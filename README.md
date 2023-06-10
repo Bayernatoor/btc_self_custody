@@ -1,2 +1,2 @@
 # btc_self_custody
-a personal education website on bitcoin self custody and other ramblings
+A personal educational website on bitcoin self custody and other ramblings
