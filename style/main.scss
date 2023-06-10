@@ -1,0 +1,450 @@
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 90vh;
+    background-color: #1a578f;
+    color: #ffffff;
+}
+/* Header styles */
+.header {
+    font-family: Arial;
+    background-color: #1a578f;
+    position: fixed;
+    z-index: 999;
+    height: 72px;
+    top: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: space-between; 
+    align-items: center; 
+    padding: 0 32px; 
+    box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.25);
+}
+
+.header .nav_links {
+    display: flex;
+    justify-content: flex-end; 
+    align-items: center; 
+    gap: 1em;
+}
+
+.header .header_title {
+    display: flex;
+    align-items: center;
+}
+
+.header h1 {
+    color: #ffffff;
+    font-size: 24px;
+    text-decoration: none;
+}
+
+.header a {
+	color: #ffffff;
+	line-height: 24px;
+	transition: color .15s ease;
+	font-weight: 300;
+	letter-spacing: .075em;
+    text-decoration: none;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-evenly;
+}
+
+.header a:hover {
+	color: #bcbcbc;
+}
+
+.header a.active {
+	color: #fff;
+	font-weight: 400
+}
+
+.header h1:hover {
+	color: #bcbcbc;
+}
+
+.header h1.active {
+	color: #fff;
+	font-weight: 400
+}
+
+/* Header: Add media query for screens with max width of 600px */
+@media only screen and (max-width: 600px) {
+  .header {
+    flex-direction: column;
+    height: auto;
+    box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.25);
+  }
+  
+  .header .nav_links {
+    justify-content: center;
+    align-items: center;
+    padding-bottom: 1em;
+    gap: 0.5em; 
+  }
+}
+
+/* HomePage Styles" */
+.homepage_container{
+    display: flex; 
+    justify-content: center;
+    flex-direction: row;
+    align-items: center;
+    max-width: 900px;
+    width: 85%;
+    margin: 0 auto;
+    text-align: left;
+    border-radius: 10px;
+    padding: 20px;
+    opacity: 0;
+    animation: fade-in 2s ease-in-out forwards; 
+} 
+
+.homepage_title_container{
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+} 
+
+.homepage_title_container h1 {
+    font-family: Roboto;
+    font-size: 72px;
+    margin: 0 240px 0 0;
+    line-height: 1em;
+    white-space: nowrap;
+}
+
+.homepage_title_container p {
+    line-height: 1.5;
+    font-family: Arial;
+    font-size: 18px;
+}
+
+.homepage_img_container img {
+    height: 250px;
+    width: 250px;
+}
+
+@keyframes fade-in {
+  0% {
+    opacity: 0; /* Start with opacity 0 */
+  }
+  100% {
+    opacity: 1; /* End with opacity 1 */
+  }
+}
+
+.homepage_title_container a {
+    background-color: #f79231; 
+    border: none;
+    color: white;
+    padding: 15px 32px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 18px;
+    border-radius: 10px;
+}
+
+.homepage_title_container a:hover {
+    background-color: #f89f4a;
+    cursor: pointer;
+}
+
+// Footer styles
+.info {
+	color: #ffffff;
+	font-size: 14px;
+	text-align: center;
+	text-decoration: none;
+}
+/* Homepage media query for screens with a maximum width of 768px (mobile) */
+@media only screen and (max-width: 768px) {
+    .homepage_container {
+        flex-direction: column;
+        padding: 10px;
+    }
+
+    .homepage_title_container {
+        display: flex;
+        align-items: center;
+    }
+
+    .homepage_title_container h1 {
+        font-size: 48px;
+        margin: 0 0 10px 0;
+        text-align: center;
+
+    }
+    .homepage_title_container p {
+        line-height: 1.5;
+        text-align: center;
+    }
+
+    .homepage_img_container img {
+        margin: 4em 0 0 0;
+        max-width: 100%;
+        max-height: auto;
+    }
+
+    .homepage_title_container a {
+        margin-top: 0;
+    }
+}
+
+/* GuideSelector component style */
+
+.main-container {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  max-width: 940px;
+  width: 100%;
+
+}
+
+.left-container {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  margin: 0 50px 0 0;
+}
+
+.right-container {
+  display: flex;
+  flex-direction: column;
+  max-width: 100%;
+}
+
+.left-container img {
+    height: auto;
+    width: 75%;
+}
+
+.left-container h1 {
+  font-size: 72px;
+  display: flex;
+  font-weight: 500;
+  margin: 0;
+}
+
+.button-guides h2 {
+    color: #f79231;
+    font-size: 28px;
+    margin-bottom: 5px;
+    margin-top: 5px;
+    font-weight: 600;
+}
+
+.button-guides p {
+    color: #1a578f;
+    font-size: 16px;
+    margin-top: 8px;
+    margin-bottom: 12px;
+    font-family: monospace;
+}
+
+.button-guides a {
+  color: white;
+  font-size: 20px;
+  text-decoration: none;
+  padding: 2px;
+  background-color: #f79231;
+  flex-direction: column;
+  display: flex;
+  font-family: system-ui;
+}
+
+.button.a :hover {
+    color: black;
+    cursor: pointer;
+}
+
+.button-guides {
+    background-color: white !important;
+    border: none !important;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 10px 70px 0px 70px; 
+    margin-bottom: 40px; 
+    text-align: center;
+    color: black;
+    background-color: #ffffff;
+    border-radius: 20px;
+    width: 100%;
+    opacity: 0; 
+    animation: button-fade-in 1s ease-in-out forwards; 
+}
+
+@keyframes button-fade-in {
+  0% {
+    opacity: 0; /* Start with opacity 0 */
+  }
+  100% {
+    opacity: 1; /* End with opacity 1 */
+  }
+}
+
+.button-guides:hover {
+    background-color: #d2d2d2 !important;
+}
+// css for when guide buttons first get pressed 
+.button-pressed {
+    background-color: white;
+    border: none !important;
+    cursor: pointer;
+    display: flex;
+    flex-direction: horizontal;
+    justify-content: space-evenly;
+    align-items: center;
+    margin-bottom: 40px; 
+    text-align: center;
+    color: black;
+    background-color: #ffffff;
+    border-radius: 20px;
+    width: 100%;
+}
+
+.button-pressed a {
+    text-decoration: none !important;
+    color: #f79231;
+    border-radius: 20px; 
+    width: 100%;
+}
+
+.button-pressed a:hover {
+    color: #d2d2d2 !important;
+
+}
+
+
+/* GuideSelector media query for screens with a maximum width of 768px (mobile) */
+@media only screen and (max-width: 768px) {
+    .main-container {
+        flex-direction: column;
+        align-items: center;
+        margin: 0 20px;
+    }
+    
+    .left-container {
+        padding-top: 4em;
+    }
+    
+    .left-container img {
+        width: 100%;
+        max-width: 275px;
+        margin: 8em 0 2em 0;
+
+    }
+    
+    .button {
+        padding: 20px;
+        border-radius: 10px;
+        margin-right: -10px;
+        margin-left: -40px
+
+    }
+    
+    .left-container h1 {
+        font-size: 36px;
+    }
+    
+    .button h2 {
+        font-size: 24px;
+    }
+    
+    .button p {
+        font-size: 14px;
+    }
+}
+
+
+/* Homepage: Add media query for screens with max width of 600px */
+@media only screen and (max-width: 600px) {
+  .home_container {
+    flex-direction: column;
+    padding-top: 8em;
+  }
+  
+  .home_container .home_button {
+    justify-content: center;
+    align-items: center;
+}
+}
+
+// Beginner Android/IOS route
+
+.beginner-guide-header {
+    font-family: Arial;
+    background-color: #1a578f;
+    display: flex;
+    justify-content: space-between; 
+    align-items: center; 
+    padding: 0 32px; 
+}
+
+
+.guide-container {
+    display: flex;
+    justify-content: center;
+    flex-direction: column;
+    justify-content: flex-start; 
+    width: 100%;
+    max-width: 720px;
+    height: 50vh;
+    padding-top: 16px;
+}
+
+.quote {
+    font-style: italic;
+    padding: 0 32px 16px;
+}
+
+.quoted {
+    display: flex;
+    justify-content: flex-end;
+    max-width: 260px;
+    line-height: 1px;
+}
+
+.android-download-links a {
+  //text-decoration: none; /* Remove underline */
+  color: inherit; /* Inherit color from parent element */
+}
+
+.android-download-links a:hover {
+    color: grey;
+}
+
+.accordion {
+    padding: 0 0 200px 0;
+
+}
+
+.accordion-toggle {
+  display: none; /* Hide the checkboxes */
+}
+
+.accordion-title {
+  cursor: pointer;
+  line-height: 2;
+  font-size: larger;
+  color: yellowgreen;
+}
+
+.accordion-content {
+  max-height: 0; /* Initially hide the content */
+  overflow: hidden;
+  transition: max-height 0.3s ease; /* Apply a smooth transition effect */
+}
+
+.accordion-toggle:checked + .accordion-title + .accordion-content {
+  max-height: 100%; /* Show the content when the checkbox is checked */
+}
+
