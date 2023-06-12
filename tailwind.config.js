@@ -4,8 +4,18 @@ module.exports = {
       files: ["*.html", "./src/**/*.rs"]
   },
   theme: {
-    extend: {},
+    extend: {
+     animation: {
+         'fadein': 'fadein 2s ease-in-out forwards',
+        },
+    keyframes: {
+        fadein: {
+            '0%': { opacity: 0},
+            '100%': { opacity: 1},
+        },
+    },
   },
+},
   plugins: [],
 }
 

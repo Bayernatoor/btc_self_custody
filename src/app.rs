@@ -7,6 +7,9 @@ use crate::routes::guideselector::*;
 use crate::routes::beginner::*;
 use crate::routes::intermediate::*;
 use crate::routes::advanced::*;
+use crate::routes::faq::*;
+use crate::routes::about::*;
+use crate::routes::blog::*;
 
 #[component]
 pub fn App(cx: Scope) -> impl IntoView {
@@ -15,13 +18,15 @@ pub fn App(cx: Scope) -> impl IntoView {
 
     view! {
         cx,
-        //<Meta name="color-scheme" content="dark" />
         // injects a stylesheet into the document <head>
         // id=leptos means cargo-leptos will hot-reload this stylesheet
         <Stylesheet id="leptos" href="/pkg/leptos_start.css"/>
 
         // sets the document title
         <Title text="Bitcoin Self Custody"/>
+        
+        // sets the body background color throughout the app
+        <Body class="bg-[#1a578f]"/>
 
         // content for this welcome page
         <Router>
@@ -34,6 +39,9 @@ pub fn App(cx: Scope) -> impl IntoView {
                     <Route path="/guides/beginner/ios" view=|cx| view! { cx, <BeginnerPageIOS/> }/>
                     <Route path="/guides/intermediate" view=|cx| view! { cx, <IntermediatePage/> }/>
                     <Route path="/guides/advanced" view=|cx| view! { cx, <AdvancedPage/> }/>
+                    <Route path="/blog" view=|cx| view! { cx, <BlogPage/> }/>
+                    <Route path="/faq" view=|cx| view! { cx, <FaqPage/> }/>
+                    <Route path="/about" view=|cx| view! { cx, <AboutPage/> }/>
                 </Routes>
             </main>
         </Router>
