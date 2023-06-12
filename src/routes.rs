@@ -4,3 +4,6 @@ pub mod homepage;
 pub mod beginner; 
 pub mod intermediate; 
 pub mod advanced;
+pub mod about;
+pub mod faq;
+pub mod blog;
