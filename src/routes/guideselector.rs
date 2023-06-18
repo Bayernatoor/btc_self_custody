@@ -90,13 +90,13 @@ pub fn GuideSelector(cx: Scope) -> impl IntoView {
             when=move || beginner_clicked()
             fallback= move |cx| view! { cx, <BeginnerButton on_click=move |_|  {set_beginner_clicked.update(|value| *value = !*value); set_intermediate_clicked.set(false); set_advanced_clicked.set(false)} /> }
           >
-            <div class="flex flex-row justify-evenly items-center text-center text-black rounded-2xl w-full cursor-pointer border-none">
-                <h2 class="font-semibold"><a class="box-border h-32 w-16 p-4 border-4 bg-slate-100
-                                                    rounded-2xl no-underline text-[#f79231] hover:bg-[#f4a949]"
-                                                    href="/guides/beginner/android">"Android"</a></h2>
-                <h2 class="font-semibold"><a class="box-border h-32 w-16 p-4 border-4 bg-slate-100
-                                                    rounded-2xl no-underline text-[#f79231] hover:bg-[#f4a949]"
-                                                    href="/guides/beginner/ios">"IOS"</a></h2>
+            <div class="container text-center text-black rounded-2xl cursor-pointer border-none">
+            <button class="basis-1/2">
+                <h2 class="font-semibold text-[#f79231]"><a class="box-border border-4 p-4 bg-slate-100 rounded-2xl no-underline text-[#f79231] hover:bg-[#f4a949]" href="/guides/beginner/android">"Android"</a></h2>
+            </button>
+            <button class="basis-1/2">
+                <h2 class="font-semibold text-[#f79231]"><a class="box-border border-4 p-4 bg-slate-100 rounded-2xl no-underline text-[#f79231] hover:bg-[#f4a949]" href="/guides/beginner/ios">"IOS"</a></h2>
+            </button>
             </div>
           </Show>
           <Show

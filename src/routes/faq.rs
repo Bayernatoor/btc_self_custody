@@ -1,5 +1,4 @@
 use leptos::*;
-use leptos_router::*;
 
 /// Renders the faq page of the application.
 #[component]

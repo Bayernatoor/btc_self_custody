@@ -1,5 +1,4 @@
 use leptos::*;
-use leptos_router::*;
 
 /// Renders the Blog page of the application.
 #[component]

@@ -1,8 +1,4 @@
 use leptos::*;
-use leptos_router::*;
-
-//#[component]
-//fn
 
 // Renders the beginner Android page
 #[component]
