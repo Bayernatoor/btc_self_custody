@@ -1,15 +1,15 @@
+use crate::routes::about::*;
+use crate::routes::advanced::*;
+use crate::routes::beginner::*;
+use crate::routes::blog::*;
+use crate::routes::faq::*;
+use crate::routes::guideselector::*;
+use crate::routes::homepage::*;
+use crate::routes::intermediate::*;
+use crate::routes::navbar::*;
 use leptos::*;
 use leptos_meta::*;
 use leptos_router::*;
-use crate::routes::navbar::*;
-use crate::routes::homepage::*;
-use crate::routes::guideselector::*;
-use crate::routes::beginner::*;
-use crate::routes::intermediate::*;
-use crate::routes::advanced::*;
-use crate::routes::faq::*;
-use crate::routes::about::*;
-use crate::routes::blog::*;
 
 #[component]
 pub fn App(cx: Scope) -> impl IntoView {
@@ -24,13 +24,13 @@ pub fn App(cx: Scope) -> impl IntoView {
 
         // sets the document title
         <Title text="Bitcoin Self Custody"/>
-        
+
         // sets the body background color throughout the app
         <Body class="bg-[#1a578f]"/>
 
         // content for this welcome page
         <Router>
-            <NavBar /> 
+            <NavBar />
             <main>
                 <Routes>
                     <Route path="/" view=|cx| view! { cx, <HomePage/> }/>
@@ -47,4 +47,3 @@ pub fn App(cx: Scope) -> impl IntoView {
         </Router>
     }
 }
-
