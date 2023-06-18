@@ -1264,6 +1264,7 @@ dependencies = [
  "leptos_meta",
  "leptos_router",
  "log",
+ "markdown",
  "simple_logger",
  "wasm-bindgen",
 ]
@@ -1321,6 +1322,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "abb12e687cfb44aa40f41fc3978ef76448f9b6038cad6aef4259d3c095a2382e"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "markdown"
+version = "1.0.0-alpha.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1bd98c3b68451b0390a289c58c856adb4e2b50cc40507ce2a105d5b00eafc80"
+dependencies = [
+ "unicode-id",
 ]
 
 [[package]]
@@ -2115,6 +2125,12 @@ name = "unicode-bidi"
 version = "0.3.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "524b68aca1d05e03fdf03fcdce2c6c94b6daf6d16861ddaa7e4f2b6638a9052c"
+
+[[package]]
+name = "unicode-id"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d70b6494226b36008c8366c288d77190b3fad2eb4c10533139c1c1f461127f1a"
 
 [[package]]
 name = "unicode-ident"
