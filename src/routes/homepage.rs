@@ -3,27 +3,23 @@ use leptos::*;
 /// Renders the home page of the application.
 #[component]
 pub fn HomePage(cx: Scope) -> impl IntoView {
-
     view! { cx,
-        <div class="flex lg:flex-row justify-around max-w-4xl w-4/5 mx-auto p-20  mt-10 text-left opacity-0 animate-fadein">
-            <div class="flex flex-col justify-around mr-12 items-start text-white">
-                <div class="text-6xl mt-10 leading-tight">
-                <h1>"Become your"</h1>
-                <h1>"own bank"</h1>
+            <div class="flex md:flex-row flex-col justify-around max-w-5xl mx-auto md:p-20 md:mt-10 mt-0 p-10 md:text-left opacity-0 animate-fadein font-sans">
+                <div class="flex flex-col justify-center md:text-left text-center text-white leading-loose">
+                    <div class="text-6xl mt-10">
+                        <h1>"Be your own bank"</h1>
+                    </div>
+                    <p class="text-base mt-6 mb-2">"Learn how to self custody your bitcoin today"</p>
+                    <a class="text-base text-center bg-[#f79231] w-32 no-underline border-none rounded-xl py-2 hover:bg-[#f4a949] cursor-pointer" href="/guides">"Start Hodling"</a>
                 </div>
-                <p class="text-base">"Learn how to self custody your bitcoin"</p>
-                <div class="bg-[#f79231] flex text-center no-underline border-none rounded-xl pt-4 pr-6">
-                    <a href="/guides">"Start Hodling"</a>
+                <div class="w-48 h-48 mx-auto mt-10">
+                    <img src="./../../bitcoin_logo.png" alt="bitcoin logo"/>
                 </div>
             </div>
-            <div class="flex items-center w-64 h-64 mt-10 ml-12">
-                <img src="./../../bitcoin_logo.png" alt="bitcoin logo"/>
-            </div>
-        </div>
-   // <footer class="info">
-   //     <p>"Knowledge is Freedom"</p>
-   //     <p>"Created by "<a target="_blank" rel="noopener noreferrer" href="https://github.com/Bayernatoor">"Bayernator"</a></p>
-   // </footer>
+       // <footer class="info">
+       //     <p>"Knowledge is Freedom"</p>
+       //     <p>"Created by "<a target="_blank" rel="noopener noreferrer" href="https://github.com/Bayernatoor">"Bayernator"</a></p>
+       // </footer>
 
-}
+    }
 }
