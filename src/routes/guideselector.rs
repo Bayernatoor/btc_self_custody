@@ -81,10 +81,10 @@ pub fn GuideSelector(cx: Scope) -> impl IntoView {
     view! { cx,
       <div class="container mx-auto max-w-5xl flex flex-col md:flex-row justify-evenly
                  items-center p-20 md:mt-10 text-white opacity-0 animate-fadein font-sans gap-8">
-          <div class="basis-1/4">
-          <img src="./../../lock.png" alt="Financial privacy lock"/>
-      </div>
-      <div class="basis-1/2">
+        <div class="basis-1/4">
+            <img src="./../../lock.png" alt="Financial privacy lock"/>
+        </div>
+        <div class="basis-1/2">
 
           <Show
             when=move || beginner_clicked()
