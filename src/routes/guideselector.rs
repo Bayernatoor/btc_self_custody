@@ -33,7 +33,7 @@ where
     F: Fn(MouseEvent) + 'static,
 {
     view! { cx,
-            <button class="flex flex-col p-2 max-w-sm mx-auto w-64 bg-slate-100 rounded-xl flex items-center" on:click=on_click>
+            <button class="flex flex-col p-2 max-w-sm mx-auto w-64 bg-slate-100 rounded-xl flex items-center mt-2" on:click=on_click>
                 <div class="text-2xl font-semibold text-[#f79231]">"Advanced"</div>
                 <p class="text-sm text-[#1a578f] mt-2">"It's time to jump down the rabbit hole"</p>
             </button>
@@ -79,47 +79,72 @@ pub fn GuideSelector(cx: Scope) -> impl IntoView {
     let (advanced_clicked, set_advanced_clicked) = create_signal(cx, false);
 
     view! { cx,
-      <div class="container mx-auto max-w-5xl flex flex-col md:flex-row justify-evenly
+      <div class="container mx-auto max-w-5xl flex flex-col md:flex-row justify-center
                  items-center p-20 md:mt-10 text-white opacity-0 animate-fadein font-sans gap-8">
         <div class="basis-1/4">
             <img src="./../../lock.png" alt="Financial privacy lock"/>
         </div>
         <div class="basis-1/2">
 
-          <Show
+        <Show
             when=move || beginner_clicked()
             fallback= move |cx| view! { cx, <BeginnerButton on_click=move |_|  {set_beginner_clicked.update(|value| *value = !*value); set_intermediate_clicked.set(false); set_advanced_clicked.set(false)} /> }
-          >
-            <div class="container text-center text-black rounded-2xl cursor-pointer border-none">
-            <button class="basis-1/2">
-                <h2 class="font-semibold text-[#f79231]"><a class="box-border border-4 p-4 bg-slate-100 rounded-2xl no-underline text-[#f79231] hover:bg-[#f4a949]" href="/guides/beginner/android">"Android"</a></h2>
-            </button>
-            <button class="basis-1/2">
-                <h2 class="font-semibold text-[#f79231]"><a class="box-border border-4 p-4 bg-slate-100 rounded-2xl no-underline text-[#f79231] hover:bg-[#f4a949]" href="/guides/beginner/ios">"IOS"</a></h2>
-            </button>
+            >
+            <div class="flex justify-center items-center gap-2">
+                <button class="h-12 flex-grow-0">
+                  <h2 class="w-32 flex items-center justify-center font-semibold text-[#f79231]">
+                    <a class="box-border p-4 bg-slate-100 rounded-2xl no-underline text-[#f79231] hover:bg-[#f4a949] w-full" href="/guides/beginner/android">"Android"</a>
+                  </h2>
+                </button>
+                <button class="h-12 flex-grow-0">
+                  <h2 class="w-32 flex items-center justify-center font-semibold text-[#f79231]">
+                    <a class="box-border p-4 bg-slate-100 rounded-2xl no-underline text-[#f79231] hover:bg-[#f4a949] w-full" href="/guides/beginner/ios">"iOS"</a>
+                  </h2>
+                </button>
             </div>
-          </Show>
+        </Show>
+
           <Show
             when=move || intermediate_clicked()
             fallback=move |cx| view! { cx, <IntermediateButton on_click=move |_| {set_intermediate_clicked.update(|value| *value = !*value); set_beginner_clicked.set(false); set_advanced_clicked.set(false)} /> }
           >
-            <div class="flex flex-row justify-evenly items-center text-center text-black rounded-2xl w-full cursor-pointer border-none">
-                <h2 class="font-semibold"><a class="box-border h-32 w-16 p-4 border-4 bg-slate-100 rounded-2xl no-underline text-[#f79231] hover:bg-[#f4a949]" href="/guides/intermediate/android">"Android"</a></h2>
-                <h2 class="font-semibold"><a class="box-border h-32 w-16 p-4 border-4 bg-slate-100 rounded-2xl no-underline text-[#f79231] hover:bg-[#f4a949]" href="/guides/intermediate/ios">"IOS"</a></h2>
-                <h2 class="font-semibold"><a class="box-border h-32 w-16 p-4 border-4 bg-slate-100 rounded-2xl no-underline text-[#f79231] hover:bg-[#f4a949]" href="/guides/intermediate/desktop">"Desktop"</a></h2>
+            <div class="flex justify-center items-center py-4 gap-2">
+                <button class="h-12 flex-grow-0">
+                  <h2 class="w-32 flex items-center justify-center font-semibold text-[#f79231]">
+                    <a class="box-border p-4 bg-slate-100 rounded-2xl no-underline text-[#f79231] hover:bg-[#f4a949] w-full" href="/guides/beginner/android">"Android"</a>
+                  </h2>
+                </button>
+                <button class="h-12 flex-grow-0">
+                  <h2 class="w-32 flex items-center justify-center font-semibold text-[#f79231]">
+                    <a class="box-border p-4 bg-slate-100 rounded-2xl no-underline text-[#f79231] hover:bg-[#f4a949] w-full" href="/guides/beginner/ios">"iOS"</a>
+                  </h2>
+                </button>
+                <button class="h-12 flex-grow-0">
+                  <h2 class="w-32 flex items-center justify-center font-semibold text-[#f79231]">
+                    <a class="box-border p-4 bg-slate-100 rounded-2xl no-underline text-[#f79231] hover:bg-[#f4a949] w-full" href="/guides/beginner/ios">"Desktop"</a>
+                  </h2>
+                </button>
             </div>
           </Show>
           <Show
             when=move || advanced_clicked()
             fallback=move |cx| view! { cx, <AdvancedButton on_click=move |_| {set_advanced_clicked.update(|value| *value = !*value); set_intermediate_clicked.set(false); set_beginner_clicked.set(false)}/> }
           >
-            <div class="flex flex-row justify-evenly items-center text-center text-black rounded-2xl w-full cursor-pointer border-none">
-                <h2 class="font-semibold"><a class="box-border h-32 w-16 p-4 border-4 bg-slate-100 rounded-2xl no-underline text-[#f79231] hover:bg-[#f4a949]" href="/guides/advanced/android">"Android"</a></h2>
-                <h2 class="font-semibold"><a class="box-border h-32 w-16 p-4 border-4 bg-slate-100 rounded-2xl no-underline text-[#f79231] hover:bg-[#f4a949]" href="/guides/advanced/ios">"IOS"</a></h2>
-                <h2 class="font-semibold"><a class="box-border h-32 w-16 p-4 border-4 bg-slate-100 rounded-2xl no-underline text-[#f79231] hover:bg-[#f4a949]" href="/guides/advanced/desktop">"Desktop"</a></h2>
+            <div class="flex justify-center items-center gap-2">
+                <button class="h-12 flex-grow-0">
+                  <h2 class="w-32 flex items-center justify-center font-semibold text-[#f79231]">
+                    <a class="box-border p-4 bg-slate-100 rounded-2xl no-underline text-[#f79231] hover:bg-[#f4a949] w-full" href="/guides/beginner/android">"Android"</a>
+                  </h2>
+                </button>
+                <button class="h-12 flex-grow-0">
+                  <h2 class="w-32 flex items-center justify-center font-semibold text-[#f79231]">
+                    <a class="box-border p-4 bg-slate-100 rounded-2xl no-underline text-[#f79231] hover:bg-[#f4a949] w-full" href="/guides/beginner/ios">"iOS"</a>
+                  </h2>
+                </button>
             </div>
+
           </Show>
-      </div>
+        </div>
       </div>
     }
 }

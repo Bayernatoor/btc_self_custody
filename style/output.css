@@ -626,10 +626,6 @@ video {
   height: 3rem;
 }
 
-.h-32 {
-  height: 8rem;
-}
-
 .h-36 {
   height: 9rem;
 }
@@ -638,8 +634,8 @@ video {
   width: 3rem;
 }
 
-.w-16 {
-  width: 4rem;
+.w-32 {
+  width: 8rem;
 }
 
 .w-36 {
@@ -674,6 +670,10 @@ video {
   flex-shrink: 0;
 }
 
+.flex-grow-0 {
+  flex-grow: 0;
+}
+
 .basis-1\/2 {
   flex-basis: 50%;
 }
@@ -694,6 +694,56 @@ video {
 
 .animate-fadein {
   animation: fadein 2s ease-in-out forwards;
+}
+
+@keyframes slidein {
+  0% {
+    transform: translateX(100%);
+    opacity: 1;
+  }
+
+  100% {
+    transform: translateX(0%);
+    opacity: 1;
+  }
+}
+
+.animate-slidein {
+  animation: slidein 1s ease-in-out;
+}
+
+@keyframes slideout {
+  0% {
+    transform: translateX(0%);
+    opacity: 1;
+  }
+
+  99.999% {
+    opacity: 0;
+  }
+
+  100% {
+    transform: translateX(-100%);
+    opacity: 1;
+  }
+}
+
+.animate-slideout {
+  animation: slideout 1s ease-in-out;
+}
+
+@keyframes fadeinone {
+  0% {
+    opacity: 0;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
+
+.animate-fadeinone {
+  animation: fadeinone 1s ease-in-out forwards;
 }
 
 .cursor-pointer {
@@ -728,10 +778,6 @@ video {
   justify-content: space-around;
 }
 
-.justify-evenly {
-  justify-content: space-evenly;
-}
-
 .gap-2 {
   gap: 0.5rem;
 }
@@ -752,10 +798,6 @@ video {
 
 .rounded-xl {
   border-radius: 0.75rem;
-}
-
-.border-4 {
-  border-width: 4px;
 }
 
 .border-none {
@@ -810,6 +852,11 @@ video {
 .py-2 {
   padding-top: 0.5rem;
   padding-bottom: 0.5rem;
+}
+
+.py-4 {
+  padding-top: 1rem;
+  padding-bottom: 1rem;
 }
 
 .pb-2 {

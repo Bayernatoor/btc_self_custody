@@ -1,7 +1,8 @@
-use leptos::{*, ev::MouseEvent};
+use leptos::{*, ev::MouseEvent, ev::animationend};
+
 
 #[component]
-pub fn WalletContainers<F>(cx: Scope, on_click: F, wallet_name: String, short_desc: String, img_url:
+pub fn WalletButton<F>(cx: Scope, on_click: F, wallet_name: String, short_desc: String, img_url:
                         String, img_alt: String, text_color: String) -> impl IntoView
     where
         F: Fn(MouseEvent) + 'static,
@@ -24,23 +25,47 @@ pub fn WalletContainers<F>(cx: Scope, on_click: F, wallet_name: String, short_de
 fn WalletInstructions(cx: Scope, blue: bool, samourai: bool) -> impl IntoView
 
     {
-        //log!("Blue : {}", blue()); 
-        //log!("samourai : {}", samourai());
+        
+        let (show_content, set_show_content) = create_signal(cx, false);
 
-        view! {cx, 
-            {if blue {
-                "blue instructions"
-            } else {
-                "Samourai instructions"
+        window_event_listener("animationend", move |ev| {
+            log!("The animation ended");
+            set_show_content(true);
+        });
+
+        if blue {
+            view! {cx, 
+                <div id="guide-container" class="max-w-6xl py-4 mx-auto rounded-xl" class=("animate-slidein", move || show_content() == true) class:hidden=move || show_content() == false>
+                    <p class="font-bold">"Download Options:"</p>
+                    <ol class="android-download-links">
+                    <li>
+                        <a href=r"https://play.google.com/store/apps/details?id=com.samourai.wallet&hl=en_US&gl=US"
+                        target="_blank">"Google Play - Beginner Friendly"</a></li>
+                    <li>
+                        <a href=r"https://samouraiwallet.com/download"
+                        target="_blank">"F-Droid"</a></li>
+                    <li>
+                        <a href=r"https://samouraiwallet.com/download" target="_blank">"Android APK"</a></li>
+                    </ol>
+                </div>
+            }
+        } else {
+            view! {cx, 
+                <div id="guide-container" class="max-w-6xl py-4 mx-auto rounded-xl" class=("animate-slidein", move || show_content() == true) class:hidden=move || show_content() == false>
+                    <p class="font-bold" >"Download Options:"</p>
+                    <ol class="android-download-links">
+                    <li>
+                        <a href=r"https://play.google.com/store/apps/details?id=com.samourai.wallet&hl=en_US&gl=US"
+                        target="_blank">"Google Play - Beginner Friendly"</a></li>
+                    <li>
+                        <a href=r"https://samouraiwallet.com/download"
+                        target="_blank">"F-Droid"</a></li>
+                    <li>
+                        <a href=r"https://samouraiwallet.com/download" target="_blank">"Android APK"</a></li>
+                    </ol>
+                </div>
+
             }}
-        }
-    }
-
-#[component]
-fn BlueWalletInstructions(cx: Scope) -> impl IntoView
-    
-    {
-        view! {cx, <h1>"Blue instructions"</h1>}
     }
 
 #[component]
@@ -48,49 +73,13 @@ pub fn BeginnerPageTemplate(cx: Scope, title: String, quote: String, quote_autho
                             String 
                             ) -> impl IntoView {
 
-    
-
-    view! { cx,
-        <div class="max-w-6xl mx-auto rounded-xl">
-            <div class="flex flex-col p-6 pt-10 max-w-2xl mx-auto">
-                <h1 class="flex justify-center text-3xl items-center font-bold text-black">{title}</h1>
-                <div class="flex justify-end pt-10 max-w-sm">
-                    <p class="mr-4 text-lg text-black">{quote}</p>
-                </div>
-                <div class="flex justify-end max-w-sm">
-                    <p class="mr-4 text-lg text-black">{quote_author}</p>
-                </div>
-            </div> 
-
-            <div class="flex flex-col p-6 max-w-2xl mx-auto">
-                <p class="font-bold">"Bitcoin Self-Custody:"</p><p class="pb-2">"The act of taking possession of a bitcoin private key."</p>
-                <p class="mr-4 text-lg text-black">{intro}</p>
-            </div>
-            
-            <h2 class="flex justify-center ps-8 py-2 max-w-2xl text-xl font-bold text-black">"Select Your Wallet: "</h2>
-        </div> 
-
-    }    
-}
-
-
-// Renders the beginner Android page
-#[component]
-pub fn BeginnerPageAndroid(cx: Scope) -> impl IntoView {
-
     let (samourai_clicked, set_samourai_clicked) = create_signal(cx, false);
     let (blue_clicked, set_blue_clicked) = create_signal(cx, false);
     let (samourai_details, set_samourai_details) = create_signal(cx, false);
     let (blue_details, set_blue_details) = create_signal(cx, false);
+    
+    let (slideout_ends, set_slideout_ends) = create_signal(cx, false);
 
-    let intro_text: String = "Controlling a bitcoin private key grants absolute authority over the
-        associated bitcoin, embodying the ethos of the bitcoin movement. Self custody and personal
-        responsibility restore power and sovereignty, eliminating reliance on third parties,
-        particularly the state.".to_string();
-
-    let title = "Beginner - Android Self-Custody Guide".to_string();
-    let quote = "Trusted Third Parties are Security Holes".to_string();
-    let quote_author = "-Nick Szabo".to_string();
     let wallet_name_samourai = "Samourai Wallet".to_string();
     let short_desc_samourai = "Privacy + Freedom Tools".to_string();
     let img_url_samourai = "./../../samourai_logo.png".to_string();
@@ -103,46 +92,100 @@ pub fn BeginnerPageAndroid(cx: Scope) -> impl IntoView {
     let img_alt_blue = "Blue Wallet".to_string();
     let text_color_blue = "#1a578f".to_string();
 
+    //let beginner_guide_element = document().get_element_by_id("beginner_guide").unwrap(); 
+
+    //let beginner_guide_element = document
+
+    
+    //beginner_guide_element.on::<AnimationEvent>("animationend", |_event| {
+    //    log!("The animation ended");
+    //    set_slideout_ends(true);
+    //});
+
+   // window_event_listener("animationend", move |ev| {
+   //     log!("the animation ended");
+   //     set_slideout_ends(true);
+   // });
+   //
+   //
+   //let beginner_guide_element = document()
+   // .get_element_by_id("beginner_guide")
+   // .unwrap()
+   // .dyn_into::<Element>()
+   // .unwrap();
+
+   // let event_listener = Closure::wrap(Box::new(move |event: Event| {
+   //     log!("The animation ended");
+   //     set_slideout_ends(true);
+   // }) as Box<dyn FnMut(_)>);
+   // 
+   // beginner_guide_element
+   //     .add_event_listener_with_callback("animationend", event_listener.as_ref().unchecked_ref())
+   //     .unwrap();
+   // 
+   // event_listener.forget();
+    
+ 
+    view! { cx, 
+        <div id="beginner_guide" class="max-w-6xl mx-auto rounded-xl" class=("animate-slideout", move || samourai_details() || blue_details() == true) >
+            <div class="flex flex-col p-6 pt-10 max-w-2xl mx-auto" class=("hidden", move || slideout_ends() == true)>
+                <h1 class="flex justify-center text-3xl items-center font-bold text-black">{title}</h1>
+                <div class="flex justify-end pt-10 max-w-sm">
+                    <p class="mr-4 text-lg text-black">{quote}</p>
+                </div>
+                <div class="flex justify-end max-w-sm">
+                    <p class="mr-4 text-lg text-black">{quote_author}</p>
+                </div>
+            </div> 
+
+            <div class="flex flex-col p-6 max-w-2xl mx-auto" class=("hidden", move || slideout_ends() == true)>
+                <p class="font-bold">"Bitcoin Self-Custody:"</p><p class="pb-2">"The act of taking possession of a bitcoin private key."</p>
+                <p class="mr-4 text-lg text-black">{intro}</p>
+            </div>
+            
+            <h2 class="flex justify-center ps-8 py-2 max-w-2xl text-center text-xl font-bold text-black" class=("hidden", move || slideout_ends() == true)>"Select Your Wallet: "</h2>
+            <div class="flex flex-row px-6 py-2 max-w-2xl mx-auto">
+                <Show
+                    when=move || samourai_clicked() || blue_clicked()
+                    fallback=move |cx| view! { cx, 
+                    <WalletButton on_click = move |_| {set_samourai_clicked(true);
+                                    set_blue_clicked(true); set_samourai_details.set(true)}
+                        wallet_name=wallet_name_samourai.clone() short_desc=short_desc_samourai.clone() img_url=img_url_samourai.clone() img_alt=img_alt_samourai.clone()
+                        text_color=text_color_samourai.clone()
+                    />
+
+                    <WalletButton on_click = move |_| {set_blue_clicked(true);
+                                      set_samourai_clicked(true); set_blue_details.set(true)}
+                        wallet_name=wallet_name_blue.clone() short_desc=short_desc_blue.clone() img_url=img_url_blue.clone()
+                        img_alt=img_alt_blue.clone() text_color=text_color_blue.clone()
+                    />}
+                >
+                    <WalletInstructions blue=blue_details() samourai=samourai_details()/> 
+                </Show>
+            </div> 
+        </div> 
+    }    
+}
+
+
+// Renders the beginner Android page
+#[component]
+pub fn BeginnerPageAndroid(cx: Scope) -> impl IntoView {
+
+
+    let intro_text: String = "Controlling a bitcoin private key grants absolute authority over the
+        associated bitcoin, embodying the ethos of the bitcoin movement. Self custody and personal
+        responsibility restore power and sovereignty, eliminating reliance on third parties,
+        particularly the state.".to_string();
+
+    let title = "Beginner - Android Self-Custody Guide".to_string();
+    let quote = "Trusted Third Parties are Security Holes".to_string();
+    let quote_author = "-Nick Szabo".to_string();
+
     view! { cx,
         <BeginnerPageTemplate title=title quote=quote quote_author=quote_author intro=intro_text/> 
-
-
-        <div class="flex flex-row px-6 py-2 max-w-2xl mx-auto">
-        <Show
-            when=move || samourai_clicked() || blue_clicked()
-            fallback=move |cx| view! { cx, 
-            <WalletContainers on_click = move |_| {set_samourai_clicked(true);
-                            set_blue_clicked(true); set_samourai_details.set(true)}
-                wallet_name=wallet_name_samourai.clone() short_desc=short_desc_samourai.clone() img_url=img_url_samourai.clone() img_alt=img_alt_samourai.clone()
-                text_color=text_color_samourai.clone()
-            />
-
-            <WalletContainers on_click = move |_| {set_blue_clicked(true);
-                              set_samourai_clicked(true); set_blue_details.set(true)}
-                wallet_name=wallet_name_blue.clone() short_desc=short_desc_blue.clone() img_url=img_url_blue.clone()
-                img_alt=img_alt_blue.clone() text_color=text_color_blue.clone()
-            />}
-        >
-           // {log!("Blue first : {}", blue_details())}
-           // {log!("Samourai first : {}", samourai_details())}
-            <WalletInstructions blue=blue_details() samourai=samourai_details()/> 
-        </Show>
-        </div>
     }
-        //<Show
-        //    when=move || blue_clicked()
-        //    fallback=move |cx| view! { cx, 
-        //    <WalletContainers on_click = move |_| {set_blue_clicked.set(true);
-        //                      set_samourai_clicked.set(true)}
-        //        wallet_name=wallet_name_blue.clone() short_desc=short_desc_blue.clone() img_url=img_url_blue.clone()
-        //        img_alt=img_alt_blue.clone() text_color=text_color_blue.clone() hidden=samourai_hidden.get().to_string()
-        //    />}
-        //>
-        //    <BlueWalletInstructions/>
-        //</Show>
-        //{ log!("Samourai is: {}", samourai_hidden.get());}
     
-
 
         //        <p>"<b>Download Options:</b>"</p>
         //        <ol class="android-download-links">
@@ -227,8 +270,18 @@ pub fn BeginnerPageAndroid(cx: Scope) -> impl IntoView {
 /// Renders the beginner IOS page.
 #[component]
 pub fn BeginnerPageIOS(cx: Scope) -> impl IntoView {
+
+        let intro_text: String = "Controlling a bitcoin private key grants absolute authority over the
+            associated bitcoin, embodying the ethos of the bitcoin movement. Self custody and personal
+            responsibility restore power and sovereignty, eliminating reliance on third parties,
+            particularly the state.".to_string();
+
+        let title = "Beginner - Android Self-Custody Guide".to_string();
+        let quote = "Trusted Third Parties are Security Holes".to_string();
+        let quote_author = "-Nick Szabo".to_string();
+
     view! { cx,
-        <h1 color="black">"Beginner Section"</h1>
-        <img src="./bitcoin_log.png" alt="bitcoin logo" />
+            <BeginnerPageTemplate title=title quote=quote quote_author=quote_author intro=intro_text/> 
+    
     }
 }
