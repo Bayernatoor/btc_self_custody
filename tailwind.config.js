@@ -11,6 +11,7 @@ module.exports = {
           'fadeinone': 'fadeinone 1s ease-in-out forwards',
           'slideout': 'slideout 1s ease-in-out',
           'slidein': 'slidein 1s ease-in-out',
+          'slideinfast': 'slidein 0.25s ease-out',
          },
       keyframes: {
           fadein: {
@@ -27,6 +28,10 @@ module.exports = {
               '100%' : { transform: 'translateX(-100%)', opacity: 1 },
           },
           slidein: {
+              '0%': { transform: 'translateX(100%)', opacity: 1 },
+              '100%' : { transform: 'translateX(0%)', opacity: 1 },
+          },
+          slideinfast: {
               '0%': { transform: 'translateX(100%)', opacity: 1 },
               '100%' : { transform: 'translateX(0%)', opacity: 1 },
           },
