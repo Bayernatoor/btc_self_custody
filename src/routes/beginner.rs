@@ -1,5 +1,6 @@
-use leptos::{*, ev::MouseEvent, ev::animationend};
-
+use leptos::{*, ev::MouseEvent};
+use leptos::ev::{Event, AnimationEvent};
+use crate::routes::beginner_wallet_instructions::*; 
 
 #[component]
 pub fn WalletButton<F>(cx: Scope, on_click: F, wallet_name: String, short_desc: String, img_url:
@@ -9,64 +10,18 @@ pub fn WalletButton<F>(cx: Scope, on_click: F, wallet_name: String, short_desc: 
     {
     
     view! {cx, 
-        <button class=format!("p-6 max-w-sm mx-auto bg-white rounded-xl shadow-md flex items-center space-x-4") on:click=on_click>
+        <button class="flex justify-center shrink-0 h-20 w-72 p-4 mx-auto bg-white rounded-xl items-center space-x-4" on:click=on_click>
           <div class="shrink-0">
             <img class="h-12 w-12" src={img_url} alt={img_alt}/>
           </div>
           <div>
-            <div class=format!("text-xl font-medium text-[{text_color}]")>{wallet_name}</div>
+            <h3 class=format!("text-xl font-medium text-[{text_color}]")>{wallet_name}</h3>
             <p class="text-slate-500">{short_desc}</p>
           </div>
         </button>
     }
 }       
 
-#[component]
-fn WalletInstructions(cx: Scope, blue: bool, samourai: bool) -> impl IntoView
-
-    {
-        
-        let (show_content, set_show_content) = create_signal(cx, false);
-
-        window_event_listener("animationend", move |ev| {
-            log!("The animation ended");
-            set_show_content(true);
-        });
-
-        if blue {
-            view! {cx, 
-                <div id="guide-container" class="max-w-6xl py-4 mx-auto rounded-xl" class=("animate-slidein", move || show_content() == true) class:hidden=move || show_content() == false>
-                    <p class="font-bold">"Download Options:"</p>
-                    <ol class="android-download-links">
-                    <li>
-                        <a href=r"https://play.google.com/store/apps/details?id=com.samourai.wallet&hl=en_US&gl=US"
-                        target="_blank">"Google Play - Beginner Friendly"</a></li>
-                    <li>
-                        <a href=r"https://samouraiwallet.com/download"
-                        target="_blank">"F-Droid"</a></li>
-                    <li>
-                        <a href=r"https://samouraiwallet.com/download" target="_blank">"Android APK"</a></li>
-                    </ol>
-                </div>
-            }
-        } else {
-            view! {cx, 
-                <div id="guide-container" class="max-w-6xl py-4 mx-auto rounded-xl" class=("animate-slidein", move || show_content() == true) class:hidden=move || show_content() == false>
-                    <p class="font-bold" >"Download Options:"</p>
-                    <ol class="android-download-links">
-                    <li>
-                        <a href=r"https://play.google.com/store/apps/details?id=com.samourai.wallet&hl=en_US&gl=US"
-                        target="_blank">"Google Play - Beginner Friendly"</a></li>
-                    <li>
-                        <a href=r"https://samouraiwallet.com/download"
-                        target="_blank">"F-Droid"</a></li>
-                    <li>
-                        <a href=r"https://samouraiwallet.com/download" target="_blank">"Android APK"</a></li>
-                    </ol>
-                </div>
-
-            }}
-    }
 
 #[component]
 pub fn BeginnerPageTemplate(cx: Scope, title: String, quote: String, quote_author: String, intro:
@@ -92,59 +47,44 @@ pub fn BeginnerPageTemplate(cx: Scope, title: String, quote: String, quote_autho
     let img_alt_blue = "Blue Wallet".to_string();
     let text_color_blue = "#1a578f".to_string();
 
-    //let beginner_guide_element = document().get_element_by_id("beginner_guide").unwrap(); 
-
-    //let beginner_guide_element = document
+    create_effect(cx, move |_| {
+        let beginner_guide_element = window().document().unwrap().get_element_by_id("beginner");
+        log!("guide element: {:?}", beginner_guide_element);
+    });
 
     
-    //beginner_guide_element.on::<AnimationEvent>("animationend", |_event| {
-    //    log!("The animation ended");
-    //    set_slideout_ends(true);
-    //});
+    window_event_listener(ev::animationend, move |_e| {
+            set_slideout_ends(true);
+            log!("Animation Done");
+     });   
 
-   // window_event_listener("animationend", move |ev| {
-   //     log!("the animation ended");
-   //     set_slideout_ends(true);
-   // });
-   //
-   //
-   //let beginner_guide_element = document()
-   // .get_element_by_id("beginner_guide")
-   // .unwrap()
-   // .dyn_into::<Element>()
-   // .unwrap();
-
-   // let event_listener = Closure::wrap(Box::new(move |event: Event| {
-   //     log!("The animation ended");
-   //     set_slideout_ends(true);
-   // }) as Box<dyn FnMut(_)>);
-   // 
-   // beginner_guide_element
-   //     .add_event_listener_with_callback("animationend", event_listener.as_ref().unchecked_ref())
-   //     .unwrap();
-   // 
-   // event_listener.forget();
-    
- 
     view! { cx, 
-        <div id="beginner_guide" class="max-w-6xl mx-auto rounded-xl" class=("animate-slideout", move || samourai_details() || blue_details() == true) >
-            <div class="flex flex-col p-6 pt-10 max-w-2xl mx-auto" class=("hidden", move || slideout_ends() == true)>
-                <h1 class="flex justify-center text-3xl items-center font-bold text-black">{title}</h1>
+        <div id="beginner" class="flex flex-col max-w-3xl mx-auto shadow-xl rounded-xl pb-10" class=("animate-slideout", move || samourai_details() || blue_details() == true)>
+            <div class="flex flex-col p-6 pt-10 max-w-3xl mx-auto " class=("hidden", move || slideout_ends() == true)>
+                    <h1 class="flex justify-center text-[36px] text-white">{title}</h1>
                 <div class="flex justify-end pt-10 max-w-sm">
-                    <p class="mr-4 text-lg text-black">{quote}</p>
+                    <p class="text-lg text-white">{quote}</p>
                 </div>
                 <div class="flex justify-end max-w-sm">
-                    <p class="mr-4 text-lg text-black">{quote_author}</p>
+                    <p class="text-lg text-white">{quote_author}</p>
                 </div>
             </div> 
 
             <div class="flex flex-col p-6 max-w-2xl mx-auto" class=("hidden", move || slideout_ends() == true)>
-                <p class="font-bold">"Bitcoin Self-Custody:"</p><p class="pb-2">"The act of taking possession of a bitcoin private key."</p>
-                <p class="mr-4 text-lg text-black">{intro}</p>
-            </div>
+                <p class="font-bold text-white">"Bitcoin Self-Custody:"</p>
+                <p class="pb-2 text-white">"The act of taking possession of a bitcoin private key."</p>
+                <p class="mr-4 text-lg text-white">{intro}</p>
+            </div> 
             
-            <h2 class="flex justify-center ps-8 py-2 max-w-2xl text-center text-xl font-bold text-black" class=("hidden", move || slideout_ends() == true)>"Select Your Wallet: "</h2>
-            <div class="flex flex-row px-6 py-2 max-w-2xl mx-auto">
+            <div class="mx-auto max-w-xl p-4 w-full" class=("hidden", move || slideout_ends() == true)>
+                <div class="mx-auto border border-dashed border-gray-400"></div>
+            </div>
+
+            <div class="flex flex-col mx-auto justify-center" class=("hidden", move || slideout_ends() == true)>
+                <p class="flex justify-center text-center mx-auto max-w-2xl text-2xl font-bold text-white" >"Alright! Let's get started."</p>
+                <h2 class="flex justify-center py-4 max-w-2xl text-center mx-auto text-xl font-bold text-white" >"Pick A Wallet"</h2>
+            </div>
+            <div class="flex flex-col md:flex-row px-6 py-2 max-w-2xl mx-auto gap-4">
                 <Show
                     when=move || samourai_clicked() || blue_clicked()
                     fallback=move |cx| view! { cx, 
@@ -160,7 +100,7 @@ pub fn BeginnerPageTemplate(cx: Scope, title: String, quote: String, quote_autho
                         img_alt=img_alt_blue.clone() text_color=text_color_blue.clone()
                     />}
                 >
-                    <WalletInstructions blue=blue_details() samourai=samourai_details()/> 
+                    <BeginnerAndroidWalletInstructions blue=blue_details() samourai=samourai_details()/> 
                 </Show>
             </div> 
         </div> 
@@ -178,7 +118,7 @@ pub fn BeginnerPageAndroid(cx: Scope) -> impl IntoView {
         responsibility restore power and sovereignty, eliminating reliance on third parties,
         particularly the state.".to_string();
 
-    let title = "Beginner - Android Self-Custody Guide".to_string();
+    let title = "Android Self-Custody Guide".to_string();
     let quote = "Trusted Third Parties are Security Holes".to_string();
     let quote_author = "-Nick Szabo".to_string();
 
@@ -187,33 +127,8 @@ pub fn BeginnerPageAndroid(cx: Scope) -> impl IntoView {
     }
     
 
-        //        <p>"<b>Download Options:</b>"</p>
-        //        <ol class="android-download-links">
-        //        <li>
-        //            <a href=r"https://play.google.com/store/apps/details?id=com.samourai.wallet&hl=en_US&gl=US"
-        //            target="_blank">"Google Play - Beginner Friendly"</a></li>
-        //        <li>
-        //            <a href=r"https://samouraiwallet.com/download"
-        //            target="_blank">"F-Droid"</a></li>
-        //        <li>
-        //            <a href=r"https://samouraiwallet.com/download" target="_blank">"Android APK"</a></li>
-        //        </ol>
 
-        //        <br></br>
-        //        <p>
-        //            "Although Samourai has some very advanced features, it is, in my
-        //            opinion, one of the best wallets available. What’s great is you can
-        //            use it as a simple bitcoin wallet and as you continue on your self
-        //            custody journey you’ll have easy access to its advanced
-        //            features."
-        //        </p>
 
-        //        <p>
-        //            "After opening the app, select “mainnet” and
-        //            continue. Follow the prompts to create your wallet. Make sure to
-        //            read the instructions and take your time. Understanding the process
-        //            is important on your journey to self custody."
-        //        </p>
         //        <br></br>
         //    <h2>"Samourai Wallet FAQs"</h2>
 

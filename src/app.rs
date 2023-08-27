@@ -36,6 +36,8 @@ pub fn App(cx: Scope) -> impl IntoView {
                     <Route path="/" view=|cx| view! { cx, <HomePage/> }/>
                     <Route path="/guides" view=|cx| view! { cx, <GuideSelector/> }/>
                     <Route path="/guides/beginner/android" view=|cx| view! { cx, <BeginnerPageAndroid/> }/>
+                        <Route path="/samourai" view=|cx| view! { cx, <BeginnerPageAndroid/> }/>
+                        <Route path="/blue" view=|cx| view! { cx, <BeginnerPageAndroid/> }/>
                     <Route path="/guides/beginner/ios" view=|cx| view! { cx, <BeginnerPageIOS/> }/>
                     <Route path="/guides/intermediate/android" view=|cx| view! { cx, <IntermediatePage/> }/>
                     <Route path="/guides/intermediate/ios" view=|cx| view! { cx, <IntermediatePage/> }/>
