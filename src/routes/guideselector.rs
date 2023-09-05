@@ -77,7 +77,7 @@ pub fn GuideSelector(cx: Scope) -> impl IntoView {
     let (beginner_clicked, set_beginner_clicked) = create_signal(cx, false);
     let (intermediate_clicked, set_intermediate_clicked) = create_signal(cx, false);
     let (advanced_clicked, set_advanced_clicked) = create_signal(cx, false);
-
+    
     view! { cx,
       <div id="test" class="container mx-auto max-w-5xl flex flex-col md:flex-row justify-center
                  items-center p-20 md:mt-10 text-white opacity-0 animate-fadein font-sans gap-8">

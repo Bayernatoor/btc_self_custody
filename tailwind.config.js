@@ -5,6 +5,10 @@ module.exports = {
       files: ["*.html", "./src/**/*.rs"]
   },
   theme: {
+    fontFamily: {
+        sans: ["Nunito Sans", "sans-serif"],
+        heading: ["Questrial", "sans-serif"]
+    },
     extend: {
       animation: {
           'fadein': 'fadein 2s ease-in-out forwards',
@@ -38,6 +42,8 @@ module.exports = {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    require('@tailwindcss/typography'),
+  ],
 }
 

@@ -16,10 +16,10 @@ pub fn HomePage(cx: Scope) -> impl IntoView {
                     <img src="./../../bitcoin_logo.png" alt="bitcoin logo"/>
                 </div>
             </div>
-       // <footer class="info">
-       //     <p>"Knowledge is Freedom"</p>
-       //     <p>"Created by "<a target="_blank" rel="noopener noreferrer" href="https://github.com/Bayernatoor">"Bayernator"</a></p>
-       // </footer>
+        //<footer class="mx-auto text-white">
+        //    <p>"Knowledge is Freedom"</p>
+        //    <p>"Created by "<a target="_blank" rel="noopener noreferrer" href="https://github.com/Bayernatoor">"Bayernator"</a></p>
+        //</footer>
 
     }
 }

@@ -6,15 +6,26 @@ use crate::routes::faq::*;
 use crate::routes::guideselector::*;
 use crate::routes::homepage::*;
 use crate::routes::intermediate::*;
-use crate::routes::navbar::*;
+use crate::extras::navbar::*;
 use leptos::*;
 use leptos_meta::*;
 use leptos_router::*;
+
 
 #[component]
 pub fn App(cx: Scope) -> impl IntoView {
     // Provides context that manages stylesheets, titles, meta tags, etc.
     provide_meta_context(cx);
+
+    //let (test, set_test) = create_signal(cx, false);
+    //provide_context(cx, test);
+
+
+    //if test() {
+    //    log!("test is true")
+    //} else {
+    //    log!("test is false")
+    //}
 
     view! {
         cx,
@@ -28,17 +39,19 @@ pub fn App(cx: Scope) -> impl IntoView {
         // sets the body background color throughout the app
         <Body class="bg-[#1a578f]"/>
 
-        // content for this welcome page
+        // Routes 
         <Router>
-            <NavBar />
+            <NavBar/>
             <main>
                 <Routes>
                     <Route path="/" view=|cx| view! { cx, <HomePage/> }/>
                     <Route path="/guides" view=|cx| view! { cx, <GuideSelector/> }/>
-                    <Route path="/guides/beginner/android" view=|cx| view! { cx, <BeginnerPageAndroid/> }/>
-                        <Route path="/samourai" view=|cx| view! { cx, <BeginnerPageAndroid/> }/>
-                        <Route path="/blue" view=|cx| view! { cx, <BeginnerPageAndroid/> }/>
+                    <Route path="/guides/beginner/android" view=|cx| view! { cx, <BeginnerPageAndroid />}/>
+                    <Route path="/guides/beginner/android/samourai" view=|cx| view! { cx, <BeginnerWalletInstructions samourai=true blue=false green=false ios=false/>}/>
+                    <Route path="/guides/beginner/android/blue" view=|cx| view! { cx, <BeginnerWalletInstructions samourai=false blue=true green=false ios=false/>}/>
                     <Route path="/guides/beginner/ios" view=|cx| view! { cx, <BeginnerPageIOS/> }/>
+                    <Route path="/guides/beginner/ios/blue" view=|cx| view! { cx, <BeginnerWalletInstructions green=false blue=true samourai=false ios=true/>}/>
+                    <Route path="/guides/beginner/ios/blockstream" view=|cx| view! { cx, <BeginnerWalletInstructions green=true blue=false samourai=false ios=true/>}/>
                     <Route path="/guides/intermediate/android" view=|cx| view! { cx, <IntermediatePage/> }/>
                     <Route path="/guides/intermediate/ios" view=|cx| view! { cx, <IntermediatePage/> }/>
                     <Route path="/guides/intermediate/desktop" view=|cx| view! { cx, <IntermediatePage/> }/>
@@ -51,3 +64,4 @@ pub fn App(cx: Scope) -> impl IntoView {
         </Router>
     }
 }
+
