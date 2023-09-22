@@ -20,6 +20,7 @@ wasm-bindgen = "=0.2.87"
 log = "0.4"
 simple_logger = "4"
 clippy = "0.0.302"
+markdown = "1.0.0-alpha.13"
 
 [features]
 hydrate = ["leptos/hydrate", "leptos_meta/hydrate", "leptos_router/hydrate"]

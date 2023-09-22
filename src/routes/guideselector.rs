@@ -90,7 +90,7 @@ pub fn GuideSelector(cx: Scope) -> impl IntoView {
             when=move || beginner_clicked()
             fallback= move |cx| view! { cx, <BeginnerButton on_click=move |_|  {set_beginner_clicked.update(|value| *value = !*value); set_intermediate_clicked.set(false); set_advanced_clicked.set(false)} /> }
             >
-            <div class="flex justify-center items-center gap-2">
+            <div class="flex justify-center items-center gap-2 animate-fadeinone">
                 <button class="h-12 flex-grow-0">
                   <h2 class="w-32 flex items-center justify-center font-semibold text-[#f79231]">
                     <a class="box-border p-4 bg-slate-100 rounded-2xl no-underline text-[#f79231] hover:bg-[#f4a949] w-full" href="/guides/beginner/android">"Android"</a>
@@ -108,7 +108,7 @@ pub fn GuideSelector(cx: Scope) -> impl IntoView {
             when=move || intermediate_clicked()
             fallback=move |cx| view! { cx, <IntermediateButton on_click=move |_| {set_intermediate_clicked.update(|value| *value = !*value); set_beginner_clicked.set(false); set_advanced_clicked.set(false)} /> }
           >
-            <div class="flex justify-center items-center py-4 gap-2">
+            <div class="flex justify-center items-center py-4 gap-2 animate-fadeinone">
                 <button class="h-12 flex-grow-0">
                   <h2 class="w-32 flex items-center justify-center font-semibold text-[#f79231]">
                     <a class="box-border p-4 bg-slate-100 rounded-2xl no-underline text-[#f79231] hover:bg-[#f4a949] w-full" href="/guides/beginner/android">"Android"</a>
@@ -130,7 +130,7 @@ pub fn GuideSelector(cx: Scope) -> impl IntoView {
             when=move || advanced_clicked()
             fallback=move |cx| view! { cx, <AdvancedButton on_click=move |_| {set_advanced_clicked.update(|value| *value = !*value); set_intermediate_clicked.set(false); set_beginner_clicked.set(false)}/> }
           >
-            <div class="flex justify-center items-center gap-2">
+            <div class="flex justify-center items-center gap-2 animate-fadeinone">
                 <button class="h-12 flex-grow-0">
                   <h2 class="w-32 flex items-center justify-center font-semibold text-[#f79231]">
                     <a class="box-border p-4 bg-slate-100 rounded-2xl no-underline text-[#f79231] hover:bg-[#f4a949] w-full" href="/guides/beginner/android">"Android"</a>
