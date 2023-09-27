@@ -1,6 +1,7 @@
 use leptos::{*, ev::MouseEvent};
 use leptos::ev::{Event, AnimationEvent};
 use leptos_router::*;
+use crate::extras::accordion_menu::{AccordionMenu, FAQS};
 
 
 // get the current path via the RouteContext
@@ -222,58 +223,6 @@ pub fn BeginnerPageAndroid(cx: Scope) -> impl IntoView {
         <BeginnerPageTemplate title=title quote=quote quote_author=quote_author intro=intro_text/>
     }
     
-       //     <p class="text-white">
-       //     "After opening the app, select “mainnet” and
-       //     continue. Follow the prompts to create your wallet. Make sure to
-       //     read the instructions and take your time. Understanding the process
-       //     is important on your journey to self custody."
-       //     </p>
-
-        //    <div class="accordion">
-        //        <input type="checkbox" id="toggle1" class="accordion-toggle" />
-        //        <label for="toggle1" class="accordion-title">"Additional features"</label>
-        //        <div class="accordion-content">
-        //          <p>
-        //          "Since you’re just starting out on your self-custody
-        //          journey let's keep things simple. If you’re asked to make a
-        //          decision regarding features that you do not understand - for
-        //          example: turn on Tor - simply leave it on the default value
-        //          and move. The intermediate guide will dive into those. "
-        //          </p>
-        //        </div>
-        //        <input type="checkbox" id="toggle2" class="accordion-toggle" />
-        //        <label for="toggle2" class="accordion-title">"PassPhrase"</label>
-        //        <div class="accordion-content">
-        //          <p>"Content for Section 2"</p>
-        //        </div>
-
-        //        <input type="checkbox" id="toggle3" class="accordion-toggle" />
-        //        <label for="toggle3" class="accordion-title">"Pin Code"</label>
-        //        <div class="accordion-content">
-        //          <p>"Content for Section 3"</p>
-        //        </div>
-
-        //        <input type="checkbox" id="toggle3" class="accordion-toggle" />
-        //        <label for="toggle3" class="accordion-title">"Secret Words"</label>
-        //        <div class="accordion-content">
-        //          <p>"Content for Section 3"</p>
-        //        </div>
-
-        //        <input type="checkbox" id="toggle3" class="accordion-toggle" />
-        //        <label for="toggle3" class="accordion-title">"Paynym"</label>
-        //        <div class="accordion-content">
-        //          <p>"Content for Section 3"</p>
-        //        </div>
-
-        //        <input type="checkbox" id="toggle3" class="accordion-toggle" />
-        //        <label for="toggle3" class="accordion-title">"Samourai Docs"</label>
-        //        <div class="accordion-content">
-        //          <p>"Content for Section 3"</p>
-        //        </div>
-        //    </div>
-        //    </div>
-        //</div>
-    //}
 }
 
 /// Renders the beginner IOS page.
@@ -324,6 +273,12 @@ pub fn BeginnerWalletInstructions(cx: Scope, blue: bool, samourai: bool, green: 
         let samourai_fdroid = r"https://samouraiwallet.com/download/fdroid".to_string();;
 
         let green_apple_store = r"https://apps.apple.com/us/app/green-bitcoin-wallet/id1402243590".to_string();;
+        
+        
+        let samourai_faq_1 = FAQS { title: "title_1".to_string(), p_1: vec!("string_1".to_string(), "string_2".to_string()), a_1: vec!("string_1".to_string(), "string_2".to_string())};
+        let samourai_faq_2 = FAQS { title: "title_1".to_string(), p_1: vec!("string_1".to_string(), "string_2".to_string()), a_1: vec!("string_1".to_string(), "string_2".to_string())};
+        let samourai_faq_3 = FAQS { title: "title_1".to_string(), p_1: vec!("string_1".to_string(), "string_2".to_string()), a_1: vec!("string_1".to_string(), "string_2".to_string())};
+        let samourai_faqs: Vec<FAQS> = vec![samourai_faq_1, samourai_faq_2, samourai_faq_3];
 
         //let (show_content, set_show_content) = create_signal(cx, false);
         //
@@ -349,7 +304,7 @@ pub fn BeginnerWalletInstructions(cx: Scope, blue: bool, samourai: bool, green: 
                         </p>                                                    
                     </div>
                     <br></br>
-                    <h2 class="flex justify-center font-bold text-2xl text-white py-2">"Download Options:"</h2>
+                    <h2 class="flex justify-center font-bold text-2xl text-white py-2">"Download Options"</h2>
 
                     <div class="flex flex-col mx-auto justify-center px-6 py-2 max-w-2xl mx-auto gap-4">
                         <Show
@@ -377,12 +332,14 @@ pub fn BeginnerWalletInstructions(cx: Scope, blue: bool, samourai: bool, green: 
                         </p>
                     </div>
                     <br></br>
-                    <h2 class="flex justify-center font-bold text-3xl text-white py-2">"Download Options:"</h2>
+                    <h2 class="flex justify-center font-bold text-3xl text-white py-2">"Download Options"</h2>
                     <div class="flex flex-col justify-center px-6 py-2 max-w-2xl mx-auto space-y-4">
                         <DownloadButton href=samourai_google_play.clone() logo=google_play_logo.clone() alt_txt=google_play_alt.clone() button_name="Google Play".to_string()/>
                         <DownloadButton href=samourai_fdroid.clone() logo=img_url_samourai_fdroid.clone() alt_txt=img_alt_samourai_fdroid.clone() button_name="F-Droid".to_string()/>
                         <DownloadButton href=samourai_android_apk.clone() logo=img_url_github.clone() alt_txt=img_alt_github.clone() button_name="Android APK".to_string()/>
                     </div>
+                    <h2 class="flex justify-center font-bold text-2xl text-white pt-6">"Help Me!"</h2>
+                    <AccordionMenu faqs=samourai_faqs/>
                 </div>
             }
         } else {
@@ -398,7 +355,7 @@ pub fn BeginnerWalletInstructions(cx: Scope, blue: bool, samourai: bool, green: 
                         </p>
                     </div>
                     <br></br>
-                    <h2 class="flex justify-center font-bold text-3xl text-white py-2">"Download Options:"</h2>
+                    <h2 class="flex justify-center font-bold text-3xl text-white py-2">"Download Options"</h2>
                     <div class="flex flex-col justify-center px-6 py-2 max-w-2xl mx-auto space-y-4">
                         <DownloadButton href=green_apple_store.clone() logo=apple_store_logo_2.clone() alt_txt=apple_store_alt.clone()/>
                     </div>
