@@ -46,8 +46,9 @@ pub fn AccordionMenu(cx: Scope, #[prop(optional)] faqs: FAQS) -> impl IntoView {
     view! {cx,
         <div id="accordion-collapse" data-accordion="collapse">
             // turn items of faqs struct into into iters, zip em together and then map to Menu comp. 
+            // title and content come in as markdown, convert to html
            {faqs.titles.iter().zip(faqs.contents.iter())
-               .map(|(title, content)| view! {cx, <Menu faq_title=title.clone() faq_content=content.clone() />})
+               .map(|(title, content)| view! {cx, <Menu faq_title=markdown::to_html(title) faq_content=markdown::to_html(content) />})
                .collect::<Vec<_>>()}
         </div>
     }
