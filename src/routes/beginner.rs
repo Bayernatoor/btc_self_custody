@@ -274,12 +274,9 @@ pub fn BeginnerWalletInstructions(cx: Scope, blue: bool, samourai: bool, green: 
 
         let green_apple_store = r"https://apps.apple.com/us/app/green-bitcoin-wallet/id1402243590".to_string();;
         
+        let samourai_faqs = FAQS { titles: vec!("title1".to_string(), "title2".to_string(), "title3".to_string()), 
+                                contents: vec!("string_1".to_string(), "string_2".to_string(), "string_2".to_string())}; 
         
-        let samourai_faq_1 = FAQS { title: "title_1".to_string(), p_1: vec!("string_1".to_string(), "string_2".to_string()), a_1: vec!("string_1".to_string(), "string_2".to_string())};
-        let samourai_faq_2 = FAQS { title: "title_1".to_string(), p_1: vec!("string_1".to_string(), "string_2".to_string()), a_1: vec!("string_1".to_string(), "string_2".to_string())};
-        let samourai_faq_3 = FAQS { title: "title_1".to_string(), p_1: vec!("string_1".to_string(), "string_2".to_string()), a_1: vec!("string_1".to_string(), "string_2".to_string())};
-        let samourai_faqs: Vec<FAQS> = vec![samourai_faq_1, samourai_faq_2, samourai_faq_3];
-
         //let (show_content, set_show_content) = create_signal(cx, false);
         //
         //window_event_listener(ev::animationend, move |_ev| {
@@ -317,6 +314,9 @@ pub fn BeginnerWalletInstructions(cx: Scope, blue: bool, samourai: bool, green: 
                             <DownloadButton href=blue_apple_store.clone() logo=apple_store_logo_2.clone() alt_txt=apple_store_alt.clone()/>
                         </Show>        
                     </div>
+                    
+                    <h2 class="flex justify-center font-bold text-2xl text-white pt-6">"Help Me!"</h2>
+                    <AccordionMenu faqs=samourai_faqs/>
                 </div>
             }
         } else if samourai {
@@ -338,6 +338,7 @@ pub fn BeginnerWalletInstructions(cx: Scope, blue: bool, samourai: bool, green: 
                         <DownloadButton href=samourai_fdroid.clone() logo=img_url_samourai_fdroid.clone() alt_txt=img_alt_samourai_fdroid.clone() button_name="F-Droid".to_string()/>
                         <DownloadButton href=samourai_android_apk.clone() logo=img_url_github.clone() alt_txt=img_alt_github.clone() button_name="Android APK".to_string()/>
                     </div>
+
                     <h2 class="flex justify-center font-bold text-2xl text-white pt-6">"Help Me!"</h2>
                     <AccordionMenu faqs=samourai_faqs/>
                 </div>
@@ -359,7 +360,10 @@ pub fn BeginnerWalletInstructions(cx: Scope, blue: bool, samourai: bool, green: 
                     <div class="flex flex-col justify-center px-6 py-2 max-w-2xl mx-auto space-y-4">
                         <DownloadButton href=green_apple_store.clone() logo=apple_store_logo_2.clone() alt_txt=apple_store_alt.clone()/>
                     </div>
-                    </div>
+
+                    <h2 class="flex justify-center font-bold text-2xl text-white pt-6">"Help Me!"</h2>
+                    <AccordionMenu faqs=samourai_faqs/>
+                </div>
                 }
         }
     
