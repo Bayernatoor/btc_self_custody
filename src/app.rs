@@ -15,12 +15,11 @@ use leptos_router::*;
 
 
 #[component]
-pub fn App(cx: Scope) -> impl IntoView {
+pub fn App() -> impl IntoView {
     // Provides context that manages stylesheets, titles, meta tags, etc.
-    provide_meta_context(cx);
+    provide_meta_context();
 
     view! {
-        cx,
         // injects a stylesheet into the document <head>
         // id=leptos means cargo-leptos will hot-reload this stylesheet
         <Stylesheet id="leptos" href="/pkg/leptos_start.css"/>
@@ -36,21 +35,21 @@ pub fn App(cx: Scope) -> impl IntoView {
             <NavBar/>
             <main>
                 <Routes>
-                    <Route path="/" view=|cx| view! { cx, <HomePage/> }/>
-                    <Route path="/guides" view=|cx| view! { cx, <GuideSelector/> }/>
-                    <Route path="/guides/beginner/android" view=|cx| view! { cx, <BeginnerPageAndroid />}/>
-                    <Route path="/guides/beginner/android/samourai" view=|cx| view! { cx, <BeginnerWalletInstructions samourai=true blue=false green=false ios=false/>}/>
-                    <Route path="/guides/beginner/android/blue" view=|cx| view! { cx, <BeginnerWalletInstructions samourai=false blue=true green=false ios=false/>}/>
-                    <Route path="/guides/beginner/ios" view=|cx| view! { cx, <BeginnerPageIOS/> }/>
-                    <Route path="/guides/beginner/ios/blue" view=|cx| view! { cx, <BeginnerWalletInstructions green=false blue=true samourai=false ios=true/>}/>
-                    <Route path="/guides/beginner/ios/blockstream" view=|cx| view! { cx, <BeginnerWalletInstructions green=true blue=false samourai=false ios=true/>}/>
-                    <Route path="/guides/intermediate/android" view=|cx| view! { cx, <IntermediatePage/> }/>
-                    <Route path="/guides/intermediate/ios" view=|cx| view! { cx, <IntermediatePage/> }/>
-                    <Route path="/guides/intermediate/desktop" view=|cx| view! { cx, <IntermediatePage/> }/>
-                    <Route path="/guides/advanced" view=|cx| view! { cx, <AdvancedPage/> }/>
-                    <Route path="/blog" view=|cx| view! { cx, <BlogPage/> }/>
-                    <Route path="/faq" view=|cx| view! { cx, <FaqPage/> }/>
-                    <Route path="/about" view=|cx| view! { cx, <AboutPage/> }/>
+                    <Route path="/" view=|| view! {<HomePage/> }/>
+                    <Route path="/guides" view=|| view! {<GuideSelector/> }/>
+                    <Route path="/guides/beginner/android" view=|| view! {<BeginnerPageAndroid />}/>
+                    <Route path="/guides/beginner/android/samourai" view=|| view! {<BeginnerWalletInstructions samourai=true blue=false green=false ios=false/>}/>
+                    <Route path="/guides/beginner/android/blue" view=|| view! {<BeginnerWalletInstructions samourai=false blue=true green=false ios=false/>}/>
+                    <Route path="/guides/beginner/ios" view=|| view! {<BeginnerPageIOS/> }/>
+                    <Route path="/guides/beginner/ios/blue" view=|| view! {<BeginnerWalletInstructions green=false blue=true samourai=false ios=true/>}/>
+                    <Route path="/guides/beginner/ios/blockstream" view=|| view! {<BeginnerWalletInstructions green=true blue=false samourai=false ios=true/>}/>
+                    <Route path="/guides/intermediate/android" view=|| view! {<IntermediatePage/> }/>
+                    <Route path="/guides/intermediate/ios" view=|| view! {<IntermediatePage/> }/>
+                    <Route path="/guides/intermediate/desktop" view=|| view! {<IntermediatePage/> }/>
+                    <Route path="/guides/advanced" view=|| view! {<AdvancedPage/> }/>
+                    <Route path="/blog" view=|| view! {<BlogPage/> }/>
+                    <Route path="/faq" view=|| view! {<FaqPage/> }/>
+                    <Route path="/about" view=|| view! {<AboutPage/> }/>
                 </Routes>
             </main>
         </Router>

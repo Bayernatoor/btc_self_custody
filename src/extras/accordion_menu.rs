@@ -19,15 +19,14 @@ use crate::server::api::fetch_faqs::*;
 #[component]
 #[allow(non_snake_case)]
 fn Menu(
-    cx: Scope,
     faq_title: String,
     faq_content: String,
 ) -> impl IntoView
 {
-    let (menu_clicked, set_menu_clicked) = create_signal(cx, false);
+    let (menu_clicked, set_menu_clicked) = create_signal(false);
     
     // takes faq_content and faq_title to make a button and a accordion style container
-    view! {cx,
+    view! {
         <h2 id="accordion-collapse-heading">
             <button type="button" class="flex items-center justify-between w-full p-5 font-medium
             text-left text-gray-900 border border-b-0 border-gray-700 rounded-t-xl focus:ring-2
@@ -50,26 +49,26 @@ fn Menu(
 // Accordion menu component for faqs, creates necessary number of Menu comps based on props passed.  
 #[component]
 #[allow(non_snake_case)]
-pub fn AccordionMenu(cx: Scope, #[prop(optional)] faqs: Vec<FAQ>) -> impl IntoView {
+pub fn AccordionMenu(#[prop(optional)] faqs: Vec<FAQ>) -> impl IntoView {
     
       
-      let faqs = create_resource(cx, 
+      let faqs = create_resource( 
             move || (),
             move |_| fetch_faq()
-            );
+            ).get().unwrap();
       
       //let faq = move || match faqs.get() {
       //      None => view! {cx,  <p>"Loading..."</p> },
       //      Some(data) => data
       //      };
 
-      view! {cx,
+      view! {
         <div id="accordion-collapse" data-accordion="collapse">
             <For 
                 each=move || faqs.clone()
                 key= |faq| faq.id
-                view=move |cx, faq| {
-                    view! {cx, <Menu faq_title=markdown::to_html(&faq.title) faq_content=markdown::to_html(&faq.content) />}
+                view=move |faq| {
+                    view! {<Menu faq_title=markdown::to_html(&faq.title) faq_content=markdown::to_html(&faq.content) />}
                 }
 
             />

@@ -7,22 +7,17 @@ pub struct NavbarContext {
 }
 
 #[component]
-pub fn NavBar(cx: Scope) -> impl IntoView {
-     let (guide, set_guide) = create_signal(cx, false);
-
-     //provide_context(cx, NavbarContext {guide: set_guide});
-
-     //log!("Guide: {}", guide());   
-    //let setter = use_context::<WriteSignal<bool>>(cx).unwrap();
+pub fn NavBar() -> impl IntoView {
+    let (guide, set_guide) = create_signal(false);
 
     let back_button = "./../../left-arrow_10024176.png".to_string() ;
-    let (menu_clicked, set_menu_clicked) = create_signal(cx, false);
+    let (menu_clicked, set_menu_clicked) = create_signal(false);
 
-    view! { cx,
+    view! {
          <div class="bg-[#1a578f] shadow-md text-white sticky top-0 z-10 max-w-10xl mx-auto p-4 flex justify-between items-center font-sans">
             <Show
                 when=move || {guide() == true}
-                fallback=|cx| view! {cx, 
+                fallback=|| view! { 
                         <div>
                             <h1 class="text-2xl font-medium text-white"><a href="/">"Bitcoin Barrack"</a></h1>
                         </div>
