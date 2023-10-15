@@ -1,7 +1,8 @@
 use leptos::{*, ev::MouseEvent};
-use leptos::ev::{Event, AnimationEvent};
 use leptos_router::*;
-use crate::extras::accordion_menu::{AccordionMenu, FAQS};
+
+use crate::extras::accordion_menu::AccordionMenu;
+use crate::server::api::fetch_faqs::FAQ;
 
 
 // get the current path via the RouteContext
@@ -12,7 +13,11 @@ fn get_current_path(cx: Scope) -> String {
     current_page 
 }
 
+
+
+
 #[component]
+#[allow(non_snake_case)]
 pub fn WalletButton<F>(cx: Scope, on_click: F, wallet_name: String, short_desc: String, img_url:
                         String, img_alt: String, text_color: String, samourai: bool, blue: bool, green: bool, platform: String) -> impl IntoView
     where
@@ -51,6 +56,7 @@ pub fn WalletButton<F>(cx: Scope, on_click: F, wallet_name: String, short_desc: 
 
 
 #[component]
+#[allow(non_snake_case)]
 pub fn DownloadButton(cx: Scope, href: String, logo: String, alt_txt: String, #[prop(optional)] button_name: Option<String> 
                         ) -> impl IntoView
     {
@@ -88,6 +94,7 @@ pub fn DownloadButton(cx: Scope, href: String, logo: String, alt_txt: String, #[
 }       
 
 #[component]
+#[allow(non_snake_case)]
 pub fn BeginnerPageTemplate(cx: Scope, title: String, quote: String, quote_author: String, intro:
                             String 
                             ) -> impl IntoView {
@@ -208,6 +215,7 @@ pub fn BeginnerPageTemplate(cx: Scope, title: String, quote: String, quote_autho
 // Renders the beginner Android page
 // This comp should be reviewed and likely redundant.
 #[component]
+#[allow(non_snake_case)]
 pub fn BeginnerPageAndroid(cx: Scope) -> impl IntoView {
 
     let intro_text: String = "Controlling a bitcoin private key grants absolute authority over the
@@ -227,6 +235,7 @@ pub fn BeginnerPageAndroid(cx: Scope) -> impl IntoView {
 
 /// Renders the beginner IOS page.
 #[component]
+#[allow(non_snake_case)]
 pub fn BeginnerPageIOS(cx: Scope) -> impl IntoView {
 
         let intro_text: String = "Controlling a bitcoin private key grants absolute authority over the
@@ -248,6 +257,7 @@ pub fn BeginnerPageIOS(cx: Scope) -> impl IntoView {
 /// Route for the android instructions - renders either bluewallet or samouraiwallet
 /// depends on button clicked. 
 #[component]
+#[allow(non_snake_case)]
 pub fn BeginnerWalletInstructions(cx: Scope, blue: bool, samourai: bool, green: bool, ios: bool) -> impl IntoView
 
     {
@@ -264,34 +274,23 @@ pub fn BeginnerWalletInstructions(cx: Scope, blue: bool, samourai: bool, green: 
         let img_url_samourai_fdroid = "./../../F-Droid_Logo.webp".to_string();
         let img_alt_samourai_fdroid = "F-Droid Logo".to_string();
         
-        let blue_google_play = r"https://play.google.com/store/apps/details?id=io.bluewallet.bluewallet".to_string();;
-        let blue_apple_store = r"https://apps.apple.com/app/bluewallet-bitcoin-wallet/id1376878040".to_string();;
-        let blue_android_apk = r"https://github.com/BlueWallet/BlueWallet/releases".to_string();;
+        let blue_google_play = r"https://play.google.com/store/apps/details?id=io.bluewallet.bluewallet".to_string();
+        let blue_apple_store = r"https://apps.apple.com/app/bluewallet-bitcoin-wallet/id1376878040".to_string();
+        let blue_android_apk = r"https://github.com/BlueWallet/BlueWallet/releases".to_string();
 
-        let samourai_google_play = r"https://play.google.com/store/apps/details?id=com.samourai.wallet&hl=en_US&gl=US".to_string();;
-        let samourai_android_apk = r"https://samouraiwallet.com/download".to_string();;
-        let samourai_fdroid = r"https://samouraiwallet.com/download/fdroid".to_string();;
+        let samourai_google_play = r"https://play.google.com/store/apps/details?id=com.samourai.wallet&hl=en_US&gl=US".to_string();
+        let samourai_android_apk = r"https://samouraiwallet.com/download".to_string();
+        let samourai_fdroid = r"https://samouraiwallet.com/download/fdroid".to_string();
 
-        let green_apple_store = r"https://apps.apple.com/us/app/green-bitcoin-wallet/id1402243590".to_string();;
+        let green_apple_store = r"https://apps.apple.com/us/app/green-bitcoin-wallet/id1402243590".to_string();
         
-        let samourai_faqs = FAQS { titles: vec!("## How do I create a wallet?".to_string(), "## First Wallet Setup Guide".to_string(), "## How do I receive bitcoin?".to_string()), 
-                                contents: vec!("After installing and opening the app, select **mainnet** and press **continue**.
-
-Follow the prompts to create your wallet. Make sure to carefully read the instructions and
-take your time. Understanding the process is as important as taking self custody of your
-bitcoin.
-
-Since you’re just starting out on your self-custody journey let's keep things simple. If
-you’re asked to make a decision regarding features that you do not understand, **for
-example: turn on Tor** simply leave it on the default value and move on. The intermediate
-guide will dive deeper into those options.".to_string(),
-
-                                               "string_2".to_string(), "string_2".to_string())}; 
-
+        let samourai_faq = vec![
+                FAQ::new_faq(1, "hello".to_string(), "Contents".to_string()),
+                FAQ::new_faq(2, "YO YO YO".to_string(), "MORE CONTENT".to_string())
+        ];
 
         
-        //let (show_content, set_show_content) = create_signal(cx, false);
-        //
+        
         //window_event_listener(ev::animationend, move |_ev| {
         //    log!("The animation ended");
         //    //log!("guide_setter {:?}", guide_setter);
@@ -329,7 +328,7 @@ guide will dive deeper into those options.".to_string(),
                     </div>
                     
                     <h2 class="flex justify-center font-bold text-2xl text-white pt-6 pb-2">"Help Me!"</h2>
-                    <AccordionMenu faqs=samourai_faqs/>
+                    <AccordionMenu faqs=samourai_faq/>
                 </div>
             }
         } else if samourai {
@@ -353,7 +352,7 @@ guide will dive deeper into those options.".to_string(),
                     </div>
 
                     <h2 class="flex justify-center font-bold text-2xl text-white pt-6 pb-2">"Help Me!"</h2>
-                    <AccordionMenu faqs=samourai_faqs/>
+                    <AccordionMenu faqs=samourai_faq/>
                 </div>
             }
         } else {
@@ -375,7 +374,7 @@ guide will dive deeper into those options.".to_string(),
                     </div>
 
                     <h2 class="flex justify-center font-bold text-2xl text-white pt-6 pb-2">"Help Me!"</h2>
-                    <AccordionMenu faqs=samourai_faqs/>
+                    <AccordionMenu faqs=samourai_faq/>
                 </div>
                 }
         }

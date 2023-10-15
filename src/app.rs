@@ -1,3 +1,4 @@
+
 use crate::routes::about::*;
 use crate::routes::advanced::*;
 use crate::routes::beginner::*;
@@ -7,6 +8,7 @@ use crate::routes::guideselector::*;
 use crate::routes::homepage::*;
 use crate::routes::intermediate::*;
 use crate::extras::navbar::*;
+use crate::server::api::fetch_faqs::*;
 use leptos::*;
 use leptos_meta::*;
 use leptos_router::*;
@@ -16,16 +18,6 @@ use leptos_router::*;
 pub fn App(cx: Scope) -> impl IntoView {
     // Provides context that manages stylesheets, titles, meta tags, etc.
     provide_meta_context(cx);
-
-    //let (test, set_test) = create_signal(cx, false);
-    //provide_context(cx, test);
-
-
-    //if test() {
-    //    log!("test is true")
-    //} else {
-    //    log!("test is false")
-    //}
 
     view! {
         cx,
