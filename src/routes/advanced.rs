@@ -2,8 +2,8 @@ use leptos::*;
 
 /// Renders the home page of your application.
 #[component]
-pub fn AdvancedPage(cx: Scope) -> impl IntoView {
-    view! { cx,
+pub fn AdvancedPage() -> impl IntoView {
+    view! {
         <h1>"Advanced Section"</h1>
     }
 }

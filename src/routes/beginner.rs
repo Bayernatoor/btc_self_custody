@@ -1,31 +1,30 @@
 use leptos::{*, ev::MouseEvent};
 use leptos_router::*;
+use leptos::logging::log;
 
 use crate::extras::accordion_menu::AccordionMenu;
 use crate::server::api::fetch_faqs::FAQ;
 
 
 // get the current path via the RouteContext
-fn get_current_path(cx: Scope) -> String {
+fn get_current_path() -> String {
     // Retrieve the URL path of the current route
-    let current_page = use_route(cx).path();
+    let current_page = use_route().path();
 
     current_page 
+
 }
-
-
-
 
 #[component]
 #[allow(non_snake_case)]
-pub fn WalletButton<F>(cx: Scope, on_click: F, wallet_name: String, short_desc: String, img_url:
+pub fn WalletButton<F>(on_click: F, wallet_name: String, short_desc: String, img_url:
                         String, img_alt: String, text_color: String, samourai: bool, blue: bool, green: bool, platform: String) -> impl IntoView
     where
         F: Fn(MouseEvent) + 'static,
     {
 
     // determine which wallet button was clicked on 
-    let (wallet, set_wallet) = create_signal(cx, "".to_string());
+    let (wallet, set_wallet) = create_signal("".to_string());
     if samourai {
         set_wallet("samourai".to_string())
     } else if blue {
@@ -39,7 +38,7 @@ pub fn WalletButton<F>(cx: Scope, on_click: F, wallet_name: String, short_desc: 
     // create our url path 
     let path = format!("/guides/beginner/{platform}/{wallet}");
     
-    view! {cx, 
+    view! { 
         <a href=path>
             <button class="flex justify-center shrink-0 h-20 w-72 p-4 mx-auto bg-white rounded-xl items-center space-x-4" on:click=on_click>
               <div class="shrink-0">
@@ -57,12 +56,12 @@ pub fn WalletButton<F>(cx: Scope, on_click: F, wallet_name: String, short_desc: 
 
 #[component]
 #[allow(non_snake_case)]
-pub fn DownloadButton(cx: Scope, href: String, logo: String, alt_txt: String, #[prop(optional)] button_name: Option<String> 
+pub fn DownloadButton(href: String, logo: String, alt_txt: String, #[prop(optional)] button_name: Option<String> 
                         ) -> impl IntoView
     {
 
-    let (button, set_button) = create_signal(cx, "".to_string());
-    let (width, set_width) = create_signal(cx, 12);
+    let (button, set_button) = create_signal("".to_string());
+    let (width, set_width) = create_signal(12);
     
     let name = match button_name.clone() {
         Some(name) => name,
@@ -75,7 +74,7 @@ pub fn DownloadButton(cx: Scope, href: String, logo: String, alt_txt: String, #[
         set_width(36)
     }
     
-    view! {cx, 
+    view! { 
         <a href=href target="_blank" rel="external">
             <button class="flex justify-center p-2 shrink-0 h-18 w-60 mx-auto bg-white rounded-xl items-center space-x-4">
                 <div class="shrink-0">
@@ -83,7 +82,7 @@ pub fn DownloadButton(cx: Scope, href: String, logo: String, alt_txt: String, #[
                 </div>
                 <Show
                     when=move || button_name.is_some()
-                    fallback=move |_| view!(cx, "")> 
+                    fallback=move || view!("")> 
                     <div class="font-bold">
                         {format!("{}", button())}
                     </div>
@@ -95,23 +94,23 @@ pub fn DownloadButton(cx: Scope, href: String, logo: String, alt_txt: String, #[
 
 #[component]
 #[allow(non_snake_case)]
-pub fn BeginnerPageTemplate(cx: Scope, title: String, quote: String, quote_author: String, intro:
+pub fn BeginnerPageTemplate(title: String, quote: String, quote_author: String, intro:
                             String 
                             ) -> impl IntoView {
 
     // used for onlick to determine which button was clicked
-    let (samourai_clicked, set_samourai_clicked) = create_signal(cx, false);
-    let (blue_clicked, set_blue_clicked) = create_signal(cx, false);
-    let (green_clicked, set_green_clicked) = create_signal(cx, false);
+    let (samourai_clicked, set_samourai_clicked) = create_signal(false);
+    let (blue_clicked, set_blue_clicked) = create_signal(false);
+    let (green_clicked, set_green_clicked) = create_signal(false);
 
     // set the button details 
-    let (samourai_details, set_samourai_details) = create_signal(cx, false);
-    let (blue_details, set_blue_details) = create_signal(cx, false);
-    let (green_details, set_green_details) = create_signal(cx, false);
+    let (samourai_details, set_samourai_details) = create_signal(false);
+    let (blue_details, set_blue_details) = create_signal(false);
+    let (green_details, set_green_details) = create_signal(false);
 
     // get current path via RouteContext
-    let path = get_current_path(cx);
-    let (platform, set_platform) = create_signal(cx, "".to_string());
+    let path = get_current_path();
+    let (platform, set_platform) = create_signal("".to_string());
 
     if path.contains("ios") {
         set_platform("ios".to_string())
@@ -141,7 +140,7 @@ pub fn BeginnerPageTemplate(cx: Scope, title: String, quote: String, quote_autho
     let text_color_green = "#0a7b46ff".to_string();
 
     // DOM elements are only available when used within a create_effect see --> https://leptos-rs.github.io/leptos/ssr/24_hydration_bugs.html#not-all-client-code-can-run-on-the-server
-    create_effect(cx, move |_| {
+    create_effect(move |_| {
         let beginner_guide_element = window().document().unwrap().get_element_by_id("beginner");
         log!("guide element: {:?}", beginner_guide_element);
     });
@@ -152,7 +151,7 @@ pub fn BeginnerPageTemplate(cx: Scope, title: String, quote: String, quote_autho
     // });   
 
     // renders the guides/beginner/* route 
-    view! { cx, 
+    view! { 
         <div id="beginner" class="flex flex-col max-w-3xl mx-auto shadow-xl rounded-xl pb-10 animate-fadein" >
             <div class="flex flex-col p-6 pt-10 max-w-3xl mx-auto">
                     <h1 class="flex justify-center text-[36px] text-white font-semibold">{title}</h1>
@@ -182,7 +181,7 @@ pub fn BeginnerPageTemplate(cx: Scope, title: String, quote: String, quote_autho
                 // Blue wallet is available for both android/ios
                 <Show
                    when=move || platform() == "android".to_string()
-                   fallback= move |cx| view! {cx, 
+                   fallback= move || view! {
                         <WalletButton on_click = move |_| {set_green_clicked(true);
                                  set_green_details(true)}
                                 samourai=false blue=false green=true platform=platform()
@@ -216,7 +215,7 @@ pub fn BeginnerPageTemplate(cx: Scope, title: String, quote: String, quote_autho
 // This comp should be reviewed and likely redundant.
 #[component]
 #[allow(non_snake_case)]
-pub fn BeginnerPageAndroid(cx: Scope) -> impl IntoView {
+pub fn BeginnerPageAndroid() -> impl IntoView {
 
     let intro_text: String = "Controlling a bitcoin private key grants absolute authority over the
         associated bitcoin, embodying the ethos of the bitcoin movement. Self custody and personal
@@ -227,7 +226,7 @@ pub fn BeginnerPageAndroid(cx: Scope) -> impl IntoView {
     let quote = "Trusted Third Parties are Security Holes".to_string();
     let quote_author = "-Nick Szabo".to_string();
         
-    view! { cx,
+    view! {
         <BeginnerPageTemplate title=title quote=quote quote_author=quote_author intro=intro_text/>
     }
     
@@ -236,7 +235,7 @@ pub fn BeginnerPageAndroid(cx: Scope) -> impl IntoView {
 /// Renders the beginner IOS page.
 #[component]
 #[allow(non_snake_case)]
-pub fn BeginnerPageIOS(cx: Scope) -> impl IntoView {
+pub fn BeginnerPageIOS() -> impl IntoView {
 
         let intro_text: String = "Controlling a bitcoin private key grants absolute authority over the
             associated bitcoin, embodying the ethos of the bitcoin movement. Self custody and personal
@@ -247,7 +246,7 @@ pub fn BeginnerPageIOS(cx: Scope) -> impl IntoView {
         let quote = "Trusted Third Parties are Security Holes".to_string();
         let quote_author = "-Nick Szabo".to_string();
 
-    view! { cx,
+    view! {
             <BeginnerPageTemplate title=title quote=quote quote_author=quote_author intro=intro_text/> 
     
     }
@@ -258,7 +257,7 @@ pub fn BeginnerPageIOS(cx: Scope) -> impl IntoView {
 /// depends on button clicked. 
 #[component]
 #[allow(non_snake_case)]
-pub fn BeginnerWalletInstructions(cx: Scope, blue: bool, samourai: bool, green: bool, ios: bool) -> impl IntoView
+pub fn BeginnerWalletInstructions(blue: bool, samourai: bool, green: bool, ios: bool) -> impl IntoView
 
     {
         let google_play_logo = "./../../google-play-logo.avif".to_string(); 
@@ -300,7 +299,7 @@ pub fn BeginnerWalletInstructions(cx: Scope, blue: bool, samourai: bool, green: 
 
         if blue {
             // Render Blue Wallet instructions 
-            view! {cx, 
+            view! {
                 <div class="flex flex-col max-w-3xl p-4 mx-auto shadow-xl rounded-xl animate-slidein">
                     <h1 class="flex justify-center text-[36px] font-bold text-blue">"Blue Wallet"</h1>
                     <br></br>
@@ -318,7 +317,7 @@ pub fn BeginnerWalletInstructions(cx: Scope, blue: bool, samourai: bool, green: 
                     <div class="flex flex-col mx-auto justify-center px-6 py-2 max-w-2xl mx-auto gap-4">
                         <Show
                             when=move || ios
-                            fallback=move |_| view!{cx,
+                            fallback=move || view!{
 
                             <DownloadButton href=blue_google_play.clone() logo=google_play_logo.clone() alt_txt=google_play_alt.clone() button_name="Google Play".to_string()/>
                             <DownloadButton href=blue_android_apk.clone() logo=img_url_github.clone() alt_txt=img_alt_github.clone() button_name="Android APK".to_string()/>
@@ -333,7 +332,7 @@ pub fn BeginnerWalletInstructions(cx: Scope, blue: bool, samourai: bool, green: 
             }
         } else if samourai {
             // Render Samourai wallet instructions
-            view! {cx, 
+            view! {
                 <div class="flex flex-col max-w-3xl p-4 mx-auto shadow-xl rounded-xl animate-slidein">
                     <div class="flex flew-row justify-center">
                         <h1 class="flex justify-center text-[36px] font-bold text-[#3a1517ff]">"Samourai Wallet"</h1>
@@ -357,7 +356,7 @@ pub fn BeginnerWalletInstructions(cx: Scope, blue: bool, samourai: bool, green: 
             }
         } else {
             // Render BlockStream wallet instructions
-            view! {cx, 
+            view! {
                 <div class="flex flex-col max-w-3xl p-4 mx-auto shadow-xl rounded-xl animate-slidein">
                     <div class="flex flew-row justify-center">
                         <h1 class="flex justify-center text-[36px] font-bold text-[#0a7b46ff]">"BlockStream Green Wallet"</h1>
@@ -379,4 +378,4 @@ pub fn BeginnerWalletInstructions(cx: Scope, blue: bool, samourai: bool, green: 
                 }
         }
     
-    }
+}

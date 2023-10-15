@@ -2,11 +2,11 @@ use leptos::ev::MouseEvent;
 use leptos::*;
 
 #[component]
-fn BeginnerButton<F>(cx: Scope, on_click: F) -> impl IntoView
+fn BeginnerButton<F>(on_click: F) -> impl IntoView
 where
     F: Fn(MouseEvent) + 'static,
 {
-    view! { cx,
+    view! {
             <button class="flex flex-col p-2 max-w-sm mx-auto w-64 bg-slate-100 rounded-xl flex items-center" on:click=on_click>
                 <div class="text-2xl font-semibold text-[#f79231]">"Beginner"</div>
                 <p class="text-sm text-[#1a578f] mt-2">"What the hell is Bitcoin?"</p>
@@ -15,11 +15,11 @@ where
 }
 
 #[component]
-fn IntermediateButton<F>(cx: Scope, on_click: F) -> impl IntoView
+fn IntermediateButton<F>(on_click: F) -> impl IntoView
 where
     F: Fn(MouseEvent) + 'static,
 {
-    view! { cx,
+    view! {
             <button class="flex flex-col p-2 max-w-sm mx-auto w-64 bg-slate-100 rounded-xl flex items-center my-5" on:click=on_click>
                 <div class="text-2xl font-semibold text-[#f79231]">"Intermediate"</div>
                 <p class="text-sm text-[#1a578f] mt-2">"I've got a wallet, I want to go deeper"</p>
@@ -28,11 +28,11 @@ where
 }
 
 #[component]
-fn AdvancedButton<F>(cx: Scope, on_click: F) -> impl IntoView
+fn AdvancedButton<F>(on_click: F) -> impl IntoView
 where
     F: Fn(MouseEvent) + 'static,
 {
-    view! { cx,
+    view! {
             <button class="flex flex-col p-2 max-w-sm mx-auto w-64 bg-slate-100 rounded-xl flex items-center mt-2" on:click=on_click>
                 <div class="text-2xl font-semibold text-[#f79231]">"Advanced"</div>
                 <p class="text-sm text-[#1a578f] mt-2">"It's time to jump down the rabbit hole"</p>
@@ -73,12 +73,12 @@ where
 //}
 /// Renders the home page of your application.
 #[component]
-pub fn GuideSelector(cx: Scope) -> impl IntoView {
-    let (beginner_clicked, set_beginner_clicked) = create_signal(cx, false);
-    let (intermediate_clicked, set_intermediate_clicked) = create_signal(cx, false);
-    let (advanced_clicked, set_advanced_clicked) = create_signal(cx, false);
+pub fn GuideSelector() -> impl IntoView {
+    let (beginner_clicked, set_beginner_clicked) = create_signal(false);
+    let (intermediate_clicked, set_intermediate_clicked) = create_signal(false);
+    let (advanced_clicked, set_advanced_clicked) = create_signal(false);
     
-    view! { cx,
+    view! {
       <div id="test" class="container mx-auto max-w-5xl flex flex-col md:flex-row justify-center
                  items-center p-20 md:mt-10 text-white opacity-0 animate-fadein font-sans gap-8">
         <div class="basis-1/4">
@@ -88,7 +88,7 @@ pub fn GuideSelector(cx: Scope) -> impl IntoView {
 
         <Show
             when=move || beginner_clicked()
-            fallback= move |cx| view! { cx, <BeginnerButton on_click=move |_|  {set_beginner_clicked.update(|value| *value = !*value); set_intermediate_clicked.set(false); set_advanced_clicked.set(false)} /> }
+            fallback= move || view! {<BeginnerButton on_click=move |_|  {set_beginner_clicked.update(|value| *value = !*value); set_intermediate_clicked.set(false); set_advanced_clicked.set(false)} /> }
             >
             <div class="flex justify-center items-center gap-2 animate-fadeinone">
                 <button class="h-12 flex-grow-0">
@@ -106,7 +106,7 @@ pub fn GuideSelector(cx: Scope) -> impl IntoView {
 
           <Show
             when=move || intermediate_clicked()
-            fallback=move |cx| view! { cx, <IntermediateButton on_click=move |_| {set_intermediate_clicked.update(|value| *value = !*value); set_beginner_clicked.set(false); set_advanced_clicked.set(false)} /> }
+            fallback=move || view! {<IntermediateButton on_click=move |_| {set_intermediate_clicked.update(|value| *value = !*value); set_beginner_clicked.set(false); set_advanced_clicked.set(false)} /> }
           >
             <div class="flex justify-center items-center py-4 gap-2 animate-fadeinone">
                 <button class="h-12 flex-grow-0">
@@ -128,7 +128,7 @@ pub fn GuideSelector(cx: Scope) -> impl IntoView {
           </Show>
           <Show
             when=move || advanced_clicked()
-            fallback=move |cx| view! { cx, <AdvancedButton on_click=move |_| {set_advanced_clicked.update(|value| *value = !*value); set_intermediate_clicked.set(false); set_beginner_clicked.set(false)}/> }
+            fallback=move || view! {<AdvancedButton on_click=move |_| {set_advanced_clicked.update(|value| *value = !*value); set_intermediate_clicked.set(false); set_beginner_clicked.set(false)}/> }
           >
             <div class="flex justify-center items-center gap-2 animate-fadeinone">
                 <button class="h-12 flex-grow-0">

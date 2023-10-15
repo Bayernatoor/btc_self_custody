@@ -2,8 +2,8 @@ use leptos::*;
 
 /// Renders the home page of the application.
 #[component]
-pub fn HomePage(cx: Scope) -> impl IntoView {
-    view! { cx,
+pub fn HomePage() -> impl IntoView {
+    view! {
             <div class="flex md:flex-row flex-col justify-around items-center max-w-5xl mx-auto md:p-20 md:mt-10 mt-0 p-10 md:text-left opacity-0 animate-fadein font-sans">
                 <div class="flex flex-col justify-center md:text-left text-center text-white leading-loose">
                     <div class="md:text-8xl text-6xl mt-10">
