@@ -21,6 +21,7 @@ log = "0.4"
 simple_logger = "4"
 clippy = "0.0.302"
 markdown = "1.0.0-alpha.13"
+serde = { version = "1.0.189", features = ["derive"] }
 
 [features]
 hydrate = ["leptos/hydrate", "leptos_meta/hydrate", "leptos_router/hydrate"]
