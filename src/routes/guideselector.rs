@@ -40,37 +40,7 @@ where
     }
 }
 
-//#[component]
-//pub fn GenericButton<F, G>(cx: Scope, on_click: F, level: G) -> impl IntoView
-//    where
-//        F: Fn(MouseEvent) + 'static,
-//        G: Fn()
-//    {
-//        let result = match level {
-//            beginner =>
-//                 view! {cx,
-//                            <button class="button-guides" on:click=on_click  >
-//                                <h2>"Beginner"</h2>
-//                                <p>"What the hell is Bitcoin?"</p>
-//                            </button>
-//                    },
-//            intermediate =>
-//                 view! {cx,
-//                            <button class="button-guides" on:click=on_click  >
-//                                <h2>"Intermediate"</h2>
-//                                <p>"I've got a wallet, I want to go deeper"</p>
-//                            </button>
-//                    },
-//            advanced =>
-//                 view! {cx,
-//                            <button class="button-guides" on:click=on_click  >
-//                                <h2>"Intermediate"</h2>
-//                                <p>"I've got a wallet, I want to go deeper"</p>
-//                            </button>
-//                    }
-//            };
-//        result
-//}
+
 /// Renders the home page of your application.
 #[component]
 pub fn GuideSelector() -> impl IntoView {
