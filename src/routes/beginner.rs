@@ -1,19 +1,10 @@
 use leptos::{*, ev::MouseEvent};
-use leptos_router::*;
 use leptos::logging::log;
 
 use crate::extras::accordion_menu::AccordionMenu;
-use crate::server::api::fetch_faqs::FAQ;
+use crate::helpers::get_path::get_current_path;
 
 
-// get the current path via the RouteContext
-fn get_current_path() -> String {
-    // Retrieve the URL path of the current route
-    let current_page = use_route().path();
-
-    current_page 
-
-}
 
 #[component]
 #[allow(non_snake_case)]
@@ -140,10 +131,10 @@ pub fn BeginnerPageTemplate(title: String, quote: String, quote_author: String, 
     let text_color_green = "#0a7b46ff".to_string();
 
     // DOM elements are only available when used within a create_effect see --> https://leptos-rs.github.io/leptos/ssr/24_hydration_bugs.html#not-all-client-code-can-run-on-the-server
-    create_effect(move |_| {
-        let beginner_guide_element = window().document().unwrap().get_element_by_id("beginner");
-        log!("guide element: {:?}", beginner_guide_element);
-    });
+   // create_effect(move |_| {
+   //     let beginner_guide_element = window().document().unwrap().get_element_by_id("beginner");
+   //     log!("guide element: {:?}", beginner_guide_element);
+   // });
 
     //window_event_listener(ev::animationend, move |_e| {
     //        set_slideout_ends(true);
@@ -283,20 +274,6 @@ pub fn BeginnerWalletInstructions(blue: bool, samourai: bool, green: bool, ios: 
 
         let green_apple_store = r"https://apps.apple.com/us/app/green-bitcoin-wallet/id1402243590".to_string();
         
-        let samourai_faq = vec![
-                FAQ::new_faq(1, "hello".to_string(), "Contents".to_string()),
-                FAQ::new_faq(2, "YO YO YO".to_string(), "MORE CONTENT".to_string())
-        ];
-
-        
-        
-        //window_event_listener(ev::animationend, move |_ev| {
-        //    log!("The animation ended");
-        //    //log!("guide_setter {:?}", guide_setter);
-        //    set_show_content(true);
-        //});
-
-
         if blue {
             // Render Blue Wallet instructions 
             view! {
@@ -327,7 +304,7 @@ pub fn BeginnerWalletInstructions(blue: bool, samourai: bool, green: bool, ios: 
                     </div>
                     
                     <h2 class="flex justify-center font-bold text-2xl text-white pt-6 pb-2">"Help Me!"</h2>
-                    <AccordionMenu faqs=samourai_faq/>
+                    <AccordionMenu faqs="bluewallet".to_string()/>
                 </div>
             }
         } else if samourai {
@@ -351,7 +328,7 @@ pub fn BeginnerWalletInstructions(blue: bool, samourai: bool, green: bool, ios: 
                     </div>
 
                     <h2 class="flex justify-center font-bold text-2xl text-white pt-6 pb-2">"Help Me!"</h2>
-                    <AccordionMenu faqs=samourai_faq/>
+                    <AccordionMenu faqs="samourai".to_string()/>
                 </div>
             }
         } else {
@@ -373,7 +350,7 @@ pub fn BeginnerWalletInstructions(blue: bool, samourai: bool, green: bool, ios: 
                     </div>
 
                     <h2 class="flex justify-center font-bold text-2xl text-white pt-6 pb-2">"Help Me!"</h2>
-                    <AccordionMenu faqs=samourai_faq/>
+                    <AccordionMenu faqs="greenwallet".to_string()/>
                 </div>
                 }
         }

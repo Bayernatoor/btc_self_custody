@@ -1,4 +1,5 @@
 use leptos::*;
+use leptos::logging::log;
 use crate::server::api::fetch_faqs::*;
 
 
@@ -49,29 +50,46 @@ fn Menu(
 // Accordion menu component for faqs, creates necessary number of Menu comps based on props passed.  
 #[component]
 #[allow(non_snake_case)]
-pub fn AccordionMenu(#[prop(optional)] faqs: Vec<FAQ>) -> impl IntoView {
+pub fn AccordionMenu(#[prop(optional)] faqs: String) -> impl IntoView {
     
       
-      let faqs = create_resource( 
+      let new_faqs = create_resource( 
             move || (),
-            move |_| fetch_faq()
-            ).get().unwrap();
-      
-      //let faq = move || match faqs.get() {
-      //      None => view! {cx,  <p>"Loading..."</p> },
-      //      Some(data) => data
-      //      };
+            move |_| fetch_faq(faqs.clone())
+            );
 
       view! {
         <div id="accordion-collapse" data-accordion="collapse">
-            <For 
-                each=move || faqs.clone()
-                key= |faq| faq.id
-                view=move |faq| {
-                    view! {<Menu faq_title=markdown::to_html(&faq.title) faq_content=markdown::to_html(&faq.content) />}
-                }
-
-            />
+            <Suspense
+                fallback=move || view! { <p>"Loading...."</p> }
+            >
+                {move || {
+                    match new_faqs.get() {
+                        None => {
+                            view! { <p>"No Data Available"</p> }
+                        }
+                        Some(Ok(faq_vec)) => {
+                            view! { 
+                                <p>
+                                    <For 
+                                        each=move || faq_vec.clone()
+                                        key= |faqs| faqs.id
+                                        children=move |faqs| {
+                                            view! {<Menu faq_title=markdown::to_html(&faqs.title) faq_content=markdown::to_html(&faqs.content) />}
+                                        }
+                                    />
+                                </p>
+                            }
+                        }
+                        Some(Err(error)) => {
+                            log!("Error rendering faqs: {}", error);
+                            view! { <p>
+                                    "Oops we ran into an error"
+                                    </p> }
+                        }
+                    }
+                }}
+            </Suspense>
         </div>
         }
         

@@ -2,6 +2,7 @@ pub mod app;
 pub mod server;
 pub mod routes;
 pub mod extras;
+pub mod helpers;
 use cfg_if::cfg_if;
 
 cfg_if! {
