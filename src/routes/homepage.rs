@@ -13,7 +13,7 @@ pub fn HomePage() -> impl IntoView {
                     <a class="text-lg text-center bg-[#f79231] md:mx-0 mx-auto w-36 no-underline border-none rounded-xl py-2 hover:bg-[#f4a949] cursor-pointer" href="/guides">"Start Hodling"</a>
                 </div>
                 <div class="md:w-48 md:h-48 h-36 w-36 mx-auto mt-10">
-                    <img src="./../../bitcoin_logo.png" alt="bitcoin logo"/>
+                    <img src="./../../../bitcoin_logo.png" alt="bitcoin logo"/>
                 </div>
             </div>
         //<footer class="mx-auto text-white">

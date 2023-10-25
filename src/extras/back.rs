@@ -4,7 +4,7 @@ use leptos::logging::log;
 #[component]
 pub fn BackButton(
         #[prop(optional)]
-        location: String,
+        _location: String,
         #[prop(optional)]
         button_image: String,
         #[prop(optional)]

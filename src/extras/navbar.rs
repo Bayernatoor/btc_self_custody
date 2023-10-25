@@ -8,7 +8,7 @@ pub struct NavbarContext {
 
 #[component]
 pub fn NavBar() -> impl IntoView {
-    let (guide, set_guide) = create_signal(false);
+    let (guide, _set_guide) = create_signal(false);
 
     let back_button = "./../../left-arrow_10024176.png".to_string() ;
     let (menu_clicked, set_menu_clicked) = create_signal(false);

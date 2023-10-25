@@ -1,20 +1,23 @@
 use leptos::*;
 use leptos::logging::log;
 use crate::server::api::fetch_faqs::*;
+use pulldown_cmark::{Parser, Options, html};
 
+#[allow(non_snake_case)]
+fn MarkdownToHtml(markdown: &str) -> String {
 
-//fn get_faqs(cx: Scope) -> String {
-//
-//        let file_path = "../faqs/samourai/samourai_faq1.txt";
-//
-//        let mut file = File::open(file_path).unwrap();
-//
-//        let mut contents = String::new();
-//
-//        file.read_to_string(&mut contents).unwrap();
-//
-//        return contents;
-//}
+    let mut options = Options::empty();
+    options.insert(Options::ENABLE_STRIKETHROUGH);
+    options.insert(Options::ENABLE_SMART_PUNCTUATION);
+    options.insert(Options::ENABLE_FOOTNOTES);
+    let parser = Parser::new_ext(markdown, options);
+ 
+    let mut html_output = String::new();
+    html::push_html(&mut html_output, parser);
+
+    html_output
+
+}
 
 // FAQ accordion menu button 
 #[component]
@@ -26,22 +29,23 @@ fn Menu(
 {
     let (menu_clicked, set_menu_clicked) = create_signal(false);
     
+
     // takes faq_content and faq_title to make a button and a accordion style container
     view! {
         <h2 id="accordion-collapse-heading">
             <button type="button" class="flex items-center justify-between w-full p-5 font-medium
-            text-left text-gray-900 border border-b-0 border-gray-700 rounded-t-xl focus:ring-2
-            focus:ring-gray-200 hover:bg-[#3c6594]" aria-expanded="true" aria-controls="accordion-collapse-body" 
+            text-left text-gray-900 border border-b-0 border-gray-700 rounded-t-xl 
+            hover:bg-[#3c6594]" aria-expanded="true" aria-controls="accordion-collapse-body" 
             on:click=move |_| { set_menu_clicked.update(|menu| *menu = !*menu)} >
-                <span inner_html=faq_title/>
+                <span class="text-white" inner_html=faq_title/>
                 <svg data-accordion-icon class="w-3 h-3 rotate-180 shrink-0" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 10 6">
                     <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5 5 1 1 5"/>
                 </svg>
             </button>
         </h2>
         <div aria-labelledby="accordion-collapse-heading" class:hidden=move || menu_clicked() == false  >
-            <div class="p-5 border border-b-0 border-gray-700">
-                <div class="bg-[#3c6594] rounded-md p-2.5" inner_html=faq_content/>
+            <div class="p-5 border border-b-0 border-gray-700 text-sm">
+                <div class="bg-[#3c6594] rounded-md p-4 leading-relaxed text-white" inner_html=faq_content/>
             </div>
         </div>
     }
@@ -52,40 +56,51 @@ fn Menu(
 #[allow(non_snake_case)]
 pub fn AccordionMenu(#[prop(optional)] faqs: String) -> impl IntoView {
     
+      let markdown = MarkdownToHtml("![note] Hello, *there*");
       
       let new_faqs = create_resource( 
             move || (),
             move |_| fetch_faq(faqs.clone())
             );
 
+     // let faqs_test = match &new_faqs.get() {
+     //     Some(Ok(faq_vecs)) =>  log!("markdown: {}", MarkdownToHtml(&faq_vecs[0].content)),
+     //     None => log!("Nothing to see here"),
+     //     Some(Err(error)) => log!("Error rendering faqs: {}", error)
+     //     
+     // };
+    
+
+      //log!("markdown {:#?}", markdown);
+
       view! {
         <div id="accordion-collapse" data-accordion="collapse">
             <Suspense
-                fallback=move || view! { <p>"Loading...."</p> }
+                fallback=move || view! { <div>"Loading...."</div> }
             >
                 {move || {
                     match new_faqs.get() {
                         None => {
-                            view! { <p>"No Data Available"</p> }
+                            view! { <div>"No Data Available"</div> }
                         }
                         Some(Ok(faq_vec)) => {
                             view! { 
-                                <p>
+                                <div>
                                     <For 
                                         each=move || faq_vec.clone()
                                         key= |faqs| faqs.id
                                         children=move |faqs| {
-                                            view! {<Menu faq_title=markdown::to_html(&faqs.title) faq_content=markdown::to_html(&faqs.content) />}
+                                            view! {<Menu faq_title=MarkdownToHtml(&faqs.title) faq_content=MarkdownToHtml(&faqs.content)/>}
                                         }
                                     />
-                                </p>
+                                </div>
                             }
                         }
                         Some(Err(error)) => {
                             log!("Error rendering faqs: {}", error);
-                            view! { <p>
+                            view! { <div>
                                     "Oops we ran into an error"
-                                    </p> }
+                                    </div> }
                         }
                     }
                 }}

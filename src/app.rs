@@ -8,7 +8,6 @@ use crate::routes::guideselector::*;
 use crate::routes::homepage::*;
 use crate::routes::intermediate::*;
 use crate::extras::navbar::*;
-use crate::server::api::fetch_faqs::*;
 use leptos::*;
 use leptos_meta::*;
 use leptos_router::*;
@@ -38,11 +37,11 @@ pub fn App() -> impl IntoView {
                     <Route path="/" view=|| view! {<HomePage/> }/>
                     <Route path="/guides" view=|| view! {<GuideSelector/> }/>
                     <Route path="/guides/beginner/android" view=|| view! {<BeginnerPageAndroid />}/>
-                    <Route path="/guides/beginner/android/samourai" view=|| view! {<BeginnerWalletInstructions samourai=true blue=false green=false ios=false/>}/>
-                    <Route path="/guides/beginner/android/blue" view=|| view! {<BeginnerWalletInstructions samourai=false blue=true green=false ios=false/>}/>
+                    <Route path="/guides/beginner/android/samourai" view=|| view! {<BeginnerWalletInstructions samourai=true blue=false _green=false ios=false/>}/>
+                    <Route path="/guides/beginner/android/blue" view=|| view! {<BeginnerWalletInstructions samourai=false blue=true _green=false ios=false/>}/>
                     <Route path="/guides/beginner/ios" view=|| view! {<BeginnerPageIOS/> }/>
-                    <Route path="/guides/beginner/ios/blue" view=|| view! {<BeginnerWalletInstructions green=false blue=true samourai=false ios=true/>}/>
-                    <Route path="/guides/beginner/ios/blockstream" view=|| view! {<BeginnerWalletInstructions green=true blue=false samourai=false ios=true/>}/>
+                    <Route path="/guides/beginner/ios/blue" view=|| view! {<BeginnerWalletInstructions _green=false blue=true samourai=false ios=true/>}/>
+                    <Route path="/guides/beginner/ios/blockstream" view=|| view! {<BeginnerWalletInstructions _green=true blue=false samourai=false ios=true/>}/>
                     <Route path="/guides/intermediate/android" view=|| view! {<IntermediatePage/> }/>
                     <Route path="/guides/intermediate/ios" view=|| view! {<IntermediatePage/> }/>
                     <Route path="/guides/intermediate/desktop" view=|| view! {<IntermediatePage/> }/>

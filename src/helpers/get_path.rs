@@ -1,4 +1,3 @@
-use leptos::*;
 use leptos_router::*;
 
 // get the current path via the RouteContext
