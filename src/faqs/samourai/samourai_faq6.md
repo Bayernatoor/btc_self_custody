@@ -1,4 +1,4 @@
-**I lost my phone what do I do?** 
+### I lost my phone what do I do?
 
 You'll want to locate the **12 words** and **passphrase** you wrote down when setting up your wallet. 
 

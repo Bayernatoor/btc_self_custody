@@ -1,4 +1,4 @@
-**First wallet setup guide**
+### First wallet setup guide
 **1\.** Open the Samourai application.
 
 **2\.** Leave network as `MAINNET` and press okay.

@@ -26,18 +26,18 @@ fn Menu(faq_title: String, faq_content: String) -> impl IntoView {
     // takes faq_content and faq_title to make a button and a accordion style container
     view! {
         <h2 id="accordion-collapse-heading">
-            <button type="button" class="flex items-center justify-between w-full p-5 font-medium
-            text-left text-gray-900 border border-b-0 border-gray-700 rounded-t-xl 
+            <button type="button" class="flex items-center justify-between w-72 p-4
+            text-left text-gray-900 border border-b-0 border-gray-500 rounded-xl 
             hover:bg-[#3c6594]" aria-expanded="true" aria-controls="accordion-collapse-body" 
             on:click=move |_| { set_menu_clicked.update(|menu| *menu = !*menu)} >
-                <span class="text-white" inner_html=faq_title/>
+                <span class="text-white text-sm" inner_html=faq_title/>
                 <svg data-accordion-icon class="w-3 h-3 rotate-180 shrink-0" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 10 6">
-                    <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5 5 1 1 5"/>
+                    <path stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5 5 1 1 5"/>
                 </svg>
             </button>
         </h2>
         <div aria-labelledby="accordion-collapse-heading" class:hidden=move || menu_clicked() == false  >
-            <div class="p-5 border border-b-0 border-gray-700 text-sm">
+            <div class="p-5 border border-b-0 border-gray-500 rounded-xl text-sm animate-fadeinone">
                 <div class="bg-[#3c6594] rounded-md p-4 leading-relaxed text-white" inner_html=faq_content/>
             </div>
         </div>
@@ -73,7 +73,7 @@ pub fn AccordionMenu(#[prop(optional)] faqs: String) -> impl IntoView {
                     }
                     Some(Ok(faq_vec)) => {
                         view! {
-                            <div>
+                            <div class="flex flex-col items-center">
                                 <For
                                     each=move || faq_vec.clone()
                                     key= |faqs| faqs.id
