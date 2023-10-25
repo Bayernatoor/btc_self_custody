@@ -1,4 +1,4 @@
-**How do I restore my wallet?** 
+### How do I restore my wallet?
 
 The official Samourai docs have a great guide on doing just this. I highly recommend that you follow it to restore your wallet. 
 

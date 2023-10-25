@@ -1,4 +1,4 @@
-**How do I send bitcoin?**
+### How do I send bitcoin?
 
 From the main Deposit account page, tap on the **blue + button** in the bottom right corner. Select **Send**, from here you have a couple options:
 

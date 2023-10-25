@@ -1,4 +1,4 @@
-**How do I create a wallet?**
+### How do I create a wallet?
 After installing and opening the app, select **mainnet** and press **continue**.
 
 
