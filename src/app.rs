@@ -1,4 +1,4 @@
-
+use crate::extras::navbar::*;
 use crate::routes::about::*;
 use crate::routes::advanced::*;
 use crate::routes::beginner::*;
@@ -7,11 +7,9 @@ use crate::routes::faq::*;
 use crate::routes::guideselector::*;
 use crate::routes::homepage::*;
 use crate::routes::intermediate::*;
-use crate::extras::navbar::*;
 use leptos::*;
 use leptos_meta::*;
 use leptos_router::*;
-
 
 #[component]
 pub fn App() -> impl IntoView {
@@ -29,7 +27,7 @@ pub fn App() -> impl IntoView {
         // sets the body background color throughout the app
         <Body class="bg-[#1a578f]"/>
 
-        // Routes 
+        // Routes
         <Router>
             <NavBar/>
             <main>
@@ -54,4 +52,3 @@ pub fn App() -> impl IntoView {
         </Router>
     }
 }
-

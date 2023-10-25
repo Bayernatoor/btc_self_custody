@@ -1,7 +1,7 @@
-use leptos::*;
-use std::fs;
 use leptos::logging::log;
+use leptos::*;
 use serde::{Deserialize, Serialize};
+use std::fs;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct FAQ {
@@ -50,7 +50,6 @@ pub async fn fetch_faq(wallet: String) -> Result<Vec<FAQ>, ServerFnError> {
 
         //log!("faq_content: {:?}", faq_content);
         //log!("content: {:?}", content);
-
 
         faqs.push(FAQ::new_faq(id, title.to_string(), faq_content.to_string()));
     }
