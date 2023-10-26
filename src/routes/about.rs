@@ -3,7 +3,6 @@ use leptos::*;
 /// Renders the About page of the application.
 #[component]
 pub fn AboutPage() -> impl IntoView {
-
     view! {
         <div id="about" class="flex flex-col max-w-3xl mx-auto rounded-xl pb-10 animate-fadein">
             <div class="flex flex-col p-6 pt-10 max-w-3xl mx-auto">
@@ -14,5 +13,4 @@ pub fn AboutPage() -> impl IntoView {
             </div>
         </div>
     }
-
 }
