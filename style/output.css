@@ -904,6 +904,10 @@ p{
   border-bottom-width: 0px;
 }
 
+.border-solid{
+  border-style: solid;
+}
+
 .border-dashed{
   border-style: dashed;
 }
