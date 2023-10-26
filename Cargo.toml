@@ -23,7 +23,6 @@ clippy = "0.0.302"
 markdown = "1.0.0-alpha.13"
 serde = { version = "1.0.189", features = ["derive"] }
 pulldown-cmark = { version = "0.9.3", features = ["serde"] }
-btcpay = "0.3.0"
 
 [features]
 hydrate = ["leptos/hydrate", "leptos_meta/hydrate", "leptos_router/hydrate"]
