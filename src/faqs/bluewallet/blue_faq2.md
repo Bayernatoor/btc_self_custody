@@ -1,2 +1,0 @@
-**First wallet setup guide**
-
