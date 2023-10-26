@@ -175,7 +175,7 @@ pub fn BeginnerPageTemplate(
             </div>
 
             <div class="mx-auto max-w-xl p-4 w-full" >
-                <div class="mx-auto border border-dashed border-gray-400"></div>
+                <div class="mx-auto border border-solid border-gray-400"></div>
             </div>
 
             <div class="flex flex-col mx-auto justify-center" >
@@ -319,7 +319,7 @@ pub fn BeginnerWalletInstructions(
                 </div>
 
                 <div class="mx-auto max-w-xl p-4 w-full" >
-                    <div class="mx-auto border border-dashed border-gray-400"></div>
+                    <div class="mx-auto border border-solid border-gray-400"></div>
                 </div>
 
                 <h2 class="flex justify-center font-bold text-xl text-white pt-6 pb-2">"Help Me!"</h2>
@@ -347,7 +347,7 @@ pub fn BeginnerWalletInstructions(
                 </div>
 
                 <div class="mx-auto max-w-xl p-4 w-full" >
-                    <div class="mx-auto border border-dashed border-gray-400"></div>
+                    <div class="mx-auto border border-solid border-gray-400"></div>
                 </div>
 
                 <h2 class="flex justify-center font-bold text-xl text-white pt-6 pb-2">"Help Me!"</h2>
@@ -373,7 +373,7 @@ pub fn BeginnerWalletInstructions(
             </div>
 
             <div class="mx-auto max-w-xl p-4 w-full" >
-                <div class="mx-auto border border-dashed border-gray-400"></div>
+                <div class="mx-auto border border-solid border-gray-400"></div>
             </div>
 
             <h2 class="flex justify-center font-bold text-xl text-white pt-6 pb-2">"Help Me!"</h2>
