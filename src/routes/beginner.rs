@@ -85,9 +85,9 @@ pub fn DownloadButton(
                 <Show
                     when=move || button_name.is_some()
                     fallback=move || view!("")>
-                    <div class="font-bold text-sm">
+                    <p class="font-medium text-sm">
                         {format!("{}", button())}
-                    </div>
+                    </p>
                 </Show>
             </button>
         </a>

@@ -1,9 +1,9 @@
 use leptos::logging::log;
 use leptos::*;
 use serde::{Deserialize, Serialize};
-use std::fs;
+use std::{fs, io};
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct FAQ {
     pub id: u32,
     pub title: String,
@@ -17,30 +17,26 @@ impl FAQ {
 }
 #[server(FetchFaq, "/api")]
 pub async fn fetch_faq(wallet: String) -> Result<Vec<FAQ>, ServerFnError> {
+
     let path = format!("./src/faqs/{}", wallet);
 
-    let faqs_dir = fs::read_dir(path)?;
+    let mut files = fs::read_dir(path)?
+        .map(|dir| dir.map(|file| file.path()))
+        .collect::<Result<Vec<_>, io::Error>>()?;
 
+    files.sort();
+    
     let mut faqs = Vec::new();
     let mut id = 0;
-    //let content = fs::read_to_string("./src/faqs/samourai/samourai_faq2.md")?;
-    //let title = &content.split("\n").collect::<Vec<&str>>()[0].to_string();
-    //let faq_content = &content.split("\n").collect::<Vec<&str>>()[1..].join("\n");
-    //log!("Content: {:?}",faq_content);
-    //faqs.push(FAQ::new_faq(1, title.to_string(), faq_content.to_string()));
-
-    for faq in faqs_dir {
-        let faq = faq?;
-        //log!("files in dir:  {:?}", faq);
-        let path = faq.path();
-        //log!("path buffer:  {:?}", path);
+    
+    for faq in files {
         // increment id for each new file
         id += 1;
         // get name of file
-        let _file_name = path.file_name().unwrap().to_str().unwrap();
+        let _file_name = faq.file_name().unwrap().to_str().unwrap();
 
         // read contents of file
-        let content = fs::read_to_string(path)?;
+        let content = fs::read_to_string(faq)?;
 
         // get the faq title
         let title = &content.split("\n").collect::<Vec<&str>>()[0].to_string();
@@ -54,6 +50,5 @@ pub async fn fetch_faq(wallet: String) -> Result<Vec<FAQ>, ServerFnError> {
         faqs.push(FAQ::new_faq(id, title.to_string(), faq_content.to_string()));
     }
 
-    //log!("FetchFaq Returns: {:?}", faqs);
     Ok(faqs)
 }
