@@ -185,7 +185,7 @@ pub fn BeginnerPageTemplate(
                 // default is geen wallet - display samourai wallet if android guide was selected.
                 // Blue wallet is available for both android/ios
                 <Show
-                   when=move || platform() == "android".to_string()
+                   when=move || platform() == *"android"
                    fallback= move || view! {
                       // comment out greenWallet for now leaving 1 wallet option for IOS
                       // { <WalletButton on_click = move |_| {set_green_clicked(true);

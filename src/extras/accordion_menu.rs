@@ -38,7 +38,7 @@ fn Menu(faq_title: String, faq_content: String) -> impl IntoView {
                 </svg>
             </button>
         </h2>
-        <div aria-labelledby="accordion-collapse-heading" class:hidden=move || menu_clicked() == false  >
+        <div aria-labelledby="accordion-collapse-heading" class:hidden=move || !menu_clicked() >
             <div class="p-5 border border-b-0 border-gray-500 rounded-xl text-sm animate-fadeinone">
                 <div class="bg-[#3c6594] rounded-md p-4 leading-relaxed text-white" inner_html=faq_content/>
             </div>

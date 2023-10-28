@@ -9,9 +9,9 @@ pub fn BackButton(
 ) -> impl IntoView {
     let (reload_page, set_reload_page) = create_signal(false);
 
-    if reload == true {
+    if reload {
         create_effect(move |_| {
-            if reload_page() == true {
+            if reload_page() {
                 let _ = window().location().reload();
                 log!("reload window");
             }

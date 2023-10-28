@@ -41,6 +41,8 @@ where
 }
 
 /// Renders the home page of your application.
+#[allow(clippy::redundant_closure)]
+#[allow(non_camel_case_types)]
 #[component]
 pub fn GuideSelector() -> impl IntoView {
     let (beginner_clicked, set_beginner_clicked) = create_signal(false);
