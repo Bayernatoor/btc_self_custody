@@ -16,9 +16,9 @@ impl FAQ {
     }
 }
 #[server(FetchFaq, "/api")]
-pub async fn fetch_faq(wallet: String) -> Result<Vec<FAQ>, ServerFnError> {
+pub async fn fetch_faq(faq_name: String) -> Result<Vec<FAQ>, ServerFnError> {
 
-    let path = format!("./src/faqs/{}", wallet);
+    let path = format!("./src/faqs/{}", faq_name);
 
     let mut files = fs::read_dir(path)?
         .map(|dir| dir.map(|file| file.path()))

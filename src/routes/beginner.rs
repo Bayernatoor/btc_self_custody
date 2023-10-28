@@ -106,12 +106,12 @@ pub fn BeginnerPageTemplate(
     let (_samourai_clicked, _set_samourai_clicked) = create_signal(false);
     let (_samourai_clicked, _set_samourai_clicked) = create_signal(false);
     let (_blue_clicked, set_blue_clicked) = create_signal(false);
-    let (_green_clicked, set_green_clicked) = create_signal(false);
+    let (_green_clicked, _set_green_clicked) = create_signal(false);
 
     // set the button details
     let (_samourai_details, set_samourai_details) = create_signal(false);
     let (_blue_details, set_blue_details) = create_signal(false);
-    let (_green_details, set_green_details) = create_signal(false);
+    let (_green_details, _set_green_details) = create_signal(false);
 
     // get current path via RouteContext
     let path = get_current_path();
@@ -138,11 +138,11 @@ pub fn BeginnerPageTemplate(
     let text_color_blue = "#1a578f".to_string();
 
     // BlockStream Green wallet assets
-    let wallet_name_green = "BlockStream Green".to_string();
-    let short_desc_green = "Self-Custody Made Easy".to_string();
-    let img_url_green = "./../../nav_green.svg".to_string();
-    let img_alt_green = "BlockStream Green".to_string();
-    let text_color_green = "#0a7b46ff".to_string();
+    let _wallet_name_green = "BlockStream Green".to_string();
+    let _short_desc_green = "Self-Custody Made Easy".to_string();
+    let _img_url_green = "./../../nav_green.svg".to_string();
+    let _img_alt_green = "BlockStream Green".to_string();
+    let _text_color_green = "#0a7b46ff".to_string();
 
     // DOM elements are only available when used within a create_effect see --> https://leptos-rs.github.io/leptos/ssr/24_hydration_bugs.html#not-all-client-code-can-run-on-the-server
     // create_effect(move |_| {
@@ -187,12 +187,13 @@ pub fn BeginnerPageTemplate(
                 <Show
                    when=move || platform() == "android".to_string()
                    fallback= move || view! {
-                        <WalletButton on_click = move |_| {set_green_clicked(true);
-                                 set_green_details(true)}
-                                samourai=false blue=false _green=true platform=platform()
-                                wallet_name=wallet_name_green.clone() short_desc=short_desc_green.clone() img_url=img_url_green.clone() img_alt=img_alt_green.clone()
-                                text_color=text_color_green.clone()
-                                />
+                      // comment out greenWallet for now leaving 1 wallet option for IOS
+                      // { <WalletButton on_click = move |_| {set_green_clicked(true);
+                      //           set_green_details(true)}
+                      //          samourai=false blue=false _green=true platform=platform()
+                      //          wallet_name=wallet_name_green.clone() short_desc=short_desc_green.clone() img_url=img_url_green.clone() img_alt=img_alt_green.clone()
+                      //          text_color=text_color_green.clone()
+                      //          />}
                    }
                 >
                         <WalletButton on_click = move |_| {_set_samourai_clicked(true);
@@ -293,7 +294,7 @@ pub fn BeginnerWalletInstructions(
     if blue {
         // Render Blue Wallet instructions
         view! {
-            <div class="flex flex-col max-w-3xl p-4 mx-auto rounded-xl animate-fadein">
+            <div class="flex flex-col max-w-3xl p-4 pt-8 mx-auto rounded-xl animate-fadein">
                 <h1 class="flex justify-center text-[36px] font-bold text-[#BEAE9A]">"Blue Wallet"</h1>
                 <div class="flex flex-col items-center">
                     <p class="text-white items-center px-4">
@@ -323,13 +324,13 @@ pub fn BeginnerWalletInstructions(
                 </div>
 
                 <h2 class="flex justify-center font-bold text-xl text-white pt-6 pb-2">"Help Me!"</h2>
-                <AccordionMenu faqs="bluewallet".to_string()/>
+                <AccordionMenu faq_name="bluewallet".to_string()/>
             </div>
         }
     } else if samourai {
         // Render Samourai wallet instructions
         view! {
-            <div class="flex flex-col max-w-3xl p-4 mx-auto rounded-xl animate-fadein">
+            <div class="flex flex-col max-w-3xl p-4 pt-8 mx-auto rounded-xl animate-fadein">
                 <div class="flex flew-row justify-center">
                     <h1 class="flex justify-center text-[36px] font-bold text-[#BEAE9A]">"Samourai Wallet"</h1>
                 </div>
@@ -351,13 +352,13 @@ pub fn BeginnerWalletInstructions(
                 </div>
 
                 <h2 class="flex justify-center font-bold text-xl text-white pt-6 pb-2">"Help Me!"</h2>
-                <AccordionMenu faqs="samourai".to_string()/>
+                <AccordionMenu faq_name="samourai".to_string()/>
             </div>
         }
     } else {
         // Render BlockStream wallet instructions
         view! {
-        <div class="flex flex-col max-w-3xl p-4 mx-auto rounded-xl animate-fadein">
+        <div class="flex flex-col max-w-3xl p-4 pt-8 mx-auto rounded-xl animate-fadein">
             <div class="flex flew-row justify-center">
                 <h1 class="flex justify-center text-[36px] font-bold text-[#BEAE9A]">"BlockStream Green Wallet"</h1>
             </div>
@@ -377,7 +378,7 @@ pub fn BeginnerWalletInstructions(
             </div>
 
             <h2 class="flex justify-center font-bold text-xl text-white pt-6 pb-2">"Help Me!"</h2>
-            <AccordionMenu faqs="greenwallet".to_string()/>
+            <AccordionMenu faq_name="greenwallet".to_string()/>
         </div>
         }
     }
