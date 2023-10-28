@@ -1,6 +1,6 @@
-use leptos::logging::log;
 use leptos::*;
 use serde::{Deserialize, Serialize};
+#[allow(unused_imports)]
 use std::{fs, io};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -17,7 +17,6 @@ impl FAQ {
 }
 #[server(FetchFaq, "/api")]
 pub async fn fetch_faq(faq_name: String) -> Result<Vec<FAQ>, ServerFnError> {
-
     let path = format!("./src/faqs/{}", faq_name);
 
     let mut files = fs::read_dir(path)?
@@ -25,10 +24,10 @@ pub async fn fetch_faq(faq_name: String) -> Result<Vec<FAQ>, ServerFnError> {
         .collect::<Result<Vec<_>, io::Error>>()?;
 
     files.sort();
-    
+
     let mut faqs = Vec::new();
     let mut id = 0;
-    
+
     for faq in files {
         // increment id for each new file
         id += 1;

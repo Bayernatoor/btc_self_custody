@@ -6,6 +6,7 @@ pub struct NavbarContext {
     pub guide: WriteSignal<bool>,
 }
 
+#[allow(clippy::redundant_closure)]
 #[component]
 pub fn NavBar() -> impl IntoView {
     let (guide, _set_guide) = create_signal(false);
@@ -16,7 +17,7 @@ pub fn NavBar() -> impl IntoView {
     view! {
              <div class="bg-[#1a578f] shadow-md text-white sticky top-0 z-10 max-w-10xl mx-auto p-4 flex justify-between items-center font-sans">
                 <Show
-                    when=move || {guide() == true}
+                    when=move || guide()
                     fallback=|| view! {
                             <div>
                                 <h1 class="text-2xl font-medium text-white"><a href="/">"Bitcoin Barrack"</a></h1>
@@ -59,7 +60,7 @@ pub fn NavBar() -> impl IntoView {
                                 stroke-linejoin="round"
                                 stroke-width="2"
                                 d="M6 18L18 6M6 6l12 12"
-                                class:hidden={move || menu_clicked() == false}
+                                class:hidden={move || !menu_clicked()}
                               />
                           </svg>
                         </div>
@@ -67,7 +68,7 @@ pub fn NavBar() -> impl IntoView {
     // TODO: add event listener to body of app to listen for click when menu is open
     // set menu to false if body is clicked.
 
-            <div class="lg:hidden flex flex-col justify-end absolute top-16 right-4 z-10 bg-white border border-gray-200 shadow-md rounded-md p-2 cursor-pointer" class:hidden={move || menu_clicked() == false} class=("animate-slideinfast", move|| menu_clicked())>
+            <div class="lg:hidden flex flex-col justify-end absolute top-16 right-4 z-10 bg-white border border-gray-200 shadow-md rounded-md p-2 cursor-pointer" class:hidden={move || !menu_clicked()} class=("animate-slideinfast", move|| menu_clicked())>
                 <a href="/guides" class="block py-2 px-4 font-medium text-xl text-[#6B7990] hover:bg-blue-100" on:click=move |_| set_menu_clicked.set(false)>"Guides"</a>
                 <a href="/faq" class="block py-2 px-4 font-medium text-xl text-[#6B7990] hover:bg-blue-100" on:click=move |_| set_menu_clicked.set(false)>"Help Desk"</a>
                 <a href="/blog" class="block py-2 px-4 font-medium text-xl text-[#6B7990] hover:bg-blue-100" on:click=move |_| set_menu_clicked.set(false)>"Articles"</a>
