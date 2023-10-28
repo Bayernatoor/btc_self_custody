@@ -3,37 +3,41 @@ use leptos::{ev::MouseEvent, *};
 use crate::extras::accordion_menu::AccordionMenu;
 use crate::helpers::get_path::get_current_path;
 
+#[derive(Clone, Copy)]
+pub enum WalletName {
+    Samourai,
+    Blue,
+    Green,
+}
+
 #[component]
 #[allow(non_snake_case)]
 pub fn WalletButton<F>(
     on_click: F,
-    wallet_name: String,
+    wallet_title: String,
     short_desc: String,
     img_url: String,
     img_alt: String,
     text_color: String,
-    samourai: bool,
-    blue: bool,
-    _green: bool,
+    selected_wallet: WalletName,
     platform: String,
 ) -> impl IntoView
 where
     F: Fn(MouseEvent) + 'static,
 {
     // determine which wallet button was clicked on
-    let (wallet, set_wallet) = create_signal("".to_string());
-    if samourai {
-        set_wallet("samourai".to_string())
-    } else if blue {
-        set_wallet("blue".to_string())
-    } else {
-        set_wallet("blockstream".to_string())
+    let (wallet, set_wallet) = create_signal(String::new());
+
+    match selected_wallet {
+        WalletName::Samourai => set_wallet("samourai".to_string()),
+        WalletName::Blue => set_wallet("blue".to_string()),
+        WalletName::Green => set_wallet("blockstream".to_string())
     }
 
     // get the name of the wallet
-    let wallet = wallet();
+    let wallet_name = wallet();
     // create our url path
-    let path = format!("/guides/beginner/{platform}/{wallet}");
+    let path = format!("/guides/beginner/{platform}/{wallet_name}");
 
     view! {
         <a href=path>
@@ -42,7 +46,7 @@ where
                 <img class="h-12 w-12" src=img_url alt=img_alt/>
               </div>
               <div>
-                <h3 class=format!("text-xl font-medium text-[{text_color}]")>{wallet_name}</h3>
+                <h3 class=format!("text-xl font-medium text-[{text_color}]")>{wallet_title}</h3>
                 <p class="text-slate-500">{short_desc}</p>
               </div>
             </button>
@@ -58,10 +62,10 @@ pub fn DownloadButton(
     alt_txt: String,
     #[prop(optional)] button_name: Option<String>,
 ) -> impl IntoView {
-    let (button, set_button) = create_signal("".to_string());
+    let (button, set_button) = create_signal(String::new());
     let (width, set_width) = create_signal(6);
     let (height, set_heigth) = create_signal(6);
-    let (flex_justify, set_flex_justify) = create_signal("".to_string());
+    let (flex_justify, set_flex_justify) = create_signal(String::new());
 
     let name = match button_name.clone() {
         Some(name) => name,
@@ -73,7 +77,7 @@ pub fn DownloadButton(
     if button_name.is_none() {
         set_width(36);
         set_heigth(10);
-        set_flex_justify("justify-center".to_string())
+        set_flex_justify("justify-center".to_string());
     }
 
     view! {
@@ -96,7 +100,7 @@ pub fn DownloadButton(
 
 #[component]
 #[allow(non_snake_case)]
-pub fn BeginnerPageTemplate(
+pub fn BeginnerPageTemplate (
     title: String,
     quote: String,
     quote_author: String,
@@ -114,12 +118,12 @@ pub fn BeginnerPageTemplate(
 
     // get current path via RouteContext
     let path = get_current_path();
-    let (platform, set_platform) = create_signal("".to_string());
+    let (platform, set_platform) = create_signal(String::new());
 
     if path.contains("ios") {
-        set_platform("ios".to_string())
+        set_platform("ios".to_string());
     } else {
-        set_platform("android".to_string())
+        set_platform("android".to_string());
     }
 
     // Samourai wallet assets
@@ -190,23 +194,21 @@ pub fn BeginnerPageTemplate(
                       // { <WalletButton on_click = move |_| {set_green_clicked(true);
                       //           set_green_details(true)}
                       //          samourai=false blue=false _green=true platform=platform()
-                      //          wallet_name=wallet_name_green.clone() short_desc=short_desc_green.clone() img_url=img_url_green.clone() img_alt=img_alt_green.clone()
+                      //          wallet_title=wallet_name_green.clone() short_desc=short_desc_green.clone() img_url=img_url_green.clone() img_alt=img_alt_green.clone()
                       //          text_color=text_color_green.clone()
                       //          />}
                    }
                 >
-                        <WalletButton on_click = move |_| {_set_samourai_clicked(true);
-                                set_samourai_details(true)}
-                                samourai=true blue=false _green=false platform=platform()
-                                wallet_name=wallet_name_samourai.clone() short_desc=short_desc_samourai.clone() img_url=img_url_samourai.clone() img_alt=img_alt_samourai.clone()
+                        <WalletButton on_click = move |_| {_set_samourai_clicked(true); set_samourai_details(true);}
+                                selected_wallet=WalletName::Samourai platform=platform()
+                                wallet_title=wallet_name_samourai.clone() short_desc=short_desc_samourai.clone() img_url=img_url_samourai.clone() img_alt=img_alt_samourai.clone()
                                 text_color=text_color_samourai.clone()
                                 />
                 </Show>
 
-                <WalletButton on_click = move |_| {set_blue_clicked(true);
-                        set_blue_details(true)}
-                        blue=true samourai=false _green=false platform=platform()
-                        wallet_name=wallet_name_blue.clone() short_desc=short_desc_blue.clone() img_url=img_url_blue.clone()
+                <WalletButton on_click = move |_| {set_blue_clicked(true); set_blue_details(true);}
+                        selected_wallet=WalletName::Blue platform=platform()
+                        wallet_title=wallet_name_blue.clone() short_desc=short_desc_blue.clone() img_url=img_url_blue.clone()
                         img_alt=img_alt_blue.clone() text_color=text_color_blue.clone()
                         />
             </div>
@@ -218,7 +220,7 @@ pub fn BeginnerPageTemplate(
 // This comp should be reviewed and likely redundant.
 #[component]
 #[allow(non_snake_case)]
-pub fn BeginnerPageAndroid() -> impl IntoView {
+pub fn RenderAndroidPage() -> impl IntoView {
     let intro_text: String = "Controlling a bitcoin private key grants absolute authority over the
         associated bitcoin, embodying the ethos of the bitcoin movement. Self custody and personal
         responsibility restore power and sovereignty, eliminating reliance on third parties,
@@ -237,7 +239,7 @@ pub fn BeginnerPageAndroid() -> impl IntoView {
 /// Renders the beginner IOS page.
 #[component]
 #[allow(non_snake_case)]
-pub fn BeginnerPageIOS() -> impl IntoView {
+pub fn RenderIosPage() -> impl IntoView {
     let intro_text: String = "Controlling a bitcoin private key grants absolute authority over the
             associated bitcoin, embodying the ethos of the bitcoin movement. Self custody and personal
             responsibility restore power and sovereignty, eliminating reliance on third parties,
@@ -258,9 +260,7 @@ pub fn BeginnerPageIOS() -> impl IntoView {
 #[component]
 #[allow(non_snake_case)]
 pub fn BeginnerWalletInstructions(
-    blue: bool,
-    samourai: bool,
-    _green: bool,
+    selected_wallet: WalletName,
     ios: bool,
 ) -> impl IntoView {
     let google_play_logo = "./../../../google-play-logo.avif".to_string();
@@ -290,7 +290,15 @@ pub fn BeginnerWalletInstructions(
     let green_apple_store =
         r"https://apps.apple.com/us/app/green-bitcoin-wallet/id1402243590".to_string();
 
-    if blue {
+    let (displayed_wallet, set_displayed_wallet) = create_signal("");
+
+    match selected_wallet {
+        WalletName::Samourai => set_displayed_wallet("samourai"),
+        WalletName::Blue => set_displayed_wallet("blue"),
+        WalletName::Green => set_displayed_wallet("green"),
+    }
+
+    if displayed_wallet() == "blue" {
         // Render Blue Wallet instructions
         view! {
             <div class="flex flex-col max-w-3xl p-4 pt-8 mx-auto rounded-xl animate-fadein">
@@ -326,7 +334,7 @@ pub fn BeginnerWalletInstructions(
                 <AccordionMenu faq_name="bluewallet".to_string()/>
             </div>
         }
-    } else if samourai {
+    } else if displayed_wallet() == "samourai" {
         // Render Samourai wallet instructions
         view! {
             <div class="flex flex-col max-w-3xl p-4 pt-8 mx-auto rounded-xl animate-fadein">

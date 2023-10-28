@@ -34,12 +34,12 @@ pub fn App() -> impl IntoView {
                 <Routes>
                     <Route path="/" view=|| view! {<HomePage/> }/>
                     <Route path="/guides" view=|| view! {<GuideSelector/> }/>
-                    <Route path="/guides/beginner/android" view=|| view! {<BeginnerPageAndroid />}/>
-                    <Route path="/guides/beginner/android/samourai" view=|| view! {<BeginnerWalletInstructions samourai=true blue=false _green=false ios=false/>}/>
-                    <Route path="/guides/beginner/android/blue" view=|| view! {<BeginnerWalletInstructions samourai=false blue=true _green=false ios=false/>}/>
-                    <Route path="/guides/beginner/ios" view=|| view! {<BeginnerPageIOS/> }/>
-                    <Route path="/guides/beginner/ios/blue" view=|| view! {<BeginnerWalletInstructions _green=false blue=true samourai=false ios=true/>}/>
-                    <Route path="/guides/beginner/ios/blockstream" view=|| view! {<BeginnerWalletInstructions _green=true blue=false samourai=false ios=true/>}/>
+                    <Route path="/guides/beginner/android" view=|| view! {<RenderAndroidPage/>}/>
+                    <Route path="/guides/beginner/android/samourai" view=|| view! {<BeginnerWalletInstructions selected_wallet=WalletName::Samourai ios=false/>}/>
+                    <Route path="/guides/beginner/android/blue" view=|| view! {<BeginnerWalletInstructions selected_wallet=WalletName::Blue ios=false/>}/>
+                    <Route path="/guides/beginner/ios" view=|| view! {<RenderIosPage/> }/>
+                    <Route path="/guides/beginner/ios/blue" view=|| view! {<BeginnerWalletInstructions selected_wallet=WalletName::Blue ios=true/>}/>
+                    <Route path="/guides/beginner/ios/blockstream" view=|| view! {<BeginnerWalletInstructions selected_wallet=WalletName::Green ios=true/>}/>
                     <Route path="/guides/intermediate/android" view=|| view! {<IntermediatePage/> }/>
                     <Route path="/guides/intermediate/ios" view=|| view! {<IntermediatePage/> }/>
                     <Route path="/guides/intermediate/desktop" view=|| view! {<IntermediatePage/> }/>
