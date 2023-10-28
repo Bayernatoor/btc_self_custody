@@ -78,9 +78,9 @@ pub fn DownloadButton(
 
     view! {
         <a href=href target="_blank" rel="external">
-            <button class=format!("flex {} p-2 shrink-0 h-12 w-36 mx-auto bg-white rounded-xl items-center space-x-4", flex_justify())>
+            <button class=format!("flex {} p-2 shrink-0 h-12 w-36 mx-auto bg-white rounded-xl items-center space-x-4", flex_justify.get_untracked())>
                 <div class="shrink-0">
-                    <img class=format!("h-{} w-{}", height(), width()) src=format!("{}", logo) alt=format!("{}", alt_txt) />
+                    <img class=format!("h-{} w-{}", height.get_untracked(), width.get_untracked()) src=format!("{}", logo) alt=format!("{}", alt_txt) />
                 </div>
                 <Show
                     when=move || button_name.is_some()
@@ -103,7 +103,6 @@ pub fn BeginnerPageTemplate(
     intro: String,
 ) -> impl IntoView {
     // used for onlick to determine which button was clicked
-    let (_samourai_clicked, _set_samourai_clicked) = create_signal(false);
     let (_samourai_clicked, _set_samourai_clicked) = create_signal(false);
     let (_blue_clicked, set_blue_clicked) = create_signal(false);
     let (_green_clicked, _set_green_clicked) = create_signal(false);
