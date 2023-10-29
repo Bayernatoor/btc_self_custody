@@ -160,7 +160,7 @@ pub fn BeginnerPageTemplate (
 
     // renders the guides/beginner/* route
     view! {
-        <div id="beginner" class="flex flex-col max-w-3xl mx-auto rounded-xl pb-10 animate-fadein" >
+        <div id="beginner" class="flex flex-col max-w-3xl mx-auto rounded-xl pb-10 animate-fadeinone" >
             <div class="flex flex-col p-6 pt-10 max-w-3xl mx-auto">
                     <h1 class="flex justify-center text-[36px] text-white font-semibold">{title}</h1>
                 <div class="flex justify-start pt-4 max-w-sm">
@@ -260,7 +260,7 @@ pub fn RenderIosPage() -> impl IntoView {
 #[component]
 #[allow(non_snake_case)]
 pub fn BeginnerWalletInstructions(
-    selected_wallet: WalletName,
+    selected_wallet:  WalletName,
     ios: bool,
 ) -> impl IntoView {
     let google_play_logo = "./../../../google-play-logo.avif".to_string();
@@ -301,7 +301,7 @@ pub fn BeginnerWalletInstructions(
     if displayed_wallet() == "blue" {
         // Render Blue Wallet instructions
         view! {
-            <div class="flex flex-col max-w-3xl p-4 pt-8 mx-auto rounded-xl animate-fadein">
+            <div class="flex flex-col max-w-3xl p-4 pt-8 mx-auto rounded-xl animate-fadeinone">
                 <h1 class="flex justify-center text-[36px] font-bold text-[#BEAE9A]">"Blue Wallet"</h1>
                 <div class="flex flex-col items-center">
                     <p class="text-white items-center px-4">
@@ -337,7 +337,7 @@ pub fn BeginnerWalletInstructions(
     } else if displayed_wallet() == "samourai" {
         // Render Samourai wallet instructions
         view! {
-            <div class="flex flex-col max-w-3xl p-4 pt-8 mx-auto rounded-xl animate-fadein">
+            <div class="flex flex-col max-w-3xl p-4 pt-8 mx-auto rounded-xl animate-fadeinone">
                 <div class="flex flew-row justify-center">
                     <h1 class="flex justify-center text-[36px] font-bold text-[#BEAE9A]">"Samourai Wallet"</h1>
                 </div>
@@ -365,7 +365,7 @@ pub fn BeginnerWalletInstructions(
     } else {
         // Render BlockStream wallet instructions
         view! {
-        <div class="flex flex-col max-w-3xl p-4 pt-8 mx-auto rounded-xl animate-fadein">
+        <div class="flex flex-col max-w-3xl p-4 pt-8 mx-auto rounded-xl animate-fadeinone">
             <div class="flex flew-row justify-center">
                 <h1 class="flex justify-center text-[36px] font-bold text-[#BEAE9A]">"BlockStream Green Wallet"</h1>
             </div>

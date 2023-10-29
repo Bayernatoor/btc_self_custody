@@ -15,14 +15,17 @@ impl FAQ {
         Self { id, title, content }
     }
 }
-#[server(FetchFaq, "/api")]
+#[server(FetchFaq, "/api", "Url", "faq")]
 pub async fn fetch_faq(faq_name: String) -> Result<Vec<FAQ>, ServerFnError> {
     let path = format!("./src/faqs/{}", faq_name);
 
+    // create a ReadDir, retreive each file and extract the path.
+    // add individual paths to a vec.
     let mut files = fs::read_dir(path)?
         .map(|dir| dir.map(|file| file.path()))
         .collect::<Result<Vec<_>, io::Error>>()?;
 
+    // sort files in order they appear in dir - ReadDir retrieves files unordered
     files.sort();
 
     let mut faqs = Vec::new();
@@ -43,9 +46,7 @@ pub async fn fetch_faq(faq_name: String) -> Result<Vec<FAQ>, ServerFnError> {
         // get faq content
         let faq_content = &content.split("\n").collect::<Vec<&str>>()[1..].join("\n");
 
-        //log!("faq_content: {:?}", faq_content);
-        //log!("content: {:?}", content);
-
+        // add created faq to vec
         faqs.push(FAQ::new_faq(id, title.to_string(), faq_content.to_string()));
     }
 

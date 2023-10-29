@@ -51,7 +51,7 @@ pub fn GuideSelector() -> impl IntoView {
 
     view! {
       <div id="test" class="container mx-auto max-w-5xl flex flex-col md:flex-row justify-center
-                 items-center p-20 md:mt-10 text-white opacity-0 animate-fadein font-sans gap-8">
+                 items-center p-20 md:mt-10 text-white opacity-0 animate-fadeinone font-sans gap-8">
         <div class="basis-1/4">
             <img src="./../../../lock.png" alt="Financial privacy lock"/>
         </div>

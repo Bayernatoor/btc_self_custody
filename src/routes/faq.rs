@@ -5,7 +5,7 @@ use leptos::*;
 #[component]
 pub fn FaqPage() -> impl IntoView {
     view! {
-        <div id="about" class="flex flex-col max-w-3xl mx-auto pb-10 animate-fadein">
+        <div id="about" class="flex flex-col max-w-3xl mx-auto pb-10 animate-fadeinone">
             <div class="flex flex-col p-6 pt-10 max-w-3xl mx-auto">
                     <h1 class="flex text-[36px] text-white font-semibold">"The Bitcoin Barrack Help Desk"</h1>
                 <div class="flex flex-col items-center w-full py-4">
