@@ -15,29 +15,23 @@ pub fn BlogPage() -> impl IntoView {
     }
 }
 
-
-
-// Setup postgress DB and add SQLx to interact with it. 
+// Setup postgress DB and add SQLx to interact with it.
 // Setup API - create_post, fetch_post
-// Create a template that renders fetched post into view. 
-
-
-
-
+// Create a template that renders fetched post into view.
 
 //
 //pub struct Post {
 //    id: u32,
-//    title: String, 
+//    title: String,
 //    introduction: String,
 //    images: Vec<String>,
 //    section_one: String,
-//    section_two: String, 
-//    section_three: String, 
+//    section_two: String,
+//    section_three: String,
 //    section_four: String,
-//    section_five: String, 
-//    section_six: String, 
-//    conclusion: String, 
+//    section_five: String,
+//    section_six: String,
+//    conclusion: String,
 //}
 
 //pub struct Post {
