@@ -447,6 +447,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "btc_self_custody"
+version = "0.1.0"
+dependencies = [
+ "actix-files",
+ "actix-web",
+ "cfg-if",
+ "clippy",
+ "console_error_panic_hook",
+ "console_log",
+ "leptos",
+ "leptos_actix",
+ "leptos_meta",
+ "leptos_router",
+ "log",
+ "markdown",
+ "pulldown-cmark",
+ "reqwest",
+ "serde",
+ "simple_logger",
+ "tokio",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1592,30 +1616,6 @@ dependencies = [
  "server_fn",
  "thiserror",
  "tracing",
-]
-
-[[package]]
-name = "leptos_start"
-version = "0.1.0"
-dependencies = [
- "actix-files",
- "actix-web",
- "cfg-if",
- "clippy",
- "console_error_panic_hook",
- "console_log",
- "leptos",
- "leptos_actix",
- "leptos_meta",
- "leptos_router",
- "log",
- "markdown",
- "pulldown-cmark",
- "reqwest",
- "serde",
- "simple_logger",
- "tokio",
- "wasm-bindgen",
 ]
 
 [[package]]
