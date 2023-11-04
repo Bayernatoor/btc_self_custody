@@ -1,4 +1,4 @@
-name: Rust
+name: Rust CI pipeline
 
 on: [push, pull_request]
 
@@ -6,6 +6,17 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Rust nightly
+      run: rustup override set nightly
+    - name: Build
+      run: cargo build --verbose
+    - name: Run tests
+      run: cargo test --verbose
+
   test:
     name: Test
     runs-on: ubuntu-latest
