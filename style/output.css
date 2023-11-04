@@ -676,12 +676,12 @@ p{
   height: 9rem;
 }
 
-.h-6{
-  height: 1.5rem;
-}
-
 .h-8{
   height: 2rem;
+}
+
+.h-6{
+  height: 1.5rem;
 }
 
 .w-12{
@@ -700,10 +700,6 @@ p{
   width: 9rem;
 }
 
-.w-6{
-  width: 1.5rem;
-}
-
 .w-64{
   width: 16rem;
 }
@@ -718,6 +714,10 @@ p{
 
 .w-full{
   width: 100%;
+}
+
+.w-6{
+  width: 1.5rem;
 }
 
 .max-w-2xl{
@@ -763,20 +763,6 @@ p{
 
 .transform{
   transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
-}
-
-@keyframes fadein{
-  0%{
-    opacity: 0;
-  }
-
-  100%{
-    opacity: 1;
-  }
-}
-
-.animate-fadein{
-  animation: fadein 2s ease-in-out forwards;
 }
 
 @keyframes fadeinone{
