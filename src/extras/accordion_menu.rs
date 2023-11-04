@@ -1,6 +1,6 @@
 use leptos::logging::log;
+use leptos::{server, ServerFnError, *};
 use pulldown_cmark::{html, Options, Parser};
-use leptos::{ServerFnError, server, *};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -68,13 +68,11 @@ fn MarkdownToHtml(markdown: &str) -> String {
     html_output
 }
 
-
-// FAQs menu 
+// FAQs menu
 #[component]
 #[allow(non_snake_case)]
 fn Menu(faq_title: String, faq_content: String) -> impl IntoView {
     let (menu_clicked, set_menu_clicked) = create_signal(false);
-
 
     // takes faq_content and faq_title to make a button and a accordion style container
     view! {
@@ -100,9 +98,8 @@ fn Menu(faq_title: String, faq_content: String) -> impl IntoView {
 // Accordion menu component for faqs, creates necessary number of Menu comps based on props passed.
 #[component]
 #[allow(non_snake_case)]
-pub fn AccordionMenu(#[prop(optional)] faq_name: String)  -> impl IntoView {
-    
-    // returns a Vec containing struct FAQS 
+pub fn AccordionMenu(#[prop(optional)] faq_name: String) -> impl IntoView {
+    // returns a Vec containing struct FAQS
     let faqs = create_resource(move || (), move |_| fetch_faq(faq_name.clone()));
 
     view! {

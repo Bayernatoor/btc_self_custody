@@ -31,7 +31,7 @@ where
     match selected_wallet {
         WalletName::Samourai => set_wallet("samourai".to_string()),
         WalletName::Blue => set_wallet("blue".to_string()),
-        WalletName::Green => set_wallet("blockstream".to_string())
+        WalletName::Green => set_wallet("blockstream".to_string()),
     }
 
     // get the name of the wallet
@@ -90,7 +90,7 @@ pub fn DownloadButton(
                     when=move || button_name.is_some()
                     fallback=move || view!("")>
                     <p class="font-medium text-sm">
-                        {format!("{}", button())}
+                        {button().to_string()}
                     </p>
                 </Show>
             </button>
@@ -100,7 +100,7 @@ pub fn DownloadButton(
 
 #[component]
 #[allow(non_snake_case)]
-pub fn BeginnerPageTemplate (
+pub fn BeginnerPageTemplate(
     title: String,
     quote: String,
     quote_author: String,
@@ -259,10 +259,7 @@ pub fn RenderIosPage() -> impl IntoView {
 /// depends on button clicked.
 #[component]
 #[allow(non_snake_case)]
-pub fn BeginnerWalletInstructions(
-    selected_wallet:  WalletName,
-    ios: bool,
-) -> impl IntoView {
+pub fn BeginnerWalletInstructions(selected_wallet: WalletName, ios: bool) -> impl IntoView {
     let google_play_logo = "./../../../google-play-logo.avif".to_string();
     let google_play_alt = "Google Play Logo".to_string();
 
