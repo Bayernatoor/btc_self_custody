@@ -25,9 +25,14 @@ serde = { version = "1.0.189", features = ["derive"] }
 pulldown-cmark = { version = "0.9.3", features = ["serde"] }
 tokio = { version = "1.33.0", features = ["macros"] }
 
+[dev-dependencies]
+reqwest = "0.11"
+
 [features]
 hydrate = ["leptos/hydrate", "leptos_meta/hydrate", "leptos_router/hydrate"]
 ssr = ["dep:actix-files", "dep:actix-web", "dep:leptos_actix", "leptos/ssr", "leptos_meta/ssr", "leptos_router/ssr"]
+
+
 
 [package.metadata.leptos]
 # The name used by wasm-bindgen/cargo-leptos for the JS/WASM bundle. Defaults to the crate name   
