@@ -1,7 +1,58 @@
-use crate::server::api::fetch_faqs::*;
 use leptos::logging::log;
-use leptos::*;
 use pulldown_cmark::{html, Options, Parser};
+use leptos::{ServerFnError, server, *};
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FAQ {
+    pub id: u32,
+    pub title: String,
+    pub content: String,
+}
+
+impl FAQ {
+    pub fn new_faq(id: u32, title: String, content: String) -> Self {
+        Self { id, title, content }
+    }
+}
+#[server(FetchFaq, "/api", "Url", "faq")]
+pub async fn fetch_faq(faq_name: String) -> Result<Vec<FAQ>, ServerFnError> {
+    use std::{fs, io};
+    let path = format!("./src/faqs/{}", faq_name);
+
+    // create a ReadDir, retreive each file and extract the path.
+    // add individual paths to a vec.
+    let mut files = fs::read_dir(path)?
+        .map(|dir| dir.map(|file| file.path()))
+        .collect::<Result<Vec<_>, io::Error>>()?;
+
+    // sort files in order they appear in dir - ReadDir retrieves files unordered
+    files.sort();
+
+    let mut faqs = Vec::new();
+    let mut id = 0;
+
+    for faq in files {
+        // increment id for each new file
+        id += 1;
+        // get name of file
+        let _file_name = faq.file_name().unwrap().to_str().unwrap();
+
+        // read contents of file
+        let content = fs::read_to_string(faq)?;
+
+        // get the faq title
+        let title = &content.split("\n").collect::<Vec<&str>>()[0].to_string();
+
+        // get faq content
+        let faq_content = &content.split("\n").collect::<Vec<&str>>()[1..].join("\n");
+
+        // add created faq to vec
+        faqs.push(FAQ::new_faq(id, title.to_string(), faq_content.to_string()));
+    }
+
+    Ok(faqs)
+}
 
 #[allow(non_snake_case)]
 fn MarkdownToHtml(markdown: &str) -> String {
