@@ -109,9 +109,6 @@ pub fn AccordionMenu(#[prop(optional)] faq_name: String) -> impl IntoView {
         >
             {move || {
                 match faqs.get() {
-                    None => {
-                        view! { <div>"No Data Available"</div> }
-                    }
                     Some(Ok(faqs_vec)) => {
                         view! {
                             <div class="flex flex-col">
@@ -123,13 +120,16 @@ pub fn AccordionMenu(#[prop(optional)] faq_name: String) -> impl IntoView {
                                     }
                                 />
                             </div>
-                        }
+                        }.into_view()
                     }
                     Some(Err(error)) => {
                         log!("Error rendering faqs: {}", error);
                         view! { <div>
                                 "Oops we ran into an error"
-                                </div> }
+                                </div> }.into_view()
+                    }
+                    None => {
+                        view! { <div>"No Data Available"</div> }.into_view()
                     }
                 }
             }}
