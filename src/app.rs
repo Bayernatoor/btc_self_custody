@@ -13,6 +13,7 @@ use leptos_router::*;
 
 #[component]
 pub fn App() -> impl IntoView {
+    logging::log!("Loading App");
     // Provides context that manages stylesheets, titles, meta tags, etc.
     provide_meta_context();
 
