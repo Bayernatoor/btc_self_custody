@@ -45,7 +45,8 @@ pub async fn fetch_faq(faq_name: String) -> Result<Vec<FAQ>, ServerFnError> {
         let title = &content.split("\n").collect::<Vec<&str>>()[0].to_string();
 
         // get faq content
-        let faq_content = &content.split("\n").collect::<Vec<&str>>()[1..].join("\n");
+        let faq_content =
+            &content.split("\n").collect::<Vec<&str>>()[1..].join("\n");
 
         // add created faq to vec
         faqs.push(FAQ::new_faq(id, title.to_string(), faq_content.to_string()));
@@ -100,7 +101,8 @@ fn Menu(faq_title: String, faq_content: String) -> impl IntoView {
 #[allow(non_snake_case)]
 pub fn AccordionMenu(#[prop(optional)] faq_name: String) -> impl IntoView {
     // returns a Vec containing struct FAQS
-    let faqs = create_resource(move || (), move |_| fetch_faq(faq_name.clone()));
+    let faqs =
+        create_resource(move || (), move |_| fetch_faq(faq_name.clone()));
 
     view! {
     <div id="accordion-collapse" data-accordion="collapse">

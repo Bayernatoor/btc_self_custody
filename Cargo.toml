@@ -6,6 +6,11 @@ edition = "2021"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
+path = "src/lib.rs"
+
+[[bin]]
+path = "src/main.rs"
+name = "btc_self_custody"
 
 [dependencies]
 actix-files = { version = "0.6", optional = true }
@@ -28,12 +33,14 @@ tokio = { version = "1.33.0", features = ["macros"] }
 
 [dev-dependencies]
 reqwest = "0.11"
+clippy = "0.0.302"
 
 [features]
 hydrate = ["leptos/hydrate", "leptos_meta/hydrate", "leptos_router/hydrate"]
 ssr = ["dep:actix-files", "dep:actix-web", "dep:leptos_actix", "leptos/ssr", "leptos_meta/ssr", "leptos_router/ssr"]
 
-
+[package.metadata]
+cargo-fmt = true
 
 [package.metadata.leptos]
 # The name used by wasm-bindgen/cargo-leptos for the JS/WASM bundle. Defaults to the crate name   
