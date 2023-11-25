@@ -1,4 +1,4 @@
-pub mod api;
+pub mod server;
 pub mod app;
 pub mod extras;
 pub mod helpers;
@@ -32,7 +32,7 @@ cfg_if! {
 pub async fn run() -> Result<Server, std::io::Error> {
     use actix_files::Files;
     use actix_web::*;
-    use api::health_check::health_check;
+    use server::health_check::health_check;
     use app::*;
     use leptos::*;
     use leptos_actix::{generate_route_list, LeptosRoutes};
@@ -49,7 +49,7 @@ pub async fn run() -> Result<Server, std::io::Error> {
 
         App::new()
             .route("/api/{tail:.*}", leptos_actix::handle_server_fns())
-            .route("/health_check", web::get().to(health_check))
+            .route("/server/health_check", web::get().to(health_check))
             .leptos_routes(
                 leptos_options.to_owned(),
                 routes.to_owned(),
