@@ -259,7 +259,10 @@ pub fn RenderIosPage() -> impl IntoView {
 /// depends on button clicked.
 #[component]
 #[allow(non_snake_case)]
-pub fn BeginnerWalletInstructions(selected_wallet: WalletName, ios: bool) -> impl IntoView {
+pub fn BeginnerWalletInstructions(
+    selected_wallet: WalletName,
+    ios: bool,
+) -> impl IntoView {
     let google_play_logo = "./../../../google-play-logo.avif".to_string();
     let google_play_alt = "Google Play Logo".to_string();
 
@@ -275,17 +278,22 @@ pub fn BeginnerWalletInstructions(selected_wallet: WalletName, ios: bool) -> imp
     let blue_google_play =
         r"https://play.google.com/store/apps/details?id=io.bluewallet.bluewallet".to_string();
     let blue_apple_store =
-        r"https://apps.apple.com/app/bluewallet-bitcoin-wallet/id1376878040".to_string();
-    let blue_android_apk = r"https://github.com/BlueWallet/BlueWallet/releases".to_string();
+        r"https://apps.apple.com/app/bluewallet-bitcoin-wallet/id1376878040"
+            .to_string();
+    let blue_android_apk =
+        r"https://github.com/BlueWallet/BlueWallet/releases".to_string();
 
     let samourai_google_play =
         r"https://play.google.com/store/apps/details?id=com.samourai.wallet&hl=en_US&gl=US"
             .to_string();
-    let samourai_android_apk = r"https://samouraiwallet.com/download".to_string();
-    let samourai_fdroid = r"https://samouraiwallet.com/download/fdroid".to_string();
+    let samourai_android_apk =
+        r"https://samouraiwallet.com/download".to_string();
+    let samourai_fdroid =
+        r"https://samouraiwallet.com/download/fdroid".to_string();
 
     let green_apple_store =
-        r"https://apps.apple.com/us/app/green-bitcoin-wallet/id1402243590".to_string();
+        r"https://apps.apple.com/us/app/green-bitcoin-wallet/id1402243590"
+            .to_string();
 
     let (displayed_wallet, set_displayed_wallet) = create_signal("");
 
