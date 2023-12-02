@@ -9,7 +9,7 @@ async fn health_check_works() {
 
     // Act
     let response = client
-        .get("http://127.0.0.1:3000/health_check")
+        .get("http://127.0.0.1:3000/server/health_check")
         .send()
         .await
         .expect("Failed to execute request");

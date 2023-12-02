@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
 
+# enable debugging - prints each line
 set -x 
+# exit immediately if any command exits with non 0 error
+# if any command in a pipeline fails the entire pipeline returns a failure status
 set -eo pipefail
 
+# ensure psql is installed
 if ! [ -x "$(command -v psql)" ]; then
     echo >&2 "Error: `psql` is not installed."
     exit 1
 fi
 
+# if sqlx not installed install it
 if ! [ -x "$(command -v sqlx)" ]; then
   echo >&2 "Error: `sqlx` is not installed."
   echo >&2 "Use:"

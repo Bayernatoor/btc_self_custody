@@ -5,8 +5,8 @@ use actix_web::main;
 #[cfg(feature = "ssr")]
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    use btc_self_custody::run;
-
+    use btc_self_custody::{run, configuration::{self, get_configuration}};
+    let configuration = get_configuration().expect("Failed to read config");
     run().await?.await
 }
 

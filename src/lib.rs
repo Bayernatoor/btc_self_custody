@@ -1,8 +1,9 @@
+pub mod configuration;
+pub mod server;
 pub mod app;
 pub mod extras;
 pub mod helpers;
 pub mod routes;
-pub mod server;
 #[cfg(feature = "ssr")]
 use actix_web::dev::Server;
 use cfg_if::cfg_if;
