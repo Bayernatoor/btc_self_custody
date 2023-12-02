@@ -676,10 +676,6 @@ p{
   height: 9rem;
 }
 
-.h-6{
-  height: 1.5rem;
-}
-
 .h-8{
   height: 2rem;
 }
@@ -698,10 +694,6 @@ p{
 
 .w-36{
   width: 9rem;
-}
-
-.w-6{
-  width: 1.5rem;
 }
 
 .w-64{
@@ -975,11 +967,6 @@ p{
 .py-4{
   padding-top: 1rem;
   padding-bottom: 1rem;
-}
-
-.py-8{
-  padding-top: 2rem;
-  padding-bottom: 2rem;
 }
 
 .pb-10{

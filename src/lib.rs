@@ -1,8 +1,8 @@
-pub mod server;
 pub mod app;
 pub mod extras;
 pub mod helpers;
 pub mod routes;
+pub mod server;
 #[cfg(feature = "ssr")]
 use actix_web::dev::Server;
 use cfg_if::cfg_if;
@@ -32,10 +32,10 @@ cfg_if! {
 pub async fn run() -> Result<Server, std::io::Error> {
     use actix_files::Files;
     use actix_web::*;
-    use server::health_check::health_check;
     use app::*;
     use leptos::*;
     use leptos_actix::{generate_route_list, LeptosRoutes};
+    use server::health_check::health_check;
 
     let conf = get_configuration(None).await.unwrap();
     let addr = conf.leptos_options.site_addr;
