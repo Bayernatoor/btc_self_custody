@@ -12,11 +12,11 @@ async fn main() -> std::io::Result<()> {
     use sqlx::PgPool;
     use std::net::TcpListener;
 
-
     let configuration = get_configuration().expect("Failed to read config");
-    let connection_pool = PgPool::connect(&configuration.database.connection_string())
-        .await
-        .expect("Failed to connect to Postgres.");
+    let connection_pool =
+        PgPool::connect(&configuration.database.connection_string())
+            .await
+            .expect("Failed to connect to Postgres.");
     run(connection_pool).await?.await
 }
 
