@@ -489,6 +489,7 @@ dependencies = [
  "actix-files",
  "actix-web",
  "cfg-if",
+ "chrono",
  "clippy",
  "config",
  "console_error_panic_hook",
@@ -505,6 +506,7 @@ dependencies = [
  "simple_logger",
  "sqlx",
  "tokio",
+ "uuid",
  "wasm-bindgen",
 ]
 
