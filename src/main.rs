@@ -9,8 +9,15 @@ async fn main() -> std::io::Result<()> {
         configuration::{self, get_configuration},
         run,
     };
+    use sqlx::PgPool;
+    use std::net::TcpListener;
+
+
     let configuration = get_configuration().expect("Failed to read config");
-    run().await?.await
+    let connection_pool = PgPool::connect(&configuration.database.connection_string())
+        .await
+        .expect("Failed to connect to Postgres.");
+    run(connection_pool).await?.await
 }
 
 #[cfg(not(feature = "ssr"))]
