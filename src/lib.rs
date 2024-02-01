@@ -6,9 +6,9 @@ pub mod routes;
 pub mod server;
 #[cfg(feature = "ssr")]
 use actix_web::dev::Server;
+use cfg_if::cfg_if;
 #[cfg(feature = "ssr")]
 use sqlx::PgPool;
-use cfg_if::cfg_if;
 
 cfg_if! {
     if #[cfg(feature = "hydrate")] {
@@ -39,7 +39,7 @@ pub async fn run(db_pool: PgPool) -> Result<Server, std::io::Error> {
     use leptos::*;
     use leptos_actix::{generate_route_list, LeptosRoutes};
     use server::{create_post::create_post, health_check::health_check};
-    
+
     // Wrap the pool using web::Data, which boils down to an Arc smart pointer
     let db_pool = web::Data::new(db_pool);
     let conf = get_configuration(None).await.unwrap();
@@ -56,7 +56,6 @@ pub async fn run(db_pool: PgPool) -> Result<Server, std::io::Error> {
             .route("/api/{tail:.*}", leptos_actix::handle_server_fns())
             .route("/server/health_check", web::get().to(health_check))
             .route("/server/create_post", web::post().to(create_post))
-
             .app_data(db_pool.clone())
             .leptos_routes(
                 leptos_options.to_owned(),
@@ -65,7 +64,6 @@ pub async fn run(db_pool: PgPool) -> Result<Server, std::io::Error> {
             )
             .service(Files::new("/", site_root))
     })
-
     .bind(&addr)?
     .run();
     Ok(server)

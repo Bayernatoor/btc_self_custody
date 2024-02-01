@@ -1,7 +1,7 @@
 #[cfg(feature = "ssr")]
-use btc_self_custody::configuration::{DatabaseSettings, get_configuration};
+use btc_self_custody::configuration::{get_configuration, DatabaseSettings};
 #[cfg(feature = "ssr")]
-use sqlx::{PgPool, PgConnection, Connection, Executor};
+use sqlx::{Connection, Executor, PgConnection, PgPool};
 #[cfg(feature = "ssr")]
 use uuid::Uuid;
 #[cfg(feature = "ssr")]
@@ -41,11 +41,12 @@ pub struct TestApp {
 #[tokio::test]
 #[cfg(feature = "ssr")]
 async fn create_returns_a_200_for_valid_post_creation() {
-    use std::collections::HashMap;
     use sqlx::{Connection, PgConnection};
+    use std::collections::HashMap;
 
     // Arrange
-    let mut configuration = get_configuration().expect("Failed to read configuration.");
+    let mut configuration =
+        get_configuration().expect("Failed to read configuration.");
     configuration.database.database_name = Uuid::new_v4().to_string();
 
     let connection_pool = configure_database(&configuration.database).await;
@@ -56,27 +57,25 @@ async fn create_returns_a_200_for_valid_post_creation() {
     map.insert("author", "Bayer");
     map.insert("title", "The path to Hyperbitcoinization");
     map.insert("content", "We explore the many...");
-     
+
     // Act
     let response = client
         .post("http://127.0.0.1:3000/server/create_post")
         .header("Content-Type", "application/json")
         .json(&map)
-
         .send()
         .await
         .expect("Failed to execute request.");
 
     // Assert
     assert_eq!(200, response.status().as_u16());
-    
-   let saved = sqlx::query!("SELECT title FROM blogposts")
+
+    let saved = sqlx::query!("SELECT title FROM blogposts")
         .fetch_one(&connection_pool)
         .await
         .expect("Failed to fetch saved blog title.");
 
     assert_eq!(saved.title, "The path to Hyperbitcoinization");
-
 }
 
 #[tokio::test]
@@ -95,7 +94,8 @@ async fn create_returns_a_400_for_invalid_post_creation() {
     //    .await
     //    .expect("Failed to connect to Postgres.");
 
-    let mut configuration = get_configuration().expect("Failed to read configuration.");
+    let mut configuration =
+        get_configuration().expect("Failed to read configuration.");
     configuration.database.database_name = Uuid::new_v4().to_string();
 
     let connection_pool = configure_database(&configuration.database).await;
@@ -106,7 +106,7 @@ async fn create_returns_a_400_for_invalid_post_creation() {
 
     map.insert("author", "");
     map.insert("content", "Hyperbitcoinization, the point at which Bitcoin becomes the dominant world reserve currency, was originally coined by Daniel Krawisz in his 2014 article titled Hyperbitcoinization.");
-     
+
     // Act
     let response = client
         .post("http://127.0.0.1:3000/server/create_post")
@@ -117,9 +117,7 @@ async fn create_returns_a_400_for_invalid_post_creation() {
         .expect("Failed to execute request.");
 
     // Assert
-    assert_eq!(
-        400, 
-        response.status().as_u16());
+    assert_eq!(400, response.status().as_u16());
 }
 
 //#[tokio::test]
@@ -133,7 +131,7 @@ async fn create_returns_a_400_for_invalid_post_creation() {
 //    let connection = PgConnection::connect(&configuration.database.connection_string())
 //        .await
 //        .expect("Failed to connect to Postgres.");
-//    
+//
 //    let client = reqwest::Client::new();
 //
 //    // Act
@@ -148,10 +146,8 @@ async fn create_returns_a_400_for_invalid_post_creation() {
 //
 //    // Assert
 //    assert_eq!(200, response.status().as_u16());
-//    
+//
 //}
-
-
 
 #[tokio::test]
 #[cfg(feature = "ssr")]
@@ -174,14 +170,14 @@ async fn health_check_works() {
     assert_eq!(Some(0), response.content_length());
 }
 
-
 #[cfg(feature = "ssr")]
 async fn spawn_app() -> std::io::Result<()> {
     use btc_self_custody::configuration;
 
     let address = format!("http://127.0.0.1:3000");
 
-    let mut configuration = get_configuration().expect("Failed to read configuration.");
+    let mut configuration =
+        get_configuration().expect("Failed to read configuration.");
     configuration.database.database_name = Uuid::new_v4().to_string();
 
     let connection_pool = configure_database(&configuration.database).await;
@@ -201,13 +197,15 @@ async fn spawn_app() -> std::io::Result<()> {
 
 #[cfg(feature = "ssr")]
 pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
-
     // create database
-    let mut connection = PgConnection::connect(&config.connection_string_without_db())
-        .await
-        .expect("Failed to connect to Postgres");
+    let mut connection =
+        PgConnection::connect(&config.connection_string_without_db())
+            .await
+            .expect("Failed to connect to Postgres");
     connection
-        .execute(format!(r#"CREATE DATABASE "{}";"#, config.database_name).as_str())
+        .execute(
+            format!(r#"CREATE DATABASE "{}";"#, config.database_name).as_str(),
+        )
         .await
         .expect("Failed to create database.");
 
@@ -222,4 +220,3 @@ pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
 
     connection_pool
 }
-
