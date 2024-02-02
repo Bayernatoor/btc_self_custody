@@ -17,7 +17,8 @@ pub struct TestApp {
 
 #[cfg(feature = "ssr")]
 async fn spawn_app() -> TestApp {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
+    let listener =
+        TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
     // retrieve random port assigned to us by OS
     let port = listener.local_addr().unwrap().port();
     println!("spawn app port: {:?}", &port);
@@ -28,15 +29,15 @@ async fn spawn_app() -> TestApp {
     configuration.database.database_name = Uuid::new_v4().to_string();
     let connection_pool = configure_database(&configuration.database).await;
 
-    let server = run(listener, connection_pool.clone()).await.expect("Failed to bind to address");
+    let server = run(listener, connection_pool.clone())
+        .await
+        .expect("Failed to bind to address");
     let _ = tokio::spawn(server);
 
     TestApp {
         address,
         db_pool: connection_pool,
     }
-
-
 }
 
 #[cfg(feature = "ssr")]
@@ -68,12 +69,10 @@ pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
 #[tokio::test]
 #[cfg(feature = "ssr")]
 async fn health_check_works() {
-    
     // Arrange
     let app = spawn_app().await;
     // Use reqwest to perform HTTP actions against our app
     let client = reqwest::Client::new();
-    
 
     // Act
     let response = client
@@ -150,5 +149,3 @@ async fn create_returns_a_400_for_invalid_post_creation() {
     // Assert
     assert_eq!(400, response.status().as_u16());
 }
-
-

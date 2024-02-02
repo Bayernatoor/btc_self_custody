@@ -34,7 +34,10 @@ cfg_if! {
 }
 
 #[cfg(feature = "ssr")]
-pub async fn run(listener: TcpListener, db_pool: PgPool) -> Result<Server, std::io::Error> {
+pub async fn run(
+    listener: TcpListener,
+    db_pool: PgPool,
+) -> Result<Server, std::io::Error> {
     use actix_files::Files;
     use actix_web::*;
     use app::*;
@@ -49,7 +52,6 @@ pub async fn run(listener: TcpListener, db_pool: PgPool) -> Result<Server, std::
     // Generate the list of routes in your Leptos App
     let routes = generate_route_list(|| view! {<App/> });
     logging::log!("Server listening on: {:?}", listener);
-
 
     let server = HttpServer::new(move || {
         let leptos_options = &conf.leptos_options;
