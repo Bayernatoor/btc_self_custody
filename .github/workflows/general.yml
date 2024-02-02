@@ -4,7 +4,7 @@ on: [push, pull_request]
 
 env:
   CARGO_TERM_COLOR: always
-  SQLX_VERSION: 0.7.3
+  SQLX_VERSION: "0.7.3"
   SQLX_FEATURES: "rustls,postgres"
 
 jobs:
