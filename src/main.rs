@@ -1,6 +1,7 @@
 #![allow(unused_imports)]
 #[cfg(feature = "ssr")]
 use actix_web::main;
+#[cfg(feature = "ssr")]
 
 #[cfg(feature = "ssr")]
 #[actix_web::main]
@@ -12,12 +13,16 @@ async fn main() -> std::io::Result<()> {
     use sqlx::PgPool;
     use std::net::TcpListener;
 
+
     let configuration = get_configuration().expect("Failed to read config");
     let connection_pool =
         PgPool::connect(&configuration.database.connection_string())
             .await
             .expect("Failed to connect to Postgres.");
-    run(connection_pool).await?.await
+    let address = format!("127.0.0.1:{}", configuration.application_port);
+    let listener = TcpListener::bind(address)?;
+    run(listener, connection_pool).await?.await?;
+    Ok(())
 }
 
 #[cfg(not(feature = "ssr"))]
