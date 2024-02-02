@@ -2,7 +2,6 @@
 #[cfg(feature = "ssr")]
 use actix_web::main;
 #[cfg(feature = "ssr")]
-
 #[cfg(feature = "ssr")]
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -12,7 +11,6 @@ async fn main() -> std::io::Result<()> {
     };
     use sqlx::PgPool;
     use std::net::TcpListener;
-
 
     let configuration = get_configuration().expect("Failed to read config");
     let connection_pool =
