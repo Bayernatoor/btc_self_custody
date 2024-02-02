@@ -66,7 +66,7 @@ jobs:
         run: SKIP_DOCKER=true ./scripts/init_db.sh
 
       - name: Run tests
-        run: cargo test
+        run: cargo test --features ssr
 
   # `fmt` container job
   fmt:
