@@ -107,14 +107,14 @@ pub fn BeginnerPageTemplate(
     intro: String,
 ) -> impl IntoView {
     // used for onlick to determine which button was clicked
-    let (_samourai_clicked, _set_samourai_clicked) = create_signal(false);
+    let (_samourai_clicked, set_samourai_clicked) = create_signal(false);
     let (_blue_clicked, set_blue_clicked) = create_signal(false);
-    let (_green_clicked, _set_green_clicked) = create_signal(false);
+    let (_green_clicked, set_green_clicked) = create_signal(false);
 
     // set the button details
     let (_samourai_details, set_samourai_details) = create_signal(false);
     let (_blue_details, set_blue_details) = create_signal(false);
-    let (_green_details, _set_green_details) = create_signal(false);
+    let (_green_details, set_green_details) = create_signal(false);
 
     // get current path via RouteContext
     let path = get_current_path();
@@ -141,11 +141,11 @@ pub fn BeginnerPageTemplate(
     let text_color_blue = "#1a578f".to_string();
 
     // BlockStream Green wallet assets
-    let _wallet_name_green = "BlockStream Green".to_string();
-    let _short_desc_green = "Self-Custody Made Easy".to_string();
-    let _img_url_green = "./../../nav_green.svg".to_string();
-    let _img_alt_green = "BlockStream Green".to_string();
-    let _text_color_green = "#0a7b46ff".to_string();
+    let wallet_name_green = "BlockStream Green".to_string();
+    let short_desc_green = "Self-Custody Made Easy".to_string();
+    let img_url_green = "./../../nav_green.svg".to_string();
+    let img_alt_green = "BlockStream Green".to_string();
+    let text_color_green = "#0a7b46ff".to_string();
 
     // DOM elements are only available when used within a create_effect see --> https://leptos-rs.github.io/leptos/ssr/24_hydration_bugs.html#not-all-client-code-can-run-on-the-server
     // create_effect(move |_| {
@@ -190,16 +190,15 @@ pub fn BeginnerPageTemplate(
                 <Show
                    when=move || platform() == *"android"
                    fallback= move || view! {
-                      // comment out greenWallet for now leaving 1 wallet option for IOS
-                      // { <WalletButton on_click = move |_| {set_green_clicked(true);
-                      //           set_green_details(true)}
-                      //          samourai=false blue=false _green=true platform=platform()
-                      //          wallet_title=wallet_name_green.clone() short_desc=short_desc_green.clone() img_url=img_url_green.clone() img_alt=img_alt_green.clone()
-                      //          text_color=text_color_green.clone()
-                      //          />}
+                        <WalletButton on_click = move |_| {set_green_clicked(true);
+                                 set_green_details(true)}
+                                selected_wallet=WalletName::Green platform=platform()
+                                wallet_title=wallet_name_green.clone() short_desc=short_desc_green.clone() img_url=img_url_green.clone() img_alt=img_alt_green.clone()
+                                text_color=text_color_green.clone()
+                                />
                    }
                 >
-                        <WalletButton on_click = move |_| {_set_samourai_clicked(true); set_samourai_details(true);}
+                        <WalletButton on_click = move |_| {set_samourai_clicked(true); set_samourai_details(true);}
                                 selected_wallet=WalletName::Samourai platform=platform()
                                 wallet_title=wallet_name_samourai.clone() short_desc=short_desc_samourai.clone() img_url=img_url_samourai.clone() img_alt=img_alt_samourai.clone()
                                 text_color=text_color_samourai.clone()
