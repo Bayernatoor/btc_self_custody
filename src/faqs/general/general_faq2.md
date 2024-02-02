@@ -1,1 +1,0 @@
-### Why bitcoin self-custody? 
