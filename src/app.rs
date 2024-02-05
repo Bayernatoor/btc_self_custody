@@ -40,6 +40,7 @@ pub fn App() -> impl IntoView {
                     <Route path="/guides/beginner/ios" view=|| view! {<RenderIosPage/> }/>
                     <Route path="/guides/beginner/ios/blue" view=|| view! {<BeginnerWalletInstructions selected_wallet=WalletName::Blue ios=true/>}/>
                     <Route path="/guides/beginner/ios/blockstream" view=|| view! {<BeginnerWalletInstructions selected_wallet=WalletName::Green ios=true/>}/>
+                    //<Route path="/guides/beginner/desktop" view=|| view! {<RenderDesktopPage/> }/>
                     <Route path="/guides/intermediate/android" view=|| view! {<IntermediatePage/> }/>
                     <Route path="/guides/intermediate/ios" view=|| view! {<IntermediatePage/> }/>
                     <Route path="/guides/intermediate/desktop" view=|| view! {<IntermediatePage/> }/>
