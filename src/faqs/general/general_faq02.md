@@ -7,5 +7,5 @@ trends towards zero.
 &nbsp;
 
 Bitcoin allows you to store your energy and time in a decentralized, censorship resistant, 
-borderless, scarce and finite bearer asset backed by <ins><a href="https://medium.com/bitcoin-tech-talk/the-anatomy-of-proof-of-work-98c85b6f6667" target="_blank" rel="noopener noreferrer">Proof of Work.</a></ins>
+borderless and scarce bearer asset backed by <ins><a href="https://medium.com/bitcoin-tech-talk/the-anatomy-of-proof-of-work-98c85b6f6667" target="_blank" rel="noopener noreferrer">Proof of Work.</a></ins>
 
