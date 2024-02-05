@@ -640,6 +640,10 @@ p{
   margin-top: 1.5rem;
 }
 
+.mt-4{
+  margin-top: 1rem;
+}
+
 .box-border{
   box-sizing: border-box;
 }
@@ -1184,6 +1188,10 @@ p{
 
   .md\:p-20{
     padding: 5rem;
+  }
+
+  .md\:pt-10{
+    padding-top: 2.5rem;
   }
 
   .md\:text-left{
