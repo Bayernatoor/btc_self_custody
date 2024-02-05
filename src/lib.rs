@@ -34,16 +34,14 @@ cfg_if! {
 }
 
 #[cfg(feature = "ssr")]
-pub async fn run(
-    listener: TcpListener,
-    db_pool: PgPool,
-) -> Result<Server, std::io::Error> {
+pub async fn run(listener: TcpListener, db_pool: PgPool) -> Result<Server, std::io::Error> {
     use actix_files::Files;
     use actix_web::*;
     use app::*;
     use leptos::*;
     use leptos_actix::{generate_route_list, LeptosRoutes};
     use server::{create_post::create_post, health_check::health_check};
+
 
     // Wrap the pool using web::Data, which boils down to an Arc smart pointer
     let db_pool = web::Data::new(db_pool);
@@ -52,6 +50,7 @@ pub async fn run(
     // Generate the list of routes in your Leptos App
     let routes = generate_route_list(|| view! {<App/> });
     logging::log!("Server listening on: {:?}", listener);
+
 
     let server = HttpServer::new(move || {
         let leptos_options = &conf.leptos_options;
