@@ -1,6 +1,6 @@
+use crate::extras::back::BackButton;
 use leptos::ev::MouseEvent;
 use leptos::*;
-use crate::extras::back::BackButton;
 
 #[component]
 fn BeginnerButton<F>(on_click: F) -> impl IntoView
@@ -50,7 +50,7 @@ pub fn GuideSelector() -> impl IntoView {
     let (intermediate_clicked, set_intermediate_clicked) = create_signal(false);
     let (advanced_clicked, set_advanced_clicked) = create_signal(false);
 
-        let level = "beginner";
+    let level = "beginner";
     let device = "android";
     let path = format!("guides/{level}/{device}");
 
@@ -65,7 +65,7 @@ pub fn GuideSelector() -> impl IntoView {
 
         <Show
             when=move || beginner_clicked() || intermediate_clicked() || advanced_clicked()
-            fallback= move || view! {<BeginnerButton on_click=move |_|  {set_beginner_clicked.update(|value| *value = !*value); set_intermediate_clicked.set(false); set_advanced_clicked.set(false)} /> 
+            fallback= move || view! {<BeginnerButton on_click=move |_|  {set_beginner_clicked.update(|value| *value = !*value); set_intermediate_clicked.set(false); set_advanced_clicked.set(false)} />
                                      <IntermediateButton on_click=move |_| {set_intermediate_clicked.update(|value| *value = !*value); set_beginner_clicked.set(false); set_advanced_clicked.set(false)} />
                                      <AdvancedButton on_click=move |_| {set_advanced_clicked.update(|value| *value = !*value); set_beginner_clicked.set(false); set_intermediate_clicked.set(false)} /> }
             >
