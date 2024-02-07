@@ -37,7 +37,7 @@ where
     // get the name of the wallet
     let wallet_name = wallet();
     // create our url path
-    let path = format!("/guides/beginner/{platform}/{wallet_name}");
+    let path = format!("/guides/basic/{platform}/{wallet_name}");
 
     view! {
         <a href=path>
@@ -158,9 +158,9 @@ pub fn BeginnerPageTemplate(
     //        log!("Animation Done");
     // });
 
-    // renders the guides/beginner/* route
+    // renders the guides/basic/* route
     view! {
-        <div id="beginner" class="flex flex-col max-w-3xl mx-auto rounded-xl pb-10 animate-fadeinone" >
+        <div id="basic" class="flex flex-col max-w-3xl mx-auto rounded-xl pb-10 animate-fadeinone" >
             <div class="flex flex-col p-6 pt-10 max-w-3xl mx-auto">
                     <h1 class="flex justify-center text-[36px] text-white font-semibold">{title}</h1>
                 <div class="flex justify-start pt-4 max-w-sm">
@@ -216,7 +216,7 @@ pub fn BeginnerPageTemplate(
     }
 }
 
-// Renders the beginner Android page
+// Renders the basic Android page
 // This comp should be reviewed and likely redundant.
 #[component]
 #[allow(non_snake_case)]
@@ -236,7 +236,7 @@ pub fn RenderAndroidPage() -> impl IntoView {
     }
 }
 
-/// Renders the beginner IOS page.
+/// Renders the basic IOS page.
 #[component]
 #[allow(non_snake_case)]
 pub fn RenderIosPage() -> impl IntoView {
