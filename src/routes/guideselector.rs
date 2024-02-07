@@ -2,57 +2,121 @@ use crate::extras::back::BackButton;
 use leptos::ev::MouseEvent;
 use leptos::*;
 
-#[component]
-fn BeginnerButton<F>(on_click: F) -> impl IntoView
-where
-    F: Fn(MouseEvent) + 'static,
-{
-    view! {
-            <button class="flex flex-col p-2 max-w-sm mx-auto w-64 bg-slate-100 rounded-xl flex items-center" on:click=on_click>
-                <div class="text-2xl font-semibold text-[#f79231]">"Basic"</div>
-                <p class="text-sm text-[#1a578f] mt-2">"I have a tiny weeny stack"</p>
-            </button>
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct GuideDetails {
+    id: u32,
+    level_name: String,
+    device: String,
+    path: String,
+}
+
+impl GuideDetails {
+    fn new_guidedetails(
+        id: u32,
+        level_name: String,
+        device: String,
+        path: String,
+    ) -> Self {
+        Self {
+            id,
+            level_name,
+            device,
+            path,
+        }
     }
 }
 
+#[allow(clippy::redundant_closure)]
 #[component]
-fn IntermediateButton<F>(on_click: F) -> impl IntoView
+fn LevelButton<F>(
+    on_click: F,
+    setter: ReadSignal<bool>,
+    hidden: ReadSignal<bool>,
+    name: String,
+    subtitle: String,
+    #[prop(optional)] devices: Vec<String>,
+) -> impl IntoView
 where
-    F: Fn(MouseEvent) + 'static,
+    F: Fn(MouseEvent) + 'static + Clone,
 {
-    view! {
-            <button class="flex flex-col p-2 max-w-sm mx-auto w-64 bg-slate-100 rounded-xl flex items-center my-5" on:click=on_click>
-                <div class="text-2xl font-semibold text-[#f79231]">"Intermediate"</div>
-                <p class="text-sm text-[#1a578f] mt-2">"My stack is average"</p>
-            </button>
+    let (guide, set_guide) = create_signal::<Vec<GuideDetails>>(vec![]);
+    let mut guides = Vec::new();
+    let mut id = 0;
+
+    for device in devices {
+        id += 1;
+        let lower_name = name.to_lowercase();
+        let device_name = device.to_lowercase();
+        let path = format!("/guides/{lower_name}/{device_name}");
+        guides.push(GuideDetails::new_guidedetails(
+            id,
+            name.clone(),
+            device,
+            path,
+        ))
     }
+
+    set_guide(guides);
+
+    view! {
+        <Show
+            when=move || setter()
+            fallback=move || view! {
+                <button class="flex flex-col p-2 max-w-sm mx-auto w-64 bg-slate-100 rounded-xl flex items-center mt-2" class:hidden=move || hidden() on:click=on_click.clone()>
+                    <div class="text-2xl font-semibold text-[#f79231]">{name.clone()}</div>
+                    <p class="text-sm text-[#1a578f] mt-2">{subtitle.clone()}</p>
+                </button>}
+        >
+            <div class="flex justify-center flex-col items-center py-4 gap-4 animate-fadeinone">
+                <For
+                    each=move || guide()
+                    key= |guide| guide.id
+                    children=move |guide| {
+                        view! {
+                        <button class="h-12 flex-grow-0">
+                            <h2 class="w-32 flex items-center justify-center font-semibold text-[#f79231]">
+                                <a class="box-border p-4 bg-slate-100 rounded-2xl no-underline text-[#f79231] hover:bg-[#f4a949] w-full" href=guide.path>{guide.device}</a>
+                            </h2>
+                        </button>
+                        }.into_view()
+                    }
+                />
+            </div>
+            <div class="mt-6 flex flex-col md:flex-row justify-center">
+                <BackButton button_image="./../../../white_back_button.png".to_string() reload=true />
+            </div>
+        </Show>
+    }.into_view()
 }
 
-#[component]
-fn AdvancedButton<F>(on_click: F) -> impl IntoView
-where
-    F: Fn(MouseEvent) + 'static,
-{
-    view! {
-            <button class="flex flex-col p-2 max-w-sm mx-auto w-64 bg-slate-100 rounded-xl flex items-center mt-2" on:click=on_click>
-                <div class="text-2xl font-semibold text-[#f79231]">"Advanced"</div>
-                <p class="text-sm text-[#1a578f] mt-2">"I am well equipped!"</p>
-            </button>
-    }
-}
-
-/// Renders the home page of your application.
+/// Renders the guides page.
 #[allow(clippy::redundant_closure)]
 #[allow(non_camel_case_types)]
 #[component]
 pub fn GuideSelector() -> impl IntoView {
-    let (beginner_clicked, set_beginner_clicked) = create_signal(false);
+    let (basic_clicked, set_basic_clicked) = create_signal(false);
     let (intermediate_clicked, set_intermediate_clicked) = create_signal(false);
     let (advanced_clicked, set_advanced_clicked) = create_signal(false);
 
-    let level = "beginner";
-    let device = "android";
-    let path = format!("guides/{level}/{device}");
+    let (basic_hidden, set_basic_hidden) = create_signal(false);
+    let (intermediate_hidden, set_intermediate_hidden) = create_signal(false);
+    let (advanced_hidden, set_advanced_hidden) = create_signal(false);
+
+    let basic_devices: Vec<String> = vec![
+        "Android".to_string(),
+        "Ios".to_string(),
+        "Desktop".to_string(),
+    ];
+    let intermediate_devices: Vec<String> = vec![
+        "Android".to_string(),
+        "Ios".to_string(),
+        "Desktop".to_string(),
+    ];
+    let advanced_devices: Vec<String> = vec![
+        "Android".to_string(),
+        "Ios".to_string(),
+        "Desktop".to_string(),
+    ];
 
     view! {
       <div id="test" class="container mx-auto max-w-5xl flex flex-col md:flex-row justify-center
@@ -61,82 +125,9 @@ pub fn GuideSelector() -> impl IntoView {
             <img src="./../../../lock.png" alt="Financial privacy lock"/>
         </div>
         <div class="basis-1/2">
-
-
-        <Show
-            when=move || beginner_clicked() || intermediate_clicked() || advanced_clicked()
-            fallback= move || view! {<BeginnerButton on_click=move |_|  {set_beginner_clicked.update(|value| *value = !*value); set_intermediate_clicked.set(false); set_advanced_clicked.set(false)} />
-                                     <IntermediateButton on_click=move |_| {set_intermediate_clicked.update(|value| *value = !*value); set_beginner_clicked.set(false); set_advanced_clicked.set(false)} />
-                                     <AdvancedButton on_click=move |_| {set_advanced_clicked.update(|value| *value = !*value); set_beginner_clicked.set(false); set_intermediate_clicked.set(false)} /> }
-            >
-
-            <div class="flex justify-center flex-col items-center gap-4 animate-fadeinone">
-                <button class="h-12 flex-grow-0">
-                  <h2 class="w-32 flex items-center justify-center font-semibold text-[#f79231]">
-                    <a class="box-border p-4 bg-slate-100 rounded-2xl no-underline text-[#f79231] hover:bg-[#f4a949] w-full" href=&path>{device}</a>
-                  </h2>
-                </button>
-                <button class="h-12 flex-grow-0">
-                  <h2 class="w-32 flex items-center justify-center font-semibold text-[#f79231]">
-                    <a class="box-border p-4 bg-slate-100 rounded-2xl no-underline text-[#f79231] hover:bg-[#f4a949] w-full" href="/guides/beginner/ios">"iOS"</a>
-                  </h2>
-                </button>
-                <button class="h-12 flex-grow-0">
-                  <h2 class="w-32 flex items-center justify-center font-semibold text-[#f79231]">
-                    <a class="box-border p-4 bg-slate-100 rounded-2xl no-underline text-[#f79231] hover:bg-[#f4a949] w-full" href="/guides/beginner/desktop">"Desktop"</a>
-                  </h2>
-                </button>
-                <div class="mt-4">
-                    <BackButton button_image="./../../../left-arrow_10024176.png".to_string() reload=true />
-                </div>
-            </div>
-        </Show>
-
-         // <Show
-         //   when=move || intermediate_clicked()
-         //   fallback=move || view! {<IntermediateButton on_click=move |_| {set_intermediate_clicked.update(|value| *value = !*value); set_beginner_clicked.set(false); set_advanced_clicked.set(false)} /> }
-         // >
-         //   <div class="flex justify-center flex-col items-center py-4 gap-4 animate-fadeinone">
-         //       <button class="h-12 flex-grow-0">
-         //         <h2 class="w-32 flex items-center justify-center font-semibold text-[#f79231]">
-         //           <a class="box-border p-4 bg-slate-100 rounded-2xl no-underline text-[#f79231] hover:bg-[#f4a949] w-full" href="/guides/beginner/android">"Android"</a>
-         //         </h2>
-         //       </button>
-         //       <button class="h-12 flex-grow-0">
-         //         <h2 class="w-32 flex items-center justify-center font-semibold text-[#f79231]">
-         //           <a class="box-border p-4 bg-slate-100 rounded-2xl no-underline text-[#f79231] hover:bg-[#f4a949] w-full" href="/guides/beginner/ios">"iOS"</a>
-         //         </h2>
-         //       </button>
-         //       <button class="h-12 flex-grow-0">
-         //         <h2 class="w-32 flex items-center justify-center font-semibold text-[#f79231]">
-         //           <a class="box-border p-4 bg-slate-100 rounded-2xl no-underline text-[#f79231] hover:bg-[#f4a949] w-full" href="/guides/beginner/desktop">"Desktop"</a>
-         //         </h2>
-         //       </button>
-         //   </div>
-         // </Show>
-         // <Show
-         //   when=move || advanced_clicked()
-         //   fallback=move || view! {<AdvancedButton on_click=move |_| {set_advanced_clicked.update(|value| *value = !*value); set_intermediate_clicked.set(false); set_beginner_clicked.set(false)}/> }
-         // >
-         //   <div class="flex justify-center flex-col items-center gap-4 animate-fadeinone">
-         //       <button class="h-12 flex-grow-0">
-         //         <h2 class="w-32 flex items-center justify-center font-semibold text-[#f79231]">
-         //           <a class="box-border p-4 bg-slate-100 rounded-2xl no-underline text-[#f79231] hover:bg-[#f4a949] w-full" href="/guides/beginner/android">"Android"</a>
-         //         </h2>
-         //       </button>
-         //       <button class="h-12 flex-grow-0">
-         //         <h2 class="w-32 flex items-center justify-center font-semibold text-[#f79231]">
-         //           <a class="box-border p-4 bg-slate-100 rounded-2xl no-underline text-[#f79231] hover:bg-[#f4a949] w-full" href="/guides/beginner/ios">"iOS"</a>
-         //         </h2>
-         //       </button>
-         //       <button class="h-12 flex-grow-0">
-         //         <h2 class="w-32 flex items-center justify-center font-semibold text-[#f79231]">
-         //           <a class="box-border p-4 bg-slate-100 rounded-2xl no-underline text-[#f79231] hover:bg-[#f4a949] w-full" href="/guides/beginner/desktop">"Desktop"</a>
-         //         </h2>
-         //       </button>
-         //   </div>
-
-         // </Show>
+            <LevelButton on_click=move |_| {set_basic_clicked.update(|value| *value = !*value); set_intermediate_hidden.set(true); set_advanced_hidden.set(true)} name="Basic".to_string() subtitle="I have teeny weeny stack".to_string() hidden=basic_hidden setter=basic_clicked devices=basic_devices/>
+            <LevelButton on_click=move |_| {set_intermediate_clicked.update(|value| *value = !*value); set_basic_hidden.set(true); set_advanced_hidden.set(true)} name="Intermediate".to_string() subtitle="I have an average stack".to_string() hidden=intermediate_hidden setter=intermediate_clicked devices=intermediate_devices/>
+            <LevelButton on_click=move |_| {set_advanced_clicked.update(|value| *value = !*value); set_basic_hidden.set(true); set_intermediate_hidden.set(true)} name="Advanced".to_string() subtitle="I am well equipped".to_string() hidden=advanced_hidden setter=advanced_clicked devices=advanced_devices/>
         </div>
       </div>
     }
