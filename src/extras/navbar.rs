@@ -15,7 +15,7 @@ pub fn NavBar() -> impl IntoView {
     let (menu_clicked, set_menu_clicked) = create_signal(false);
 
     view! {
-             <div class="bg-[#1a578f] shadow-md text-white sticky top-0 z-10 max-w-10xl mx-auto p-4 flex justify-between items-center font-sans">
+             <div class="bg-[#123c64] shadow-md text-white sticky top-0 z-10 max-w-10xl mx-auto p-4 flex justify-between items-center font-sans">
                 <Show
                     when=move || guide()
                     fallback=|| view! {
