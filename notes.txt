@@ -1,5 +1,0 @@
-Discord discussion about using server functions to retrieve data from DB:
-:w
-
-
-https://discord.com/channels/1031524867910148188/1031524868883218474/1169447362469568542
