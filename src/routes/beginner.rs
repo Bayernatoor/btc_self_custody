@@ -8,7 +8,7 @@ pub enum WalletName {
     Samourai,
     Blue,
     Green,
-    Sparrow
+    Sparrow,
 }
 
 #[component]
@@ -130,7 +130,6 @@ pub fn BeginnerPageTemplate(
         set_platform("desktop".to_string());
     }
 
-
     // Samourai wallet assets
     let wallet_name_samourai = "Samourai Wallet".to_string();
     let short_desc_samourai = "Privacy + Freedom Tools".to_string();
@@ -193,7 +192,7 @@ pub fn BeginnerPageTemplate(
                 // default is green wallet - display samourai wallet if android guide was selected.
                 // Blue wallet is available for both android/ios
                     <Show
-                       when=move || platform() == *"android" 
+                       when=move || platform() == *"android"
                        fallback= move || view! {
                             <WalletButton on_click = move |_| {set_green_clicked(true);
                                      set_green_details(true)}
@@ -215,7 +214,7 @@ pub fn BeginnerPageTemplate(
                             wallet_title=wallet_name_blue.clone() short_desc=short_desc_blue.clone() img_url=img_url_blue.clone()
                             img_alt=img_alt_blue.clone() text_color=text_color_blue.clone()
                         />
-                    
+
             </div>
         </div>
     }
@@ -229,10 +228,9 @@ pub fn BeginnerDesktopPageTemplate(
     quote_author: String,
     intro: String,
 ) -> impl IntoView {
-    
     // used for onlick to determine which button was clicked
     let (_sparrow_clicked, set_sparrow_clicked) = create_signal(false);
-    
+
     // Sparrow wallet assets
     let wallet_name_sparrow = "Sparrow Wallet".to_string();
     let short_desc_sparrow = "Financial self sovereignty".to_string();
@@ -297,7 +295,6 @@ pub fn RenderAndroidPage() -> impl IntoView {
         <BeginnerPageTemplate title=title quote=quote quote_author=quote_author intro=intro_text/>
     }
 }
-
 
 /// Renders the basic IOS page.
 #[component]
@@ -379,7 +376,6 @@ pub fn BeginnerWalletInstructions(
     let sparrow_download = r"https://sparrowwallet.com/download/".to_string();
     let img_url_sparrow = "./../../../sparrow.png".to_string();
     let img_alt_sparrow = "Sparrow logo".to_string();
-
 
     let (displayed_wallet, set_displayed_wallet) = create_signal("");
 
