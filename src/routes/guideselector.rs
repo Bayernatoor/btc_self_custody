@@ -94,7 +94,6 @@ where
 #[allow(non_camel_case_types)]
 #[component]
 pub fn GuideSelector() -> impl IntoView {
-
     // set on_click
     let (basic_clicked, set_basic_clicked) = create_signal(false);
     let (intermediate_clicked, set_intermediate_clicked) = create_signal(false);
@@ -111,12 +110,8 @@ pub fn GuideSelector() -> impl IntoView {
         "Ios".to_string(),
         "Desktop".to_string(),
     ];
-    let intermediate_devices: Vec<String> = vec![
-        "Desktop".to_string(),
-    ];
-    let advanced_devices: Vec<String> = vec![
-        "Desktop".to_string(),
-    ];
+    let intermediate_devices: Vec<String> = vec!["Desktop".to_string()];
+    let advanced_devices: Vec<String> = vec!["Desktop".to_string()];
 
     view! {
       <div id="test" class="container mx-auto max-w-5xl flex flex-col md:flex-row justify-center

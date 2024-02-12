@@ -45,9 +45,9 @@ pub fn App() -> impl IntoView {
                     <Route path="/guides/basic/ios" view=|| view! {<RenderIosPage/> }/>
                         <Route path="/blue" view=|| view! {<BeginnerWalletInstructions selected_wallet=WalletName::Blue ios=true/>}/>
                         <Route path="/blockstream" view=|| view! {<BeginnerWalletInstructions selected_wallet=WalletName::Green ios=true/>}/>
-                    // Intermediate guide routes 
+                    // Intermediate guide routes
                     <Route path="/guides/intermediate" view=|| view! {<IntermediatePage/> }/>
-                    // Advanced guide routes 
+                    // Advanced guide routes
                     <Route path="/guides/advanced" view=|| view! {<AdvancedPage/> }/>
                     <Route path="/blog" view=|| view! {<BlogPage/> }/>
                     <Route path="/faq" view=|| view! {<FaqPage/> }/>
