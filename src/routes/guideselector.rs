@@ -64,7 +64,7 @@ where
             fallback=move || view! {
                 <button class="flex flex-col p-2 max-w-sm mx-auto w-64 bg-slate-100 rounded-xl flex items-center mt-2" class:hidden=move || hidden() on:click=on_click.clone()>
                     <div class="text-2xl font-semibold text-[#f79231]">{name.clone()}</div>
-                    <p class="text-sm text-[#1a578f] mt-2">{subtitle.clone()}</p>
+                    <p class="text-sm text-[#123c64] mt-2">{subtitle.clone()}</p>
                 </button>}
         >
             <div class="flex justify-center flex-col items-center py-4 gap-4 animate-fadeinone">
@@ -82,7 +82,7 @@ where
                     }
                 />
             </div>
-            <div class="mt-6 flex flex-col md:flex-row justify-center">
+            <div class="mt-6 flex flex-col md:flex-row items-center justify-center">
                 <BackButton button_image="./../../../white_back_button.png".to_string() reload=true />
             </div>
         </Show>
@@ -94,35 +94,35 @@ where
 #[allow(non_camel_case_types)]
 #[component]
 pub fn GuideSelector() -> impl IntoView {
+
+    // set on_click
     let (basic_clicked, set_basic_clicked) = create_signal(false);
     let (intermediate_clicked, set_intermediate_clicked) = create_signal(false);
     let (advanced_clicked, set_advanced_clicked) = create_signal(false);
 
+    // used to hidden other buttons on click
     let (basic_hidden, set_basic_hidden) = create_signal(false);
     let (intermediate_hidden, set_intermediate_hidden) = create_signal(false);
     let (advanced_hidden, set_advanced_hidden) = create_signal(false);
 
+    // devices to be included in guide level
     let basic_devices: Vec<String> = vec![
         "Android".to_string(),
         "Ios".to_string(),
         "Desktop".to_string(),
     ];
     let intermediate_devices: Vec<String> = vec![
-        "Android".to_string(),
-        "Ios".to_string(),
         "Desktop".to_string(),
     ];
     let advanced_devices: Vec<String> = vec![
-        "Android".to_string(),
-        "Ios".to_string(),
         "Desktop".to_string(),
     ];
 
     view! {
       <div id="test" class="container mx-auto max-w-5xl flex flex-col md:flex-row justify-center
-                 items-center p-20 md:mt-10 text-white opacity-0 animate-fadeinone font-sans gap-8">
+                 items-center px-20 pt-20 pb-10 md:mt-10 text-white opacity-0 animate-fadeinone font-sans gap-8">
         <div class="basis-1/4">
-            <img src="./../../../lock.png" alt="Financial privacy lock"/>
+            <img src="./../../../lock_new_blue.png" alt="Financial privacy lock"/>
         </div>
         <div class="basis-1/2">
             <LevelButton on_click=move |_| {set_basic_clicked.update(|value| *value = !*value); set_intermediate_hidden.set(true); set_advanced_hidden.set(true)} name="Basic".to_string() subtitle="I have teeny weeny stack".to_string() hidden=basic_hidden setter=basic_clicked devices=basic_devices/>
@@ -130,5 +130,12 @@ pub fn GuideSelector() -> impl IntoView {
             <LevelButton on_click=move |_| {set_advanced_clicked.update(|value| *value = !*value); set_basic_hidden.set(true); set_intermediate_hidden.set(true)} name="Advanced".to_string() subtitle="I am well equipped".to_string() hidden=advanced_hidden setter=advanced_clicked devices=advanced_devices/>
         </div>
       </div>
+      //<div class="text-center mt-3 md:mt-0 italic max-w-3xl mx-auto">
+      //  <p class="text-white mx-10 pb-10">"Controlling a bitcoin private key grants absolute authority over the
+      //      associated bitcoin, embodying the ethos of the bitcoin movement. Self custody and personal
+      //      responsibility restore power and sovereignty, eliminating reliance on third parties,
+      //      particularly the state."
+      //  </p>
+      //</div>
     }
 }
