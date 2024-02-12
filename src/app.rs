@@ -7,7 +7,6 @@ use crate::routes::faq::*;
 use crate::routes::guideselector::*;
 use crate::routes::homepage::*;
 use crate::routes::intermediate::*;
-use crate::routes::not_found::*;
 use leptos::*;
 use leptos_meta::*;
 use leptos_router::*;
