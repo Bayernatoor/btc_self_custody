@@ -25,7 +25,8 @@ pub fn App() -> impl IntoView {
         <Title text="Bitcoin Self Custody"/>
 
         // sets the body background color throughout the app
-        <Body class="bg-[#1a578f]"/>
+        //<Body class="bg-[#1a578f]"/>
+        <Body class="bg-[#123c64]"/>
 
         // Routes
         <Router>
@@ -34,20 +35,23 @@ pub fn App() -> impl IntoView {
                 <Routes>
                     <Route path="/" view=|| view! {<HomePage/> }/>
                     <Route path="/guides" view=|| view! {<GuideSelector/> }/>
-                    <Route path="/guides/beginner/android" view=|| view! {<RenderAndroidPage/>}/>
-                    <Route path="/guides/beginner/android/samourai" view=|| view! {<BeginnerWalletInstructions selected_wallet=WalletName::Samourai ios=false/>}/>
-                    <Route path="/guides/beginner/android/blue" view=|| view! {<BeginnerWalletInstructions selected_wallet=WalletName::Blue ios=false/>}/>
-                    <Route path="/guides/beginner/ios" view=|| view! {<RenderIosPage/> }/>
-                    <Route path="/guides/beginner/ios/blue" view=|| view! {<BeginnerWalletInstructions selected_wallet=WalletName::Blue ios=true/>}/>
-                    <Route path="/guides/beginner/ios/blockstream" view=|| view! {<BeginnerWalletInstructions selected_wallet=WalletName::Green ios=true/>}/>
-                    //<Route path="/guides/beginner/desktop" view=|| view! {<RenderDesktopPage/> }/>
-                    <Route path="/guides/intermediate/android" view=|| view! {<IntermediatePage/> }/>
-                    <Route path="/guides/intermediate/ios" view=|| view! {<IntermediatePage/> }/>
-                    <Route path="/guides/intermediate/desktop" view=|| view! {<IntermediatePage/> }/>
+                    // Basic guide routes
+                    <Route path="/guides/basic/desktop" view=|| view! {<RenderDesktopPage/>}/>
+                    <Route path="/guides/basic/desktop/sparrow" view=|| view! {<BeginnerWalletInstructions selected_wallet=WalletName::Sparrow ios=false/>}/>
+                    <Route path="/guides/basic/android" view=|| view! {<RenderAndroidPage/>}/>
+                    <Route path="/guides/basic/android/samourai" view=|| view! {<BeginnerWalletInstructions selected_wallet=WalletName::Samourai ios=false/>}/>
+                    <Route path="/blue" view=|| view! {<BeginnerWalletInstructions selected_wallet=WalletName::Blue ios=false/>}/>
+                    <Route path="/guides/basic/ios" view=|| view! {<RenderIosPage/> }/>
+                        <Route path="/blue" view=|| view! {<BeginnerWalletInstructions selected_wallet=WalletName::Blue ios=true/>}/>
+                        <Route path="/blockstream" view=|| view! {<BeginnerWalletInstructions selected_wallet=WalletName::Green ios=true/>}/>
+                    // Intermediate guide routes
+                    <Route path="/guides/intermediate" view=|| view! {<IntermediatePage/> }/>
+                    // Advanced guide routes
                     <Route path="/guides/advanced" view=|| view! {<AdvancedPage/> }/>
                     <Route path="/blog" view=|| view! {<BlogPage/> }/>
                     <Route path="/faq" view=|| view! {<FaqPage/> }/>
                     <Route path="/about" view=|| view! {<AboutPage/> }/>
+                    //<Route path="/*" view=|| view! {<NotFound/> }/>
                 </Routes>
             </main>
         </Router>

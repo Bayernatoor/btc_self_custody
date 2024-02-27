@@ -15,6 +15,7 @@ impl FAQ {
         Self { id, title, content }
     }
 }
+
 #[server(FetchFaq, "/api", "Url", "faq")]
 pub async fn fetch_faq(faq_name: String) -> Result<Vec<FAQ>, ServerFnError> {
     use std::{fs, io};

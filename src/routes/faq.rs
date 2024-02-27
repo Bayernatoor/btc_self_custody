@@ -6,7 +6,14 @@ use leptos::*;
 pub fn FaqPage() -> impl IntoView {
     view! {
         <div id="about" class="flex flex-col max-w-3xl mx-auto p-6 md:pt-10 animate-fadeinone">
-                    <h1 class="flex text-[36px] text-white font-semibold text-center justify-center">"The Bitcoin Help Desk"</h1>
+                <h1 class="flex text-[36px] text-white font-semibold text-center justify-center">"The Bitcoin Help Desk"</h1>
+                <div class="text-center mt-3 md:mt-0 italic max-w-3xl mx-auto">
+                    <p class="text-white mx-10 pb-10">"Controlling a bitcoin private key grants absolute authority over the
+                      associated bitcoin, embodying the ethos of the bitcoin movement. Self custody and personal
+                      responsibility restore power and sovereignty, eliminating reliance on third parties,
+                      particularly the state."
+                    </p>
+                </div>
                 <div class="flex flex-col items-center w-full py-4">
                     <h2 class="text-xl text-white py-2">"Commonly asked questions:"</h2>
                 </div>
