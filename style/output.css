@@ -609,19 +609,6 @@ p{
 .mx-10{
   margin-left: 2.5rem;
   margin-right: 2.5rem;
-<<<<<<< HEAD
-}
-
-.mx-auto{
-  margin-left: auto;
-  margin-right: auto;
-}
-
-.my-5{
-  margin-top: 1.25rem;
-  margin-bottom: 1.25rem;
-=======
->>>>>>> cea7c94 (Get tests to past)
 }
 
 .mx-auto{
@@ -651,17 +638,6 @@ p{
 
 .mt-3{
   margin-top: 0.75rem;
-<<<<<<< HEAD
-}
-
-.mt-6{
-  margin-top: 1.5rem;
-}
-
-.mt-4{
-  margin-top: 1rem;
-=======
->>>>>>> cea7c94 (Get tests to past)
 }
 
 .mt-6{
@@ -867,10 +843,6 @@ p{
   gap: 2rem;
 }
 
-.gap-2{
-  gap: 0.5rem;
-}
-
 .space-x-4 > :not([hidden]) ~ :not([hidden]){
   --tw-space-x-reverse: 0;
   margin-right: calc(1rem * var(--tw-space-x-reverse));
@@ -986,13 +958,6 @@ p{
   padding: 1.5rem;
 }
 
-<<<<<<< HEAD
-.p-20{
-  padding: 5rem;
-}
-
-=======
->>>>>>> cea7c94 (Get tests to past)
 .px-20{
   padding-left: 5rem;
   padding-right: 5rem;
@@ -1159,14 +1124,6 @@ p{
   color: rgb(255 255 255 / var(--tw-text-opacity));
 }
 
-<<<<<<< HEAD
-.text-\[\#1a578f\]{
-  --tw-text-opacity: 1;
-  color: rgb(26 87 143 / var(--tw-text-opacity));
-}
-
-=======
->>>>>>> cea7c94 (Get tests to past)
 .underline{
   text-decoration-line: underline;
 }
