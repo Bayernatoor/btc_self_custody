@@ -22,7 +22,7 @@ leptos = { version = "0.5", features = ["nightly"] }
 leptos_meta = { version = "0.5", features = ["nightly"] }
 leptos_actix = { version = "0.5", optional = true }
 leptos_router = { version = "0.5", features = ["nightly"] }
-wasm-bindgen = "=0.2.91"
+wasm-bindgen = "=0.2.87"
 log = "0.4"
 simple_logger = "4"
 clippy = "0.0.302"
@@ -36,7 +36,7 @@ chrono = { version = "0.4.22", default-features = false, features = ["clock"] }
 
 
 [dependencies.sqlx]
-version = "0.7.3"
+version = "0.7.4"
 default-features = false
 features = [
     "runtime-tokio",
