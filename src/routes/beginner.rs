@@ -418,7 +418,7 @@ pub fn BeginnerWalletInstructions(
                     <div class="mx-auto border border-solid border-gray-400"></div>
                 </div>
 
-                <h2 class="flex justify-center font-bold text-xl text-white pt-6 pb-2">"Help Me!"</h2>
+                <h2 class="flex justify-center font-bold text-xl text-white pt-6 pb-2">"Start Here"</h2>
                 <AccordionMenu faq_name="bluewallet".to_string()/>
             </div>
         }
@@ -446,7 +446,7 @@ pub fn BeginnerWalletInstructions(
                     <div class="mx-auto border border-solid border-gray-400"></div>
                 </div>
 
-                <h2 class="flex justify-center font-bold text-xl text-white pt-6 pb-2">"Help Me!"</h2>
+                <h2 class="flex justify-center font-bold text-xl text-white pt-6 pb-2">"Start Here"</h2>
                 <AccordionMenu faq_name="samourai".to_string()/>
             </div>
         }
@@ -472,7 +472,7 @@ pub fn BeginnerWalletInstructions(
                 <div class="mx-auto border border-solid border-gray-400"></div>
             </div>
 
-            <h2 class="flex justify-center font-bold text-xl text-white pt-6 pb-2">"Help Me!"</h2>
+            <h2 class="flex justify-center font-bold text-xl text-white pt-6 pb-2">"Start Here"</h2>
             <AccordionMenu faq_name="greenwallet".to_string()/>
         </div>
         }
@@ -498,7 +498,7 @@ pub fn BeginnerWalletInstructions(
                 <div class="mx-auto border border-solid border-gray-400"></div>
             </div>
 
-            <h2 class="flex justify-center font-bold text-xl text-white pt-6 pb-2">"Help Me!"</h2>
+            <h2 class="flex justify-center font-bold text-xl text-white pt-6 pb-2">"Start Here"</h2>
             <AccordionMenu faq_name="sparrow".to_string()/>
         </div>
         }

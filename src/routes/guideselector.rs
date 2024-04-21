@@ -83,7 +83,7 @@ where
                 />
             </div>
             <div class="mt-6 flex flex-col md:flex-row items-center justify-center">
-                <BackButton button_image="./../../../white_back_button.png".to_string() reload=true />
+                <BackButton button_image="./../../../back_button_white.png".to_string() reload=true />
             </div>
         </Show>
     }.into_view()
