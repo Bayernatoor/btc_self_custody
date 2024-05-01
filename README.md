@@ -3,6 +3,6 @@
 Website to help users self custody their bitcoin. Built using [Leptos](https://github.com/leptos-rs/leptos) a Rust
 webframe work library. 
 
-## Launching postgress db:
+## Launching postgres db:
 
 `./scripts/init_db.sh `
