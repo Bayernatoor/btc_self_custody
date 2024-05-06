@@ -8,7 +8,8 @@ pub fn IntermediateIntroPage() -> impl IntoView {
     let title = "Intermediate Self-Custody Guide".to_string();
     let quote = "Rights Are Not Given, They Are Taken".to_string();
     let quote_author = "-Aldous Huxley".to_string();
-    let link_to_basic: String = "<a href=/guides/basic/desktop/>basic desktop guide</a>".to_string();
+    let link_to_basic: String =
+        "<a href=/guides/basic/desktop/>basic desktop guide</a>".to_string();
 
     let intro_text: String = format!("It's time to take your bitcoin privacy and security to another level. In this guide we'll build on our previous basic desktop setup.
         If you originally chose a mobile setup, I recommend that you first start with the {}, before continuing.
