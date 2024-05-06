@@ -640,6 +640,10 @@ p{
   margin-top: 0.75rem;
 }
 
+.mt-4{
+  margin-top: 1rem;
+}
+
 .mt-6{
   margin-top: 1.5rem;
 }
@@ -654,6 +658,10 @@ p{
 
 .flex{
   display: flex;
+}
+
+.inline-flex{
+  display: inline-flex;
 }
 
 .contents{
@@ -722,6 +730,10 @@ p{
 
 .max-w-3xl{
   max-width: 48rem;
+}
+
+.max-w-4xl{
+  max-width: 56rem;
 }
 
 .max-w-5xl{
@@ -833,6 +845,10 @@ p{
 
 .justify-around{
   justify-content: space-around;
+}
+
+.gap-2{
+  gap: 0.5rem;
 }
 
 .gap-4{
@@ -995,8 +1011,16 @@ p{
   padding-bottom: 1rem;
 }
 
+.pb-6{
+  padding-bottom: 1.5rem;
+}
+
 .pt-10{
   padding-top: 2.5rem;
+}
+
+.pt-2{
+  padding-top: 0.5rem;
 }
 
 .pt-20{
@@ -1104,6 +1128,11 @@ p{
   color: rgb(190 174 154 / var(--tw-text-opacity));
 }
 
+.text-\[\#f71d5a\]{
+  --tw-text-opacity: 1;
+  color: rgb(247 29 90 / var(--tw-text-opacity));
+}
+
 .text-\[\#f79231\]{
   --tw-text-opacity: 1;
   color: rgb(247 146 49 / var(--tw-text-opacity));
@@ -1117,6 +1146,11 @@ p{
 .text-slate-500{
   --tw-text-opacity: 1;
   color: rgb(100 116 139 / var(--tw-text-opacity));
+}
+
+.text-slate-600{
+  --tw-text-opacity: 1;
+  color: rgb(71 85 105 / var(--tw-text-opacity));
 }
 
 .text-white{
