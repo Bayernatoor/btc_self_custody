@@ -128,8 +128,7 @@ pub fn BeginnerPageTemplate(
 
     // Mutiny wallet assets
     let wallet_name_mutiny = "Mutiny Wallet".to_string();
-    let short_desc_mutiny =
-        "On-chain + Lightning".to_string();
+    let short_desc_mutiny = "On-chain + Lightning".to_string();
     let img_url_mutiny = "./../../mutiny_logo.webp".to_string();
     let img_alt_mutiny = "Mutiny Logo".to_string();
     let text_color_mutiny = "#f71d5a".to_string();
