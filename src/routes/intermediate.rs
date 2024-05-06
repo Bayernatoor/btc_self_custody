@@ -8,10 +8,11 @@ pub fn IntermediateIntroPage() -> impl IntoView {
     let title = "Intermediate Self-Custody Guide".to_string();
     let quote = "Rights Are Not Given, They Are Taken".to_string();
     let quote_author = "-Aldous Huxley".to_string();
+    let link_to_basic: String = "<a href=/guides/basic/desktop/>basic desktop guide</a>".to_string();
 
-    let intro_text: String = "It's time to take your bitcoin privacy and security to another level. In this guide we'll build on our previous basic desktop setup.
-        If you originally chose a mobile setup, I recommend that you first start with the basic desktop guide, before continuing here.
-        "
+    let intro_text: String = format!("It's time to take your bitcoin privacy and security to another level. In this guide we'll build on our previous basic desktop setup.
+        If you originally chose a mobile setup, I recommend that you first start with the {}, before continuing.
+        ", link_to_basic)
         .to_string();
 
     let explanation: String = "We'll start by getting a ColdCard hardware wallet, setting up a new wallet and connecting it to Sparrow. I recommend following ColdCard's Paranoid Guide, however,
@@ -34,8 +35,8 @@ pub fn IntermediateIntroPage() -> impl IntoView {
             <div class="flex flex-col p-6 max-w-3xl mx-auto bg-[#123c64] rounded-xl shadow-xl" >
                 <p class="font-bold text-white">"Coldcard & Node Setup:"</p>
                 <p class="pb-2 text-white">""</p>
-                <p class="mr-4 text-lg text-white">{intro_text}</p>
-                <p class="pt-2 text-white">{explanation}</p>
+                <p class="mr-4 text-md text-white">{intro_text}</p>
+                <p class="pt-2 text-md text-white">{explanation}</p>
             </div>
 
             <div class="mx-auto max-w-xl p-4 w-full" >
