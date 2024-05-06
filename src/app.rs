@@ -39,15 +39,18 @@ pub fn App() -> impl IntoView {
                     <Route path="/guides/basic/desktop" view=|| view! {<RenderDesktopPage/>}/>
                     <Route path="/guides/basic/desktop/sparrow" view=|| view! {<BeginnerWalletInstructions selected_wallet=WalletName::Sparrow ios=false/>}/>
                     <Route path="/guides/basic/android" view=|| view! {<RenderAndroidPage/>}/>
-                    <Route path="/guides/basic/android/samourai" view=|| view! {<BeginnerWalletInstructions selected_wallet=WalletName::Samourai ios=false/>}/>
+                    <Route path="/guides/basic/android/mutiny" view=|| view! {<BeginnerWalletInstructions selected_wallet=WalletName::Mutiny ios=false/>}/>
                     <Route path="/guides/basic/android/blue" view=|| view! {<BeginnerWalletInstructions selected_wallet=WalletName::Blue ios=false/>}/>
                     <Route path="/guides/basic/ios" view=|| view! {<RenderIosPage/> }/>
                     <Route path="/guides/basic/ios/blue" view=|| view! {<BeginnerWalletInstructions selected_wallet=WalletName::Blue ios=true/>}/>
                     <Route path="/guides/basic/ios/blockstream" view=|| view! {<BeginnerWalletInstructions selected_wallet=WalletName::Green ios=true/>}/>
                     // Intermediate guide routes
-                    <Route path="/guides/intermediate" view=|| view! {<IntermediatePage/> }/>
+                    <Route path="/guides/intermediate/desktop" view=|| view! {<IntermediateIntroPage/>}/>
+                    <Route path="/guides/intermediate/hardware-wallet" view=|| view! {<IntermediateHardwarePage/>}/>
+                    <Route path="/guides/intermediate/node" view=|| view! {<IntermediateNodePage/>}/>
                     // Advanced guide routes
-                    <Route path="/guides/advanced" view=|| view! {<AdvancedPage/> }/>
+                    <Route path="/guides/advanced" view=|| view! {<AdvancedPage/>}/>
+                    // Other routes
                     <Route path="/blog" view=|| view! {<BlogPage/> }/>
                     <Route path="/faq" view=|| view! {<FaqPage/> }/>
                     <Route path="/about" view=|| view! {<AboutPage/> }/>
