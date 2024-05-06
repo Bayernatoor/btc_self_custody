@@ -582,6 +582,10 @@ p{
   position: absolute;
 }
 
+.relative{
+  position: relative;
+}
+
 .sticky{
   position: sticky;
 }
@@ -1156,6 +1160,11 @@ p{
 .text-white{
   --tw-text-opacity: 1;
   color: rgb(255 255 255 / var(--tw-text-opacity));
+}
+
+.text-\[\#83d1f4\]{
+  --tw-text-opacity: 1;
+  color: rgb(131 209 244 / var(--tw-text-opacity));
 }
 
 .underline{

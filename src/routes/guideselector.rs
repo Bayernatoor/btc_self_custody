@@ -11,7 +11,7 @@ struct GuideDetails {
 }
 
 impl GuideDetails {
-    fn new_guidedetails(
+    fn new_guide_details(
         id: u32,
         level_name: String,
         device: String,
@@ -48,7 +48,7 @@ where
         let lower_name = name.to_lowercase();
         let device_name = device.to_lowercase();
         let path = format!("/guides/{lower_name}/{device_name}");
-        guides.push(GuideDetails::new_guidedetails(
+        guides.push(GuideDetails::new_guide_details(
             id,
             name.clone(),
             device,
@@ -82,8 +82,8 @@ where
                     }
                 />
             </div>
-            <div class="mt-6 flex flex-col md:flex-row items-center justify-center">
-                <BackButton button_image="./../../../back_button_white.png".to_string() reload=true />
+            <div class="mt-4 flex flex-col md:flex-row items-center justify-center">
+                <BackButton button_image="./../../../arrow-111-512.png".to_string() reload=true />
             </div>
         </Show>
     }.into_view()
@@ -120,9 +120,20 @@ pub fn GuideSelector() -> impl IntoView {
             <img src="./../../../lock_new_blue.png" alt="Financial privacy lock"/>
         </div>
         <div class="basis-1/2">
-            <LevelButton on_click=move |_| {set_basic_clicked.update(|value| *value = !*value); set_intermediate_hidden.set(true); set_advanced_hidden.set(true)} name="Basic".to_string() subtitle="I have teeny weeny stack".to_string() hidden=basic_hidden setter=basic_clicked devices=basic_devices/>
-            <LevelButton on_click=move |_| {set_intermediate_clicked.update(|value| *value = !*value); set_basic_hidden.set(true); set_advanced_hidden.set(true)} name="Intermediate".to_string() subtitle="I have an average stack".to_string() hidden=intermediate_hidden setter=intermediate_clicked devices=intermediate_devices/>
-            <LevelButton on_click=move |_| {set_advanced_clicked.update(|value| *value = !*value); set_basic_hidden.set(true); set_intermediate_hidden.set(true)} name="Advanced".to_string() subtitle="I am well equipped".to_string() hidden=advanced_hidden setter=advanced_clicked devices=advanced_devices/>
+            <LevelButton on_click=move |_| {set_basic_clicked.update(|value| *value = !*value); set_intermediate_hidden.set(true); 
+                                    set_advanced_hidden.set(true)} name="Basic".to_string() 
+                                    subtitle="I have a teeny weeny stack".to_string() 
+                                    hidden=basic_hidden setter=basic_clicked devices=basic_devices/>
+
+            <LevelButton on_click=move |_| {set_intermediate_clicked.update(|value| *value = !*value);
+                                    set_basic_hidden.set(true); set_advanced_hidden.set(true)} name="Intermediate".to_string() 
+                                    subtitle="I have an average stack".to_string() 
+                                    hidden=intermediate_hidden setter=intermediate_clicked devices=intermediate_devices/>
+
+            <LevelButton on_click=move |_| {set_advanced_clicked.update(|value| *value = !*value); set_basic_hidden.set(true); 
+                set_intermediate_hidden.set(true)} name="Advanced".to_string() 
+                subtitle="I am well equipped".to_string() 
+                                    hidden=advanced_hidden setter=advanced_clicked devices=advanced_devices/>
         </div>
       </div>
       //<div class="text-center mt-3 md:mt-0 italic max-w-3xl mx-auto">
