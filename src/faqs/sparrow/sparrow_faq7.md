@@ -13,7 +13,7 @@ got a BIP39 mnemonic seed. Recovering using Sparrow wallet is very similar to wa
 
 &thinsp;
 
-**3\.** A modal will appear, you'll select the first option **Mnemonic Words**, click on the down arrow and select **Use 12 words**.
+**3\.** A new window will appear, you'll select the first option **Mnemonic Words**, click on the down arrow and select **Use 12 words**.
 
 &thinsp;
 

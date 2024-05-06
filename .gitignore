@@ -15,3 +15,5 @@ playwright/.cache/
 # other files
 resources.txt
 bin/notes.txt
+notes.md
+todo.md
