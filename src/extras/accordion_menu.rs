@@ -80,7 +80,7 @@ fn Menu(faq_title: String, faq_content: String) -> impl IntoView {
     view! {
         <h2 id="accordion-collapse-heading">
             <button type="button" class=format!("flex justify-between w-full p-4
-            text-left text-gray-900 border border-b-0 border-gray-500 rounded-xl 
+            text-left text-gray-900 border border-gray-500 rounded-xl 
             hover:bg-[#3c6594]") aria-expanded="true" aria-controls="accordion-collapse-body" 
             on:click=move |_| { set_menu_clicked.update(|menu| *menu = !*menu)} >
                 <span class="text-white text-md" inner_html=faq_title/>
@@ -90,7 +90,7 @@ fn Menu(faq_title: String, faq_content: String) -> impl IntoView {
             </button>
         </h2>
         <div aria-labelledby="accordion-collapse-heading" class:hidden=move || !menu_clicked() >
-            <div class="p-5 border border-b-0 border-gray-500 rounded-xl text-sm animate-fadeinone">
+            <div class="p-5 border border-gray-500 rounded-xl text-sm animate-fadeinone">
                 <div class="bg-[#3c6594] rounded-md p-4 leading-relaxed text-white" inner_html=faq_content/>
             </div>
         </div>
