@@ -897,10 +897,6 @@ p{
   border-width: 1px;
 }
 
-.border-b-0{
-  border-bottom-width: 0px;
-}
-
 .border-solid{
   border-style: solid;
 }
@@ -1127,6 +1123,11 @@ p{
   color: rgb(107 121 144 / var(--tw-text-opacity));
 }
 
+.text-\[\#83d1f4\]{
+  --tw-text-opacity: 1;
+  color: rgb(131 209 244 / var(--tw-text-opacity));
+}
+
 .text-\[\#BEAE9A\]{
   --tw-text-opacity: 1;
   color: rgb(190 174 154 / var(--tw-text-opacity));
@@ -1160,11 +1161,6 @@ p{
 .text-white{
   --tw-text-opacity: 1;
   color: rgb(255 255 255 / var(--tw-text-opacity));
-}
-
-.text-\[\#83d1f4\]{
-  --tw-text-opacity: 1;
-  color: rgb(131 209 244 / var(--tw-text-opacity));
 }
 
 .underline{
