@@ -6,7 +6,7 @@
 
 **3\.** Enter the amount you wish to send in sats, confirm the associated fee and press **Confirm Send**.
 
-**4\.** The transaction will be broadcasted and if successful you'll see a **green checkmark**, press on **Nice** to go back to the main page.
+**'4\.** The transaction will be broadcasted and if successful you'll see a **green checkmark**, press on **Nice** to go back to the main page.
 
 **5\.** Your transaction will appear here and will likely appear as **pending**. Tap on it to see details. 
 
