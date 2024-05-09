@@ -423,7 +423,7 @@ pub fn BeginnerWalletInstructions(
                 </div>
 
                 <h2 class="flex justify-center font-bold text-xl text-white pt-6 pb-2">"Start Here"</h2>
-                <AccordionMenu faq_name="samourai".to_string()/>
+                <AccordionMenu faq_name="mutiny".to_string()/>
             </div>
         }
     } else {
