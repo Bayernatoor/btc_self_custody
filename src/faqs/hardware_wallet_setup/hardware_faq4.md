@@ -1,1 +1,1 @@
-# Next steps
+## Connecting to Sparrow Wallet. 
