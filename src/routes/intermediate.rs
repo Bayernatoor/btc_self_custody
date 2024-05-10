@@ -8,17 +8,10 @@ pub fn IntermediateIntroPage() -> impl IntoView {
     let title = "Intermediate Self-Custody Guide".to_string();
     let quote = "Rights Are Not Given, They Are Taken".to_string();
     let quote_author = "-Aldous Huxley".to_string();
-    let link_to_basic: String =
-        "<a href=/guides/basic/desktop/>basic desktop guide</a>".to_string();
 
-    let intro_text: String = format!("It's time to take your bitcoin privacy and security to another level. In this guide we'll build on our previous basic desktop setup.
-        If you originally chose a mobile setup, I recommend that you first start with the {}, before continuing.
-        ", link_to_basic)
-        .to_string();
-
-    let explanation: String = "We'll start by getting a ColdCard hardware wallet, setting up a new wallet and connecting it to Sparrow. I recommend following ColdCard's Paranoid Guide, however,
-    you're welcome to choose the Ultra Quick or Middle Ground guide if you prefer. In Part two we'll decide which bitcoin node setup we want to use, set it up and then connect our Sparrow wallet to it.
-        Once we're through with this, you'll have an excellent, highly secure and private bitcoin self-custody solution.
+    let explanation: String = "We'll start by setting up a ColdCard signing device, and connecting it to Sparrow. I recommend following ColdCard's Paranoid Guide, however,
+        you're welcome to choose the Ultra Quick or Middle Ground guide if you prefer. In Part two we'll decide which bitcoin node setup we want to use, and then connect our Sparrow wallet to it.
+        Once we're through with this, you'll have an excellent, secure and private bitcoin self-custody solution.
         ".to_string();
 
     view! {
@@ -36,7 +29,13 @@ pub fn IntermediateIntroPage() -> impl IntoView {
             <div class="flex flex-col p-6 max-w-3xl mx-auto bg-[#123c64] rounded-xl shadow-xl" >
                 <p class="font-bold text-white">"Coldcard & Node Setup:"</p>
                 <p class="pb-2 text-white">""</p>
-                <p class="mr-4 text-md text-white">{intro_text}</p>
+                <p class="mr-4 text-md text-white">
+                    "It's time to take your bitcoin privacy and security to another level.
+                    In this guide we'll build on our previous basic desktop setup. If you
+                    originally chose a mobile setup, I recommend that you first start with the"
+                    <a class="text-[#8cb4ff] underline-offset-auto" href="/guides/basic/desktop">" basic desktop guide "</a>
+                    "before continuing."
+                </p>
                 <p class="pt-2 text-md text-white">{explanation}</p>
             </div>
 

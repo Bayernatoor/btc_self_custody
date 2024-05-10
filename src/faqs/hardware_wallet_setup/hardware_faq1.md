@@ -1,4 +1,4 @@
-## Getting Ready 
+[Getting Ready](#coldcard-getting-ready)
 
 First things first, get yourself a Coldcard directly from Coinkite's website above. The basic bundle comes with a Coldcard MK4, 2 industrial SD cards,
 and costs around $220, a small price to pay to protect generational wealth. 

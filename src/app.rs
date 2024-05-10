@@ -43,7 +43,7 @@ pub fn App() -> impl IntoView {
                     <Route path="/guides/basic/android/blue" view=|| view! {<BeginnerWalletInstructions selected_wallet=WalletName::Blue ios=false/>}/>
                     <Route path="/guides/basic/ios" view=|| view! {<RenderIosPage/> }/>
                     <Route path="/guides/basic/ios/blue" view=|| view! {<BeginnerWalletInstructions selected_wallet=WalletName::Blue ios=true/>}/>
-                    <Route path="/guides/basic/ios/blockstream" view=|| view! {<BeginnerWalletInstructions selected_wallet=WalletName::Mutiny ios=true/>}/>
+                    <Route path="/guides/basic/ios/mutiny" view=|| view! {<BeginnerWalletInstructions selected_wallet=WalletName::Mutiny ios=true/>}/>
                     // Intermediate guide routes
                     <Route path="/guides/intermediate/desktop" view=|| view! {<IntermediateIntroPage/>}/>
                     <Route path="/guides/intermediate/hardware-wallet" view=|| view! {<IntermediateHardwarePage/>}/>
