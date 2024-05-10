@@ -1,4 +1,4 @@
-## Connecting to Sparrow Wallet. 
+## Storing your seed words safely. 
 
 Sparrow wallet (only available on desktop) is by far the best open-source bitcoin only desktop wallet. 
 It's been built from the ground up to be as robust and feature rich as possible without overwhelming the user while at the 

@@ -1,11 +1,21 @@
-## Setting up the ColdCard 
+## Getting Ready 
 
-Sparrow wallet (only available on desktop) is by far the best open-source bitcoin only desktop wallet. 
-It's been built from the ground up to be as robust and feature rich as possible without overwhelming the user while at the 
-same time educating the user on the inner workings of bitcoin. I highly recommend that you take the time to carefully
-read their documentation and guides (presented below). You'll be up and running before you know it!
+First things first, get yourself a Coldcard directly from Coinkite's website above. The basic bundle comes with a Coldcard MK4, 2 industrial SD cards,
+and costs around $220, a small price to pay to protect generational wealth. 
 
 &nbsp;
 
-You can directly support their open-source work here: <ins><a href="https://sparrowwallet.com/docs/quick-start.html" target="_blank" rel="noopener noreferrer">Donate</a></ins>
+At the same time, pick up a Seedplate and a Center Punch, you'll need those to backup
+your seed words. Also, if you dont have any, grab **[a set of casino dice](https://www.amazon.com/GSE-Games-Sports-Expert-Serialized/dp/B07DF7C279/ref=sr_1_1?sr=8-1)**, we'll use those to generate our own entropy when creating a seed. 
+
+&nbsp;
+
+Never plug your Coldcard into a computer, you'll do everything air-gapped, therefore we need a way to connect our Coldcard to power. Either you plug it
+into a USB battery pack/USB wall charger or get yourself some **[Coldpower from coinkite](https://store.coinkite.com/store/cldpwr)**. Lastly, if your computer
+does not have a microSD port, you can pick up a microSD to USB adapter from **[Amazon](https://www.amazon.com/SanDisk-MobileMate-microSD-Card-Reader/dp/B06G5JV2B5/ref=sr_1_2?sr=8-2)**.
+
+&nbsp;
+
+Once you've received everything you can get started with setting up the Coldcard.
+
 
