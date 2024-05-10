@@ -7,5 +7,5 @@ read their documentation and guides (presented below). You'll be up and running 
 
 &nbsp;
 
-You can directly support their open-source work here: <ins><a href="https://sparrowwallet.com/docs/quick-start.html" target="_blank" rel="noopener noreferrer">Donate</a></ins>
+You can directly support their open-source work here: <ins><a href="https://sparrowwallet.com/donate/" target="_blank" rel="noopener noreferrer">Donate</a></ins>
 
