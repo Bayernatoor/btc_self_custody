@@ -101,12 +101,12 @@ fn Menu(faq_title: String, faq_content: String) -> impl IntoView {
 #[component]
 #[allow(non_snake_case)]
 pub fn AccordionMenu(#[prop(optional)] faq_name: String) -> impl IntoView {
-    // returns a Vec containing struct FAQS
+    // returns a Vec containing a FAQS struct
     let faqs =
         create_resource(move || (), move |_| fetch_faq(faq_name.clone()));
 
     view! {
-    <div id="accordion-collapse" data-accordion="collapse">
+    <div>
         <Suspense
             fallback=move || view! { <div>"Loading...."</div> }
         >

@@ -897,6 +897,10 @@ p{
   border-width: 1px;
 }
 
+.border-b-0{
+  border-bottom-width: 0px;
+}
+
 .border-solid{
   border-style: solid;
 }
@@ -1108,6 +1112,10 @@ p{
   line-height: 1.625;
 }
 
+.leading-tight{
+  line-height: 1.25;
+}
+
 .text-\[\#123c64\]{
   --tw-text-opacity: 1;
   color: rgb(18 60 100 / var(--tw-text-opacity));
@@ -1163,12 +1171,30 @@ p{
   color: rgb(255 255 255 / var(--tw-text-opacity));
 }
 
+.text-black{
+  --tw-text-opacity: 1;
+  color: rgb(0 0 0 / var(--tw-text-opacity));
+}
+
+.text-\[\#8cb4ff\]{
+  --tw-text-opacity: 1;
+  color: rgb(140 180 255 / var(--tw-text-opacity));
+}
+
 .underline{
   text-decoration-line: underline;
 }
 
 .no-underline{
   text-decoration-line: none;
+}
+
+.underline-offset-2{
+  text-underline-offset: 2px;
+}
+
+.underline-offset-auto{
+  text-underline-offset: auto;
 }
 
 .opacity-0{

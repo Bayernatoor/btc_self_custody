@@ -348,6 +348,10 @@ pub fn BeginnerWalletInstructions(
     let mutiny_android_apk =
         r"https://github.com/MutinyWallet/mutiny-web/releases".to_string();
 
+    let mutiny_apple_store =
+        r"https://apps.apple.com/us/app/mutiny-wallet/id6471030760?ign-itscg=30200&ign-itsct=apps_box_link"
+            .to_string();
+
     let sparrow_download = r"https://sparrowwallet.com/download/".to_string();
     let img_url_sparrow = "./../../../sparrow.png".to_string();
     let img_alt_sparrow = "Sparrow logo".to_string();
@@ -414,8 +418,15 @@ pub fn BeginnerWalletInstructions(
                 <br></br>
                 <h2 class="flex justify-center font-bold text-xl text-white py-2">"Download Options"</h2>
                 <div class="flex flex-col justify-center px-6 py-2 max-w-2xl mx-auto space-y-4">
-                    <DownloadButton href=mutiny_google_play.clone() logo=google_play_logo.clone() alt_txt=google_play_alt.clone() button_name="Google Play".to_string()/>
-                    <DownloadButton href=mutiny_android_apk.clone() logo=img_url_github.clone() alt_txt=img_alt_github.clone() button_name="APK".to_string()/>
+                    <Show
+                        when=move || ios
+                        fallback=move || view! {
+
+                        <DownloadButton href=mutiny_google_play.clone() logo=google_play_logo.clone() alt_txt=google_play_alt.clone() button_name="Google Play".to_string()/>
+                        <DownloadButton href=mutiny_android_apk.clone() logo=img_url_github.clone() alt_txt=img_alt_github.clone() button_name="APK".to_string()/>
+                            }>
+                        <DownloadButton href=mutiny_apple_store.clone() logo=apple_store_logo.clone() alt_txt=apple_store_alt.clone()/>
+                    </Show>
                 </div>
 
                 <div class="mx-auto max-w-xl p-4 w-full" >

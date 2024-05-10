@@ -1,4 +1,4 @@
-## Setting up the Coldcard 
+[Setting up the Coldcard](#setting-up-the-coldcard)
 
 You've gathered all the parts, now is the time to setup your Coldcard. There are many guides and approaches, some of which I will provide below. However,
 this guide will provide a balanced approach to setting up your Coldcard.
@@ -26,8 +26,7 @@ this guide will provide a balanced approach to setting up your Coldcard.
 **7\.** Once downloaded/verified, connect one of the MicroSD cards to your computer and copy the firmware file to it. 
 
 **8\.** Connect your Coldcard to power **(DO NOT connect it to a computer)**. Use Coldpower or a USB battery.
-&emsp;    *Note: Some battery packs will turn off when connected to low power devices I recommend using a*
-&emsp;    *USB wall charger or coldpower.*
+*Note: Some battery packs will turn off when connected to low power devices I recommend using a USB wall charger or coldpower.*
 
 **9\.** Your Coldcard will power up, verify that the serial number on the device matches the one on the bag.
 
@@ -129,3 +128,4 @@ You should also have an encrypted backup of your **Passphrase** and the new **Ma
 
 - To view Coldcard's official documention click **[here](https://coldcard.com/docs/)**.
 
+- To learn about some of Coldcard's best features checkout Econoalchemist's great blog post **[here](https://www.econoalchemist.com/post/my-top-10-coldcard-features)**.
