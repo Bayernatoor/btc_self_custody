@@ -4,7 +4,7 @@ This completes step 1 of the intermediate guide. However, to truly level up to i
 
 &nbsp;
 
-Up next we'll pick a Node implementation, and once setup you'll have a well thought out, secure and private self-custodial btcoin solution.
+Up next we'll pick a Node implementation, and once setup you'll have a well thought out, secure and private self-custodial Bittcoin solution.
 
 &nbsp;
 

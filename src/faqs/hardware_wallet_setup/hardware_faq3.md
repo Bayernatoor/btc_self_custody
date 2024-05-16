@@ -1,6 +1,5 @@
 [Protecting your Seed Words](#protecting-your-seed-word)
 
-
 Now that you've setup your Coldcard, it's time to add an extra layer of protection to your 24 seed words. Having them on paper is fine but that piece of paper
 is susceptible to fire, water and other enviromental damage. Steel.... Steel is your answer and although it's not perfect it will help keep you words safe in the 
 event that disaster strikes.

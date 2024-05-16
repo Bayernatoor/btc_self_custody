@@ -9,7 +9,7 @@ pub fn IntermediateIntroPage() -> impl IntoView {
     let quote = "Rights Are Not Given, They Are Taken".to_string();
     let quote_author = "-Aldous Huxley".to_string();
 
-    let explanation: String = "We'll start by setting up a ColdCard signing device, and connecting it to Sparrow. I recommend following ColdCard's Paranoid Guide, however,
+    let explanation: String = "We'll start by setting up a highly ColdCard signing device, and connecting it to Sparrow. I recommend following ColdCard's Paranoid Guide, however,
         you're welcome to choose the Ultra Quick or Middle Ground guide if you prefer. In Part two we'll decide which bitcoin node setup we want to use, and then connect our Sparrow wallet to it.
         Once we're through with this, you'll have an excellent, secure and private bitcoin self-custody solution.
         ".to_string();
@@ -59,27 +59,28 @@ pub fn IntermediateHardwarePage() -> impl IntoView {
 
     view! {
 
-        <div id="hardware_page" class="flex flex-col max-w-3xl mx-auto rounded-xl p-5 animate-fadeinone" >
+        <div id="hardware_page" class="flex flex-col max-w-3xl mx-auto rounded-xl p-5 animate-fadeinone">
             <div class="flex flex-col p-6 pt-10 max-w-3xl mx-auto">
                 <h1 class="flex justify-center text-xl text-white font-semibold">{title}</h1>
             </div>
-            // Might want to display this flex horizontal for desktop
-            <div class="pb-2 pt-2">
-                <GenericExternalButton path="https://store.coinkite.com/store/bundle-mk4-basic".to_string() wallet_title="Buy a ColdCard".to_string()
-                                    img_url="./../../../coldcard-logo-nav.png".to_string() img_alt="coldcard logo".to_string()
-                                    new_width="12".to_string() new_height="8".to_string()/>
+            <div class="flex flex-col gap-4">
+                // Might want to display this flex horizontal for desktop
+                <div class="flex justify-center">
+                    <GenericExternalButton path="https://store.coinkite.com/store/bundle-mk4-basic".to_string() wallet_title="Buy a ColdCard".to_string()
+                                        img_url="./../../../coldcard-logo-nav.png".to_string() img_alt="coldcard logo".to_string()
+                                        new_width="24".to_string() new_height="8".to_string()/>
+                </div>
+                <div class="flex justify-center">
+                    <GenericExternalButton path="https://store.coinkite.com/store/seedplate".to_string() wallet_title="Buy a Seedplate".to_string()
+                                        img_url="./../../../steel.png".to_string() img_alt="Steel plate".to_string()
+                                        new_width="10".to_string() new_height="8".to_string()/>
+                </div>
+                <div class="flex justify-center">
+                    <GenericExternalButton path="https://store.coinkite.com/store/drillpunch".to_string() wallet_title="Buy a Center Punch".to_string()
+                                        img_url="./../../../hole-puncher.png".to_string() img_alt="Hole puncher icons created by Smashicons - Flaticon".to_string()
+                                        new_width="10".to_string() new_height="8".to_string()/>
+                </div>
             </div>
-            <div class="pb-2 pt-2">
-                <GenericExternalButton path="https://store.coinkite.com/store/seedplate".to_string() wallet_title="Buy a Seedplate".to_string()
-                                    img_url="./../../../steel.png".to_string() img_alt="Steel plate".to_string()
-                                    new_width="10".to_string() new_height="8".to_string()/>
-            </div>
-            <div class="pb-2 pt-2">
-                <GenericExternalButton path="https://store.coinkite.com/store/drillpunch".to_string() wallet_title="Buy a Center Punch".to_string()
-                                    img_url="./../../../hole-puncher.png".to_string() img_alt="Hole puncher icons created by Smashicons - Flaticon".to_string()
-                                    new_width="10".to_string() new_height="8".to_string()/>
-            </div>
-
             <h2 class="flex justify-center font-bold text-xl text-white pt-6 pb-2">"Instructions"</h2>
             <AccordionMenu faq_name="hardware_wallet_setup".to_string()/>
 
@@ -97,20 +98,31 @@ pub fn IntermediateNodePage() -> impl IntoView {
     let title = "Step 2 - Node Setup".to_string();
 
     view! {
-        <div id="hardware_page" class="flex flex-col max-w-4xl mx-auto rounded-xl p-5 animate-fadeinone" >
+        <div id="hardware_page" class="flex flex-col max-w-5xl justify-center mx-auto rounded-xl p-5 animate-fadeinone" >
             <div class="flex flex-col p-6 pt-10 max-w-4xl mx-auto">
                 <h1 class="flex justify-center text-xl text-white font-semibold">{title}</h1>
             </div>
-            <div class="inline-flex flex-col md:flex-row gap-2">
-                <div>
-                    <GenericImageSubTextButton path="https://store.coinkite.com/store/bundle-mk4-basic".to_string() title="Start9".to_string() short_desc="Sovereign Computing".to_string()/>
+            <div class="flex flex-col md:flex-row max-4-xl justify-center gap-4">
+                <div class="flex justify-center  md:justify-end">
+                    <GenericExternalButton path="https://start9.com/".to_string() wallet_title="Sovereign Computing".to_string()
+                                    img_url="./../../../start9_transparent_inverted.png".to_string() img_alt="Start9 logo".to_string()
+                                    new_width="28".to_string() new_height="".to_string()/>
                 </div>
-                <div>
-                    <GenericImageSubTextButton path="https://store.coinkite.com/store/seedplate".to_string() title="RaspiBlitz".to_string() short_desc="Not Your Node, Not Your Rules.".to_string()/>
+                <div class="flex justify-center md:justify-end">
+                    <GenericExternalButton path="".to_string() wallet_title="Bitcoin, Lightning and more!".to_string()
+                                        img_url="./../../../mynode_logo.png".to_string() img_alt="MyNode logo".to_string()
+                                        new_width="32".to_string() new_height="6".to_string()/>
                 </div>
-                <div>
-                    <GenericImageSubTextButton path="https://store.coinkite.com/store/drillpunch".to_string() title="MyNode".to_string() short_desc="Bitcoin, Lightning, and more!".to_string()/>
+                <div class="flex justify-center md:justify-start">
+                    <GenericExternalButton path="".to_string() wallet_title="Not Your Node, Not your Rules".to_string()
+                                        img_url="./../../../raspiblitz_logo_main.png".to_string() img_alt="RaspiBlitz logo".to_string()
+                                        new_width="28".to_string() new_height="".to_string()/>
                 </div>
+                //<div class="flex justify-center md:justify-start">
+                //    <GenericExternalButton path="".to_string() wallet_title="Your cloud. In your home.".to_string()
+                //                        img_url="./../../../umbrel_logo_512.png".to_string() img_alt="Umbrel logo".to_string()
+                //                        new_width="24".to_string() new_height="".to_string()/>
+                //</div>
             </div>
             <h2 class="flex justify-center font-bold text-xl text-white pt-6 pb-2">"Instructions"</h2>
             <AccordionMenu faq_name="node_setup".to_string()/>

@@ -1,11 +1,47 @@
-## MyNode Setup
+## RaspiBlitz Details & Resources 
 
-Sparrow wallet (only available on desktop) is by far the best open-source bitcoin only desktop wallet. 
-It's been built from the ground up to be as robust and feature rich as possible without overwhelming the user while at the 
-same time educating the user on the inner workings of bitcoin. I highly recommend that you take the time to carefully
-read their documentation and guides (presented below). You'll be up and running before you know it!
+RaspiBlitz is the Do-It-Yourselfers wet dream. One of the original DIY Bitcoin and Ligthning node implementations.
+For those who want to get their hands dirty with a Raspiberry Pi or 2. You can't go wrong with the RaspiBlitz.
 
-&nbsp;
+<br>
 
-You can directly support their open-source work here: <ins><a href="https://sparrowwallet.com/docs/quick-start.html" target="_blank" rel="noopener noreferrer">Donate</a></ins>
+<a href="#">
+    <img id="raspiblitz" src="./../../../raspiblitz_graphics.jpg" alt="raspiblitz graphics" width="600"/> 
+</a>
 
+<br>
+
+
+**Features**
+
+-- Supports LND & CoreLightning implementations.
+
+-- Comes with optional Graphical display for easy initial setup and monitoring.
+
+-- JAM a Joinmarket Web UI for increased privacy.
+
+-- Run your own BTCPay Server or Mempool explorer.  
+
+-- Several other services available via the SSH menu
+ 
+<br>
+
+**Considerations**
+
+-- Advanced features are only available via the SSH.
+
+-- Recommended hardware stack uses Raspiberry Pi, not suitable for large scale deployment
+
+<br>
+
+**Resources**
+
+**<ins><a href="https://docs.raspiblitz.org/docs/intro" style="color:#8cb4ff;">Build your own RaspiBlitz's</a><ins>**
+
+**<ins><a href="https://docs.raspiblitz.org/docs/category/faqs" style="color:#8cb4ff;">RaspiBlitz's FAQs</a><ins>**
+
+**<ins><a href="https://docs.raspiblitz.org/docs/category/community-resources" style="color:#8cb4ff;">Get Support</a><ins>**
+
+**<ins><a href="https://github.com/raspiblitz/raspiblitz?tab=readme-ov-file" style="color:#8cb4ff;">RaspiBlitz's Github</a><ins>**
+
+**<ins><a href="https://shop.fulmo.org/" style="color:#8cb4ff;">Buy a pre-made Raspiblitz</a><ins>**

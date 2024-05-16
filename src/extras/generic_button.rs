@@ -5,6 +5,7 @@ use leptos::*;
 pub fn GenericButton(
     path: String,
     wallet_title: String,
+    #[prop(default = "xl".to_string())] text_size: String,
     #[prop(optional)] short_desc: String,
     #[prop(optional)] img_url: String,
     #[prop(optional)] img_alt: String,
@@ -25,12 +26,12 @@ pub fn GenericButton(
 
     view! {
         <a href=path>
-            <button class="flex justify-center shrink-0 h-20 w-72 p-4 mx-auto bg-white rounded-xl items-center space-x-4 shadow-inner">
-              <div class="shrink-0">
+            <button class="flex justify-center shrink-0 h-18 w-72 p-2 mx-auto bg-white rounded-xl items-center">
+              <div class="flex justify-center basis-1/3 shrink-0">
                 <img class=format!("h-{} w-{}", height.get(), width.get()) src=img_url alt=img_alt/>
               </div>
-              <div>
-                <h3 class=format!("text-xl font-medium text-[{text_color}]")>{wallet_title}</h3>
+              <div class="basis-2/3">
+                <h3 class=format!("text-{text_size} font-medium text-[{text_color}]")>{wallet_title}</h3>
                 <p class="text-slate-500">{short_desc}</p>
               </div>
             </button>
@@ -62,12 +63,12 @@ pub fn GenericExternalButton(
     }
 
     view! {
-        <a href=path rel="noreferrer" target="_blank">
+        <a href=path rel="noreferrer" target="_blank" rel="noreferrer" class="flex h-18 w-72">
             <button class="flex justify-center shrink-0 h-18 w-72 p-2 mx-auto bg-white rounded-xl items-center space-x-4 shadow-inner">
-              <div class="shrink-0">
+              <div class="flex justify-center basis-1/3">
                 <img class=format!("h-{} w-{}", height.get(), width.get()) src=img_url alt=img_alt/>
               </div>
-              <div>
+              <div class="basis-2/3">
                 <h3 class=format!("text-md font-medium text-[{text_color}]")>{wallet_title}</h3>
                 <p class="text-slate-500">{short_desc}</p>
               </div>

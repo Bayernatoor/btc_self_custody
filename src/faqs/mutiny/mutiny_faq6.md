@@ -14,3 +14,4 @@ any BIP39 compatible wallet, however, we'll assume your using Muiny wallet.
 **5\.** If your funds do not appear, tap on the **M** in the top right corner, scroll all the way
 down to **Admin Page**. From there go down to **Resync wallet**. Return to the main page and wait, 
 your transactions should start to appear. 
+

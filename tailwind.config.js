@@ -16,6 +16,7 @@ module.exports = {
           'slideout': 'slideout 1s ease-in-out',
           'slidein': 'slidein 1s ease-in-out',
           'slideinfast': 'slidein 0.25s ease-out',
+          'zoominimg': 'transform 0.25 ease',
          },
       keyframes: {
           fadein: {
@@ -39,6 +40,10 @@ module.exports = {
               '0%': { transform: 'translateX(100%)', opacity: 1 },
               '100%' : { transform: 'translateX(0%)', opacity: 1 },
           },
+          zoominimg: {
+              '0%': { transform: 'scale(0)', opacity: 1 },
+              '100%' : { transform: 'scale(2)', opacity: 1 },
+          },
       },
     },
   },
@@ -46,4 +51,3 @@ module.exports = {
     require('@tailwindcss/typography'),
   ],
 }
-
