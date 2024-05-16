@@ -88,9 +88,11 @@ pub fn DownloadButton(
                 <Show
                     when=move || button_name.is_some()
                     fallback=move || view!("")>
-                    <p class="font-semibold text-sm">
-                        {button().to_string()}
-                    </p>
+                    <div class="">
+                        <p class="font-semibold text-sm">
+                            {button().to_string()}
+                        </p>
+                    </div>
                 </Show>
             </button>
         </a>
