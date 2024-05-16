@@ -20,7 +20,7 @@ pub fn NavBar() -> impl IntoView {
                     when=move || guide()
                     fallback=|| view! {
                             <div>
-                                <h1 class="text-2xl font-medium text-white"><a href="/">"Bitcoin Barrack"</a></h1>
+                                <h1 class="text-2xl font-medium text-white"><a href="/">"We Hodl BTC"</a></h1>
                             </div>
                     }
                 >

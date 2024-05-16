@@ -448,3 +448,21 @@ body {
   max-height: 100%; /* Show the content when the checkbox is checked */
 }
 
+// enlarge images on hover
+
+img#marketplace {
+    transition:transform 0.25s ease;
+}
+
+img#marketplace:hover {
+    -webkit-transform:scale(1.5);
+    transform:scale(2);
+}
+
+.enlarge-image {
+  transition: transform 0.25s ease;
+}
+
+.enlarge-image:hover {
+  transform: scale(2);
+}
