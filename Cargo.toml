@@ -22,18 +22,19 @@ leptos = { version = "0.6", features = ["nightly"] }
 leptos_meta = { version = "0.6", features = ["nightly"] }
 leptos_actix = { version = "0.6", optional = true }
 leptos_router = { version = "0.6", features = ["nightly"] }
-wasm-bindgen = "0.2.92"
 log = "0.4"
-simple_logger = "4"
-clippy = "0.0.302"
-markdown = "1.0.0-alpha.13"
+wasm-bindgen = "0.2.92"
 serde = { version = "1.0.189", features = ["derive"] }
 pulldown-cmark = { version = "0.9.3", features = ["serde"] }
 tokio = { version = "1.33.0", features = ["macros"] }
 config = "0.13.4"
-uuid = {version = "1", features =["v4"] }
+uuid = {version = "1", features = ["v4"] }
 chrono = { version = "0.4.22", default-features = false, features = ["clock"] }
-
+tracing = { version = "0.1", features = ["log"] }
+tracing-futures = "0.2.5"
+tracing-subscriber = { version = "0.3.18", features = ["registry", "env-filter"] }
+tracing-bunyan-formatter = { path = "/home/mrsmith/programming/repos/tracing-bunyan-formatter", default-features = false}
+tracing-log = "0.2.0"
 
 [dependencies.sqlx]
 version = "0.7.4"
@@ -49,10 +50,10 @@ features = [
     ]
 optional = true
     
-
 [dev-dependencies]
 reqwest = { version = "0.11", features = ["json"] }
 clippy = "0.0.302"
+once_cell = "1.19.0"
 
 [features]
 hydrate = ["leptos/hydrate", "leptos_meta/hydrate", "leptos_router/hydrate"]

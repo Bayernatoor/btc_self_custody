@@ -1,7 +1,11 @@
 #[cfg(feature = "ssr")]
-use actix_web::{web, HttpResponse};
-#[cfg(feature = "ssr")]
-use sqlx::PgPool;
+use {
+    actix_web::{web, HttpResponse},
+    chrono::Utc,
+    sqlx::PgPool,
+    tracing_futures::Instrument,
+    uuid::Uuid,
+};
 
 #[cfg(feature = "ssr")]
 #[derive(serde::Deserialize)]
@@ -11,18 +15,39 @@ pub struct BlogpostData {
     content: String,
 }
 
+// creates a span at the beginning of the function invocation
+#[tracing::instrument(
+    name ="Adding new blogpost to database",
+    skip(blogpost_data, pool),
+    fields(
+        request_id = %Uuid::new_v4(),
+        %blogpost_data.title
+        )
+    )]
 #[cfg(feature = "ssr")]
 pub async fn create_post(
     blogpost_data: web::Json<BlogpostData>,
-    connection: web::Data<PgPool>,
+    pool: web::Data<PgPool>,
 ) -> HttpResponse {
-    use chrono::Utc;
-    use uuid::Uuid;
+    match insert_post(&pool, &blogpost_data).await {
+        Ok(_) => HttpResponse::Ok().finish(),
+        Err(_) => HttpResponse::InternalServerError().finish(),
+    }
+}
 
-    match sqlx::query!(
+#[tracing::instrument(
+    name = "Saving new blogpost details to database"
+    skip(blogpost_data, pool)
+    )]
+#[cfg(feature = "ssr")]
+pub async fn insert_post(
+    pool: &PgPool,
+    blogpost_data: &BlogpostData,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
         r#"
-        INSERT INTO blogposts (id, created_at, author, title, content)
-        VALUES ($1, $2, $3, $4, $5)
+        insert into blogposts (id, created_at, author, title, content)
+        values ($1, $2, $3, $4, $5)
         "#,
         Uuid::new_v4(),
         Utc::now(),
@@ -30,15 +55,13 @@ pub async fn create_post(
         blogpost_data.title,
         blogpost_data.content
     )
-    // use get_ref to get immutable reference to the PgConnection
-    // wrapped by web::Data
-    .execute(connection.get_ref())
+    // use get_ref to get immutable reference to the pgconnection
+    // wrapped by web::data
+    .execute(pool)
     .await
-    {
-        Ok(_) => HttpResponse::Ok().finish(),
-        Err(e) => {
-            println!("Failed to execute query: {}", e);
-            HttpResponse::InternalServerError().finish()
-        }
-    }
+    .map_err(|e| {
+        tracing::error!("Failed to execute query: {:?}", e);
+        e
+    })?;
+    Ok(())
 }
