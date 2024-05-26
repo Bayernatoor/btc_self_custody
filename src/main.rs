@@ -1,16 +1,20 @@
 #![allow(unused_imports)]
 #[cfg(feature = "ssr")]
-use actix_web::main;
-#[cfg(feature = "ssr")]
+use {
+    actix_web::main,
+    btc_self_custody::configuration::get_configuration,
+    btc_self_custody::run,
+    btc_self_custody::telemetry::{get_subscriber, init_subscriber},
+    sqlx::PgPool,
+    std::net::TcpListener,
+};
+
 #[cfg(feature = "ssr")]
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    use btc_self_custody::{
-        configuration::{self, get_configuration},
-        run,
-    };
-    use sqlx::PgPool;
-    use std::net::TcpListener;
+    let subscriber =
+        get_subscriber("wehodlbtc".into(), "info".into(), std::io::stdout);
+    init_subscriber(subscriber);
 
     let configuration = get_configuration().expect("Failed to read config");
     let connection_pool =
