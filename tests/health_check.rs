@@ -1,13 +1,40 @@
 #[cfg(feature = "ssr")]
-use btc_self_custody::configuration::{get_configuration, DatabaseSettings};
+#[allow(unused_imports)]
 #[cfg(feature = "ssr")]
-use btc_self_custody::run;
+use {
+    btc_self_custody::configuration::{get_configuration, DatabaseSettings},
+    btc_self_custody::run,
+    btc_self_custody::telemetry::{get_subscriber, init_subscriber},
+    once_cell::sync::Lazy,
+    sqlx::{Connection, Executor, PgConnection, PgPool},
+    std::net::TcpListener,
+    uuid::Uuid,
+};
+
+// Ensure that the `tracing` stack is only initialised once using `once_cell`
 #[cfg(feature = "ssr")]
-use sqlx::{Connection, Executor, PgConnection, PgPool};
-#[cfg(feature = "ssr")]
-use std::net::TcpListener;
-#[cfg(feature = "ssr")]
-use uuid::Uuid;
+static TRACING: Lazy<()> = Lazy::new(|| {
+    let default_filter_level = "info".to_string();
+    let subscriber_name = "test".to_string();
+    // We cannot assign the output of `get_subscriber` to a variable based on the value
+    // of `TEST_LOG` because the sink is part of the type returned by `get_subscriber`,
+    // therefore they are not the same type.
+    if std::env::var("TEST_LOG").is_ok() {
+        let subscriber = get_subscriber(
+            subscriber_name,
+            default_filter_level,
+            std::io::stdout,
+        );
+        init_subscriber(subscriber);
+    } else {
+        let subscriber = get_subscriber(
+            subscriber_name,
+            default_filter_level,
+            std::io::sink,
+        );
+        init_subscriber(subscriber);
+    }
+});
 
 #[cfg(feature = "ssr")]
 pub struct TestApp {
@@ -17,6 +44,10 @@ pub struct TestApp {
 
 #[cfg(feature = "ssr")]
 async fn spawn_app() -> TestApp {
+    // the first time `intialize` is invoked the code in `TRACING` is executed.
+    // all other invocations will instead skip execution.
+    Lazy::force(&TRACING);
+
     let listener =
         TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
     // retrieve random port assigned to us by OS
