@@ -33,7 +33,7 @@ chrono = { version = "0.4.22", default-features = false, features = ["clock"] }
 tracing = { version = "0.1", features = ["log"] }
 tracing-futures = "0.2.5"
 tracing-subscriber = { version = "0.3.18", features = ["registry", "env-filter"] }
-tracing-bunyan-formatter = { path = "/home/mrsmith/programming/repos/tracing-bunyan-formatter", default-features = false}
+tracing-bunyan-formatter = { git  = "https://github.com/Bayernatoor/tracing-bunyan-formatter.git", default-features = false, branch = "add_support_for_all_targets"}
 tracing-log = "0.2.0"
 
 [dependencies.sqlx]
