@@ -1,23 +1,23 @@
 pub mod app;
 pub mod configuration;
+pub mod telemetry;
 pub mod extras;
 pub mod helpers;
 pub mod routes;
 pub mod server;
-pub mod telemetry;
 use cfg_if::cfg_if;
 #[cfg(feature = "ssr")]
 use {
-    actix_files::Files,
     actix_web::dev::Server,
+    sqlx::PgPool,
+    std::net::TcpListener,
     actix_web::middleware::Logger,
+    actix_files::Files,
     actix_web::*,
     app::*,
     leptos::*,
     leptos_actix::{generate_route_list, LeptosRoutes},
     server::{create_post::create_post, health_check::health_check},
-    sqlx::PgPool,
-    std::net::TcpListener,
 };
 
 cfg_if! {
@@ -47,6 +47,7 @@ pub async fn run(
     listener: TcpListener,
     db_pool: PgPool,
 ) -> Result<Server, std::io::Error> {
+
     // Wrap the pool using web::Data, which boils down to an Arc smart pointer
     let db_pool = web::Data::new(db_pool);
     let conf = get_configuration(None).await.unwrap();
