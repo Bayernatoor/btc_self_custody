@@ -15,7 +15,10 @@ use {
     app::*,
     leptos::*,
     leptos_actix::{generate_route_list, LeptosRoutes},
-    server::{create_post::create_post, health_check::health_check, subscriptions::subscribe},
+    server::{
+        create_post::create_post, health_check::health_check,
+        subscriptions::subscribe,
+    },
     sqlx::PgPool,
     std::net::TcpListener,
 };

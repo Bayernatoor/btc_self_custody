@@ -3,8 +3,8 @@ use {
     actix_web::{web, HttpResponse},
     chrono::Utc,
     sqlx::PgPool,
-    uuid::Uuid,
     tracing_futures::Instrument,
+    uuid::Uuid,
 };
 
 #[cfg(feature = "ssr")]
@@ -27,7 +27,7 @@ pub struct FormData {
 #[cfg(feature = "ssr")]
 pub async fn subscribe(
     form: web::Form<FormData>,
-    pool: web::Data<PgPool>, 
+    pool: web::Data<PgPool>,
 ) -> HttpResponse {
     match insert_subscriber(&form, &pool).await {
         Ok(_) => HttpResponse::Ok().finish(),

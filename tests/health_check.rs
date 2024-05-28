@@ -153,7 +153,6 @@ async fn create_returns_a_200_for_valid_post_creation() {
     assert_eq!(saved.title, "The path to Hyperbitcoinization");
 }
 
-
 /// creating an invalid blogpost returns a 400 error
 #[tokio::test]
 #[cfg(feature = "ssr")]
@@ -194,7 +193,7 @@ async fn subscribe_returns_a_200_for_valid_user_creation() {
     // Arrange
     let app = spawn_app().await;
     let client = reqwest::Client::new();
-    let body = "name=Bob%20Myers&email=Bob_Myers%40@gmail.com";
+    let body = "name=Bob%20Myers&email=Bob_Myers%40gmail.com";
 
     // Act
     let response = client
@@ -208,7 +207,7 @@ async fn subscribe_returns_a_200_for_valid_user_creation() {
     // Assert
     assert_eq!(200, response.status().as_u16());
 
-    let saved = sqlx::query!("SELECT email FROM subscriptions")
+    let saved = sqlx::query!("SELECT email, name FROM subscriptions")
         .fetch_one(&app.db_pool)
         .await
         .expect("Failed to fetch saved subscription.");
@@ -217,29 +216,34 @@ async fn subscribe_returns_a_200_for_valid_user_creation() {
     assert_eq!(saved.name, "Bob Myers");
 }
 
+/// creating an user blogpost returns a 400 error
+#[tokio::test]
+#[cfg(feature = "ssr")]
+async fn subscribe_returns_a_400_for_invalid_subscribe_creation() {
+    // Arrange
+    let app = spawn_app().await;
+    let client = reqwest::Client::new();
+    let test_cases = vec![
+        ("email=Bob_Myers%40gmail.com", "missing the name"),
+        ("name=Bob%20Myers", "missing the email"),
+        ("", "missing both name and email"),
+    ];
 
-// creating an user blogpost returns a 400 error
-//#[tokio::test]
-//#[cfg(feature = "ssr")]
-//async fn subscribe_returns_a_400_for_invalid_subscribe_creation() {
-//    // Arrange
-//    let app = spawn_app().await;
-//    let client = reqwest::Client::new();
-//
-//    // create hashmap with missing required values.
-//    let mut map = HashMap::new();
-//    map.insert("author", "");
-//    map.insert("content", "Hyperbitcoinization, the point at which Bitcoin becomes the dominant world reserve currency, was originally coined by Daniel Krawisz in his 2014 article titled Hyperbitcoinization.");
-//
-//    // Act
-//    let response = client
-//        .post(&format!("{}/server/create_post", &app.address))
-//        .header("Content-Type", "application/json")
-//        .json(&map)
-//        .send()
-//        .await
-//        .expect("Failed to execute request.");
-//
-//    // Assert
-//    assert_eq!(400, response.status().as_u16());
-//}
+    for (invalid_body, error_message) in test_cases {
+        // Act
+        let response = client
+            .post(&format!("{}/server/subscriptions", &app.address))
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .body(invalid_body)
+            .send()
+            .await
+            .expect("Failed to execute request.");
+
+        // Assert
+        assert_eq!(400, response.status().as_u16(),
+            // Additional customised error message on test failure
+            "The API did not fail with 400 Bad Request when the payload was {}.",
+            error_message
+        );
+    }
+}
