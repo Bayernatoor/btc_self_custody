@@ -116,7 +116,9 @@ async fn health_check_works() {
     assert!(response.status().is_success());
     assert_eq!(Some(0), response.content_length());
 }
+// BLOGPOST TESTS
 
+// creating a valid blogpost returns a 200 response
 #[tokio::test]
 #[cfg(feature = "ssr")]
 async fn create_returns_a_200_for_valid_post_creation() {
@@ -151,6 +153,8 @@ async fn create_returns_a_200_for_valid_post_creation() {
     assert_eq!(saved.title, "The path to Hyperbitcoinization");
 }
 
+
+/// creating an invalid blogpost returns a 400 error
 #[tokio::test]
 #[cfg(feature = "ssr")]
 async fn create_returns_a_400_for_invalid_post_creation() {
@@ -180,3 +184,62 @@ async fn create_returns_a_400_for_invalid_post_creation() {
     // Assert
     assert_eq!(400, response.status().as_u16());
 }
+
+// NEWSLETTER TESTS
+
+/// creating a valid user returns a 200 response
+#[tokio::test]
+#[cfg(feature = "ssr")]
+async fn subscribe_returns_a_200_for_valid_user_creation() {
+    // Arrange
+    let app = spawn_app().await;
+    let client = reqwest::Client::new();
+    let body = "name=Bob%20Myers&email=Bob_Myers%40@gmail.com";
+
+    // Act
+    let response = client
+        .post(&format!("{}/server/subscriptions", &app.address))
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .body(body)
+        .send()
+        .await
+        .expect("Failed to execute request.");
+
+    // Assert
+    assert_eq!(200, response.status().as_u16());
+
+    let saved = sqlx::query!("SELECT email FROM subscriptions")
+        .fetch_one(&app.db_pool)
+        .await
+        .expect("Failed to fetch saved subscription.");
+
+    assert_eq!(saved.email, "Bob_Myers@gmail.com");
+    assert_eq!(saved.name, "Bob Myers");
+}
+
+
+// creating an user blogpost returns a 400 error
+//#[tokio::test]
+//#[cfg(feature = "ssr")]
+//async fn subscribe_returns_a_400_for_invalid_subscribe_creation() {
+//    // Arrange
+//    let app = spawn_app().await;
+//    let client = reqwest::Client::new();
+//
+//    // create hashmap with missing required values.
+//    let mut map = HashMap::new();
+//    map.insert("author", "");
+//    map.insert("content", "Hyperbitcoinization, the point at which Bitcoin becomes the dominant world reserve currency, was originally coined by Daniel Krawisz in his 2014 article titled Hyperbitcoinization.");
+//
+//    // Act
+//    let response = client
+//        .post(&format!("{}/server/create_post", &app.address))
+//        .header("Content-Type", "application/json")
+//        .json(&map)
+//        .send()
+//        .await
+//        .expect("Failed to execute request.");
+//
+//    // Assert
+//    assert_eq!(400, response.status().as_u16());
+//}
