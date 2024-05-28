@@ -15,7 +15,7 @@ use {
     app::*,
     leptos::*,
     leptos_actix::{generate_route_list, LeptosRoutes},
-    server::{create_post::create_post, health_check::health_check},
+    server::{create_post::create_post, health_check::health_check, subscriptions::subscribe},
     sqlx::PgPool,
     std::net::TcpListener,
 };
@@ -48,6 +48,7 @@ pub async fn run(
     db_pool: PgPool,
 ) -> Result<Server, std::io::Error> {
     // Wrap the pool using web::Data, which boils down to an Arc smart pointer
+
     let db_pool = web::Data::new(db_pool);
     let conf = get_configuration(None).await.unwrap();
 
@@ -66,6 +67,7 @@ pub async fn run(
             .route("/api/{tail:.*}", leptos_actix::handle_server_fns())
             .route("/server/health_check", web::get().to(health_check))
             .route("/server/create_post", web::post().to(create_post))
+            .route("/server/subscriptions", web::post().to(subscribe))
             .app_data(db_pool.clone())
             .leptos_routes(
                 leptos_options.to_owned(),
