@@ -49,7 +49,8 @@ pub fn App() -> impl IntoView {
                     <Route path="/guides/intermediate/hardware-wallet" view=|| view! {<IntermediateHardwarePage/>}/>
                     <Route path="/guides/intermediate/node" view=|| view! {<IntermediateNodePage/>}/>
                     // Advanced guide routes
-                    <Route path="/guides/advanced" view=|| view! {<AdvancedPage/> }/>
+                    <Route path="/guides/advanced/desktop" view=|| view! {<AdvancedPage/> }/>
+                    // other routes
                     <Route path="/blog" view=|| view! {<BlogPage/> }/>
                     <Route path="/faq" view=|| view! {<FaqPage/> }/>
                     <Route path="/about" view=|| view! {<AboutPage/> }/>

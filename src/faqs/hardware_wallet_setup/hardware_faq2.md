@@ -83,32 +83,56 @@ does not appear you either made a mistake or incorrectly copied the words.
 
 **29\.** Once you've entered all 24 words press on the **Checkmark** to confirm. Go to *Advanced* -> *View Identity* to confirm that you've in fact restored the original seed. 
 
-&nbsp;
+<br>
 
 **Adding a Passphrase:**
+
+<br>
 
 **30\.** A Passphrase acts a **"25th word"** and helps add additional security to your seed words. Adding a Passphrase would help prevent access to your wallet if someone 
 were able to obtain your 24 words. Remember, the original 24 words results in a valid wallet, adding a 25th word creates an entirely new wallet.  
 
+<br>
+
 **31\.** Adding a Passphrase to your 24 seed words will result in a new Master Fingerprint. It's important to wrote this down since the Coldcard cannot confirm if you've entered
 the correct Passphrase. But you can confirm it via the unique Master Fingerprint.
 
+<br>
+
 **32\.** Let's begin. Select **Passphrase** from the main menu. 
+
+<br>
 
 **33\.** Read the warnings and press the **Checkmark**. 
 
+<br>
+
 **34\.** I recommend selecting a combination of words, numbers and special characters, make sure it's at least 12 chars in length.
+
+<br>
 
 **35\.** Write this Passphrase in a safe place. **It's just as important as your 24 seed words.**
 
-**36\.** Copy the Master Fingerprint down as well. If you ever restore your wallet, you'll use the fingerprint to confirm that you've entered the correct seed and Passphrase. 
+<br>
 
-**37\.** When satisfied, press on **APPLY**. Ensure you have a MicroSD card loaded and press 1 to create an encrypted backup of the Passphrase on the MicroSD card.
+**36\.** Copy the XFP (Extended/Master Fingerprint) down as well. If you ever restore your wallet, you'll use the fingerprint to confirm that you've entered the correct seed and Passphrase. 
+
+<br>
+
+**37\.** When satisfied, press on **APPLY**. Ensure you have a MicroSD card loaded and press 1 to create an encrypted backup of the Passphrase on the MicroSD card. The encrypted backup does NOT save your passphrase.
+         Make sure you've written it down and keep it safe! For more information on the encrypted backups created by Coldcard see the **[ColdCard Docs](https://coldcard.com/docs/backups/#background)**.
+
+<br>
 
 **38\.**  Your Coldcard is now using a new wallet comprised of the 24 original words plus your Passphrase. 
 
+<br>
 
-&nbsp;
+**Note:** *The ColdCard does not remember your passphrase, you must enter it everytime you turn on the device. To do so enter your PIN then select ***Passphrase --> Restore Saved***. 
+        The Passphrase is now in effect until you logout. For more detailed information on passphrases see the* **[ColdCard Docs](https://coldcard.com/docs/passphrase/#using-a-saved-passphrase)**
+
+
+<br>
 
 **Summary:**
 
