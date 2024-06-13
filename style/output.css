@@ -823,6 +823,10 @@ p{
   cursor: pointer;
 }
 
+.list-decimal{
+  list-style-type: decimal;
+}
+
 .flex-row{
   flex-direction: row;
 }
@@ -1013,6 +1017,10 @@ p{
 
 .pb-6{
   padding-bottom: 1.5rem;
+}
+
+.pl-4{
+  padding-left: 1rem;
 }
 
 .pt-10{
