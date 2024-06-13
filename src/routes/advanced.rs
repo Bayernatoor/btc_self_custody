@@ -40,7 +40,7 @@ pub fn AdvancedPage() -> impl IntoView {
                     <li>"Optional - setup seedXOR for all 3 wallet seeds."</li>
                 </ol>
             <p class="italic pt-2 text-md text-white">
-               "Before starting, I encourage you to read through all the steps below, so as to get an understanding of the options available to you. 
+               "Before starting, I encourage you to read through all the steps below, so as to get an understanding of the options available to you.
                The last step is optional, however, if you decide to implement it you should to do it from the start."
             </p>
            // <a class="text-[#8cb4ff] underline-offset-auto" href="/guides/basic/desktop">" basic desktop guide "</a>
