@@ -1,6 +1,6 @@
 [Receiving & Spending](#receiving-and-spending)
 
-<p class="text-lg pb-4">Receiving to a Multisig Wallet</p>
+<p class="text-lg pb-4 font-semibold">Receiving to a Multisig Wallet</p>
 
 Receiving bitcoin to a Multisig wallet is as easy as with a Singlesig. We'll use Sparrow wallet to obtain an address 
 and simply send funds to it. 
@@ -28,9 +28,7 @@ considered received and protected by your Multisig setup.<br>
  
 <br>
 
-**Sending from a Multisig Wallet**
-
-<br> 
+<p class="text-lg pb-2 font-semibold">Sending from a Multisig Wallet</p>
 
 Sending bitcoin from a Multisig wallet is more difficult then a Singlesig wallet. This is especially true if you've stored your Signing devices
 (Coldcard, etc...) in separate locations, as you will need physical access to at least **M** devices to succesfully sign a transaction. 
@@ -68,6 +66,8 @@ click on **Create Transaction**.
 
 **3\.** It's now time to save this PSBT and import it into the Coldcards for signing. Click on **Save transaction**, you'll be prompted to save a file with
         a **.psbt** extension.
+
+<br>
 
 <a href="#">
     <img id="sparrow_wallet_multisig_send_save" src="./../../../save_the_transaction.png" alt="sparrow_wallet_multisig_save" width="600"/> 
@@ -127,10 +127,14 @@ click on **Create Transaction**.
  
 <br>
 
-**14\.** Sparrow will broadcast your transaction to the network, once complete you'll see a page similar to the one below. Congrats, you've sent a bitcoin transaction using multiple co-signers. 
+**14\.** Sparrow will broadcast your transaction to the network, once complete you'll see a page similar to the one below. 
 
 <br>
 
 <a href="#">
     <img id="sparrow_wallet_multisig_transaction_sent" src="./../../../transaction_sent.png" alt="sparrow_wallet_multisig_transaction_sent" width="600"/> 
 </a>
+
+<br>
+
+**Congrats, you've sent a bitcoin transaction using multiple co-signers.**

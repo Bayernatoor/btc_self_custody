@@ -155,7 +155,7 @@ pub fn BeginnerPageTemplate(
 
     // renders the guides/basic/* route
     view! {
-        <div id="basic" class="flex flex-col max-w-3xl mx-auto rounded-xl pb-10 animate-fadeinone" >
+        <div id="basic" class="flex flex-col max-w-3xl mx-auto pb-10 animate-fadeinone md:transform md:scale-125 md:pt-20" >
             <div class="flex flex-col p-6 pt-10 max-w-3xl mx-auto">
                     <h1 class="flex justify-center text-center text-[36px] text-white font-semibold">{title}</h1>
                 <div class="flex justify-start pt-4 max-w-sm">
@@ -166,7 +166,7 @@ pub fn BeginnerPageTemplate(
                 </div>
             </div>
 
-            <div class="flex flex-col p-6 max-w-2xl mx-auto bg-[#123c64] rounded-xl shadow-xl" >
+            <div class="flex flex-col p-6 max-w-3xl mx-auto" >
                 <p class="font-bold text-white">"Bitcoin Self-Custody:"</p>
                 <p class="pb-2 text-white">"The act of taking possession of a bitcoin private key."</p>
                 <p class="mr-4 text-md text-white">{intro}</p>
@@ -182,16 +182,15 @@ pub fn BeginnerPageTemplate(
                 <h2 class="flex justify-center pb-4 max-w-2xl text-center mx-auto text-xl text-white" >"Pick A Wallet"</h2>
             </div>
             <div class="flex flex-col md:flex-row px-6 py-2 max-w-2xl mx-auto gap-4">
-
-            <WalletButton on_click = move |_| {set_blue_clicked(true); set_blue_details(true);}
-                    selected_wallet=WalletName::Blue platform=platform()
-                    wallet_title=wallet_name_blue.clone() short_desc=short_desc_blue.clone() img_url=img_url_blue.clone()
-                    img_alt=img_alt_blue.clone() text_color=text_color_blue.clone()
-                />
-            <WalletButton on_click = move |_| {set_mutiny_clicked(true); set_mutiny_details(true);}
-                    selected_wallet=WalletName::Mutiny platform=platform()
-                    wallet_title=wallet_name_mutiny.clone() short_desc=short_desc_mutiny.clone() img_url=img_url_mutiny.clone() img_alt=img_alt_mutiny.clone()
-                    text_color=text_color_mutiny.clone()
+                <WalletButton on_click = move |_| {set_blue_clicked(true); set_blue_details(true);}
+                        selected_wallet=WalletName::Blue platform=platform()
+                        wallet_title=wallet_name_blue.clone() short_desc=short_desc_blue.clone() img_url=img_url_blue.clone()
+                        img_alt=img_alt_blue.clone() text_color=text_color_blue.clone()
+                    />
+                <WalletButton on_click = move |_| {set_mutiny_clicked(true); set_mutiny_details(true);}
+                        selected_wallet=WalletName::Mutiny platform=platform()
+                        wallet_title=wallet_name_mutiny.clone() short_desc=short_desc_mutiny.clone() img_url=img_url_mutiny.clone() img_alt=img_alt_mutiny.clone()
+                        text_color=text_color_mutiny.clone()
                     />
             </div>
         </div>
@@ -217,7 +216,7 @@ pub fn BeginnerDesktopPageTemplate(
     let text_color_sparrow = "#6f767c".to_string();
 
     view! {
-        <div id="basic" class="flex flex-col max-w-3xl mx-auto rounded-xl pb-10 animate-fadeinone" >
+        <div id="basic" class="flex flex-col max-w-3xl mx-auto rounded-xl pb-10 animate-fadeinone md:transform md:scale-125 md:pt-20" >
             <div class="flex flex-col p-6 pt-10 max-w-3xl mx-auto">
                     <h1 class="flex justify-center text-center text-[36px] text-white font-semibold">{title}</h1>
                 <div class="flex justify-start pt-4 max-w-sm">
@@ -228,10 +227,10 @@ pub fn BeginnerDesktopPageTemplate(
                 </div>
             </div>
 
-            <div class="flex flex-col p-6 max-w-2xl mx-auto bg-[#123c64] rounded-xl shadow-xl" >
+            <div class="flex flex-col p-6 max-w-3xl mx-auto" >
                 //<p class="font-bold text-white">"Basic Desktop Wallet Setup:"</p>
                 //<p class="pb-2 text-white">"Sparrow Wallet"</p>
-                <p class="mr-4 text-sm text-white">{intro}</p>
+                <p class="mr-4 text-md text-white">{intro}</p>
             </div>
 
             <div class="mx-auto max-w-xl p-4 w-full" >
@@ -369,7 +368,7 @@ pub fn BeginnerWalletInstructions(
     if displayed_wallet() == "blue" {
         // Render Blue Wallet instructions
         view! {
-            <div class="flex flex-col max-w-3xl p-4 pt-8 mx-auto rounded-xl animate-fadeinone">
+            <div class="flex flex-col max-w-3xl p-4 pt-8 mx-auto rounded-xl animate-fadeinone md:transform md:scale-125 md:pt-28">
                 <h1 class="flex justify-center text-[36px] font-bold text-[#83d1f4]">"Blue Wallet"</h1>
                 <div class="flex flex-col text-center">
                     <p class="text-white px-4">
@@ -405,7 +404,7 @@ pub fn BeginnerWalletInstructions(
     } else if displayed_wallet() == "mutiny" {
         // Render Samourai wallet instructions
         view! {
-            <div class="flex flex-col max-w-3xl p-4 pt-8 mx-auto rounded-xl animate-fadeinone">
+            <div class="flex flex-col max-w-3xl p-4 pt-8 mx-auto rounded-xl animate-fadeinone md:transform md:scale-125 md:pt-28">
                 <div class="flex flew-row justify-center">
                     <h1 class="flex justify-center text-[36px] font-bold text-[#f71d5a]">"Mutiny Wallet"</h1>
                 </div>
@@ -442,7 +441,7 @@ pub fn BeginnerWalletInstructions(
     } else {
         // Render Sparrow wallet instructions
         view! {
-        <div class="flex flex-col max-w-3xl p-4 pt-8 mx-auto rounded-xl animate-fadeinone">
+        <div class="flex flex-col max-w-3xl p-4 pt-8 mx-auto animate-fadeinone md:transform md:scale-125 md:pt-28">
             <div class="flex flew-row justify-center">
                 <h1 class="flex justify-center text-[36px] font-bold text-[#BEAE9A]">"Sparrow Wallet"</h1>
             </div>

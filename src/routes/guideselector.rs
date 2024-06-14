@@ -114,8 +114,8 @@ pub fn GuideSelector() -> impl IntoView {
     let advanced_devices: Vec<String> = vec!["Desktop".to_string()];
 
     view! {
-      <div id="test" class="container mx-auto max-w-5xl flex flex-col md:flex-row justify-center
-                 items-center px-20 pt-20 pb-10 md:mt-10 text-white opacity-0 animate-fadeinone font-sans gap-8">
+      <div class="container mx-auto max-w-5xl flex flex-col md:flex-row justify-center
+                 items-center px-20 pt-20 pb-10 text-white opacity-0 animate-fadeinone font-sans gap-8 md:mt-10 md:transform md:scale-125">
         <div class="basis-1/4">
             <img src="./../../../lock_new_blue.png" alt="Financial privacy lock"/>
         </div>

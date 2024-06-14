@@ -4,7 +4,7 @@ use leptos::*;
 #[component]
 pub fn HomePage() -> impl IntoView {
     view! {
-            <div class="flex md:flex-row flex-col justify-around items-center max-w-5xl mx-auto md:p-20 md:mt-10 mt-0 p-10 md:text-left opacity-0 animate-fadeinone font-sans">
+            <div class="flex flex-col justify-around items-center max-w-5xl mx-auto  mt-0 p-5 opacity-0 animate-fadeinone font-sans md:flex-row md:p-20 md:mt-10 md:text-left md:transform md:scale-125">
                 <div class="flex flex-col justify-center md:text-left text-center text-white leading-loose">
                     <div class="md:text-8xl text-6xl mt-10">
                         <h1>"Be your" <br></br> "own bank"</h1>

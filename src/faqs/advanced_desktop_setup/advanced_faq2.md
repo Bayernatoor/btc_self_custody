@@ -1,6 +1,6 @@
 Backups and Storage
 
-<p class="text-lg pb-4">Backups and Storage</p>
+<p class="text-lg pb-4 font-semibold">Backup Best Practices</p>
 
 Setting up a Multisignature wallet is a great step in protecting your Bitcoin, 
 but it's just as important to keep your seed words and passphrases safe. You'll also want to keep your Wallet Output Descriptor 
@@ -10,13 +10,8 @@ To recover the funds locked in a Multisig wallet you will need **M** private key
 
 <br>
 
-**Backup Best Practices:**
 
-<br>
-
-**DO NOTS!!:**
-
-<br>
+<p class="text-lg pb-2 font-semibold">DO NOTs:</p>
 
 **1\.** Do not take digital photos of your seed words.
 
@@ -30,9 +25,7 @@ To recover the funds locked in a Multisig wallet you will need **M** private key
 
 <br>
 
-***DOs***
-
-<br>
+<p class="text-lg pb-2 font-semibold">DOs:</p>
 
 **1\.** Write down your 12 or 24 seed words, your passphrase and your extended fingerprint on **separate pieces of paper**. 
         (passphrase + fingerprint) can be stored together, and stored apart from the seed words.
@@ -59,7 +52,7 @@ To recover the funds locked in a Multisig wallet you will need **M** private key
 
 <br>
 
-**The exported text file looks like this:**
+<p class="text-md pb-2 font-semibold">Exported Coldcard Multisig text file</p>
 
 <a href="./../../../wehodlbtc_xpub_backup.png" target="_blank">
     <img id="xpub_backup" src="./../../../wehodlbtc_xpub_backup.png" alt="xpub_backup" width="800"/> 
@@ -67,9 +60,7 @@ To recover the funds locked in a Multisig wallet you will need **M** private key
 
 <br>
 
-**Storage Best Pratices**
-
-<br>
+<p class="text-lg pb-2 font-semibold">Storage Best Practices</p>
 
 Backing everything up is one thing, storing it safely is another. You'll want to make sure to eliminate any single points of failure.
 We must consider the following: fire, flooding and other natural disasters, 5$ wrench attacks, wear and tear and human errors. 
