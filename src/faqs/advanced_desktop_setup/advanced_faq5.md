@@ -1,5 +1,7 @@
 [Advanced Solutions](#advanced-solutions)
 
+<p class="text-lg pb-4">Advanced Solutions</p>
+
 ***NOTE: These can add significant complexity to your setup so proceed with caution. YOU HAVE BEEN WARNED!!*** 
 
 <br>
@@ -31,13 +33,13 @@ associated with that wallet's private key it can than serve as a decoy and keep 
 
 The Coldcard lets you set a Duress PIN, which gives you access to an entirely separate Duress Wallet.
 It acts and behaves similarly to the original wallet and can be loaded with some bitcoin that you
-are willing to lose. More information on this can be found in **[Coldcard's Documention](https://coldcard.com/docs/settings/#duress-pin)**.
+are willing to lose. More information on this can be found in **<a class="text-[#8cb4ff] underline-offset-auto" href="https://coldcard.com/docs/settings/#duress-pin">Coldcard's Documention<a>**.
 
 <br>
 
 **SeedXOR:**
 
-Splitting your seed words into multiple parts is a VERY bad idea as explained in this **[short video](https://www.youtube.com/watch?v=p5nSibpfHYE&t=3s).**
+Splitting your seed words into multiple parts is a VERY bad idea as explained in this **<a class="text-[#8cb4ff] underline-offset-auto" href="https://www.youtube.com/watch?v=p5nSibpfHYE&t=3s">short video<a>**
 SeedXOR enables you to store your seed in two or more parts without negatively affecting its resilience while also increasing your security. 
 
 <br>
@@ -47,7 +49,7 @@ as all parts would need to be recombined to recreate the original seed.
 
 <br>
 
-To understand how this works please visit the **[official SeedXOR documentation](https://seedxor.com/)**
+To understand how this works please visit the **<a class="text-[#8cb4ff] underline-offset-auto" href="https://seedxor.com/">official SeedXOR documentation<a>**
 
 <br>
 
@@ -55,7 +57,7 @@ To understand how this works please visit the **[official SeedXOR documentation]
 
 This Coldcard feature is amongst one of the more advanced so I won't dive into the details but it's worth checking out
 if you find yourself needing to sign transactions without physically handling the Coldcard device. You can find the
-**[official docs here](https://coldcard.com/docs/hsm/)**.
+**<a class="text-[#8cb4ff] underline-offset-auto" href="https://coldcard.com/docs/hsm/">official docs here<a>**.
 
 
 
