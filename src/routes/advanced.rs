@@ -12,7 +12,7 @@ pub fn AdvancedPage() -> impl IntoView {
         A secure and private advanced self-custody setup looks like the following: ".to_string();
 
     view! {
-        <div id="basic" class="flex flex-col max-w-4xl mx-auto rounded-xl p-4 animate-fadeinone" >
+        <div id="basic" class="flex flex-col max-w-4xl mx-auto rounded-xl p-4 animate-fadeinone md:transform md:scale-125 md:pt-28">
             <div class="flex flex-col p-6 pt-10 max-w-3xl mx-auto">
                     <h1 class="flex justify-center text-[36px] text-white font-semibold">{title}</h1>
             </div>

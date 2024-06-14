@@ -1,6 +1,6 @@
-Multi-Signature Wallet Setup
+Multisignature Wallet Setup
 
-<p class="text-lg pb-4">Setting up a MultiSig</p>
+<p class="text-lg pb-4 font-semibold">Setting up a MultiSig</p>
 
 At a high level, a Multisignature wallet requires multiple **signers** to approve a transaction. You'll often see it refered to 
 as a M-of-N wallet. Where M signers out of N signers are required to send a transaction (e.g. 2 of 3 or 10 of 15 etc..) 
@@ -14,9 +14,7 @@ in the foot...as the old adage goes, Keep It Simple Stupid.
 
 <br> 
 
-<p class="text-lg">Important considerations:</p>
-
-<br> 
+<p class="text-lg pb-2 font-semibold">Important considerations</p>
 
 **1\.** How many co-signers (N) will be used?
 
@@ -39,21 +37,19 @@ in the foot...as the old adage goes, Keep It Simple Stupid.
 
 <br>
 
-For this guide we will set up a 2-of-3 Multisig using 3 Mk4 Coldcards, we'll then import it into Sparrow Wallet for easier visualization and support.
+***Note:*** *For this guide we will set up a 2-of-3 Multisig using 3 Mk4 Coldcards, we'll then import it into Sparrow Wallet for easier visualization and support.*
 
 <br>
 
-<h3 class="text-lg">Preparing your Coldcards</h3>
-
-<br>
+<p class="text-lg pb-2 font-semibold">Preparing your Coldcards</p>
 
 **1\.** Prepare each of the N Coldcards (signing devices) that will be used in the Multisig quorum. If you've forgotten the steps, please read **Setting up the Coldcard** in the **<a class="text-[#8cb4ff] underline-offset-auto" href="http://localhost:3000/guides/intermediate/hardware-wallet#setting-up-the-coldcard">Intermediate Guide<a>**. 
         Remember to write down the private key, passphrase and XFP (extended fingerprint) of each wallet you create. 
 
 <br>
 
-**Note:** *The Coldcard does not remember your passphrase, you must enter it everytime you turn on the device. To do so enter your PIN then select ***Passphrase --> Restore Saved***. 
-        The Passphrase is now in effect until you logout. For more detailed information on passphrases see the **<a class="text-[#8cb4ff] underline-offset-auto" href="https://coldcard.com/docs/passphrase/#using-a-saved-passphrase">Coldcard Docs<a>**
+**Note:** *The Coldcard does not remember your passphrase, you must enter it everytime you turn on the device. To do so enter your PIN then select **Passphrase --> Restore Saved**. 
+        The Passphrase is now in effect until you logout. For more detailed information on passphrases see the* **<a class="text-[#8cb4ff] underline-offset-auto" href="https://coldcard.com/docs/passphrase/#using-a-saved-passphrase">Coldcard Docs<a>.**
 
 <br>
 
@@ -97,9 +93,7 @@ For this guide we will set up a 2-of-3 Multisig using 3 Mk4 Coldcards, we'll the
 
 <br>
 
-**Adding your Multisig wallet to Sparrow**
-
-<br>
+<p class="text-lg pb-2 font-semibold">Adding your Multisig wallet to Sparrow</p>
 
 **1\.** From the Sparrow toolbar click on ***File --> New Wallet***. After naming your wallet you shoul see this page: 
 
@@ -135,7 +129,7 @@ For this guide we will set up a 2-of-3 Multisig using 3 Mk4 Coldcards, we'll the
 
 <br>
 
-**Importing the Coldcard ccxp file:**
+<p class="text-md pb-2 font-semibold">Importing the Coldcard ccxp file</p>
 
 <a href="#">
     <img id="sparrow_multisig_import" src="./../../../sparrow_multisig_import.png" alt="sparrow_multisig_import" width="600"/> 
@@ -143,7 +137,7 @@ For this guide we will set up a 2-of-3 Multisig using 3 Mk4 Coldcards, we'll the
 
 <br>
 
-**1 of 3 Keystores imported**
+<p class="text-md pb-2 font-semibold">1 of 3 Keystores imported</p>
 
 <a href="#">
     <img id="sparrow_multisig_keystore" src="./../../../sparrow_multisig_keystore.png" alt="sparrow_multisig_keystore" width="600"/> 

@@ -15,7 +15,7 @@ pub fn IntermediateIntroPage() -> impl IntoView {
         ".to_string();
 
     view! {
-        <div id="basic" class="flex flex-col max-w-3xl mx-auto rounded-xl pb-10 animate-fadeinone" >
+        <div id="basic" class="flex flex-col max-w-3xl mx-auto pb-10 animate-fadeinone md:transform md:scale-125 md:pt-20" >
             <div class="flex flex-col p-6 pt-10 max-w-3xl mx-auto">
                     <h1 class="flex justify-center text-[36px] text-white font-semibold">{title}</h1>
                 <div class="flex justify-start pt-4 max-w-sm">
@@ -26,7 +26,7 @@ pub fn IntermediateIntroPage() -> impl IntoView {
                 </div>
             </div>
 
-            <div class="flex flex-col p-6 max-w-3xl mx-auto bg-[#123c64] rounded-xl shadow-xl" >
+            <div class="flex flex-col p-6 max-w-3xl mx-auto" >
                 <p class="font-bold text-white">"Coldcard & Node Setup:"</p>
                 <p class="pb-2 text-white">""</p>
                 <p class="mr-4 text-md text-white">
@@ -59,7 +59,7 @@ pub fn IntermediateHardwarePage() -> impl IntoView {
 
     view! {
 
-        <div id="hardware_page" class="flex flex-col max-w-3xl mx-auto rounded-xl p-5 animate-fadeinone">
+        <div id="hardware_page" class="flex flex-col max-w-3xl mx-auto p-5 animate-fadeinone md:transform md:scale-125 md:pt-20">
             <div class="flex flex-col p-6 pt-10 max-w-3xl mx-auto">
                 <h1 class="flex justify-center text-xl text-white font-semibold">{title}</h1>
             </div>
@@ -98,7 +98,7 @@ pub fn IntermediateNodePage() -> impl IntoView {
     let title = "Step 2 - Node Setup".to_string();
 
     view! {
-        <div id="hardware_page" class="flex flex-col max-w-5xl justify-center mx-auto rounded-xl p-5 animate-fadeinone" >
+        <div id="hardware_page" class="flex flex-col max-w-5xl justify-center mx-auto p-5 animate-fadeinone md:transform md:scale-125 md:pt-10" >
             <div class="flex flex-col p-6 pt-10 max-w-4xl mx-auto">
                 <h1 class="flex justify-center text-xl text-white font-semibold">{title}</h1>
             </div>

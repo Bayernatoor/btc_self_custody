@@ -26,7 +26,7 @@ pub fn NavBar() -> impl IntoView {
                 >
                     <BackButton button_image=back_button.clone() reload=true/>
                 </Show>
-                    <div class="hidden font-heading space-x-8 lg:flex">
+                    <div class="hidden text-lg font-heading space-x-8 lg:flex">
                         <a href="/guides">
                             "Guides"
                         </a>

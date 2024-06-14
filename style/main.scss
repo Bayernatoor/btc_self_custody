@@ -466,3 +466,10 @@ img#marketplace:hover {
 .enlarge-image:hover {
   transform: scale(2);
 }
+
+// styles in mastyles in markdown
+
+.markdown-sub-paragraphs {
+    @apply pb-2 font-semibold text-lg; 
+}
+
