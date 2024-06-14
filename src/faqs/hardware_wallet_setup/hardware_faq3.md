@@ -27,7 +27,7 @@ Once finished it should look similar to this:
 
 &nbsp;
 
-<img src="./../../../seedplate.jpeg" alt="Seedplate" width="400"/>
+<img src="./../../../seedplate.jpeg" alt="Seedplate" width="600"/>
 
 &nbsp;
 
