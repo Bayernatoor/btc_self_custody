@@ -1,8 +1,6 @@
 [Receiving & Spending](#receiving-and-spending)
 
-**Receiving to a Multisig Wallet**
-
-<br>
+<p class="text-lg pb-4">Receiving to a Multisig Wallet</p>
 
 Receiving bitcoin to a Multisig wallet is as easy as with a Singlesig. We'll use Sparrow wallet to obtain an address 
 and simply send funds to it. 

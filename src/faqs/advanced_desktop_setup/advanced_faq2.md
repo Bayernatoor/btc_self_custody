@@ -1,4 +1,6 @@
-[Backups and Storage](#backup-and-storage)
+Backups and Storage
+
+<p class="text-lg pb-4">Backups and Storage</p>
 
 Setting up a Multisignature wallet is a great step in protecting your Bitcoin, 
 but it's just as important to keep your seed words and passphrases safe. You'll also want to keep your Wallet Output Descriptor 
@@ -12,7 +14,7 @@ To recover the funds locked in a Multisig wallet you will need **M** private key
 
 <br>
 
-***DO NOTS!!:**
+**DO NOTS!!:**
 
 <br>
 
@@ -51,7 +53,7 @@ To recover the funds locked in a Multisig wallet you will need **M** private key
 
 <br>
 
-<a href="#">
+<a href="./../../../sparrow_wallet_export.png" target="_blank">
     <img id="sparrow_wallet_export" src="./../../../sparrow_wallet_export.png" alt="sparrow_wallet_export" width="600"/> 
 </a>
 
@@ -59,7 +61,7 @@ To recover the funds locked in a Multisig wallet you will need **M** private key
 
 **The exported text file looks like this:**
 
-<a href="#">
+<a href="./../../../wehodlbtc_xpub_backup.png" target="_blank">
     <img id="xpub_backup" src="./../../../wehodlbtc_xpub_backup.png" alt="xpub_backup" width="800"/> 
 </a>
 
@@ -80,13 +82,13 @@ The passphrase to each wallet can be stored alongside its extended fingerprint b
 <br>
 
 Your digital encrypted backups are great but digital material can become corrupted or damaged. Make sure to use 
-**[industrial grade MicroSD cards](https://store.coinkite.com/store/microsd-cc)**, these are relatively inexpensive 
+**<a class="text-[#8cb4ff] underline-offset-auto" href="https://store.coinkite.com/store/microsd-cc">industrial grade MicroSD cards<a>**, these are relatively inexpensive 
 so you can create multiple backups if you wish and store them separately in different locations.
 
 <br>
 
 Ultimately, you must decide what your threat level is and what level of security you require.
-Do not overcomplicate this for the sake of wanting **"The Best"** setup. Just [Keep It Simple Stupid](https://en.wikipedia.org/wiki/KISS_principle)
+Do not overcomplicate this for the sake of wanting **"The Best"** setup. Just KISS, **<a class="text-[#8cb4ff] underline-offset-auto" href="https://en.wikipedia.org/wiki/KISS_principle">Keep It Simple Stupid<a>**.
 
 <br>
 

@@ -1,4 +1,6 @@
-[Multi-Signature Wallet Setup](#multi-sig-setup)
+Multi-Signature Wallet Setup
+
+<p class="text-lg pb-4">Setting up a MultiSig</p>
 
 At a high level, a Multisignature wallet requires multiple **signers** to approve a transaction. You'll often see it refered to 
 as a M-of-N wallet. Where M signers out of N signers are required to send a transaction (e.g. 2 of 3 or 10 of 15 etc..) 
@@ -12,9 +14,7 @@ in the foot...as the old adage goes, Keep It Simple Stupid.
 
 <br> 
 
-**Setting up a MultiSig**
-
-Important considerations: 
+<p class="text-lg">Important considerations:</p>
 
 <br> 
 
@@ -27,7 +27,7 @@ Important considerations:
 <br>
 
 **3\.** What hardware will you use to store the private keys. I recommend using the latest Coldcard (Mk4 as of this writing) but to eliminate vendor risk you can chose hardware from various manufacturers (make sure they support Multisig).
-        Some more options can be found on **[The Bitcoin Hole](https://thebitcoinhole.com/hardware-wallets)**.
+        Some more options can be found on **<a class="text-[#8cb4ff] underline-offset-auto" href="https://thebitcoinhole.com/hardware-wallets">The Bitcoin Hole<a>**.
 
 <br>
 
@@ -43,17 +43,17 @@ For this guide we will set up a 2-of-3 Multisig using 3 Mk4 Coldcards, we'll the
 
 <br>
 
-**Preparing your Coldcards**
+<h3 class="text-lg">Preparing your Coldcards</h3>
 
 <br>
 
-**1\.** Prepare each of the N Coldcards (signing devices) that will be used in the Multisig quorum. If you've forgotten the steps, please read **Setting up the Coldcard** in the **[Intermediate Guide](http://localhost:3000/guides/intermediate/hardware-wallet#setting-up-the-coldcard)**. 
+**1\.** Prepare each of the N Coldcards (signing devices) that will be used in the Multisig quorum. If you've forgotten the steps, please read **Setting up the Coldcard** in the **<a class="text-[#8cb4ff] underline-offset-auto" href="http://localhost:3000/guides/intermediate/hardware-wallet#setting-up-the-coldcard">Intermediate Guide<a>**. 
         Remember to write down the private key, passphrase and XFP (extended fingerprint) of each wallet you create. 
 
 <br>
 
 **Note:** *The Coldcard does not remember your passphrase, you must enter it everytime you turn on the device. To do so enter your PIN then select ***Passphrase --> Restore Saved***. 
-        The Passphrase is now in effect until you logout. For more detailed information on passphrases see the* **[Coldcard Docs](https://coldcard.com/docs/passphrase/#using-a-saved-passphrase)**
+        The Passphrase is now in effect until you logout. For more detailed information on passphrases see the **<a class="text-[#8cb4ff] underline-offset-auto" href="https://coldcard.com/docs/passphrase/#using-a-saved-passphrase">Coldcard Docs<a>**
 
 <br>
 
@@ -74,12 +74,12 @@ For this guide we will set up a 2-of-3 Multisig using 3 Mk4 Coldcards, we'll the
 <br>
 
 **4\.** You'll now select the **M** value, which is the number of co-signers required to approve a signature. The **N** value is based upon the number of **ccxp** files present on the MicroSD card. Press ***7 or 9*** to change the
-        M value 
+        M value. 
 
 <br>
 
 <a href="#">
-    <img id="coldcard_m_of_n" src="./../../../coldcard_m_of_n.png" alt="coldcard_mofn_screen" width="400"/> 
+    <img id="coldcard_m_of_n" src="./../../../coldcard_m_of_n.png" alt="coldcard_m_of_n_screen" width="400"/> 
 </a>
 
 <br>

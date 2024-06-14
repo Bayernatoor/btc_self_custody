@@ -1116,6 +1116,10 @@ p{
   line-height: 1.625;
 }
 
+.leading-normal{
+  line-height: 1.5;
+}
+
 .text-\[\#123c64\]{
   --tw-text-opacity: 1;
   color: rgb(18 60 100 / var(--tw-text-opacity));
