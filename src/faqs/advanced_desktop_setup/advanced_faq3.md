@@ -25,7 +25,7 @@ in the foot...as the old adage goes, Keep It Simple Stupid.
 <br>
 
 **3\.** What hardware will you use to store the private keys. I recommend using the latest Coldcard (Mk4 as of this writing) but to eliminate vendor risk you can chose hardware from various manufacturers (make sure they support Multisig).
-        Some more options can be found on **<a class="text-[#8cb4ff] underline-offset-auto" href="https://thebitcoinhole.com/hardware-wallets">The Bitcoin Hole<a>**.
+        Some more options can be found on **<a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://thebitcoinhole.com/hardware-wallets">The Bitcoin Hole<a>**.
 
 <br>
 
@@ -43,13 +43,15 @@ in the foot...as the old adage goes, Keep It Simple Stupid.
 
 <p class="text-lg pb-2 font-semibold">Preparing your Coldcards</p>
 
-**1\.** Prepare each of the N Coldcards (signing devices) that will be used in the Multisig quorum. If you've forgotten the steps, please read **Setting up the Coldcard** in the **<a class="text-[#8cb4ff] underline-offset-auto" href="http://localhost:3000/guides/intermediate/hardware-wallet#setting-up-the-coldcard">Intermediate Guide<a>**. 
+**1\.** Prepare each of the N Coldcards (signing devices) that will be used in the Multisig quorum. If you've forgotten the steps, please read **Setting up the Coldcard** in the 
+        **<a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="/guides/intermediate/hardware-wallet#setting-up-the-coldcard" target="_blank">Intermediate Guide<a>**. 
         Remember to write down the private key, passphrase and XFP (extended fingerprint) of each wallet you create. 
 
 <br>
 
 **Note:** *The Coldcard does not remember your passphrase, you must enter it everytime you turn on the device. To do so enter your PIN then select **Passphrase --> Restore Saved**. 
-        The Passphrase is now in effect until you logout. For more detailed information on passphrases see the* **<a class="text-[#8cb4ff] underline-offset-auto" href="https://coldcard.com/docs/passphrase/#using-a-saved-passphrase">Coldcard Docs<a>.**
+        The Passphrase is now in effect until you logout. For more detailed information on passphrases see the* **<a class="text-[#8cb4ff] underline-offset-auto font-semibold" 
+        href="https://coldcard.com/docs/passphrase/#using-a-saved-passphrase" target="_blank">Coldcard Docs<a>.**
 
 <br>
 
@@ -63,7 +65,7 @@ in the foot...as the old adage goes, Keep It Simple Stupid.
 
 <br>
 
-<a href="#">
+<a href="./../../../coldcard_air_gapped.png" target="_blank">
     <img id="coldcard_air_gapped" src="./../../../coldcard_air_gapped.png" alt="coldcard_air_gapped_screen" width="400"/> 
 </a>
 
@@ -74,7 +76,7 @@ in the foot...as the old adage goes, Keep It Simple Stupid.
 
 <br>
 
-<a href="#">
+<a href="./../../../coldcard_m_of_n.png" target="_blank">
     <img id="coldcard_m_of_n" src="./../../../coldcard_m_of_n.png" alt="coldcard_m_of_n_screen" width="400"/> 
 </a>
 
@@ -99,7 +101,7 @@ in the foot...as the old adage goes, Keep It Simple Stupid.
 
 <br>
 
-<a href="#">
+<a href="./../../../sparrow_wallet_multisig.png" target="_blank">
     <img id="sparrow_multisig" src="./../../../sparrow_wallet_multisig.png" alt="sparrow_Wallet_multisig" width="600"/> 
 </a>
 
@@ -131,7 +133,7 @@ in the foot...as the old adage goes, Keep It Simple Stupid.
 
 <p class="text-md pb-2 font-semibold">Importing the Coldcard ccxp file</p>
 
-<a href="#">
+<a href="./../../../sparrow_multisig_import.png" target="_blank">
     <img id="sparrow_multisig_import" src="./../../../sparrow_multisig_import.png" alt="sparrow_multisig_import" width="600"/> 
 </a>
 
@@ -139,7 +141,7 @@ in the foot...as the old adage goes, Keep It Simple Stupid.
 
 <p class="text-md pb-2 font-semibold">1 of 3 Keystores imported</p>
 
-<a href="#">
+<a href="./../../../sparrow_multisig_keystore.png" target="_blank">
     <img id="sparrow_multisig_keystore" src="./../../../sparrow_multisig_keystore.png" alt="sparrow_multisig_keystore" width="600"/> 
 </a>
 
@@ -149,7 +151,7 @@ in the foot...as the old adage goes, Keep It Simple Stupid.
 
 <br>
 
-<a href="#">
+<a href="./../../../sparrow_multisig_ready_to_import.png" target="_blank">  
     <img id="sparrow_multisig_ready_to_import" src="./../../../sparrow_multisig_ready_to_import.png" alt="sparrow_multisig_ready_to_import" width="600"/> 
 </a>
 
@@ -160,7 +162,7 @@ in the foot...as the old adage goes, Keep It Simple Stupid.
 
 <br>
 
-<a href="#">
+<a href="./../../../sparrow_multisig_backup.png" target="_blank">
     <img id="sparrow_multisig_backup" src="./../../../sparrow_multisig_backup.png" alt="sparrow_multisig_backup" width="600"/> 
 </a>
 
