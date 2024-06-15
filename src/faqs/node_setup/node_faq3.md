@@ -1,41 +1,59 @@
 ## MyNode Details & Resources 
 
+<p class="text-lg pb-4 font-semibold">Choice #2: MyNode</p>
+
 MyNode makes running a Bitcoin and Lightning node as easy as possible. Whether you DIY or you purchase a pre-built node, running bitcoin
 has never been easier. 
 
 <br>
 
-<a href="#">
+<p class="text-md pb-2 font-semibold">MyNode's Home Page</p>
+
+<a href="./../../../mynode_ui.png" target="_blank">
     <img id="mynode_ui" src="./../../../mynode_ui.png" alt="mynode ui" width="500"/> 
 </a>
 
 <br>
 
+<p class="text-lg pb-2 font-semibold">Features</p>
 
-**Features**
 
 -- Very easy to follow documentation and DIY Guide 
 
--- No Command Line required all features are available via their intuitive UI accessible via the browser.
+-- No Command Line required. All features are available via their intuitive UI accessible via the browser.
 
--- Every Pre-built MyNode comes with 12 months of **<ins><a href="https://mynodebtc.github.io/premium_plus/premium_plus.html" style="color:#8cb4ff;">Premium+ support</a><ins>**, great for that extra peace of mind.
+-- Every Pre-built MyNode comes with 12 months of <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://mynodebtc.github.io/premium_plus/premium_plus.html" target="_blank">Premium+ support</a>,
+   great for that extra peace of mind.
 
 -- Extensive app marketplace
 
 <br>
 
-<a href="#">
-    <img id="mynode_marketplace" src="./../../../mynode_marketplace.png" alt="mynode ui" width="600"/> 
+<p class="text-md pb-2 font-semibold">MyNode's Marketplace</p>
+
+<a href="./../../../mynode_marketplace.png" target="_blank">
+    <img id="mynode_marketplace" src="./../../../mynode_marketplace.png" alt="mynode_marketplace" width="400"/> 
 </a>
 
 <br>
 
-**Resources**
+<p class="text-lg pb-2 font-semibold">Considerations:</p>
 
-**<ins><a href="https://mynodebtc.github.io/intro/introduction.html" style="color:#8cb4ff;">MyNode's Documentation</a><ins>**
+-- Bitcoin + Lightning only. Is not an all-in-one personal home server like Start9.
 
-**<ins><a href="https://www.mynodebtc.com/order_now" style="color:#8cb4ff;">Buy a pre-made MyNode</a><ins>**
+-- MyNode is <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://github.com/mynodebtc/mynode?tab=License-1-ov-file#readme" target="_blank">available under a Modified Creative Commons License</a>
 
-**<ins><a href="https://github.com/mynodebtc/mynode" style="color:#8cb4ff;">MyNode's Github</a><ins>**
+<br>
 
-**<ins><a href="https://www.mynodebtc.com/support" style="color:#8cb4ff;">Get Support</a><ins>**
+<p class="text-lg pb-2 font-semibold">Resources:</p>
+
+**\-** <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://www.mynodebtc.com/order_now" target="_blank">Buy a Pre-Made MyNode</a>
+
+**\-** <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://mynodebtc.github.io/videos/guides.html" target="_blank">DIY with Community Guides</a>
+
+**\-** <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://www.mynodebtc.com/support" target="_blank">Get Support</a>
+
+**\-** <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://mynodebtc.github.io/intro/introduction.html" target="_blank">MyNode's Docummentation</a>
+
+**\-** <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://github.com/mynodebtc/mynode" target="_blank">MyNode's Github</a>
+

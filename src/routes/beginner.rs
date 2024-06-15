@@ -106,7 +106,8 @@ pub fn BeginnerPageTemplate(
     quote: String,
     quote_author: String,
     intro: String,
-    #[prop(optional)] intro_part_two: String,
+    #[prop(optional)] wallet_one_text: String,
+    #[prop(optional)] wallet_two_text: String,
 ) -> impl IntoView {
     // used for onlick to determine which button was clicked
     let (_mutiny_clicked, set_mutiny_clicked) = create_signal(false);
@@ -166,12 +167,12 @@ pub fn BeginnerPageTemplate(
                 </div>
             </div>
 
-            <div class="flex flex-col p-6 max-w-3xl mx-auto" >
+            <div class="flex flex-col p-6 max-w-3xl mx-auto">
                 <p class="font-bold text-white">"Bitcoin Self-Custody:"</p>
                 <p class="pb-2 text-white">"The act of taking possession of a bitcoin private key."</p>
-                <p class="mr-4 text-md text-white">{intro}</p>
-                <br></br>
-                <p class="mr-4 text-md text-white">{intro_part_two}</p>
+                <p class="mr-4 pb-2 text-md text-white">{intro}</p>
+                <p class="mr-4 pb-2 text-md text-white"><strong>{wallet_name_blue.clone()}</strong>{wallet_one_text}</p>
+                <p class="mr-4 pb-2 text-md text-white"><strong>{wallet_name_mutiny.clone()}</strong>{wallet_two_text}</p>
             </div>
 
             <div class="mx-auto max-w-xl p-4 w-full" >
@@ -179,7 +180,7 @@ pub fn BeginnerPageTemplate(
             </div>
 
             <div class="flex flex-col mx-auto justify-center" >
-                <h2 class="flex justify-center pb-4 max-w-2xl text-center mx-auto text-xl text-white" >"Pick A Wallet"</h2>
+                <h2 class="flex justify-center pb-4 max-w-2xl text-center mx-auto text-xl text-white font-semibold" >"Pick A Wallet"</h2>
             </div>
             <div class="flex flex-col md:flex-row px-6 py-2 max-w-2xl mx-auto gap-4">
                 <WalletButton on_click = move |_| {set_blue_clicked(true); set_blue_details(true);}
@@ -259,13 +260,16 @@ pub fn BeginnerDesktopPageTemplate(
 #[allow(non_snake_case)]
 pub fn RenderAndroidPage() -> impl IntoView {
     let intro_text: String = "This basic Android setup is meant to get you up to speed quickly. You'll pick one of the one wallets
-        below, create your private key and take posession of your bitcoin. I wouldn't recommend storing too much of your wealth in a
+        below, create your private key and take possession of your bitcoin. I wouldn't recommend storing too much of your wealth in a
         mobile wallet. Think of it as a self-custodied spending wallet, similar to how you'd carry cash in a physical wallet.
         ".to_string();
 
-    let intro_part_two: String = "Blue Wallet is a great self-custodial On-Chain wallet. It's easy to setup, follows all the latest standards and 
-        also has the option of connecting to your own Lightning Node. Mutiny is a relative new, modern On-chain and Lightning enabled wallet, it integrats bitcoin payments
-        into your social networks using the power of the decentralized NOSTR protocol. I recommend Mutiny if you want more the just a basic bitcoin wallet but if you prefer to keep it simple
+    let wallet_one_text: String = " is a great self-custodial On-Chain wallet. It's easy to setup, follows all the latest standards and 
+        also has the option of connecting to your own Lightning Node.".to_string();
+
+    let wallet_two_text: String = " is a relatively new, modern On-chain and Lightning enabled wallet, it integrates bitcoin payments
+        into your social networks using the power of the decentralized NOSTR protocol and simplifies onboarding by making use of Fedimints. 
+        I recommend Mutiny if you want more then just a basic bitcoin wallet but if you prefer to keep it simple
         choose Blue Wallet.".to_string();
 
     let title = "Android Self-Custody Guide".to_string();
@@ -273,7 +277,7 @@ pub fn RenderAndroidPage() -> impl IntoView {
     let quote_author = "-Nick Szabo".to_string();
 
     view! {
-        <BeginnerPageTemplate title=title quote=quote quote_author=quote_author intro=intro_text intro_part_two=intro_part_two/>
+        <BeginnerPageTemplate title=title quote=quote quote_author=quote_author intro=intro_text wallet_one_text=wallet_one_text wallet_two_text=wallet_two_text/>
     }
 }
 
@@ -286,9 +290,12 @@ pub fn RenderIosPage() -> impl IntoView {
         mobile wallet. Think of it as a self-custodied spending wallet, similar to how you'd carry cash in a physical wallet.
         ".to_string();
 
-    let intro_part_two: String = "Blue Wallet is a great self-custodial On-Chain wallet. It's easy to setup, follows all the latest standards and 
-        also has the option of connecting to your own Lightning Node. Mutiny is a relative new, modern On-chain and Lightning enabled wallet, it integrates bitcoin payments
-        into your social networks using the power of the decentralized NOSTR protocol. I recommend Mutiny if you want more the just a basic bitcoin wallet but if you prefer to keep it simple
+    let wallet_one_text: String = " is a great self-custodial On-Chain wallet. It's easy to setup, follows all the latest standards and 
+        also has the option of connecting to your own Lightning Node.".to_string();
+
+    let wallet_two_text: String = " is a relatively new, modern On-chain and Lightning enabled wallet, it integrates bitcoin payments
+        into your social networks using the power of the decentralized NOSTR protocol and simplifies onboarding by making use of Fedimints. 
+        I recommend Mutiny if you want more then just a basic bitcoin wallet but if you prefer to keep it simple
         choose Blue Wallet.".to_string();
 
     let title = "Beginner - IOS Self-Custody Guide".to_string();
@@ -296,7 +303,7 @@ pub fn RenderIosPage() -> impl IntoView {
     let quote_author = "-Nick Szabo".to_string();
 
     view! {
-            <BeginnerPageTemplate title=title quote=quote quote_author=quote_author intro=intro_text intro_part_two=intro_part_two/>
+            <BeginnerPageTemplate title=title quote=quote quote_author=quote_author intro=intro_text wallet_one_text=wallet_one_text wallet_two_text=wallet_two_text/>
 
     }
 }
@@ -306,7 +313,7 @@ pub fn RenderIosPage() -> impl IntoView {
 #[allow(non_snake_case)]
 pub fn RenderDesktopPage() -> impl IntoView {
     let intro_text: String = "Desktop wallets, such as Sparrow Wallet, deliver heightened security versus mobile options. 
-        Often employed in elaborate setups for self-managing sizeable Bitcoin savings, they remain accessible even for basic use cases. 
+        Often employed in elaborate setups for self-custodying sizeable Bitcoin savings, they remain accessible even for basic use cases. 
         Our guide begins with a simplified configuration, expanding upon it later. Ideal for individuals intending to grow their Bitcoin holdings, 
         this introduction sets the stage for more advanced techniques.".to_string();
 

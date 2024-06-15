@@ -13,12 +13,12 @@ Otherwise, if you're new here and have yet to take self-custody of your bitcoin 
 
 <br>
 
-**1\.** Follow the **<a class="text-[#8cb4ff] underline-offset-auto" href="http://localhost:3000/guides/basic/desktop/sparrow">Basic guide<a>** to setup Sparrow Wallet. Download the latest
+**1\.** Follow the <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="/guides/basic/desktop/sparrow">Basic guide<a> to setup Sparrow Wallet. Download the latest
 version of Sparrow Wallet and follow the first 2 items "Quick word.." and "Verifying the downloaded binary..".
 
 <br>
 
-**2\.** Next, follow part 2 of the **<a class="text-[#8cb4ff] underline-offset-auto" href="http://localhost:3000/guides/intermediate/node">Intermediate guide<a>** to select and setup a node implementation. 
+**2\.** Next, follow part 2 of the **<a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="/guides/intermediate/node">Intermediate guide<a>** to select and setup a node implementation. 
 
 <br>
 

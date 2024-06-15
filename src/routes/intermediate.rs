@@ -9,9 +9,9 @@ pub fn IntermediateIntroPage() -> impl IntoView {
     let quote = "Rights Are Not Given, They Are Taken".to_string();
     let quote_author = "-Aldous Huxley".to_string();
 
-    let explanation: String = "We'll start by setting up a highly ColdCard signing device, and connecting it to Sparrow. I recommend following ColdCard's Paranoid Guide, however,
-        you're welcome to choose the Ultra Quick or Middle Ground guide if you prefer. In Part two we'll decide which bitcoin node setup we want to use, and then connect our Sparrow wallet to it.
-        Once we're through with this, you'll have an excellent, secure and private bitcoin self-custody solution.
+    let explanation: String = "We'll start by setting up a ColdCard signing device, and connecting it to Sparrow. 
+        In Part two we'll decide which bitcoin node setup we want to use, and then connect our Sparrow wallet to it.
+        Once we're through with this, you'll have a standards based, secure and private bitcoin self-custody solution.
         ".to_string();
 
     view! {
@@ -60,8 +60,8 @@ pub fn IntermediateHardwarePage() -> impl IntoView {
     view! {
 
         <div id="hardware_page" class="flex flex-col max-w-3xl mx-auto p-5 animate-fadeinone md:transform md:scale-125 md:pt-20">
-            <div class="flex flex-col p-6 pt-10 max-w-3xl mx-auto">
-                <h1 class="flex justify-center text-xl text-white font-semibold">{title}</h1>
+            <div class="flex flex-col p-6 pt-20 max-w-3xl mx-auto">
+                <h1 class="flex justify-center text-2xl text-white font-semibold">{title}</h1>
             </div>
             <div class="flex flex-col gap-4">
                 // Might want to display this flex horizontal for desktop
@@ -98,9 +98,9 @@ pub fn IntermediateNodePage() -> impl IntoView {
     let title = "Step 2 - Node Setup".to_string();
 
     view! {
-        <div id="hardware_page" class="flex flex-col max-w-5xl justify-center mx-auto p-5 animate-fadeinone md:transform md:scale-125 md:pt-10" >
+        <div id="hardware_page" class="flex flex-col max-w-5xl max-h-full justify-center mx-auto p-5 animate-fadeinone md:pt-20" >
             <div class="flex flex-col p-6 pt-10 max-w-4xl mx-auto">
-                <h1 class="flex justify-center text-xl text-white font-semibold">{title}</h1>
+                <h1 class="flex justify-center text-2xl text-white font-semibold">{title}</h1>
             </div>
             <div class="flex flex-col md:flex-row max-4-xl justify-center gap-4">
                 <div class="flex justify-center  md:justify-end">
@@ -109,20 +109,15 @@ pub fn IntermediateNodePage() -> impl IntoView {
                                     new_width="28".to_string() new_height="".to_string()/>
                 </div>
                 <div class="flex justify-center md:justify-end">
-                    <GenericExternalButton path="".to_string() wallet_title="Bitcoin, Lightning and more!".to_string()
+                    <GenericExternalButton path="https://mynodebtc.github.io/".to_string() wallet_title="Bitcoin, Lightning and more!".to_string()
                                         img_url="./../../../mynode_logo.png".to_string() img_alt="MyNode logo".to_string()
                                         new_width="32".to_string() new_height="6".to_string()/>
                 </div>
                 <div class="flex justify-center md:justify-start">
-                    <GenericExternalButton path="".to_string() wallet_title="Not Your Node, Not your Rules".to_string()
+                    <GenericExternalButton path="https://shop.fulmo.org/raspiblitz/".to_string() wallet_title="Not Your Node, Not your Rules".to_string()
                                         img_url="./../../../raspiblitz_logo_main.png".to_string() img_alt="RaspiBlitz logo".to_string()
                                         new_width="28".to_string() new_height="".to_string()/>
                 </div>
-                //<div class="flex justify-center md:justify-start">
-                //    <GenericExternalButton path="".to_string() wallet_title="Your cloud. In your home.".to_string()
-                //                        img_url="./../../../umbrel_logo_512.png".to_string() img_alt="Umbrel logo".to_string()
-                //                        new_width="24".to_string() new_height="".to_string()/>
-                //</div>
             </div>
             <h2 class="flex justify-center font-bold text-xl text-white pt-6 pb-2">"Instructions"</h2>
             <AccordionMenu faq_name="node_setup".to_string()/>
