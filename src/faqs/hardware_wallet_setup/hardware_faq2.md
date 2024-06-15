@@ -1,9 +1,9 @@
 [Setting up the Coldcard](#setting-up-the-coldcard)
 
-<p class="text-lg pb-4 font-semibold">Setting Up The Coldcard</p>
+<p class="text-lg pb-4 font-semibold">Setting Up the Coldcard</p>
 
-You've gathered all the parts, now is the time to setup your Coldcard. There are many guides and approaches, some of which I will provide below. However,
-this guide will provide a balanced approach to setting up your Coldcard.
+You've gathered all the parts, now is the time to setup your Coldcard. There are many guides and approaches to setting up a Coldcard, from very simple to complex.
+In this guide we'll provide a balanced approach to ensure privacy and security without overwhelming you with technical details.
 
 <br>
 
@@ -17,22 +17,23 @@ this guide will provide a balanced approach to setting up your Coldcard.
  
 <br>
 
-**3\.** The bag itself has a unique serial number on it. We'll match that number to the Coldcard, so don't dispose of it yet.
+**3\.** The bag itself has a unique serial number on it. We'll match that number to the on the Coldcard, so don't dispose of it yet.
 
 <br>
 
-**4\.** Inside the bad you'll find a Coldcard, a serialized tear off tab of the bag and a Wallet Backup Card. The tab should match the bag.
+**4\.** Inside the bad you'll find a Coldcard, a serialized tear off tab of the bag and a Wallet Backup Card. The number on the tab  should match the number on the bag.
 
 <br>
 
 <p class="text-lg pb-2 font-semibold">Updating the Firmware:</p>
 
 
-**5\.** Download the Coldcard's latest **[firmware here](https://coldcard.com/docs/upgrade/)**.
+**5\.** Download the Coldcard's latest <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://coldcard.com/docs/upgrade/">firmware here</a>.
 
 <br>
 
-**6\.** After having downloaded the firmware to your computer, I highly recommend that you **[verify it by following this guide](https://coldcard.com/docs/upgrade/#dont-trust-verify-the-firmware)**.
+**6\.** After downloading the firmware to your computer, I highly recommend that you
+<a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://coldcard.com/docs/upgrade/#dont-trust-verify-the-firmware">verify it by following this guide</a>.
 
 <br>
 
@@ -127,7 +128,7 @@ and restore it using the words we wrote down.
 
 <br>
 
-**27\.** Let's delete the current seed on your Coldcard. Go to ***Advanced -> Danger Zone -> Seed Functions*** -> *Destroy Seed*. Read and agree to the warnings.
+**27\.** Let's delete the current seed on your Coldcard. Go to ***Advanced -> Danger Zone -> Seed Functions -> Destroy Seed***. Read and agree to the warnings.
 
 <br>
 
@@ -177,7 +178,7 @@ the correct Passphrase. But you can confirm it via the unique Extended Fingerpri
 
 **37\.** When satisfied, press on **APPLY**. Ensure you have a MicroSD card loaded and press 1 to create an encrypted backup of the passphrase on the MicroSD card. 
          The previous encrypted backup you made of the seed words does NOT save your passphrase. Make sure that you've also written it down and keep it safe! 
-         For more information on the encrypted backups created by Coldcard see the <a class="text-[#8cb4ff] underline-offset-auto" href="https://coldcard.com/docs/backups/#background">ColdCard Docs</a>.
+         For more information on the encrypted backups created by Coldcard see the <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://coldcard.com/docs/backups/#background">ColdCard Docs</a>.
 
 <br>
 
@@ -188,32 +189,35 @@ the correct Passphrase. But you can confirm it via the unique Extended Fingerpri
 ***Note:*** *The ColdCard does not remember your passphrase, you must enter it everytime you turn on the device. To do so enter your PIN then select ***Passphrase --> Restore Saved***. 
         Select the correct passphrase, after loading the passphrase will be in effect until you logout. 
         For more detailed information on passphrases see the*
-        <a class="text-[#8cb4ff] underline-offset-auto" href="https://coldcard.com/docs/passphrase/#using-a-saved-passphrase">ColdCard Docs</a>.
+        <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://coldcard.com/docs/passphrase/#using-a-saved-passphrase">ColdCard Docs</a>.
 
 <br>
 
 <p class="text-lg pb-2 font-semibold">Summary:</p>
 
 Congrats, you've successfully set up your coldcard with a 24 word seed and a Passphrase. at this point you should have the following:
-a backup card with your **pin suffix + prefix** as well as your **2 anti-phishings** words, your **24 seed words** and that seed's **master fingerprint**. 
+a backup card with your **pin suffix + prefix** as well as your **2 anti-phishings** words, your **24 seed words** and that seed's **Extended fingerprint**. 
 You should also have an encrypted backup of your **Passphrase** and the new **Master Fingerprint**. 
 
 <br>
 
 ***Note:*** *Your Coldcard stores your 24 seed words but not your Passphrase, everytime you access your wallet you'll need to enter your Passphrase.*
-*after adding the passphrase double check that it's the correct wallet by confirming that the master fingerpint matches.*
+*after adding the passphrase double check that it's the correct wallet by confirming that the Extended fingerpint matches.*
 
 <br>
 
-- For more details on how Passphrases work click **[here](https://coldcard.com/docs/passphrase/#passphrases-and-your-coldcard)**.
+- For more details on how Passphrases work click
+<a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://coldcard.com/docs/passphrase/#passphrases-and-your-coldcard">here</a>.
 
 <br>
 
-- To view Coldcard's official documention click **[here](https://coldcard.com/docs/)**.
+- To view Coldcard's official documention click 
+<a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://coldcard.com/docs/">here</a>.
 
 <br>
 
-- To learn about some of Coldcard's best features checkout Econoalchemist's great blog post **[here](https://www.econoalchemist.com/post/my-top-10-coldcard-features)**.
+- To learn about some of Coldcard's best features checkout Econoalchemist's great blog post
+<a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://www.econoalchemist.com/post/my-top-10-coldcard-features">here</a>.
 
 <br>
 

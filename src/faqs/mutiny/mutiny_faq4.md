@@ -1,15 +1,25 @@
 ### How do I send bitcoin?
 
+<p class="text-lg pb-4 font-semibold">Sending Bitcoin</p>
+
 **1\.** To send bitcoin, tap on the red **+** icon in the bottom right corner, then select **Send**.
+
+<br>
 
 **2\.** From here you can paste a bitcoin address or click the icon in the top right corner to scan a QR code.
 
+<br>
+
 **3\.** Enter the amount you wish to send in sats, confirm the associated fee and press **Confirm Send**.
 
-**'4\.** The transaction will be broadcasted and if successful you'll see a **green checkmark**, press on **Nice** to go back to the main page.
+<br>
+
+**4\.** The transaction will be broadcasted and if successful you'll see a **green checkmark**, press on **Nice** to go back to the main page.
+
+<br>
 
 **5\.** Your transaction will appear here and will likely appear as **pending**. Tap on it to see details. 
 
-&nbsp;
+<br>
 
-Congrats, you've sent your first on-chain bitcoin transaction using a self-custodial bitcoin wallet. 
+Congrats, you've sent your first On-chain bitcoin transaction using a self-custodial bitcoin wallet. 

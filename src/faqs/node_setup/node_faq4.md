@@ -1,18 +1,21 @@
 ## RaspiBlitz Details & Resources 
 
+<p class="text-lg pb-4 font-semibold">Choice #3: RaspiBlitz</p>
+
 RaspiBlitz is the Do-It-Yourselfers wet dream. One of the original DIY Bitcoin and Ligthning node implementations.
-For those who want to get their hands dirty with a Raspiberry Pi or 2. You can't go wrong with the RaspiBlitz.
+For those who want to get their hands dirty with a Raspiberry Pi. You can't go wrong with the RaspiBlitz.
 
 <br>
 
-<a href="#">
+<a href="./../../../raspiblitz_graphics.jpg" target="_blank">
     <img id="raspiblitz" src="./../../../raspiblitz_graphics.jpg" alt="raspiblitz graphics" width="600"/> 
 </a>
 
 <br>
 
+<p class="text-lg pb-2 font-semibold">Features:</p>
 
-**Features**
+-- RaspiBlitz is <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://github.com/fusion44/raspiblitz/blob/dev/LICENSE" target="_blank">open-source and available under an MIT license</a>
 
 -- Supports LND & CoreLightning implementations.
 
@@ -23,25 +26,31 @@ For those who want to get their hands dirty with a Raspiberry Pi or 2. You can't
 -- Run your own BTCPay Server or Mempool explorer.  
 
 -- Several other services available via the SSH menu
+
+-- The original DIY node, excellent for thinkerers.
+
  
 <br>
 
-**Considerations**
+<p class="text-lg pb-2 font-semibold">Considerations:</p>
 
 -- Advanced features are only available via the SSH.
 
 -- Recommended hardware stack uses Raspiberry Pi, not suitable for large scale deployment
 
+-- Bitcoin + Lightning only. Is not an all-in-one personal home server like Start9.
+
 <br>
 
-**Resources**
+<p class="text-lg pb-2 font-semibold">Resources:</p>
 
-**<ins><a href="https://docs.raspiblitz.org/docs/intro" style="color:#8cb4ff;">Build your own RaspiBlitz's</a><ins>**
+**\-** <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://shop.fulmo.org/" target="_blank">Buy a pre-made RaspiBlitz</a>
 
-**<ins><a href="https://docs.raspiblitz.org/docs/category/faqs" style="color:#8cb4ff;">RaspiBlitz's FAQs</a><ins>**
+**\-** <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://docs.raspiblitz.org/docs/intro/" target="_blank">Build your own RaspiBlitz</a>
 
-**<ins><a href="https://docs.raspiblitz.org/docs/category/community-resources" style="color:#8cb4ff;">Get Support</a><ins>**
+**\-** <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://docs.raspiblitz.org/docs/category/community-resources" target="_blank">Get Support</a>
 
-**<ins><a href="https://github.com/raspiblitz/raspiblitz?tab=readme-ov-file" style="color:#8cb4ff;">RaspiBlitz's Github</a><ins>**
+**\-** <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://docs.raspiblitz.org/docs/category/faqs" target="_blank">RaspiBlitz's FAQs</a>
 
-**<ins><a href="https://shop.fulmo.org/" style="color:#8cb4ff;">Buy a pre-made Raspiblitz</a><ins>**
+**\-** <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://github.com/raspiblitz/raspiblitz?tab=readme-ov-file" target="_blank">RaspiBlitz's Github</a>
+

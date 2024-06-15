@@ -11,7 +11,7 @@ Click on **Receive**, add a **Label** to track source of funds (only known to yo
 
 <br>
 
-<a href="#">
+<a href="./../../../receiving_to_multisig.png" target="_blank">
     <img id="sparrow_wallet_multisig_receive" src="./../../../receiving_to_multisig.png" alt="sparrow_wallet_multisig_receive" width="600"/> 
 </a>
  
@@ -22,7 +22,7 @@ considered received and protected by your Multisig setup.<br>
 
 <br>
 
-<a href="#">
+<a href="./../../../transaction_received.png" target="_blank">
     <img id="sparrow_wallet_multisig_received" src="./../../../transaction_received.png" alt="sparrow_wallet_multisig_received" width="600"/> 
 </a>
  
@@ -46,7 +46,7 @@ click on **Create Transaction**.
 
 <br>
 
-<a href="#">
+<a href="./../../../sending_multisig_transaction.png" target="_blank">
     <img id="sparrow_wallet_multisig_send" src="./../../../sending_multisig_transaction.png" alt="sparrow_wallet_multisig_send" width="600"/> 
 </a>
  
@@ -58,7 +58,7 @@ click on **Create Transaction**.
 
 <br>
 
-<a href="#">
+<a href="./../../../verify_the_transaction.png" target="_blank">
     <img id="sparrow_wallet_multisig_send_verify" src="./../../../verify_the_transaction.png" alt="sparrow_wallet_multisig_verfy" width="600"/> 
 </a>
  
@@ -69,7 +69,7 @@ click on **Create Transaction**.
 
 <br>
 
-<a href="#">
+<a href="./../../../save_the_transaction.png" target="_blank">
     <img id="sparrow_wallet_multisig_send_save" src="./../../../save_the_transaction.png" alt="sparrow_wallet_multisig_save" width="600"/> 
 </a>
  
@@ -121,7 +121,7 @@ click on **Create Transaction**.
          
 <br> 
 
-<a href="#">
+<a href="./../../../signed_ready_to_broadcast.png" target="_blank">
     <img id="sparrow_wallet_multisig_signed_broadcast" src="./../../../signed_ready_to_broadcast.png" alt="sparrow_wallet_multisig_signed_broadcast" width="600"/> 
 </a>
  
@@ -131,7 +131,7 @@ click on **Create Transaction**.
 
 <br>
 
-<a href="#">
+<a href="./../../../transaction_sent.png" target="_blank">
     <img id="sparrow_wallet_multisig_transaction_sent" src="./../../../transaction_sent.png" alt="sparrow_wallet_multisig_transaction_sent" width="600"/> 
 </a>
 

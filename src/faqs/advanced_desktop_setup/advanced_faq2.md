@@ -73,13 +73,13 @@ The passphrase to each wallet can be stored alongside its extended fingerprint b
 <br>
 
 Your digital encrypted backups are great but digital material can become corrupted or damaged. Make sure to use 
-**<a class="text-[#8cb4ff] underline-offset-auto" href="https://store.coinkite.com/store/microsd-cc">industrial grade MicroSD cards<a>**, these are relatively inexpensive 
+**<a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://store.coinkite.com/store/microsd-cc">industrial grade MicroSD cards<a>**, these are relatively inexpensive 
 so you can create multiple backups if you wish and store them separately in different locations.
 
 <br>
 
 Ultimately, you must decide what your threat level is and what level of security you require.
-Do not overcomplicate this for the sake of wanting **"The Best"** setup. Just KISS, **<a class="text-[#8cb4ff] underline-offset-auto" href="https://en.wikipedia.org/wiki/KISS_principle">Keep It Simple Stupid<a>**.
+Do not overcomplicate this for the sake of wanting **"The Best"** setup. Just KISS, **<a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://en.wikipedia.org/wiki/KISS_principle">Keep It Simple Stupid<a>**.
 
 <br>
 
