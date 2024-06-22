@@ -83,7 +83,7 @@ fn Menu(faq_title: String, faq_content: String) -> impl IntoView {
             text-left text-gray-900 border border-gray-500 rounded-xl 
             hover:bg-[#3c6594]") aria-expanded="true" aria-controls="accordion-collapse-body" 
             on:click=move |_| { set_menu_clicked.update(|menu| *menu = !*menu)} >
-                <span class="text-white text-md" inner_html=faq_title/>
+                <span class="text-white text-lg" inner_html=faq_title/>
                 <svg data-accordion-icon class="w-3 h-3 rotate-180 shrink-0" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 10 6">
                     <path stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5 5 1 1 5"/>
                 </svg>
@@ -114,7 +114,7 @@ pub fn AccordionMenu(#[prop(optional)] faq_name: String) -> impl IntoView {
                 match faqs.get() {
                     Some(Ok(faqs_vec)) => {
                         view! {
-                            <div class="flex flex-col">
+                            <div class="px-6 flex flex-col lg:px-0">
                                 <For
                                     each=move || faqs_vec.clone()
                                     key= |faqs| faqs.id
