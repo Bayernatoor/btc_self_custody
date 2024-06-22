@@ -15,18 +15,18 @@ pub fn NavBar() -> impl IntoView {
     let (menu_clicked, set_menu_clicked) = create_signal(false);
 
     view! {
-             <div class="bg-[#123c64] shadow-md text-white sticky top-0 z-10 max-w-10xl mx-auto p-4 flex justify-between items-center font-sans">
+             <div class="bg-[#123c64] text-white sticky top-0 z-10 w-full mx-auto p-8 flex justify-between items-center">
                 <Show
                     when=move || guide()
                     fallback=|| view! {
                             <div>
-                                <h1 class="text-2xl font-medium text-white"><a href="/">"We Hodl BTC"</a></h1>
+                                <div class="text-3xl lg:text-4xl font-medium text-white font-title"><a href="/">"WE HODL BTC"</a></div>
                             </div>
                     }
                 >
                     <BackButton button_image=back_button.clone() reload=true/>
                 </Show>
-                    <div class="hidden text-lg font-heading space-x-8 lg:flex">
+                    <div class="hidden text-2xl space-x-8 lg:flex font-questrial">
                         <a href="/guides">
                             "Guides"
                         </a>

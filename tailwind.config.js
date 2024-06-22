@@ -6,8 +6,8 @@ module.exports = {
   },
   theme: {
     fontFamily: {
-        sans: ["Nunito Sans", "sans-serif"],
-        heading: ["Questrial", "sans-serif"]
+        questrial: ["Questrial", "sans-serif"],
+        title: ["Oswald", "sans-serif"]
     },
     extend: {
       animation: {
