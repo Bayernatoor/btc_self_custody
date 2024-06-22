@@ -41,7 +41,7 @@ where
 
     view! {
         <a href=path>
-            <button class="flex justify-center shrink-0 h-20 w-72 p-4 mx-auto bg-white rounded-xl items-center space-x-4 shadow-inner" on:click=on_click>
+            <button class="flex justify-center shrink-0 h-20 w-72 p-4 mx-auto bg-white rounded-xl items-center space-x-4 hover:bg-[#f2f2f2] shadow-inner" on:click=on_click>
               <div class="shrink-0">
                 <img class="h-12 w-12 rounded-md" src=img_url alt=img_alt/>
               </div>
@@ -81,7 +81,7 @@ pub fn DownloadButton(
     }
     view! {
         <a href=href target="_blank" rel="external">
-            <button class=format!("flex {} p-2 shrink-0 h-12 w-36 mx-auto bg-white rounded-xl items-center space-x-4 shadow-inner", flex_justify.get_untracked())>
+            <button class=format!("flex {} p-2 shrink-0 h-12 w-36 mx-auto bg-white rounded-xl items-center space-x-4 hover:bg-[#f2f2f2] shadow-inner", flex_justify.get_untracked())>
                 <div class="shrink">
                     <img class=format!("h-{} w-{}", height.get(), width.get()) src=format!("{}", logo) alt=format!("{}", alt_txt) />
                 </div>
@@ -156,7 +156,7 @@ pub fn BeginnerPageTemplate(
 
     // renders the guides/basic/* route
     view! {
-        <div id="basic" class="flex flex-col max-w-3xl mx-auto pb-10 animate-fadeinone md:transform md:scale-125 md:pt-20" >
+        <div id="basic" class="flex flex-col max-w-3xl mx-auto pb-10 animate-fadeinone md:pt-20" >
             <div class="flex flex-col p-6 pt-10 max-w-3xl mx-auto">
                     <h1 class="flex justify-center text-center text-[36px] text-white font-semibold">{title}</h1>
                 <div class="flex justify-start pt-4 max-w-sm">
@@ -217,7 +217,7 @@ pub fn BeginnerDesktopPageTemplate(
     let text_color_sparrow = "#6f767c".to_string();
 
     view! {
-        <div id="basic" class="flex flex-col max-w-3xl mx-auto rounded-xl pb-10 animate-fadeinone md:transform md:scale-125 md:pt-20" >
+        <div id="basic" class="flex flex-col max-w-3xl mx-auto rounded-xl pb-10 animate-fadeinone md:pt-20" >
             <div class="flex flex-col p-6 pt-10 max-w-3xl mx-auto">
                     <h1 class="flex justify-center text-center text-[36px] text-white font-semibold">{title}</h1>
                 <div class="flex justify-start pt-4 max-w-sm">
@@ -375,7 +375,7 @@ pub fn BeginnerWalletInstructions(
     if displayed_wallet() == "blue" {
         // Render Blue Wallet instructions
         view! {
-            <div class="flex flex-col max-w-3xl p-4 pt-8 mx-auto rounded-xl animate-fadeinone md:transform md:scale-125 md:pt-28">
+            <div class="flex flex-col max-w-3xl p-4 pt-8 mx-auto rounded-xl animate-fadeinone md:pt-28">
                 <h1 class="flex justify-center text-[36px] font-bold text-[#83d1f4]">"Blue Wallet"</h1>
                 <div class="flex flex-col text-center">
                     <p class="text-white px-4">

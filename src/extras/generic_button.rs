@@ -26,7 +26,7 @@ pub fn GenericButton(
 
     view! {
         <a href=path>
-            <button class="flex justify-center shrink-0 h-18 w-72 p-2 mx-auto bg-white rounded-xl items-center">
+            <button class="flex justify-center shrink-0 h-18 w-72 p-2 mx-auto bg-white rounded-xl items-center hover:bg-[#f2f2f2]">
               <div class="flex justify-center basis-1/3 shrink-0">
                 <img class=format!("h-{} w-{}", height.get(), width.get()) src=img_url alt=img_alt/>
               </div>
@@ -64,7 +64,7 @@ pub fn GenericExternalButton(
 
     view! {
         <a href=path rel="noreferrer" target="_blank" rel="noreferrer" class="flex h-18 w-72">
-            <button class="flex justify-center shrink-0 h-18 w-72 p-4 mx-auto bg-white rounded-xl items-center space-x-4 shadow-inner">
+            <button class="flex justify-center shrink-0 h-18 w-72 p-4 mx-auto bg-white rounded-xl items-center space-x-4 shadow-inner hover:bg-[#f2f2f2]">
               <div class="flex justify-center basis-1/3">
                 <img class=format!("h-{} w-{}", height.get(), width.get()) src=img_url alt=img_alt/>
               </div>
@@ -91,7 +91,7 @@ pub fn GenericImageSubTextButton(
 ) -> impl IntoView {
     view! {
         <a href=path rel="noreferrer" target="_blank">
-            <button class="flex justify-center shrink-0 h-18 w-72 p-2 mx-auto bg-white rounded-xl items-center space-x-4 shadow-inner">
+            <button class="flex justify-center shrink-0 h-18 w-72 p-2 mx-auto bg-white rounded-xl items-center space-x-4 shadow-inner hover:bg-[#f2f2f2]">
               <div>
                 //<img class=format!("h-{} w-{} inline-flex", height.get(), width.get()) src=img_url alt=img_alt/>
                 <h3 class=format!("text-lg font-medium text-[{text_color}]")>{title}</h3>
