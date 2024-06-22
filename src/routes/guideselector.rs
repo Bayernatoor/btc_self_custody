@@ -72,13 +72,15 @@ where
                     key= |guide| guide.id
                     children=move |guide| {
                         view! {
-                        <button class="flex-grow-0 max-w-md-">
-                            <h2 class="w-48 flex items-center justify-center font-semibold text-[#f79231]">
-                                <div class="box-border p-5 bg-white text-2xl rounded-2xl no-underline text-[#f79231] hover:bg-[#f2f2f2] w-full transition ease-in-out duration-300">
-                                    <a href=guide.path>{guide.device}</a>
-                                </div>
-                            </h2>
-                        </button>
+                            <a href=guide.path>
+                                <button class="flex-grow-0 max-w-md-">
+                                    <h2 class="w-48 flex items-center justify-center font-semibold text-[#f79231]">
+                                        <div class="box-border p-5 bg-white text-2xl rounded-2xl no-underline text-[#f79231] hover:bg-[#f2f2f2] w-full transition ease-in-out duration-300">
+                                            <span>{guide.device}</span>
+                                        </div>
+                                    </h2>
+                                </button>
+                            </a>
                         }.into_view()
                     }
                 />
