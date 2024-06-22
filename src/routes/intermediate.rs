@@ -15,7 +15,7 @@ pub fn IntermediateIntroPage() -> impl IntoView {
         ".to_string();
 
     view! {
-        <div id="basic" class="flex flex-col max-w-3xl mx-auto pb-10 animate-fadeinone md:transform md:scale-125 md:pt-20" >
+        <div id="basic" class="flex flex-col max-w-3xl mx-auto pb-10 animate-fadeinone md:pt-20" >
             <div class="flex flex-col p-6 pt-10 max-w-3xl mx-auto">
                     <h1 class="flex justify-center text-[36px] text-white font-semibold">{title}</h1>
                 <div class="flex justify-start pt-4 max-w-sm">
@@ -59,7 +59,7 @@ pub fn IntermediateHardwarePage() -> impl IntoView {
 
     view! {
 
-        <div id="hardware_page" class="flex flex-col max-w-3xl mx-auto p-5 animate-fadeinone md:transform md:scale-125 md:pt-20">
+        <div id="hardware_page" class="flex flex-col max-w-3xl mx-auto p-5 animate-fadeinone md:pt-20">
             <div class="flex flex-col p-6 pt-20 max-w-3xl mx-auto">
                 <h1 class="flex justify-center text-2xl text-white font-semibold">{title}</h1>
             </div>

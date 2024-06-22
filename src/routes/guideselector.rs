@@ -25,7 +25,6 @@ impl GuideDetails {
         }
     }
 }
-
 #[allow(clippy::redundant_closure)]
 #[component]
 fn LevelButton<F>(
@@ -62,34 +61,35 @@ where
         <Show
             when=move || setter()
             fallback=move || view! {
-                <button class="flex flex-col p-2 max-w-sm mx-auto w-64 bg-slate-100 rounded-xl flex items-center mt-2" class:hidden=move || hidden() on:click=on_click.clone()>
-                    <div class="text-2xl font-semibold text-[#f79231]">{name.clone()}</div>
-                    <p class="text-sm text-[#123c64] mt-2">{subtitle.clone()}</p>
+                <button class="flex flex-col p-4 max-w-md mx-auto w-72 bg-white rounded-xl items-center mt-6 shadow-md hover:bg-[#f2f2f2] transition ease-in-out duration-300" class:hidden=move || hidden() on:click=on_click.clone()>
+                    <div class="text-3xl font-bold text-[#f79231]">{name.clone()}</div>
+                    <p class="text-lg text-[#123c64] mt-3">{subtitle.clone()}</p>
                 </button>}
         >
-            <div class="flex justify-center flex-col items-center py-4 gap-4 animate-fadeinone">
+            <div class="flex flex-col items-center py-5 gap-5 animate-fadeinone">
                 <For
                     each=move || guide()
                     key= |guide| guide.id
                     children=move |guide| {
                         view! {
-                        <button class="h-12 flex-grow-0">
-                            <h2 class="w-32 flex items-center justify-center font-semibold text-[#f79231]">
-                                <a class="box-border p-4 bg-slate-100 rounded-2xl no-underline text-[#f79231] hover:bg-[#f4a949] w-full" href=guide.path>{guide.device}</a>
+                        <button class="flex-grow-0 max-w-md-">
+                            <h2 class="w-48 flex items-center justify-center font-semibold text-[#f79231]">
+                                <div class="box-border p-5 bg-white text-2xl rounded-2xl no-underline text-[#f79231] hover:bg-[#f2f2f2] w-full transition ease-in-out duration-300">
+                                    <a href=guide.path>{guide.device}</a>
+                                </div>
                             </h2>
                         </button>
                         }.into_view()
                     }
                 />
             </div>
-            <div class="mt-4 flex flex-col md:flex-row items-center justify-center">
-                <BackButton button_image="./../../../off_white_back_arrow.png".to_string() reload=true />
+            <div class="mt-5 flex flex-col md:flex-row items-center justify-center">
+                <BackButton button_image="./../../../arrow-111-512.png".to_string() reload=true />
             </div>
         </Show>
     }.into_view()
 }
 
-/// Renders the guides page.
 #[allow(clippy::redundant_closure)]
 #[allow(non_camel_case_types)]
 #[component]
@@ -107,41 +107,39 @@ pub fn GuideSelector() -> impl IntoView {
     // devices to be included in guide level
     let basic_devices: Vec<String> = vec![
         "Android".to_string(),
-        "Ios".to_string(),
+        "iOS".to_string(),
         "Desktop".to_string(),
     ];
     let intermediate_devices: Vec<String> = vec!["Desktop".to_string()];
     let advanced_devices: Vec<String> = vec!["Desktop".to_string()];
 
     view! {
-      <div class="container mx-auto max-w-5xl flex flex-col md:flex-row justify-center
-                 items-center px-20 pt-20 pb-10 text-white opacity-0 animate-fadeinone font-sans gap-8 md:mt-10 md:transform md:scale-125">
-        <div class="basis-1/4">
-            <img src="./../../../lock_new_blue.png" alt="Financial privacy lock"/>
-        </div>
-        <div class="basis-1/2">
-            <LevelButton on_click=move |_| {set_basic_clicked.update(|value| *value = !*value); set_intermediate_hidden.set(true);
-                                    set_advanced_hidden.set(true)} name="Basic".to_string()
-                                    subtitle="I have a teeny weeny stack".to_string()
-                                    hidden=basic_hidden setter=basic_clicked devices=basic_devices/>
+        <div class="grid gap-4 mx-auto justify-items-center max-w-5xl my-20 opacity-0 animate-fadeinone lg:grid-cols-2 lg:mt-0 lg:my-64">
+            <div class="flex justify-center items-center">
+                <img class="w-64 h-auto lg:w-80" src="./../../../lock_new_blue.png" alt="Financial privacy lock"/>
+            </div>
+            <div class="">
+                <LevelButton on_click=move |_| { set_basic_clicked.update(|value| *value = !*value); set_intermediate_hidden.set(true); set_advanced_hidden.set(true) }
+                             name="Basic".to_string()
+                             subtitle="I have a teeny weeny stack".to_string()
+                             hidden=basic_hidden
+                             setter=basic_clicked
+                             devices=basic_devices/>
 
-            <LevelButton on_click=move |_| {set_intermediate_clicked.update(|value| *value = !*value);
-                                    set_basic_hidden.set(true); set_advanced_hidden.set(true)} name="Intermediate".to_string()
-                                    subtitle="I have an average stack".to_string()
-                                    hidden=intermediate_hidden setter=intermediate_clicked devices=intermediate_devices/>
+                <LevelButton on_click=move |_| { set_intermediate_clicked.update(|value| *value = !*value); set_basic_hidden.set(true); set_advanced_hidden.set(true) }
+                             name="Intermediate".to_string()
+                             subtitle="I have an average stack".to_string()
+                             hidden=intermediate_hidden
+                             setter=intermediate_clicked
+                             devices=intermediate_devices/>
 
-            <LevelButton on_click=move |_| {set_advanced_clicked.update(|value| *value = !*value); set_basic_hidden.set(true);
-                                    set_intermediate_hidden.set(true)} name="Advanced".to_string()
-                                    subtitle="I am well equipped".to_string()
-                                    hidden=advanced_hidden setter=advanced_clicked devices=advanced_devices/>
-        </div>
+                <LevelButton on_click=move |_| { set_advanced_clicked.update(|value| *value = !*value); set_basic_hidden.set(true); set_intermediate_hidden.set(true) }
+                             name="Advanced".to_string()
+                             subtitle="I am well equipped".to_string()
+                             hidden=advanced_hidden
+                             setter=advanced_clicked
+                             devices=advanced_devices/>
+            </div>
       </div>
-      //<div class="text-center mt-3 md:mt-0 italic max-w-3xl mx-auto">
-      //  <p class="text-white mx-10 pb-10">"Controlling a bitcoin private key grants absolute authority over the
-      //      associated bitcoin, embodying the ethos of the bitcoin movement. Self custody and personal
-      //      responsibility restore power and sovereignty, eliminating reliance on third parties,
-      //      particularly the state."
-      //  </p>
-      //</div>
     }
 }
