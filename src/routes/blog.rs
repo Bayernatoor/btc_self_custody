@@ -4,12 +4,18 @@ use leptos::*;
 #[component]
 pub fn BlogPage() -> impl IntoView {
     view! {
-        <div id="about" class="flex flex-col max-w-3xl mx-auto rounded-xl pb-10 animate-fadeinone">
-            <div class="flex flex-col p-6 pt-10 max-w-3xl mx-auto">
-                    <h1 class="flex justify-center text-[36px] text-white font-semibold">"Posts"</h1>
-                <div class="flex justify-center pt-4 max-w-sm">
-                    <p class="text-sm text-white">"Random thoughts about bitcoin and stuff."</p>
+       <div id="about" class="grid gap-6 max-w-5xl mx-auto pb-20 animate-fadeinone grid-rows-[auto_auto_1fr] lg:gap-8">
+            // Section 1: Title and Subtitle
+            <div class="flex flex-col mx-auto px-4 pt-10 lg:pt-0">
+                <h1 class="text-center text-[2.25rem] text-[#f7931a] font-semibold font-title leading-tight lg:text-[4rem]">"Posts"</h1>
+                <div class="text-center max-w-sm mx-auto pt-4">
+                    <p class="text-lg text-white">"Coming...soon ™"</p>
                 </div>
+            </div>
+
+            // Section 2: Under Construction Image
+            <div class="px-4 lg:pt-0 lg:px-0 flex justify-center">
+                <img src="./../../../writing.jpg" alt="Under construction image" class="max-w-full h-auto"/>
             </div>
         </div>
     }

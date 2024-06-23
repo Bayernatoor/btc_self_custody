@@ -122,7 +122,7 @@ pub fn GuideSelector() -> impl IntoView {
             </div>
             <div class="">
                 <LevelButton on_click=move |_| { set_basic_clicked.update(|value| *value = !*value); set_intermediate_hidden.set(true); set_advanced_hidden.set(true) }
-                             name="Basic".to_string()
+                             name="Beginner".to_string()
                              subtitle="I have a teeny weeny stack".to_string()
                              hidden=basic_hidden
                              setter=basic_clicked

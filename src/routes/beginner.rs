@@ -180,9 +180,9 @@ pub fn BeginnerPageTemplate(
             <div class="px-6 lg:pb-4 lg:px-0">
                 <hr class="border border-solid border-gray-400 mx-auto w-full mb-6"/>
     
-                <h2 class="text-center pb-4 text-xl font-semibold text-[#f7931a] font-semibold">"Pick A Wallet"</h2>
+                <h2 class="text-center pb-4 text-[1.5rem] font-semibold text-[#f7931a] font-semibold">"Pick A Wallet"</h2>
                 
-                <div class="flex flex-col justify-center lg:flex-row px-6 py-2 gap-4 max-w-2xl mx-auto">
+                <div class="flex flex-col mx-auto justify-center lg:flex-row px-6 gap-4">
                     <WalletButton on_click=move |_| {set_blue_clicked(true); set_blue_details(true);}
                         selected_wallet=WalletName::Blue platform=platform()
                         wallet_title=wallet_name_blue.clone() short_desc=short_desc_blue.clone() img_url=img_url_blue.clone()
