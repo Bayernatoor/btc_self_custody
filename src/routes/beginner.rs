@@ -167,7 +167,7 @@ pub fn BeginnerPageTemplate(
                     <p class="text-sm text-white italic">{quote_author}</p>
                 </div>
             </div>
-    
+
             // Section 2: Intro
             <div class="px-6 pt-4 lg:pt-0 lg:px-0">
                 <p class="text-xl font-semibold text-white pb-2 ">"Bitcoin Self-Custody: The act of taking possession of a bitcoin private key."</p>
@@ -175,13 +175,13 @@ pub fn BeginnerPageTemplate(
                 <p class="text-lg text-white pb-2"><strong>{wallet_name_blue.clone()}</strong>{wallet_one_text}</p>
                 <p class="text-lg text-white"><strong>{wallet_name_mutiny.clone()}</strong>{wallet_two_text}</p>
             </div>
-    
+
             // Section 3: Everything Else
             <div class="px-6 lg:pb-4 lg:px-0">
                 <hr class="border border-solid border-gray-400 mx-auto w-full mb-6"/>
-    
+
                 <h2 class="text-center pb-4 text-[1.5rem] font-semibold text-[#f7931a] font-semibold">"Pick A Wallet"</h2>
-                
+
                 <div class="flex flex-col mx-auto justify-center lg:flex-row px-6 gap-4">
                     <WalletButton on_click=move |_| {set_blue_clicked(true); set_blue_details(true);}
                         selected_wallet=WalletName::Blue platform=platform()
@@ -227,18 +227,18 @@ pub fn BeginnerDesktopPageTemplate(
                     <p class="text-sm text-white italic">{quote_author}</p>
                 </div>
             </div>
-        
+
             // Section 2: Intro
             <div class="px-6 pt-4 lg:pt-0 lg:px-0">
                 <p class="text-lg text-white">{intro}</p>
             </div>
-        
+
             // Section 3: Everything Else
             <div class="px-6 lg:pb-4 lg:px-0">
                 <hr class="border border-solid border-gray-400 mx-auto w-full mb-6"/>
-        
+
                 <h2 class="text-center pb-4 text-xl font-semibold text-[#f7931a]">"Recommended Wallet"</h2>
-                
+
                 <div class="flex flex-col justify-center lg:flex-row px-6 py-2 gap-4 max-w-2xl mx-auto">
                     <WalletButton on_click=move |_| {set_sparrow_clicked(true);}
                         selected_wallet=WalletName::Sparrow platform="desktop".to_string()
@@ -371,7 +371,7 @@ pub fn BeginnerWalletInstructions(
 
     if displayed_wallet() == "blue" {
         view! {
-            <div id="basic" class="grid gap-6 max-w-5xl mx-auto pb-20 animate-fadeinone grid-rows-[auto_auto_1fr] lg:gap-8"> 
+            <div id="basic" class="grid gap-6 max-w-5xl mx-auto pb-20 animate-fadeinone grid-rows-[auto_auto_1fr] lg:gap-8">
                 // Section 1: Title, Quote, and Quote Author
                 <div class="mt-10 lg:mt-0 px-6">
                     <h1 class="text-center text-[2.25rem] font-semibold text-[#f7931a] lg:text-[3rem]">"Blue Wallet"</h1>
@@ -382,7 +382,7 @@ pub fn BeginnerWalletInstructions(
                         <p class="text-md text-white italic">"A freedom and self-sovereign tool, disguised as a cute little Blue app in your pocket."</p>
                     </div>
                 </div>
-        
+
                 // Section 2: Download Options
                 <div class="flex flex-col mx-auto justify-center px-6 py-2 max-w-2xl mx-auto gap-4">
                     <Show
@@ -394,7 +394,7 @@ pub fn BeginnerWalletInstructions(
                         <DownloadButton href=blue_apple_store.clone() logo=apple_store_logo.clone() alt_txt=apple_store_alt.clone()/>
                     </Show>
                 </div>
-        
+
                 // Section 3: Start Here
                 <div class="mx-auto max-w-5xl p-4 w-full">
                     <div class="mx-auto border border-solid border-gray-400"></div>
@@ -416,7 +416,7 @@ pub fn BeginnerWalletInstructions(
                         <p class="text-md text-white italic">"Mutiny is a self-custodial lightning wallet that runs everywhere."</p>
                     </div>
                 </div>
-        
+
                 // Section 2: Download Options
                 <div class="flex flex-col mx-auto justify-center px-6 py-2 max-w-2xl mx-auto gap-4">
                     <Show
@@ -428,7 +428,7 @@ pub fn BeginnerWalletInstructions(
                         <DownloadButton href=mutiny_apple_store.clone() logo=apple_store_logo.clone() alt_txt=apple_store_alt.clone()/>
                     </Show>
                 </div>
-        
+
                 // Section 3: Start Here
                 <div class="mx-auto max-w-5xl p-4 w-full">
                     <div class="mx-auto border border-solid border-gray-400"></div>
@@ -447,12 +447,12 @@ pub fn BeginnerWalletInstructions(
                         <p class="text-white text-lg font-semibold px-4">"Gain Financial Sovereignty with Sparrow Wallet."</p>
                     </div>
                 </div>
-        
+
                 // Section 2: Download Options
                 <div class="flex flex-col mx-auto justify-center px-6 py-2 mx-auto gap-4 lg:px-4">
                     <DownloadButton href=sparrow_download.clone() logo=img_url_sparrow.clone() alt_txt=img_alt_sparrow.clone() button_name="Get Sparrow".to_string()/>
                 </div>
-        
+
                 // Section 3: Start Here
                 <div class="mx-auto max-w-5xl p-4 w-full">
                     <div class="mx-auto border border-solid border-gray-400"></div>
@@ -461,6 +461,5 @@ pub fn BeginnerWalletInstructions(
                 </div>
             </div>
         }
-
     }
 }

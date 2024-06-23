@@ -18,7 +18,7 @@ pub fn AboutPage() -> impl IntoView {
                 <div class="flex flex-col p-6 mx-auto text-left text-white leading-loose lg:text-left">
                     <h2 class="text-2xl lg:text-3xl text-[#f7931a] font-semibold">"Me"</h2>
                     <p class="text-lg pt-2">
-                        "I go by Bayer, I am a Bitcoiner who believes bitcoin is the most significant discovery of our time. 
+                        "I go by Bayer, I am a Bitcoiner who believes bitcoin is the most significant discovery of our time.
                         In a world conditioned to spend endlessly, bitcoin rewards those who embrace saving, fostering a mindset 
                         of low time preference and incentivizing long-term thinking and planning."
                     </p>
