@@ -5,8 +5,8 @@ use leptos::*;
 #[allow(non_snake_case)]
 pub fn AdvancedPage() -> impl IntoView {
     let title = "Advanced Self-Custody Guide".to_string();
-    let quote = "".to_string();
-    let quote_author = "".to_string();
+    let _quote = "".to_string();
+    let _quote_author = "".to_string();
     let explainer  = "Taking self-custody of your bitcoin comes with great responsibility, especially when that bitcoin could become generational wealth, therefore it is
         wise to take extra precautions. That being said, we should take care to keep things as simple as possible, while also ensuring a high degree of privacy and security.
         A secure and private advanced self-custody setup looks like the following: ".to_string();
