@@ -1,5 +1,5 @@
-use crate::extras::navbar::*;
 use crate::extras::footer::*;
+use crate::extras::navbar::*;
 use crate::routes::about::*;
 use crate::routes::advanced::*;
 use crate::routes::beginner::*;

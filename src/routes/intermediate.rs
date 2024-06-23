@@ -59,7 +59,7 @@ pub fn IntermediateHardwarePage() -> impl IntoView {
 
     view! {
         <div id="hardware_page" class="grid gap-6 max-w-5xl mx-auto pb-20 animate-fadeinone grid-rows-[auto_auto_1fr] lg:gap-8 lg:mt-10">
-            // Section 1: Title 
+            // Section 1: Title
             <div class="flex flex-col mx-auto pt-10 lg:pt-0">
                 <h1 class="text-center text-[2rem] text-[#f7931a] font-semibold leading-tight lg:text-[2.25rem]">{title}</h1>
             </div>

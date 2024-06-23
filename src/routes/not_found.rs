@@ -1,5 +1,5 @@
-use leptos::*;
 use crate::extras::back::BackButton;
+use leptos::*;
 
 /// Renders the About page of the application.
 #[component]
