@@ -114,7 +114,7 @@ pub fn AccordionMenu(#[prop(optional)] faq_name: String) -> impl IntoView {
                 match faqs.get() {
                     Some(Ok(faqs_vec)) => {
                         view! {
-                            <div class="px-6 flex flex-col lg:px-0">
+                            <div class="px-2 flex flex-col lg:px-0">
                                 <For
                                     each=move || faqs_vec.clone()
                                     key= |faqs| faqs.id

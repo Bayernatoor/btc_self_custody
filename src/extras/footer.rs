@@ -15,11 +15,11 @@ pub fn Footer() -> impl IntoView {
                   <h5 class="mb-2 font-semibold uppercase">"We Hodl BTC"</h5>
 
                   <p class="mx-4 lg:p-0 lg:mx-0 lg:mt-2">
-                    "We Hodl BTC is a free resource created to help bitcoin users take full custody of their bitcoin. Following the guides will help you understand"
+                    "We Hodl BTC is a free resource created to help bitcoin users take full custody of their bitcoin. Whether it's 100 000 satoshis or 100 bitcoins, there's a guide for you."
                   </p>
 
                   <p class="my-2">
-                    "Knowledge is Power"
+                    "Knowledge is Freedom"
                   </p>
                 </div>
                 // right side social links
@@ -44,7 +44,7 @@ pub fn Footer() -> impl IntoView {
                         </a>
 
                         <a
-                          href="primal.net/p/npub1hxcjalw99u4m7vcalnrrgkdvyqftglydrt6tm2q9afnvec55guysrwkq9z"
+                          href="https://primal.net/p/npub1hxcjalw99u4m7vcalnrrgkdvyqftglydrt6tm2q9afnvec55guysrwkq9z"
                           type="button"
                           class="rounded-full bg-[#333333] p-3 uppercase leading-normal text-white shadow-dark-3 shadow-black/30 transition duration-150 ease-in-out hover:shadow-dark-1 focus:shadow-dark-1 focus:outline-none focus:ring-0 active:shadow-1 dark:text-white"
                           data-twe-ripple-init
@@ -64,7 +64,7 @@ pub fn Footer() -> impl IntoView {
               </div>
             </div>
             // centered made by text
-            <div class="w-full pt-2 pb-6 text-center">
+            <div class="w-full pt-2 pb-6 text-center text-[#f7931a]">
               "2024 "
               <a class="underline" href="https://github.com/Bayernatoor">"Made by Bayer"</a>
             </div>

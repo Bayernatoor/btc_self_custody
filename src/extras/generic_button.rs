@@ -31,7 +31,7 @@ pub fn GenericButton(
                 <img class=format!("h-{} w-{}", height.get(), width.get()) src=img_url alt=img_alt/>
               </div>
               <div class="basis-2/3">
-                <h3 class=format!("text-{text_size} font-medium text-[{text_color}]")>{wallet_title}</h3>
+                <h3 class=format!("text-{text_size} font-semibold text-[{text_color}]")>{wallet_title}</h3>
                 <p class="text-slate-500">{short_desc}</p>
               </div>
             </button>
@@ -69,7 +69,7 @@ pub fn GenericExternalButton(
                 <img class=format!("h-{} w-{}", height.get(), width.get()) src=img_url alt=img_alt/>
               </div>
               <div class="basis-2/3">
-                <h3 class=format!("text-md font-semibold text-[{text_color}]")>{wallet_title}</h3>
+                <h3 class=format!("text-lg font-semibold text-[{text_color}]")>{wallet_title}</h3>
                 <p class="text-slate-500">{short_desc}</p>
               </div>
             </button>

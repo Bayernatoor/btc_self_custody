@@ -12,39 +12,38 @@ pub fn AdvancedPage() -> impl IntoView {
         A secure and private advanced self-custody setup looks like the following: ".to_string();
 
     view! {
-        <div id="advanced" class="flex flex-col pb-32 max-w-4xl mx-auto rounded-xl p-4 animate-fadeinone">
-            <div class="flex flex-col p-6 pt-10 max-w-3xl mx-auto">
-                    <h1 class="flex justify-center text-[36px] text-white font-semibold">{title}</h1>
-            </div>
+      <div id="advanced" class="grid gap-6 max-w-5xl mx-auto pb-20 animate-fadeinone grid-rows-[auto_auto_1fr] lg:gap-8">
+         // Section 1: Title
+         <div class="flex flex-col mx-auto px-4">
+             <h1 class="text-center text-[2.25rem] text-[#f7931a] font-title font-semibold lg:text-[3rem]">{title}</h1>
+         </div>
 
-            <p class="font-bold text-lg text-white">"MultiSignature Wallet"</p>
-            <p class="pb-2 text-white">""</p>
-            //<p class="mr-4 text-md text-white">
-            //    "You've got quite the stash to protect now. This Advanced guide builds on-top of our previous basic/intermediate desktop guide."
-            //    <a class="text-[#8cb4ff] underline-offset-auto" href="/guides/basic/desktop">" basic desktop guide "</a>
-            //    "before continuing."
-            //</p>
-            <p class="py-2 text-md text-white">{explainer}</p>
-                <ol class="list-decimal pl-4 pt-2 text-md leading-normal text-white">
-                    <li>"Setup and run your own Bitcoin node"</li>
-                    <li>"Setup a 2 of 3 Multisig in Sparrow Wallet using 3 signing devices"</li>
-                    <li>"Use Sparrow Wallet to coordinate the Multisig. Preferably on a dedicated computer"</li>
-                    <li>"Backup your seed words and passphrases on steel"</li>
-                    <li>"Safely backup and store your Multisig Wallet's Output Descriptors"</li>
-                    <li>"Store the backups and devices in different geographic locations"</li>
-                </ol>
-            <p class="italic pt-4 text-md text-white">
-               "Before starting, I encourage you to read through all the steps below, so as to get an understanding of the options available to you.
-               The advanced section is optional, however, if you decide to implement certain parts, you should to do it from the start."
-            </p>
-           // <a class="text-[#8cb4ff] underline-offset-auto" href="/guides/basic/desktop">" basic desktop guide "</a>
-            <div class="mx-auto max-w-xl p-4 w-full" >
-                <div class="mx-auto border border-solid border-gray-400"></div>
-            </div>
+         //  Section 2: Intro and Steps
+         <div class="px-4 lg:pt-0 lg:px-0">
+             <h2 class="text-left text-[1.5rem] text-[#f7931a] font-semibold">"MultiSignature Wallet"</h2>
+             <p class="py-2 text-md text-white">{explainer}</p>
+             <ol class="list-decimal pl-8 pt-2 text-md leading-normal text-white">
+                 <li>"Setup and run your own Bitcoin node"</li>
+                 <li>"Setup a 2 of 3 Multisig in Sparrow Wallet using 3 signing devices"</li>
+                 <li>"Use Sparrow Wallet to coordinate the Multisig. Preferably on a dedicated computer"</li>
+                 <li>"Backup your seed words and passphrases on steel"</li>
+                 <li>"Safely backup and store your Multisig Wallet's Output Descriptors"</li>
+                 <li>"Store the backups and devices in different geographic locations"</li>
+             </ol>
+             <p class="italic pt-4 text-md text-white">
+                 "Before starting, I encourage you to read through all the steps below, so as to get an understanding of the options available to you.
+                 The advanced section is optional, however, if you decide to implement certain parts, you should to do it from the start."
+             </p>
+         </div>
 
-            <h2 class="flex justify-center font-bold text-xl text-white pt-6 pb-2">"Advanced Setup"</h2>
-            <AccordionMenu faq_name="advanced_desktop_setup".to_string()/>
-        </div>
+         // Section 3: Additional Content and Accordion Menu
+         <div class="px-4 lg:pb-4 lg:px-0">
+             <hr class="border border-solid border-gray-400 mx-auto w-full mb-6"/>
+             <h3 class="py-4 text-center text-[1.5rem] text-[#f7931a] font-semibold">"Advanced Setup"</h3>
+             <AccordionMenu faq_name="advanced_desktop_setup".to_string()/>
+         </div>
+    </div>
+
 
     }
 }
