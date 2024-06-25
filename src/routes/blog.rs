@@ -15,7 +15,7 @@ pub fn BlogPage() -> impl IntoView {
 
             // Section 2: Under Construction Image
             <div class="px-4 lg:pt-0 lg:px-0 flex justify-center">
-                <img src="./../../../writing.jpg" alt="Under construction image" class="max-w-full h-auto"/>
+                <img src="./../../../writing.jpg" alt="Under construction image" class="max-w-full h-auto rounded-md"/>
             </div>
         </div>
     }
