@@ -9,7 +9,8 @@ pub fn AboutPage() -> impl IntoView {
             <header class="flex flex-col mx-auto px-4 pt-10 lg:pt-0 text-center">
                 <h1 class="text-[2.5rem] text-[#f7931a] font-semibold leading-tight font-title pb-2 lg:text-[4rem]">"We Hodl BTC"</h1>
                 <hr class="mx-auto border-2 border-solid border-white w-1/2 lg:w-full"/>
-                <p class="text-lg lg:text-lg text-white pt-4">"We Hodl BTC is about taking self-custody of your bitcoin. The goal is to help everyone take ownership regardless of how many satoshis or bitcoin they own. Bitcoin’s core values are of self resilience, decentralization, trust minimization and preservation of wealth. I believe that taking self-custody of your bitcoin naturally follows."</p>
+                <p class="text-lg lg:text-lg text-white pt-4">"We Hodl BTC is about taking self-custody of your bitcoin. The goal is to help everyone take ownership regardless of how many satoshis or bitcoin they own.
+                                                              Bitcoin’s core values are of self-sovereignty, decentralization, trust minimization and preservation of wealth. I believe that taking self-custody of your bitcoin naturally follows."</p>
             </header>
 
             // Main Content
@@ -22,9 +23,9 @@ pub fn AboutPage() -> impl IntoView {
                         In a world conditioned to spend endlessly, bitcoin rewards those who embrace saving, fostering a mindset 
                         of low time preference and incentivizing long-term thinking and planning."
                     </p>
-                    <p class="text-lg pt-2">"PGP Key: "<a class="underline text-blue-400 hover:text-[#3c6594]" href="./../../../public_key.asc" target="_blank" rel="noopener noreferrer">"download"</a></p>
-                    <p class="text-lg pt-2">"Find me on: "<a class="underline text-blue-400 hover:text-[#3c6594]" href="https://primal.net/p/npub1hxcjalw99u4m7vcalnrrgkdvyqftglydrt6tm2q9afnvec55guysrwkq9z" target="_blank" rel="noopener noreferrer">"Nostr"</a></p>
-                    <p class="text-lg pt-2">"Find me on: "<a class="underline text-blue-400 hover:text-[#3c6594]" href="https://github.com/Bayernatoor" target="_blank" rel="noopener noreferrer">"Github"</a></p>
+                    <p class="text-lg pt-2"><strong>"My PGP Key: "</strong><a class="underline text-blue-400 hover:text-[#3c6594]" href="./../../../public_key.asc" target="_blank" rel="noopener noreferrer">"download"</a></p>
+                    <p class="text-lg pt-2"><strong>"Find me on: "</strong><a class="underline text-blue-400 hover:text-[#3c6594]" href="https://primal.net/p/npub1hxcjalw99u4m7vcalnrrgkdvyqftglydrt6tm2q9afnvec55guysrwkq9z" target="_blank" rel="noopener noreferrer">"Nostr"</a></p>
+                    <p class="text-lg pt-2"><strong>"Find me on: "</strong><a class="underline text-blue-400 hover:text-[#3c6594]" href="https://github.com/Bayernatoor" target="_blank" rel="noopener noreferrer">"Github"</a></p>
                 </div>
 
                 // Contribute Section
@@ -42,7 +43,7 @@ pub fn AboutPage() -> impl IntoView {
                 // Donate Section
                 <div class="flex flex-col p-6 mx-auto text-left text-white leading-loose lg:text-left">
                     <h2 class="text-2xl lg:text-3xl text-[#f7931a] font-semibold">"Donate"</h2>
-                    <p class="text-lg pt-2">"Your contributions help keep the project running and are greatly appreciated. If you want to support me you can do so below. Thank you :)"</p>
+                    <p class="text-lg pt-2">"Your contributions help keep the project running and are greatly appreciated. If you want to support me you can do so below. Thank you!"</p>
                     <p class="text-lg pt-2"><strong>"Lightning Address:"</strong>
                         <a class="underline text-blue-400 hover:text-[#3c6594]" href="lightning:bayer@mutiny.plus" target="_blank" rel="noopener noreferrer">" bayer@mutiny.plus"</a>
                     </p>

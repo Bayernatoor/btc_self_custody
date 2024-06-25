@@ -1,3 +1,4 @@
+use crate::extras::spinner::Spinner;
 use leptos::logging::log;
 use leptos::{server, ServerFnError, *};
 use pulldown_cmark::{html, Options, Parser};
@@ -108,7 +109,7 @@ pub fn AccordionMenu(#[prop(optional)] faq_name: String) -> impl IntoView {
     view! {
     <div>
         <Suspense
-            fallback=move || view! { <div>"Loading...."</div> }
+            fallback=move || view! { <div class="flex justify-center pt-4"><Spinner /></div> }
         >
             {move || {
                 match faqs.get() {
