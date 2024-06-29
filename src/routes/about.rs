@@ -32,7 +32,7 @@ pub fn AboutPage() -> impl IntoView {
                     <h2 class="text-2xl lg:text-3xl text-[#f7931a] font-semibold">"Contribute"</h2>
                     <p class="text-lg pt-2">"This project was developed with the purpose of helping anyone learn about bitcoin self-custody, as well as a means for me to learn Rust and web development.
                                             It is entirely free and open-sourced under an MIT license. Although, this is a personal project, contributions are always welcome, please feel free to open an "
-                                            <a class="underline text-blue-400 hover:text-[#3c6594]" href="https://github.com/Bayernatoor/btc_self_custody" target="_blank" rel="noopener noreferrer">"issue on Github."</a>
+                                            <a class="underline text-blue-400 hover:text-[#3c6594]" href="https://github.com/Bayernatoor/we_hodl_btc" target="_blank" rel="noopener noreferrer">"issue on Github."</a>
                                             </p>
                     <p class="text-lg pt-2"><strong>"Questions?"</strong>" Reach out via Nostr or send me an "
                                             <a class="underline text-blue-400 hover:text-[#3c6594]" href="mailto:bayernator@protonmail.com" target="_blank" rel="noopener noreferrer">"email."</a>

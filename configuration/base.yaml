@@ -1,9 +1,8 @@
-application: 
+application:
   port: 8000
-  host: 127.0.0.1
-database:
+database: 
   host: "localhost"
   port: 5432
   username: "postgres"
   password: "password"
-  database_name: "wehodlbtc"
+  database_name: "we_hodl_btc"
