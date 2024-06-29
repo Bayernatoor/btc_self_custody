@@ -2,13 +2,13 @@
 #[allow(unused_imports)]
 #[cfg(feature = "ssr")]
 use {
-    we_hodl_btc::configuration::{get_configuration, DatabaseSettings},
-    we_hodl_btc::run,
-    we_hodl_btc::telemetry::{get_subscriber, init_subscriber},
     once_cell::sync::Lazy,
     sqlx::{Connection, Executor, PgConnection, PgPool},
     std::net::TcpListener,
     uuid::Uuid,
+    we_hodl_btc::configuration::{get_configuration, DatabaseSettings},
+    we_hodl_btc::run,
+    we_hodl_btc::telemetry::{get_subscriber, init_subscriber},
 };
 
 // Ensure that the `tracing` stack is only initialised once using `once_cell`
