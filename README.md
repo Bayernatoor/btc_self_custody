@@ -1,7 +1,7 @@
-# btc_self_custody
+# WE_HODL_BTC 
 
 Website to help users self custody their bitcoin. Built using [Leptos](https://github.com/leptos-rs/leptos) a Rust
-webframe work library. 
+web framework library. 
 
 ## Launching postgres db:
 
