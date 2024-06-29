@@ -2,10 +2,11 @@
 #[cfg(feature = "ssr")]
 use {
     actix_web::main,
-    btc_self_custody::configuration::get_configuration,
-    btc_self_custody::run,
-    btc_self_custody::telemetry::{get_subscriber, init_subscriber},
+    we_hodl_btc::configuration::get_configuration,
+    we_hodl_btc::run,
+    we_hodl_btc::telemetry::{get_subscriber, init_subscriber},
     sqlx::PgPool,
+    sqlx::postgres::PgPoolOptions,
     std::net::TcpListener,
 };
 
@@ -17,11 +18,11 @@ async fn main() -> std::io::Result<()> {
     init_subscriber(subscriber);
 
     let configuration = get_configuration().expect("Failed to read config");
-    let connection_pool =
-        PgPool::connect(&configuration.database.connection_string())
-            .await
-            .expect("Failed to connect to Postgres.");
-    let address = format!("127.0.0.1:{}", configuration.application_port);
+    let connection_pool = PgPoolOptions::new()
+        .acquire_timeout(std::time::Duration::from_secs(2))
+        .connect_lazy(&configuration.database.connection_string())
+        .expect("Failed to connect to Postgres.");
+    let address = format!("{}:{}", configuration.application.host, configuration.application.port);
     let listener = TcpListener::bind(address)?;
     run(listener, connection_pool).await?.await?;
     Ok(())

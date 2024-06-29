@@ -2,9 +2,9 @@
 #[allow(unused_imports)]
 #[cfg(feature = "ssr")]
 use {
-    btc_self_custody::configuration::{get_configuration, DatabaseSettings},
-    btc_self_custody::run,
-    btc_self_custody::telemetry::{get_subscriber, init_subscriber},
+    we_hodl_btc::configuration::{get_configuration, DatabaseSettings},
+    we_hodl_btc::run,
+    we_hodl_btc::telemetry::{get_subscriber, init_subscriber},
     once_cell::sync::Lazy,
     sqlx::{Connection, Executor, PgConnection, PgPool},
     std::net::TcpListener,

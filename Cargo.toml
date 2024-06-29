@@ -1,8 +1,14 @@
 [package]
-name = "btc_self_custody"
+name = "we_hodl_btc"
 version = "0.1.0"
 authors = ["Bayer <bayernator@protonmail.com"]
 edition = "2021"
+
+[profile.wasm-release]
+inherits = "release"
+opt-level = 'z'
+lto = true
+codegen-units = 1
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -10,7 +16,7 @@ path = "src/lib.rs"
 
 [[bin]]
 path = "src/main.rs"
-name = "btc_self_custody"
+name = "we_hodl_btc"
 
 [dependencies]
 actix-files = { version = "0.6", optional = true }
@@ -27,7 +33,7 @@ wasm-bindgen = "0.2.92"
 serde = { version = "1.0.189", features = ["derive"] }
 pulldown-cmark = { version = "0.9.3", features = ["serde"] }
 tokio = { version = "1.33.0", features = ["macros"] }
-config = "0.13.4"
+config = "0.14"
 uuid = {version = "1", features = ["v4"] }
 chrono = { version = "0.4.22", default-features = false, features = ["clock"] }
 tracing = { version = "0.1", features = ["log"] }
@@ -38,7 +44,6 @@ tracing-log = "0.2.0"
 
 [dependencies.sqlx]
 version = "0.7.4"
-default-features = false
 features = [
     "runtime-tokio",
     "tls-rustls",
@@ -46,7 +51,7 @@ features = [
     "postgres",
     "uuid",
     "chrono",
-    "migrate"
+    "migrate",
     ]
 optional = true
     
@@ -57,14 +62,14 @@ once_cell = "1.19.0"
 
 [features]
 hydrate = ["leptos/hydrate", "leptos_meta/hydrate", "leptos_router/hydrate"]
-ssr = ["dep:actix-files", "dep:actix-web", "dep:leptos_actix", "dep:sqlx", "leptos/ssr", "leptos_meta/ssr", "leptos_router/ssr"]
+ssr = ["dep:actix-files", "dep:actix-web", "dep:leptos_actix", "dep:sqlx", "sqlx/runtime-tokio", "leptos/ssr", "leptos_meta/ssr", "leptos_router/ssr"]
 
 [package.metadata]
 cargo-fmt = true
 
 [package.metadata.leptos]
 # The name used by wasm-bindgen/cargo-leptos for the JS/WASM bundle. Defaults to the crate name   
-output-name = "btc_self_custody"
+output-name = "we_hodl_btc"
 # The site root folder is where cargo-leptos generate all output. WARNING: all content of this folder will be erased on a rebuild. Use it in your server setup.
 site-root = "target/site"
 # The site-root relative folder where all compiled output (JS, WASM and CSS) is written
@@ -79,7 +84,7 @@ style-file = "style/output.css"
 # Optional. Env: LEPTOS_ASSETS_DIR.
 assets-dir = "assets"
 # The IP and port (ex: 127.0.0.1:3000) where the server serves the content. Use it in your server setup.
-site-addr = "127.0.0.1:3000"
+site-addr = "127.0.0.1:8000"
 # The port to use for automatic reload monitoring
 reload-port = 3001
 # [Optional] Command to use when running end2end tests. It will run in the end2end dir.
@@ -112,3 +117,7 @@ lib-features = ["hydrate"]
 #
 # Optional. Defaults to false.
 lib-default-features = false
+
+# release profile
+lib-profile-release = "wasm-release"
+

@@ -21,7 +21,7 @@ pub fn App() -> impl IntoView {
     view! {
         // injects a stylesheet into the document <head>
         // id=leptos means cargo-leptos will hot-reload this stylesheet
-        <Stylesheet id="leptos" href="/pkg/btc_self_custody.css"/>
+        <Stylesheet id="leptos" href="/pkg/we_hodl_btc.css"/>
         <Meta name="We Hodl BTC" content="A bitcoin self-custody guide"/>
 
         // sets the document title
