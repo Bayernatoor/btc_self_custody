@@ -2,12 +2,12 @@
 #[cfg(feature = "ssr")]
 use {
     actix_web::main,
+    sqlx::postgres::PgPoolOptions,
+    sqlx::PgPool,
+    std::net::TcpListener,
     we_hodl_btc::configuration::get_configuration,
     we_hodl_btc::run,
     we_hodl_btc::telemetry::{get_subscriber, init_subscriber},
-    sqlx::PgPool,
-    sqlx::postgres::PgPoolOptions,
-    std::net::TcpListener,
 };
 
 #[cfg(feature = "ssr")]
@@ -22,7 +22,10 @@ async fn main() -> std::io::Result<()> {
         .acquire_timeout(std::time::Duration::from_secs(2))
         .connect_lazy(&configuration.database.connection_string())
         .expect("Failed to connect to Postgres.");
-    let address = format!("{}:{}", configuration.application.host, configuration.application.port);
+    let address = format!(
+        "{}:{}",
+        configuration.application.host, configuration.application.port
+    );
     let listener = TcpListener::bind(address)?;
     run(listener, connection_pool).await?.await?;
     Ok(())
