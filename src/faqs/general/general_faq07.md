@@ -4,8 +4,8 @@ Bitcoin mining consists of a person or group of people who use specialized minin
 the bitcoin network. These "miners" compete against one another by expending electricity to find a solution to a mathematical problem, also
 known as the Proof of Work. The mathematical problem is meant to be solved on average every 10 minutes. When a miner finds a solution that matches
 a predetermined pattern, they may add the block to the bitcoin blockchain. Miners who find solutions are rewarded with the fees included in the
-transactions, as well as a coinbase transaction which rewards them with the current <ins><a href="https://en.bitcoin.it/wiki/Controlled_supply" target="_blank" 
-rel="noopener noferrer">block reward.</a></ins>
+transactions, as well as a coinbase transaction which rewards them with the current <a class="underline text-blue-400 hover:text-[#3c6594]" href="https://en.bitcoin.it/wiki/Controlled_supply" target="_blank" 
+rel="noopener noferrer">block reward.</a>
 
 &nbsp;
 

@@ -8,4 +8,4 @@ wealth, without the need for a third party intermediary (e.g. banks).
 
 As the old bitcoin adage goes
 **not your keys, not your coins**. For a deep dive on self-sovereignty and it's importance see this article by 
-<ins><a href="https://bitcoinmagazine.com/culture/bitcoin-self-custody-and-financial-sovereignty" target="_blank" ref="noopener noreferrer">Kudzai Kutukwa.</a></ins>
+<a class="underline text-blue-400 hover:text-[#3c6594]" href="https://bitcoinmagazine.com/culture/bitcoin-self-custody-and-financial-sovereignty" target="_blank" ref="noopener noreferrer">Kudzai Kutukwa.</a>

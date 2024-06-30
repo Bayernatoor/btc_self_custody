@@ -2,8 +2,8 @@
 
 <p class="text-xl pb-4 font-semibold">Getting Up To Speed</p>
 
-<p class="text-base">**Note for all users: Since we're now in the advanced stage of self-custody, if at all possible, I recommend using a dedicated computer. Some computer whose only
-job is to run bitcoin software. So, although you may already have Sparrow Wallet installed on your main computer you might want to consider updating your setup before proceeding.**</p>
+**Note for all users: Since we're now in the advanced stage of self-custody, if at all possible, I recommend using a dedicated computer. Some computer whose only
+job is to run bitcoin software. So, although you may already have Sparrow Wallet installed on your main computer you might want to consider updating your setup before proceeding.**
 
 <br>
 
@@ -21,7 +21,7 @@ version of Sparrow Wallet and follow the first 2 items "Quick word.." and "Verif
 
 <br>
 
-**Note: A personal bitcoin node is NOT mandatory but proceeding without your personal node will reduce your privacy, therefore it is highly recommended.**
+**Note: A personal bitcoin node is NOT mandatory but proceeding without your personal node will reduce your privacy, therefore it is highly recommended and a vital part of a proper self-custody setup**
 
 <br>
 

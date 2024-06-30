@@ -21,14 +21,14 @@ To recover the funds locked in a Multisig wallet you will need **M** private key
 
 <br>
 
-**3\.** Do not create/invent new backup methods, make sure you follow all the latest standards. DYI security is a BAD idea.
+**3\.** Do not create/invent new backup methods, make sure you follow all the latest standards. DIY security is a bad idea.
 
 <br>
 
 <p class="text-lg pb-2 font-semibold">DOs:</p>
 
 **1\.** Write down your 12 or 24 seed words, your passphrase and your extended fingerprint on **separate pieces of paper**. 
-        (passphrase + fingerprint) can be stored together, and stored apart from the seed words.
+        Passphrase + fingerprint can be stored together, and stored apart from the seed words.
 
 <br>
 
@@ -52,7 +52,7 @@ To recover the funds locked in a Multisig wallet you will need **M** private key
 
 <br>
 
-<p class="text-md pb-2 font-semibold">Exported Coldcard Multisig text file</p>
+<p class="text-md pb-2 font-semibold">Exported Coldcard Multisig file</p>
 
 <a href="./../../../wehodlbtc_xpub_backup.png" target="_blank">
     <img id="xpub_backup" src="./../../../wehodlbtc_xpub_backup.png" alt="xpub_backup" width="800"/> 
