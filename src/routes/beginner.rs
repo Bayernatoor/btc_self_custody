@@ -143,20 +143,9 @@ pub fn BeginnerPageTemplate(
     let img_alt_blue = "Blue Wallet".to_string();
     let text_color_blue = "#1a578f".to_string();
 
-    // DOM elements are only available when used within a create_effect see --> https://leptos-rs.github.io/leptos/ssr/24_hydration_bugs.html#not-all-client-code-can-run-on-the-server
-    // create_effect(move |_| {
-    //     let beginner_guide_element = window().document().unwrap().get_element_by_id("beginner");
-    //     log!("guide element: {:?}", beginner_guide_element);
-    // });
-
-    //window_event_listener(ev::animationend, move |_e| {
-    //        set_slideout_ends(true);
-    //        log!("Animation Done");
-    // });
-
     // renders the guides/basic/* route
     view! {
-        <div id="basic" class="grid gap-6 max-w-5xl mx-auto pb-20 animate-fadeinone grid-rows-[auto_auto_1fr] lg:gap-8 lg:mt-[-10rem] lg:pb-0">
+        <div id="basic" class="grid gap-6 max-w-5xl mx-auto pb-20 animate-fadeinone grid-rows-[auto_auto_1fr] lg:gap-8 lg:pb-0">
             // Section 1: Title, Quote, and Quote Author
             <div class="mt-10 lg:mt-0 px-6">
                 <h1 class="text-center text-[2.25rem] text-[#f7931a] font-semibold lg:text-[3rem]">{title}</h1>
@@ -216,7 +205,7 @@ pub fn BeginnerDesktopPageTemplate(
     let text_color_sparrow = "#6f767c".to_string();
 
     view! {
-        <div id="basic" class="grid gap-6 max-w-5xl mx-auto rounded-xl pb-20 animate-fadeinone grid-rows-[auto_auto_1fr] lg:gap-8 lg:mt-[-10rem] lg:pb-0">
+        <div id="basic" class="grid gap-6 max-w-5xl mx-auto rounded-xl pb-20 animate-fadeinone grid-rows-[auto_auto_1fr] lg:gap-8 lg:pb-0">
             // Section 1: Title, Quote, and Quote Author
             <div class="mt-10 lg:mt-0">
                 <h1 class="text-center text-[2.25rem] px-6 text-[#f7931a] font-semibold lg:text-[3rem] lg:px-0">{title}</h1>
@@ -261,12 +250,12 @@ pub fn RenderAndroidPage() -> impl IntoView {
         mobile wallet. Think of it as a self-custodied spending wallet, similar to how you'd carry cash in a physical wallet.
         ".to_string();
 
-    let wallet_one_text: String = " is a great self-custodial On-Chain wallet. It's easy to setup, follows all the latest standards and 
+    let wallet_one_text: String = " is a great self-custodial On-chain wallet. It's easy to setup, follows all the latest standards and 
         also has the option of connecting to your own Lightning Node.".to_string();
 
     let wallet_two_text: String = " is a relatively new, modern On-chain and Lightning enabled wallet, it integrates bitcoin payments
         into your social networks using the power of the decentralized NOSTR protocol and simplifies onboarding by making use of Fedimints. 
-        I recommend Mutiny if you want more then just a basic bitcoin wallet but if you prefer to keep it simple
+        I recommend Mutiny if you want more than just a basic bitcoin wallet but if you prefer to keep it simple
         choose Blue Wallet.".to_string();
 
     let title = "Android Self-Custody Guide".to_string();
@@ -282,7 +271,7 @@ pub fn RenderAndroidPage() -> impl IntoView {
 #[component]
 #[allow(non_snake_case)]
 pub fn RenderIosPage() -> impl IntoView {
-    let intro_text: String = "This basic IOS setup is meant to get you up to speed quickly. You'll pick one of the one wallets
+    let intro_text: String = "This basic iOS setup is meant to get you up to speed quickly. You'll pick one of the one wallets
         below, create your private key and take posession of your bitcoin. I wouldn't recommend storing too much of your wealth in a
         mobile wallet. Think of it as a self-custodied spending wallet, similar to how you'd carry cash in a physical wallet.
         ".to_string();
@@ -292,10 +281,10 @@ pub fn RenderIosPage() -> impl IntoView {
 
     let wallet_two_text: String = " is a relatively new, modern On-chain and Lightning enabled wallet, it integrates bitcoin payments
         into your social networks using the power of the decentralized NOSTR protocol and simplifies onboarding by making use of Fedimints. 
-        I recommend Mutiny if you want more then just a basic bitcoin wallet but if you prefer to keep it simple
+        I recommend Mutiny if you want more than just a basic bitcoin wallet but if you prefer to keep it simple
         choose Blue Wallet.".to_string();
 
-    let title = "Beginner - IOS Self-Custody Guide".to_string();
+    let title = "Basic - iOS Self-Custody Guide".to_string();
     let quote = "Trusted Third Parties are Security Holes".to_string();
     let quote_author = "-Nick Szabo".to_string();
 
@@ -314,7 +303,7 @@ pub fn RenderDesktopPage() -> impl IntoView {
         Our guide begins with a simplified configuration, expanding upon it later. Ideal for individuals intending to grow their Bitcoin holdings, 
         this introduction sets the stage for more advanced techniques.".to_string();
 
-    let title = "Beginner - Desktop Self-Custody Guide".to_string();
+    let title = "Basic - Desktop Self-Custody Guide".to_string();
     let quote = "Trusted Third Parties are Security Holes".to_string();
     let quote_author = "-Nick Szabo".to_string();
 
