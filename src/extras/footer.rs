@@ -30,7 +30,7 @@ pub fn Footer() -> impl IntoView {
                     <a
                       href="https://github.com/Bayernatoor"
                       type="button"
-                      class="rounded-full bg-[#333333] p-3 uppercase leading-normal text-white shadow-dark-3 shadow-black/30 transition duration-150 ease-in-out hover:text-orange-400 focus:shadow-dark-1 focus:outline-none focus:ring-0 active:shadow-1 dark:text-white"
+                      class="rounded-full bg-[#333333] p-3 uppercase leading-normal text-white transition duration-150 ease-in-out hover:text-orange-400 focus:shadow-dark-1 focus:outline-none focus:ring-0 active:shadow-1 dark:text-white"
                       data-twe-ripple-init
                       data-twe-ripple-color="light">
                       <span class="mx-auto [&>svg]:h-10 [&>svg]:w-10">
@@ -49,7 +49,7 @@ pub fn Footer() -> impl IntoView {
                     <a
                       href="https://nostr.com/npub1hxcjalw99u4m7vcalnrrgkdvyqftglydrt6tm2q9afnvec55guysrwkq9z"
                       type="button"
-                      class="rounded-full bg-[#333333] p-3 uppercase leading-normal text-white shadow-dark-3 shadow-black/30 transition duration-150 ease-in-out hover:shadow-dark-1 focus:shadow-dark-1 focus:outline-none focus:ring-0 active:shadow-1 dark:text-white"
+                      class="rounded-full bg-[#333333] p-3 uppercase leading-normal text-white transition duration-150 ease-in-out hover:shadow-dark-1 focus:shadow-dark-1 focus:outline-none focus:ring-0 active:shadow-1 dark:text-white"
                       data-twe-ripple-init
                       data-twe-ripple-color="light">
                       <span class="mx-auto [&>svg]:h-10 [&>svg]:w-10">
@@ -67,7 +67,7 @@ pub fn Footer() -> impl IntoView {
                     <a
                       href="mailto:wehodlbtc@pm.me"
                       type="button"
-                      class="rounded-full bg-[#333333] p-3 uppercase leading-normal text-white shadow-dark-3 shadow-black/30 transition duration-150 ease-in-out hover:shadow-dark-1 focus:shadow-dark-1 focus:outline-none focus:ring-0 active:shadow-1 dark:text-white"
+                      class="rounded-full bg-[#333333] p-3 uppercase leading-normal text-white transition duration-150 ease-in-out hover:shadow-dark-1 focus:shadow-dark-1 focus:outline-none focus:ring-0 active:shadow-1 dark:text-white"
                       data-twe-ripple-init
                       data-twe-ripple-color="light">
                       <span class="mx-auto [&>svg]:h-10 [&>svg]:w-10">
