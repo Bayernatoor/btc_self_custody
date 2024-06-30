@@ -15,16 +15,18 @@ pub fn Footer() -> impl IntoView {
               <h5 class="mb-2 font-semibold uppercase">"We Hodl BTC"</h5>
 
               <p class="mx-4 lg:p-0 lg:mx-0 lg:mt-2">
-                "We Hodl BTC is a free resource created to help bitcoin users take full custody of their bitcoin. Whether it's 100 000 satoshis or 100 bitcoins, there's a guide for you."
+                "We Hodl BTC is a free resource created to help bitcoiners take full custody of their bitcoin. Whether it's 100 000 satoshis or 100 bitcoins, there's a guide for you."
               </p>
 
               <p class="my-2">
                 "Knowledge is Freedom"
               </p>
             </div>
+
             // right side social links
             <div class="my-6 lg:my-0">
                 <div class="flex flex-row justify-center space-x-2 lg:justify-end">
+                    //Github link
                     <a
                       href="https://github.com/Bayernatoor"
                       type="button"
@@ -43,8 +45,9 @@ pub fn Footer() -> impl IntoView {
                       </span>
                     </a>
 
+                    // NOSTR link
                     <a
-                      href="https://primal.net/p/npub1hxcjalw99u4m7vcalnrrgkdvyqftglydrt6tm2q9afnvec55guysrwkq9z"
+                      href="https://nostr.com/npub1hxcjalw99u4m7vcalnrrgkdvyqftglydrt6tm2q9afnvec55guysrwkq9z"
                       type="button"
                       class="rounded-full bg-[#333333] p-3 uppercase leading-normal text-white shadow-dark-3 shadow-black/30 transition duration-150 ease-in-out hover:shadow-dark-1 focus:shadow-dark-1 focus:outline-none focus:ring-0 active:shadow-1 dark:text-white"
                       data-twe-ripple-init
@@ -56,6 +59,23 @@ pub fn Footer() -> impl IntoView {
                             class="fill-current text-gray-700 hover:text-orange-500 dark:text-gray-200 dark:hover:text-orange-400">
                             <path
                                 d="M278.5 215.6 23 471c-9.4 9.4-9.4 24.6 0 33.9s24.6 9.4 33.9 0l57-57h68c49.7 0 97.9-14.4 139-41 11.1-7.2 5.5-23-7.8-23-5.1 0-9.2-4.1-9.2-9.2 0-4.1 2.7-7.6 6.5-8.8l81-24.3c2.5-.8 4.8-2.1 6.7-4l22.4-22.4c10.1-10.1 2.9-27.3-11.3-27.3H377c-5.1 0-9.2-4.1-9.2-9.2 0-4.1 2.7-7.6 6.5-8.8l112-33.6c4-1.2 7.4-3.9 9.3-7.7 10.8-21 16.4-44.5 16.4-68.6 0-41-16.3-80.3-45.3-109.3l-5.5-5.5C432.3 16.3 393 0 352 0s-80.3 16.3-109.3 45.3L139 149c-48 48-75 113.1-75 181v55.3l189.6-189.5c6.2-6.2 16.4-6.2 22.6 0 5.4 5.4 6.1 13.6 2.2 19.8z"></path>
+                        </svg>
+                      </span>
+                    </a>
+
+                    // Email Link
+                    <a
+                      href="mailto:wehodlbtc@pm.me"
+                      type="button"
+                      class="rounded-full bg-[#333333] p-3 uppercase leading-normal text-white shadow-dark-3 shadow-black/30 transition duration-150 ease-in-out hover:shadow-dark-1 focus:shadow-dark-1 focus:outline-none focus:ring-0 active:shadow-1 dark:text-white"
+                      data-twe-ripple-init
+                      data-twe-ripple-color="light">
+                      <span class="mx-auto [&>svg]:h-10 [&>svg]:w-10">
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg" width="64" height="64"
+                            viewBox="-0.5 -0.5 64 64"
+                            class="fill-current text-gray-700 hover:text-orange-500 dark:text-gray-200 dark:hover:text-orange-400">
+                            <path d="M31.5-.45S12.646-1.07 8.757 19.845V34.1s.16 1.525 4.45 4.62S28.594 50.526 31.5 50.526s14.007-8.718 18.294-11.815 4.45-4.62 4.45-4.62V19.845C50.354-1.07 31.5-.45 31.5-.45zM44.4 27.6H18.6v-7.766C21.2 9.46 31.5 9.316 31.5 9.316s10.3.143 12.9 10.53zM31.5 53.734s-2.922-.286-5.2-1.874L8.757 39.378v21.566s.13 2.5 2.892 2.5h39.7c2.763 0 2.892-2.5 2.892-2.5V39.378L36.7 51.86c-2.287 1.588-5.2 1.874-5.2 1.874z"/>
                         </svg>
                       </span>
                     </a>

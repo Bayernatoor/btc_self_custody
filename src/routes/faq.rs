@@ -32,7 +32,7 @@ pub fn FaqPage() -> impl IntoView {
                 <hr class="border border-solid border-gray-400 mx-auto w-full mb-6"/>
 
                 <div class="flex flex-col items-center pt-6">
-                    <p class="text-lg text-white">"Need additional help? Reach out to me by email: "<a class="underline text-[#8cb4ff] hover:text-[#3c6594]" href="mailto:bayernator@protonmail.com" target="_blank" rel="noopener noreferrer">bayernator@protonmail.com</a></p>
+                    <p class="text-lg text-white">"Need additional help? Reach out to me by email: "<a class="underline text-[#8cb4ff] hover:text-[#3c6594]" href="mailto:wehodlbtc@pm.me" target="_blank" rel="noopener noreferrer">wehodlbtc@pm.me</a></p>
                     <br />
                     <p class="text-lg text-white">"Or connect via "<a class="underline text-[#8cb4ff] hover:text-[#3c6594]" href="https://github.com/simplex-chat" target="_blank" rel="noopener noreferrer">Simplex Chat</a>" by scanning the QR code:"</p>
                     <br />

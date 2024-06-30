@@ -1582,6 +1582,10 @@ p, h1, h2, h3{
     padding-top: 0px;
   }
 
+  .lg\:pt-4{
+    padding-top: 1rem;
+  }
+
   .lg\:text-left{
     text-align: left;
   }

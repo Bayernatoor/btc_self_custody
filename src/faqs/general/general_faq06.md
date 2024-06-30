@@ -1,6 +1,6 @@
 ### What's a bitcoin mempool?
 
-A <ins><a href="https://mempool.space/" target="_blank" rel="noopener noreferrer">bitcoin mempool</a></ins> contains a temporary record of all unconfirmed transactions. 
+A <a class="underline text-blue-400 hover:text-[#3c6594]" href="https://mempool.space/" target="_blank" rel="noopener noreferrer">bitcoin mempool</a> contains a temporary record of all unconfirmed transactions. 
 Every node on the network maintains it's own mempool.
 
 &nbsp;

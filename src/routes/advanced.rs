@@ -21,8 +21,8 @@ pub fn AdvancedPage() -> impl IntoView {
          //  Section 2: Intro and Steps
          <div class="px-4 lg:pt-0 lg:px-0">
              <h2 class="text-left text-[1.5rem] text-[#f7931a] font-semibold">"MultiSignature Wallet"</h2>
-             <p class="py-2 text-md text-white">{explainer}</p>
-             <ol class="list-decimal pl-8 pt-2 text-md leading-normal text-white">
+             <p class="py-2 text-lg text-white">{explainer}</p>
+             <ol class="list-decimal pl-8 pt-2 text-lg leading-normal text-white">
                  <li>"Setup and run your own Bitcoin node"</li>
                  <li>"Setup a 2 of 3 Multisig in Sparrow Wallet using 3 signing devices"</li>
                  <li>"Use Sparrow Wallet to coordinate the Multisig. Preferably on a dedicated computer"</li>
@@ -30,9 +30,9 @@ pub fn AdvancedPage() -> impl IntoView {
                  <li>"Safely backup and store your Multisig Wallet's Output Descriptors"</li>
                  <li>"Store the backups and devices in different geographic locations"</li>
              </ol>
-             <p class="italic pt-4 text-md text-white">
+             <p class="italic pt-4 text-lg text-white">
                  "Before starting, I encourage you to read through all the steps below, so as to get an understanding of the options available to you.
-                 The advanced section is optional, however, if you decide to implement certain parts, you should to do it from the start."
+                 The advanced section is optional, however, if you decide to implement certain parts, you'll want to be aware of them before starting."
              </p>
          </div>
 
