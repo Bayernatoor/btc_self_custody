@@ -14,7 +14,7 @@
 
 <br>
  
-**4\.** You'll be presented with 12 words - **WRITE THEM DOWN**. Do not take a digital photo of them, write them down on paper and keep them safe. 
+**4\.** You'll be presented with 12 words - **WRITE THEM DOWN**. Do not take a digital photo of them, write them down on paper and and never share them.
         If you ever lose your phone you'll need these to recover your bitcoin. 
 
 <br>
