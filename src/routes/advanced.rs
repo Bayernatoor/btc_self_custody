@@ -15,7 +15,7 @@ pub fn AdvancedPage() -> impl IntoView {
       <div id="advanced" class="grid gap-6 max-w-3xl mt-8 mb-24 mx-auto animate-fadeinone grid-rows-[auto_auto_1fr] md:max-w-4xl lg:max-w-5xl lg:gap-8">
          // Section 1: Title
          <div class="flex flex-col mx-auto px-4">
-             <h1 class="text-center text-[2.25rem] text-[#f7931a] font-title font-semibold lg:text-[3rem]">{title}</h1>
+             <h1 class="text-center text-[2.25rem] text-[#f7931a] font-title font-semibold md:text-[2.5rem] lg:text-[3rem]">{title}</h1>
          </div>
 
          //  Section 2: Intro and Steps
