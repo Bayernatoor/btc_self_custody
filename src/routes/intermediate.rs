@@ -15,10 +15,10 @@ pub fn IntermediateIntroPage() -> impl IntoView {
         ".to_string();
 
     view! {
-        <div id="basic" class="grid gap-6 max-w-5xl mx-auto pb-20 animate-fadeinone grid-rows-[auto_auto_1fr] lg:gap-8">
+        <div id="basic" class="grid gap-6 max-w-3xl mx-auto mt-8 mb-24 animate-fadeinone grid-rows-[auto_auto_1fr] md:max-w-4xl lg:max-w-5xl lg:gap-8">
             //- Section 1: Title, Quote, and Quote Author
             <div class="flex flex-col mx-auto px-4 pt-10 lg:pt-0">
-                <h1 class="text-center text-[2.25rem] text-[#f7931a] font-semibold leading-tight lg:text-[3rem]">{title}</h1>
+                <h1 class="text-center text-[2.25rem] text-[#f7931a] font-semibold leading-tight md:text-[2.5rem] lg:text-[3rem]">{title}</h1>
                 <div class="text-center max-w-sm mx-auto pt-4">
                     <p class="text-lg font-semibold text-white italic">{quote}</p>
                 </div>
@@ -58,10 +58,10 @@ pub fn IntermediateHardwarePage() -> impl IntoView {
     let title = "Step 1 - Hardware Wallet Setup".to_string();
 
     view! {
-        <div id="hardware_page" class="grid gap-6 max-w-5xl mx-auto pb-20 animate-fadeinone grid-rows-[auto_auto_1fr] lg:gap-8 lg:mt-10">
+        <div id="hardware_page" class="grid gap-6 max-w-3xl mx-auto mt-8 mb-24 animate-fadeinone grid-rows-[auto_auto_1fr] md:max-w-4xl lg:max-w-5xl lg:gap-8">
             // Section 1: Title
-            <div class="flex flex-col mx-auto pt-10 lg:pt-0">
-                <h1 class="text-center text-[2rem] text-[#f7931a] font-semibold leading-tight lg:text-[2.25rem]">{title}</h1>
+            <div class="flex flex-col mx-auto px-4 pt-10 lg:pt-0">
+                <h1 class="text-center text-[2.25rem] text-[#f7931a] font-semibold leading-tight md:text-[2.5rem] lg:text-[3rem]">{title}</h1>
             </div>
 
             // Section 2: Purchase Buttons
@@ -110,10 +110,10 @@ pub fn IntermediateNodePage() -> impl IntoView {
     let title = "Step 2 - Node Setup".to_string();
 
     view! {
-        <div id="hardware_page" class="grid gap-6 max-w-5xl mx-auto pb-20 animate-fadeinone grid-rows-[auto_auto_1fr] lg:gap-8">
+        <div id="hardware_page" class="grid gap-6 max-w-3xl mx-auto mt-8 mb-24 animate-fadeinone grid-rows-[auto_auto_1fr] md:max-w-4xl lg:max-w-5xl lg:gap-8">
             // Section 1: Title
             <div class="flex flex-col mx-auto px-4 pt-10 lg:pt-0">
-                <h1 class="text-center text-[2rem] text-[#f7931a] font-semibold leading-tight lg:text-[2.25rem]">{title}</h1>
+                <h1 class="text-center text-[2.25rem] text-[#f7931a] font-semibold leading-tight md:text-[2.5rem] lg:text-[3rem]">{title}</h1>
             </div>
 
             // Section 2: Purchase Buttons

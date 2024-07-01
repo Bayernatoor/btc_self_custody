@@ -4,10 +4,10 @@ use leptos::*;
 #[component]
 pub fn AboutPage() -> impl IntoView {
     view! {
-        <div class="grid gap-10 mx-auto max-w-5xl pb-20 opacity-0 animate-fadeinone grid-rows-[auto_auto_1fr]">
+        <div class="grid gap-10 mx-auto max-w-3xl mt-8 mb-24 opacity-0 animate-fadeinone grid-rows-[auto_auto_1fr] md:max-w-4xl lg:max-w-5xl">
             // Header Section
             <header class="flex flex-col mx-auto px-4 pt-10">
-                <h1 class="text-[2.5rem] text-[#f7931a] text-center font-semibold leading-tight font-title pb-2 lg:text-[4rem]">"WE HODL BTC"</h1>
+                <h1 class="text-[2.5rem] text-[#f7931a] text-center font-semibold leading-tight font-title pb-2 md:text-[3rem] lg:text-[4rem]">"WE HODL BTC"</h1>
                 <hr class="mx-auto border-2 border-solid border-white w-1/2 lg:w-full"/>
                 <p class="text-lg lg:text-lg text-center text-white px-6 pt-4">"We Hodl BTC is about taking self-custody of your bitcoin. The goal is to help anyone take ownership regardless of how many satoshis or bitcoin they own.
                                                               Bitcoin’s core values are of self-sovereignty, decentralization, trust minimization and preservation of wealth. I believe that taking self-custody of your bitcoin naturally follows."</p>
