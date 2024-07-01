@@ -145,10 +145,10 @@ pub fn BeginnerPageTemplate(
 
     // renders the guides/basic/* route
     view! {
-        <div id="basic" class="grid gap-6 max-w-5xl mx-auto pb-20 animate-fadeinone grid-rows-[auto_auto_1fr] lg:gap-8 lg:pb-0">
+        <div id="basic" class="grid gap-6 max-w-3xl mx-auto mt-8 mb-24 animate-fadeinone grid-rows-[auto_auto_1fr] lg:max-w-4xl xl:max-w-5xl lg:gap-8">
             // Section 1: Title, Quote, and Quote Author
             <div class="mt-10 lg:mt-0 px-6">
-                <h1 class="text-center text-[2.25rem] text-[#f7931a] font-semibold lg:text-[3rem]">{title}</h1>
+                <h1 class="text-center text-[2.25rem] text-[#f7931a] font-semibold md:text-[2.5rem] lg:text-[3rem]">{title}</h1>
                 <div class="text-center max-w-sm mx-auto">
                     <p class="text-lg text-white italic">{quote}</p>
                 </div>
@@ -205,10 +205,10 @@ pub fn BeginnerDesktopPageTemplate(
     let text_color_sparrow = "#6f767c".to_string();
 
     view! {
-        <div id="basic" class="grid gap-6 max-w-5xl mx-auto rounded-xl pb-20 animate-fadeinone grid-rows-[auto_auto_1fr] lg:gap-8 lg:pb-0">
+        <div id="basic" class="grid gap-6 mx-auto max-w-3xl mt-8 mb-24 rounded-xl animate-fadeinone grid-rows-[auto_auto_1fr] lg:max-w-4xl xl:max-w-5xl lg:gap-8">
             // Section 1: Title, Quote, and Quote Author
             <div class="mt-10 lg:mt-0">
-                <h1 class="text-center text-[2.25rem] px-6 text-[#f7931a] font-semibold lg:text-[3rem] lg:px-0">{title}</h1>
+                <h1 class="text-center text-[2.25rem] px-6 text-[#f7931a] font-semibold md:text-[2.5rem] lg:text-[3rem] lg:px-0">{title}</h1>
                 <div class="text-center max-w-sm mx-auto">
                     <p class="text-lg text-white italic">{quote}</p>
                 </div>
@@ -224,7 +224,7 @@ pub fn BeginnerDesktopPageTemplate(
 
             // Section 3: Everything Else
             <div class="px-6 lg:pb-4 lg:px-0">
-                <hr class="border border-solid border-gray-400 mx-auto w-full mb-6"/>
+                <hr class="border border-solid border-gray-400 mx-auto mb-6 w-full"/>
 
                 <h2 class="text-center pb-4 text-xl font-semibold text-[#f7931a]">"Recommended Wallet"</h2>
 
@@ -258,7 +258,7 @@ pub fn RenderAndroidPage() -> impl IntoView {
         I recommend Mutiny if you want more than just a basic bitcoin wallet but if you prefer to keep it simple
         choose Blue Wallet.".to_string();
 
-    let title = "Android Self-Custody Guide".to_string();
+    let title = "Basic Android Self-Custody Guide".to_string();
     let quote = "Trusted Third Parties are Security Holes".to_string();
     let quote_author = "-Nick Szabo".to_string();
 
@@ -284,7 +284,7 @@ pub fn RenderIosPage() -> impl IntoView {
         I recommend Mutiny if you want more than just a basic bitcoin wallet but if you prefer to keep it simple
         choose Blue Wallet.".to_string();
 
-    let title = "Basic - iOS Self-Custody Guide".to_string();
+    let title = "Basic iOS Self-Custody Guide".to_string();
     let quote = "Trusted Third Parties are Security Holes".to_string();
     let quote_author = "-Nick Szabo".to_string();
 
@@ -303,7 +303,7 @@ pub fn RenderDesktopPage() -> impl IntoView {
         Our guide begins with a simplified configuration, expanding upon it later. Ideal for individuals intending to grow their Bitcoin holdings, 
         this introduction sets the stage for more advanced techniques.".to_string();
 
-    let title = "Basic - Desktop Self-Custody Guide".to_string();
+    let title = "Basic Desktop Self-Custody Guide".to_string();
     let quote = "Trusted Third Parties are Security Holes".to_string();
     let quote_author = "-Nick Szabo".to_string();
 
@@ -360,10 +360,10 @@ pub fn BeginnerWalletInstructions(
 
     if displayed_wallet() == "blue" {
         view! {
-            <div id="basic" class="grid gap-6 max-w-5xl mx-auto pb-20 animate-fadeinone grid-rows-[auto_auto_1fr] lg:gap-8">
+            <div id="basic" class="grid gap-6 max-w-3xl mx-auto mt-8 mb-24 animate-fadeinone grid-rows-[auto_auto_1fr] lg:max-w-4xl xl:max-w-5xl lg:gap-8">
                 // Section 1: Title, Quote, and Quote Author
-                <div class="mt-10 lg:mt-0 px-6">
-                    <h1 class="text-center text-[2.25rem] font-semibold text-[#f7931a] lg:text-[3rem]">"Blue Wallet"</h1>
+                <div class="lg:mt-0 px-6">
+                    <h1 class="text-center text-[2.25rem] font-semibold text-[#f7931a] md:text-[2.5rem] lg:text-[3rem]">"Blue Wallet"</h1>
                     <div class="text-center mx-auto">
                         <p class="text-lg font-semibold text-white italic">"Radically Simple 👩‍🎤 Extremely Powerful."</p>
                     </div>
@@ -394,10 +394,10 @@ pub fn BeginnerWalletInstructions(
         }
     } else if displayed_wallet() == "mutiny" {
         view! {
-            <div id="basic" class="grid gap-6 max-w-5xl mx-auto pb-20 animate-fadeinone grid-rows-[auto_auto_1fr] lg:gap-8">
+            <div id="basic" class="grid gap-6 max-w-3xl mx-auto mt-8 mb-24 animate-fadeinone grid-rows-[auto_auto_1fr] lg:max-w-4xl xl:max-w-5xl lg:gap-8">
                 // Section 1: Title, Quote, and Quote Author
-                <div class="mt-10 lg:mt-0 px-6">
-                    <h1 class="text-center text-[2.25rem] font-semibold text-[#f7931a] lg:text-[3rem]">"Mutiny Wallet"</h1>
+                <div class="lg:mt-0 px-6">
+                    <h1 class="text-center text-[2.25rem] font-semibold text-[#f7931a] md:text-[2.5rem] lg:text-[3rem]">"Mutiny Wallet"</h1>
                     <div class="text-center mx-auto">
                         <p class="text-lg font-semibold text-white italic">"Unstoppable bitcoin. For everyone."</p>
                     </div>
@@ -428,10 +428,10 @@ pub fn BeginnerWalletInstructions(
         }
     } else {
         view! {
-            <div id="basic" class="grid gap-6 max-w-5xl mx-auto pb-20 animate-fadeinone grid-rows-[auto_auto_1fr] lg:gap-8">
+            <div id="basic" class="grid gap-6 max-w-3xl mx-auto mt-8 mb-24 animate-fadeinone grid-rows-[auto_auto_1fr] lg:max-w-4xl xl:max-w-5xl lg:gap-8">
                 // Section 1: Title, Quote, and Quote Author
-                <div class="mt-10 lg:mt-0 px-6">
-                    <h1 class="text-center text-[2.25rem] font-semibold text-[#f7931a] lg:text-[3rem]">"Sparrow Wallet"</h1>
+                <div class="lg:mt-0 px-6">
+                    <h1 class="text-center text-[2.25rem] font-semibold text-[#f7931a] md:text-[2.5rem] lg:text-[3rem]">"Sparrow Wallet"</h1>
                     <div class="text-center mx-auto">
                         <p class="text-white text-lg font-semibold px-4">"Gain Financial Sovereignty with Sparrow Wallet."</p>
                     </div>
