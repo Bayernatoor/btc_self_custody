@@ -12,10 +12,10 @@ pub fn Footer() -> impl IntoView {
           // left side text
           <div class="grid gap-4 mx-auto lg:grid-cols-2 lg:p-4">
             <div class="lg:mb-0 lg:mr-56">
-              <h5 class="mb-2 font-semibold uppercase">"We Hodl BTC"</h5>
+              <h5 class="mb-2 font-semibold uppercase">"WE HODL BTC"</h5>
 
               <p class="mx-4 lg:p-0 lg:mx-0 lg:mt-2">
-                "We Hodl BTC is a free resource created to help bitcoiners take full custody of their bitcoin. Whether it's 100 000 satoshis or 100 bitcoins, there's a guide for you."
+                "WE HODL BTC is a free resource created to help bitcoiners take full custody of their bitcoin. Whether it's 100 000 satoshis or 100 bitcoins, there's a guide for you."
               </p>
 
               <p class="my-2">

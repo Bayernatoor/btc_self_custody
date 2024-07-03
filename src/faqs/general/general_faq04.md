@@ -4,7 +4,7 @@ For the first time in human history bitcoin allows anyone to become financially 
 That is to say, someone who owns and controls their bitcoin private keys and therefore their 
 wealth, without the need for a third party intermediary (e.g. banks). 
 
-&nbsp;
+<br>
 
 As the old bitcoin adage goes
 **not your keys, not your coins**. For a deep dive on self-sovereignty and it's importance see this article by 

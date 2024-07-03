@@ -12,8 +12,8 @@ pub fn FaqPage() -> impl IntoView {
                 <div class="text-center mt-4 md:mt-0 italic max-w-3xl mx-auto">
                     <p class="text-white text-lg pb-10">
                         "Controlling a bitcoin private key grants absolute control over the
-                        associated bitcoin, embodying the ethos of the bitcoin movement. Self custody and personal
-                        responsibility restore power and sovereignty, eliminating reliance on third parties,
+                        associated bitcoin, embodying the ethos of the bitcoin movement. Self-custody and personal
+                        responsibility restore independence and self-sovereignty, eliminating reliance on third parties,
                         particularly the state."
                     </p>
                 </div>

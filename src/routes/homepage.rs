@@ -12,7 +12,7 @@ pub fn HomePage() -> impl IntoView {
                 <p class="text-xl px-6 mt-6 mb-4 md:px-0 md:text-2xl ">"Learn how to self custody your bitcoin today"</p>
 
                 <a href="/guides">
-                    <div role="button" class="text-lg md:text-xl text-center bg-[#f79231] w-36 md:w-40 lg:w-44 xl:w-48 mx-auto no-underline border-none rounded-xl p-3 hover:bg-[#f4a949] cursor-pointer lg:mx-0">
+                    <div role="button" class="text-xl md:text-xl text-center bg-[#f79231] w-36 md:w-40 lg:w-44 xl:w-48 mx-auto no-underline border-none rounded-xl p-3 hover:bg-[#f4a949] cursor-pointer lg:mx-0">
                         <span>"Start Hodling"</span>
                     </div>
                 </a>
