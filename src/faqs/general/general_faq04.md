@@ -1,5 +1,12 @@
 ### Why bitcoin self-custody? 
 
+Controlling a bitcoin private key grants absolute control over the
+associated bitcoin, embodying the ethos of the bitcoin movement. Self-custody and personal
+responsibility restore independence and self-sovereignty, eliminating reliance on third parties,
+particularly the state.
+
+<br>
+
 For the first time in human history bitcoin allows anyone to become financially self-sovereign. 
 That is to say, someone who owns and controls their bitcoin private keys and therefore their 
 wealth, without the need for a third party intermediary (e.g. banks). 
