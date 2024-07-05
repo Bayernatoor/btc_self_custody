@@ -15,7 +15,8 @@ pub fn Footer() -> impl IntoView {
               <h5 class="mb-2 font-semibold uppercase">"WE HODL BTC"</h5>
 
               <p class="mx-4 lg:p-0 lg:mx-0 lg:mt-2">
-                "WE HODL BTC is a free resource created to help bitcoiners take full custody of their bitcoin. Whether it's 100 000 satoshis or 100 bitcoins, there's a guide for you."
+                  "WE HODL BTC is a free resource created to help bitcoiners take 
+                  self-custody of their bitcoin. Whether it's 100 000 satoshis or 100 bitcoins, there's a guide for you."
               </p>
 
               <p class="my-2">
@@ -28,7 +29,7 @@ pub fn Footer() -> impl IntoView {
                 <div class="flex flex-row justify-center space-x-2 lg:justify-end">
                     //Github link
                     <a
-                      href="https://github.com/Bayernatoor"
+                      href="https://github.com/Bayernatoor/btc_self_custody"
                       type="button"
                       class="rounded-full bg-[#333333] p-3 uppercase leading-normal text-white transition duration-150 ease-in-out hover:text-orange-400 focus:shadow-dark-1 focus:outline-none focus:ring-0 active:shadow-1 dark:text-white"
                       data-twe-ripple-init

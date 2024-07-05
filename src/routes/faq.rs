@@ -4,18 +4,28 @@ use leptos::*;
 /// Renders the faq page of the application.
 #[component]
 pub fn FaqPage() -> impl IntoView {
+    let quote = "Free software is a matter of liberty, not price. To understand the concept, you should think of 'free' as in 'free speech,' not as in 'free beer'." ;
+    let quote_author = "- Richard Stallman";
+    let intro =  "The guides are meant to help anyone self-custody their bitcoin, regardless of how much they own. The guides are opinionated, recommending few options to
+                 help cut through the noise and streamline the self-custody process. All software recommendations are licensed using open and permissive licenses which follow 
+                 the principales set forth by Richard Stallman regarding Free Software. The intention is to eliminate the need to trust me, since you
+                 can verify it for yourself.";
+
     view! {
         <div id="about" class="grid gap-6 max-w-3xl mx-auto p-6 mt-8 mb-24 animate-fadeinone grid-rows-[auto_auto_1fr] md:max-w-4xl lg:max-w-5xl lg:gap-8">
             // Section 1: Title and Intro
             <div class="">
-                <h1 class="text-center text-[2.25rem] text-[#f7931a] font-semibold justify-center leading-tight font-title md:p-6 md:text-[3rem] lg:text-[4rem]">"The Bitcoin Help Desk"</h1>
-                <div class="text-center mt-4 md:mt-0 italic max-w-3xl mx-auto">
-                    <p class="text-white text-lg pb-10">
-                        "Controlling a bitcoin private key grants absolute control over the
-                        associated bitcoin, embodying the ethos of the bitcoin movement. Self-custody and personal
-                        responsibility restore independence and self-sovereignty, eliminating reliance on third parties,
-                        particularly the state."
-                    </p>
+                <h1 class="text-center text-[2.25rem] text-[#f7931a] font-semibold justify-center leading-tight font-title md:p-4 md:text-[3rem] lg:text-[4rem]">"The Bitcoin Help Desk"</h1>
+                <div class="text-center mt-4 md:mt-0 max-w-3xl mx-auto md:max-w-4xl lg:max-w-4xl">
+                    <div class="text-center mx-auto">
+                        <p class="text-lg text-white italic">{quote}</p>
+                    </div>
+                    <div class="text-center mx-auto">
+                        <p class="text-sm text-white italic">{quote_author}</p>
+                    </div>
+                    <div class="text-center mt-4 mx-auto">
+                        <p class="text-lg text-white">{intro}</p>
+                    </div>
                 </div>
             </div>
 

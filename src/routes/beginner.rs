@@ -63,8 +63,10 @@ pub fn DownloadButton(
     #[prop(optional)] button_name: Option<String>,
 ) -> impl IntoView {
     let (button, set_button) = create_signal(String::new());
-    let (width, set_width) = create_signal(8);
-    let (height, set_heigth) = create_signal(8);
+    let (width, set_width) = create_signal(12);
+    let (button_width, set_button_width) = create_signal(64);
+    let (basis_one, set_basis_one) = create_signal("1/3".to_string());
+    let (basis_two, set_basis_two) = create_signal("2/3".to_string());
     let (flex_justify, set_flex_justify) = create_signal(String::new());
 
     let name = match button_name.clone() {
@@ -75,23 +77,26 @@ pub fn DownloadButton(
     set_button(name.clone());
 
     if button_name.is_none() {
-        set_width(36);
-        set_heigth(10);
+        set_width(48);
+        set_button_width(48);
         set_flex_justify("justify-center".to_string());
+        set_basis_one("full".to_string());
+        set_basis_two("full".to_string());
     }
     view! {
-        <a href=href target="_blank" rel="external">
-            <button class=format!("flex {} p-2 shrink-0 h-12 w-36 mx-auto bg-white rounded-xl items-center space-x-4 hover:bg-[#f2f2f2] shadow-inner", flex_justify.get_untracked())>
-                <div class="shrink">
-                    <img class=format!("h-{} w-{}", height.get(), width.get()) src=format!("{}", logo) alt=format!("{}", alt_txt) />
-                </div>
+        <a href=href rel="noreferrer" target="_blank" rel="noreferrer" class="flex h-18 w-72">
+            <button class=format!("flex {} h-auto w-{} p-2 mx-auto bg-white rounded-xl items-center hover:bg-[#f2f2f2]",
+                                  flex_justify.get_untracked(), button_width.get_untracked())> 
+              <div class=format!("flex justify-center basis-{}", basis_one.get_untracked())>
+                <img class=format!("h-auto w-{}", width.get()) src=format!("{}", logo) alt=format!("{}", alt_txt) />
+              </div>
                 <Show
                     when=move || button_name.is_some()
                     fallback=move || view!("")>
                     <div class="">
-                        <p class="font-semibold text-sm">
-                            {button().to_string()}
-                        </p>
+                        <div class=format!("basis-{}", basis_two.get_untracked())>
+                          <p class=format!("text-[1.25rem] font-bold text-black")>{button().to_string()}</p>
+                        </div>
                     </div>
                 </Show>
             </button>
@@ -254,7 +259,7 @@ pub fn RenderAndroidPage() -> impl IntoView {
         also has the option of connecting to your own Lightning Node.".to_string();
 
     let wallet_two_text: String = " is a relatively new, modern On-chain and Lightning enabled wallet, it integrates bitcoin payments
-        into your social networks using the power of the decentralized NOSTR protocol and simplifies onboarding by making use of Fedimints. 
+        into your social network using the power of the decentralized NOSTR protocol and simplifies onboarding by making use of Fedimints. 
         I recommend Mutiny if you want more than just a basic bitcoin wallet but if you prefer to keep it simple
         choose Blue Wallet.".to_string();
 
@@ -280,7 +285,7 @@ pub fn RenderIosPage() -> impl IntoView {
         also has the option of connecting to your own Lightning Node.".to_string();
 
     let wallet_two_text: String = " is a relatively new, modern On-chain and Lightning enabled wallet, it integrates bitcoin payments
-        into your social networks using the power of the decentralized NOSTR protocol and simplifies onboarding by making use of Fedimints. 
+        into your social network using the power of the decentralized NOSTR protocol and simplifies onboarding by making use of Fedimints. 
         I recommend Mutiny if you want more than just a basic bitcoin wallet but if you prefer to keep it simple
         choose Blue Wallet.".to_string();
 
@@ -300,8 +305,8 @@ pub fn RenderIosPage() -> impl IntoView {
 pub fn RenderDesktopPage() -> impl IntoView {
     let intro_text: String = "Desktop wallets, such as Sparrow Wallet, deliver heightened security versus mobile options. 
         Often employed in elaborate setups for self-custodying sizeable Bitcoin savings, they remain accessible even for basic use cases. 
-        Our guide begins with a simplified configuration, expanding upon it later. Ideal for individuals intending to grow their Bitcoin holdings, 
-        this introduction sets the stage for more advanced techniques.".to_string();
+        This guide begins with a simplified configuration, expanding upon it later. Ideal for individuals intending to grow their Bitcoin holdings, 
+        this introduction sets the stage for more advanced techniques found in intermediate and advanced guides.".to_string();
 
     let title = "Basic Desktop Self-Custody Guide".to_string();
     let quote = "Trusted Third Parties are Security Holes".to_string();

@@ -677,6 +677,10 @@ p, h1, h2, h3{
   margin-top: 2rem;
 }
 
+.mt-2{
+  margin-top: 0.5rem;
+}
+
 .box-border{
   box-sizing: border-box;
 }
@@ -1210,6 +1214,10 @@ p, h1, h2, h3{
   line-height: 1.75rem;
 }
 
+.text-\[1\.25rem\]{
+  font-size: 1.25rem;
+}
+
 .font-bold{
   font-weight: 700;
 }
@@ -1299,6 +1307,11 @@ p, h1, h2, h3{
 .text-white{
   --tw-text-opacity: 1;
   color: rgb(255 255 255 / var(--tw-text-opacity));
+}
+
+.text-black{
+  --tw-text-opacity: 1;
+  color: rgb(0 0 0 / var(--tw-text-opacity));
 }
 
 .underline{
@@ -1479,6 +1492,10 @@ p, h1, h2, h3{
 
   .md\:p-6{
     padding: 1.5rem;
+  }
+
+  .md\:p-4{
+    padding: 1rem;
   }
 
   .md\:px-0{
