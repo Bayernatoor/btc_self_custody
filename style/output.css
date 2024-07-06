@@ -677,10 +677,6 @@ p, h1, h2, h3{
   margin-top: 2rem;
 }
 
-.mt-2{
-  margin-top: 0.5rem;
-}
-
 .box-border{
   box-sizing: border-box;
 }
@@ -803,10 +799,6 @@ p, h1, h2, h3{
 
 .max-w-sm{
   max-width: 24rem;
-}
-
-.shrink{
-  flex-shrink: 1;
 }
 
 .shrink-0{
@@ -1183,6 +1175,10 @@ p, h1, h2, h3{
   line-height: 1;
 }
 
+.text-\[1\.25rem\]{
+  font-size: 1.25rem;
+}
+
 .text-\[1\.5rem\]{
   font-size: 1.5rem;
 }
@@ -1212,10 +1208,6 @@ p, h1, h2, h3{
 .text-xl{
   font-size: 1.25rem;
   line-height: 1.75rem;
-}
-
-.text-\[1\.25rem\]{
-  font-size: 1.25rem;
 }
 
 .font-bold{
@@ -1279,6 +1271,11 @@ p, h1, h2, h3{
   color: rgb(247 147 26 / var(--tw-text-opacity));
 }
 
+.text-black{
+  --tw-text-opacity: 1;
+  color: rgb(0 0 0 / var(--tw-text-opacity));
+}
+
 .text-blue-400{
   --tw-text-opacity: 1;
   color: rgb(96 165 250 / var(--tw-text-opacity));
@@ -1307,11 +1304,6 @@ p, h1, h2, h3{
 .text-white{
   --tw-text-opacity: 1;
   color: rgb(255 255 255 / var(--tw-text-opacity));
-}
-
-.text-black{
-  --tw-text-opacity: 1;
-  color: rgb(0 0 0 / var(--tw-text-opacity));
 }
 
 .underline{
@@ -1488,10 +1480,6 @@ p, h1, h2, h3{
 
   .md\:gap-2{
     gap: 0.5rem;
-  }
-
-  .md\:p-6{
-    padding: 1.5rem;
   }
 
   .md\:p-4{
