@@ -1,20 +1,28 @@
 ## Quick wallet setup guide
 
-<p class="text-lg pb-4 font-semibold">BlueWallet Setup</p>
+<h2 class="text-2xl pb-4 text-[#f7931a] font-semibold">BlueWallet Wallet Setup</h2>
 
-**1\.** After downloading and opening the app tap on **Add a wallet**.  
+**1\.** After downloading and opening the app tap on **Add now**.  
+
+<br>
+
+<a href="./../../../bluewallet_new_wallet.jpg" target="_blank">
+    <img id="bluewallet add wallet" src="./../../../bluewallet_new_wallet.jpg" alt="bluewallet add wallet" width="400"/> 
+</a>
 
 <br>
  
-**2\.** Enter a name for your wallet.
+**2\.** Enter a name for your wallet, under **Type** tap **Bitcoin** then tap **Create**.
 
 <br>
- 
-**3\.** Under **Type** tap **Bitcoin** then tap **Create**.
 
-<br>
+<a href="./../../../bluewallet_wallet_creation.jpg" target="_blank">
+    <img id="bluewallet wallet type selection" src="./../../../bluewallet_wallet_creation.jpg" alt="bluewallet wallet type selection" width="400"/> 
+</a>
  
-**4\.** You'll be presented with 12 words - **WRITE THEM DOWN**. Do not take a digital photo of them, write them down on paper and never share them. 
+<br>
+
+**3\.** You'll be presented with 12 words - **WRITE THEM DOWN**. Do not take a digital photo of them, write them down on paper and never share them. 
         If you ever lose your phone you'll need these to recover your bitcoin. 
 
 <br>
@@ -24,8 +32,8 @@ are the **only way to recover** your bitcoin if you lose your phone.*
 
 <br>
  
-**5\.** After having correctly written them down, tap on **Ok, I wrote it down**.
+**4\.** After having correctly written them down, tap on **Ok, I wrote it down**.
 
 <br>
 
-Congrats! You've created your first self-custodial bitcoin wallet. That was easy wasn't it? Now let's learn how to receive bitcoin.
+Congrats! You've created your first self-custodial bitcoin wallet. That was easy wasn't it? Now let's receive some bitcoin to our new wallet.

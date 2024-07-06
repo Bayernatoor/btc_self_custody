@@ -1,6 +1,6 @@
 ## I lost my phone what do I do?
 
-<p class="text-lg pb-4 font-semibold">Lost Phone</p>
+<h2 class="text-2xl pb-4 text-[#f7931a] font-semibold">I Lost my Phone!</h2>
 
 Follow the instructions in **How do I restore my wallet** above.
 
