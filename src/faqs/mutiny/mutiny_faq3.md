@@ -1,7 +1,6 @@
 ### How do I receive bitcoin?
 
- 
-<p class="text-lg pb-4 font-semibold">Receiving Bitcoin</p>
+<h2 class="text-2xl pb-4 text-[#f7931a] font-semibold">Receiving Your First Transaction</h2>
 
 Receiving Bitcoin is easy. That being said, Mutiny excels at being a Lightning wallet. Lighting allows for instantaneous and low fee payments.
 This is why you'll see the word **Sats** everywhere, sats, short for satoshi is the smallest unit of a bitcoin, 1 bitcoin is equal to 100 million satoshis.
@@ -9,31 +8,64 @@ With all that said, we'll start with receiving an On-chain (Regular) payment wit
 
 <br>
 
-**1\.** From the main page tap **Receive your first sats**. 
+**1\.** From the main page tap on **Receive your first sats**. 
 
 <br>
 
-**2\.** Enter the amount you wish to receive. If you're not sure of the exact amount, that's fine just enter any amount in satoshi. 
+<a href="./../../../mutiny_first_receive.png" target="_blank">
+    <img id="mutiny first receive" src="./../../../mutiny_first_receive.png" alt="mutiny first receive" width="400"/> 
+</a>
 
 <br>
 
-**3\.** You may disregard the message regarding a minimum amount. (*Unless you intend to receive via lightning*)
+**2\.** Tap on **Lightning** to change your receive address type. 
 
 <br>
 
-**4\.** In the **What's this for?** field enter a label (optional) for these funds. This will help you keep track of where they came from.  
+<a href="./../../../mutiny_switch_to_onchain.png" target="_blank">
+    <img id="mutiny switch to onchain" src="./../../../mutiny_switch_to_onchain.png" alt="mutiny switch to onchain" width="400"/> 
+</a>
 
 <br>
 
-**5\.** Press **Continue**. On the next screen, at the very bottom, tap on **Choose format** and select the 3rd option **Bitcoin address**.
+**3\.** Select the second option **Bitcoin Address**
 
 <br>
 
-**6\.** You'll be presented with a QR code which can be scanned by the **Sender**, or you can copy the bitcoin address (starts with bc1) and share that with the **Sender**. 
+<a href="./../../../mutiny_address_type_switcher.png" target="_blank">
+    <img id="mutiny address type switcher" src="./../../../mutiny_address_type_switcher.png" alt="mutiny address type switcher" width="400"/> 
+</a>
+
+<br>
+
+**4\.** Enter the amount to receive (optional). In the **What's this for?** field enter a label (optional and only visible to you) for these funds. Tap on **Continue**.
+
+<br>
+
+<a href="./../../../mutiny_receive_page.png" target="_blank">
+    <img id="mutiny receive page" src="./../../../mutiny_receive_page.png" alt="mutiny receive page" width="400"/> 
+</a>
+
+<br>
+
+**6\.** You'll be presented with a QR code which can be scanned by the **Sender**, or you can copy the bitcoin address below and share that with the **Sender**. 
+
+<br>
+
+<a href="./../../../mutiny_bitcoin_receive_address.png" target="_blank">
+    <img id="mutiny bitcoin receive address" src="./../../../mutiny_bitcoin_receive_address.png" alt="mutiny bitcoin receive address" width="400"/> 
+</a>
 
 <br>
 
 **7\.** When the wallet detects that the payment has been sent, the page will update with a large green check mark and the words **Payment Initiated**.
+        You can tap on **View Payment Details** for more information or tap on **Nice** to go back to the main page.
+
+<br>
+
+<a href="./../../../mutiny_payment_initiated.png" target="_blank">
+    <img id="mutiny payment initiated" src="./../../../mutiny_payment_initiated.png" alt="mutiny payment initiated" width="400"/> 
+</a>
 
 <br>
 
@@ -44,5 +76,11 @@ With all that said, we'll start with receiving an On-chain (Regular) payment wit
 
 <br>
 
-For more general bitcoin questions/answers checkout our <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="/faq" target="_blank">FAQs<a>
+<a href="./../../../mutiny_payment_pending.png" target="_blank">
+    <img id="mutiny payment pending" src="./../../../mutiny_payment_pending.png" alt="mutiny payment pending" width="400"/> 
+</a>
+
+<br>
+
+For more general bitcoin questions & answers checkout our <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="/faq" target="_blank">FAQs<a>
 
