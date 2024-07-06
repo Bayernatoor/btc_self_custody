@@ -1,23 +1,23 @@
 ## Basic recommended setup
 
-<p class="text-lg pb-4 font-semibold">Sparrow Wallet Setup</p>
+<h2 class="text-2xl pb-4 text-[#f7931a] font-semibold">Sparrow Wallet Setup</h2>
 
-Starting with a basic bitcoin desktop wallet setup is a good way to get comfortable with bitcoin while ensuring
+Starting with a basic desktop wallet setup is a good way to get comfortable with bitcoin while ensuring
 a higher level of security compared to a mobile wallet. It also allows room to iterate on your setup as your bitcoin
 holdings grow in value.
 
 <br>
 
-<p class="text-lg pb-2 font-semibold">Recommended Setup:</p>
+<h3 class="text-xl pb-2 text-[#f7931a] font-semibold">Recommended Setup</h3>
 
-We'll create a single signature wallet using 12 words and a passphrase. This setup is simple yet secure. It makes
+We'll create a single signature wallet using 12 seed words (which represent your bitcoin private key) and a passphrase. This setup is simple yet secure. It makes
 recovery easy and avoids some pitfalls associated with more complex setups. Due to the passphrase (13th word) you
 benefit from highten security, since, if someone was to get access to your 12 seed words, they would not
 gain access to your funds. Which is why the 12 words and the passphrase must be stored separately. 
 
 <br>
 
-<p class="text-lg pb-2 font-semibold">Quick Start Guide</p>
+<h3 class="text-xl pb-2 text-[#f7931a] font-semibold">Quick Start Guide</h3>
 
 Since the Sparrow documentation is some of the best out there and to eliminate any trust issues, 
 I recommend following their amazing getting started guide here: <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://sparrowwallet.com/docs/quick-start.html" target="_blank" rel="noopener noreferrer">Quick Start</a>
@@ -25,11 +25,11 @@ I recommend following their amazing getting started guide here: <a class="text-[
 
 <br>
 
-<p class="text-lg pb-2 font-semibold">However, before you begin note the following:</p>
+<h3 class="text-xl pb-2 text-[#f7931a] font-semibold">However, before you begin:</h3>
 
 **1\.** Sparrow's quick start guide does not make use of the passphrase when creating a wallet. I recommend that you do. When copying your 12 words, you'll notice a checkbox called
 **Use passphrase?**, check it and a field will appear. Add a passphrase (13th word). Make sure it's unique and atleast 12 characters in length
-(use letters, numbers and specials characters) write it down and keep it apart from your 12 words.
+(use letters, numbers). Write it down and store it apart from your 12 words, it as important as your 12 words!
 
 <br>
 
@@ -38,7 +38,7 @@ after wallet creation is only meant to prevent unauthorized access to the Sparro
 
 <br>
 
-**3\.** Unless you've already got your own bitcoin blockchain node. Using a **Public Server** is a fine way to get started. Later guides will touch on setting up a bitcoin node. Which
+**3\.** Unless you've already got your own bitcoin node. Using a **Public Server** is a fine way to get started. Later guides will touch on setting up a bitcoin node. Which
 will help increase your privacy.
 
 <br>
@@ -54,6 +54,6 @@ Sparrow summarizes it well in this article:
 <br>
 
 ***Remember to store the 12 words and the passphrase separately but don't lose them, you need both to recover your bitcoin. It's also wise to store your wallet's Extended/Master
-fingerprint since every wallet has a unique fingerprint, you can confirm that you've entered the correct seed words + passphrase if you ever need to recover
+fingerprint. Since every wallet has a unique fingerprint, you can confirm that you've entered the correct seed words + passphrase if you ever need to recover
 the wallet.***
 

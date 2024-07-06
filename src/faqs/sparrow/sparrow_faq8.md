@@ -1,6 +1,6 @@
 ## Help, I recovered my wallet but there are no transactions
 
-<p class="text-lg pb-4 font-semibold">Wallet Recovery Issues</p>
+<h2 class="text-2xl pb-4 text-[#f7931a] font-semibold">sjdhsajdh</h2>
 
 There are some common reasons as to why this could happen.
 
@@ -17,4 +17,4 @@ it wont be the same you originally created. Make sure you enter the correct pass
 <br>
 
 For more details take a look at Sparrow's FAQ: 
-<a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://sparrowwallet.com/docs/faq.html#all-my-addresses-have-changed" target="_blank">Wallet Recovery<a>.
+<a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://sparrowwallet.com/docs/faq.html#all-my-addresses-have-changed" target="_blank" rel="noopener noreferrer">Wallet Recovery<a>.
