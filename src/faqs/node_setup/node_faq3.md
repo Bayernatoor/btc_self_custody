@@ -1,59 +1,64 @@
-## MyNode Details & Resources 
+### Start9 Details & Resources 
 
-<p class="text-lg pb-4 font-semibold">Choice #2: MyNode</p>
+<h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Choice #1: Start9</h4>
 
-MyNode makes running a Bitcoin and Lightning node as easy as possible. Whether you DIY or you purchase a pre-built node, running bitcoin
-has never been easier. 
+Start9's mission is to level the playing field and allow anyone to run their own personal home server. This
+includes the ability to run your own personal Bitcoin full node. They believe that everything we currently
+do on the centralized, permissioned and closed-source cloud can be done with open-source, self-hosted and private
+software and hardware. 
 
 <br>
 
-<p class="text-md pb-2 font-semibold">MyNode's Home Page</p>
+<p class="text-xl pb-2 text-white font-semibold">Start9's Home Page</p>
 
-<a href="./../../../mynode_ui.png" target="_blank">
-    <img id="mynode_ui" src="./../../../mynode_ui.png" alt="mynode ui" width="500"/> 
+<a href="./../../../start9_home.png" target="_blank">
+    <img id="start9_home" src="./../../../start9_home.png" alt="start9_home" width="600"/> 
 </a>
 
 <br>
 
-<p class="text-lg pb-2 font-semibold">Features</p>
+<h4 class="text-2xl pb-2 text-[#f7931a] font-semibold">Features</h4>
 
+-- The Start9 OS is <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://github.com/start9labs/start-os" target="_blank" rel="noopener noreferrer">open-source and available under an MIT license</a>
 
--- Very easy to follow documentation and DIY Guide 
+-- World class <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://docs.start9.com/0.3.5.x/support/" target="_blank" rel="noopener noreferrer">community support</a>
 
--- No Command Line required. All features are available via their intuitive UI accessible via the browser.
+-- A clean and intuitive Graphical User interface - no command lines involved
 
--- Every Pre-built MyNode comes with 12 months of <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://mynodebtc.github.io/premium_plus/premium_plus.html" target="_blank">Premium+ support</a>,
-   great for that extra peace of mind.
+-- Easy to use System Backups  
 
--- Extensive app marketplace
+-- Encrypted connection over home network
+
+-- A <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://marketplace.start9.com" target="_blank" rel="noopener noreferrer">marketplace</a> for all your sovereign app needs. Many apps are packaged by the community reducing trust on Start9.
 
 <br>
 
-<p class="text-md pb-2 font-semibold">MyNode's Marketplace</p>
+<p class="text-xl pb-2 text-white font-semibold">Start9's App Marketplace</p>
 
-<a href="./../../../mynode_marketplace.png" target="_blank">
-    <img id="mynode_marketplace" src="./../../../mynode_marketplace.png" alt="mynode_marketplace" width="400"/> 
+<a href="./../../../start9_marketplace.png" target="_blank">
+    <img id="marketplace" src="./../../../start9_marketplace.png" alt="start9_marketplace" width="600"/> 
 </a>
 
 <br>
 
-<p class="text-lg pb-2 font-semibold">Considerations:</p>
+<h4 class="text-2xl pb-2 text-[#f7931a] font-semibold">Considerations:</h4>
 
--- Bitcoin + Lightning only. Is not an all-in-one personal home server like Start9.
-
--- MyNode is <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://github.com/mynodebtc/mynode?tab=License-1-ov-file#readme" target="_blank">available under a Modified Creative Commons License</a>
+-- Is not solely focused on bitcoin, can install non-bitcoin related software.
 
 <br>
 
-<p class="text-lg pb-2 font-semibold">Resources:</p>
+<h4 class="text-2xl pb-2 text-[#f7931a] font-semibold">Resources:</h4>
 
-**\-** <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://www.mynodebtc.com/order_now" target="_blank">Buy a Pre-Made MyNode</a>
+**\-** <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://store.start9.com" target="_blank" rel="noopener noreferrer">Buy a Pre-Made Start9</a>
 
-**\-** <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://mynodebtc.github.io/videos/guides.html" target="_blank">DIY with Community Guides</a>
+**\-** <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://docs.start9.com/0.3.5.x/diy/" target="_blank" rel="noopener noreferrer">Build It Yourself</a>
 
-**\-** <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://www.mynodebtc.com/support" target="_blank">Get Support</a>
+**\-** <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://docs.start9.com/0.3.5.x/support/" target="_blank" rel="noopener noreferrer">Get Support</a>
 
-**\-** <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://mynodebtc.github.io/intro/introduction.html" target="_blank">MyNode's Docummentation</a>
+**\-** <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://start9.com/faq/" target="_blank" rel="noopener noreferrer">Start9's FAQs</a>
 
-**\-** <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://github.com/mynodebtc/mynode" target="_blank">MyNode's Github</a>
+**\-** <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://docs.start9.com/" target="_blank" rel="noopener noreferrer">Start9's Docummentation</a>
+
+
+
 
