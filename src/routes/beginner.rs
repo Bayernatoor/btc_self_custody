@@ -86,7 +86,7 @@ pub fn DownloadButton(
     view! {
         <a href=href rel="noreferrer" target="_blank" rel="noreferrer" class="flex h-18 w-72">
             <button class=format!("flex {} h-auto w-{} p-2 mx-auto bg-white rounded-xl items-center hover:bg-[#f2f2f2]",
-                                  flex_justify.get_untracked(), button_width.get_untracked())> 
+                                  flex_justify.get_untracked(), button_width.get_untracked())>
               <div class=format!("flex justify-center basis-{}", basis_one.get_untracked())>
                 <img class=format!("h-auto w-{}", width.get()) src=format!("{}", logo) alt=format!("{}", alt_txt) />
               </div>

@@ -15,7 +15,7 @@ pub fn Footer() -> impl IntoView {
               <h5 class="mb-2 font-semibold uppercase">"WE HODL BTC"</h5>
 
               <p class="mx-4 lg:p-0 lg:mx-0 lg:mt-2">
-                  "WE HODL BTC is a free resource created to help bitcoiners take 
+                  "WE HODL BTC is a free resource created to help bitcoiners take
                   self-custody of their bitcoin. Whether it's 100 000 satoshis or 100 bitcoins, there's a guide for you."
               </p>
 
