@@ -1,9 +1,9 @@
-[Receiving & Spending](#receiving-and-spending)
+### Receiving & Spending
 
-<p class="text-lg pb-4 font-semibold">Receiving to a Multisig Wallet</p>
+<h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Receiving to a Multisig Wallet</h4>
 
-Receiving bitcoin to a Multisig wallet is as easy as with a Singlesig. We'll use Sparrow wallet to obtain an address 
-and simply send funds to it. 
+Receiving bitcoin to a Multisig wallet is as easy as with a Singlesig. We'll use Sparrow wallet to obtain an address. We can share that address with the sender or use it to 
+send bitcoin to it ourselves.
 
 <br>
 
@@ -17,8 +17,8 @@ Click on **Receive**, add a **Label** to track source of funds (only known to yo
  
 <br>
 
-Once the transaction appears in a mempool, Sparrow will display it under the **Transactions** tab. Once it receives at least 1 confirmation, it can be 
-considered received and protected by your Multisig setup.<br>
+When your Bitcoin node detects the transaction, Sparrow will display it under the **Transactions** tab. Once it receives at least 1 confirmation, it can be 
+considered received and protected by your Multisig setup. However, it's recommended to wait for 6 confirmations, before considering it to be settled and irreversible.
 
 <br>
 
@@ -28,14 +28,14 @@ considered received and protected by your Multisig setup.<br>
  
 <br>
 
-<p class="text-lg pb-2 font-semibold">Sending from a Multisig Wallet</p>
+<h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Sending from a Multisig Wallet</h4>
 
 Sending bitcoin from a Multisig wallet is more difficult then a Singlesig wallet. This is especially true if you've stored your Signing devices
 (Coldcard, etc...) in separate locations, as you will need physical access to at least **M** devices to succesfully sign a transaction. 
 
 <br> 
 
-**1\.** First, we'll create a PSBT (pre-signed bitcoin transaction) with Sparrow wallet. This PSBT will then be imported into **M of N Coldcards** (e.g. 2 if your setup is 2-of-3)
+**1\.** First, we'll create a **PSBT** (pre-signed bitcoin transaction) with Sparrow wallet. This **PSBT** will then be imported into **M of N Coldcards** (e.g. 2 if your setup is 2-of-3)
         to be signed. 
 
 <br>
@@ -52,9 +52,9 @@ click on **Create Transaction**.
  
 <br>
 
-**2\.** On the next screen you'll have the opportunity to verify your transaction. Feel free to view the inputs and ouputs on the left hand side. Confirm that the 
-        receicing address is correct. Click on **Details** to view specific/technical details about the transaction. Under **Signatures** you'll find the wallet 
-        responsible for signing, in this case it's our Multsig wallet. Finally, click on **Finalize Transaction for Signing**.
+**2\.** On the next screen you'll have the opportunity to verify your transaction. Feel free to review the inputs and ouputs on the left hand side. Confirm that the 
+        receiving address is correct. Click on **Details** to view specific/technical details about the transaction. Under **Signatures** you'll find the wallet 
+        responsible for signing, in this case it's our Multisig wallet. When you're ready, click on **Finalize Transaction for Signing**.
 
 <br>
 
@@ -64,7 +64,7 @@ click on **Create Transaction**.
  
 <br>
 
-**3\.** It's now time to save this PSBT and import it into the Coldcards for signing. Click on **Save transaction**, you'll be prompted to save a file with
+**3\.** It's now time to save this **PSBT** onto a MicroSD card and import it into the Coldcards for signing. Click on **Save Transaction**, you'll be prompted to save a file with
         a **.psbt** extension.
 
 <br>
@@ -75,7 +75,7 @@ click on **Create Transaction**.
  
 <br>
 
-**4\.** It's time to sign this transaction using 2 of the 3 Coldcards. Add the **psbt** file to a MicroSD card. Make sure to have you passphrase ready,
+**4\.** You'll need to sign this transaction using 2 of the 3 Coldcards. Make sure to have your Coldcard's Passphrase ready,
         either on the MicroSD card or ready to enter manually.
 
 <br>
@@ -88,7 +88,7 @@ click on **Create Transaction**.
 
 <br>
 
-**7\.** The Coldcard will load the passphrase. you can confirm that the correct one was added by confirming that the **Extended Fingerprint** is correct.
+**7\.** The Coldcard will load the Passphrase. you can confirm that the correct one was added by confirming that the **Extended Fingerprint** is correct.
 
 <br>
 
@@ -97,17 +97,16 @@ click on **Create Transaction**.
 
 <br>
 
-**9\.** The Coldcard will display the amount, destination address and the associated network fee. Make sure to verify that the information displayed
+**9\.** The Coldcard will display the **amount**, **destination address** and the associated **network fee**. Make sure to verify that the information displayed
         is correct.
 
 <br> 
 
-**10\.** Press enter or 1(review this for mk4) to approve and sign the transaction. The PSBT will be signed and a new file created with **-part** will be appended to the
-         original name.
+**10\.** Press **Ok** to approve and sign the transaction. The PSBT will be signed and a new file ending in **-part.pbst** will be created.
 
 <br> 
 
-**11\.** Repeat this step on the second Coldcard. Remember to select the PSBT file ending in *-part.pbst**
+**11\.** Repeat this step on the second Coldcard. Remember to select the PSBT file ending in **-part.pbst**
 
 <br> 
 
@@ -116,7 +115,7 @@ click on **Create Transaction**.
 
 <br> 
 
-**13\.** After loading the PSBT, 2 signatures will appear, one for each Coldcard or signing device. The blue **Broadcast Transaction"" button will become clickable,
+**13\.** After loading the **PSBT**, 2 signatures will appear, one for each Coldcard or signing device. The blue **Broadcast Transaction** button will become clickable,
          click it to broadcast your transaction. 
          
 <br> 
