@@ -1,6 +1,6 @@
-## Quick wallet setup guide
+### Quick wallet setup guide
 
-<h2 class="text-2xl pb-4 text-[#f7931a] font-semibold">BlueWallet Wallet Setup</h2>
+<h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">BlueWallet Wallet Setup</h4>
 
 **1\.** After downloading and opening the app tap on **Add now**.  
 

@@ -1,6 +1,6 @@
 ### How do I send bitcoin?
 
-<h2 class="text-2xl pb-4 text-[#f7931a] font-semibold">Sending A Bitcoin Transaction</h2>
+<h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Sending A Bitcoin Transaction</h4>
 
 **1\.** To send bitcoin, tap on the red **+** icon in the bottom right corner, then select **Send**.
 
