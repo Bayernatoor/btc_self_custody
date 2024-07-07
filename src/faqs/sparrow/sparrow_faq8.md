@@ -1,6 +1,6 @@
-## Help, I recovered my wallet but there are no transactions
+## Troubleshooting
 
-<h2 class="text-2xl pb-4 text-[#f7931a] font-semibold">sjdhsajdh</h2>
+<h2 class="text-2xl pb-4 text-[#f7931a] font-semibold">I recovered my wallet but there are no transactions</h2>
 
 There are some common reasons as to why this could happen.
 
@@ -12,7 +12,7 @@ your seed words exactly as they appeared when first creating it. *The same words
 <br>
 
 **2\.** **You entered the wrong passphrase**. You entered the correct 12 words but the wrong passphrase, this too will generate a valid wallet, however
-it wont be the same you originally created. Make sure you enter the correct passphrase (if you originally used one).
+it wont be the same you originally created. Make sure you enter the correct passphrase (if you used one when creating the wallet).
 
 <br>
 
