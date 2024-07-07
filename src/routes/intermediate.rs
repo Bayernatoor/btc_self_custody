@@ -9,8 +9,8 @@ pub fn IntermediateIntroPage() -> impl IntoView {
     let quote = "Rights Are Not Given, They Are Taken".to_string();
     let quote_author = "-Aldous Huxley".to_string();
 
-    let explanation: String = "We'll start by setting up a ColdCard signing device, and connecting it to Sparrow. 
-        In Part two we'll decide which bitcoin node setup we want to use, and then connect our Sparrow wallet to it.
+    let explanation: String = "In this guide, we'll start by setting up a Coldcard signing device (AKA hardware wallet), and connecting it to Sparrow. 
+        In part two we'll decide which bitcoin node implementation to use, and then connect our Sparrow wallet to it.
         Once we're through with this, you'll have a standards based, secure and private bitcoin self-custody solution.
         ".to_string();
 
@@ -31,11 +31,11 @@ pub fn IntermediateIntroPage() -> impl IntoView {
             <div class="px-4 lg:pt-0 lg:px-0">
                 <h2 class="text-left text-[1.5rem] text-[#f7931a] font-semibold lg:text-[1.5rem]">"Coldcard & Node Setup:"</h2>
                 <p class="text-lg text-white">
-                    "It's time to take your bitcoin privacy and security to another level.
+                    "It's time to take your bitcoin privacy and security to the next level.
                     In this guide we'll build on our previous basic desktop setup. If you
-                    originally chose a mobile setup, I recommend that you first start with the"
+                    originally chose a mobile setup, I recommend that you install Sparrow Desktop wallet by following the"
                     <a class="text-[#8cb4ff] underline-offset-auto" href="/guides/basic/desktop">" basic desktop guide "</a>
-                    "before continuing."
+                    "before continuing on here. There's no need to create a wallet, as we'll do that next using a hardware signing device."
                 </p>
                 <p class="pt-2 text-lg text-white">{explanation}</p>
             </div>
@@ -123,17 +123,17 @@ pub fn IntermediateNodePage() -> impl IntoView {
                     <div class="flex justify-center md:justify-end">
                         <GenericExternalButton path="https://start9.com/".to_string() wallet_title="Sovereign Computing".to_string()
                             img_url="./../../../start9_transparent_inverted.png".to_string() img_alt="Start9 logo".to_string()
-                            new_width="28".to_string() new_height="".to_string()/>
+                            new_width="28".to_string()/>
                     </div>
                     <div class="flex justify-center md:justify-end">
                         <GenericExternalButton path="https://mynodebtc.github.io/".to_string() wallet_title="Bitcoin, Lightning and more!".to_string()
                             img_url="./../../../mynode_logo.png".to_string() img_alt="MyNode logo".to_string()
-                            new_width="32".to_string() new_height="6".to_string()/>
+                            new_width="30".to_string()/>
                     </div>
                     <div class="flex justify-center md:justify-start">
                         <GenericExternalButton path="https://shop.fulmo.org/raspiblitz/".to_string() wallet_title="Not Your Node, Not your Rules".to_string()
                             img_url="./../../../raspiblitz_logo_main.png".to_string() img_alt="RaspiBlitz logo".to_string()
-                            new_width="28".to_string() new_height="".to_string()/>
+                            new_width="28".to_string()/>
                     </div>
                 </div>
             </div>

@@ -1,6 +1,6 @@
-[Protecting your Seed Words & Backup Best Practices](#protecting-your-seed-word)
+### Protecting your Seed Words & Backup Best Practices
 
-<p class="text-lg pb-4 font-semibold">Backing up your Seed Words</p>
+<h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Backup up your Seed Words</h4>
 
 Now that you've setup your Coldcard, it's important to backup your seed words in a safe, reliable and resilient way. Having them on paper is fine but that piece of paper
 is susceptible to fire, water and other enviromental damage. Steel.... Steel is your answer and although it's not perfect it will help keep your seed words safe in the 
@@ -12,7 +12,7 @@ By now you should have received your Seedplate from Coinkite. Let's transfer the
 
 <br>
 
-<p class="text-lg pb-2 font-semibold">Backing up in Steel</p>
+<h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Backing up in Steel</h4>
 
 **1\.** The seedplate is 2 sided and can accomodate 12 words per side.
 
@@ -38,12 +38,12 @@ By now you should have received your Seedplate from Coinkite. Let's transfer the
 <p class="text-md pb-2 font-semibold">Once finished it should appear similar to this:</p>
 
 <a href="./../../../seedplate.jpeg" target="_blank">
-    <img id="coinkite_seedplate" src="./../../../seedplate.jpeg" alt="cointkite_seedplate" width="600"/> 
+    <img id="coinkite_seedplate" src="./../../../seedplate.jpeg" alt="coinkite_seedplate" width="600"/> 
 </a>
 
 <br>
 
-<p class="text-lg pb-2 font-semibold">Backup Best Practices</p>
+<h4 class="text-2xl pb-2 text-[#f7931a] font-semibold">Backup Best Practices</h4>
 
 Let's recap everything we've done so far in terms of backing up our sensitive wallet information. Make sure that you've done the following:
 
@@ -53,17 +53,24 @@ Let's recap everything we've done so far in terms of backing up our sensitive wa
 
 <br>
 
-**2\.** Written down your passphrase on paper and created an encrypted backup of your Coldcard's passphrase onto a separate MicroSD card. 
+**2\.** Written down your Passphrase on paper and created an encrypted backup of your Coldcard's Passphrase onto a separate MicroSD card. 
 
 <br>
 
-**3\.** Made a backup of your seed words into at least 1 steelplate. Using multiple steelplates allows you to store them in multiple locations for further security.
+**3\.** Made a backup of your seed words into at least 1 steelplate. Using multiple steelplates allows you to store them in multiple locations for increased safety. It does however, increase the chances of someone finding one.
 
 <br>
 
-**4\.** Optionally, you made a backup of your passphrase into a steelplate. Remember, the passphrase is as important as the seed words.
+**4\.** Optionally, you made a backup of your Passphrase into a steelplate. Remember, the Passphrase is as important as the seed words.
 
 <br>
 
-**5\.** Do NOT store your seed words with your passphrase. You may store your passphrase and the wallet's extended(master) fingerprint together.
+**5\.** Do NOT store your 24 seed words with your Passphrase. You may store your Passphrase and the wallet's Extended(Master) Fingerprint together.
 
+<br>
+
+**6\.** Do NOT store any of this information online, no not take a digital photo of your seed words. The security/safety of this setup is dependent on keeping everything completely offline. 
+
+<br>
+
+Last but not least... remember to always KISS! **<a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://en.wikipedia.org/wiki/KISS_principle" target="_blank" rel="noreferrer noopener">Keep It Simple Stupid</a>**.

@@ -1,9 +1,9 @@
-[Connecting to Sparrow Wallet](#connecting-to-sparrow-wallet)
+Connecting to Sparrow Wallet
 
-<p class="text-lg pb-4 font-semibold">Connecting to Sparrow Wallet</p>
+<h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Connecting to Sparrow Wallet</h4>
 
-You've setup your Coldcard and backed up your seed words, passphrase and extended fingerprint. Now's the time to get it connected to Sparrow wallet so that 
-we can easily receive and transfer bitcoin, all without our seed words touching the internet.
+You've setup your Coldcard and backed up your seed words, Passphrase and Extended Fingerprint. Now's the time to get it connected to Sparrow Wallet so that 
+we can easily receive and transfer bitcoin, all without our seed words being exposed to the internet.
 
 <br>
 
@@ -17,7 +17,7 @@ bitcoin using your Coldcard and Sparrow Wallet.
 
 <br>
 
-***Note***: *If you do not have a third MicroSD card, I recommend using the MicroSD card with your passphrase to export the wallet connection file*.
+***Note***: *If you do not have a third MicroSD card, I recommend using the MicroSD card with your Passphrase to export the wallet connection file, since you'll have to enter your Passphrase anyway*.
 
 <br>
 
@@ -25,6 +25,6 @@ bitcoin using your Coldcard and Sparrow Wallet.
 
 <br>
 
-<p class="text-lg pb-4 font-semibold">❗Warning❗</p>
+<p class="text-xl pb-4 font-semibold">❗Warning❗</p>
 
 ***REMEMBER***, your coldcard is setup to use a passphrase, make sure you enter it manually or via the MicroSD card before ***exporting the wallet connection file or signing transactions!***

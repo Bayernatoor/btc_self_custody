@@ -63,13 +63,13 @@ pub fn GenericExternalButton(
     }
 
     view! {
-        <a href=path rel="noreferrer" target="_blank" rel="noreferrer" class="flex h-18 w-72">
-            <button class="flex justify-center shrink-0 h-18 w-72 p-4 mx-auto bg-white rounded-xl items-center space-x-4 shadow-inner hover:bg-[#f2f2f2]">
-              <div class="flex justify-center basis-1/3">
+        <a href=path rel="noreferrer" target="_blank" rel="noreferrer">
+            <button class="flex flex-col justify-center h-auto w-72 p-2 mx-auto bg-white rounded-xl items-center hover:bg-[#f2f2f2]">
+              <div class="flex justify-center basis-1/2">
                 <img class=format!("h-{} w-{}", height.get(), width.get()) src=img_url alt=img_alt/>
               </div>
-              <div class="basis-2/3">
-                <h3 class=format!("text-lg font-semibold text-[{text_color}]")>{wallet_title}</h3>
+              <div class="basis-1/2">
+                <p class=format!("text-md mt-1.5 font-semibold text-[{text_color}]")>{wallet_title}</p>
                 <p class="text-slate-500">{short_desc}</p>
               </div>
             </button>
