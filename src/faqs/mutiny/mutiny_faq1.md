@@ -1,6 +1,6 @@
 ### About Mutiny Wallet 
 
-<h2 class="text-2xl pb-4 text-[#f7931a] font-semibold">Why Mutiny Wallet</h2>
+<h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Why Mutiny Wallet</h4>
 
 Mutiny Wallet is more than just an on-chain Bitcoin wallet; it includes 
 <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://bitcoiner.guide/qna/lightning/" target="_blank" rel="noopener noreferrer">Lightning payments</a>

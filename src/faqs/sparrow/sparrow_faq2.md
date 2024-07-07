@@ -1,6 +1,6 @@
-## Verifying the downloaded binary
+### Verifying the binary
 
-<h2 class="text-2xl pb-4 text-[#f7931a] font-semibold">Verifying The Download Binary</h2>
+<h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Verifying The Binary</h4>
 
 After downloading the appropriate binary for your system, if you haven't done so yet, 
 I would recommend that you also verify the release. You can do so by following these instructions: 

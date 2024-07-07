@@ -1,6 +1,6 @@
-## Troubleshooting
+### Troubleshooting
 
-<h2 class="text-2xl pb-4 text-[#f7931a] font-semibold">I recovered my wallet but there are no transactions</h2>
+<h4 class="text-xl md-text-2xl pb-4 text-[#f7931a] font-semibold">I recovered my wallet but there are no transactions</h4>
 
 There are some common reasons as to why this could happen.
 

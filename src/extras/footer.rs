@@ -30,6 +30,8 @@ pub fn Footer() -> impl IntoView {
                     //Github link
                     <a
                       href="https://github.com/Bayernatoor/btc_self_custody"
+                      target="_blank"
+                      rel="noopener noreferrer"
                       type="button"
                       class="rounded-full bg-[#333333] p-3 uppercase leading-normal text-white transition duration-150 ease-in-out hover:text-orange-400 focus:shadow-dark-1 focus:outline-none focus:ring-0 active:shadow-1 dark:text-white"
                       data-twe-ripple-init
@@ -49,6 +51,8 @@ pub fn Footer() -> impl IntoView {
                     // NOSTR link
                     <a
                       href="https://nostr.com/npub1hxcjalw99u4m7vcalnrrgkdvyqftglydrt6tm2q9afnvec55guysrwkq9z"
+                      target="_blank"
+                      rel="noopener noreferrer"
                       type="button"
                       class="rounded-full bg-[#333333] p-3 uppercase leading-normal text-white transition duration-150 ease-in-out hover:shadow-dark-1 focus:shadow-dark-1 focus:outline-none focus:ring-0 active:shadow-1 dark:text-white"
                       data-twe-ripple-init
@@ -67,6 +71,8 @@ pub fn Footer() -> impl IntoView {
                     // Email Link
                     <a
                       href="mailto:wehodlbtc@pm.me"
+                      target="_blank"
+                      rel="noopener noreferrer"
                       type="button"
                       class="rounded-full bg-[#333333] p-3 uppercase leading-normal text-white transition duration-150 ease-in-out hover:shadow-dark-1 focus:shadow-dark-1 focus:outline-none focus:ring-0 active:shadow-1 dark:text-white"
                       data-twe-ripple-init
@@ -87,7 +93,7 @@ pub fn Footer() -> impl IntoView {
         // centered made by text
         <div class="w-full pt-2 pb-6 text-center text-[#f7931a]">
           "2024 "
-          <a class="underline" href="https://github.com/Bayernatoor">"Made by Bayer"</a>
+          <a class="underline" href="https://github.com/Bayernatoor" target="_blank" rel="noopener noreferrer">"Made by Bayer"</a>
         </div>
     </footer>
     }

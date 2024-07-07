@@ -1,6 +1,6 @@
-### More information about Mutiny wallet.
+### More information about Mutiny.
 
-<h2 class="text-2xl pb-4 text-[#f7931a] font-semibold">What Really Is Mutiny Wallet?</h2>
+<h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">What Is Mutiny Wallet?</h4>
 
 Mutiny wallet is an On-chain, Lightning and Federation capable bitcoin wallet. 
 Providing you with plenty of sending and receiving options. That being said it can be a bit overwhelming at first. 

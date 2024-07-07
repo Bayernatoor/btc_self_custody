@@ -1,6 +1,6 @@
 ### How do I receive bitcoin?
 
-<h2 class="text-2xl pb-4 text-[#f7931a] font-semibold">Receiving Your First Transaction</h2>
+<h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Receiving Your First Transaction</h4>
 
 Receiving Bitcoin is easy. That being said, Mutiny excels at being a Lightning wallet. Lighting allows for instantaneous and low fee payments.
 This is why you'll see the word **Sats** everywhere, sats, short for satoshi is the smallest unit of a bitcoin, 1 bitcoin is equal to 100 million satoshis.

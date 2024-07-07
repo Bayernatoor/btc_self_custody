@@ -1,6 +1,6 @@
-## How do I restore my wallet? 
+### How do I restore my wallet? 
 
-<h2 class="text-2xl pb-4 text-[#f7931a] font-semibold">Restoring a Bitcoin Wallet</h2>
+<h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Restoring a Bitcoin Wallet</h4>
 
 If you've lost your phone or accidentally deleted the BlueWallet app you can easily recover your bitcoin by following these steps. 
 
