@@ -66,5 +66,4 @@ pub fn NavBar() -> impl IntoView {
             <a href="/about" class="block py-2 px-4 font-medium text-xl text-[#6B7990] hover:bg-blue-100" on:click=move |_| set_menu_clicked.set(false)>"About"</a>
         </div>
     }
-
 }
