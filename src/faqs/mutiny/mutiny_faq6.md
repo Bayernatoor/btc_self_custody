@@ -1,6 +1,6 @@
 ### How do I restore my wallet?
 
-<h2 class="text-2xl pb-4 text-[#f7931a] font-semibold">Wallet Recovery</h2>
+<h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Wallet Recovery</h4>
 
 As long as you propely backed up your 12 seed words, restoring a wallet is easy. You can use 
 any **<a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://en.bitcoin.it/wiki/BIP_0039" rel="noopener noreferrer" target="blank">BIP39<a>** 

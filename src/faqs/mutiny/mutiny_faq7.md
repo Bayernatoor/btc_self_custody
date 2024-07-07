@@ -1,6 +1,6 @@
 ### I lost my phone what do I do?
 
-<h2 class="text-2xl pb-4 text-[#f7931a] font-semibold">Lost Phone Recovery</h2>
+<h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Lost Phone Recovery</h4>
 
 If you've lost your phone you should immediately follow the above **How do I restore my wallet**. 
 

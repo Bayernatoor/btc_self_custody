@@ -1,6 +1,6 @@
-## Wallet recovery 
+### Wallet recovery 
 
-<h2 class="text-2xl pb-4 text-[#f7931a] font-semibold">Recovering Your Wallet</h2>
+<h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Recovering Your Wallet</h4>
 
 Wallet recovery can be done using any software that supports **<a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://en.bitcoin.it/wiki/BIP_0039" rel="noopener noreferrer" target="blank">BIP39<a>** 
 mnemonic seeds. If you followed this guide, including Sparrow's quick start guide, than you've 

@@ -1,6 +1,6 @@
-## How do I send bitcoin?
+### How do I send bitcoin?
 
-<h2 class="text-2xl pb-4 text-[#f7931a] font-semibold">Sending Your First Transaction:</h2>
+<h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Sending Your First Transaction:</h4>
 
 **1\.** From the main page tap on the wallet you want to send from. 
 

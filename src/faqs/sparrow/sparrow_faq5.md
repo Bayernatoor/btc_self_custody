@@ -1,7 +1,7 @@
-## Receiving your first transaction 
+### Receiving your first transaction 
 
-<h2 class="text-2xl pb-4 text-[#f7931a] font-semibold">Receiving Your First Transaction</h2>
-
+<h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Receiving Your First Transaction</h4>
+3
 As with any other bitcoin wallet, receiving a transaction is quite simple.
 
 <br>

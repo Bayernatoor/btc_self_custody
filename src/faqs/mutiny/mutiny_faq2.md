@@ -1,4 +1,4 @@
-### Quick wallet setup guide
+## Quick wallet setup guide
 
 <h2 class="text-2xl pb-4 text-[#f7931a] font-semibold">Setting Up Mutiny Wallet</h2>
 

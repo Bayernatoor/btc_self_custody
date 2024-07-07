@@ -1,6 +1,6 @@
-## A quick word on Sparrow wallet
+### A quick word on Sparrow wallet
 
-<h2 class="text-2xl pb-4 text-[#f7931a] font-semibold">A Quick Word On Sparrow</h2>
+<h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">A Quick Word On Sparrow</h4>
 
 Sparrow Wallet (only available on desktop) is by far the best open-source, Bitcoin-only desktop wallet. 
 It's been built from the ground up to be as robust and feature-rich as possible without overwhelming the user, while at the 

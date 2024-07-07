@@ -392,7 +392,7 @@ pub fn BeginnerWalletInstructions(
                 // Section 3: Start Here
                 <div class="mx-auto max-w-5xl p-4 w-full">
                     <div class="mx-auto border border-solid border-gray-400"></div>
-                    <h2 class="flex justify-center font-semibold text-[#f7931a] text-xl text-white pt-6 pb-4">"Start Here"</h2>
+                    <h2 class="flex justify-center font-semibold text-[#f7931a] text-[1.5rem] pt-6 pb-4">"Start Here"</h2>
                     <AccordionMenu faq_name="bluewallet".to_string()/>
                 </div>
             </div>
@@ -426,7 +426,7 @@ pub fn BeginnerWalletInstructions(
                 // Section 3: Start Here
                 <div class="mx-auto max-w-5xl p-4 w-full">
                     <div class="mx-auto border border-solid border-gray-400"></div>
-                    <h2 class="flex justify-center font-semibold text-[#f7931a] text-xl text-white pt-6 pb-4">"Start Here"</h2>
+                    <h2 class="flex justify-center font-semibold text-[#f7931a] text-[1.5rem] pt-6 pb-4">"Start Here"</h2>
                     <AccordionMenu faq_name="mutiny".to_string()/>
                 </div>
             </div>
@@ -450,7 +450,7 @@ pub fn BeginnerWalletInstructions(
                 // Section 3: Start Here
                 <div class="mx-auto max-w-5xl p-4 w-full">
                     <div class="mx-auto border border-solid border-gray-400"></div>
-                    <h2 class="flex justify-center font-semibold text-[#f7931a] text-xl text-white pt-6 pb-4">"Start Here"</h2>
+                    <h2 class="flex justify-center font-semibold text-[#f7931a] text-[1.5rem] pt-6 pb-4">"Start Here"</h2>
                     <AccordionMenu faq_name="sparrow".to_string()/>
                 </div>
             </div>

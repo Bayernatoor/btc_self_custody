@@ -1,6 +1,6 @@
-## Sending your first transaction 
+### Sending your first transaction 
 
-<h2 class="text-2xl pb-4 text-[#f7931a] font-semibold">Sending Your First Transaction</h2>
+<h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Sending Your First Transaction</h4>
 
 Sending bitcoin from your Sparrow wallet is easy and a great way to learn the inner workings of a bitcoin transaction.
 Sparrow walks you through the process and visually demonstrates each step. 
