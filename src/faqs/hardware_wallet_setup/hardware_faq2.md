@@ -8,7 +8,7 @@ In this guide we'll provide a balanced approach to ensure privacy and security w
 <br>
 
 This guide has several steps but the process itself is relatively simple. Take it slow and you'll be setup in no time. If you have any questions throughout the process feel free to reachout to me via 
-<a class="text-blue-400 hover:text-[#3c6594]" href="mailto:wehodlbtc@pm.me" target="_blank" rel="noopener noreferrer">"email."</a> or through the links in the footer.
+<a class="text-blue-400 hover:text-[#3c6594]" href="mailto:wehodlbtc@pm.me" target="_blank" rel="noopener noreferrer">email</a> or through the links in the footer.
 
 
 <br>

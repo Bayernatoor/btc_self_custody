@@ -1,6 +1,6 @@
-[Getting Up To Speed](#advance-setup)
+### Getting Up To Speed
 
-<p class="text-xl pb-4 font-semibold">Getting Up To Speed</p>
+<h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Getting up to Speed</h4>
 
 **Note for all users: Since we're now in the advanced stage of self-custody, if at all possible, I recommend using a dedicated computer. Some computer whose only
 job is to run bitcoin software. So, although you may already have Sparrow Wallet installed on your main computer you might want to consider updating your setup before proceeding.**

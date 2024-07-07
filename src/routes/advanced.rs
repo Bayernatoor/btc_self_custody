@@ -26,7 +26,7 @@ pub fn AdvancedPage() -> impl IntoView {
                  <li>"Setup and run your own Bitcoin node"</li>
                  <li>"Setup a 2 of 3 Multisig in Sparrow Wallet using 3 signing devices"</li>
                  <li>"Use Sparrow Wallet to coordinate the Multisig. Preferably on a dedicated computer"</li>
-                 <li>"Backup your seed words and passphrases on steel"</li>
+                 <li>"Backup your Seed Words and Passphrases on steel"</li>
                  <li>"Safely backup and store your Multisig Wallet's Output Descriptors"</li>
                  <li>"Store the backups and devices in different geographic locations"</li>
              </ol>
