@@ -1,12 +1,12 @@
-use leptos::*;
 use leptos::html::Div;
+use leptos::*;
 use leptos_use::on_click_outside;
 
 #[allow(clippy::redundant_closure)]
 #[component]
 pub fn NavBar() -> impl IntoView {
     let (menu_clicked, set_menu_clicked) = create_signal(false);
-    let navbar_menu= create_node_ref::<Div>();
+    let navbar_menu = create_node_ref::<Div>();
 
     // Hook to close main menu when clicking outside
     let _ = on_click_outside(navbar_menu, move |_| {
