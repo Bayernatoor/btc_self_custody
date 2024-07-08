@@ -1,5 +1,5 @@
-use leptos::*;
 use leptos::html::Div;
+use leptos::*;
 use leptos_use::on_click_outside;
 
 #[allow(clippy::redundant_closure)]
