@@ -584,6 +584,10 @@ p, h1, h2, h3{
   position: static;
 }
 
+.fixed{
+  position: fixed;
+}
+
 .absolute{
   position: absolute;
 }

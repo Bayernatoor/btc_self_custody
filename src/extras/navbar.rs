@@ -1,9 +1,17 @@
 use leptos::*;
+use leptos::html::Div;
+use leptos_use::on_click_outside;
 
 #[allow(clippy::redundant_closure)]
 #[component]
 pub fn NavBar() -> impl IntoView {
     let (menu_clicked, set_menu_clicked) = create_signal(false);
+    let navbar_menu = create_node_ref::<Div>();
+
+    // Hook to close main menu when clicking outside
+    let _ = on_click_outside(navbar_menu, move |_| {
+        set_menu_clicked.set(false);
+    });
 
     view! {
         <div class="bg-[#123c64] text-white sticky top-0 z-10 w-full mx-auto p-8 flex justify-between items-center">
@@ -55,7 +63,7 @@ pub fn NavBar() -> impl IntoView {
         </div>
         // TODO: add event listener to body of app to listen for click when menu is open
         // set menu to false if body is clicked.
-        <div class="lg:hidden flex flex-col justify-end absolute top-16 right-4 z-20 bg-white border border-gray-200 shadow-md rounded-md p-2 cursor-pointer" class:hidden={move || !menu_clicked()} class=("animate-slideinfast", move|| menu_clicked())>
+        <div node_ref=navbar_menu class="lg:hidden flex flex-col justify-end fixed top-16 right-4 z-10 bg-white border border-gray-200 shadow-md rounded-md p-2 cursor-pointer" class:hidden={move || !menu_clicked()} class=("animate-slideinfast", move || menu_clicked())>
             <a href="/guides" class="block py-2 px-4 font-medium text-xl text-[#6B7990] hover:bg-blue-100" on:click=move |_| set_menu_clicked.set(false)>"Guides"</a>
             <a href="/faq" class="block py-2 px-4 font-medium text-xl text-[#6B7990] hover:bg-blue-100" on:click=move |_| set_menu_clicked.set(false)>"Help Desk"</a>
             <a href="/blog" class="block py-2 px-4 font-medium text-xl text-[#6B7990] hover:bg-blue-100" on:click=move |_| set_menu_clicked.set(false)>"Articles"</a>
