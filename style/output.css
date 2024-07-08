@@ -584,8 +584,8 @@ p, h1, h2, h3{
   position: static;
 }
 
-.absolute{
-  position: absolute;
+.fixed{
+  position: fixed;
 }
 
 .sticky{
