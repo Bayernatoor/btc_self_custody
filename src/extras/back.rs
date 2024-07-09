@@ -19,13 +19,10 @@ pub fn BackButton(
     }
 
     view! {
-        //<div class="flex flex-row bg-transparent sticky z-10 max-w-10xl mx-auto py-4">
-            <button on:click=move |_| set_reload_page(true)>
-                <div class="active:bg-transparent left-0 top-0 h-12 w-12">
-                    <img src=format!("{}", button_image) alt="back_button" />
-                </div>
-            </button>
-        //</div>
-
+        <button on:click=move |_| set_reload_page(true)>
+            <div class="active:bg-transparent left-0 top-0 h-12 w-12">
+                <img src=format!("{}", button_image) alt="back_button"/>
+            </div>
+        </button>
     }
 }
