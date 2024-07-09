@@ -63,7 +63,7 @@ once_cell = "1.19.0"
 
 [features]
 hydrate = ["leptos/hydrate", "leptos_meta/hydrate", "leptos_router/hydrate"]
-ssr = ["dep:actix-files", "dep:actix-web", "dep:leptos_actix", "dep:sqlx", "sqlx/runtime-tokio", "leptos/ssr", "leptos_meta/ssr", "leptos_router/ssr", "leptos-use/ssr"]
+ssr = ["dep:actix-files", "dep:actix-web", "dep:leptos_actix", "dep:sqlx", "sqlx/runtime-tokio", "leptos/ssr", "leptos_meta/ssr", "leptos_router/ssr",  "leptos-use/ssr"]
 
 [package.metadata]
 cargo-fmt = true
