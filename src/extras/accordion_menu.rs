@@ -18,7 +18,7 @@ impl FAQ {
     }
 }
 
-// Server function to fetch FAQ md files 
+// Server function to fetch FAQ md files
 #[server(FetchFaq, "/api", "Url", "faq")]
 pub async fn fetch_faq(faq_name: String) -> Result<Vec<FAQ>, ServerFnError> {
     use std::{fs, io};

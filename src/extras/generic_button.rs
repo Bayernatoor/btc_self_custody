@@ -106,7 +106,7 @@ pub fn GenericExternalButton(
 /// 2. title
 /// 3. short_desc - location below title
 /// 4. an img - location to the left of text.
-/// all params are optional except path 
+/// all params are optional except path
 #[component]
 #[allow(non_snake_case)]
 pub fn GenericImageSubTextButton(
