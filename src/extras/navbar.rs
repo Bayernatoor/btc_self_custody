@@ -2,6 +2,9 @@ use leptos::html::Div;
 use leptos::*;
 use leptos_use::on_click_outside;
 
+// navbar requires rework 
+// - prevent propagation (disable clicks when menu is open)
+// - support safari, doesn't seem to be work in safari atm :(
 #[allow(clippy::redundant_closure)]
 #[component]
 pub fn NavBar() -> impl IntoView {

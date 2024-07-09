@@ -57,7 +57,7 @@ pub async fn run(
 
     //let addr = conf.leptos_options.site_addr;
     // Generate the list of routes in your Leptos App
-    let routes = generate_route_list(|| view! {<App/> });
+    let routes = generate_route_list(|| view! { <App/> });
     logging::log!("Server listening on: {:?}", listener);
 
     let server = HttpServer::new(move || {
@@ -75,7 +75,7 @@ pub async fn run(
             .leptos_routes(
                 leptos_options.to_owned(),
                 routes.to_owned(),
-                || view! {<App/> },
+                || view! { <App/> },
             )
             .service(Files::new("/", site_root))
     })

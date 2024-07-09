@@ -96,7 +96,7 @@ pub fn Footer() -> impl IntoView {
                     </div>
                 </div>
             </div>
-            // centered made by text
+            // made by portion 
             <div class="w-full pt-2 pb-6 text-center text-[#f7931a]">
                 "2024 "
                 <a
