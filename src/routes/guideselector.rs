@@ -27,7 +27,7 @@ impl GuideDetails {
     }
 }
 
-/// Returns the sub categories of `GuideSelector()`. Determines 
+/// Returns the sub categories of `GuideSelector()`. Determines
 /// which OS options to display (android, ios or desktop), based on what is
 /// passed to the component in `GuideSelector`
 /// then generates and returns the buttons
