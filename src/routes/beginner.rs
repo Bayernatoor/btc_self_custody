@@ -10,6 +10,9 @@ pub enum WalletName {
     Sparrow,
 }
 
+// TODO: refactor all buttons, add them to generic_button module.
+// to much repetition and different buttons being used.
+
 #[component]
 #[allow(non_snake_case)]
 pub fn WalletButton<F>(
@@ -41,14 +44,17 @@ where
 
     view! {
         <a href=path>
-            <button class="flex justify-center shrink-0 h-20 w-72 p-4 mx-auto bg-white rounded-xl items-center space-x-4 hover:bg-[#f2f2f2] shadow-inner" on:click=on_click>
-              <div class="shrink-0">
-                <img class="h-12 w-12 rounded-md" src=img_url alt=img_alt/>
-              </div>
-              <div>
-                <h3 class=format!("text-xl font-medium text-[{text_color}]")>{wallet_title}</h3>
-                <p class="text-slate-500">{short_desc}</p>
-              </div>
+            <button
+                class="flex justify-center shrink-0 h-20 w-72 p-4 mx-auto bg-white rounded-xl items-center space-x-4 hover:bg-[#f2f2f2] shadow-inner"
+                on:click=on_click
+            >
+                <div class="shrink-0">
+                    <img class="h-12 w-12 rounded-md" src=img_url alt=img_alt/>
+                </div>
+                <div>
+                    <h3 class=format!("text-xl font-medium text-[{text_color}]")>{wallet_title}</h3>
+                    <p class="text-slate-500">{short_desc}</p>
+                </div>
             </button>
         </a>
     }
@@ -85,17 +91,24 @@ pub fn DownloadButton(
     }
     view! {
         <a href=href rel="noreferrer" target="_blank" rel="noreferrer" class="flex h-18 w-72">
-            <button class=format!("flex {} h-auto w-{} p-2 mx-auto bg-white rounded-xl items-center hover:bg-[#f2f2f2]",
-                                  flex_justify.get_untracked(), button_width.get_untracked())>
-              <div class=format!("flex justify-center basis-{}", basis_one.get_untracked())>
-                <img class=format!("h-auto w-{}", width.get()) src=format!("{}", logo) alt=format!("{}", alt_txt) />
-              </div>
-                <Show
-                    when=move || button_name.is_some()
-                    fallback=move || view!("")>
+            <button class=format!(
+                "flex {} h-auto w-{} p-2 mx-auto bg-white rounded-xl items-center hover:bg-[#f2f2f2]",
+                flex_justify.get_untracked(),
+                button_width.get_untracked(),
+            )>
+                <div class=format!("flex justify-center basis-{}", basis_one.get_untracked())>
+                    <img
+                        class=format!("h-auto w-{}", width.get())
+                        src=format!("{}", logo)
+                        alt=format!("{}", alt_txt)
+                    />
+                </div>
+                <Show when=move || button_name.is_some() fallback=move || view! { "" }>
                     <div class="">
                         <div class=format!("basis-{}", basis_two.get_untracked())>
-                          <p class=format!("text-[1.25rem] font-bold text-black")>{button().to_string()}</p>
+                            <p class=format!(
+                                "text-[1.25rem] font-bold text-black",
+                            )>{button().to_string()}</p>
                         </div>
                     </div>
                 </Show>
@@ -104,6 +117,7 @@ pub fn DownloadButton(
     }
 }
 
+/// Component used for mobile (basic) pages.
 #[component]
 #[allow(non_snake_case)]
 pub fn BeginnerPageTemplate(
@@ -150,10 +164,15 @@ pub fn BeginnerPageTemplate(
 
     // renders the guides/basic/* route
     view! {
-        <div id="basic" class="grid gap-6 max-w-3xl mx-auto mt-8 mb-24 animate-fadeinone grid-rows-[auto_auto_1fr] lg:max-w-4xl xl:max-w-5xl lg:gap-8">
+        <div
+            id="basic"
+            class="grid gap-6 max-w-3xl mx-auto mt-8 mb-24 animate-fadeinone grid-rows-[auto_auto_1fr] lg:max-w-4xl xl:max-w-5xl lg:gap-8"
+        >
             // Section 1: Title, Quote, and Quote Author
             <div class="mt-10 lg:mt-0 px-6">
-                <h1 class="text-center text-[2.25rem] text-[#f7931a] font-semibold md:text-[2.5rem] lg:text-[3rem]">{title}</h1>
+                <h1 class="text-center text-[2.25rem] text-[#f7931a] font-semibold md:text-[2.5rem] lg:text-[3rem]">
+                    {title}
+                </h1>
                 <div class="text-center max-w-sm mx-auto">
                     <p class="text-lg text-white italic">{quote}</p>
                 </div>
@@ -164,33 +183,62 @@ pub fn BeginnerPageTemplate(
 
             // Section 2: Intro
             <div class="px-6 pt-4 lg:pt-0 lg:px-0">
-                <p class="text-xl font-semibold text-white pb-2 ">"Bitcoin Self-Custody: The act of taking possession of a bitcoin private key."</p>
+                <p class="text-xl font-semibold text-white pb-2 ">
+                    "Bitcoin Self-Custody: The act of taking possession of a bitcoin private key."
+                </p>
                 <p class="text-lg text-white pb-2">{intro}</p>
-                <p class="text-lg text-white pb-2"><strong>{wallet_name_blue.clone()}</strong>{wallet_one_text}</p>
-                <p class="text-lg text-white"><strong>{wallet_name_mutiny.clone()}</strong>{wallet_two_text}</p>
+                <p class="text-lg text-white pb-2">
+                    <strong>{wallet_name_blue.clone()}</strong>
+                    {wallet_one_text}
+                </p>
+                <p class="text-lg text-white">
+                    <strong>{wallet_name_mutiny.clone()}</strong>
+                    {wallet_two_text}
+                </p>
             </div>
 
             // Section 3: Everything Else
             <div class="px-6 lg:pb-4 lg:px-0">
                 <hr class="border border-solid border-gray-400 mx-auto w-full mb-6"/>
 
-                <h2 class="text-center pb-4 text-[1.5rem] font-semibold text-[#f7931a] font-semibold">"Pick A Wallet"</h2>
+                <h2 class="text-center pb-4 text-[1.5rem] font-semibold text-[#f7931a] font-semibold">
+                    "Pick A Wallet"
+                </h2>
 
                 <div class="flex flex-col mx-auto justify-center lg:flex-row px-6 gap-4">
-                    <WalletButton on_click=move |_| {set_blue_clicked(true); set_blue_details(true);}
-                        selected_wallet=WalletName::Blue platform=platform()
-                        wallet_title=wallet_name_blue.clone() short_desc=short_desc_blue.clone() img_url=img_url_blue.clone()
-                        img_alt=img_alt_blue.clone() text_color=text_color_blue.clone() />
-                    <WalletButton on_click=move |_| {set_mutiny_clicked(true); set_mutiny_details(true);}
-                        selected_wallet=WalletName::Mutiny platform=platform()
-                        wallet_title=wallet_name_mutiny.clone() short_desc=short_desc_mutiny.clone() img_url=img_url_mutiny.clone() img_alt=img_alt_mutiny.clone()
-                        text_color=text_color_mutiny.clone() />
+                    <WalletButton
+                        on_click=move |_| {
+                            set_blue_clicked(true);
+                            set_blue_details(true);
+                        }
+                        selected_wallet=WalletName::Blue
+                        platform=platform()
+                        wallet_title=wallet_name_blue.clone()
+                        short_desc=short_desc_blue.clone()
+                        img_url=img_url_blue.clone()
+                        img_alt=img_alt_blue.clone()
+                        text_color=text_color_blue.clone()
+                    />
+                    <WalletButton
+                        on_click=move |_| {
+                            set_mutiny_clicked(true);
+                            set_mutiny_details(true);
+                        }
+                        selected_wallet=WalletName::Mutiny
+                        platform=platform()
+                        wallet_title=wallet_name_mutiny.clone()
+                        short_desc=short_desc_mutiny.clone()
+                        img_url=img_url_mutiny.clone()
+                        img_alt=img_alt_mutiny.clone()
+                        text_color=text_color_mutiny.clone()
+                    />
                 </div>
             </div>
         </div>
     }
 }
 
+/// Component used for beginner (basic) desktop pages.
 #[component]
 #[allow(non_snake_case)]
 pub fn BeginnerDesktopPageTemplate(
@@ -210,10 +258,15 @@ pub fn BeginnerDesktopPageTemplate(
     let text_color_sparrow = "#6f767c".to_string();
 
     view! {
-        <div id="basic" class="grid gap-6 mx-auto max-w-3xl mt-8 mb-24 rounded-xl animate-fadeinone grid-rows-[auto_auto_1fr] lg:max-w-4xl xl:max-w-5xl lg:gap-8">
+        <div
+            id="basic"
+            class="grid gap-6 mx-auto max-w-3xl mt-8 mb-24 rounded-xl animate-fadeinone grid-rows-[auto_auto_1fr] lg:max-w-4xl xl:max-w-5xl lg:gap-8"
+        >
             // Section 1: Title, Quote, and Quote Author
             <div class="mt-10 lg:mt-0">
-                <h1 class="text-center text-[2.25rem] px-6 text-[#f7931a] font-semibold md:text-[2.5rem] lg:text-[3rem] lg:px-0">{title}</h1>
+                <h1 class="text-center text-[2.25rem] px-6 text-[#f7931a] font-semibold md:text-[2.5rem] lg:text-[3rem] lg:px-0">
+                    {title}
+                </h1>
                 <div class="text-center max-w-sm mx-auto">
                     <p class="text-lg text-white italic">{quote}</p>
                 </div>
@@ -231,22 +284,31 @@ pub fn BeginnerDesktopPageTemplate(
             <div class="px-6 lg:pb-4 lg:px-0">
                 <hr class="border border-solid border-gray-400 mx-auto mb-6 w-full"/>
 
-                <h2 class="text-center pb-4 text-xl font-semibold text-[#f7931a]">"Recommended Wallet"</h2>
+                <h2 class="text-center pb-4 text-xl font-semibold text-[#f7931a]">
+                    "Recommended Wallet"
+                </h2>
 
                 <div class="flex flex-col justify-center lg:flex-row px-6 py-2 gap-4 max-w-2xl mx-auto">
-                    <WalletButton on_click=move |_| {set_sparrow_clicked(true);}
-                        selected_wallet=WalletName::Sparrow platform="desktop".to_string()
-                        wallet_title=wallet_name_sparrow.clone() short_desc=short_desc_sparrow.clone() img_url=img_url_sparrow.clone()
-                        img_alt=img_alt_sparrow.clone() text_color=text_color_sparrow.clone() />
+                    <WalletButton
+                        on_click=move |_| {
+                            set_sparrow_clicked(true);
+                        }
+                        selected_wallet=WalletName::Sparrow
+                        platform="desktop".to_string()
+                        wallet_title=wallet_name_sparrow.clone()
+                        short_desc=short_desc_sparrow.clone()
+                        img_url=img_url_sparrow.clone()
+                        img_alt=img_alt_sparrow.clone()
+                        text_color=text_color_sparrow.clone()
+                    />
                 </div>
             </div>
         </div>
-
     }
 }
 
-// Renders the basic Android page
-// This comp should be reviewed and likely redundant.
+/// Renders the basic Android page
+/// This comp should be reviewed and is likely redundant.
 #[component]
 #[allow(non_snake_case)]
 pub fn RenderAndroidPage() -> impl IntoView {
@@ -268,7 +330,14 @@ pub fn RenderAndroidPage() -> impl IntoView {
     let quote_author = "-Nick Szabo".to_string();
 
     view! {
-        <BeginnerPageTemplate title=title quote=quote quote_author=quote_author intro=intro_text wallet_one_text=wallet_one_text wallet_two_text=wallet_two_text/>
+        <BeginnerPageTemplate
+            title=title
+            quote=quote
+            quote_author=quote_author
+            intro=intro_text
+            wallet_one_text=wallet_one_text
+            wallet_two_text=wallet_two_text
+        />
     }
 }
 
@@ -294,12 +363,18 @@ pub fn RenderIosPage() -> impl IntoView {
     let quote_author = "-Nick Szabo".to_string();
 
     view! {
-            <BeginnerPageTemplate title=title quote=quote quote_author=quote_author intro=intro_text wallet_one_text=wallet_one_text wallet_two_text=wallet_two_text/>
-
+        <BeginnerPageTemplate
+            title=title
+            quote=quote
+            quote_author=quote_author
+            intro=intro_text
+            wallet_one_text=wallet_one_text
+            wallet_two_text=wallet_two_text
+        />
     }
 }
 
-/// Renders the basic IOS page.
+/// Renders the basic desktop page.
 #[component]
 #[allow(non_snake_case)]
 pub fn RenderDesktopPage() -> impl IntoView {
@@ -313,8 +388,12 @@ pub fn RenderDesktopPage() -> impl IntoView {
     let quote_author = "-Nick Szabo".to_string();
 
     view! {
-            <BeginnerDesktopPageTemplate title=title quote=quote quote_author=quote_author intro=intro_text/>
-
+        <BeginnerDesktopPageTemplate
+            title=title
+            quote=quote
+            quote_author=quote_author
+            intro=intro_text
+        />
     }
 }
 /// Route for the android instructions - renders either bluewallet or mutinywallet
@@ -365,15 +444,24 @@ pub fn BeginnerWalletInstructions(
 
     if displayed_wallet() == "blue" {
         view! {
-            <div id="basic" class="grid gap-6 max-w-3xl mx-auto mt-8 mb-24 animate-fadeinone grid-rows-[auto_auto_1fr] lg:max-w-4xl xl:max-w-5xl lg:gap-8">
+            <div
+                id="basic"
+                class="grid gap-6 max-w-3xl mx-auto mt-8 mb-24 animate-fadeinone grid-rows-[auto_auto_1fr] lg:max-w-4xl xl:max-w-5xl lg:gap-8"
+            >
                 // Section 1: Title, Quote, and Quote Author
                 <div class="lg:mt-0 px-6">
-                    <h1 class="text-center text-[2.25rem] font-semibold text-[#f7931a] md:text-[2.5rem] lg:text-[3rem]">"Blue Wallet"</h1>
+                    <h1 class="text-center text-[2.25rem] font-semibold text-[#f7931a] md:text-[2.5rem] lg:text-[3rem]">
+                        "Blue Wallet"
+                    </h1>
                     <div class="text-center mx-auto">
-                        <p class="text-lg font-semibold text-white italic">"Radically Simple 👩‍🎤 Extremely Powerful."</p>
+                        <p class="text-lg font-semibold text-white italic">
+                            "Radically Simple 👩‍🎤 Extremely Powerful."
+                        </p>
                     </div>
                     <div class="text-center mx-auto">
-                        <p class="text-md text-white italic">"A freedom and self-sovereign tool, disguised as a cute little Blue app in your pocket."</p>
+                        <p class="text-md text-white italic">
+                            "A freedom and self-sovereign tool, disguised as a cute little Blue app in your pocket."
+                        </p>
                     </div>
                 </div>
 
@@ -381,33 +469,61 @@ pub fn BeginnerWalletInstructions(
                 <div class="flex flex-col mx-auto justify-center px-6 py-2 max-w-2xl mx-auto gap-4">
                     <Show
                         when=move || ios
-                        fallback=move || view! {
-                            <DownloadButton href=blue_google_play.clone() logo=google_play_logo.clone() alt_txt=google_play_alt.clone() button_name="Google Play".to_string()/>
-                            <DownloadButton href=blue_android_apk.clone() logo=img_url_github.clone() alt_txt=img_alt_github.clone() button_name="APK".to_string()/>
-                        }>
-                        <DownloadButton href=blue_apple_store.clone() logo=apple_store_logo.clone() alt_txt=apple_store_alt.clone()/>
+                        fallback=move || {
+                            view! {
+                                <DownloadButton
+                                    href=blue_google_play.clone()
+                                    logo=google_play_logo.clone()
+                                    alt_txt=google_play_alt.clone()
+                                    button_name="Google Play".to_string()
+                                />
+                                <DownloadButton
+                                    href=blue_android_apk.clone()
+                                    logo=img_url_github.clone()
+                                    alt_txt=img_alt_github.clone()
+                                    button_name="APK".to_string()
+                                />
+                            }
+                        }
+                    >
+                        <DownloadButton
+                            href=blue_apple_store.clone()
+                            logo=apple_store_logo.clone()
+                            alt_txt=apple_store_alt.clone()
+                        />
                     </Show>
                 </div>
 
                 // Section 3: Start Here
                 <div class="mx-auto max-w-5xl p-4 w-full">
                     <div class="mx-auto border border-solid border-gray-400"></div>
-                    <h2 class="flex justify-center font-semibold text-[#f7931a] text-[1.5rem] pt-6 pb-4">"Start Here"</h2>
+                    <h2 class="flex justify-center font-semibold text-[#f7931a] text-[1.5rem] pt-6 pb-4">
+                        "Start Here"
+                    </h2>
                     <AccordionMenu faq_name="bluewallet".to_string()/>
                 </div>
             </div>
         }
     } else if displayed_wallet() == "mutiny" {
         view! {
-            <div id="basic" class="grid gap-6 max-w-3xl mx-auto mt-8 mb-24 animate-fadeinone grid-rows-[auto_auto_1fr] lg:max-w-4xl xl:max-w-5xl lg:gap-8">
+            <div
+                id="basic"
+                class="grid gap-6 max-w-3xl mx-auto mt-8 mb-24 animate-fadeinone grid-rows-[auto_auto_1fr] lg:max-w-4xl xl:max-w-5xl lg:gap-8"
+            >
                 // Section 1: Title, Quote, and Quote Author
                 <div class="lg:mt-0 px-6">
-                    <h1 class="text-center text-[2.25rem] font-semibold text-[#f7931a] md:text-[2.5rem] lg:text-[3rem]">"Mutiny Wallet"</h1>
+                    <h1 class="text-center text-[2.25rem] font-semibold text-[#f7931a] md:text-[2.5rem] lg:text-[3rem]">
+                        "Mutiny Wallet"
+                    </h1>
                     <div class="text-center mx-auto">
-                        <p class="text-lg font-semibold text-white italic">"Unstoppable bitcoin. For everyone."</p>
+                        <p class="text-lg font-semibold text-white italic">
+                            "Unstoppable bitcoin. For everyone."
+                        </p>
                     </div>
                     <div class="text-center mx-auto">
-                        <p class="text-md text-white italic">"Mutiny is a self-custodial lightning wallet that runs everywhere."</p>
+                        <p class="text-md text-white italic">
+                            "Mutiny is a self-custodial lightning wallet that runs everywhere."
+                        </p>
                     </div>
                 </div>
 
@@ -415,42 +531,75 @@ pub fn BeginnerWalletInstructions(
                 <div class="flex flex-col mx-auto justify-center px-6 py-2 max-w-2xl mx-auto gap-4">
                     <Show
                         when=move || ios
-                        fallback=move || view! {
-                            <DownloadButton href=mutiny_google_play.clone() logo=google_play_logo.clone() alt_txt=google_play_alt.clone() button_name="Google Play".to_string()/>
-                            <DownloadButton href=mutiny_android_apk.clone() logo=img_url_github.clone() alt_txt=img_alt_github.clone() button_name="APK".to_string()/>
-                        }>
-                        <DownloadButton href=mutiny_apple_store.clone() logo=apple_store_logo.clone() alt_txt=apple_store_alt.clone()/>
+                        fallback=move || {
+                            view! {
+                                <DownloadButton
+                                    href=mutiny_google_play.clone()
+                                    logo=google_play_logo.clone()
+                                    alt_txt=google_play_alt.clone()
+                                    button_name="Google Play".to_string()
+                                />
+                                <DownloadButton
+                                    href=mutiny_android_apk.clone()
+                                    logo=img_url_github.clone()
+                                    alt_txt=img_alt_github.clone()
+                                    button_name="APK".to_string()
+                                />
+                            }
+                        }
+                    >
+                        <DownloadButton
+                            href=mutiny_apple_store.clone()
+                            logo=apple_store_logo.clone()
+                            alt_txt=apple_store_alt.clone()
+                        />
                     </Show>
                 </div>
 
                 // Section 3: Start Here
                 <div class="mx-auto max-w-5xl p-4 w-full">
                     <div class="mx-auto border border-solid border-gray-400"></div>
-                    <h2 class="flex justify-center font-semibold text-[#f7931a] text-[1.5rem] pt-6 pb-4">"Start Here"</h2>
+                    <h2 class="flex justify-center font-semibold text-[#f7931a] text-[1.5rem] pt-6 pb-4">
+                        "Start Here"
+                    </h2>
                     <AccordionMenu faq_name="mutiny".to_string()/>
                 </div>
             </div>
         }
     } else {
         view! {
-            <div id="basic" class="grid gap-6 max-w-3xl mx-auto mt-8 mb-24 animate-fadeinone grid-rows-[auto_auto_1fr] lg:max-w-4xl xl:max-w-5xl lg:gap-8">
+            <div
+                id="basic"
+                class="grid gap-6 max-w-3xl mx-auto mt-8 mb-24 animate-fadeinone grid-rows-[auto_auto_1fr] lg:max-w-4xl xl:max-w-5xl lg:gap-8"
+            >
                 // Section 1: Title, Quote, and Quote Author
                 <div class="lg:mt-0 px-6">
-                    <h1 class="text-center text-[2.25rem] font-semibold text-[#f7931a] md:text-[2.5rem] lg:text-[3rem]">"Sparrow Wallet"</h1>
+                    <h1 class="text-center text-[2.25rem] font-semibold text-[#f7931a] md:text-[2.5rem] lg:text-[3rem]">
+                        "Sparrow Wallet"
+                    </h1>
                     <div class="text-center mx-auto">
-                        <p class="text-white text-lg font-semibold px-4">"Gain Financial Sovereignty with Sparrow Wallet."</p>
+                        <p class="text-white text-lg font-semibold px-4">
+                            "Gain Financial Sovereignty with Sparrow Wallet."
+                        </p>
                     </div>
                 </div>
 
                 // Section 2: Download Options
                 <div class="flex flex-col mx-auto justify-center px-6 py-2 mx-auto gap-4 lg:px-4">
-                    <DownloadButton href=sparrow_download.clone() logo=img_url_sparrow.clone() alt_txt=img_alt_sparrow.clone() button_name="Get Sparrow".to_string()/>
+                    <DownloadButton
+                        href=sparrow_download.clone()
+                        logo=img_url_sparrow.clone()
+                        alt_txt=img_alt_sparrow.clone()
+                        button_name="Get Sparrow".to_string()
+                    />
                 </div>
 
                 // Section 3: Start Here
                 <div class="mx-auto max-w-5xl p-4 w-full">
                     <div class="mx-auto border border-solid border-gray-400"></div>
-                    <h2 class="flex justify-center font-semibold text-[#f7931a] text-[1.5rem] pt-6 pb-4">"Start Here"</h2>
+                    <h2 class="flex justify-center font-semibold text-[#f7931a] text-[1.5rem] pt-6 pb-4">
+                        "Start Here"
+                    </h2>
                     <AccordionMenu faq_name="sparrow".to_string()/>
                 </div>
             </div>

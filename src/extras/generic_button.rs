@@ -1,5 +1,11 @@
 use leptos::*;
 
+// TODO: rework all buttons and standardize them.
+
+/// button to for internal redirects
+/// 1. path is required
+/// 2. wallet_title is required (will be renamed, it's simply a title text)
+/// all other params are optional
 #[component]
 #[allow(non_snake_case)]
 pub fn GenericButton(
@@ -45,6 +51,11 @@ pub fn GenericButton(
     }
 }
 
+/// button for external redirects
+/// 1. path is required
+/// 2. wallet_title is required (will be renamed, it's simply a title text)
+/// all other params are optional
+/// same as GenericButton but is for outside links
 #[component]
 #[allow(non_snake_case)]
 pub fn GenericExternalButton(
@@ -89,6 +100,13 @@ pub fn GenericExternalButton(
     }
 }
 
+/// internal button
+/// important params are:
+/// 1. path (href) is required
+/// 2. title
+/// 3. short_desc - location below title
+/// 4. an img - location to the left of text.
+/// all params are optional except path 
 #[component]
 #[allow(non_snake_case)]
 pub fn GenericImageSubTextButton(
