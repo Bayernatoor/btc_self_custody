@@ -43,7 +43,7 @@
 
 <br>
 
-**5\.** You can also tap **Share** at the bottom of the screen to share the address using an application your phone.
+**5\.** You can also tap **Share** at the bottom of the screen to share the address using a messaging app on your phone.
 
 <br>
 
