@@ -4,6 +4,7 @@ use leptos::{server, ServerFnError, *};
 use pulldown_cmark::{html, Options, Parser};
 use serde::{Deserialize, Serialize};
 
+// An FAQ - values come from an md file
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FAQ {
     pub id: u32,
@@ -17,6 +18,7 @@ impl FAQ {
     }
 }
 
+// Server function to fetch FAQ md files 
 #[server(FetchFaq, "/api", "Url", "faq")]
 pub async fn fetch_faq(faq_name: String) -> Result<Vec<FAQ>, ServerFnError> {
     use std::{fs, io};
@@ -34,6 +36,8 @@ pub async fn fetch_faq(faq_name: String) -> Result<Vec<FAQ>, ServerFnError> {
     let mut faqs = Vec::new();
     let mut id = 0;
 
+    // Iterate over all files and create new a `FAQ` struct for each one.
+    // Add them to faqs vec
     for faq in files {
         // increment id for each new file
         id += 1;
@@ -57,6 +61,7 @@ pub async fn fetch_faq(faq_name: String) -> Result<Vec<FAQ>, ServerFnError> {
     Ok(faqs)
 }
 
+// Pasre the markdown and convert it to html
 #[allow(non_snake_case)]
 fn MarkdownToHtml(markdown: &str) -> String {
     let mut options = Options::empty();
@@ -71,7 +76,7 @@ fn MarkdownToHtml(markdown: &str) -> String {
     html_output
 }
 
-// FAQs menu
+// Generate FAQs menu
 #[component]
 #[allow(non_snake_case)]
 fn Menu(faq_title: String, faq_content: String) -> impl IntoView {

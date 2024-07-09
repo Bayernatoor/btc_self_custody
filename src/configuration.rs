@@ -76,7 +76,7 @@ pub fn get_configuration() -> Result<Settings, config::ConfigError> {
     })
 }
 
-// The possible runtime environment for our application.
+// The possible runtime environments for our application.
 pub enum Environment {
     Local,
     Production,
