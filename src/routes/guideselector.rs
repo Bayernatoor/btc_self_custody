@@ -137,12 +137,17 @@ pub fn GuideSelector() -> impl IntoView {
 
     view! {
         <div class="grid gap-4 md:gap-2 mx-auto justify-items-center max-w-3xl mt-8 mb-24 opacity-0 animate-fadeinone md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-2 md:max-w-4xl lg:max-w-5xl md:mt-20 lg:pb-28 lg:my-0">
-            <div class="flex justify-center items-center">
-                <img
-                    class="w-64 h-auto lg:w-80"
+            <div class="flex flex-col pb-2 justify-center items-center">
+                 <img
+                    class="w-72 h-auto py-4 lg:w-96"
                     src="./../../../lock_new_blue.png"
                     alt="Financial privacy lock"
                 />
+                <div class="px-6 pt-4">
+                    <p class="text-white text-2xl font-medium text-center pb-2">
+                        "Select a guide based on how much Bitcoin you are protecting."
+                    </p>
+                </div>
             </div>
             <div class="">
                 <LevelButton
@@ -187,3 +192,7 @@ pub fn GuideSelector() -> impl IntoView {
         </div>
     }
 }
+
+
+
+
