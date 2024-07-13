@@ -50,6 +50,7 @@ pub fn App() -> impl IntoView {
                                 }
                             }
                         />
+
                         <Route path="/guides/basic/android" view=|| view! { <RenderAndroidPage/> }/>
                         <Route
                             path="/guides/basic/android/mutiny"
@@ -62,6 +63,7 @@ pub fn App() -> impl IntoView {
                                 }
                             }
                         />
+
                         <Route
                             path="/guides/basic/android/blue"
                             view=|| {
@@ -73,6 +75,7 @@ pub fn App() -> impl IntoView {
                                 }
                             }
                         />
+
                         <Route path="/guides/basic/ios" view=|| view! { <RenderIosPage/> }/>
                         <Route
                             path="/guides/basic/ios/blue"
@@ -85,6 +88,7 @@ pub fn App() -> impl IntoView {
                                 }
                             }
                         />
+
                         <Route
                             path="/guides/basic/ios/mutiny"
                             view=|| {
@@ -96,6 +100,7 @@ pub fn App() -> impl IntoView {
                                 }
                             }
                         />
+
                         // Intermediate guide routes
                         <Route
                             path="/guides/intermediate/desktop"

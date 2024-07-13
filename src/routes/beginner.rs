@@ -189,11 +189,11 @@ pub fn BeginnerPageTemplate(
                 <p class="text-lg text-white pb-2">{intro}</p>
                 <p class="text-lg text-[#f7931a]">
                     <strong>{wallet_name_blue.clone()}</strong>
-                    <p class="text-lg text-white" inner_html=wallet_one_text/>
+                    <p class="text-lg text-white" inner_html=wallet_one_text></p>
                 </p>
                 <p class="text-lg text-[#f7931a] pt-2">
                     <strong>{wallet_name_mutiny.clone()}</strong>
-                    <p class="text-lg text-white" inner_html=wallet_two_text/>
+                    <p class="text-lg text-white" inner_html=wallet_two_text></p>
                 </p>
             </div>
 
@@ -211,6 +211,7 @@ pub fn BeginnerPageTemplate(
                             set_blue_clicked(true);
                             set_blue_details(true);
                         }
+
                         selected_wallet=WalletName::Blue
                         platform=platform()
                         wallet_title=wallet_name_blue.clone()
@@ -224,6 +225,7 @@ pub fn BeginnerPageTemplate(
                             set_mutiny_clicked(true);
                             set_mutiny_details(true);
                         }
+
                         selected_wallet=WalletName::Mutiny
                         platform=platform()
                         wallet_title=wallet_name_mutiny.clone()
@@ -293,6 +295,7 @@ pub fn BeginnerDesktopPageTemplate(
                         on_click=move |_| {
                             set_sparrow_clicked(true);
                         }
+
                         selected_wallet=WalletName::Sparrow
                         platform="desktop".to_string()
                         wallet_title=wallet_name_sparrow.clone()
@@ -490,6 +493,7 @@ pub fn BeginnerWalletInstructions(
                             }
                         }
                     >
+
                         <DownloadButton
                             href=blue_apple_store.clone()
                             logo=apple_store_logo.clone()
@@ -552,6 +556,7 @@ pub fn BeginnerWalletInstructions(
                             }
                         }
                     >
+
                         <DownloadButton
                             href=mutiny_apple_store.clone()
                             logo=apple_store_logo.clone()
