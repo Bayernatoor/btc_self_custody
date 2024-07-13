@@ -146,7 +146,7 @@ pub fn GuideSelector() -> impl IntoView {
                 />
                 <div class="px-6 pt-2 max-w-3xl">
                     <p class="text-white text-xl text-center pb-2 md:text-2xl">
-                        "Select a guide based on how much Bitcoin you are protecting"
+                        "Select a guide based on how much Bitcoin you are protecting."
                     </p>
                 </div>
             </div>
