@@ -1,5 +1,5 @@
 use crate::extras::accordion_menu::AccordionMenu;
-use crate::extras::generic_button::*;
+use crate::extras::buttons::*;
 use leptos::*;
 
 // Renders the intro page to the intermediate guide

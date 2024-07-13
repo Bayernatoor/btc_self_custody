@@ -66,52 +66,23 @@ pub fn DownloadButton(
     href: String,
     logo: String,
     alt_txt: String,
-    #[prop(optional)] button_name: Option<String>,
 ) -> impl IntoView {
-    let (button, set_button) = create_signal(String::new());
-    let (width, set_width) = create_signal(12);
-    let (button_width, set_button_width) = create_signal(64);
-    let (basis_one, set_basis_one) = create_signal("1/3".to_string());
-    let (basis_two, set_basis_two) = create_signal("2/3".to_string());
-    let (flex_justify, set_flex_justify) = create_signal(String::new());
-
-    let name = match button_name.clone() {
-        Some(name) => name,
-        None => "No Button Name".to_string(),
-    };
-
-    set_button(name.clone());
-
-    if button_name.is_none() {
-        set_width(48);
-        set_button_width(48);
-        set_flex_justify("justify-center".to_string());
-        set_basis_one("full".to_string());
-        set_basis_two("full".to_string());
-    }
     view! {
-        <a href=href rel="noreferrer" target="_blank" rel="noreferrer" class="flex h-18 w-72">
-            <button class=format!(
-                "flex {} h-auto w-{} p-2 mx-auto bg-white rounded-xl items-center hover:bg-[#f2f2f2]",
-                flex_justify.get_untracked(),
-                button_width.get_untracked(),
-            )>
-                <div class=format!("flex justify-center basis-{}", basis_one.get_untracked())>
+        <a
+            href=href
+            rel="noreferrer"
+            target="_blank"
+            rel="noreferrer"
+            class="flex h-18 w-64 rounded-xl"
+        >
+            <button class="flex justify-center p-2 mx-auto bg-white items-center rounded-xl">
+                <div class="flex justify-center h-full w-full">
                     <img
-                        class=format!("h-auto w-{}", width.get())
+                        class="max-h-full max-w-full object-contain"
                         src=format!("{}", logo)
                         alt=format!("{}", alt_txt)
                     />
                 </div>
-                <Show when=move || button_name.is_some() fallback=move || view! { "" }>
-                    <div class="">
-                        <div class=format!("basis-{}", basis_two.get_untracked())>
-                            <p class=format!(
-                                "text-[1.25rem] font-bold text-black",
-                            )>{button().to_string()}</p>
-                        </div>
-                    </div>
-                </Show>
             </button>
         </a>
     }
@@ -411,13 +382,13 @@ pub fn BeginnerWalletInstructions(
     selected_wallet: WalletName,
     ios: bool,
 ) -> impl IntoView {
-    let google_play_logo = "./../../../google-play-logo.avif".to_string();
+    let google_play_logo = "./../../../google_play.png".to_string();
     let google_play_alt = "Google Play Logo".to_string();
 
-    let apple_store_logo = "./../../../download_on_app_store.svg".to_string();
+    let apple_store_logo = "./../../../download_on_app_store.png".to_string();
     let apple_store_alt = "Apple Store Logo".to_string();
 
-    let img_url_github = "./../../../github-mark.png".to_string();
+    let img_url_github = "./../../../GitHub_Logo.png".to_string();
     let img_alt_github = "Github Logo".to_string();
 
     let blue_google_play =
@@ -438,8 +409,8 @@ pub fn BeginnerWalletInstructions(
             .to_string();
 
     let sparrow_download = r"https://sparrowwallet.com/download/".to_string();
-    let img_url_sparrow = "./../../../sparrow.png".to_string();
-    let img_alt_sparrow = "Sparrow logo".to_string();
+    let img_url_sparrow = "./../../../download_sparrow.png".to_string();
+    let img_alt_sparrow = "download sparrow wallet".to_string();
 
     let (displayed_wallet, set_displayed_wallet) = create_signal("");
 
@@ -482,13 +453,11 @@ pub fn BeginnerWalletInstructions(
                                     href=blue_google_play.clone()
                                     logo=google_play_logo.clone()
                                     alt_txt=google_play_alt.clone()
-                                    button_name="Google Play".to_string()
                                 />
                                 <DownloadButton
                                     href=blue_android_apk.clone()
                                     logo=img_url_github.clone()
                                     alt_txt=img_alt_github.clone()
-                                    button_name="APK".to_string()
                                 />
                             }
                         }
@@ -545,13 +514,11 @@ pub fn BeginnerWalletInstructions(
                                     href=mutiny_google_play.clone()
                                     logo=google_play_logo.clone()
                                     alt_txt=google_play_alt.clone()
-                                    button_name="Google Play".to_string()
                                 />
                                 <DownloadButton
                                     href=mutiny_android_apk.clone()
                                     logo=img_url_github.clone()
                                     alt_txt=img_alt_github.clone()
-                                    button_name="APK".to_string()
                                 />
                             }
                         }
@@ -599,7 +566,6 @@ pub fn BeginnerWalletInstructions(
                         href=sparrow_download.clone()
                         logo=img_url_sparrow.clone()
                         alt_txt=img_alt_sparrow.clone()
-                        button_name="Get Sparrow".to_string()
                     />
                 </div>
 
