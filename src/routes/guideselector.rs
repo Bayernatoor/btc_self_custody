@@ -82,6 +82,7 @@ where
                 }
             }
         >
+
             <div class="flex flex-col items-center py-5 gap-5 animate-fadeinone">
                 <For
                     each=move || guide()
@@ -138,7 +139,7 @@ pub fn GuideSelector() -> impl IntoView {
     view! {
         <div class="grid gap-4 md:gap-2 mx-auto justify-items-center max-w-3xl mt-8 mb-24 opacity-0 animate-fadeinone md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-2 md:max-w-4xl lg:max-w-5xl md:mt-20 lg:pb-28 lg:my-0">
             <div class="flex flex-col pb-2 justify-center items-center">
-                 <img
+                <img
                     class="w-72 h-auto py-4 lg:w-96"
                     src="./../../../lock_new_blue.png"
                     alt="Financial privacy lock"
@@ -156,6 +157,7 @@ pub fn GuideSelector() -> impl IntoView {
                         set_intermediate_hidden.set(true);
                         set_advanced_hidden.set(true)
                     }
+
                     name="Basic".to_string()
                     subtitle="I have a teeny weeny stack".to_string()
                     hidden=basic_hidden
@@ -169,6 +171,7 @@ pub fn GuideSelector() -> impl IntoView {
                         set_basic_hidden.set(true);
                         set_advanced_hidden.set(true)
                     }
+
                     name="Intermediate".to_string()
                     subtitle="I have an average stack".to_string()
                     hidden=intermediate_hidden
@@ -182,6 +185,7 @@ pub fn GuideSelector() -> impl IntoView {
                         set_basic_hidden.set(true);
                         set_intermediate_hidden.set(true)
                     }
+
                     name="Advanced".to_string()
                     subtitle="I am well equipped".to_string()
                     hidden=advanced_hidden
@@ -192,7 +196,3 @@ pub fn GuideSelector() -> impl IntoView {
         </div>
     }
 }
-
-
-
-

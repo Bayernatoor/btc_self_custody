@@ -35,6 +35,7 @@ pub fn NavBar() -> impl IntoView {
                     set_menu_clicked.update(|value| *value = !*value);
                 }
             >
+
                 <div>
                     <svg
                         xmlns="http://www.w3.org/2000/svg"

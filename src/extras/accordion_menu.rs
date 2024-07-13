@@ -92,6 +92,7 @@ fn Menu(faq_title: String, faq_content: String) -> impl IntoView {
             text-left text-gray-900 border border-gray-500 rounded-xl 
             hover:bg-[#3c6594]",
                 )
+
                 aria-expanded="true"
                 aria-controls="accordion-collapse-body"
                 on:click=move |_| { set_menu_clicked.update(|menu| *menu = !*menu) }
