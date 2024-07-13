@@ -187,13 +187,13 @@ pub fn BeginnerPageTemplate(
                     "Bitcoin Self-Custody: The act of taking possession of a bitcoin private key."
                 </p>
                 <p class="text-lg text-white pb-2">{intro}</p>
-                <p class="text-lg text-white pb-2">
+                <p class="text-lg text-[#f7931a]">
                     <strong>{wallet_name_blue.clone()}</strong>
-                    {wallet_one_text}
+                    <p class="text-lg text-white" inner_html=wallet_one_text/>
                 </p>
-                <p class="text-lg text-white">
+                <p class="text-lg text-[#f7931a] pt-2">
                     <strong>{wallet_name_mutiny.clone()}</strong>
-                    {wallet_two_text}
+                    <p class="text-lg text-white" inner_html=wallet_two_text/>
                 </p>
             </div>
 
@@ -321,9 +321,11 @@ pub fn RenderAndroidPage() -> impl IntoView {
         also has the option of connecting to your own Lightning Node.".to_string();
 
     let wallet_two_text: String = " is a relatively new, modern On-chain and Lightning enabled wallet, it integrates bitcoin payments
-        into your social network using the power of the decentralized NOSTR protocol and simplifies onboarding by making use of Fedimints. 
-        I recommend Mutiny if you want more than just a basic bitcoin wallet but if you prefer to keep it simple
-        choose Blue Wallet.".to_string();
+        into your social network using the power of the decentralized
+        <a class='text-[#8cb4ff] underline-offset-auto' href='https://nostr.com' target='_blank' rel='noopener noreferrer'>
+            NOSTR protocol.
+        </a>
+        I recommend Mutiny if you want more than just a basic bitcoin wallet but if you prefer to keep it simple choose Blue Wallet.".to_string();
 
     let title = "Basic Android Self-Custody Guide".to_string();
     let quote = "Trusted Third Parties are Security Holes".to_string();
@@ -354,9 +356,11 @@ pub fn RenderIosPage() -> impl IntoView {
         also has the option of connecting to your own Lightning Node.".to_string();
 
     let wallet_two_text: String = " is a relatively new, modern On-chain and Lightning enabled wallet, it integrates bitcoin payments
-        into your social network using the power of the decentralized NOSTR protocol and simplifies onboarding by making use of Fedimints. 
-        I recommend Mutiny if you want more than just a basic bitcoin wallet but if you prefer to keep it simple
-        choose Blue Wallet.".to_string();
+        into your social network using the power of the decentralized
+        <a class='text-[#8cb4ff] underline-offset-auto' href='https://nostr.com' target='_blank' rel='noopener noreferrer'>
+            NOSTR protocol.
+        </a>
+        I recommend Mutiny if you want more than just a basic bitcoin wallet but if you prefer to keep it simple choose Blue Wallet.".to_string();
 
     let title = "Basic iOS Self-Custody Guide".to_string();
     let quote = "Trusted Third Parties are Security Holes".to_string();

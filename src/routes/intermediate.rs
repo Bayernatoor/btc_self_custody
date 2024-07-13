@@ -11,8 +11,8 @@ pub fn IntermediateIntroPage() -> impl IntoView {
     let quote_author = "-Aldous Huxley".to_string();
 
     let explanation: String = "In this guide, we'll start by setting up a Coldcard signing device (AKA hardware wallet), and connecting it to Sparrow. 
-        In part two we'll decide which bitcoin node implementation to use, and then connect our Sparrow wallet to it.
-        Once we're through with this, you'll have a standards based, secure and private bitcoin self-custody solution.
+        In part two we'll decide which Bitcoin node implementation to use, and then connect our Sparrow wallet to it.
+        Once we're through with this, you'll have a standards based, secure and private Bitcoin self-custody solution.
         ".to_string();
 
     view! {
@@ -45,7 +45,7 @@ pub fn IntermediateIntroPage() -> impl IntoView {
                     <a class="text-[#8cb4ff] underline-offset-auto" href="/guides/basic/desktop">
                         " basic desktop guide "
                     </a>
-                    "before continuing on here. There's no need to create a wallet, as we'll do that next using a hardware signing device."
+                    "before continuing with this guide. There's no need to create a wallet, as we'll do that next using a hardware signing device."
                 </p>
                 <p class="pt-2 text-lg text-white">{explanation}</p>
             </div>

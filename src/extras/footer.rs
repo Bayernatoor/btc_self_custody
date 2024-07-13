@@ -16,7 +16,7 @@ pub fn Footer() -> impl IntoView {
 
                         <p class="mx-4 lg:p-0 lg:mx-0 lg:mt-2">
                             "WE HODL BTC is a free resource created to help bitcoiners take
-                            self-custody of their bitcoin. Whether it's 100 000 satoshis or 100 bitcoins, there's a guide for you."
+                            self-custody of their bitcoin. Whether it's 100 satoshis or 100 bitcoins, there's a guide for you."
                         </p>
 
                         <p class="my-2">"Knowledge is Freedom"</p>
