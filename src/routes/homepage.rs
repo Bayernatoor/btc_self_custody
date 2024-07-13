@@ -7,7 +7,7 @@ pub fn HomePage() -> impl IntoView {
         <div class="grid gap-2 md:gap-2 mx-auto justify-items-center max-w-3xl mt-20 opacity-0 animate-fadeinone md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-2 md:my-28 lg:pb-28 md:max-w-4xl lg:max-w-5xl">
             <div class="flex flex-col text-center text-white leading-loose md:text-center lg:text-left xl:leading-relaxed xl:text-left md:pt-10 lg:pt-0 xl:pt-0">
                 <div class="text-7xl lg:text-[112px] xl:text-[112px]">
-                    <h1>"Be your own bank"</h1>
+                    <h1>"Be your" <br/> "own bank"</h1>
                 </div>
                 <div class="lg:hidden flex flex-col justify-center pb-10 pt-6 lg:pt-0 xl:pt-0">
                     <div class="h-auto w-32 md:w-36 md:h-36 lg:w-48 lg:h-48 xl:w-56 xl:h-56 mx-auto lg:mt-10 xl:mt-12">
