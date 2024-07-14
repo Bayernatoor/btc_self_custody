@@ -1,4 +1,3 @@
-use leptos::logging::log;
 use leptos::*;
 
 #[component]
@@ -13,7 +12,6 @@ pub fn BackButton(
         create_effect(move |_| {
             if reload_page() {
                 let _ = window().location().reload();
-                log!("reload window");
             }
         });
     }

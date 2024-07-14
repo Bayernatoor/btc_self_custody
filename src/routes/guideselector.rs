@@ -71,15 +71,14 @@ where
             when=move || setter()
             fallback=move || {
                 view! {
-                    <a on:click=on_click.clone()>
                         <button
-                            class="flex flex-col p-4 max-w-md mx-auto w-72 bg-white rounded-xl items-center mt-6 shadow-md hover:bg-[#f2f2f2] transition ease-in-out duration-300"
+                            class="flex flex-col z-20 p-4 max-w-md mx-auto w-72 bg-white rounded-xl items-center mt-6 shadow-md hover:bg-[#f2f2f2] transition ease-in-out duration-300"
                             class:hidden=move || hidden()
+                            on:click=on_click.clone() 
                         >
                             <div class="text-3xl font-bold text-[#f79231]">{name.clone()}</div>
                             <p class="text-lg text-[#123c64] mt-3">{subtitle.clone()}</p>
                         </button>
-                    </a>
                 }
             }
         >
@@ -138,7 +137,7 @@ pub fn GuideSelector() -> impl IntoView {
     let advanced_devices: Vec<String> = vec!["Desktop".to_string()];
 
     view! {
-        <div class="grid gap-4 md:gap-2 mx-auto justify-items-center max-w-3xl mt-8 mb-24 opacity-0 animate-fadeinone md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-2 md:max-w-4xl lg:max-w-5xl md:my-28">
+        <div class="grid gap-4 md:gap-2 mx-auto justify-items-center max-w-3xl mt-20 mb-24 opacity-0 animate-fadeinone md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-2 md:max-w-4xl lg:max-w-5xl md:my-28">
             <div class="flex flex-col justify-center items-center">
                 <img
                     class="w-72 h-auto py-4 lg:w-96"
@@ -151,7 +150,7 @@ pub fn GuideSelector() -> impl IntoView {
                     </p>
                 </div>
             </div>
-            <div class="">
+            <div class="flex flex-col gap-2">
                 <LevelButton
                     on_click=move |_| {
                         set_basic_clicked.update(|value| *value = !*value);
