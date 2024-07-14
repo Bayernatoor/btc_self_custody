@@ -4,13 +4,10 @@ use leptos::*;
 #[component]
 pub fn Footer() -> impl IntoView {
     view! {
-        <footer class="flex flex-col items-center text-white text-center text-surface lg:text-left">
-            <div class="w-full pb-8">
-                <hr class="mx-auto border border-solid border-white"/>
-            </div>
+        <footer class="flex flex-col items-center text-white text-center text-surface lg:text-left border-t border-solid border-white">
             <div class="max-w-5xl">
                 // left side text
-                <div class="grid gap-4 mx-auto lg:grid-cols-2 lg:p-4">
+                <div class="grid gap-4 p-6 mx-auto lg:grid-cols-2">
                     <div class="lg:mb-0 lg:mr-56">
                         <h5 class="mb-2 font-semibold uppercase">"WE HODL BTC"</h5>
 

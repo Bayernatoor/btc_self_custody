@@ -137,7 +137,7 @@ pub fn GuideSelector() -> impl IntoView {
     let advanced_devices: Vec<String> = vec!["Desktop".to_string()];
 
     view! {
-        <div class="grid gap-4 md:gap-2 mx-auto justify-items-center max-w-3xl mt-8 mb-24 opacity-0 animate-fadeinone md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-2 md:max-w-4xl lg:max-w-5xl md:mt-20 lg:pb-28 lg:my-0">
+        <div class="grid gap-4 md:gap-2 mx-auto justify-items-center max-w-3xl mt-8 mb-24 opacity-0 animate-fadeinone md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-2 md:max-w-4xl lg:max-w-5xl md:my-28">
             <div class="flex flex-col justify-center items-center">
                 <img
                     class="w-72 h-auto py-4 lg:w-96"
