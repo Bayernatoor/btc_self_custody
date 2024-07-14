@@ -15,7 +15,7 @@ pub fn AdvancedPage() -> impl IntoView {
     view! {
         <div
             id="advanced"
-            class="grid gap-6 max-w-3xl mt-8 mb-24 mx-auto animate-fadeinone grid-rows-[auto_auto_1fr] md:max-w-4xl lg:max-w-5xl lg:gap-8"
+            class="grid gap-6 max-w-3xl mt-8 mb-24 mx-auto animate-fadeinone grid-rows-[auto_auto_1fr] md:max-w-4xl lg:max-w-5xl lg:gap-8 md:my-28"
         >
             // Section 1: Title
             <div class="flex flex-col mx-auto px-4">

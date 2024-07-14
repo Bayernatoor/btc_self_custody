@@ -137,7 +137,7 @@ pub fn BeginnerPageTemplate(
     view! {
         <div
             id="basic"
-            class="grid gap-6 max-w-3xl mx-auto mt-8 mb-24 animate-fadeinone grid-rows-[auto_auto_1fr] lg:max-w-4xl xl:max-w-5xl lg:gap-8"
+            class="grid gap-6 max-w-3xl mx-auto mt-8 mb-24 animate-fadeinone grid-rows-[auto_auto_1fr] lg:max-w-4xl xl:max-w-5xl lg:gap-8 md:my-28"
         >
             // Section 1: Title, Quote, and Quote Author
             <div class="mt-10 lg:mt-0 px-6">
@@ -233,7 +233,7 @@ pub fn BeginnerDesktopPageTemplate(
     view! {
         <div
             id="basic"
-            class="grid gap-6 mx-auto max-w-3xl mt-8 mb-24 rounded-xl animate-fadeinone grid-rows-[auto_auto_1fr] lg:max-w-4xl xl:max-w-5xl lg:gap-8"
+            class="grid gap-6 mx-auto max-w-3xl mt-8 mb-24 rounded-xl animate-fadeinone grid-rows-[auto_auto_1fr] lg:max-w-4xl xl:max-w-5xl lg:gap-8 md:my-28"
         >
             // Section 1: Title, Quote, and Quote Author
             <div class="mt-10 lg:mt-0">
@@ -424,7 +424,7 @@ pub fn BeginnerWalletInstructions(
         view! {
             <div
                 id="basic"
-                class="grid gap-6 max-w-3xl mx-auto mt-8 mb-24 animate-fadeinone grid-rows-[auto_auto_1fr] lg:max-w-4xl xl:max-w-5xl lg:gap-8"
+                class="grid gap-6 max-w-3xl mx-auto mt-8 mb-24 animate-fadeinone grid-rows-[auto_auto_1fr] lg:max-w-4xl xl:max-w-5xl lg:gap-8 md:my-28"
             >
                 // Section 1: Title, Quote, and Quote Author
                 <div class="lg:mt-0 px-6">
@@ -485,7 +485,7 @@ pub fn BeginnerWalletInstructions(
         view! {
             <div
                 id="basic"
-                class="grid gap-6 max-w-3xl mx-auto mt-8 mb-24 animate-fadeinone grid-rows-[auto_auto_1fr] lg:max-w-4xl xl:max-w-5xl lg:gap-8"
+                class="grid gap-6 max-w-3xl mx-auto mt-8 mb-24 animate-fadeinone grid-rows-[auto_auto_1fr] lg:max-w-4xl xl:max-w-5xl lg:gap-8 md:my-28"
             >
                 // Section 1: Title, Quote, and Quote Author
                 <div class="lg:mt-0 px-6">
@@ -546,7 +546,7 @@ pub fn BeginnerWalletInstructions(
         view! {
             <div
                 id="basic"
-                class="grid gap-6 max-w-3xl mx-auto mt-8 mb-24 animate-fadeinone grid-rows-[auto_auto_1fr] lg:max-w-4xl xl:max-w-5xl lg:gap-8"
+                class="grid gap-6 max-w-3xl mx-auto mt-8 mb-24 animate-fadeinone grid-rows-[auto_auto_1fr] lg:max-w-4xl xl:max-w-5xl lg:gap-8 md:my-28"
             >
                 // Section 1: Title, Quote, and Quote Author
                 <div class="lg:mt-0 px-6">
