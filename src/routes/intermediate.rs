@@ -18,7 +18,7 @@ pub fn IntermediateIntroPage() -> impl IntoView {
     view! {
         <div
             id="basic"
-            class="grid gap-6 max-w-3xl mx-auto mt-8 mb-24 animate-fadeinone grid-rows-[auto_auto_1fr] md:max-w-4xl lg:max-w-5xl lg:gap-8"
+            class="grid gap-6 max-w-3xl mx-auto mt-8 mb-24 animate-fadeinone grid-rows-[auto_auto_1fr] md:max-w-4xl lg:max-w-5xl lg:gap-8 md:my-28"
         >
             // - Section 1: Title, Quote, and Quote Author
             <div class="flex flex-col mx-auto px-4 pt-10 lg:pt-0">
@@ -75,7 +75,7 @@ pub fn IntermediateHardwarePage() -> impl IntoView {
     view! {
         <div
             id="hardware_page"
-            class="grid gap-6 max-w-3xl mx-auto mt-8 mb-24 animate-fadeinone grid-rows-[auto_auto_1fr] md:max-w-4xl lg:max-w-5xl lg:gap-8"
+            class="grid gap-6 max-w-3xl mx-auto mt-8 mb-24 animate-fadeinone grid-rows-[auto_auto_1fr] md:max-w-4xl lg:max-w-5xl lg:gap-8 md:my-28"
         >
             // Section 1: Title
             <div class="flex flex-col mx-auto px-4 pt-10 lg:pt-0">
@@ -158,7 +158,7 @@ pub fn IntermediateNodePage() -> impl IntoView {
     view! {
         <div
             id="hardware_page"
-            class="grid gap-6 max-w-3xl mx-auto mt-8 mb-24 animate-fadeinone grid-rows-[auto_auto_1fr] md:max-w-4xl lg:max-w-5xl lg:gap-8"
+            class="grid gap-6 max-w-3xl mx-auto mt-8 mb-24 animate-fadeinone grid-rows-[auto_auto_1fr] md:max-w-4xl lg:max-w-5xl lg:gap-8 md:my-28"
         >
             // Section 1: Title
             <div class="flex flex-col mx-auto px-4 pt-10 lg:pt-0">

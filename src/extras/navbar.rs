@@ -17,7 +17,7 @@ pub fn NavBar() -> impl IntoView {
     });
 
     view! {
-        <div class="bg-[#123c64] text-white sticky top-0 z-10 w-full mx-auto p-8 flex justify-between items-center">
+        <div class="bg-[#123c64] text-white sticky top-0 z-10 w-full mx-auto p-8 flex justify-between border-b border-solid border-white items-center">
             <div>
                 <div class="text-3xl lg:text-4xl font-medium text-white font-title">
                     <a href="/">"WE HODL BTC"</a>

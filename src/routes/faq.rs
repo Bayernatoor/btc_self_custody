@@ -14,7 +14,7 @@ pub fn FaqPage() -> impl IntoView {
     view! {
         <div
             id="about"
-            class="grid gap-6 max-w-3xl mx-auto p-6 mt-8 mb-24 animate-fadeinone grid-rows-[auto_auto_1fr] md:max-w-4xl lg:max-w-5xl lg:gap-8"
+            class="grid gap-6 max-w-3xl mx-auto p-6 mt-8 mb-24 animate-fadeinone grid-rows-[auto_auto_1fr] md:max-w-4xl lg:max-w-5xl lg:gap-8 md:my-24"
         >
             // Section 1: Title and Intro
             <div class="">

@@ -4,7 +4,7 @@ use leptos::*;
 #[component]
 pub fn AboutPage() -> impl IntoView {
     view! {
-        <div class="grid gap-10 mx-auto max-w-3xl mt-8 mb-24 opacity-0 animate-fadeinone grid-rows-[auto_auto_1fr] md:max-w-4xl lg:max-w-5xl">
+        <div class="grid gap-10 mx-auto max-w-3xl mt-8 mb-24 opacity-0 animate-fadeinone grid-rows-[auto_auto_1fr] md:max-w-4xl lg:max-w-5xl md:my-24">
             // Header Section
             <header class="flex flex-col mx-auto px-4 pt-10">
                 <h1 class="text-[2.5rem] text-[#f7931a] text-center font-semibold leading-tight font-title pb-2 md:text-[3rem] lg:text-[4rem]">
