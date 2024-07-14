@@ -71,14 +71,15 @@ where
             when=move || setter()
             fallback=move || {
                 view! {
-                    <button
-                        class="flex flex-col p-4 max-w-md mx-auto w-72 bg-white rounded-xl items-center mt-6 shadow-md hover:bg-[#f2f2f2] transition ease-in-out duration-300"
-                        class:hidden=move || hidden()
-                        on:click=on_click.clone()
-                    >
-                        <div class="text-3xl font-bold text-[#f79231]">{name.clone()}</div>
-                        <p class="text-lg text-[#123c64] mt-3">{subtitle.clone()}</p>
-                    </button>
+                    <a on:click=on_click.clone()>
+                        <button
+                            class="flex flex-col p-4 max-w-md mx-auto w-72 bg-white rounded-xl items-center mt-6 shadow-md hover:bg-[#f2f2f2] transition ease-in-out duration-300"
+                            class:hidden=move || hidden()
+                        >
+                            <div class="text-3xl font-bold text-[#f79231]">{name.clone()}</div>
+                            <p class="text-lg text-[#123c64] mt-3">{subtitle.clone()}</p>
+                        </button>
+                    </a>
                 }
             }
         >

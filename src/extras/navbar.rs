@@ -29,37 +29,35 @@ pub fn NavBar() -> impl IntoView {
                 <a href="/blog">"Articles"</a>
                 <a href="/about">"About"</a>
             </div>
-            <div
-                class="flex lg:hidden cursor-pointer"
-                on:click=move |_| {
+            <div class="flex lg:hidden cursor-pointer">
+                <a on:click=move |_| {
                     set_menu_clicked.update(|value| *value = !*value);
-                }
-            >
-
-                <div>
-                    <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        class="w-8 h-8 transition-transform duration-300 transform"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                    >
-                        <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M4 6h16M4 12h16M4 18h16"
-                            class:hidden=move || menu_clicked()
-                        ></path>
-                        <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M6 18L18 6M6 6l12 12"
-                            class:hidden=move || !menu_clicked()
-                        ></path>
-                    </svg>
-                </div>
+                }>
+                    <div>
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            class="w-8 h-8 transition-transform duration-300 transform"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M4 6h16M4 12h16M4 18h16"
+                                class:hidden=move || menu_clicked()
+                            ></path>
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12"
+                                class:hidden=move || !menu_clicked()
+                            ></path>
+                        </svg>
+                    </div>
+                </a>
             </div>
         </div>
         // TODO: add event listener to body of app to listen for click when menu is open
