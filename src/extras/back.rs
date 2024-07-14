@@ -19,10 +19,12 @@ pub fn BackButton(
     }
 
     view! {
-        <button on:click=move |_| set_reload_page(true)>
-            <div class="active:bg-transparent left-0 top-0 h-12 w-12">
-                <img src=format!("{}", button_image) alt="back_button"/>
-            </div>
-        </button>
+        <a on:click=move |_| set_reload_page(true)>
+            <button >
+                <div class="active:bg-transparent left-0 top-0 h-12 w-12">
+                    <img src=format!("{}", button_image) alt="back_button"/>
+                </div>
+            </button>
+        </a>
     }
 }
