@@ -76,11 +76,12 @@ pub fn AboutPage() -> impl IntoView {
                     <p class="text-lg">
                         <a
                             class="underline text-blue-400 hover:text-[#3c6594]"
-                            href="lightning:bayer@mutiny.plus"
+                            //href="lightning:bayer@mutiny.plus"
+                            href="lightning:bayernator@getalby.com"
                             target="_blank"
                             rel="noopener noreferrer"
                         >
-                            " bayer@mutiny.plus"
+                            " bayernator@getalby.com"
                         </a>
                     </p>
 
