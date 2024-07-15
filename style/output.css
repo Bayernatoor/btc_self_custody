@@ -1180,6 +1180,10 @@ p, h1, h2, h3{
   padding-top: 2rem;
 }
 
+.pb-1{
+  padding-bottom: 0.25rem;
+}
+
 .text-left{
   text-align: left;
 }
@@ -1244,6 +1248,11 @@ p, h1, h2, h3{
 .text-xl{
   font-size: 1.25rem;
   line-height: 1.75rem;
+}
+
+.text-5xl{
+  font-size: 3rem;
+  line-height: 1;
 }
 
 .font-bold{
@@ -1571,6 +1580,21 @@ p, h1, h2, h3{
   .md\:text-\[3rem\]{
     font-size: 3rem;
   }
+
+  .md\:text-5xl{
+    font-size: 3rem;
+    line-height: 1;
+  }
+
+  .md\:text-7xl{
+    font-size: 4.5rem;
+    line-height: 1;
+  }
+
+  .md\:text-6xl{
+    font-size: 3.75rem;
+    line-height: 1;
+  }
 }
 
 @media (min-width: 1024px){
@@ -1638,6 +1662,10 @@ p, h1, h2, h3{
 
   .lg\:w-full{
     width: 100%;
+  }
+
+  .lg\:w-56{
+    width: 14rem;
   }
 
   .lg\:max-w-4xl{

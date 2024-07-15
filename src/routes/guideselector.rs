@@ -127,6 +127,11 @@ pub fn GuideSelector() -> impl IntoView {
     let (intermediate_hidden, set_intermediate_hidden) = create_signal(false);
     let (advanced_hidden, set_advanced_hidden) = create_signal(false);
 
+    // explainer copy
+    let (explainer, _set_explainer) = create_signal("Select a guide based on how much Bitcoin you are protecting.".to_string());
+
+    //let device_selector_explainer = "Select your preferred OS".to_string();
+
     // devices to be included in guide level
     let basic_devices: Vec<String> = vec![
         "Android".to_string(),
@@ -139,14 +144,19 @@ pub fn GuideSelector() -> impl IntoView {
     view! {
         <div class="grid gap-4 md:gap-2 mx-auto justify-items-center max-w-3xl mt-20 mb-24 opacity-0 animate-fadeinone md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-2 md:max-w-4xl lg:max-w-5xl md:my-28">
             <div class="flex flex-col justify-center items-center">
+                <div class="">
+                    <h1 class="text-white text-5xl text-center pb-1 md:text-6xl">
+                        "Unlock Financial Privacy"
+                    </h1>
+                </div>
                 <img
-                    class="w-72 h-auto py-4 lg:w-96"
-                    src="./../../../lock_new_blue.png"
+                    class="w-48 h-auto py-4 lg:w-56"
+                    src="./../../../only_lock.png"
                     alt="Financial privacy lock"
                 />
                 <div class="px-6 pt-2 max-w-3xl">
                     <p class="text-white text-xl text-center pb-2 md:text-2xl">
-                        "Select a guide based on how much Bitcoin you are protecting."
+                        {explainer()}
                     </p>
                 </div>
             </div>
