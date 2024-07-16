@@ -17,7 +17,7 @@ use {
     leptos_actix::{generate_route_list, LeptosRoutes},
     server::{
         create_post::create_post, health_check::health_check,
-        subscriptions::subscribe, health_check::nostr_json
+        health_check::nostr_json, subscriptions::subscribe,
     },
     sqlx::PgPool,
     std::net::TcpListener,

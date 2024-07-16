@@ -97,7 +97,7 @@ pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
     connection_pool
 }
 
-/// Tests apps basic health check 
+/// Tests apps basic health check
 #[tokio::test]
 #[cfg(feature = "ssr")]
 async fn health_check_works() {
@@ -118,7 +118,7 @@ async fn health_check_works() {
     assert_eq!(Some(0), response.content_length());
 }
 
-/// Can nostr.json be reached 
+/// Can nostr.json be reached
 #[tokio::test]
 #[cfg(feature = "ssr")]
 async fn can_reach_nostr_json() {
