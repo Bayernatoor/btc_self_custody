@@ -18,7 +18,7 @@ pub fn BackButton(
 
     view! {
         <a on:click=move |_| set_reload_page(true)>
-            <button >
+            <button>
                 <div class="active:bg-transparent left-0 top-0 h-12 w-12">
                     <img src=format!("{}", button_image) alt="back_button"/>
                 </div>

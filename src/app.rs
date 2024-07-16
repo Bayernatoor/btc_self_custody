@@ -21,11 +21,11 @@ pub fn App() -> impl IntoView {
     view! {
         <Stylesheet id="leptos" href="/pkg/we_hodl_btc.css"/>
         <Meta name="We Hodl BTC" content="A bitcoin self-custody guide"/>
-        <Meta property="og:title" content="We Hodl BTC" />
-        <Meta property="og:type" content="website" />
-        <Meta property="og:url" content="https://www.wehodlbtc.com/" />
-        <Meta property="og:image" content="https://www.wehodlbtc.com/metadata_unfurl_image.png" />
-        <Meta property="og:description" content="A Bitcoin self-custody guide" />
+        <Meta property="og:title" content="We Hodl BTC"/>
+        <Meta property="og:type" content="website"/>
+        <Meta property="og:url" content="https://www.wehodlbtc.com/"/>
+        <Meta property="og:image" content="https://www.wehodlbtc.com/metadata_unfurl_image.png"/>
+        <Meta property="og:description" content="A Bitcoin self-custody guide"/>
 
         // sets the document title
         <Title text="We Hodl BTC"/>
