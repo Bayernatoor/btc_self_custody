@@ -60,7 +60,7 @@ COPY --from=builder /app/target/site /app/site
 COPY --from=builder /app/src /app/src
 
 # Copy .well-known to app dir
-COPY --from=builder /app/.well-known /app/
+COPY --from=builder /app/.well-known /app/.well-known
 
 # Copy the configuration directory to the /app directory
 COPY --from=builder /app/configuration /app/configuration
