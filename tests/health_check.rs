@@ -97,6 +97,7 @@ pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
     connection_pool
 }
 
+/// Tests apps basic health check 
 #[tokio::test]
 #[cfg(feature = "ssr")]
 async fn health_check_works() {
@@ -116,9 +117,31 @@ async fn health_check_works() {
     assert!(response.status().is_success());
     assert_eq!(Some(0), response.content_length());
 }
+
+/// Can nostr.json be reached 
+#[tokio::test]
+#[cfg(feature = "ssr")]
+async fn can_reach_nostr_json() {
+    // Arrange
+    let app = spawn_app().await;
+    // Use reqwest to perform HTTP actions against our app
+    let client = reqwest::Client::new();
+
+    // Act
+    let response = client
+        .get(&format!("{}/.well-known/nostr.json", &app.address))
+        .send()
+        .await
+        .expect("Failed to execute request");
+
+    // Assert
+    assert!(response.status().is_success());
+    assert_eq!(Some(109), response.content_length());
+}
+
 // BLOGPOST TESTS
 
-// creating a valid blogpost returns a 200 response
+/// creating a valid blogpost returns a 200 response
 #[tokio::test]
 #[cfg(feature = "ssr")]
 async fn create_returns_a_200_for_valid_post_creation() {

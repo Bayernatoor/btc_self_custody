@@ -17,7 +17,7 @@ use {
     leptos_actix::{generate_route_list, LeptosRoutes},
     server::{
         create_post::create_post, health_check::health_check,
-        subscriptions::subscribe,
+        subscriptions::subscribe, health_check::nostr_json
     },
     sqlx::PgPool,
     std::net::TcpListener,
@@ -69,6 +69,7 @@ pub async fn run(
             .wrap(Logger::default())
             .route("/api/{tail:.*}", leptos_actix::handle_server_fns())
             .route("/server/health_check", web::get().to(health_check))
+            .route(".well-known/nostr.json", web::get().to(nostr_json))
             .route("/server/create_post", web::post().to(create_post))
             .route("/server/subscriptions", web::post().to(subscribe))
             .app_data(db_pool.clone())
