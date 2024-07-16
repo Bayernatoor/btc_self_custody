@@ -71,14 +71,14 @@ where
             when=move || setter()
             fallback=move || {
                 view! {
-                        <button
-                            class="flex flex-col z-20 p-4 max-w-md mx-auto w-72 bg-white rounded-xl items-center mt-6 shadow-md hover:bg-[#f2f2f2] transition ease-in-out duration-300"
-                            class:hidden=move || hidden()
-                            on:click=on_click.clone() 
-                        >
-                            <div class="text-3xl font-bold text-[#f79231]">{name.clone()}</div>
-                            <p class="text-lg text-[#123c64] mt-3">{subtitle.clone()}</p>
-                        </button>
+                    <button
+                        class="flex flex-col z-20 p-4 max-w-md mx-auto w-72 bg-white rounded-xl items-center mt-6 shadow-md hover:bg-[#f2f2f2] transition ease-in-out duration-300"
+                        class:hidden=move || hidden()
+                        on:click=on_click.clone()
+                    >
+                        <div class="text-3xl font-bold text-[#f79231]">{name.clone()}</div>
+                        <p class="text-lg text-[#123c64] mt-3">{subtitle.clone()}</p>
+                    </button>
                 }
             }
         >
@@ -128,7 +128,10 @@ pub fn GuideSelector() -> impl IntoView {
     let (advanced_hidden, set_advanced_hidden) = create_signal(false);
 
     // explainer copy
-    let (explainer, _set_explainer) = create_signal("Select a guide based on how much Bitcoin you are protecting.".to_string());
+    let (explainer, _set_explainer) = create_signal(
+        "Select a guide based on how much Bitcoin you are protecting."
+            .to_string(),
+    );
 
     //let device_selector_explainer = "Select your preferred OS".to_string();
 
@@ -155,9 +158,7 @@ pub fn GuideSelector() -> impl IntoView {
                     alt="Financial privacy lock"
                 />
                 <div class="px-6 pt-2 max-w-3xl">
-                    <p class="text-white text-xl text-center pb-2 md:text-2xl">
-                        {explainer()}
-                    </p>
+                    <p class="text-white text-xl text-center pb-2 md:text-2xl">{explainer()}</p>
                 </div>
             </div>
             <div class="flex flex-col gap-2">
