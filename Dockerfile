@@ -59,6 +59,9 @@ COPY --from=builder /app/target/site /app/site
 # Copy src - need to reach server functions
 COPY --from=builder /app/src /app/src
 
+# Copy .well-known to app dir
+COPY --from=builder /app/.well-known /app/
+
 # Copy the configuration directory to the /app directory
 COPY --from=builder /app/configuration /app/configuration
 
