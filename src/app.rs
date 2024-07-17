@@ -21,11 +21,32 @@ pub fn App() -> impl IntoView {
     view! {
         <Stylesheet id="leptos" href="/pkg/we_hodl_btc.css"/>
         <Meta name="We Hodl BTC" content="A bitcoin self-custody guide"/>
+        
+        // open graph properties
         <Meta property="og:title" content="We Hodl BTC"/>
         <Meta property="og:type" content="website"/>
         <Meta property="og:url" content="https://www.wehodlbtc.com/"/>
         <Meta property="og:image" content="https://www.wehodlbtc.com/metadata_unfurl_image.png"/>
         <Meta property="og:description" content="A Bitcoin self-custody guide"/>
+
+        // Twitter OG properties
+        <Meta name="twitter:card" content="summary_large_image"/>
+        <Meta name="twitter:title" content="We Hodl BTC"/>
+        <Meta name="twitter:description" content="A Bitcoin self-custody guide"/>
+        <Meta name="twitter:url" content="https://www.wehodlbtc.com/"/>
+        <Meta name="twitter:image" content="https://www.wehodlbtc.com/metadata_unfurl_image.png"/>
+        <Meta name="twitter:site" content="@bayernatoor"/> 
+        <Meta name="twitter:creator" content="@bayernatoor"/> 
+
+
+        // favicons
+        <Link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png"/>
+        <Link rel="icon" type_="image/png" sizes="32x32" href="/favicon-32x32.png"/>
+        <Link rel="icon" type_="image/png" sizes="16x16" href="/favicon-16x16.png"/>
+        <Link rel="manifest" href="/site.webmanifest"/>
+        <Link rel="mask-icon" href="/safari-pinned-tab.svg" />
+        <Meta name="msapplication-TileColor" content="#123c64"/>
+        <Meta name="theme-color" content="#123c64"/>
 
         // sets the document title
         <Title text="We Hodl BTC"/>
