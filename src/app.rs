@@ -47,6 +47,9 @@ pub fn App() -> impl IntoView {
         <Meta name="msapplication-TileColor" content="#123c64"/>
         <Meta name="theme-color" content="#123c64"/>
 
+        // Poetic Metric - https://www.poeticmetric.com/
+        <script async src="https://www.poeticmetric.com/pm.js"></script>
+
         // sets the document title
         <Title text="We Hodl BTC"/>
 
