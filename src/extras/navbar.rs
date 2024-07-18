@@ -17,13 +17,13 @@ pub fn NavBar() -> impl IntoView {
     });
 
     view! {
-        <div class="bg-[#123c64] text-white sticky top-0 z-10 w-full mx-auto p-8 flex justify-between border-b border-solid border-white items-center">
+        <div class="bg-[#123c64] text-white sticky top-0 z-10 w-full mx-auto p-6 2xl:p-8 flex justify-between border-b border-solid border-white items-center">
             <div>
-                <div class="text-3xl lg:text-4xl font-medium text-white font-title">
+                <div class="text-2xl 2xl:text-4xl font-medium text-white font-title">
                     <a href="/">"WE HODL BTC"</a>
                 </div>
             </div>
-            <div class="hidden text-2xl space-x-8 lg:flex font-questrial">
+            <div class="hidden text-xl 2xl:text-2xl space-x-8 lg:flex font-questrial">
                 <a href="/guides">"Guides"</a>
                 <a href="/faq">"Help Desk"</a>
                 <a href="/blog">"Articles"</a>
