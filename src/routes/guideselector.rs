@@ -148,17 +148,17 @@ pub fn GuideSelector() -> impl IntoView {
         <div class="grid gap-4 md:gap-2 mx-auto justify-items-center max-w-3xl mt-20 mb-24 opacity-0 animate-fadeinone md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-2 md:max-w-4xl lg:max-w-5xl md:my-28">
             <div class="flex flex-col justify-center items-center">
                 <div class="">
-                    <h1 class="text-white text-5xl text-center pb-1 md:text-6xl">
+                    <h1 class="text-white text-5xl text-center pb-1 2xl:text-6xl">
                         "Unlock Financial Privacy"
                     </h1>
                 </div>
                 <img
-                    class="w-48 h-auto py-4 lg:w-56"
+                    class="w-48 h-auto py-4 2xl:w-56"
                     src="./../../../only_lock.png"
                     alt="Financial privacy lock"
                 />
                 <div class="px-6 pt-2 max-w-3xl">
-                    <p class="text-white text-xl text-center pb-2 md:text-2xl">{explainer()}</p>
+                    <p class="text-white text-xl text-center pb-2 2xl:text-2xl">{explainer()}</p>
                 </div>
             </div>
             <div class="flex flex-col gap-2">

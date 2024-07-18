@@ -86,7 +86,7 @@ pub fn AboutPage() -> impl IntoView {
                     </p>
 
                     <p class="text-lg pt-2 break-words">
-                        <strong>"PayNym Address:"</strong>
+                        <strong>"PayNym Address (BIP47):"</strong>
                     </p>
                     <p class="text-lg">
                         <a
