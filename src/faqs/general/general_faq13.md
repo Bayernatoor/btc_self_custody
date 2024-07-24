@@ -25,22 +25,26 @@
 
 <br>
 
-**5\.** Highly thought-provoking essays, writings and musings can be found at <a class="underline text-blue-400" href="https://dergigi.com" target="_blank" rel="noopener noreferrer">dergigi.com</a> created by <strong>Gigi</strong>. 
+**5\.** Fantastic video guides for all things Bitcoin at </strong> <a class="underline text-blue-400" href="https://www.btcsessions.ca/" target="_blank" rel="noopener noreferrer">btcsessions.ca</a> created by <strong>BTCsessions</strong>.
 
 <br>
 
-**6\.** Dive deep into Bitcoin's history, economics and technology at <a class="underline text-blue-400"  href="https://nakamotoinstitute.org/" target="_blank" rel="noopener noreferrer">Nakamotoinstitute.org</a> created by <strong>Michael Goldstein</strong> and <strong>Pierre Rochard</strong>.
+**6\.** Highly thought-provoking essays, writings and musings can be found at <a class="underline text-blue-400" href="https://dergigi.com" target="_blank" rel="noopener noreferrer">dergigi.com</a> created by <strong>Gigi</strong>. 
+
+<br>
+
+**7\.** Dive deep into Bitcoin's history, economics and technology at <a class="underline text-blue-400"  href="https://nakamotoinstitute.org/" target="_blank" rel="noopener noreferrer">Nakamotoinstitute.org</a> created by <strong>Michael Goldstein</strong> and <strong>Pierre Rochard</strong>.
 
 <br> 
 
-**7\.** One of the longest standing podcasts on all things Bitcoin & freedom tech is <a class="underline text-blue-400" href="https://zap.stream/p/npub10uthwp4ddc9w5adfuv69m8la4enkwma07fymuetmt93htcww6wgs55xdlq" target="_blank" rel="noopener noreferrer">Rabbit Hole Recap</a> hosted by <strong>Marty Bent</strong> and <strong>MATT ODELL</strong>.
+**8\.** One of the longest standing podcasts on all things Bitcoin & freedom tech is <a class="underline text-blue-400" href="https://zap.stream/p/npub10uthwp4ddc9w5adfuv69m8la4enkwma07fymuetmt93htcww6wgs55xdlq" target="_blank" rel="noopener noreferrer">Rabbit Hole Recap</a> hosted by <strong>Marty Bent</strong> and <strong>MATT ODELL</strong>.
 
 <br> 
 
-**8\.** Covering a broad range of technical Bitcoin topics including self-custody, the **<a class="underline text-blue-400" href="https://stephanlivera.com/" target="_blank" rel="noopener noreferrer">Stephan Livera podcast</a>** is a great listen. Especially 
+**9\.** Covering a broad range of technical Bitcoin topics including self-custody, the **<a class="underline text-blue-400" href="https://stephanlivera.com/" target="_blank" rel="noopener noreferrer">Stephan Livera podcast</a>** is a great listen. Especially 
         <a class="underline text-blue-400" href="https://stephanlivera.com/episode/215/" target="_blank" rel="noopener noreferrer">episode 215</a> with Michael Flaxman as it pertains to self-custody.
 
 <br> 
 
-**9\.** Dive into the technical details of Bitcoin with the people who build it (caution may induce sleep) check out <a class="underline text-blue-400" href="https://bitcoin.review/" target="_blank" rel="noopener noreferrer">Bitcoin.review</a> hosted by <strong>NVK</strong>. 
+**10\.** Dive into the technical details of Bitcoin with the people who build it (caution may induce sleep) check out <a class="underline text-blue-400" href="https://bitcoin.review/" target="_blank" rel="noopener noreferrer">Bitcoin.review</a> hosted by <strong>NVK</strong>. 
 
