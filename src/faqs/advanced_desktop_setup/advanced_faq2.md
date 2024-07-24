@@ -64,6 +64,10 @@ To recover the funds locked in a Multisig wallet you will need **M** private key
 
 <br>
 
+**5\.** Listen to this amazing podcast on 10Xing your Bitcoin security by **<a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://stephanlivera.com/episode/215/" target="_blank" rel="noopener noreferrer" >Stephan Livera with Michael Flaxman<a>**.
+
+<br>
+
 <h5 class="text-2xl pb-2 text-[#f7931a] font-semibold">Storage Best Practices</h5>
 
 Backing everything up is one thing, storing it safely is another. You'll want to make sure to eliminate any single points of failure.
@@ -77,13 +81,13 @@ The Passphrase to each wallet can be stored alongside its extended Fingerprint b
 <br>
 
 Your digital encrypted backups are great but digital material can become corrupted or damaged. Make sure to use 
-**<a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://store.coinkite.com/store/microsd-cc">industrial grade MicroSD cards<a>**, these are relatively inexpensive 
+**<a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://store.coinkite.com/store/microsd-cc" target="_blank" rel="noreferrer noopener">industrial grade MicroSD cards<a>**, these are relatively inexpensive 
 so you can create multiple backups if you wish and store them separately in different locations.
 
 <br>
 
 Ultimately, you must decide what your threat level is and what level of security you require.
-Do not overcomplicate this for the sake of wanting **"The Best"** setup. Just KISS, **<a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://en.wikipedia.org/wiki/KISS_principle">Keep It Simple Stupid<a>**.
+Do not overcomplicate this for the sake of wanting **"The Best"** setup. Just KISS, **<a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://en.wikipedia.org/wiki/KISS_principle" target="_blank" rel="noreferrer noopener">Keep It Simple Stupid<a>**.
 
 <br>
 

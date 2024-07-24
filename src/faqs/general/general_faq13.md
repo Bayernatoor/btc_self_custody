@@ -37,10 +37,9 @@
 
 <br> 
 
-**8\.** Covering a broad range of technical bitcoin topics including self-custody, the  <a class="underline text-blue-400" href="https://stephanlivera.com/" target="_blank" rel="noopener noreferrer">Stephen Livera podcast</a> is a great listen.
+**8\.** Covering a broad range of technical bitcoin topics including self-custody, the  <a class="underline text-blue-400" href="https://stephanlivera.com/" target="_blank" rel="noopener noreferrer">Stephan Livera podcast</a> is a great listen.
 
 <br> 
 
 **9\.** Ready to dive into the technical details of Bitcoin with the people who build it (caution may induce sleep) check out <a class="underline text-blue-400" href="https://bitcoin.review/" target="_blank" rel="noopener noreferrer">Bitcoin.review</a> hosted by NVK from coinkite. 
-
 
