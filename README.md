@@ -1,6 +1,6 @@
 # WE HODL BTC
 
-WE HODL BTC is a free resource created to help bitcoiners take self-custody of their bitcoin. Whether it's 100 000 satoshis or 100 bitcoins, there's a guide for you.
+WE HODL BTC is a free resource created to help bitcoiners take self-custody of their bitcoin. Whether it's 100 satoshis or 100 bitcoins, there's a guide for you.
 
 View the live website here: https://www.wehodlbtc.com/
 
