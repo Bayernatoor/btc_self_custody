@@ -744,10 +744,6 @@ p, h1, h2, h3{
   height: 100vh;
 }
 
-.h-6{
-  height: 1.5rem;
-}
-
 .max-h-full{
   max-height: 100%;
 }
@@ -794,10 +790,6 @@ p, h1, h2, h3{
 
 .w-full{
   width: 100%;
-}
-
-.w-6{
-  width: 1.5rem;
 }
 
 .max-w-2xl{
@@ -1100,10 +1092,6 @@ p, h1, h2, h3{
 
 .p-6{
   padding: 1.5rem;
-}
-
-.p-8{
-  padding: 2rem;
 }
 
 .px-2{
@@ -1542,11 +1530,6 @@ p, h1, h2, h3{
     line-height: 2rem;
   }
 
-  .md\:text-6xl{
-    font-size: 3.75rem;
-    line-height: 1;
-  }
-
   .md\:text-\[2\.5rem\]{
     font-size: 2.5rem;
   }
@@ -1603,10 +1586,6 @@ p, h1, h2, h3{
     height: 12rem;
   }
 
-  .lg\:h-8{
-    height: 2rem;
-  }
-
   .lg\:w-44{
     width: 11rem;
   }
@@ -1615,20 +1594,12 @@ p, h1, h2, h3{
     width: 12rem;
   }
 
-  .lg\:w-56{
-    width: 14rem;
-  }
-
   .lg\:w-64{
     width: 16rem;
   }
 
   .lg\:w-full{
     width: 100%;
-  }
-
-  .lg\:w-8{
-    width: 2rem;
   }
 
   .lg\:max-w-4xl{
@@ -1663,18 +1634,8 @@ p, h1, h2, h3{
     gap: 2rem;
   }
 
-  .lg\:space-x-8 > :not([hidden]) ~ :not([hidden]){
-    --tw-space-x-reverse: 0;
-    margin-right: calc(2rem * var(--tw-space-x-reverse));
-    margin-left: calc(2rem * calc(1 - var(--tw-space-x-reverse)));
-  }
-
   .lg\:p-0{
     padding: 0px;
-  }
-
-  .lg\:p-8{
-    padding: 2rem;
   }
 
   .lg\:px-0{
@@ -1708,17 +1669,13 @@ p, h1, h2, h3{
     line-height: 2.25rem;
   }
 
-  .lg\:text-4xl{
-    font-size: 2.25rem;
-    line-height: 2.5rem;
+  .lg\:text-8xl{
+    font-size: 6rem;
+    line-height: 1;
   }
 
   .lg\:text-\[1\.5rem\]{
     font-size: 1.5rem;
-  }
-
-  .lg\:text-\[112px\]{
-    font-size: 112px;
   }
 
   .lg\:text-\[3rem\]{
@@ -1732,21 +1689,6 @@ p, h1, h2, h3{
   .lg\:text-lg{
     font-size: 1.125rem;
     line-height: 1.75rem;
-  }
-
-  .lg\:text-2xl{
-    font-size: 1.5rem;
-    line-height: 2rem;
-  }
-
-  .lg\:text-xl{
-    font-size: 1.25rem;
-    line-height: 1.75rem;
-  }
-
-  .lg\:text-8xl{
-    font-size: 6rem;
-    line-height: 1;
   }
 }
 
@@ -1771,25 +1713,12 @@ p, h1, h2, h3{
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .xl\:p-8{
-    padding: 2rem;
-  }
-
   .xl\:pt-0{
     padding-top: 0px;
   }
 
   .xl\:text-left{
     text-align: left;
-  }
-
-  .xl\:text-\[112px\]{
-    font-size: 112px;
-  }
-
-  .xl\:text-2xl{
-    font-size: 1.5rem;
-    line-height: 2rem;
   }
 
   .xl\:leading-relaxed{
@@ -1811,8 +1740,9 @@ p, h1, h2, h3{
     line-height: 2rem;
   }
 
-  .\32xl\:text-\[112px\]{
-    font-size: 112px;
+  .\32xl\:text-4xl{
+    font-size: 2.25rem;
+    line-height: 2.5rem;
   }
 
   .\32xl\:text-6xl{
@@ -1820,9 +1750,8 @@ p, h1, h2, h3{
     line-height: 1;
   }
 
-  .\32xl\:text-4xl{
-    font-size: 2.25rem;
-    line-height: 2.5rem;
+  .\32xl\:text-\[112px\]{
+    font-size: 112px;
   }
 }
 
