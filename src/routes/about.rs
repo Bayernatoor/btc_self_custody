@@ -125,7 +125,7 @@ pub fn AboutPage() -> impl IntoView {
                         It is entirely free and open-sourced under an MIT license. Although this is a personal project, contributions are always welcome, please feel free to open an "
                         <a
                             class="underline text-blue-400 hover:text-[#3c6594]"
-                            href="https://github.com/Bayernatoor/we_hodl_btc"
+                            href="https://github.com/Bayernatoor/btc_self_custody"
                             target="_blank"
                             rel="noopener noreferrer"
                         >
