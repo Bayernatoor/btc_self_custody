@@ -10,8 +10,8 @@ pub enum WalletName {
     Sparrow,
 }
 
-// TODO: refactor all buttons, add them to generic_button module.
-// to much repetition and different buttons being used.
+// FIXME: refactor all buttons, add them to generic_button module.
+// to much repetition and different buttons being used.:
 
 #[component]
 #[allow(non_snake_case)]
