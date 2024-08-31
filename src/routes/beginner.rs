@@ -5,7 +5,7 @@ use crate::helpers::get_path::get_current_path;
 
 #[derive(Clone, Copy)]
 pub enum WalletName {
-    Mutiny,
+    Green,
     Blue,
     Sparrow,
 }
@@ -32,7 +32,7 @@ where
     let (wallet, set_wallet) = create_signal(String::new());
 
     match selected_wallet {
-        WalletName::Mutiny => set_wallet("mutiny".to_string()),
+        WalletName::Green => set_wallet("green".to_string()),
         WalletName::Blue => set_wallet("blue".to_string()),
         WalletName::Sparrow => set_wallet("sparrow".to_string()),
     }
@@ -100,11 +100,11 @@ pub fn BeginnerPageTemplate(
     #[prop(optional)] wallet_two_text: String,
 ) -> impl IntoView {
     // used for onlick to determine which button was clicked
-    let (_mutiny_clicked, set_mutiny_clicked) = create_signal(false);
+    let (_green_clicked, set_green_clicked) = create_signal(false);
     let (_blue_clicked, set_blue_clicked) = create_signal(false);
 
     // set the button details
-    let (_mutiny_details, set_mutiny_details) = create_signal(false);
+    let (_green_details, set_green_details) = create_signal(false);
     let (_blue_details, set_blue_details) = create_signal(false);
 
     // get current path via RouteContext
@@ -119,12 +119,12 @@ pub fn BeginnerPageTemplate(
         set_platform("desktop".to_string());
     }
 
-    // Mutiny wallet assets
-    let wallet_name_mutiny = "Mutiny Wallet".to_string();
-    let short_desc_mutiny = "On-chain + Lightning".to_string();
-    let img_url_mutiny = "./../../mutiny_logo.webp".to_string();
-    let img_alt_mutiny = "Mutiny Logo".to_string();
-    let text_color_mutiny = "#f71d5a".to_string();
+    // Green wallet assets
+    let wallet_name_green = "Green Wallet".to_string();
+    let short_desc_green = "Feature Rich Wallet".to_string();
+    let img_url_green = "./../../green_logo.webp".to_string();
+    let img_alt_green = "Green Logo".to_string();
+    let text_color_green = "#038046".to_string();
 
     // Blue wallet assets
     let wallet_name_blue = "Blue Wallet".to_string();
@@ -163,7 +163,7 @@ pub fn BeginnerPageTemplate(
                     <p class="text-lg text-white" inner_html=wallet_one_text></p>
                 </p>
                 <p class="text-lg text-[#f7931a] pt-2">
-                    <strong>{wallet_name_mutiny.clone()}</strong>
+                    <strong>{wallet_name_green.clone()}</strong>
                     <p class="text-lg text-white" inner_html=wallet_two_text></p>
                 </p>
             </div>
@@ -193,17 +193,17 @@ pub fn BeginnerPageTemplate(
                     />
                     <WalletButton
                         on_click=move |_| {
-                            set_mutiny_clicked(true);
-                            set_mutiny_details(true);
+                            set_green_clicked(true);
+                            set_green_details(true);
                         }
 
-                        selected_wallet=WalletName::Mutiny
+                        selected_wallet=WalletName::Green
                         platform=platform()
-                        wallet_title=wallet_name_mutiny.clone()
-                        short_desc=short_desc_mutiny.clone()
-                        img_url=img_url_mutiny.clone()
-                        img_alt=img_alt_mutiny.clone()
-                        text_color=text_color_mutiny.clone()
+                        wallet_title=wallet_name_green.clone()
+                        short_desc=short_desc_green.clone()
+                        img_url=img_url_green.clone()
+                        img_alt=img_alt_green.clone()
+                        text_color=text_color_green.clone()
                     />
                 </div>
             </div>
@@ -291,15 +291,16 @@ pub fn RenderAndroidPage() -> impl IntoView {
         mobile wallet. Think of it as a self-custodied spending wallet, similar to how you'd carry cash in a physical wallet.
         ".to_string();
 
-    let wallet_one_text: String = " is a great self-custodial On-chain wallet. It's easy to setup, follows all the latest standards and 
-        also has the option of connecting to your own Lightning Node.".to_string();
+    let wallet_one_text: String = " is a tried and tested On-chain Bitcoin wallet. It's easy to setup, follows all the latest standards and 
+        also has the option of connecting to your own Electrum or Lightning Node.".to_string();
 
-    let wallet_two_text: String = " is a relatively new, modern On-chain and Lightning enabled wallet, it integrates bitcoin payments
-        into your social network using the power of the decentralized
-        <a class='text-[#8cb4ff] underline-offset-auto' href='https://nostr.com' target='_blank' rel='noopener noreferrer'>
-            NOSTR protocol.
-        </a>
-        I recommend Mutiny if you want more than just a basic bitcoin wallet but if you prefer to keep it simple choose Blue Wallet.".to_string();
+    let wallet_two_text: String = " is an easy to use self-custodial On-chain Bitcoin wallet, with many advanced feaures such as: multi-signature setups, 
+        the ability to connect your own node, access a Bitcoin layer 2 called the 
+        <a class='text-[#8cb4ff] underline-offset-auto' href='https://blockstream.com/liquid/' target='_blank' rel='noopener noreferrer'>
+            Liquid Network.
+        </a> and many privacy preserving features. 
+        ."
+    .to_string();
 
     let title = "Basic Android Self-Custody Guide".to_string();
     let quote = "Trusted Third Parties are Security Holes".to_string();
@@ -329,12 +330,13 @@ pub fn RenderIosPage() -> impl IntoView {
     let wallet_one_text: String = " is a great self-custodial On-Chain wallet. It's easy to setup, follows all the latest standards and 
         also has the option of connecting to your own Lightning Node.".to_string();
 
-    let wallet_two_text: String = " is a relatively new, modern On-chain and Lightning enabled wallet, it integrates bitcoin payments
-        into your social network using the power of the decentralized
-        <a class='text-[#8cb4ff] underline-offset-auto' href='https://nostr.com' target='_blank' rel='noopener noreferrer'>
-            NOSTR protocol.
-        </a>
-        I recommend Mutiny if you want more than just a basic bitcoin wallet but if you prefer to keep it simple choose Blue Wallet.".to_string();
+    let wallet_two_text: String = " is an easy to use self-custodial On-chain wallet, with many advanced feaures such as: multi-signature setups, the ability to connect
+        to your own node, access to a Bitcoin layer 2 called the 
+        <a class='text-[#8cb4ff] underline-offset-auto' href='https://blockstream.com/liquid/' target='_blank' rel='noopener noreferrer'>
+            Liquid Network.
+        </a> and many other privacy preserving features. 
+        "
+    .to_string();
 
     let title = "Basic iOS Self-Custody Guide".to_string();
     let quote = "Trusted Third Parties are Security Holes".to_string();
@@ -374,7 +376,7 @@ pub fn RenderDesktopPage() -> impl IntoView {
         />
     }
 }
-/// Route for the android instructions - renders either bluewallet or mutinywallet
+/// Route for the android instructions - renders either bluewallet or greenwallet
 /// depends on button clicked.
 #[component]
 #[allow(non_snake_case)]
@@ -391,6 +393,7 @@ pub fn BeginnerWalletInstructions(
     let img_url_github = "./../../../GitHub_Logo.png".to_string();
     let img_alt_github = "Github Logo".to_string();
 
+    // Blue wallet assest
     let blue_google_play =
         r"https://play.google.com/store/apps/details?id=io.bluewallet.bluewallet".to_string();
     let blue_apple_store =
@@ -398,16 +401,17 @@ pub fn BeginnerWalletInstructions(
             .to_string();
     let blue_android_apk =
         r"https://github.com/BlueWallet/BlueWallet/releases".to_string();
-    let mutiny_google_play =
-        r"https://play.google.com/store/apps/details?id=com.mutinywallet.mutinywallet"
+    // Green wallet assest
+    let green_google_play =
+        r"https://play.google.com/store/apps/details?id=com.greenaddress.greenbits_android_wallet"
             .to_string();
-    let mutiny_android_apk =
-        r"https://github.com/MutinyWallet/mutiny-web/releases".to_string();
+    let green_android_apk =
+        r"https://github.com/Blockstream/green_android/releases".to_string();
 
-    let mutiny_apple_store =
-        r"https://apps.apple.com/us/app/mutiny-wallet/id6471030760?ign-itscg=30200&ign-itsct=apps_box_link"
+    let green_apple_store =
+        r"https://apps.apple.com/us/app/green-bitcoin-wallet/id1402243590"
             .to_string();
-
+    // Sparrow wallet assest
     let sparrow_download = r"https://sparrowwallet.com/download/".to_string();
     let img_url_sparrow = "./../../../download_sparrow.png".to_string();
     let img_alt_sparrow = "download sparrow wallet".to_string();
@@ -415,7 +419,7 @@ pub fn BeginnerWalletInstructions(
     let (displayed_wallet, set_displayed_wallet) = create_signal("");
 
     match selected_wallet {
-        WalletName::Mutiny => set_displayed_wallet("mutiny"),
+        WalletName::Green => set_displayed_wallet("green"),
         WalletName::Blue => set_displayed_wallet("blue"),
         WalletName::Sparrow => set_displayed_wallet("sparrow"),
     }
@@ -475,13 +479,14 @@ pub fn BeginnerWalletInstructions(
                 <div class="mx-auto max-w-5xl p-4 w-full">
                     <div class="mx-auto border border-solid border-gray-400"></div>
                     <h2 class="flex justify-center font-semibold text-[#f7931a] text-[1.5rem] pt-6 pb-4">
-                        "Start Here"
+                        "Get Started"
                     </h2>
+                    // Renders FAQs menu
                     <AccordionMenu faq_name="bluewallet".to_string()/>
                 </div>
             </div>
         }
-    } else if displayed_wallet() == "mutiny" {
+    } else if displayed_wallet() == "green" {
         view! {
             <div
                 id="basic"
@@ -490,16 +495,16 @@ pub fn BeginnerWalletInstructions(
                 // Section 1: Title, Quote, and Quote Author
                 <div class="lg:mt-0 px-6">
                     <h1 class="text-center text-[2.25rem] font-semibold text-[#f7931a] md:text-[2.5rem] lg:text-[3rem]">
-                        "Mutiny Wallet"
+                        "Blockstream Green Wallet"
                     </h1>
                     <div class="text-center mx-auto">
                         <p class="text-lg font-semibold text-white italic">
-                            "Unstoppable bitcoin. For everyone."
+                            "More Powerful Than Ever"
                         </p>
                     </div>
                     <div class="text-center mx-auto">
                         <p class="text-md text-white italic">
-                            "Mutiny is a self-custodial lightning wallet that runs everywhere."
+                            "Blockstream Green is an industry-leading Bitcoin wallet that offers you an unrivaled blend of security and ease-of-use."
                         </p>
                     </div>
                 </div>
@@ -511,12 +516,12 @@ pub fn BeginnerWalletInstructions(
                         fallback=move || {
                             view! {
                                 <DownloadButton
-                                    href=mutiny_google_play.clone()
+                                    href=green_google_play.clone()
                                     logo=google_play_logo.clone()
                                     alt_txt=google_play_alt.clone()
                                 />
                                 <DownloadButton
-                                    href=mutiny_android_apk.clone()
+                                    href=green_android_apk.clone()
                                     logo=img_url_github.clone()
                                     alt_txt=img_alt_github.clone()
                                 />
@@ -525,20 +530,21 @@ pub fn BeginnerWalletInstructions(
                     >
 
                         <DownloadButton
-                            href=mutiny_apple_store.clone()
+                            href=green_apple_store.clone()
                             logo=apple_store_logo.clone()
                             alt_txt=apple_store_alt.clone()
                         />
                     </Show>
                 </div>
 
-                // Section 3: Start Here
+                // Section 3: Get Started
                 <div class="mx-auto max-w-5xl p-4 w-full">
                     <div class="mx-auto border border-solid border-gray-400"></div>
                     <h2 class="flex justify-center font-semibold text-[#f7931a] text-[1.5rem] pt-6 pb-4">
-                        "Start Here"
+                        "Get Started"
                     </h2>
-                    <AccordionMenu faq_name="mutiny".to_string()/>
+                    // Renders FAQs menu
+                    <AccordionMenu faq_name="greenwallet".to_string()/>
                 </div>
             </div>
         }
@@ -569,12 +575,13 @@ pub fn BeginnerWalletInstructions(
                     />
                 </div>
 
-                // Section 3: Start Here
+                // Section 3: Get Started
                 <div class="mx-auto max-w-5xl p-4 w-full">
                     <div class="mx-auto border border-solid border-gray-400"></div>
                     <h2 class="flex justify-center font-semibold text-[#f7931a] text-[1.5rem] pt-6 pb-4">
-                        "Start Here"
+                        "Get Started"
                     </h2>
+                    // Renders FAQs menu
                     <AccordionMenu faq_name="sparrow".to_string()/>
                 </div>
             </div>

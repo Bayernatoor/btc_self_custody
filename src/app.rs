@@ -81,11 +81,11 @@ pub fn App() -> impl IntoView {
 
                         <Route path="/guides/basic/android" view=|| view! { <RenderAndroidPage/> }/>
                         <Route
-                            path="/guides/basic/android/mutiny"
+                            path="/guides/basic/android/green"
                             view=|| {
                                 view! {
                                     <BeginnerWalletInstructions
-                                        selected_wallet=WalletName::Mutiny
+                                        selected_wallet=WalletName::Green
                                         ios=false
                                     />
                                 }
@@ -118,11 +118,11 @@ pub fn App() -> impl IntoView {
                         />
 
                         <Route
-                            path="/guides/basic/ios/mutiny"
+                            path="/guides/basic/ios/green"
                             view=|| {
                                 view! {
                                     <BeginnerWalletInstructions
-                                        selected_wallet=WalletName::Mutiny
+                                        selected_wallet=WalletName::Green
                                         ios=true
                                     />
                                 }
