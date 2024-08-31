@@ -291,14 +291,14 @@ pub fn RenderAndroidPage() -> impl IntoView {
         mobile wallet. Think of it as a self-custodied spending wallet, similar to how you'd carry cash in a physical wallet.
         ".to_string();
 
-    let wallet_one_text: String = " is a tried and tested On-chain Bitcoin wallet. It's easy to setup, follows all the latest standards and 
-        also has the option of connecting to your own Electrum or Lightning Node.".to_string();
+    let wallet_one_text: String = " is a tried and tested On-chain Bitcoin wallet. It's easy to setup, follows all the latest standards, has great features such as: multiple 
+        wallet creation, Multisig Vaults, duress wallet capability, payjoins and of course the ability to
+        connect to your own Electrum or Lightning Node.".to_string();
 
-    let wallet_two_text: String = " is an easy to use self-custodial On-chain Bitcoin wallet, with many advanced feaures such as: multi-signature setups, 
-        the ability to connect your own node, access a Bitcoin layer 2 called the 
+    let wallet_two_text: String = " is an easy to use self-custodial On-chain Bitcoin wallet built by Blockstream. It has many advanced feaures such as: Multi-Signature wallets with 2FA, Multi wallet creation, the ability to connect your own Electrum node, and access to a Bitcoin layer 2 called the 
         <a class='text-[#8cb4ff] underline-offset-auto' href='https://blockstream.com/liquid/' target='_blank' rel='noopener noreferrer'>
             Liquid Network.
-        </a> and many privacy preserving features. 
+        </a>
         ."
     .to_string();
 
@@ -327,15 +327,15 @@ pub fn RenderIosPage() -> impl IntoView {
         mobile wallet. Think of it as a self-custodied spending wallet, similar to how you'd carry cash in a physical wallet.
         ".to_string();
 
-    let wallet_one_text: String = " is a great self-custodial On-Chain wallet. It's easy to setup, follows all the latest standards and 
-        also has the option of connecting to your own Lightning Node.".to_string();
+    let wallet_one_text: String = " is a tried and tested On-chain Bitcoin wallet. It's easy to setup, follows all the latest standards, has great features such as: Multiple 
+        Wallet Creation, Multisig Vaults, Duress Wallet capability, Payjoins and of course the ability to
+        connect to your own Electrum or Lightning Node.".to_string();
 
-    let wallet_two_text: String = " is an easy to use self-custodial On-chain wallet, with many advanced feaures such as: multi-signature setups, the ability to connect
-        to your own node, access to a Bitcoin layer 2 called the 
+    let wallet_two_text: String = " is an easy to use self-custodial On-chain Bitcoin wallet built by Blockstream. It has many advanced feaures such as: Multi-Signature 
+        wallets with 2FA, Multi wallet creation, the ability to connect your own Electrum node, and access to a Bitcoin layer 2 called the 
         <a class='text-[#8cb4ff] underline-offset-auto' href='https://blockstream.com/liquid/' target='_blank' rel='noopener noreferrer'>
-            Liquid Network.
-        </a> and many other privacy preserving features. 
-        "
+            Liquid Network
+        </a>."
     .to_string();
 
     let title = "Basic iOS Self-Custody Guide".to_string();
