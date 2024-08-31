@@ -121,14 +121,14 @@ pub fn BeginnerPageTemplate(
 
     // Green wallet assets
     let wallet_name_green = "Green Wallet".to_string();
-    let short_desc_green = "Feature Rich Wallet".to_string();
+    let short_desc_green = "Industry leading".to_string();
     let img_url_green = "./../../green_logo.webp".to_string();
     let img_alt_green = "Green Logo".to_string();
     let text_color_green = "#038046".to_string();
 
     // Blue wallet assets
     let wallet_name_blue = "Blue Wallet".to_string();
-    let short_desc_blue = "Basic + Ease of Use".to_string();
+    let short_desc_blue = "Tried & Tested".to_string();
     let img_url_blue = "./../../bluewallet_logo.webp".to_string();
     let img_alt_blue = "Blue Wallet".to_string();
     let text_color_blue = "#1a578f".to_string();
@@ -291,15 +291,14 @@ pub fn RenderAndroidPage() -> impl IntoView {
         mobile wallet. Think of it as a self-custodied spending wallet, similar to how you'd carry cash in a physical wallet.
         ".to_string();
 
-    let wallet_one_text: String = " is a tried and tested On-chain Bitcoin wallet. It's easy to setup, follows all the latest standards, has great features such as: multiple 
-        wallet creation, Multisig Vaults, duress wallet capability, payjoins and of course the ability to
+    let wallet_one_text: String = " is a tried and tested On-chain Bitcoin wallet. It's easy to setup, follows all the latest standards, has great features such as: Multiple 
+        Wallet creation, Multisig Vaults, Duress Wallet capability, Payjoins and of course the ability to
         connect to your own Electrum or Lightning Node.".to_string();
 
     let wallet_two_text: String = " is an easy to use self-custodial On-chain Bitcoin wallet built by Blockstream. It has many advanced feaures such as: Multi-Signature wallets with 2FA, Multi wallet creation, the ability to connect your own Electrum node, and access to a Bitcoin layer 2 called the 
         <a class='text-[#8cb4ff] underline-offset-auto' href='https://blockstream.com/liquid/' target='_blank' rel='noopener noreferrer'>
-            Liquid Network.
-        </a>
-        ."
+            Liquid Network
+        </a>."
     .to_string();
 
     let title = "Basic Android Self-Custody Guide".to_string();
