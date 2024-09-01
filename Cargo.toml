@@ -29,7 +29,7 @@ leptos_meta = { version = "0.6", features = ["nightly"] }
 leptos_actix = { version = "0.6", optional = true }
 leptos_router = { version = "0.6", features = ["nightly"] }
 log = "0.4"
-wasm-bindgen = "0.2.92"
+wasm-bindgen = "=0.2.93"
 serde = { version = "1.0.189", features = ["derive"] }
 pulldown-cmark = { version = "0.9.3", features = ["serde"] }
 tokio = { version = "1.33.0", features = ["macros"] }
@@ -41,7 +41,7 @@ tracing-futures = "0.2.5"
 tracing-subscriber = { version = "0.3.18", features = ["registry", "env-filter"] }
 tracing-bunyan-formatter = { git  = "https://github.com/Bayernatoor/tracing-bunyan-formatter.git", default-features = false, branch = "add_support_for_all_targets"}
 tracing-log = "0.2.0"
-leptos-use = "0.10.10"
+leptos-use = "0.13.0"
 
 [dependencies.sqlx]
 version = "0.7.4"
