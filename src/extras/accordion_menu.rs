@@ -84,6 +84,7 @@ fn Menu(faq_title: String, faq_content: String) -> impl IntoView {
 
     // takes faq_content and faq_title to make a button and a accordion style container
     view! {
+    <div>
         <h2 id="accordion-collapse-heading">
             <button
                 type="button"
@@ -124,6 +125,7 @@ fn Menu(faq_title: String, faq_content: String) -> impl IntoView {
                 ></div>
             </div>
         </div>
+    </div>
     }
 }
 

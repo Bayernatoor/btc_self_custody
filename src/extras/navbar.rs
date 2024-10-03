@@ -1,10 +1,8 @@
+use leptos::ev::MouseEvent;
 use leptos::html::Div;
 use leptos::*;
-use leptos_use::on_click_outside;
+use leptos_use::{on_click_outside_with_options, OnClickOutsideOptions};
 
-// navbar requires rework
-// - prevent propagation (disable clicks when menu is open)
-// - support safari, doesn't seem to be work in safari atm :(
 #[allow(clippy::redundant_closure)]
 #[component]
 pub fn NavBar() -> impl IntoView {
@@ -12,9 +10,19 @@ pub fn NavBar() -> impl IntoView {
     let navbar_menu = create_node_ref::<Div>();
 
     // Hook to close navbar menu when clicking outside
-    let _ = on_click_outside(navbar_menu, move |_| {
-        set_menu_clicked.set(false);
-    });
+    let _ = on_click_outside_with_options(
+        navbar_menu,
+        move |_event| {
+            set_menu_clicked.set(false);
+        },
+        OnClickOutsideOptions::default().ignore(["#navbar_hamburger_menu"]),
+    );
+
+    // Hanlder for mobile hamburger menu
+    let on_click = move |event: MouseEvent| {
+        event.stop_immediate_propagation();
+        set_menu_clicked.set(!menu_clicked.get());
+    };
 
     view! {
         <div class="bg-[#123c64] text-white sticky top-0 z-10 w-full mx-auto p-6 2xl:p-8 flex justify-between border-b border-solid border-white items-center">
@@ -29,10 +37,7 @@ pub fn NavBar() -> impl IntoView {
                 <a href="/blog">"Articles"</a>
                 <a href="/about">"About"</a>
             </div>
-            <div class="flex lg:hidden cursor-pointer">
-                <a on:click=move |_| {
-                    set_menu_clicked.update(|value| *value = !*value);
-                }>
+            <div id="navbar_hamburger_menu" on:click=on_click class="flex lg:hidden cursor-pointer">
                     <div>
                         <svg
                             xmlns="http://www.w3.org/2000/svg"
@@ -41,6 +46,7 @@ pub fn NavBar() -> impl IntoView {
                             viewBox="0 0 24 24"
                             stroke="currentColor"
                         >
+                            // Hamburger menu Icon
                             <path
                                 stroke-linecap="round"
                                 stroke-linejoin="round"
@@ -48,16 +54,16 @@ pub fn NavBar() -> impl IntoView {
                                 d="M4 6h16M4 12h16M4 18h16"
                                 class:hidden=move || menu_clicked()
                             ></path>
+                            // X Icon to close menu
                             <path
                                 stroke-linecap="round"
                                 stroke-linejoin="round"
                                 stroke-width="2"
                                 d="M6 18L18 6M6 6l12 12"
-                                class:hidden=move || !menu_clicked()
+                                class:hidden= move || !menu_clicked()
                             ></path>
                         </svg>
                     </div>
-                </a>
             </div>
         </div>
         // TODO: add event listener to body of app to listen for click when menu is open

@@ -1,6 +1,7 @@
 use crate::extras::back::BackButton;
 use leptos::ev::MouseEvent;
 use leptos::*;
+use log::{info, Level};
 
 /// used to create a struct representing the values required for a button.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -68,7 +69,7 @@ where
     // generate each one.
     view! {
         <Show
-            when=move || setter()
+            when=move || setter() 
             fallback=move || {
                 view! {
                     <button
@@ -80,7 +81,7 @@ where
                         <p class="text-lg text-[#123c64] mt-3">{subtitle.clone()}</p>
                     </button>
                 }
-            }
+            }.into_view()
         >
 
             <div class="flex flex-col items-center py-5 gap-5 animate-fadeinone">
@@ -98,8 +99,7 @@ where
                                     </h2>
                                 </button>
                             </a>
-                        }
-                            .into_view()
+                        }.into_view()
                     }
                 />
 
