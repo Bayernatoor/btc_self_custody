@@ -57,7 +57,7 @@ where
                 </div>
             </button>
         </a>
-    }
+    }.into_view()
 }
 
 #[component]
@@ -72,7 +72,6 @@ pub fn DownloadButton(
             href=href
             rel="noreferrer"
             target="_blank"
-            rel="noreferrer"
             class="flex h-18 w-64 rounded-xl"
         >
             <button class="flex justify-center p-2 mx-auto bg-white items-center rounded-xl">
@@ -85,7 +84,7 @@ pub fn DownloadButton(
                 </div>
             </button>
         </a>
-    }
+        }.into_view()
 }
 
 /// Component used for mobile (basic) pages.
