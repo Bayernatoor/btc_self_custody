@@ -68,12 +68,7 @@ pub fn DownloadButton(
     alt_txt: String,
 ) -> impl IntoView {
     view! {
-        <a
-            href=href
-            rel="noreferrer"
-            target="_blank"
-            class="flex h-18 w-64 rounded-xl"
-        >
+        <a href=href rel="noreferrer" target="_blank" class="flex h-18 w-64 rounded-xl">
             <button class="flex justify-center p-2 mx-auto bg-white items-center rounded-xl">
                 <div class="flex justify-center h-full w-full">
                     <img
@@ -84,7 +79,7 @@ pub fn DownloadButton(
                 </div>
             </button>
         </a>
-        }.into_view()
+    }.into_view()
 }
 
 /// Component used for mobile (basic) pages.

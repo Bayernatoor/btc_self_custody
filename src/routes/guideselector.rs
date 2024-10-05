@@ -1,7 +1,6 @@
 use crate::extras::back::BackButton;
 use leptos::ev::MouseEvent;
 use leptos::*;
-use log::{info, Level};
 
 /// used to create a struct representing the values required for a button.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -69,19 +68,22 @@ where
     // generate each one.
     view! {
         <Show
-            when=move || setter() 
+            when=move || setter()
             fallback=move || {
-                view! {
-                    <button
-                        class="flex flex-col z-20 p-4 max-w-md mx-auto w-72 bg-white rounded-xl items-center mt-6 shadow-md hover:bg-[#f2f2f2] transition ease-in-out duration-300"
-                        class:hidden=move || hidden()
-                        on:click=on_click.clone()
-                    >
-                        <div class="text-3xl font-bold text-[#f79231]">{name.clone()}</div>
-                        <p class="text-lg text-[#123c64] mt-3">{subtitle.clone()}</p>
-                    </button>
+                {
+                    view! {
+                        <button
+                            class="flex flex-col z-20 p-4 max-w-md mx-auto w-72 bg-white rounded-xl items-center mt-6 shadow-md hover:bg-[#f2f2f2] transition ease-in-out duration-300"
+                            class:hidden=move || hidden()
+                            on:click=on_click.clone()
+                        >
+                            <div class="text-3xl font-bold text-[#f79231]">{name.clone()}</div>
+                            <p class="text-lg text-[#123c64] mt-3">{subtitle.clone()}</p>
+                        </button>
+                    }
                 }
-            }.into_view()
+                    .into_view()
+            }
         >
 
             <div class="flex flex-col items-center py-5 gap-5 animate-fadeinone">
@@ -99,7 +101,8 @@ where
                                     </h2>
                                 </button>
                             </a>
-                        }.into_view()
+                        }
+                            .into_view()
                     }
                 />
 

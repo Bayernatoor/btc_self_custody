@@ -84,48 +84,48 @@ fn Menu(faq_title: String, faq_content: String) -> impl IntoView {
 
     // takes faq_content and faq_title to make a button and a accordion style container
     view! {
-    <div>
-        <h2 id="accordion-collapse-heading">
-            <button
-                type="button"
-                class=format!(
-                    "flex justify-between w-full p-4
+        <div>
+            <h2 id="accordion-collapse-heading">
+                <button
+                    type="button"
+                    class=format!(
+                        "flex justify-between w-full p-4
             text-left text-gray-900 border border-gray-500 rounded-xl 
             hover:bg-[#3c6594]",
-                )
+                    )
 
-                aria-expanded="true"
-                aria-controls="accordion-collapse-body"
-                on:click=move |_| { set_menu_clicked.update(|menu| *menu = !*menu) }
-            >
-                <span class="text-white text-xl" inner_html=faq_title></span>
-                <svg
-                    data-accordion-icon
-                    class="w-3 h-3 rotate-180 shrink-0"
-                    aria-hidden="true"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 10 6"
+                    aria-expanded="true"
+                    aria-controls="accordion-collapse-body"
+                    on:click=move |_| { set_menu_clicked.update(|menu| *menu = !*menu) }
                 >
-                    <path
-                        stroke="white"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M9 5 5 1 1 5"
-                    ></path>
-                </svg>
-            </button>
-        </h2>
-        <div aria-labelledby="accordion-collapse-heading" class:hidden=move || !menu_clicked()>
-            <div class="p-5 border border-gray-500 rounded-xl text-sm animate-fadeinone">
-                <div
-                    class="bg-[#3c6594] rounded-md p-4 leading-relaxed text-white text-lg"
-                    inner_html=faq_content
-                ></div>
+                    <span class="text-white text-xl" inner_html=faq_title></span>
+                    <svg
+                        data-accordion-icon
+                        class="w-3 h-3 rotate-180 shrink-0"
+                        aria-hidden="true"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 10 6"
+                    >
+                        <path
+                            stroke="white"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M9 5 5 1 1 5"
+                        ></path>
+                    </svg>
+                </button>
+            </h2>
+            <div aria-labelledby="accordion-collapse-heading" class:hidden=move || !menu_clicked()>
+                <div class="p-5 border border-gray-500 rounded-xl text-sm animate-fadeinone">
+                    <div
+                        class="bg-[#3c6594] rounded-md p-4 leading-relaxed text-white text-lg"
+                        inner_html=faq_content
+                    ></div>
+                </div>
             </div>
         </div>
-    </div>
     }
 }
 
