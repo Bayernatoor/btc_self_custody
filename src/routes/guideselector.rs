@@ -65,7 +65,7 @@ where
 
     // If only one option is available (desktop) the <Show>'s fallback will be used to display i
     // otherwise, the options are pushed into a Vec<GuideDetails> and then iterated over to
-    // generate each one.
+    // generate a button for each platform's guide.
     view! {
         <Show
             when=move || setter()
@@ -130,13 +130,15 @@ pub fn GuideSelector() -> impl IntoView {
     let (intermediate_hidden, set_intermediate_hidden) = create_signal(false);
     let (advanced_hidden, set_advanced_hidden) = create_signal(false);
 
-    // explainer copy
-    let (explainer, _set_explainer) = create_signal(
-        "Select a guide based on how much Bitcoin you are protecting."
-            .to_string(),
-    );
-
-    //let device_selector_explainer = "Select your preferred OS".to_string();
+    // Derived signal for explainer copy based on clicked state
+    let explainer = move || {
+        if basic_clicked() || intermediate_clicked() || advanced_clicked() {
+            "Select your preferred OS".to_string()
+        } else {
+            "Select a guide based on how much Bitcoin you are protecting."
+                .to_string()
+        }
+    };
 
     // devices to be included in guide level
     let basic_devices: Vec<String> = vec![
@@ -161,7 +163,9 @@ pub fn GuideSelector() -> impl IntoView {
                     alt="Financial privacy lock"
                 />
                 <div class="px-6 pt-2 max-w-3xl">
-                    <p class="text-white text-xl text-center pb-2 2xl:text-2xl">{explainer()}</p>
+                    <p class="text-white text-xl text-center pb-2 2xl:text-2xl">
+                        {move || explainer()}
+                    </p>
                 </div>
             </div>
             <div class="flex flex-col gap-2">
