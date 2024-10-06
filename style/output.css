@@ -1415,6 +1415,11 @@ p, h1, h2, h3{
   color: rgb(249 115 22 / var(--tw-text-opacity));
 }
 
+.focus\:bg-blue-300:focus{
+  --tw-bg-opacity: 1;
+  background-color: rgb(147 197 253 / var(--tw-bg-opacity));
+}
+
 .focus\:outline-none:focus{
   outline: 2px solid transparent;
   outline-offset: 2px;
@@ -1428,6 +1433,11 @@ p, h1, h2, h3{
 
 .active\:bg-transparent:active{
   background-color: transparent;
+}
+
+.active\:bg-blue-300:active{
+  --tw-bg-opacity: 1;
+  background-color: rgb(147 197 253 / var(--tw-bg-opacity));
 }
 
 @media (prefers-color-scheme: dark){

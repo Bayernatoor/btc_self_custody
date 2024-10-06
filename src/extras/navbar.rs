@@ -1,4 +1,4 @@
-use leptos::ev::MouseEvent;
+use leptos::ev::TouchEvent;
 use leptos::html::Div;
 use leptos::*;
 use leptos_use::{on_click_outside_with_options, OnClickOutsideOptions};
@@ -19,7 +19,7 @@ pub fn NavBar() -> impl IntoView {
     );
 
     // Hanlder for mobile hamburger menu
-    let on_click = move |event: MouseEvent| {
+    let on_touchstart = move |event: TouchEvent| {
         event.stop_immediate_propagation();
         set_menu_clicked.set(!menu_clicked.get());
     };
@@ -37,7 +37,11 @@ pub fn NavBar() -> impl IntoView {
                 <a href="/blog">"Articles"</a>
                 <a href="/about">"About"</a>
             </div>
-            <div id="navbar_hamburger_menu" on:click=on_click class="flex lg:hidden cursor-pointer">
+            <div
+                id="navbar_hamburger_menu"
+                on:touchstart=on_touchstart
+                class="flex lg:hidden cursor-pointer"
+            >
                 <div>
                     <svg
                         xmlns="http://www.w3.org/2000/svg"
@@ -76,28 +80,28 @@ pub fn NavBar() -> impl IntoView {
         >
             <a
                 href="/guides"
-                class="block py-2 px-4 font-medium text-xl text-[#6B7990] hover:bg-blue-100"
+                class="block py-2 px-4 font-medium text-xl text-[#6B7990] hover:bg-blue-100 active:bg-blue-300"
                 on:click=move |_| set_menu_clicked.set(false)
             >
                 "Guides"
             </a>
             <a
                 href="/faq"
-                class="block py-2 px-4 font-medium text-xl text-[#6B7990] hover:bg-blue-100"
+                class="block py-2 px-4 font-medium text-xl text-[#6B7990] hover:bg-blue-100 active:bg-blue-300"
                 on:click=move |_| set_menu_clicked.set(false)
             >
                 "Help Desk"
             </a>
             <a
                 href="/blog"
-                class="block py-2 px-4 font-medium text-xl text-[#6B7990] hover:bg-blue-100"
+                class="block py-2 px-4 font-medium text-xl text-[#6B7990] hover:bg-blue-100 active:bg-blue-300"
                 on:click=move |_| set_menu_clicked.set(false)
             >
                 "Articles"
             </a>
             <a
                 href="/about"
-                class="block py-2 px-4 font-medium text-xl text-[#6B7990] hover:bg-blue-100"
+                class="block py-2 px-4 font-medium text-xl text-[#6B7990] hover:bg-blue-100 active:bg-blue-300"
                 on:click=move |_| set_menu_clicked.set(false)
             >
                 "About"
