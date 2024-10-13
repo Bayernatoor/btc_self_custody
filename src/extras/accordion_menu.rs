@@ -2,8 +2,8 @@ use crate::extras::spinner::Spinner;
 use leptos::html::Button;
 use leptos::logging::log;
 use leptos::{server, ServerFnError, *};
-use leptos_use::{use_clipboard, UseClipboardReturn};
-use log::{info, Level};
+//use leptos_use::{use_clipboard, UseClipboardReturn};
+//use log::{info, Level};
 use pulldown_cmark::{html, Options, Parser};
 use serde::{Deserialize, Serialize};
 
@@ -85,12 +85,12 @@ fn Menu(
     open_menu: ReadSignal<Option<u32>>, // Signal tracking currently open menu
     set_open_menu: WriteSignal<Option<u32>>, // Signal setter to update open menu
 ) -> impl IntoView {
-    let UseClipboardReturn {
-        is_supported,
-        text,
-        copied,
-        copy,
-    } = use_clipboard();
+    //let UseClipboardReturn {
+    //    is_supported,
+    //    text,
+    //    copied,
+    //    copy,
+    //} = use_clipboard();
     // ref for menu title to enable anchoring
     let title_ref = create_node_ref::<Button>();
 
