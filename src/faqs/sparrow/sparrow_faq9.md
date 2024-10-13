@@ -1,5 +1,4 @@
-### Other Resources
-
+[Other Resources](#other-resources)
 
 <h5 class="text-2xl pb-2 text-[#f7931a] font-semibold">Other Resources & References</h5>
 

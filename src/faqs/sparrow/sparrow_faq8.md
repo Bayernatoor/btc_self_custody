@@ -1,4 +1,4 @@
-### Troubleshooting
+[Troubleshooting](#sparrow-troubleshooting)
 
 <h4 class="text-xl md-text-2xl pb-4 text-[#f7931a] font-semibold">I recovered my wallet but there are no transactions</h4>
 

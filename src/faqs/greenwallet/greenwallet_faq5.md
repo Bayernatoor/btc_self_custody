@@ -1,4 +1,4 @@
-### How do I restore my wallet? 
+### [How do I restore my wallet?](#greenwallet-restoring-your-wallet)
 
 <h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Restoring a Bitcoin Wallet</h4>
 

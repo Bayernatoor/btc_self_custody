@@ -1,4 +1,4 @@
-### Quick wallet setup guide
+### [Quick Wallet Setup Guide](#bluewallet-quick-setup-guide)
 
 <h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">BlueWallet Wallet Setup</h4>
 

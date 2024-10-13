@@ -1,4 +1,4 @@
-### Backups and Storage
+[Backups and Storage](#advanced-backups-and-storage)
 
 <h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Backup Best Practices</h4>
 

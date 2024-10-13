@@ -1,7 +1,6 @@
-### What are some book recommendations? 
+### [What are some book recommendations?](#book-recommendations)
 
-
-<h5 class="text-xl pb-4 text-[#f7931a] font-semibold text-center lg:text-left">Find Bitcoin, technical, economic and at times philosophical books below.</h5>
+<h5 class="text-xl pb-4 text-[#f7931a] font-semibold text-center lg:text-left">Find technical, economic and at times philosophical bitcoin books below.</h5>
 
 <ul class="space-y-4">
     <li class="py-2 max-w-lg border-b border-gray-200">

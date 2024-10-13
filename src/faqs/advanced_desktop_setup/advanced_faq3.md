@@ -1,4 +1,4 @@
-### Multisignature Wallet Setup
+[Multisignature Wallet Setup](#advanced-multisignature-wallet-setup)
 
 <h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Setting up a Multisig</h4>
 

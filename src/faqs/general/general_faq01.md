@@ -1,4 +1,4 @@
-### What is bitcoin?
+### [What is Bitcoin?](#what-is-bitcoin)
 
 Bitcoin is money. Bitcoin is a store of value. Bitcoin is an exit.
 
