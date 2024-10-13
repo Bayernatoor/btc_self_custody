@@ -1,4 +1,4 @@
-### Basic recommended setup
+[Basic recommended setup](#sparrow-basic-recommended-setup)
 
 <h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Sparrow Wallet Setup</h4>
 

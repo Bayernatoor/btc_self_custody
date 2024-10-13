@@ -1,4 +1,4 @@
-### What are bitcoin private/public keys? 
+### [What are Bitcoin private/public keys?](#what-are-bitcoin-private-public-keys)
 
 Bitcoin private and public keys are essential cryptographic components in the Bitcoin network.
 

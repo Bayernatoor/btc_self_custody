@@ -1,4 +1,4 @@
-### Why Bitcoin?
+### [Why Bitcoin?](#why-bitcoin)
 
 Bitcoin is an exit. An exit from government issued fiat currencies. Currencies that undergo constant inflation, robbing you of your hard earned savings.
 Bitcoin is the best savings mechanism ever discovered. It preserves your wealth as everything <a class="underline text-blue-400 hover:text-[#3c6594]" href="https://www.pricedinbitcoin21.com/landing" target="_blank" rel="noopener noreferrer">priced in bitcoin</a>

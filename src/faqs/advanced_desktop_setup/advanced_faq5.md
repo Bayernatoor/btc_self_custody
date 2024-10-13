@@ -1,4 +1,4 @@
-### Advanced Solutions
+[Advanced Solutions](#advanced-additional-solutions)
 
 <h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Advanced Solutions</h4>
 

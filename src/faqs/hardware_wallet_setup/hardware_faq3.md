@@ -1,4 +1,4 @@
-### Protecting your Seed Words & Backup Best Practices
+### [Protecting your Seed Words & Backup Best Practices](#intermediate-seedwords-and-backups)
 
 <h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Backup up your Seed Words</h4>
 

@@ -1,4 +1,4 @@
-## Next step
+### [Next step](#intermediate-next-steps)
 
 <h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Next Step</h4>
 

@@ -1,4 +1,4 @@
-### Why bitcoin self-custody? 
+### Why Bitcoin self-custody? 
 
 Controlling a bitcoin private key grants absolute control over the
 associated bitcoin, embodying the ethos of the bitcoin movement. Self-custody and personal

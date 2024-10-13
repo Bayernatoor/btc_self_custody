@@ -1,4 +1,4 @@
-### What are transaction fees?  
+### [What are transaction fees?](#what-are-transaction-fees)
 
 The bitcoin network is secured by miners, who are compensated with transaction fees to include
 transactions in blocks. Each bitcoin block has limited space (~4MB), creating a fee market based 

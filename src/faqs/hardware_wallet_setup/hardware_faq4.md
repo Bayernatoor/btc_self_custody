@@ -1,4 +1,4 @@
-### Connecting to Sparrow Wallet
+### [Connecting to Sparrow Wallet](#intermediate-connecting-to-sparrow)
 
 <h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Connecting to Sparrow Wallet</h4>
 

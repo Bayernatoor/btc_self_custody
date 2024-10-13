@@ -1,4 +1,4 @@
-## Why run a Bitcoin Node?
+### [Why run a Bitcoin Node?](#intermediate-why-run-a-bitcoin-node)
 
 <h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Running Bitcoin</h4>
 
@@ -11,6 +11,6 @@ Bitcoin Core connects to the Bitcoin network, downloads, and fully validates blo
 Running your own copy of the Bitcoin Core code allows you to personally validate 
 every block and broadcast your own transactions, all without depending on a trusted third party. 
 It provides you with additional privacy and security while also helping to decentralize the peer-to-peer network. 
-Running Bitcoin is our way to help keep the network honest, ensure consensus rules are being followed, and become sovereign Bitcoin users. If not us, then who?
+Running Bitcoin is our way to help keep the network honest, ensure consensus rules are being followed, and become sovereign Bitcoin users. If not you, then who?
 
 

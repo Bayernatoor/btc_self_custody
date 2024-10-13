@@ -1,4 +1,4 @@
-### I lost my phone what do I do?
+### [I lost my phone what do I do?](#greenwallet-restoring-from-lost-phone)
 
 <h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">I Lost my Phone!</h4>
 
