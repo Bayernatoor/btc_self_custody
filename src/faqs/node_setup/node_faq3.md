@@ -1,4 +1,4 @@
-### Start9 Details & Resources 
+### [Start9 Details & Resources](#intemediate-start9-node-details)
 
 <h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Choice #1: Start9</h4>
 

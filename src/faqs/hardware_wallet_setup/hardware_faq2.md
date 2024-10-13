@@ -1,4 +1,4 @@
-### Setting up the Coldcard
+### [Setting up the Coldcard](#intermediate-setting-up-coldcard)
 
 <h4 class="text-2xl pb-2 text-[#f7931a] font-semibold">Setting up Your Coldcard</h4>
 

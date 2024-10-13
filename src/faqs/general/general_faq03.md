@@ -1,4 +1,4 @@
-### Who invented bitcoin? 
+### [Who discovered Bitcoin?](#who-discovered-bitcoin)
 
 Bitcoin is the result of decades of research in cryptography and dozens of attempts at creating a digitally native money.
 

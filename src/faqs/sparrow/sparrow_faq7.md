@@ -1,4 +1,4 @@
-### Wallet recovery or import
+[Wallet recovery or import](#sparrow-wallet-recovery-or-import)
 
 <h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Recovering or Importing an Existing Wallet</h4>
 

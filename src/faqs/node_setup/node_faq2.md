@@ -1,4 +1,4 @@
-### Which node should I chose?
+### [Which node should I chose?](#intermediate-which-node-to-chose)
 
 <h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Choosing a Node Implementation</h4>
 

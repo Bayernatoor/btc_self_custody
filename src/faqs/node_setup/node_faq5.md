@@ -1,4 +1,4 @@
-### RaspiBlitz Details & Resources 
+### [RaspiBlitz Details & Resources](#intermediate-raspiblitz-node-details)
 
 <h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Choice #3: RaspiBlitz</h4>
 

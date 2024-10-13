@@ -1,4 +1,4 @@
-### Sending your first transaction 
+[Sending your first transaction](#sparrow-sending-your-first-transaction)
 
 <h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Sending Your First Transaction</h4>
 

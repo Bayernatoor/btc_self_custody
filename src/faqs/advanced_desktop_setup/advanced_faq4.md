@@ -1,4 +1,4 @@
-### Receiving & Spending
+[Receiving & Spending](#advanced-receiving-and-spending)
 
 <h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Receiving to a Multisig Wallet</h4>
 
