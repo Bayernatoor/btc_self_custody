@@ -174,7 +174,7 @@ pub fn AccordionMenu(#[prop(optional)] faq_name: String) -> impl IntoView {
     // Check URL on component mount and open the corresponding FAQ
     create_effect(move |_| {
         // Get the current URL's hash
-        if let Some(hash) = window().location().hash().ok() {
+        if let Ok(hash) = window().location().hash() {
             // Loop through FAQs to find the matching ID
             for faq in faqs.get().unwrap_or_else(|| Ok(vec![])).unwrap() {
                 // Extract the anchor ID from the title
