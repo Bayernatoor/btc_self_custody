@@ -1,6 +1,9 @@
 use crate::extras::spinner::Spinner;
+use leptos::html::Button;
 use leptos::logging::log;
 use leptos::{server, ServerFnError, *};
+use leptos_use::{use_clipboard, UseClipboardReturn};
+use log::{info, Level};
 use pulldown_cmark::{html, Options, Parser};
 use serde::{Deserialize, Serialize};
 
@@ -61,13 +64,10 @@ pub async fn fetch_faq(faq_name: String) -> Result<Vec<FAQ>, ServerFnError> {
     Ok(faqs)
 }
 
-// Pasre the markdown and convert it to html
+// Parse the markdown and convert it to html
 #[allow(non_snake_case)]
 fn MarkdownToHtml(markdown: &str) -> String {
-    let mut options = Options::empty();
-    options.insert(Options::ENABLE_STRIKETHROUGH);
-    options.insert(Options::ENABLE_SMART_PUNCTUATION);
-    options.insert(Options::ENABLE_FOOTNOTES);
+    let options = Options::empty();
     let parser = Parser::new_ext(markdown, options);
 
     let mut html_output = String::new();
@@ -76,13 +76,43 @@ fn MarkdownToHtml(markdown: &str) -> String {
     html_output
 }
 
-// Generate FAQs menu
 #[component]
 #[allow(non_snake_case)]
-fn Menu(faq_title: String, faq_content: String) -> impl IntoView {
-    let (menu_clicked, set_menu_clicked) = create_signal(false);
+fn Menu(
+    faq_title: String,
+    faq_content: String,
+    menu_id: u32,
+    open_menu: ReadSignal<Option<u32>>, // Signal tracking currently open menu
+    set_open_menu: WriteSignal<Option<u32>>, // Signal setter to update open menu
+) -> impl IntoView {
+    let UseClipboardReturn {
+        is_supported,
+        text,
+        copied,
+        copy,
+    } = use_clipboard();
+    // ref for menu title to enable anchoring
+    let title_ref = create_node_ref::<Button>();
 
-    // takes faq_content and faq_title to make a button and a accordion style container
+    // determine which accordion menu is currently open
+    let is_open = move || open_menu() == Some(menu_id);
+
+    // scroll to the title when menu is opened
+    let handle_menu_click = move |_| {
+        if is_open() {
+            // close menu if it's already open
+            set_open_menu(None);
+        } else {
+            // open menu and close the others
+            set_open_menu(Some(menu_id));
+
+            // Scroll to the title of the opened menu
+            if let Some(element) = title_ref.get() {
+                element.scroll_into_view();
+            }
+        }
+    };
+
     view! {
         <div>
             <h2 id="accordion-collapse-heading">
@@ -96,7 +126,9 @@ fn Menu(faq_title: String, faq_content: String) -> impl IntoView {
 
                     aria-expanded="true"
                     aria-controls="accordion-collapse-body"
-                    on:click=move |_| { set_menu_clicked.update(|menu| *menu = !*menu) }
+                    on:click=handle_menu_click
+                    node_ref=title_ref
+
                 >
                     <span class="text-white text-xl" inner_html=faq_title></span>
                     <svg
@@ -117,7 +149,7 @@ fn Menu(faq_title: String, faq_content: String) -> impl IntoView {
                     </svg>
                 </button>
             </h2>
-            <div aria-labelledby="accordion-collapse-heading" class:hidden=move || !menu_clicked()>
+            <div aria-labelledby="accordion-collapse-heading" class:hidden=move || !is_open()>
                 <div class="p-5 border border-gray-500 rounded-xl text-sm animate-fadeinone">
                     <div
                         class="bg-[#3c6594] rounded-md p-4 leading-relaxed text-white text-lg"
@@ -129,13 +161,38 @@ fn Menu(faq_title: String, faq_content: String) -> impl IntoView {
     }
 }
 
-// Accordion menu component for faqs, creates necessary number of Menu comps based on props passed.
 #[component]
 #[allow(non_snake_case)]
 pub fn AccordionMenu(#[prop(optional)] faq_name: String) -> impl IntoView {
-    // returns a Vec containing a FAQS struct
+    // Signal to track the currently open menu's ID
+    let (open_menu, set_open_menu) = create_signal(None::<u32>);
+
+    // Fetch the FAQ data
     let faqs =
-        create_resource(move || (), move |_| fetch_faq(faq_name.clone()));
+        create_local_resource(move || (), move |_| fetch_faq(faq_name.clone()));
+
+    // Check URL on component mount and open the corresponding FAQ
+    create_effect(move |_| {
+        // Get the current URL's hash
+        if let Some(hash) = window().location().hash().ok() {
+            // Loop through FAQs to find the matching ID
+            for faq in faqs.get().unwrap_or_else(|| Ok(vec![])).unwrap() {
+                // Extract the anchor ID from the title
+                if let Some(anchor) = faq
+                    .title
+                    .split('(')
+                    .nth(1)
+                    .and_then(|s| s.split(')').next())
+                {
+                    // Compare the anchor ID with the extracted anchor
+                    if anchor == hash {
+                        set_open_menu(Some(faq.id)); // Set the corresponding FAQ as open
+                        break;
+                    }
+                }
+            }
+        }
+    });
 
     view! {
         <div>
@@ -159,14 +216,16 @@ pub fn AccordionMenu(#[prop(optional)] faq_name: String) -> impl IntoView {
                                                 <Menu
                                                     faq_title=MarkdownToHtml(&faqs.title)
                                                     faq_content=MarkdownToHtml(&faqs.content)
+                                                    menu_id=faqs.id
+                                                    open_menu=open_menu
+                                                    set_open_menu=set_open_menu
                                                 />
                                             }
                                         }
                                     />
 
                                 </div>
-                            }
-                                .into_view()
+                            }.into_view()
                         }
                         Some(Err(error)) => {
                             log!("Error rendering faqs: {}", error);
