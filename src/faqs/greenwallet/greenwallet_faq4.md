@@ -1,4 +1,4 @@
-### How do I send bitcoin?
+### [How do I send bitcoin?](#greenwallet-sending-bitcoin)
 
 <h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Sending Your First Transaction:</h4>
 

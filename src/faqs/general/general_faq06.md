@@ -1,4 +1,4 @@
-### What's a bitcoin mempool?
+### [What's a Bitcoin mempool?](#what-is-a-bitcoin-mempool)
 
 A <a class="underline text-blue-400 hover:text-[#3c6594]" href="https://mempool.space/" target="_blank" rel="noopener noreferrer">bitcoin mempool</a>,
 or memory pool, is a temporary repository for unconfirmed transactions on the bitcoin network. 

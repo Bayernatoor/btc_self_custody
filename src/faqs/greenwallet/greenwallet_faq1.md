@@ -1,4 +1,4 @@
-### Quick wallet setup guide
+### [Quick wallet setup guide](#greenwallet-quick-setup-guide)
 
 <h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Blockstream Green Wallet Setup</h4>
 

@@ -1,4 +1,4 @@
-### What is a bitcoin transaction?
+### [What is a Bitcoin transaction?](#what-is-a-bitcoin-transaction)
 
 Simply put, a bitcoin transaction represents the transfer of value between 1 or more participants of the bitcoin network.
 

@@ -1,4 +1,5 @@
-### How do I receive bitcoin?
+### [How do I receive bitcoin?](#bluewallet-receiving-bitcoin)
+
 
 <h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Receiving Your First Transaction:</h3>
 

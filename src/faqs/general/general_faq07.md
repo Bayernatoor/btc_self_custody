@@ -1,4 +1,4 @@
-### How does bitcoin mining work?  
+### [How does Bitcoin mining work?](#how-does-bitcoin-mining-work)
 
 Bitcoin mining involves individuals or groups using specialized mining computers (ASICs) and electricity to secure the bitcoin network. 
 These "miners" compete by solving a mathematical problem known as Proof of Work, designed to be solved approximately every 10 minutes. 

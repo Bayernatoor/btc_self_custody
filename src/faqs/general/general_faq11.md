@@ -1,4 +1,4 @@
-### What's a bitcoin wallet?
+### [What's a Bitcoin wallet?](#what-is-a-bitcoin-wallet)
 
 A **bitcoin wallet** is software that you download and install on your device. 
 The wallet securely stores your bitcoin private key, which is essential for accessing and managing your bitcoin. 
