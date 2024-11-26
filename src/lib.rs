@@ -25,7 +25,7 @@ use {
 
 cfg_if! {
     if #[cfg(feature = "hydrate")] {
-
+      // is this causing version issues?
       use wasm_bindgen::prelude::wasm_bindgen;
 
         #[wasm_bindgen]
