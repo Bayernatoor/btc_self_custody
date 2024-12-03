@@ -90,7 +90,6 @@ dependencies = [
  "quote",
  "syn 2.0.90",
 ]
-
 [[package]]
 name = "actix-router"
 version = "0.5.3"
@@ -4293,6 +4292,7 @@ name = "wasm-streams"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "15053d8d85c7eccdbefef60f06769760a563c7f0a9d6902a13d35c7800b0ad65"
+
 dependencies = [
  "futures-util",
  "js-sys",
