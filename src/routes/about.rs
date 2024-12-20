@@ -22,7 +22,7 @@ pub fn AboutPage() -> impl IntoView {
             // Main Content
             <main class="px-4 lg:pt-0 lg:px-0 grid gap-10 lg:gap-6 lg:grid-cols-3">
                 // Me Section
-                <div class="flex flex-col px-6 py-4 mx-auto text-left text-white leading-loose lg:text-left">
+                <div class="flex flex-col px-6 py-4 mx-auto max-w-xs text-left text-white leading-loose lg:text-left">
                     <h2 class="text-2xl lg:text-3xl text-[#f7931a] font-semibold">"About"</h2>
                     <p class="text-lg pt-2">
                         "I go by Bayer, I am a Bitcoiner who believes bitcoin is the most significant discovery of our time.
@@ -37,14 +37,14 @@ pub fn AboutPage() -> impl IntoView {
                             target="_blank"
                             rel="noopener noreferrer"
                         >
-                            "download"
+                            "Download"
                         </a>
                     </p>
                     <p class="text-lg pt-2">
                         <strong>"Find me on: "</strong>
                         <a
                             class="underline text-blue-400 hover:text-[#3c6594]"
-                            href="https://nostr.com/npub1hxcjalw99u4m7vcalnrrgkdvyqftglydrt6tm2q9afnvec55guysrwkq9z"
+                            href="https://primal.net/bayer"
                             target="_blank"
                             rel="noopener noreferrer"
                         >
@@ -65,7 +65,7 @@ pub fn AboutPage() -> impl IntoView {
                 </div>
 
                 // Donate Section
-                <div class="flex flex-col px-6 py-4 mx-auto text-left text-white leading-loose lg:text-left">
+                <div class="flex flex-col px-6 py-4 mx-auto max-w-xs ttext-left text-white leading-loose lg:text-left">
                     <h2 class="text-2xl lg:text-3xl text-[#f7931a] font-semibold">"Donate"</h2>
                     <p class="text-lg pt-2">
                         "Your contributions help keep the project running and are greatly appreciated. If you want to support me you can do so below. Thank you!"
@@ -76,12 +76,11 @@ pub fn AboutPage() -> impl IntoView {
                     <p class="text-lg">
                         <a
                             class="underline text-blue-400 hover:text-[#3c6594]"
-                            // href="lightning:bayer@mutiny.plus"
-                            href="lightning:bayer@getalby.com"
+                            href="lightning:bayer@primal.net"
                             target="_blank"
                             rel="noopener noreferrer"
                         >
-                            " bayer@getalby.com"
+                            " bayer@primal.net"
                         </a>
                     </p>
 
@@ -107,7 +106,7 @@ pub fn AboutPage() -> impl IntoView {
                             target="_blank"
                             rel="noopener noreferrer"
                         >
-                            " bc1pg3l4kqvurd3w350mgr4amcplj7\nar70gqyck9hzfu75w5ylrvl3rst84h3d"
+                            " bc1pg3l4kqvurd3w350mgr4amcplj7ar70gqyck9hzfu75w5ylrvl3rst84h3d"
                         </a>
                         <img
                             class="h-auto w-[150px] pt-2"
@@ -118,7 +117,7 @@ pub fn AboutPage() -> impl IntoView {
                 </div>
 
                 // Contribute Section
-                <div class="flex flex-col px-6 py-4 mx-auto text-left text-white leading-loose lg:text-left">
+                <div class="flex flex-col px-6 py-4 mx-auto  max-w-xs text-left text-white leading-loose lg:text-left">
                     <h2 class="text-2xl lg:text-3xl text-[#f7931a] font-semibold">"Contribute"</h2>
                     <p class="text-lg pt-2">
                         "This project was developed with the purpose of helping anyone learn about bitcoin self-custody, as well as a means for me to learn Rust and web development.
