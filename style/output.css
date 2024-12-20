@@ -782,6 +782,19 @@ p, h1, h2, h3{
   max-width: 24rem;
 }
 
+.max-w-xl{
+  max-width: 36rem;
+}
+
+.max-w-min{
+  max-width: -moz-min-content;
+  max-width: min-content;
+}
+
+.max-w-xs{
+  max-width: 20rem;
+}
+
 .shrink-0{
   flex-shrink: 0;
 }

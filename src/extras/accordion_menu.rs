@@ -128,8 +128,8 @@ fn Menu(
                     aria-controls="accordion-collapse-body"
                     on:click=handle_menu_click
                     node_ref=title_ref
-
                 >
+
                     <span class="text-white text-xl" inner_html=faq_title></span>
                     <svg
                         data-accordion-icon
@@ -225,7 +225,8 @@ pub fn AccordionMenu(#[prop(optional)] faq_name: String) -> impl IntoView {
                                     />
 
                                 </div>
-                            }.into_view()
+                            }
+                                .into_view()
                         }
                         Some(Err(error)) => {
                             log!("Error rendering faqs: {}", error);
