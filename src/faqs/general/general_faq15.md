@@ -5,7 +5,7 @@
 
 Bitcoin can be acquired in several ways. Ideally, you can provide a service and accept payment in Bitcoin. If earning Bitcoin isn’t an option, you can purchase it through an exchange. However, not all exchanges are the same—some require more personal information than others. Below are my recommendations, but keep in mind that the availability of certain exchanges may vary depending on your location.
 
-<p class ="py-2 text-sm">*Some of the provided links may be referal links. If you choose to use them they help support the site. </p>
+<p class ="py-2 text-sm">*Some of the provided links may be referral links. If you choose to use them they will help support the site. </p>
 
 <h4 class="text-2xl py-4 text-[#f7931a] font-semibold">Peer to Peer Exchanges:</h4>
 
@@ -28,6 +28,10 @@ Bitcoin can be acquired in several ways. Ideally, you can provide a service and 
         <a class="underline  text-xl text-blue-400 hover:text-[#625F5E] font-semibold" href="https://bisq.network/" target="_blank" rel="noopener noreferrer">Bisq</a>
     </li>
     <span> — Buy and sell Bitcoin for fiat (or other cryptocurrencies) privately and securely using Bisq's peer-to-peer network and open-source desktop software. </span>
+    <li class="py-2 max-w-lg">
+        <a class="underline  text-xl text-blue-400 hover:text-[#625F5E] font-semibold" href="https://www.b2p-central.com/" target="_blank" rel="noopener noreferrer">B2P Central</a>
+    </li>
+    <span> — Find the best prices to buy and sell Bitcoin with B2P Central's Peer-to-Peer Bitcoin pricing aggregator.</span>
 </ol>
 
 <h4 class="text-2xl py-4 text-[#f7931a] font-semibold">KYC Exchanges:</h4>
@@ -37,11 +41,11 @@ Bitcoin can be acquired in several ways. Ideally, you can provide a service and 
 
 <ol class="space-y-4">
     <li class="py-2 max-w-lg">
-        <a class="underline text-blue-400 hover:text-[#625F5E] font-semibold" href="https://strike.me/" target="_blank" rel="noopener noreferrer">Strike</a>
+        <a class="underline text-blue-400 hover:text-[#625F5E] font-semibold" href="https://invite.strike.me/OKENOF" target="_blank" rel="noopener noreferrer">Strike</a>
     </li>
-    <span> — Buy, sell & send bitcoin – low fees & high limits - Available in over 75 countries. </span>
+    <span> — Buy, sell & send bitcoin – low fees & high limits - Available in over 95 countries. </span>
     <li class="py-2 max-w-lg">
-        <a class="underline text-blue-400 hover:text-[#625F5E] font-semibold" href="https://bullbitcoin.com/user/recipients/7184-0275-3493-7523" target="_blank" rel="noopener noreferrer">BullBitcoin Canada</a>
+        <a class="underline text-blue-400 hover:text-[#625F5E] font-semibold" href="https://bullbitcoin.com" target="_blank" rel="noopener noreferrer">BullBitcoin Canada</a>
     </li>
     <li class="py-2 max-w-lg">
         <a class="underline text-blue-400 hover:text-[#625F5E] font-semibold" href="https://app.bullbitcoin.com/" target="_blank" rel="noopener noreferrer">BullBitcoin Europe</a>
@@ -51,6 +55,10 @@ Bitcoin can be acquired in several ways. Ideally, you can provide a service and 
         <a class="underline text-blue-400 hover:text-[#625F5E] font-semibold" href="https://river.com/" target="_blank" rel="noopener noreferrer">River</a>
     </li>
     <span> — Invest in Bitcoin with confidence - US only. </span>
+    <li class="py-2 max-w-lg">
+        <a class="underline text-blue-400 hover:text-[#625F5E] font-semibold" href="https://unchained.com/" target="_blank" rel="noopener noreferrer">Unchained</a>
+    </li>
+    <span> — Protect your bitcoin with cold storage that you control and get access to trading, inheritance, loans, and IRAs - US only. </span>
 </ol>
 
 <br>
