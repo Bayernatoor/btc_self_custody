@@ -45,7 +45,7 @@ Bitcoin can be acquired in several ways. Ideally, you can provide a service and 
     </li>
     <span> — Buy, sell & send bitcoin – low fees & high limits - Available in over 95 countries. </span>
     <li class="py-2 max-w-lg">
-        <a class="underline text-blue-400 hover:text-[#625F5E] font-semibold" href="https://bullbitcoin.com" target="_blank" rel="noopener noreferrer">BullBitcoin Canada</a>
+        <a class="underline text-blue-400 hover:text-[#625F5E] font-semibold" href="https://mission.bullbitcoin.com/bayer" target="_blank" rel="noopener noreferrer">BullBitcoin Canada</a>
     </li>
     <li class="py-2 max-w-lg">
         <a class="underline text-blue-400 hover:text-[#625F5E] font-semibold" href="https://app.bullbitcoin.com/" target="_blank" rel="noopener noreferrer">BullBitcoin Europe</a>
