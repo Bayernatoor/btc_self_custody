@@ -48,7 +48,7 @@ Bitcoin can be acquired in several ways. Ideally, you can provide a service and 
         <a class="underline text-blue-400 hover:text-[#625F5E] font-semibold" href="https://mission.bullbitcoin.com/bayer" target="_blank" rel="noopener noreferrer">BullBitcoin Canada</a>
     </li>
     <li class="py-2 max-w-lg">
-        <a class="underline text-blue-400 hover:text-[#625F5E] font-semibold" href="https://app.bullbitcoin.com/" target="_blank" rel="noopener noreferrer">BullBitcoin Europe</a>
+        <a class="underline text-blue-400 hover:text-[#625F5E] font-semibold" href="https://accounts.bullbitcoin.com/en/registration?referral_code=0cba9fbbb5f4e0a44418577eaac09f0f82f429fad6" target="_blank" rel="noopener noreferrer">BullBitcoin Europe</a>
     </li>
     <span> — Bull Bitcoin is a non-custodial Bitcoin exchange and OTC desk. Available in Canada and Europe. </span>
     <li class="py-2 max-w-lg">
