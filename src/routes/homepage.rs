@@ -15,7 +15,7 @@ pub fn HomePage() -> impl IntoView {
                     </div>
                 </div>
                 <p class="text-xl max-w-2xl px-6 mb-6 md:px-0 2xl:text-2xl md:my-10">
-                    "Opinionated guides that cut through the noise to help you easily self-custody your Bitcoin today."
+                    "Opinionated guides that cut through the noise to help you easily self-custody your Bitcoin."
                 </p>
                 <a href="/guides">
                     <button
