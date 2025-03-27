@@ -24,17 +24,17 @@ actix-web = { version = "4", optional = true, features = ["macros"] }
 console_error_panic_hook = "0.1"
 console_log = "0.2"
 cfg-if = "1"
-leptos = { version = "0.6", features = ["nightly"] }
-leptos_meta = { version = "0.6", features = ["nightly"] }
-leptos_actix = { version = "0.6", optional = true }
-leptos_router = { version = "0.6", features = ["nightly"] }
+leptos = { version = "^0.6.15", features = ["nightly"] }
+leptos_meta = { version = "^0.6.15", features = ["nightly"] }
+leptos_actix = { version = "^0.6.15", optional = true }
+leptos_router = { version = "^0.6.15", features = ["nightly"] }
 log = "0.4"
-wasm-bindgen = "=0.2.99"
+wasm-bindgen = "^0.2.100"
 serde = { version = "1.0.189", features = ["derive"] }
 pulldown-cmark = { version = "=0.12.1", features = ["serde"] }
 tokio = { version = "1.33.0", features = ["macros"] }
 config = "0.14"
-uuid = {version = "1", features = ["v4"] }
+uuid = {version = "^1.11.0", features = ["v4", "js"] }
 chrono = { version = "0.4.22", default-features = false, features = ["clock"] }
 tracing = { version = "0.1", features = ["log"] }
 tracing-futures = "0.2.5"
