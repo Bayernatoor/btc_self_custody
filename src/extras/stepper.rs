@@ -109,18 +109,11 @@ fn StepperContent(
                 steps
                     .get(current.get())
                     .map(|faq| {
-                        let title_html = markdown_to_html(&faq.title);
                         let content_html = markdown_to_html(&faq.content);
                         view! {
-                            <div class="bg-white/5 border border-white/10 rounded-xl p-5 lg:p-7 animate-slidedown">
-                                <header class="mb-3">
-                                    <div
-                                        class="text-base lg:text-lg font-semibold text-[#f7931a]"
-                                        inner_html=title_html
-                                    ></div>
-                                </header>
+                            <div class="bg-white/[0.03] border border-white/[0.07] rounded-2xl p-6 lg:p-8 animate-slidedown">
                                 <div
-                                    class="step-content text-[0.85rem] lg:text-[0.95rem] text-white/80 leading-relaxed"
+                                    class="step-content text-[0.85rem] lg:text-[0.95rem] text-white/75 leading-relaxed"
                                     inner_html=content_html
                                 ></div>
                             </div>
