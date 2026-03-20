@@ -71,7 +71,7 @@
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-/* Sub-section heading — hidden when JS converts to collapsible */
+/* Sub-section heading — JS converts these to collapsible sections */
 .step-content h5 {
   font-size: 0.95rem;
   font-weight: 600;
@@ -81,6 +81,14 @@
   padding-top: 1.25rem;
   padding-bottom: 0.4rem;
   margin-bottom: 0.25rem;
+}
+/* Hide content that has h5 sections until JS processes it */
+.step-content.has-sections {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.step-content.sections-ready {
+  opacity: 1;
 }
 
 /* ── Collapsible sections (JS-created from h5 tags) ────────── */

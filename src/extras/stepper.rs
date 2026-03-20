@@ -7,6 +7,7 @@ use crate::extras::accordion_menu::{fetch_faq, FAQ};
 use crate::extras::spinner::Spinner;
 use leptos::html::Div;
 use leptos::prelude::*;
+use leptos::web_sys;
 use pulldown_cmark::{html, Options, Parser};
 
 fn markdown_to_html(markdown: &str) -> String {
@@ -231,9 +232,27 @@ pub fn Stepper(#[prop(optional)] faq_name: String) -> impl IntoView {
                                     </section>
                                 }.into_any()
                             }
-                            Err(error) => {
-                                let msg = format!("Error loading guide: {}", error);
-                                view! { <div class="text-red-400 text-center p-4">{msg}</div> }.into_any()
+                            Err(_) => {
+                                view! {
+                                    <div class="flex flex-col items-center gap-4 py-12">
+                                        <div class="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center">
+                                            <svg class="w-6 h-6 text-white/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+                                            </svg>
+                                        </div>
+                                        <p class="text-sm text-white/50 text-center">"Unable to load guide content. Please refresh the page."</p>
+                                        <button
+                                            class="text-xs text-white/40 border border-white/10 rounded-lg px-4 py-2 hover:text-white/70 hover:border-white/20 transition-all cursor-pointer"
+                                            on:click=move |_| {
+                                                if let Some(w) = web_sys::window() {
+                                                    let _ = w.location().reload();
+                                                }
+                                            }
+                                        >
+                                            "Refresh"
+                                        </button>
+                                    </div>
+                                }.into_any()
                             }
                         }
                     })
