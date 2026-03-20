@@ -7,6 +7,7 @@ pub fn HomePage() -> impl IntoView {
     view! {
         <Title text="WE HODL BTC — Bitcoin Self-Custody Guides"/>
 
+        // Hero
         <section aria-label="Hero" class="grid gap-2 mx-auto justify-items-center max-w-3xl mt-14 px-6 opacity-0 animate-fadeinone md:grid-cols-1 lg:grid-cols-2 md:my-24 lg:pb-24 md:max-w-4xl lg:max-w-5xl lg:px-8">
             <div class="flex flex-col text-center text-white leading-normal md:text-center lg:text-left md:pt-8 lg:pt-0">
                 <h1 class="text-5xl font-title font-normal tracking-tight md:text-6xl lg:text-[5rem]">
@@ -33,6 +34,87 @@ pub fn HomePage() -> impl IntoView {
                 <div class="h-auto w-28 md:w-40 lg:w-60 mx-auto">
                     <img src="./../../../bitcoin_logo.png" alt="Bitcoin logo" width="208" height="208"/>
                 </div>
+            </div>
+        </section>
+
+        // Why Self-Custody
+        <section aria-label="Why self-custody" class="max-w-4xl mx-auto px-6 pb-16 lg:px-8">
+            <div class="text-center mb-10">
+                <h2 class="text-2xl lg:text-3xl font-title text-white mb-2">"Why Self-Custody?"</h2>
+                <div class="w-12 h-0.5 bg-[#f7931a] mx-auto mt-2"></div>
+            </div>
+            <div class="grid gap-4 md:grid-cols-3">
+                <div class="bg-white/5 border border-white/10 rounded-xl p-5 opacity-0 animate-slideup" style="animation-delay: 100ms">
+                    <div class="w-9 h-9 rounded-lg bg-[#f7931a]/10 flex items-center justify-center mb-3">
+                        <svg class="w-5 h-5 text-[#f7931a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-base font-semibold text-white mb-1.5">"Your Keys, Your Coins"</h3>
+                    <p class="text-[0.85rem] text-white/60 leading-relaxed">
+                        "When you hold your own keys, no exchange, bank, or third party can freeze, seize, or lose your bitcoin. True ownership means true control."
+                    </p>
+                </div>
+                <div class="bg-white/5 border border-white/10 rounded-xl p-5 opacity-0 animate-slideup" style="animation-delay: 200ms">
+                    <div class="w-9 h-9 rounded-lg bg-[#f7931a]/10 flex items-center justify-center mb-3">
+                        <svg class="w-5 h-5 text-[#f7931a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-base font-semibold text-white mb-1.5">"Eliminate Counterparty Risk"</h3>
+                    <p class="text-[0.85rem] text-white/60 leading-relaxed">
+                        "Exchanges get hacked. Companies go bankrupt. Trusted third parties are security holes. Self-custody removes the middleman entirely."
+                    </p>
+                </div>
+                <div class="bg-white/5 border border-white/10 rounded-xl p-5 opacity-0 animate-slideup" style="animation-delay: 300ms">
+                    <div class="w-9 h-9 rounded-lg bg-[#f7931a]/10 flex items-center justify-center mb-3">
+                        <svg class="w-5 h-5 text-[#f7931a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-base font-semibold text-white mb-1.5">"Financial Sovereignty"</h3>
+                    <p class="text-[0.85rem] text-white/60 leading-relaxed">
+                        "Send and receive bitcoin anywhere, anytime, without permission. No borders, no business hours, no gatekeepers. That's the point."
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        // Guide levels preview
+        <section aria-label="Guide levels" class="max-w-4xl mx-auto px-6 pb-20 lg:px-8">
+            <div class="text-center mb-10">
+                <h2 class="text-2xl lg:text-3xl font-title text-white mb-2">"A Guide For Every Level"</h2>
+                <div class="w-12 h-0.5 bg-[#f7931a] mx-auto mt-2 mb-4"></div>
+                <p class="text-[0.9rem] text-white/50 max-w-lg mx-auto">"Whether you're stacking your first sats or securing generational wealth."</p>
+            </div>
+            <div class="grid gap-4 md:grid-cols-3">
+                <a href="/guides" class="block opacity-0 animate-slideup" style="animation-delay: 100ms">
+                    <div class="group bg-white/5 border border-white/10 rounded-xl p-5 hover:bg-white/10 hover:border-white/20 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 h-full">
+                        <div class="text-[#f7931a] text-xs font-semibold uppercase tracking-widest mb-2">"Basic"</div>
+                        <h3 class="text-base font-semibold text-white mb-1.5 group-hover:text-[#f4a949] transition-colors">"Mobile & Desktop Wallets"</h3>
+                        <p class="text-[0.85rem] text-white/50 leading-relaxed">
+                            "Get started with Blue Wallet, Green Wallet, or Sparrow. Create your private key and take possession of your bitcoin in minutes."
+                        </p>
+                    </div>
+                </a>
+                <a href="/guides" class="block opacity-0 animate-slideup" style="animation-delay: 200ms">
+                    <div class="group bg-white/5 border border-white/10 rounded-xl p-5 hover:bg-white/10 hover:border-white/20 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 h-full">
+                        <div class="text-[#f7931a] text-xs font-semibold uppercase tracking-widest mb-2">"Intermediate"</div>
+                        <h3 class="text-base font-semibold text-white mb-1.5 group-hover:text-[#f4a949] transition-colors">"Hardware Wallet & Node"</h3>
+                        <p class="text-[0.85rem] text-white/50 leading-relaxed">
+                            "Level up with a Coldcard hardware wallet and your own Bitcoin node. Standards-based security and real privacy."
+                        </p>
+                    </div>
+                </a>
+                <a href="/guides" class="block opacity-0 animate-slideup" style="animation-delay: 300ms">
+                    <div class="group bg-white/5 border border-white/10 rounded-xl p-5 hover:bg-white/10 hover:border-white/20 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 h-full">
+                        <div class="text-[#f7931a] text-xs font-semibold uppercase tracking-widest mb-2">"Advanced"</div>
+                        <h3 class="text-base font-semibold text-white mb-1.5 group-hover:text-[#f4a949] transition-colors">"Multisig Setup"</h3>
+                        <p class="text-[0.85rem] text-white/50 leading-relaxed">
+                            "2-of-3 multisig with multiple signing devices, steel seed backups, and geographic separation. Protect generational wealth."
+                        </p>
+                    </div>
+                </a>
             </div>
         </section>
     }

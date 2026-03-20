@@ -16,6 +16,36 @@ use crate::guides::{
 // Shared sub-components
 // =============================================================================
 
+/// Breadcrumb trail: Guides > Level > Platform > Wallet
+#[component]
+fn Breadcrumbs(crumbs: Vec<(String, String)>) -> impl IntoView {
+    let last = crumbs.len() - 1;
+    view! {
+        <nav aria-label="Breadcrumb" class="w-full mb-4">
+            <ol class="flex items-center gap-1.5 text-xs text-white/40">
+                <li>
+                    <a href="/guides" class="hover:text-white/70 transition-colors">"Guides"</a>
+                </li>
+                {crumbs.into_iter().enumerate().map(|(i, (label, href))| {
+                    let is_last = i == last;
+                    view! {
+                        <li class="flex items-center gap-1.5">
+                            <svg class="w-3 h-3 text-white/20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                            </svg>
+                            {if is_last {
+                                view! { <span class="text-white/60">{label}</span> }.into_any()
+                            } else {
+                                view! { <a href=href class="hover:text-white/70 transition-colors">{label}</a> }.into_any()
+                            }}
+                        </li>
+                    }
+                }).collect::<Vec<_>>()}
+            </ol>
+        </nav>
+    }
+}
+
 #[component]
 fn PageHeader(
     title: String,
@@ -185,9 +215,15 @@ fn render_level_page(
         level.title.to_string()
     };
 
+    let crumbs = vec![
+        (level.name.to_string(), "/guides".to_string()),
+        (platform_display.to_string(), format!("/guides/{}/{}", level.id, platform)),
+    ];
+
     view! {
         <Title text=page_title/>
         <div class=centered_layout()>
+            <Breadcrumbs crumbs=crumbs/>
             <PageHeader
                 title=full_title
                 quote=level.quote.to_string()
@@ -245,8 +281,8 @@ fn render_level_intro(
                 <p class="text-[0.85rem] text-white/80 leading-relaxed lg:text-[0.95rem]">
                     {level.intro}
                     " If you originally chose a mobile setup, I recommend installing Sparrow Desktop wallet via the "
-                    <a class="text-blue-400 hover:text-blue-300 transition-colors" href="/guides/basic/desktop">"basic desktop guide"</a>
-                    " before continuing."
+                    <a class="text-blue-400 hover:text-blue-300 transition-colors" href="/guides/basic/desktop">"basic desktop guides"</a>
+                    " (available for Linux, macOS, and Windows) before continuing."
                 </p>
                 <p class="mt-3 text-[0.85rem] text-white/80 leading-relaxed lg:text-[0.95rem]">
                     "We'll start by setting up a Coldcard signing device and connecting it to Sparrow. In part two we'll choose a Bitcoin node implementation and connect our wallet to it."
@@ -310,17 +346,20 @@ fn render_step_navigation(level: &'static GuideLevelDef) -> impl IntoView {
 #[component]
 pub fn GuideWalletPage() -> impl IntoView {
     let params = leptos_router::hooks::use_params_map();
+    let level_id = move || params.read().get("level");
     let wallet_id = move || params.read().get("wallet");
     let platform_id = move || params.read().get("platform");
 
     view! {
         {move || {
+            let level_id = level_id();
             let wallet_id = wallet_id();
             let platform_id = platform_id();
-            match (wallet_id.as_deref(), platform_id.as_deref()) {
-                (Some(wid), Some(pid)) => {
+            match (level_id.as_deref(), wallet_id.as_deref(), platform_id.as_deref()) {
+                (Some(lid), Some(wid), Some(pid)) => {
+                    let level = guides::find_level(lid);
                     match guides::find_wallet(wid) {
-                        Some(wallet) => render_wallet_page(wallet, pid).into_any(),
+                        Some(wallet) => render_wallet_page(wallet, pid, lid, level).into_any(),
                         None => view! { <p class="text-white text-center p-8">"Wallet not found."</p> }.into_any(),
                     }
                 }
@@ -333,13 +372,24 @@ pub fn GuideWalletPage() -> impl IntoView {
 fn render_wallet_page(
     wallet: &'static WalletDef,
     platform: &str,
+    level_id: &str,
+    level: Option<&'static GuideLevelDef>,
 ) -> impl IntoView {
     let page_title = format!("{} Guide | WE HODL BTC", wallet.name);
     let downloads = guides::downloads_for(wallet, platform);
+    let level_name = level.map(|l| l.name).unwrap_or("Guide");
+    let platform_display = guides::platform_display(platform);
+
+    let crumbs = vec![
+        (level_name.to_string(), "/guides".to_string()),
+        (platform_display.to_string(), format!("/guides/{}/{}", level_id, platform)),
+        (wallet.name.to_string(), format!("/guides/{}/{}/{}", level_id, platform, wallet.id)),
+    ];
 
     view! {
         <Title text=page_title/>
         <div class=centered_layout()>
+            <Breadcrumbs crumbs=crumbs/>
             <PageHeader
                 title=wallet.name.to_string()
                 subtitle=wallet.tagline.to_string()
@@ -367,10 +417,18 @@ fn render_step_page(
     level_id: &str,
 ) -> impl IntoView {
     let page_title = format!("{} | WE HODL BTC", step.title);
+    let level = guides::find_level(level_id);
+    let level_name = level.map(|l| l.name).unwrap_or("Guide");
+
+    let crumbs = vec![
+        (level_name.to_string(), "/guides".to_string()),
+        (step.name.to_string(), format!("/guides/{}/{}", level_id, step.id)),
+    ];
 
     view! {
         <Title text=page_title/>
         <div class=centered_layout()>
+            <Breadcrumbs crumbs=crumbs/>
             <PageHeader title=step.title.to_string()/>
 
             // Products
