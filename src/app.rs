@@ -32,6 +32,10 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
         <html lang="en">
             <head>
                 <meta charset="utf-8"/>
+
+                // Preload fonts to eliminate flash of unstyled text
+                <link rel="preconnect" href="https://fonts.googleapis.com"/>
+                <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous"/>
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 
                 <meta name="description" content="Free, opinionated Bitcoin self-custody guides. Learn to secure your Bitcoin with mobile wallets, hardware wallets, and multisig setups. From beginner to advanced."/>
@@ -96,7 +100,19 @@ pub fn App() -> impl IntoView {
             <div class="flex flex-col justify-between h-screen">
                 <NavBar/>
                 <main>
-                    <Routes fallback=|| view! { <p>"Page not found."</p> }>
+                    <Routes fallback=|| view! {
+                        <div class="flex flex-col items-center justify-center min-h-[60vh] px-6 opacity-0 animate-fadeinone">
+                            <div class="text-[4rem] lg:text-[5rem] font-title text-white/10 font-bold mb-4">"404"</div>
+                            <h1 class="text-xl lg:text-2xl text-white font-semibold mb-2">"Page not found"</h1>
+                            <p class="text-sm text-white/50 mb-8 text-center max-w-sm">"The page you're looking for doesn't exist or has been moved."</p>
+                            <a href="/guides" class="inline-flex items-center gap-2 px-5 py-2.5 bg-[#f7931a] text-white text-sm font-medium rounded-xl hover:bg-[#f4a949] hover:scale-[1.02] active:scale-[0.98] transition-all duration-200">
+                                "Browse Guides"
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                </svg>
+                            </a>
+                        </div>
+                    }>
                         <Route path=path!("/") view=HomePage/>
                         <Route path=path!("/guides") view=GuideSelector/>
                         // Unified guide routes (2 parameterized routes replace 14 static ones)

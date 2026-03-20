@@ -61,6 +61,10 @@
 /* ── Step content typography (inner_html from markdown) ────────── */
 
 /* Section title — prominent, sets the context */
+.step-content {
+  overflow-x: hidden;
+  word-break: break-word;
+}
 .step-content h4 {
   font-size: 1.25rem;
   font-weight: 700;
