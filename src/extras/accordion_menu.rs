@@ -4,9 +4,9 @@
 //! renders them as collapsible accordion panels.
 
 use crate::extras::spinner::Spinner;
+use crate::helpers::markdown;
 use leptos::html::Button;
 use leptos::prelude::*;
-use pulldown_cmark::{html, Options, Parser};
 use serde::{Deserialize, Serialize};
 
 // An FAQ - values come from an md file
@@ -40,7 +40,6 @@ pub async fn fetch_faq(faq_name: String) -> Result<Vec<FAQ>, ServerFnError> {
 
     for faq in files {
         id += 1;
-        let _file_name = faq.file_name().unwrap().to_str().unwrap();
         let content = fs::read_to_string(faq)?;
         let title = &content.split("\n").collect::<Vec<&str>>()[0].to_string();
         let faq_content =
@@ -51,17 +50,6 @@ pub async fn fetch_faq(faq_name: String) -> Result<Vec<FAQ>, ServerFnError> {
     Ok(faqs)
 }
 
-// Parse the markdown and convert it to html
-#[allow(non_snake_case)]
-fn MarkdownToHtml(markdown: &str) -> String {
-    let options = Options::empty();
-    let parser = Parser::new_ext(markdown, options);
-
-    let mut html_output = String::new();
-    html::push_html(&mut html_output, parser);
-
-    html_output
-}
 
 #[component]
 #[allow(non_snake_case)]
@@ -172,8 +160,8 @@ pub fn AccordionMenu(#[prop(optional)] faq_name: String) -> impl IntoView {
                                             children=move |faqs| {
                                                 view! {
                                                     <Menu
-                                                        faq_title=MarkdownToHtml(&faqs.title)
-                                                        faq_content=MarkdownToHtml(&faqs.content)
+                                                        faq_title=markdown::to_html(&faqs.title)
+                                                        faq_content=markdown::to_html(&faqs.content)
                                                         menu_id=faqs.id
                                                         open_menu=open_menu
                                                         set_open_menu=set_open_menu

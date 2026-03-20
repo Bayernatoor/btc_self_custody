@@ -1,1 +1,1 @@
-// Helpers module — currently empty after restructure
+pub mod markdown;

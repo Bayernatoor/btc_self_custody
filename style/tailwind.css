@@ -242,7 +242,6 @@
 /* Tame excessive <br> spacing from markdown */
 .step-content br {
   display: block;
-  content: "";
   margin: 0.15rem 0;
 }
 

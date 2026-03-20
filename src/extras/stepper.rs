@@ -8,15 +8,8 @@ use crate::extras::spinner::Spinner;
 use leptos::html::Div;
 use leptos::prelude::*;
 use leptos::web_sys;
-use pulldown_cmark::{html, Options, Parser};
 
-fn markdown_to_html(markdown: &str) -> String {
-    let options = Options::empty();
-    let parser = Parser::new_ext(markdown, options);
-    let mut html_output = String::new();
-    html::push_html(&mut html_output, parser);
-    html_output
-}
+use crate::helpers::markdown;
 
 fn strip_title(raw: &str) -> String {
     if let Some(start) = raw.find('[') {
@@ -110,7 +103,7 @@ fn StepperContent(
                 steps
                     .get(current.get())
                     .map(|faq| {
-                        let content_html = markdown_to_html(&faq.content);
+                        let content_html = markdown::to_html(&faq.content);
                         view! {
                             <div class="bg-white/[0.03] border border-white/[0.07] rounded-2xl p-6 lg:p-8 animate-slidedown">
                                 <div
@@ -172,7 +165,7 @@ fn StepperNav(
                 class=move || {
                     let base = "inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200";
                     if current.get() < total - 1 {
-                        format!("{base} bg-[#f79231] text-white hover:bg-[#f4a949] hover:scale-[1.02] active:scale-[0.98] cursor-pointer")
+                        format!("{base} bg-[#f7931a] text-white hover:bg-[#f4a949] hover:scale-[1.02] active:scale-[0.98] cursor-pointer")
                     } else {
                         format!("{base} opacity-20 cursor-not-allowed text-white")
                     }
