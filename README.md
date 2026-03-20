@@ -1,18 +1,47 @@
 # WE HODL BTC
 
-WE HODL BTC is a free resource created to help bitcoiners take self-custody of their bitcoin. Whether it's 100 satoshis or 100 bitcoins, there's a guide for you.
+Free, opinionated Bitcoin self-custody guides. From beginner mobile wallets to advanced multisig setups.
 
-View the live website here: https://www.wehodlbtc.com/
+**Live site:** <https://www.wehodlbtc.com/>
 
-## About
+## Tech Stack
 
-This website is built using using [Leptos](https://github.com/leptos-rs/leptos) a Rust web framework library. It's a personal project meant to help me learn web development, Rust, Postgres etc... and to help refine my understanding of 
-btc self-custody. It's a way for me to do my small part for Bitcoin education.
+- **Language:** Rust
+- **Framework:** [Leptos 0.8](https://github.com/leptos-rs/leptos) (SSR + WASM hydration)
+- **Server:** Axum
+- **Styling:** Tailwind CSS v4
+- **Fonts:** Oswald + Questrial
+
+## Project Structure
+
+```
+src/
+  app.rs          — Router, HTML shell, meta tags
+  guides.rs       — Wallet, level, platform definitions (single source of truth)
+  lib.rs          — Crate root, WASM hydrate entry point
+  main.rs         — SSR server entry point (Axum)
+  extras/         — Reusable UI components (navbar, footer, stepper, accordion, buttons, spinner)
+  routes/         — Page components (homepage, guide selector, guide pages, FAQ, about, blog)
+  helpers/        — Utility modules
+  faqs/           — Markdown FAQ/guide content loaded at runtime
+style/
+  tailwind.css    — Tailwind config, fonts, animations
+assets/           — Static assets (JSON-LD, images)
+```
+
+## Running Locally
+
+```bash
+# Install dependencies
+cargo install cargo-leptos
+
+# Development (watches for changes)
+cargo leptos watch
+
+# Production build
+cargo leptos build --release
+```
 
 ## Contributing
 
-The project It is entirely free and open-sourced under an MIT license. Although this is a personal project, contributions, feedback, improvements and bug reports are always welcome, please feel free to open an issue.
-
-## Running it locally
-
-For those who may want to...Coming soon
+MIT licensed. Contributions, feedback, and bug reports welcome — please open an [issue on GitHub](https://github.com/Bayernatoor/btc_self_custody).

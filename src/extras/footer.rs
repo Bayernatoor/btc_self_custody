@@ -7,20 +7,20 @@ pub fn Footer() -> impl IntoView {
         <footer class="flex flex-col items-center text-white text-center text-surface lg:text-left border-t border-solid border-white">
             <div class="max-w-5xl">
                 // left side text
-                <div class="grid gap-4 p-6 mx-auto lg:grid-cols-2">
-                    <div class="lg:mb-0 lg:mr-56">
-                        <h5 class="mb-2 font-semibold uppercase">"WE HODL BTC"</h5>
+                <div class="grid gap-2 px-6 py-4 mx-auto lg:grid-cols-2">
+                    <div class="lg:mb-0 lg:mr-40">
+                        <h5 class="text-sm mb-2 font-semibold uppercase">"WE HODL BTC"</h5>
 
-                        <p class="mx-4 lg:p-0 lg:mx-0 lg:mt-2">
+                        <p class="text-xs leading-relaxed mx-4 lg:p-0 lg:mx-0 lg:mt-2">
                             "WE HODL BTC is a free resource created to help bitcoiners take
                             self-custody of their bitcoin. Whether it's 100 satoshis or 100 bitcoins, there's a guide for you."
                         </p>
 
-                        <p class="my-2">"Knowledge is Freedom"</p>
+                        <p class="text-xs leading-relaxed my-2">"Knowledge is Freedom"</p>
                     </div>
 
                     // right side social links
-                    <div class="my-6 lg:my-0">
+                    <div class="my-2 lg:my-0">
                         <div class="flex flex-row justify-center space-x-2 lg:justify-end">
                             // Github link
                             <a
@@ -28,11 +28,11 @@ pub fn Footer() -> impl IntoView {
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 type="button"
-                                class="rounded-full bg-[#333333] p-3 uppercase leading-normal text-white transition duration-150 ease-in-out hover:text-orange-400 focus:shadow-dark-1 focus:outline-none focus:ring-0 active:shadow-1 dark:text-white"
+                                class="rounded-full bg-[#333333] p-2 uppercase leading-normal text-white transition duration-150 ease-in-out hover:text-orange-400 focus:shadow-dark-1 focus:outline-none focus:ring-0 active:shadow-1 dark:text-white"
                                 data-twe-ripple-init
                                 data-twe-ripple-color="light"
                             >
-                                <span class="mx-auto [&>svg]:h-10 [&>svg]:w-10">
+                                <span class="mx-auto [&>svg]:h-5 [&>svg]:w-5">
                                     <svg
                                         xmlns="http://www.w3.org/2000/svg"
                                         fill="currentColor"
@@ -52,11 +52,11 @@ pub fn Footer() -> impl IntoView {
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 type="button"
-                                class="rounded-full bg-[#333333] p-3 uppercase leading-normal text-white transition duration-150 ease-in-out hover:shadow-dark-1 focus:shadow-dark-1 focus:outline-none focus:ring-0 active:shadow-1 dark:text-white"
+                                class="rounded-full bg-[#333333] p-2 uppercase leading-normal text-white transition duration-150 ease-in-out hover:shadow-dark-1 focus:shadow-dark-1 focus:outline-none focus:ring-0 active:shadow-1 dark:text-white"
                                 data-twe-ripple-init
                                 data-twe-ripple-color="light"
                             >
-                                <span class="mx-auto [&>svg]:h-10 [&>svg]:w-10">
+                                <span class="mx-auto [&>svg]:h-5 [&>svg]:w-5">
                                     <svg
                                         xmlns="http://www.w3.org/2000/svg"
                                         viewBox="0 0 512 512"
@@ -73,11 +73,11 @@ pub fn Footer() -> impl IntoView {
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 type="button"
-                                class="rounded-full bg-[#333333] p-3 uppercase leading-normal text-white transition duration-150 ease-in-out hover:shadow-dark-1 focus:shadow-dark-1 focus:outline-none focus:ring-0 active:shadow-1 dark:text-white"
+                                class="rounded-full bg-[#333333] p-2 uppercase leading-normal text-white transition duration-150 ease-in-out hover:shadow-dark-1 focus:shadow-dark-1 focus:outline-none focus:ring-0 active:shadow-1 dark:text-white"
                                 data-twe-ripple-init
                                 data-twe-ripple-color="light"
                             >
-                                <span class="mx-auto [&>svg]:h-10 [&>svg]:w-10">
+                                <span class="mx-auto [&>svg]:h-5 [&>svg]:w-5">
                                     <svg
                                         xmlns="http://www.w3.org/2000/svg"
                                         viewBox="0 0 90 90"
@@ -95,11 +95,11 @@ pub fn Footer() -> impl IntoView {
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 type="button"
-                                class="rounded-full bg-[#333333] p-3 uppercase leading-normal text-white transition duration-150 ease-in-out hover:shadow-dark-1 focus:shadow-dark-1 focus:outline-none focus:ring-0 active:shadow-1 dark:text-white"
+                                class="rounded-full bg-[#333333] p-2 uppercase leading-normal text-white transition duration-150 ease-in-out hover:shadow-dark-1 focus:shadow-dark-1 focus:outline-none focus:ring-0 active:shadow-1 dark:text-white"
                                 data-twe-ripple-init
                                 data-twe-ripple-color="light"
                             >
-                                <span class="mx-auto [&>svg]:h-10 [&>svg]:w-10">
+                                <span class="mx-auto [&>svg]:h-5 [&>svg]:w-5">
                                     <svg
                                         xmlns="http://www.w3.org/2000/svg"
                                         width="64"
@@ -116,8 +116,8 @@ pub fn Footer() -> impl IntoView {
                 </div>
             </div>
             // made by portion
-            <div class="w-full pt-2 pb-6 text-center text-[#f7931a]">
-                "2024 - "
+            <div class="w-full pt-1 pb-3 text-center text-xs text-[#f7931a]">
+                "2025 - "
                 <a
                     class="underline"
                     href="https://github.com/Bayernatoor"

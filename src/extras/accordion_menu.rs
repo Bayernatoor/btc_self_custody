@@ -1,3 +1,8 @@
+//! Accordion menu component for FAQ sections.
+//!
+//! Loads markdown FAQ files from `src/faqs/<faq_name>/` via a server function,
+//! renders them as collapsible accordion panels.
+
 use crate::extras::spinner::Spinner;
 use leptos::html::Button;
 use leptos::prelude::*;

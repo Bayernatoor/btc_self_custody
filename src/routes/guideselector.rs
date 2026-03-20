@@ -1,193 +1,101 @@
-use crate::extras::back::BackButton;
-use leptos::ev::MouseEvent;
+use crate::extras::buttons::GenericButton;
+use crate::guides;
 use leptos::prelude::*;
+use leptos_meta::*;
 
-/// used to create a struct representing the values required for a button.
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct GuideDetails {
-    id: u32,
-    level_name: String,
-    device: String,
-    path: String,
-}
-
-impl GuideDetails {
-    fn new_guide_details(
-        id: u32,
-        level_name: String,
-        device: String,
-        path: String,
-    ) -> Self {
-        Self {
-            id,
-            level_name,
-            device,
-            path,
-        }
-    }
-}
-
-#[allow(clippy::redundant_closure)]
-#[component]
-fn LevelButton<F>(
-    on_click: F,
-    setter: ReadSignal<bool>,
-    hidden: ReadSignal<bool>,
-    name: String,
-    subtitle: String,
-    #[prop(optional)] devices: Vec<String>,
-) -> impl IntoView
-where
-    F: Fn(MouseEvent) + 'static + Clone + Send + Sync,
-{
-    let mut guides = Vec::new();
-    let mut id = 0;
-
-    for device in devices {
-        id += 1;
-        let lower_name = name.to_lowercase();
-        let device_name = device.to_lowercase();
-        let path = format!("/guides/{lower_name}/{device_name}");
-        guides.push(GuideDetails::new_guide_details(
-            id,
-            name.clone(),
-            device,
-            path,
-        ))
-    }
-
-    let guide = RwSignal::new(guides);
-
-    view! {
-        <Show
-            when=move || setter.get()
-            fallback=move || {
-                view! {
-                    <button
-                        class="flex flex-col z-20 p-4 max-w-md mx-auto w-72 bg-white rounded-xl items-center mt-6 shadow-md hover:bg-[#f2f2f2] transition ease-in-out duration-300"
-                        class:hidden=move || hidden.get()
-                        on:click=on_click.clone()
-                    >
-                        <div class="text-3xl font-bold text-[#f79231]">{name.clone()}</div>
-                        <p class="text-lg text-[#123c64] mt-3">{subtitle.clone()}</p>
-                    </button>
-                }.into_any()
-            }
-        >
-            <div class="flex flex-col items-center py-5 gap-5 animate-fadeinone">
-                <For
-                    each=move || guide.get()
-                    key=|guide| guide.id
-                    children=move |guide| {
-                        view! {
-                            <a href=guide.path>
-                                <button class="flex-grow-0 max-w-md-">
-                                    <h2 class="w-48 flex items-center justify-center font-semibold text-[#f79231]">
-                                        <div class="box-border p-5 bg-white text-2xl rounded-2xl no-underline text-[#f79231] hover:bg-[#f2f2f2] w-full transition ease-in-out duration-300">
-                                            <span>{guide.device}</span>
-                                        </div>
-                                    </h2>
-                                </button>
-                            </a>
-                        }
-                    }
-                />
-            </div>
-            <div class="mt-5 flex flex-col md:flex-row items-center justify-center">
-                <BackButton button_image="./../../../arrow-111-512.png".to_string() reload=true/>
-            </div>
-        </Show>
-    }
-}
-
-/// returns the available guides (basic, intermediate and advanced)
-#[allow(clippy::redundant_closure)]
-#[allow(non_camel_case_types)]
+/// Data-driven guide selector — pick a level and then a platform.
 #[component]
 pub fn GuideSelector() -> impl IntoView {
-    let (basic_clicked, set_basic_clicked) = signal(false);
-    let (intermediate_clicked, set_intermediate_clicked) = signal(false);
-    let (advanced_clicked, set_advanced_clicked) = signal(false);
-
-    let (basic_hidden, set_basic_hidden) = signal(false);
-    let (intermediate_hidden, set_intermediate_hidden) = signal(false);
-    let (advanced_hidden, set_advanced_hidden) = signal(false);
+    let (selected_level, set_selected_level) = signal(None::<&'static str>);
 
     let explainer = move || {
-        if basic_clicked.get() || intermediate_clicked.get() || advanced_clicked.get() {
-            "Select your preferred OS".to_string()
+        if selected_level.get().is_some() {
+            "Select your preferred platform".to_string()
         } else {
-            "Select a guide based on how much Bitcoin you are protecting."
-                .to_string()
+            "Select a guide based on how much Bitcoin you are protecting.".to_string()
         }
     };
 
-    let basic_devices: Vec<String> = vec![
-        "Android".to_string(),
-        "iOS".to_string(),
-        "Desktop".to_string(),
-    ];
-    let intermediate_devices: Vec<String> = vec!["Desktop".to_string()];
-    let advanced_devices: Vec<String> = vec!["Desktop".to_string()];
-
     view! {
-        <div class="grid gap-4 md:gap-2 mx-auto justify-items-center max-w-3xl mt-20 mb-24 opacity-0 animate-fadeinone md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-2 md:max-w-4xl lg:max-w-5xl md:my-28">
+        <Title text="Guides | WE HODL BTC"/>
+
+        <div class="grid gap-4 md:gap-2 mx-auto justify-items-center max-w-3xl mt-14 mb-24 opacity-0 animate-fadeinone md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-2 md:max-w-4xl lg:max-w-5xl md:my-28">
             <div class="flex flex-col justify-center items-center">
-                <div class="">
-                    <h1 class="text-white text-5xl text-center pb-1 2xl:text-6xl">
+                <div>
+                    <h1 class="text-white text-4xl text-center pb-1 md:text-5xl 2xl:text-5xl font-title">
                         "Unlock Financial Privacy"
                     </h1>
                 </div>
                 <img
-                    class="w-48 h-auto py-4 2xl:w-56"
+                    class="w-36 h-auto py-4 2xl:w-44"
                     src="./../../../only_lock.png"
                     alt="Financial privacy lock"
                 />
                 <div class="px-6 pt-2 max-w-3xl">
-                    <p class="text-white text-xl text-center pb-2 2xl:text-2xl">
+                    <p class="text-white text-base text-center pb-2 md:text-lg">
                         {explainer}
                     </p>
                 </div>
             </div>
             <div class="flex flex-col gap-2">
-                <LevelButton
-                    on_click=move |_| {
-                        set_basic_clicked.update(|value| *value = !*value);
-                        set_intermediate_hidden.set(true);
-                        set_advanced_hidden.set(true)
+                {move || {
+                    match selected_level.get() {
+                        None => {
+                            // Show level buttons
+                            guides::ALL_LEVELS.iter().map(|level| {
+                                let level_id = level.id;
+                                let name = level.name.to_string();
+                                let subtitle = level.subtitle.to_string();
+                                view! {
+                                    <button
+                                        class="flex flex-col z-20 p-3 max-w-md mx-auto w-64 bg-white rounded-lg items-center mt-4 shadow-md hover:bg-[#f2f2f2] transition ease-in-out duration-300"
+                                        on:click=move |_| set_selected_level.set(Some(level_id))
+                                    >
+                                        <div class="text-xl font-bold text-[#f79231]">{name.clone()}</div>
+                                        <p class="text-sm text-[#123c64] mt-2">{subtitle.clone()}</p>
+                                    </button>
+                                }.into_any()
+                            }).collect::<Vec<_>>()
+                        }
+                        Some(lid) => {
+                            // Show platform buttons for selected level
+                            match guides::find_level(lid) {
+                                Some(level) => {
+                                    let mut views: Vec<AnyView> = level.platforms.iter().map(|platform| {
+                                        let display = match *platform {
+                                            "android" => "Android",
+                                            "ios" => "iOS",
+                                            "desktop" => "Desktop",
+                                            other => other,
+                                        };
+                                        let path = format!("/guides/{}/{}", lid, platform);
+                                        view! {
+                                            <div class="animate-fadeinone">
+                                                <GenericButton
+                                                    path=path
+                                                    wallet_title=display.to_string()
+                                                    text_color="#f79231".to_string()
+                                                />
+                                            </div>
+                                        }.into_any()
+                                    }).collect();
+                                    views.push(view! {
+                                        <div class="mt-4 flex justify-center">
+                                            <button
+                                                class="text-sm text-white underline opacity-60 hover:opacity-100"
+                                                on:click=move |_| set_selected_level.set(None)
+                                            >
+                                                "Back to levels"
+                                            </button>
+                                        </div>
+                                    }.into_any());
+                                    views
+                                }
+                                None => vec![view! { <p class="text-white">"Level not found."</p> }.into_any()]
+                            }
+                        }
                     }
-                    name="Basic".to_string()
-                    subtitle="I have a teeny weeny stack".to_string()
-                    hidden=basic_hidden
-                    setter=basic_clicked
-                    devices=basic_devices
-                />
-
-                <LevelButton
-                    on_click=move |_| {
-                        set_intermediate_clicked.update(|value| *value = !*value);
-                        set_basic_hidden.set(true);
-                        set_advanced_hidden.set(true)
-                    }
-                    name="Intermediate".to_string()
-                    subtitle="I have an average stack".to_string()
-                    hidden=intermediate_hidden
-                    setter=intermediate_clicked
-                    devices=intermediate_devices
-                />
-
-                <LevelButton
-                    on_click=move |_| {
-                        set_advanced_clicked.update(|value| *value = !*value);
-                        set_basic_hidden.set(true);
-                        set_intermediate_hidden.set(true)
-                    }
-                    name="Advanced".to_string()
-                    subtitle="I am well equipped".to_string()
-                    hidden=advanced_hidden
-                    setter=advanced_clicked
-                    devices=advanced_devices
-                />
+                }}
             </div>
         </div>
     }

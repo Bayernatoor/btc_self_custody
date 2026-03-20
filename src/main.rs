@@ -1,3 +1,5 @@
+/// SSR server — Axum serves pre-rendered HTML + static assets.
+/// The WASM client hydrates on load for client-side interactivity.
 #[cfg(feature = "ssr")]
 #[tokio::main]
 async fn main() {

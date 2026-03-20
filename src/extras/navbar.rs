@@ -25,13 +25,13 @@ pub fn NavBar() -> impl IntoView {
     };
 
     view! {
-        <div class="bg-[#123c64] text-white sticky top-0 z-10 w-full mx-auto p-6 2xl:p-8 flex justify-between border-b border-solid border-white items-center">
+        <div class="bg-[#123c64] text-white sticky top-0 z-10 w-full mx-auto px-6 py-3 2xl:px-8 2xl:py-4 flex justify-between border-b border-solid border-white items-center">
             <div>
-                <div class="text-2xl 2xl:text-4xl font-medium text-white font-title">
+                <div class="text-lg 2xl:text-xl font-medium text-white font-title">
                     <a href="/">"WE HODL BTC"</a>
                 </div>
             </div>
-            <div class="hidden text-xl 2xl:text-2xl space-x-8 lg:flex font-questrial">
+            <div class="hidden text-sm 2xl:text-base space-x-6 lg:flex font-questrial">
                 <a href="/guides">"Guides"</a>
                 <a href="/faq">"Help Desk"</a>
                 <a href="/blog">"Articles"</a>
@@ -45,7 +45,7 @@ pub fn NavBar() -> impl IntoView {
                 <div>
                     <svg
                         xmlns="http://www.w3.org/2000/svg"
-                        class="w-8 h-8 transition-transform duration-300 transform"
+                        class="w-6 h-6 transition-transform duration-300 transform"
                         fill="none"
                         viewBox="0 0 24 24"
                         stroke="currentColor"
@@ -80,28 +80,28 @@ pub fn NavBar() -> impl IntoView {
         >
             <a
                 href="/guides"
-                class="block py-2 px-4 font-medium text-xl text-[#6B7990] hover:bg-blue-100 active:bg-blue-300"
+                class="block py-1.5 px-3 font-medium text-base text-[#6B7990] hover:bg-blue-100 active:bg-blue-300"
                 on:click=move |_| set_menu_clicked.set(false)
             >
                 "Guides"
             </a>
             <a
                 href="/faq"
-                class="block py-2 px-4 font-medium text-xl text-[#6B7990] hover:bg-blue-100 active:bg-blue-300"
+                class="block py-1.5 px-3 font-medium text-base text-[#6B7990] hover:bg-blue-100 active:bg-blue-300"
                 on:click=move |_| set_menu_clicked.set(false)
             >
                 "Help Desk"
             </a>
             <a
                 href="/blog"
-                class="block py-2 px-4 font-medium text-xl text-[#6B7990] hover:bg-blue-100 active:bg-blue-300"
+                class="block py-1.5 px-3 font-medium text-base text-[#6B7990] hover:bg-blue-100 active:bg-blue-300"
                 on:click=move |_| set_menu_clicked.set(false)
             >
                 "Articles"
             </a>
             <a
                 href="/about"
-                class="block py-2 px-4 font-medium text-xl text-[#6B7990] hover:bg-blue-100 active:bg-blue-300"
+                class="block py-1.5 px-3 font-medium text-base text-[#6B7990] hover:bg-blue-100 active:bg-blue-300"
                 on:click=move |_| set_menu_clicked.set(false)
             >
                 "About"
