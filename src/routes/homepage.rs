@@ -97,7 +97,7 @@ pub fn HomePage() -> impl IntoView {
                         </p>
                     </div>
                 </a>
-                <a href="/guides/intermediate/desktop" class="block opacity-0 animate-slideup" style="animation-delay: 200ms">
+                <a href="/guides" class="block opacity-0 animate-slideup" style="animation-delay: 200ms">
                     <div class="group bg-white/5 border border-white/10 rounded-xl p-5 hover:bg-white/10 hover:border-white/20 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 h-full">
                         <div class="text-[#f7931a] text-xs font-semibold uppercase tracking-widest mb-2">"Intermediate"</div>
                         <h3 class="text-base font-semibold text-white mb-1.5 group-hover:text-[#f4a949] transition-colors">"Hardware Wallet & Node"</h3>
@@ -106,7 +106,7 @@ pub fn HomePage() -> impl IntoView {
                         </p>
                     </div>
                 </a>
-                <a href="/guides/advanced/desktop" class="block opacity-0 animate-slideup" style="animation-delay: 300ms">
+                <a href="/guides" class="block opacity-0 animate-slideup" style="animation-delay: 300ms">
                     <div class="group bg-white/5 border border-white/10 rounded-xl p-5 hover:bg-white/10 hover:border-white/20 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 h-full">
                         <div class="text-[#f7931a] text-xs font-semibold uppercase tracking-widest mb-2">"Advanced"</div>
                         <h3 class="text-base font-semibold text-white mb-1.5 group-hover:text-[#f4a949] transition-colors">"Multisig Setup"</h3>
