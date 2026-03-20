@@ -44,7 +44,7 @@ COPY --from=builder /app/Cargo.toml /app/
 
 ENV RUST_LOG="info"
 ENV LEPTOS_SITE_ROOT="site"
-ENV LEPTOS_SITE_ADDR="0.0.0.0:8080"
-EXPOSE 8080
+ENV LEPTOS_SITE_ADDR="0.0.0.0:8000"
+EXPOSE 8000
 
 CMD ["/app/we_hodl_btc"]
