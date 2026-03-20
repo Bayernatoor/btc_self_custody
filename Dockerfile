@@ -1,79 +1,50 @@
-# Builder stage 
-# Build env using Rust nightly
-FROM rustlang/rust:nightly-bullseye AS chef 
+# Build stage - Rust stable on Debian Bookworm
+FROM rust:1-bookworm AS builder
 
-RUN cargo install cargo-chef
-
-# install cargo-binstall, makes it easier to install other cargo extensions
-RUN wget https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-unknown-linux-musl.tgz
-RUN tar -xvf cargo-binstall-x86_64-unknown-linux-musl.tgz
-RUN cp cargo-binstall /usr/local/cargo/bin
-
-# Install cargo-leptos
-RUN cargo binstall cargo-leptos -y
-
-# Add the WASM target
+# Install cargo-leptos and add WASM target
+RUN cargo install cargo-leptos
 RUN rustup target add wasm32-unknown-unknown
 
 WORKDIR /app
 
-FROM chef AS planner
+# Copy manifests first for dependency caching
+COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 
-# Copy all files from our working environment to our Docker image 
-COPY . .
+# Copy source and assets
+COPY src ./src
+COPY style ./style
+COPY assets ./assets
 
-# Compute a lock-like file for our project
-RUN cargo chef prepare  --recipe-path recipe.json
-
-FROM chef AS builder
-COPY --from=planner /app/recipe.json recipe.json
-
-# Build project dependencies, not application.
-RUN cargo chef cook --release --recipe-path recipe.json
-
-# at this point, if our dependency tree stays the same,
-# all layers should be cached.
-COPY . . 
-# SQLX should use offline saved queries at compile-time
-ENV SQLX_OFFLINE=true
-# Build release binary
+# Build release binary (SSR server + WASM client)
+ENV LEPTOS_OUTPUT_NAME="we_hodl_btc"
 RUN cargo leptos build --release -vv
 
-# Runtime stage
+# Runtime stage - same Debian version as builder
 FROM debian:bookworm-slim AS runtime
 
 WORKDIR /app
+
 RUN apt-get update -y \
   && apt-get install -y --no-install-recommends openssl ca-certificates \
   && apt-get autoremove -y \
   && apt-get clean -y \
   && rm -rf /var/lib/apt/lists/*
 
-# -- NB: update binary name from "leptos_start" to match your app name in Cargo.toml --
-# Copy the server binary to the /app directory
+# Copy the server binary
 COPY --from=builder /app/target/release/we_hodl_btc /app/
 
-# /target/site contains our JS/WASM/CSS, etc.
+# Copy the site assets (JS/WASM/CSS)
 COPY --from=builder /app/target/site /app/site
 
-# Copy src - need to reach server functions
+# Copy source (needed for server functions that read FAQ files)
 COPY --from=builder /app/src /app/src
 
-# Copy .well-known to app dir
-COPY --from=builder /app/.well-known /app/.well-known
-
-# Copy the configuration directory to the /app directory
-COPY --from=builder /app/configuration /app/configuration
-
-# Copy Cargo.toml if it’s needed at runtime
+# Copy Cargo.toml (leptos reads config from it at runtime)
 COPY --from=builder /app/Cargo.toml /app/
 
-# Set any required env variables and
-ENV APP_ENVIRONMENT=production
 ENV RUST_LOG="info"
-#ENV LEPTOS_SITE_ADDR="0.0.0.0:8000"
 ENV LEPTOS_SITE_ROOT="site"
-#EXPOSE 8000
+ENV LEPTOS_SITE_ADDR="0.0.0.0:8080"
+EXPOSE 8080
 
-# When `docker run` is executed, launch the binary!
 CMD ["/app/we_hodl_btc"]
