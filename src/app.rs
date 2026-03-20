@@ -69,6 +69,9 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 // Image lightbox for guide steps
                 <script defer src="/lightbox.js"></script>
 
+                // Collapsible sections within step content
+                <script defer src="/sections.js"></script>
+
                 // Analytics
                 <script async src="https://www.poeticmetric.com/pm.js"></script>
 

@@ -71,7 +71,7 @@
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-/* Sub-section heading — orange accent, clearly subordinate */
+/* Sub-section heading — hidden when JS converts to collapsible */
 .step-content h5 {
   font-size: 0.95rem;
   font-weight: 600;
@@ -81,6 +81,64 @@
   padding-top: 1.25rem;
   padding-bottom: 0.4rem;
   margin-bottom: 0.25rem;
+}
+
+/* ── Collapsible sections (JS-created from h5 tags) ────────── */
+.section-collapsible {
+  margin-top: 0.75rem;
+}
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.65rem 0.85rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 0.625rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+}
+.section-header:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+.section-header.active {
+  background: rgba(247, 147, 26, 0.06);
+  border-color: rgba(247, 147, 26, 0.15);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.section-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #f7931a;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.section-chevron {
+  width: 1rem;
+  height: 1rem;
+  color: rgba(255, 255, 255, 0.3);
+  flex-shrink: 0;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.section-header.active .section-chevron {
+  transform: rotate(180deg);
+  color: #f7931a;
+}
+.section-body {
+  display: none;
+  padding: 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-top: none;
+  border-radius: 0 0 0.625rem 0.625rem;
+  background: rgba(255, 255, 255, 0.015);
+  animation: slidedown 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.section-body.open {
+  display: block;
 }
 
 /* Paragraphs */
