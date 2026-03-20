@@ -194,7 +194,7 @@ pub fn os_tip(platform: &str) -> Option<(&'static str, &'static str)> {
     match platform {
         "desktop-linux" => Some((
             "Linux Tip",
-            "Sparrow is distributed as an AppImage or .deb package. You may need to set executable permissions: right-click the file → Properties → Permissions → Allow executing, or run chmod +x in your terminal. If using the .deb, install with sudo dpkg -i."
+            "Sparrow is distributed as a .deb package. Install with sudo dpkg -i in your terminal."
         )),
         "desktop-macos" => Some((
             "macOS Tip",

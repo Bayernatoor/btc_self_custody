@@ -16,7 +16,7 @@ use crate::routes::about::AboutPage;
 use crate::routes::blog::BlogPage;
 use crate::routes::faq::FaqPage;
 use crate::routes::guide::{GuideTwoSegment, GuideWalletPage};
-use crate::routes::guideselector::GuideSelector;
+use crate::routes::guideselector::{GuideSelector, GuideLevelSelector};
 use crate::routes::homepage::HomePage;
 use leptos::prelude::*;
 use leptos_meta::*;
@@ -118,6 +118,7 @@ pub fn App() -> impl IntoView {
                     }>
                         <Route path=path!("/") view=HomePage/>
                         <Route path=path!("/guides") view=GuideSelector/>
+                        <Route path=path!("/guides/:level") view=GuideLevelSelector/>
                         // Unified guide routes (2 parameterized routes replace 14 static ones)
                         <Route path=path!("/guides/:level/:segment") view=GuideTwoSegment/>
                         <Route path=path!("/guides/:level/:platform/:wallet") view=GuideWalletPage/>

@@ -28,4 +28,4 @@ If you've lost your phone or accidentally deleted the BlueWallet app you can eas
     <img id="bluewallet wallet recovered" src="./../../../bluewallet_wallet_recovered.png" alt="bluewallet wallet recovered" width="400"/> 
 </a>
 
-Need additional help? Reach out to me via the information on <a href="/faq">the help desk page</a>.
+Need additional help? Reach out --> <a href="/faq">the help desk</a>.
