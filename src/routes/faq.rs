@@ -2,90 +2,77 @@ use crate::extras::accordion_menu::AccordionMenu;
 use leptos::prelude::*;
 use leptos_meta::*;
 
-/// Renders the faq page of the application.
+/// Renders the FAQ / Help Desk page.
 #[component]
 pub fn FaqPage() -> impl IntoView {
-    let quote = "Free software is a matter of liberty, not price. To understand the concept, you should think of 'free' as in 'free speech,' not as in 'free beer'." ;
-    let quote_author = "- Richard Stallman";
-    let intro =  "The guides are meant to help anyone self-custody their bitcoin, regardless of how much they own. The guides are opinionated, recommending few options to
-                 help cut through the noise and streamline the self-custody process. All software recommendations are licensed using open and permissive licenses which follow
-                 the principales set forth by Richard Stallman regarding Free Software. The intention is to eliminate the need to trust me, since you
-                 can verify it for yourself.";
-
     view! {
         <Title text="Help Desk | WE HODL BTC"/>
 
-        <div
-            id="about"
-            class="grid gap-6 max-w-3xl mx-auto p-6 mt-8 mb-24 animate-fadeinone grid-rows-[auto_auto_1fr] md:max-w-4xl lg:max-w-5xl lg:gap-8 md:my-24"
-        >
-            // Section 1: Title and Intro
-            <div class="">
-                <h1 class="text-center text-[1.75rem] text-[#f7931a] font-semibold justify-center leading-tight font-title md:p-4 md:text-[2rem] lg:text-[2.5rem]">
+        <div class="max-w-3xl mx-auto px-6 mt-10 mb-24 opacity-0 animate-fadeinone md:max-w-4xl lg:max-w-5xl lg:px-8 md:my-20">
+
+            // Header
+            <header class="text-center mb-10">
+                <h1 class="text-[1.65rem] text-[#f7931a] font-semibold leading-tight font-title md:text-[2rem] lg:text-[2.5rem]">
                     "The Bitcoin Help Desk"
                 </h1>
-                <div class="text-center mt-4 md:mt-0 max-w-3xl mx-auto md:max-w-4xl lg:max-w-4xl">
-                    <div class="text-center mx-auto">
-                        <p class="text-base text-white italic">{quote}</p>
-                    </div>
-                    <div class="text-center mx-auto">
-                        <p class="text-xs text-white italic">{quote_author}</p>
-                    </div>
-                    <div class="text-center mt-4 mx-auto">
-                        <p class="text-sm text-white leading-relaxed">{intro}</p>
-                    </div>
-                </div>
-            </div>
+                <div class="w-16 h-0.5 bg-[#f7931a] mx-auto mt-3 mb-5"></div>
 
-            // Section 2: Commonly Asked Questions
-            <div class="pt-4 lg:pt-0 lg:px-0">
-                <div class="flex flex-col items-center w-full pb-4">
-                    <h2 class="text-base text-[#f7931a] text-center font-semibold md:text-lg">
-                        "Commonly asked questions:"
-                    </h2>
-                </div>
-                <AccordionMenu faq_name="general".to_string()/>
-            </div>
-
-            // Section 3: Contact Information
-            <div class="pb-6">
-                <hr class="border border-solid border-gray-400 mx-auto w-full mb-6"/>
-
-                <div class="flex flex-col items-center text-center pt-6">
-                    <p class="text-sm text-white">
-                        "Need additional help? Reach out to me by email: "
-                        <a
-                            class="underline text-[#8cb4ff] hover:text-[#3c6594]"
-                            href="mailto:wehodlbtc@pm.me"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                        >
-                            wehodlbtc@pm.me
-                        </a>
+                // Quote
+                <div class="max-w-xl mx-auto mb-6">
+                    <p class="text-[0.9rem] text-white/60 italic leading-relaxed">
+                        "\"Free software is a matter of liberty, not price. To understand the concept, you should think of 'free' as in 'free speech,' not as in 'free beer'.\""
                     </p>
-                    <br/>
-                    <p class="text-sm text-white">
-                        "Or connect via "
+                    <p class="text-xs text-white/40 mt-1">"— Richard Stallman"</p>
+                </div>
+
+                // Intro
+                <div class="bg-white/5 border border-white/10 rounded-xl p-5 max-w-2xl mx-auto">
+                    <p class="text-[0.85rem] text-white/80 leading-relaxed">
+                        "The guides are opinionated, recommending few options to help cut through the noise and streamline the self-custody process.
+                        All software recommendations use open and permissive licenses — you don't need to trust me, you can verify it for yourself."
+                    </p>
+                </div>
+            </header>
+
+            // FAQ Accordion
+            <section>
+                <h2 class="text-base text-[#f7931a] font-semibold text-center mb-4">"Commonly Asked Questions"</h2>
+                <AccordionMenu faq_name="general".to_string()/>
+            </section>
+
+            // Contact
+            <section class="mt-10 pt-8 border-t border-white/10">
+                <div class="flex flex-col items-center text-center">
+                    <h3 class="text-base text-[#f7931a] font-semibold mb-4">"Need More Help?"</h3>
+                    <div class="flex flex-col sm:flex-row gap-4">
                         <a
-                            class="underline text-[#8cb4ff] hover:text-[#3c6594]"
+                            class="inline-flex items-center gap-2 px-5 py-2.5 bg-white/5 border border-white/10 rounded-xl text-[0.85rem] text-white/80 hover:bg-white/10 hover:border-white/20 transition-all duration-200"
+                            href="mailto:wehodlbtc@pm.me"
+                        >
+                            <svg class="w-4 h-4 text-[#f7931a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                            </svg>
+                            "wehodlbtc@pm.me"
+                        </a>
+                        <a
+                            class="inline-flex items-center gap-2 px-5 py-2.5 bg-white/5 border border-white/10 rounded-xl text-[0.85rem] text-white/80 hover:bg-white/10 hover:border-white/20 transition-all duration-200"
                             href="https://github.com/simplex-chat"
                             target="_blank"
                             rel="noopener noreferrer"
                         >
-                            Simplex Chat
-                        </a> " by scanning the QR code:"
-                    </p>
-                    <br/>
-                    <div>
-                        <img
-                            src="./../../../simplexqr.png"
-                            alt="simplex_qr_code"
-                            width="150"
-                            height="150"
-                        />
+                            <svg class="w-4 h-4 text-[#f7931a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                            </svg>
+                            "Simplex Chat"
+                        </a>
                     </div>
+                    <img
+                        class="mt-5 w-28 h-28 rounded-lg"
+                        src="./../../../simplexqr.png"
+                        alt="Simplex Chat QR code"
+                    />
                 </div>
-            </div>
+            </section>
         </div>
     }
 }

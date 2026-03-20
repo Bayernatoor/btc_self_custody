@@ -15,10 +15,7 @@ pub fn AboutPage() -> impl IntoView {
                 </h1>
                 <div class="w-16 h-0.5 bg-[#f7931a] mx-auto mt-3 mb-5"></div>
                 <p class="text-[0.9rem] text-white/80 max-w-2xl mx-auto leading-relaxed">
-                    "We Hodl BTC is about taking self-custody of your bitcoin.
-                    The goal is to help anyone take ownership regardless of how many satoshis or bitcoin they own.
-                    Bitcoin's core values are of self-sovereignty, decentralization, trust minimization and preservation of wealth.
-                    I believe that taking self-custody of your bitcoin naturally follows."
+                    "WE HODL BTC helps you take true ownership of your bitcoin — whether it's your first 100 sats or your life savings. Self-sovereignty starts with self-custody."
                 </p>
             </header>
 

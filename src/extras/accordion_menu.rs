@@ -88,45 +88,31 @@ fn Menu(
     };
 
     view! {
-        <div>
-            <h2 id="accordion-collapse-heading">
+        <div class="mb-2">
+            <h2>
                 <button
                     type="button"
-                    class=format!(
-                        "flex justify-between w-full p-4
-            text-left text-gray-900 border border-gray-500 rounded-xl
-            hover:bg-[#3c6594]",
-                    )
-
-                    aria-expanded="true"
-                    aria-controls="accordion-collapse-body"
+                    class="group flex items-center justify-between w-full px-5 py-3.5 text-left bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 hover:border-white/20 transition-all duration-200 cursor-pointer"
+                    aria-expanded=move || is_open()
                     on:click=handle_menu_click
                     node_ref=title_ref
                 >
-
-                    <span class="text-white text-xl" inner_html=faq_title></span>
+                    <span class="text-white text-[0.95rem] font-medium pr-4" inner_html=faq_title></span>
                     <svg
-                        data-accordion-icon
-                        class="w-3 h-3 rotate-180 shrink-0"
-                        aria-hidden="true"
-                        xmlns="http://www.w3.org/2000/svg"
+                        class="w-4 h-4 shrink-0 text-white/40 group-hover:text-white/70 transition-transform duration-200"
+                        class:rotate-180=move || is_open()
                         fill="none"
-                        viewBox="0 0 10 6"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
                     >
-                        <path
-                            stroke="white"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M9 5 5 1 1 5"
-                        ></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                     </svg>
                 </button>
             </h2>
-            <div aria-labelledby="accordion-collapse-heading" class:hidden=move || !is_open()>
-                <div class="p-5 border border-gray-500 rounded-xl text-sm animate-fadeinone">
+            <div class:hidden=move || !is_open()>
+                <div class="mt-1 px-5 py-4 bg-white/5 border border-white/10 rounded-xl animate-slidedown">
                     <div
-                        class="bg-[#3c6594] rounded-md p-4 leading-relaxed text-white text-lg"
+                        class="text-[0.9rem] leading-relaxed text-white/80"
                         inner_html=faq_content
                     ></div>
                 </div>
@@ -179,7 +165,7 @@ pub fn AccordionMenu(#[prop(optional)] faq_name: String) -> impl IntoView {
                         match result {
                             Ok(faqs_vec) => {
                                 view! {
-                                    <div class="px-2 flex flex-col lg:px-0">
+                                    <div class="flex flex-col">
                                         <For
                                             each=move || faqs_vec.clone()
                                             key=|faqs| faqs.id

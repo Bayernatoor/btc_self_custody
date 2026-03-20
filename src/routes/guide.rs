@@ -7,7 +7,6 @@
 use leptos::prelude::*;
 use leptos_meta::*;
 
-use crate::extras::buttons::GenericExternalButton;
 use crate::extras::stepper::Stepper;
 use crate::guides::{self, DownloadLink, GuideLevelDef, ProductLink, WalletDef};
 
@@ -18,23 +17,24 @@ use crate::guides::{self, DownloadLink, GuideLevelDef, ProductLink, WalletDef};
 #[component]
 fn PageHeader(
     title: String,
+    #[prop(optional)] subtitle: String,
     #[prop(optional)] quote: String,
     #[prop(optional)] quote_author: String,
 ) -> impl IntoView {
     view! {
-        <header class="flex flex-col mx-auto px-4 pt-10 lg:pt-0">
-            <h1 class="text-center text-[1.65rem] text-[#f7931a] font-semibold leading-tight md:text-[2rem] lg:text-[2.5rem]">
+        <header class="text-center mb-8 animate-scaleup">
+            <h1 class="text-[1.65rem] text-[#f7931a] font-semibold leading-tight font-title md:text-[2rem] lg:text-[2.75rem]">
                 {title}
             </h1>
+            <div class="w-16 h-0.5 bg-[#f7931a] mx-auto mt-3 mb-4"></div>
+            {(!subtitle.is_empty()).then(|| view! {
+                <p class="text-[0.9rem] text-white/60 max-w-lg mx-auto">{subtitle}</p>
+            })}
             {(!quote.is_empty()).then(|| view! {
-                <div class="text-center max-w-sm mx-auto pt-4">
-                    <p class="text-lg font-semibold text-white italic">{quote}</p>
-                </div>
+                <p class="text-[0.9rem] text-white/50 italic max-w-md mx-auto mt-2">{quote}</p>
             })}
             {(!quote_author.is_empty()).then(|| view! {
-                <div class="text-center max-w-sm mx-auto">
-                    <p class="text-md text-white italic">{quote_author}</p>
-                </div>
+                <p class="text-xs text-white/30 mt-0.5">{quote_author}</p>
             })}
         </header>
     }
@@ -42,10 +42,31 @@ fn PageHeader(
 
 #[component]
 fn DownloadButton(download: &'static DownloadLink) -> impl IntoView {
+    let is_filled = download.icon.contains("fill-rule") || download.icon.contains("M18.71") || download.icon.contains("M3.609");
     view! {
-        <a href=download.url rel="noreferrer" target="_blank" class="block">
-            <button class="flex justify-center items-center w-56 px-3 py-2 mx-auto bg-white/95 border border-white/20 rounded-lg hover:bg-white hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 transition-all duration-200">
-                <img class="h-8 max-w-full object-contain" src=download.logo alt=download.logo_alt/>
+        <a href=download.url rel="noreferrer" target="_blank" class="block w-full">
+            <button
+                class="group flex items-center gap-3 w-full px-5 py-3 rounded-xl border transition-all duration-200 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+                style=format!("background: {}15; border-color: {}30", download.color, download.color)
+            >
+                <div
+                    class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                    style=format!("background: {}25", download.color)
+                >
+                    {if is_filled {
+                        view! {
+                            <svg class="w-4.5 h-4.5" viewBox="0 0 24 24" fill="currentColor" style=format!("color: {}", download.color) inner_html=download.icon></svg>
+                        }.into_any()
+                    } else {
+                        view! {
+                            <svg class="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" style=format!("color: {}", download.color) inner_html=download.icon></svg>
+                        }.into_any()
+                    }}
+                </div>
+                <span class="text-sm font-medium text-white/90 group-hover:text-white transition-colors">{download.label}</span>
+                <svg class="w-4 h-4 ml-auto text-white/25 group-hover:text-white/50 group-hover:translate-x-0.5 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+                </svg>
             </button>
         </a>
     }
@@ -57,41 +78,40 @@ fn WalletCard(wallet: &'static WalletDef, platform: String, level: String) -> im
     let color = wallet.color;
     view! {
         <a href=path class="block">
-            <button class="flex items-center gap-3 w-full max-w-sm px-5 py-3.5 mx-auto bg-white/95 border border-white/20 rounded-xl hover:bg-white hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 transition-all duration-200 cursor-pointer">
-                <img class="h-10 w-10 rounded-md shrink-0" src=wallet.logo alt=wallet.logo_alt/>
-                <div class="text-left">
-                    <h3 class="text-base font-semibold" style=format!("color: {color}")>{wallet.name}</h3>
-                    <p class="text-sm text-slate-500">{wallet.tagline}</p>
+            <button class="group flex items-center gap-4 w-full px-5 py-4 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 hover:border-white/25 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer">
+                <div class="w-11 h-11 rounded-lg bg-white/10 flex items-center justify-center shrink-0 group-hover:bg-white/15 transition-colors">
+                    <img class="h-8 w-8 rounded-md" src=wallet.logo alt=wallet.logo_alt/>
                 </div>
+                <div class="flex-1 text-left">
+                    <h3 class="text-base lg:text-lg font-semibold" style=format!("color: {color}")>{wallet.name}</h3>
+                    <p class="text-sm text-white/50 mt-0.5">{wallet.tagline}</p>
+                </div>
+                <svg class="w-5 h-5 text-white/30 group-hover:text-white/60 group-hover:translate-x-0.5 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                </svg>
             </button>
         </a>
     }
 }
 
 #[component]
-fn ProductButtons(products: &'static [ProductLink]) -> impl IntoView {
+fn ProductCard(product: &'static ProductLink) -> impl IntoView {
     view! {
-        <div class="flex flex-col md:flex-row justify-center gap-4">
-            {products.iter().map(|p| {
-                view! {
-                    <div class="flex justify-center">
-                        <GenericExternalButton
-                            path=p.url.to_string()
-                            wallet_title=p.name.to_string()
-                            img_url=p.logo.to_string()
-                            img_alt=p.logo_alt.to_string()
-                            new_width=p.logo_width.to_string()
-                            new_height=p.logo_height.to_string()
-                        />
-                    </div>
-                }
-            }).collect::<Vec<_>>()}
-        </div>
+        <a href=product.url rel="noreferrer" target="_blank" class="block h-full">
+            <button class="group flex flex-col items-center justify-center gap-2 w-full h-full px-4 py-4 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 hover:border-white/20 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer">
+                <img
+                    class=format!("h-{} w-{} object-contain opacity-80 group-hover:opacity-100 transition-opacity", product.logo_height, product.logo_width)
+                    src=product.logo
+                    alt=product.logo_alt
+                />
+                <span class="text-xs font-medium text-white/70 group-hover:text-white/90 transition-colors text-center">{product.name}</span>
+            </button>
+        </a>
     }
 }
 
-fn page_layout() -> &'static str {
-    "grid gap-6 max-w-3xl mx-auto mt-8 mb-24 px-6 animate-fadeinone grid-rows-[auto_auto_1fr] md:max-w-4xl lg:max-w-5xl lg:gap-8 lg:px-8 md:my-28"
+fn centered_layout() -> &'static str {
+    "flex flex-col items-center max-w-2xl mx-auto px-6 mt-10 mb-24 opacity-0 animate-fadeinone lg:px-8 lg:max-w-3xl xl:max-w-4xl md:my-20"
 }
 
 // =============================================================================
@@ -100,12 +120,9 @@ fn page_layout() -> &'static str {
 
 const PLATFORMS: &[&str] = &["android", "ios", "desktop"];
 
-/// Handles /guides/:level/:segment where segment is either a platform (android/ios/desktop)
-/// or a step ID (hardware-wallet/node). Dispatches accordingly.
 #[component]
 pub fn GuideTwoSegment() -> impl IntoView {
     let params = leptos_router::hooks::use_params_map();
-
     let level_id = move || params.read().get("level");
     let segment = move || params.read().get("segment");
 
@@ -113,16 +130,13 @@ pub fn GuideTwoSegment() -> impl IntoView {
         {move || {
             let level_id = level_id();
             let segment = segment();
-
             match (level_id.as_deref(), segment.as_deref()) {
                 (Some(lid), Some(seg)) => {
                     match guides::find_level(lid) {
                         Some(level) => {
                             if PLATFORMS.contains(&seg) {
-                                // It's a platform → render level intro page
                                 render_level_page(level, seg).into_any()
                             } else {
-                                // It's a step ID → render step page
                                 match level.steps.iter().find(|s| s.id == seg) {
                                     Some(step) => render_step_page(step, lid).into_any(),
                                     None => view! { <p class="text-white text-center p-8">"Step not found."</p> }.into_any(),
@@ -156,115 +170,111 @@ fn render_level_page(level: &'static GuideLevelDef, platform: &str) -> impl Into
 
     view! {
         <Title text=page_title/>
-        <article class=page_layout()>
+        <div class=centered_layout()>
             <PageHeader
                 title=full_title
                 quote=level.quote.to_string()
                 quote_author=level.quote_author.to_string()
             />
 
-            // Intro text
-            <section class="px-6 pt-4 lg:pt-0 lg:px-0">
+            // Intro
+            <div class="w-full mb-8 animate-slideup" style="animation-delay: 100ms">
                 {render_level_intro(level, platform)}
-            </section>
+            </div>
 
-            // Wallet picker (basic) or step navigation (intermediate/advanced)
-            <section class="px-6 lg:pb-4 lg:px-0">
-                <hr class="border border-solid border-gray-400 mx-auto w-full mb-6"/>
+            // Wallet picker / step nav / stepper
+            <div class="w-full">
                 {if !wallets.is_empty() {
-                    // Basic: show wallet picker
                     view! {
-                        <div>
-                            <h2 class="text-center pb-4 text-lg font-semibold text-[#f7931a]">
-                                "Pick A Wallet"
-                            </h2>
-                            <div class="flex flex-col mx-auto justify-center lg:flex-row px-6 gap-4">
-                                {wallets.iter().map(|w| {
-                                    view! { <WalletCard wallet=w platform=platform_owned.clone() level=level.id.to_string()/> }
+                        <div class="animate-slideup" style="animation-delay: 200ms">
+                            <h2 class="text-base text-[#f7931a] font-semibold text-center mb-4">"Pick A Wallet"</h2>
+                            <div class="flex flex-col gap-3">
+                                {wallets.iter().enumerate().map(|(i, w)| {
+                                    let delay = format!("animation-delay: {}ms", 250 + i * 80);
+                                    view! {
+                                        <div class="opacity-0 animate-slideup" style=delay>
+                                            <WalletCard wallet=w platform=platform_owned.clone() level=level.id.to_string()/>
+                                        </div>
+                                    }
                                 }).collect::<Vec<_>>()}
                             </div>
                         </div>
                     }.into_any()
                 } else if !level.steps.is_empty() {
-                    // Intermediate: show step navigation
                     render_step_navigation(level).into_any()
                 } else if let Some(faq_dir) = level.faq_dir {
-                    // Advanced: show stepper directly
                     view! {
-                        <div>
-                            <h3 class="py-4 text-center text-lg text-[#f7931a] font-semibold">
-                                "Advanced Setup"
-                            </h3>
+                        <div class="animate-slideup" style="animation-delay: 200ms">
+                            <h2 class="text-base text-[#f7931a] font-semibold text-center mb-4">"Advanced Setup"</h2>
                             <Stepper faq_name=faq_dir.to_string()/>
                         </div>
                     }.into_any()
                 } else {
                     view! { <div></div> }.into_any()
                 }}
-            </section>
-        </article>
+            </div>
+        </div>
     }
 }
 
 fn render_level_intro(level: &'static GuideLevelDef, _platform: &str) -> impl IntoView {
     match level.id {
         "intermediate" => view! {
-            <div>
-                <h2 class="text-left text-lg text-[#f7931a] font-semibold lg:text-lg">
-                    "Coldcard & Node Setup:"
-                </h2>
-                <p class="text-[0.9rem] text-white">
+            <div class="bg-white/5 border border-white/10 rounded-xl p-5">
+                <h2 class="text-base text-[#f7931a] font-semibold mb-2">"Coldcard & Node Setup"</h2>
+                <p class="text-[0.85rem] text-white/80 leading-relaxed lg:text-[0.95rem]">
                     {level.intro}
-                    " If you originally chose a mobile setup, I recommend that you install Sparrow Desktop wallet by following the"
-                    <a class="text-[#8cb4ff] underline-offset-auto" href="/guides/basic/desktop">" basic desktop guide "</a>
-                    "before continuing with this guide."
+                    " If you originally chose a mobile setup, I recommend installing Sparrow Desktop wallet via the "
+                    <a class="text-blue-400 hover:text-blue-300 transition-colors" href="/guides/basic/desktop">"basic desktop guide"</a>
+                    " before continuing."
                 </p>
-                <p class="pt-2 text-[0.9rem] text-white">
-                    "In this guide, we'll start by setting up a Coldcard signing device (AKA hardware wallet), and connecting it to Sparrow. In part two we'll decide which Bitcoin node implementation to use, and then connect our Sparrow wallet to it. Once we're through with this, you'll have a standards based, secure and private Bitcoin self-custody solution."
+                <p class="mt-3 text-[0.85rem] text-white/80 leading-relaxed lg:text-[0.95rem]">
+                    "We'll start by setting up a Coldcard signing device and connecting it to Sparrow. In part two we'll choose a Bitcoin node implementation and connect our wallet to it."
                 </p>
             </div>
         }.into_any(),
         "advanced" => view! {
-            <div>
-                <h2 class="text-left text-lg text-[#f7931a] font-semibold">"MultiSignature Wallet"</h2>
-                <p class="py-2 text-[0.9rem] text-white">{level.intro}</p>
-                <p class="text-[0.9rem] text-white">"A secure and private advanced self-custody setup looks like the following:"</p>
-                <ol class="list-decimal pl-8 pt-2 text-lg leading-normal text-white">
+            <div class="bg-white/5 border border-white/10 rounded-xl p-5">
+                <h2 class="text-base text-[#f7931a] font-semibold mb-2">"MultiSignature Wallet"</h2>
+                <p class="text-[0.85rem] text-white/80 leading-relaxed lg:text-[0.95rem] mb-3">{level.intro}</p>
+                <ol class="list-decimal pl-5 text-[0.85rem] text-white/80 leading-relaxed lg:text-[0.95rem] space-y-1">
                     <li>"Setup and run your own Bitcoin node"</li>
                     <li>"Setup a 2 of 3 Multisig in Sparrow Wallet using 3 signing devices"</li>
-                    <li>"Use Sparrow Wallet to coordinate the Multisig. Preferably on a dedicated computer"</li>
+                    <li>"Use Sparrow Wallet to coordinate the Multisig, preferably on a dedicated computer"</li>
                     <li>"Backup your Seed Words and Passphrases on steel"</li>
                     <li>"Safely backup and store your Multisig Wallet's Output Descriptors"</li>
                     <li>"Store the backups and devices in different geographic locations"</li>
                 </ol>
-                <p class="italic pt-4 text-[0.9rem] text-white">
-                    "Before starting, I encourage you to read through all the steps below, so as to get an understanding of the options available to you."
+                <p class="mt-3 text-[0.85rem] text-white/60 italic">
+                    "Read through all the steps below before starting, so you understand the options available."
                 </p>
             </div>
         }.into_any(),
         _ => view! {
-            <div>
-                <p class="text-[0.95rem] font-semibold text-white pb-2">
+            <div class="bg-white/5 border border-white/10 rounded-xl p-5">
+                <p class="text-[0.85rem] font-medium text-white/90 mb-2">
                     "Bitcoin Self-Custody: The act of taking possession of a bitcoin private key."
                 </p>
-                <p class="text-[0.9rem] text-white pb-2">{level.intro}</p>
+                <p class="text-[0.85rem] text-white/80 leading-relaxed lg:text-[0.95rem]">{level.intro}</p>
             </div>
         }.into_any(),
     }
 }
 
 fn render_step_navigation(level: &'static GuideLevelDef) -> impl IntoView {
-    // Show only the first step as a "Level up" entry point
     let first_step = level.steps.first();
     view! {
-        <div class="pb-6 pt-4 flex flex-col items-center">
+        <div class="flex flex-col items-center animate-slideup" style="animation-delay: 200ms">
             {first_step.map(|step| {
                 let path = format!("/guides/{}/{}", level.id, step.id);
                 view! {
                     <a href=path class="block">
-                        <button class="inline-flex items-center gap-3 px-5 py-3 bg-white/95 border border-white/20 rounded-xl hover:bg-white hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 transition-all duration-200 cursor-pointer">
+                        <button class="group inline-flex items-center gap-4 px-6 py-4 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 hover:border-white/25 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer">
                             <img class="h-10 w-10 shrink-0 object-contain" src=step.icon alt=step.icon_alt/>
-                            <span class="text-base font-semibold text-[#f7931a]">"Level up to Intermediate"</span>
+                            <span class="text-base lg:text-lg font-semibold text-[#f7931a]">"Level up to Intermediate"</span>
+                            <svg class="w-5 h-5 text-white/30 group-hover:text-white/60 group-hover:translate-x-0.5 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                            </svg>
                         </button>
                     </a>
                 }
@@ -280,7 +290,6 @@ fn render_step_navigation(level: &'static GuideLevelDef) -> impl IntoView {
 #[component]
 pub fn GuideWalletPage() -> impl IntoView {
     let params = leptos_router::hooks::use_params_map();
-
     let wallet_id = move || params.read().get("wallet");
     let platform_id = move || params.read().get("platform");
 
@@ -288,7 +297,6 @@ pub fn GuideWalletPage() -> impl IntoView {
         {move || {
             let wallet_id = wallet_id();
             let platform_id = platform_id();
-
             match (wallet_id.as_deref(), platform_id.as_deref()) {
                 (Some(wid), Some(pid)) => {
                     match guides::find_wallet(wid) {
@@ -308,29 +316,26 @@ fn render_wallet_page(wallet: &'static WalletDef, platform: &str) -> impl IntoVi
 
     view! {
         <Title text=page_title/>
-        <article class=page_layout()>
+        <div class=centered_layout()>
             <PageHeader
                 title=wallet.name.to_string()
-                quote=wallet.tagline.to_string()
-                quote_author=wallet.description.to_string()
+                subtitle=wallet.tagline.to_string()
+                quote=wallet.description.to_string()
             />
 
-            // Download buttons
-            <div class="flex flex-col mx-auto justify-center px-6 py-2 max-w-2xl mx-auto gap-4">
+            // Downloads
+            <div class="w-full max-w-sm mx-auto flex flex-col gap-3 mb-8 opacity-0 animate-slideup" style="animation-delay: 100ms">
                 {downloads.iter().map(|d| {
                     view! { <DownloadButton download=d/> }
                 }).collect::<Vec<_>>()}
             </div>
 
             // Stepper
-            <div class="mx-auto max-w-5xl p-4 w-full">
-                <div class="mx-auto border border-solid border-gray-400"></div>
-                <h2 class="flex justify-center font-semibold text-[#f7931a] text-lg pt-6 pb-4">
-                    "Get Started"
-                </h2>
+            <div class="w-full opacity-0 animate-slideup" style="animation-delay: 200ms">
+                <h2 class="text-base text-[#f7931a] font-semibold text-center mb-4">"Get Started"</h2>
                 <Stepper faq_name=wallet.faq_dir.to_string()/>
             </div>
-        </article>
+        </div>
     }
 }
 
@@ -339,26 +344,25 @@ fn render_step_page(step: &'static guides::GuideStep, level_id: &str) -> impl In
 
     view! {
         <Title text=page_title/>
-        <article class=page_layout()>
+        <div class=centered_layout()>
             <PageHeader title=step.title.to_string()/>
 
-            // Product purchase buttons
+            // Products
             {(!step.products.is_empty()).then(|| view! {
-                <div class="px-4 lg:pt-0 lg:px-0">
-                    <ProductButtons products=step.products/>
+                <div class="w-full grid grid-cols-1 sm:grid-cols-3 gap-3 mb-8 opacity-0 animate-slideup" style="animation-delay: 100ms">
+                    {step.products.iter().map(|p| {
+                        view! { <ProductCard product=p/> }
+                    }).collect::<Vec<_>>()}
                 </div>
             })}
 
             // Stepper
-            <div class="px-4 lg:pb-4 lg:px-0">
-                <hr class="border border-solid border-gray-400 mx-auto w-full mb-6"/>
-                <h2 class="text-center pb-4 text-lg text-[#f7931a] font-semibold">
-                    "Start Here"
-                </h2>
+            <div class="w-full opacity-0 animate-slideup" style="animation-delay: 200ms">
+                <h2 class="text-base text-[#f7931a] font-semibold text-center mb-4">"Start Here"</h2>
                 <Stepper faq_name=step.faq_dir.to_string()/>
             </div>
 
-            // Next step link
+            // Next step
             {step.next_step.map(|next| {
                 let level = guides::find_level(level_id);
                 let next_step = level.and_then(|l| l.steps.iter().find(|s| s.id == next));
@@ -368,23 +372,24 @@ fn render_step_page(step: &'static guides::GuideStep, level_id: &str) -> impl In
                 let icon = next_step.map(|s| s.icon).unwrap_or("");
                 let icon_alt = next_step.map(|s| s.icon_alt).unwrap_or("");
                 view! {
-                    <div class="px-4 lg:pb-4 lg:px-0">
-                        <h3 class="text-center pb-4 text-lg text-[#f7931a] font-semibold">
-                            {heading}
-                        </h3>
-                        <div class="pb-4 flex justify-center">
+                    <div class="w-full mt-8 pt-6 border-t border-white/10">
+                        <h3 class="text-base text-[#f7931a] font-semibold text-center mb-4">{heading}</h3>
+                        <div class="flex justify-center">
                             <a href=path class="block">
-                                <button class="inline-flex items-center gap-3 px-5 py-3 bg-white/95 border border-white/20 rounded-xl hover:bg-white hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 transition-all duration-200 cursor-pointer">
+                                <button class="group inline-flex items-center gap-3 px-5 py-3.5 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 hover:border-white/25 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer">
                                     {(!icon.is_empty()).then(|| view! {
                                         <img class="h-10 w-10 shrink-0 object-contain" src=icon alt=icon_alt/>
                                     })}
-                                    <span class="text-base font-semibold text-[#f7931a]">{button_label}</span>
+                                    <span class="text-base lg:text-lg font-semibold text-[#f7931a]">{button_label}</span>
+                                    <svg class="w-5 h-5 text-white/30 group-hover:text-white/60 group-hover:translate-x-0.5 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                    </svg>
                                 </button>
                             </a>
                         </div>
                     </div>
                 }
             })}
-        </article>
+        </div>
     }
 }
