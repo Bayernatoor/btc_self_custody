@@ -120,7 +120,7 @@ fn StepperContent(
                                     ></div>
                                 </header>
                                 <div
-                                    class="text-[0.85rem] lg:text-[0.95rem] text-white/80 leading-relaxed"
+                                    class="step-content text-[0.85rem] lg:text-[0.95rem] text-white/80 leading-relaxed"
                                     inner_html=content_html
                                 ></div>
                             </div>

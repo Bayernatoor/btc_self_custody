@@ -1,21 +1,17 @@
 ### [RaspiBlitz Details & Resources](#intermediate-raspiblitz-node-details)
 
-<h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Choice #3: RaspiBlitz</h4>
+<h4>Choice #3: RaspiBlitz</h4>
 
 RaspiBlitz is the Do-It-Yourselfers wet dream. One of the original DIY Bitcoin and Lightning node implementations.
 For those who want to get their hands dirty with a Raspiberry Pi. You can't go wrong with RaspiBlitz.
-
-<br>
 
 <a href="./../../../raspiblitz_graphics.jpg" target="_blank">
     <img id="raspiblitz" src="./../../../raspiblitz_graphics.jpg" alt="raspiblitz graphics" width="600"/> 
 </a>
 
-<br>
+<h4>Features:</h4>
 
-<h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Features:</h4>
-
--- RaspiBlitz is <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://github.com/fusion44/raspiblitz/blob/dev/LICENSE" target="_blank" rel="noopener noreferrer">open-source and available under an MIT license</a>
+-- RaspiBlitz is <a href="https://github.com/fusion44/raspiblitz/blob/dev/LICENSE" target="_blank" rel="noopener noreferrer">open-source and available under an MIT license</a>
 
 -- Supports LND & CoreLightning implementations.
 
@@ -27,10 +23,7 @@ For those who want to get their hands dirty with a Raspiberry Pi. You can't go w
 
 -- The original DIY node, excellent for thinkerers.
 
- 
-<br>
-
-<h4 class="text-2xl pb-2 text-[#f7931a] font-semibold">Considerations:</h4>
+<h4>Considerations:</h4>
 
 -- Advanced features are only available via SSH.
 
@@ -38,17 +31,15 @@ For those who want to get their hands dirty with a Raspiberry Pi. You can't go w
 
 -- Bitcoin + Lightning only. Is not an all-in-one personal home server like Start9.
 
-<br>
+<h4>Resources:</h4>
 
-<h4 class="text-2xl pb-2 text-[#f7931a] font-semibold">Resources:</h4>
+**\-** <a href="https://shop.fulmo.org/" target="_blank" rel="noopener noreferrer">Buy a pre-made RaspiBlitz</a>
 
-**\-** <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://shop.fulmo.org/" target="_blank" rel="noopener noreferrer">Buy a pre-made RaspiBlitz</a>
+**\-** <a href="https://docs.raspiblitz.org/docs/intro/" target="_blank" rel="noopener noreferrer">Build your own RaspiBlitz</a>
 
-**\-** <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://docs.raspiblitz.org/docs/intro/" target="_blank" rel="noopener noreferrer">Build your own RaspiBlitz</a>
+**\-** <a href="https://docs.raspiblitz.org/docs/category/community-resources" target="_blank" rel="noopener noreferrer">Get Support</a>
 
-**\-** <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://docs.raspiblitz.org/docs/category/community-resources" target="_blank" rel="noopener noreferrer">Get Support</a>
+**\-** <a href="https://docs.raspiblitz.org/docs/category/faqs" target="_blank" rel="noopener noreferrer">RaspiBlitz's FAQs</a>
 
-**\-** <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://docs.raspiblitz.org/docs/category/faqs" target="_blank" rel="noopener noreferrer">RaspiBlitz's FAQs</a>
-
-**\-** <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://github.com/raspiblitz/raspiblitz?tab=readme-ov-file" target="_blank" rel="noopener noreferrer">RaspiBlitz's Github</a>
+**\-** <a href="https://github.com/raspiblitz/raspiblitz?tab=readme-ov-file" target="_blank" rel="noopener noreferrer">RaspiBlitz's Github</a>
 

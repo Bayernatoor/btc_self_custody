@@ -66,6 +66,9 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 // Schema.org JSON-LD for search engines and LLMs
                 <script defer src="/jsonld.js"></script>
 
+                // Image lightbox for guide steps
+                <script defer src="/lightbox.js"></script>
+
                 // Analytics
                 <script async src="https://www.poeticmetric.com/pm.js"></script>
 

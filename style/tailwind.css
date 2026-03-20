@@ -57,3 +57,93 @@
     font-family: var(--font-questrial);
   }
 }
+
+/* ── Step content typography (inner_html from markdown) ────────── */
+.step-content h4 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: #f7931a;
+  padding-bottom: 0.5rem;
+  margin-top: 0.25rem;
+}
+.step-content h5 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #f7931a;
+  padding-bottom: 0.35rem;
+  margin-top: 1rem;
+}
+.step-content p {
+  margin-bottom: 0.5rem;
+  line-height: 1.7;
+}
+.step-content strong {
+  color: rgba(255, 255, 255, 0.95);
+}
+.step-content em {
+  color: rgba(255, 255, 255, 0.7);
+}
+.step-content a {
+  color: #8cb4ff;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color 0.15s;
+}
+.step-content a:hover {
+  color: #b8d4ff;
+}
+.step-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+  margin: 0.75rem 0;
+  cursor: zoom-in;
+  transition: opacity 0.15s;
+}
+.step-content img:hover {
+  opacity: 0.85;
+}
+.step-content ul, .step-content ol {
+  padding-left: 1.5rem;
+  margin: 0.5rem 0;
+}
+.step-content li {
+  margin-bottom: 0.25rem;
+  line-height: 1.6;
+}
+.step-content br {
+  display: block;
+  content: "";
+  margin: 0.25rem 0;
+}
+
+/* ── Image lightbox ────────── */
+#lightbox-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  align-items: center;
+  justify-content: center;
+  cursor: zoom-out;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+#lightbox-overlay.active {
+  opacity: 1;
+}
+#lightbox-img {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 0.75rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  transform: scale(0.9);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+#lightbox-overlay.active #lightbox-img {
+  transform: scale(1);
+}

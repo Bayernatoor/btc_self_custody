@@ -112,7 +112,7 @@ fn Menu(
             <div class:hidden=move || !is_open()>
                 <div class="mt-1 px-5 py-4 bg-white/5 border border-white/10 rounded-xl animate-slidedown">
                     <div
-                        class="text-[0.9rem] leading-relaxed text-white/80"
+                        class="step-content text-[0.9rem] leading-relaxed text-white/80"
                         inner_html=faq_content
                     ></div>
                 </div>
