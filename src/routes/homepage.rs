@@ -74,7 +74,7 @@ pub fn HomePage() -> impl IntoView {
                     </div>
                     <h3 class="text-base font-semibold text-white mb-1.5">"Financial Sovereignty"</h3>
                     <p class="text-[0.85rem] text-white/60 leading-relaxed">
-                        "Send and receive bitcoin anywhere, anytime, without permission. No borders, no business hours, no gatekeepers. That's the point."
+                        "Send and receive bitcoin anywhere, anytime, without permission. No borders, no business hours, no gatekeepers."
                     </p>
                 </div>
             </div>
@@ -93,7 +93,7 @@ pub fn HomePage() -> impl IntoView {
                         <div class="text-[#f7931a] text-xs font-semibold uppercase tracking-widest mb-2">"Basic"</div>
                         <h3 class="text-base font-semibold text-white mb-1.5 group-hover:text-[#f4a949] transition-colors">"Mobile & Desktop Wallets"</h3>
                         <p class="text-[0.85rem] text-white/50 leading-relaxed">
-                            "Get started with Blue Wallet, Green Wallet, or Sparrow. Create your private key and take possession of your bitcoin in minutes."
+                            "Get started with Blue Wallet, Green Wallet, or Sparrow. Generate your keys and take possession of your bitcoin in minutes."
                         </p>
                     </div>
                 </a>

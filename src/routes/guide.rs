@@ -11,6 +11,7 @@ use crate::extras::stepper::Stepper;
 use crate::guides::{
     self, DownloadLink, GuideLevelDef, ProductLink, WalletDef,
 };
+use crate::routes::guideselector::guide_selector_view;
 
 // =============================================================================
 // Shared sub-components
@@ -179,7 +180,12 @@ pub fn GuideTwoSegment() -> impl IntoView {
                 (Some(lid), Some(seg)) => {
                     match guides::find_level(lid) {
                         Some(level) => {
-                            if PLATFORMS.contains(&seg) {
+                            if seg == "desktop" {
+                                // /guides/basic/desktop → show OS picker
+                                let (selected_level, set_selected_level) = signal(Some(level.id));
+                                let (selected_platform, set_selected_platform) = signal(Some("desktop"));
+                                guide_selector_view(selected_level, set_selected_level, selected_platform, set_selected_platform).into_any()
+                            } else if PLATFORMS.contains(&seg) {
                                 render_level_page(level, seg).into_any()
                             } else {
                                 match level.steps.iter().find(|s| s.id == seg) {

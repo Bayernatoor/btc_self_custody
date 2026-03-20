@@ -82,11 +82,36 @@ fn back_button_view(
     }
 }
 
+/// Route handler for `/guides/:level` — pre-selects the level.
+#[component]
+pub fn GuideLevelSelector() -> impl IntoView {
+    use leptos_router::hooks::use_params_map;
+    let params = use_params_map();
+    let initial_level = params.read().get("level")
+        .and_then(|id| guides::find_level(&id).map(|l| l.id));
+
+    let (selected_level, set_selected_level) = signal(initial_level);
+    let (selected_platform, set_selected_platform) =
+        signal(None::<&'static str>);
+
+    guide_selector_view(selected_level, set_selected_level, selected_platform, set_selected_platform)
+}
+
 #[component]
 pub fn GuideSelector() -> impl IntoView {
     let (selected_level, set_selected_level) = signal(None::<&'static str>);
     let (selected_platform, set_selected_platform) =
         signal(None::<&'static str>);
+
+    guide_selector_view(selected_level, set_selected_level, selected_platform, set_selected_platform)
+}
+
+pub fn guide_selector_view(
+    selected_level: ReadSignal<Option<&'static str>>,
+    set_selected_level: WriteSignal<Option<&'static str>>,
+    selected_platform: ReadSignal<Option<&'static str>>,
+    set_selected_platform: WriteSignal<Option<&'static str>>,
+) -> impl IntoView {
 
     // Step: 1 = level, 2 = platform, 3 = OS (desktop only)
     let step = Signal::derive(move || {
