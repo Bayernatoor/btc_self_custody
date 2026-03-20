@@ -1,0 +1,41 @@
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@200..700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Questrial&display=swap');
+
+@import 'tailwindcss';
+
+@source "../src/**/*.rs";
+
+@theme {
+  --font-questrial: "Questrial", sans-serif;
+  --font-title: "Oswald", sans-serif;
+
+  --animate-fadein: fadein 2s ease-in-out forwards;
+  --animate-fadeinone: fadeinone 1s ease-in-out forwards;
+  --animate-slideout: slideout 1s ease-in-out;
+  --animate-slidein: slidein 1s ease-in-out;
+  --animate-slideinfast: slidein 0.25s ease-out;
+
+  @keyframes fadein {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+  }
+  @keyframes fadeinone {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+  }
+  @keyframes slideout {
+    0% { transform: translateX(0%); opacity: 1; }
+    99.999% { opacity: 0; }
+    100% { transform: translateX(-100%); opacity: 1; }
+  }
+  @keyframes slidein {
+    0% { transform: translateX(100%); opacity: 1; }
+    100% { transform: translateX(0%); opacity: 1; }
+  }
+}
+
+@layer base {
+  p, h1, h2, h3 {
+    font-family: var(--font-questrial);
+  }
+}

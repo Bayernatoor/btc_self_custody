@@ -1,13 +1,13 @@
 use leptos::ev::TouchEvent;
 use leptos::html::Div;
-use leptos::*;
+use leptos::prelude::*;
 use leptos_use::{on_click_outside_with_options, OnClickOutsideOptions};
 
 #[allow(clippy::redundant_closure)]
 #[component]
 pub fn NavBar() -> impl IntoView {
-    let (menu_clicked, set_menu_clicked) = create_signal(false);
-    let navbar_menu = create_node_ref::<Div>();
+    let (menu_clicked, set_menu_clicked) = signal(false);
+    let navbar_menu = NodeRef::<Div>::new();
 
     // Hook to close navbar menu when clicking outside
     let _ = on_click_outside_with_options(
@@ -18,7 +18,7 @@ pub fn NavBar() -> impl IntoView {
         OnClickOutsideOptions::default().ignore(["#navbar_hamburger_menu"]),
     );
 
-    // Hanlder for mobile hamburger menu
+    // Handler for mobile hamburger menu
     let on_touchstart = move |event: TouchEvent| {
         event.stop_immediate_propagation();
         set_menu_clicked.set(!menu_clicked.get());
@@ -56,7 +56,7 @@ pub fn NavBar() -> impl IntoView {
                             stroke-linejoin="round"
                             stroke-width="2"
                             d="M4 6h16M4 12h16M4 18h16"
-                            class:hidden=move || menu_clicked()
+                            class:hidden=move || menu_clicked.get()
                         ></path>
                         // X Icon to close menu
                         <path
@@ -64,7 +64,7 @@ pub fn NavBar() -> impl IntoView {
                             stroke-linejoin="round"
                             stroke-width="2"
                             d="M6 18L18 6M6 6l12 12"
-                            class:hidden=move || !menu_clicked()
+                            class:hidden=move || !menu_clicked.get()
                         ></path>
                     </svg>
                 </div>
@@ -75,8 +75,8 @@ pub fn NavBar() -> impl IntoView {
         <div
             node_ref=navbar_menu
             class="lg:hidden flex flex-col justify-end fixed top-16 right-4 z-20 bg-white border border-gray-200 shadow-md rounded-md p-2 cursor-pointer"
-            class:hidden=move || !menu_clicked()
-            class=("animate-slideinfast", move || menu_clicked())
+            class:hidden=move || !menu_clicked.get()
+            class=("animate-slideinfast", move || menu_clicked.get())
         >
             <a
                 href="/guides"

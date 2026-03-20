@@ -1,7 +1,7 @@
-use leptos_router::*;
+use leptos::prelude::Get;
+use leptos_router::hooks::use_location;
 
-// get the current path via the RouteContext
+// get the current path via the location
 pub fn get_current_path() -> String {
-    // Retrieve the URL path of the current route
-    use_route().path()
+    use_location().pathname.get()
 }

@@ -1,4 +1,4 @@
-use leptos::*;
+use leptos::prelude::*;
 
 #[allow(clippy::redundant_closure)]
 #[component]
@@ -124,7 +124,7 @@ pub fn Footer() -> impl IntoView {
                     target="_blank"
                     rel="noopener noreferrer"
                 >
-                    "Made with 🧡 by Bayer"
+                    "Made with \u{1f9e1} by Bayer"
                 </a>
             </div>
         </footer>

@@ -1,6 +1,6 @@
 use crate::extras::back::BackButton;
 use leptos::ev::MouseEvent;
-use leptos::*;
+use leptos::prelude::*;
 
 /// used to create a struct representing the values required for a button.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -27,10 +27,6 @@ impl GuideDetails {
     }
 }
 
-/// Returns the sub categories of `GuideSelector()`. Determines
-/// which OS options to display (android, ios or desktop), based on what is
-/// passed to the component in `GuideSelector`
-/// then generates and returns the buttons
 #[allow(clippy::redundant_closure)]
 #[component]
 fn LevelButton<F>(
@@ -42,9 +38,8 @@ fn LevelButton<F>(
     #[prop(optional)] devices: Vec<String>,
 ) -> impl IntoView
 where
-    F: Fn(MouseEvent) + 'static + Clone,
+    F: Fn(MouseEvent) + 'static + Clone + Send + Sync,
 {
-    let (guide, set_guide) = create_signal::<Vec<GuideDetails>>(vec![]);
     let mut guides = Vec::new();
     let mut id = 0;
 
@@ -61,34 +56,27 @@ where
         ))
     }
 
-    set_guide(guides);
+    let guide = RwSignal::new(guides);
 
-    // If only one option is available (desktop) the <Show>'s fallback will be used to display i
-    // otherwise, the options are pushed into a Vec<GuideDetails> and then iterated over to
-    // generate a button for each platform's guide.
     view! {
         <Show
-            when=move || setter()
+            when=move || setter.get()
             fallback=move || {
-                {
-                    view! {
-                        <button
-                            class="flex flex-col z-20 p-4 max-w-md mx-auto w-72 bg-white rounded-xl items-center mt-6 shadow-md hover:bg-[#f2f2f2] transition ease-in-out duration-300"
-                            class:hidden=move || hidden()
-                            on:click=on_click.clone()
-                        >
-                            <div class="text-3xl font-bold text-[#f79231]">{name.clone()}</div>
-                            <p class="text-lg text-[#123c64] mt-3">{subtitle.clone()}</p>
-                        </button>
-                    }
-                }
-                    .into_view()
+                view! {
+                    <button
+                        class="flex flex-col z-20 p-4 max-w-md mx-auto w-72 bg-white rounded-xl items-center mt-6 shadow-md hover:bg-[#f2f2f2] transition ease-in-out duration-300"
+                        class:hidden=move || hidden.get()
+                        on:click=on_click.clone()
+                    >
+                        <div class="text-3xl font-bold text-[#f79231]">{name.clone()}</div>
+                        <p class="text-lg text-[#123c64] mt-3">{subtitle.clone()}</p>
+                    </button>
+                }.into_any()
             }
         >
-
             <div class="flex flex-col items-center py-5 gap-5 animate-fadeinone">
                 <For
-                    each=move || guide()
+                    each=move || guide.get()
                     key=|guide| guide.id
                     children=move |guide| {
                         view! {
@@ -102,37 +90,31 @@ where
                                 </button>
                             </a>
                         }
-                            .into_view()
                     }
                 />
-
             </div>
             <div class="mt-5 flex flex-col md:flex-row items-center justify-center">
                 <BackButton button_image="./../../../arrow-111-512.png".to_string() reload=true/>
             </div>
         </Show>
-    }.into_view()
+    }
 }
 
 /// returns the available guides (basic, intermediate and advanced)
-/// and is responsbile for calling `LevelButton` which displays availabe OS guides.
 #[allow(clippy::redundant_closure)]
 #[allow(non_camel_case_types)]
 #[component]
 pub fn GuideSelector() -> impl IntoView {
-    // set on_click
-    let (basic_clicked, set_basic_clicked) = create_signal(false);
-    let (intermediate_clicked, set_intermediate_clicked) = create_signal(false);
-    let (advanced_clicked, set_advanced_clicked) = create_signal(false);
+    let (basic_clicked, set_basic_clicked) = signal(false);
+    let (intermediate_clicked, set_intermediate_clicked) = signal(false);
+    let (advanced_clicked, set_advanced_clicked) = signal(false);
 
-    // used to hidden other buttons on click
-    let (basic_hidden, set_basic_hidden) = create_signal(false);
-    let (intermediate_hidden, set_intermediate_hidden) = create_signal(false);
-    let (advanced_hidden, set_advanced_hidden) = create_signal(false);
+    let (basic_hidden, set_basic_hidden) = signal(false);
+    let (intermediate_hidden, set_intermediate_hidden) = signal(false);
+    let (advanced_hidden, set_advanced_hidden) = signal(false);
 
-    // Derived signal for explainer copy based on clicked state
     let explainer = move || {
-        if basic_clicked() || intermediate_clicked() || advanced_clicked() {
+        if basic_clicked.get() || intermediate_clicked.get() || advanced_clicked.get() {
             "Select your preferred OS".to_string()
         } else {
             "Select a guide based on how much Bitcoin you are protecting."
@@ -140,7 +122,6 @@ pub fn GuideSelector() -> impl IntoView {
         }
     };
 
-    // devices to be included in guide level
     let basic_devices: Vec<String> = vec![
         "Android".to_string(),
         "iOS".to_string(),
@@ -164,7 +145,7 @@ pub fn GuideSelector() -> impl IntoView {
                 />
                 <div class="px-6 pt-2 max-w-3xl">
                     <p class="text-white text-xl text-center pb-2 2xl:text-2xl">
-                        {move || explainer()}
+                        {explainer}
                     </p>
                 </div>
             </div>
@@ -175,7 +156,6 @@ pub fn GuideSelector() -> impl IntoView {
                         set_intermediate_hidden.set(true);
                         set_advanced_hidden.set(true)
                     }
-
                     name="Basic".to_string()
                     subtitle="I have a teeny weeny stack".to_string()
                     hidden=basic_hidden
@@ -189,7 +169,6 @@ pub fn GuideSelector() -> impl IntoView {
                         set_basic_hidden.set(true);
                         set_advanced_hidden.set(true)
                     }
-
                     name="Intermediate".to_string()
                     subtitle="I have an average stack".to_string()
                     hidden=intermediate_hidden
@@ -203,7 +182,6 @@ pub fn GuideSelector() -> impl IntoView {
                         set_basic_hidden.set(true);
                         set_intermediate_hidden.set(true)
                     }
-
                     name="Advanced".to_string()
                     subtitle="I am well equipped".to_string()
                     hidden=advanced_hidden

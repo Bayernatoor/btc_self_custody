@@ -1,6 +1,6 @@
 use crate::extras::accordion_menu::AccordionMenu;
 use crate::extras::buttons::*;
-use leptos::*;
+use leptos::prelude::*;
 
 // Renders the intro page to the intermediate guide
 #[component]
@@ -10,7 +10,7 @@ pub fn IntermediateIntroPage() -> impl IntoView {
     let quote = "Rights Are Not Given, They Are Taken".to_string();
     let quote_author = "-Aldous Huxley".to_string();
 
-    let explanation: String = "In this guide, we'll start by setting up a Coldcard signing device (AKA hardware wallet), and connecting it to Sparrow. 
+    let explanation: String = "In this guide, we'll start by setting up a Coldcard signing device (AKA hardware wallet), and connecting it to Sparrow.
         In part two we'll decide which Bitcoin node implementation to use, and then connect our Sparrow wallet to it.
         Once we're through with this, you'll have a standards based, secure and private Bitcoin self-custody solution.
         ".to_string();
@@ -87,7 +87,6 @@ pub fn IntermediateHardwarePage() -> impl IntoView {
             // Section 2: Purchase Buttons
             <div class="px-4 lg:pt-0 lg:px-0">
                 <div class="flex flex-col gap-4">
-                    // - Purchase Buttons
                     <div class="flex justify-center">
                         <GenericExternalButton
                             path="https://store.coinkite.com/store/bundle-mk4-basic".to_string()
@@ -170,7 +169,6 @@ pub fn IntermediateNodePage() -> impl IntoView {
             // Section 2: Purchase Buttons
             <div class="px-4 lg:pt-0 lg:px-0">
                 <div class="flex flex-col md:flex-row justify-center gap-4">
-                    // Purchase Buttons
                     <div class="flex justify-center md:justify-end">
                         <GenericExternalButton
                             path="https://start9.com/".to_string()

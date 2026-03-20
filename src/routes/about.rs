@@ -1,4 +1,4 @@
-use leptos::*;
+use leptos::prelude::*;
 
 /// Renders the About page of the application.
 #[component]
@@ -14,7 +14,7 @@ pub fn AboutPage() -> impl IntoView {
                 <p class="text-lg lg:text-lg text-center text-white px-6 pt-4">
                     "We Hodl BTC is about taking self-custody of your bitcoin.
                     The goal is to help anyone take ownership regardless of how many satoshis or bitcoin they own.
-                    Bitcoin’s core values are of self-sovereignty, decentralization, trust minimization and preservation of wealth. 
+                    Bitcoin's core values are of self-sovereignty, decentralization, trust minimization and preservation of wealth.
                     I believe that taking self-custody of your bitcoin naturally follows."
                 </p>
             </header>
@@ -26,7 +26,7 @@ pub fn AboutPage() -> impl IntoView {
                     <h2 class="text-2xl lg:text-3xl text-[#f7931a] font-semibold">"About"</h2>
                     <p class="text-lg pt-2">
                         "I go by Bayer, I am a Bitcoiner who believes bitcoin is the most significant discovery of our time.
-                        In a world conditioned to spend endlessly, bitcoin rewards those who embrace saving, fostering a mindset 
+                        In a world conditioned to spend endlessly, bitcoin rewards those who embrace saving, fostering a mindset
                         of low time preference and incentivizing long-term thinking and planning."
                     </p>
                     <p class="text-lg pt-2">

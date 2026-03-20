@@ -1,5 +1,5 @@
 use crate::extras::accordion_menu::AccordionMenu;
-use leptos::*;
+use leptos::prelude::*;
 
 /// Renders the faq page of the application.
 #[component]
@@ -7,7 +7,7 @@ pub fn FaqPage() -> impl IntoView {
     let quote = "Free software is a matter of liberty, not price. To understand the concept, you should think of 'free' as in 'free speech,' not as in 'free beer'." ;
     let quote_author = "- Richard Stallman";
     let intro =  "The guides are meant to help anyone self-custody their bitcoin, regardless of how much they own. The guides are opinionated, recommending few options to
-                 help cut through the noise and streamline the self-custody process. All software recommendations are licensed using open and permissive licenses which follow 
+                 help cut through the noise and streamline the self-custody process. All software recommendations are licensed using open and permissive licenses which follow
                  the principales set forth by Richard Stallman regarding Free Software. The intention is to eliminate the need to trust me, since you
                  can verify it for yourself.";
 

@@ -6,4 +6,3 @@ pub mod faq;
 pub mod guideselector;
 pub mod homepage;
 pub mod intermediate;
-pub mod not_found;
