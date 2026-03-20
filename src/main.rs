@@ -1,39 +1,33 @@
-#![allow(unused_imports)]
+/// SSR server — Axum serves pre-rendered HTML + static assets.
+/// The WASM client hydrates on load for client-side interactivity.
 #[cfg(feature = "ssr")]
-use {
-    actix_web::main,
-    sqlx::postgres::PgPoolOptions,
-    sqlx::PgPool,
-    std::net::TcpListener,
-    we_hodl_btc::configuration::get_configuration,
-    we_hodl_btc::run,
-    we_hodl_btc::telemetry::{get_subscriber, init_subscriber},
-};
+#[tokio::main]
+async fn main() {
+    use axum::Router;
+    use leptos::prelude::*;
+    use leptos_axum::{generate_route_list, LeptosRoutes};
+    use tokio::net::TcpListener;
+    use we_hodl_btc::app::{shell, App};
 
-#[cfg(feature = "ssr")]
-#[actix_web::main]
-async fn main() -> std::io::Result<()> {
-    let subscriber =
-        get_subscriber("we_hodl_btc".into(), "info".into(), std::io::stdout);
-    init_subscriber(subscriber);
+    let conf = get_configuration(None).unwrap();
+    let addr = conf.leptos_options.site_addr;
+    let leptos_options = conf.leptos_options;
+    let routes = generate_route_list(App);
 
-    let configuration = get_configuration().expect("Failed to read config");
-    let connection_pool = PgPoolOptions::new()
-        .acquire_timeout(std::time::Duration::from_secs(2))
-        .connect_lazy(&configuration.database.connection_string())
-        .expect("Failed to connect to Postgres.");
-    let address = format!(
-        "{}:{}",
-        configuration.application.host, configuration.application.port
-    );
-    let listener = TcpListener::bind(address)?;
-    run(listener, connection_pool).await?.await?;
-    Ok(())
+    let app = Router::new()
+        .leptos_routes(&leptos_options, routes, {
+            let leptos_options = leptos_options.clone();
+            move || shell(leptos_options.clone())
+        })
+        .fallback(leptos_axum::file_and_error_handler(shell))
+        .with_state(leptos_options);
+
+    let listener = TcpListener::bind(&addr).await.unwrap();
+    println!("Server listening on http://{}", addr);
+    axum::serve(listener, app.into_make_service())
+        .await
+        .unwrap();
 }
 
 #[cfg(not(feature = "ssr"))]
-pub fn main() {
-    // no client-side main function
-    // unless we want this to work with e.g., Trunk for pure client-side testing
-    // see lib.rs for hydration function instead
-}
+fn main() {}

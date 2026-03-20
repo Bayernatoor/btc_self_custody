@@ -1,233 +1,118 @@
 ### [Setting up the Coldcard](#intermediate-setting-up-coldcard)
 
-<h4 class="text-2xl pb-2 text-[#f7931a] font-semibold">Setting up Your Coldcard</h4>
+<h4>Setting up Your Coldcard</h4>
 
 You've gathered all the parts, now is the time to setup your Coldcard. There are many guides and approaches to setting up a Coldcard, from very simple to complex.
 In this guide we'll provide a balanced approach to ensure privacy and security without overwhelming you with technical details.
 
-<br>
+This guide has several steps but the process itself is relatively simple. Take it slow and you'll be setup in no time. If you have any questions throughout the process feel free to reach out to me via
+<a href="mailto:wehodlbtc@pm.me" target="_blank" rel="noopener noreferrer">email</a> or through the links in the footer.
 
-This guide has several steps but the process itself is relatively simple. Take it slow and you'll be setup in no time. If you have any questions throughout the process feel free to reachout to me via 
-<a class="text-blue-400 hover:text-[#3c6594]" href="mailto:wehodlbtc@pm.me" target="_blank" rel="noopener noreferrer">email</a> or through the links in the footer.
+<h5>Visual Inspection</h5>
 
-
-<br>
-
-<h5 class="text-xl pb-4 text-[#f7931a] font-semibold">Visual Inspection</h5>
-
-**1\.** Upon receiving your Coldcard, inspect the tamper evident bag, ensure it wasn't opened or tampered with. 
-
-<br>
+**1\.** Upon receiving your Coldcard, inspect the tamper evident bag, ensure it wasn't opened or tampered with.
 
 **2\.** Open the bag and verify that the device has not been tampered with.
- 
-<br>
 
 **3\.** The bag itself has a unique serial number on it. We'll match that number to the one on the Coldcard, so don't dispose of it yet.
 
-<br>
-
 **4\.** Inside the bag you'll find a Coldcard, a serialized tear off tab of the bag and a Wallet Backup Card. The number on the tab should match the number on the bag.
 
-<br>
+<h5>Updating the Firmware</h5>
 
-<h5 class="text-xl pb-2 text-[#f7931a] font-semibold">Updating the Firmware</h5>
+**1\.** Download the Coldcard's latest <a href="https://coldcard.com/docs/upgrade/" target="_blank" rel="noopener noreferrer">firmware here</a>.
 
+**2\.** After downloading the firmware to your computer, I highly recommend that you
+<a href="https://coldcard.com/docs/upgrade/#dont-trust-verify-the-firmware" target="_blank" rel="noopener noreferrer">verify it by following this guide</a>.
 
-**5\.** Download the Coldcard's latest <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://coldcard.com/docs/upgrade/" target="_blank" rel="noopener noreferrer">firmware here</a>.
+**3\.** Once downloaded & verified, connect one of the MicroSD cards to your computer and copy the firmware file to it.
 
-<br>
+**4\.** Connect your Coldcard to power **(DO NOT connect it to a computer)**. Use Coldpower or a USB battery/wall charger.
 
-**6\.** After downloading the firmware to your computer, I highly recommend that you
-<a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://coldcard.com/docs/upgrade/#dont-trust-verify-the-firmware" target="_blank" rel="noopener noreferrer">verify it by following this guide</a>.
+***Note:*** *Some battery packs will turn off when connected to low power devices. I recommend using a USB wall charger or Coldpower.*
 
-<br>
+**5\.** Your Coldcard will power up, verify that the serial number on the device matches the one on the bag.
 
-**7\.** Once downloaded & verified, connect one of the MicroSD cards to your computer and copy the firmware file to it. 
+**6\.** If it matches, press the **Checkmark** in the bottom right corner.
 
-<br>
+**7\.** Next, insert the MicroSD card into the Coldcard. Click on ***Advanced -> Upgrade Firmware -> From MicroSD***. Select the firmware to use, wait for the Coldcard to update.
 
-**8\.** Connect your Coldcard to power **(DO NOT connect it to a computer)**. Use Coldpower or a USB battery/wall charger.
+<h5>Setting a PIN</h5>
 
-<br>
+**1\.** The PIN grants complete access to your Coldcard so choose it wisely. It consists of a prefix and a suffix each comprised of 2-6 digits.
+**There is no way to recover this PIN so keep it safe!**
 
-***Note:*** *Some battery packs will turn off when connected to low power devices I recommend using a USB wall charger or coldpower.*
+**2\.** Select **Choose Pin Code**.
 
-<br>
+**3\.** Enter the prefix (first part of the pin), I recommend using at least 4 digits. Write it down on the included backup card.
 
-**9\.** Your Coldcard will power up, verify that the serial number on the device matches the one on the bag.
+**4\.** After pressing the **Checkmark** you'll be presented with **2 anti-phishing words**. Make note of these on the backup card. These words
+will appear each time you enter your prefix. They confirm that your Coldcard has not been tampered with since you last accessed it.
 
-<br>
+**5\.** Now enter the suffix, again use a minimum of 4-6 digits and write them down on the backup card.
 
-**10\.** If it matches, press the **Checkmark** in the bottom right corner. 
+**6\.** You'll be asked to re-enter the prefix & suffix and confirm the anti-phishing words. Make sure you wrote everything down correctly.
 
-<br>
+<h5>Creating a New Wallet</h5>
 
-**11\.** Next, insert the MicroSD card into the Coldcard. Click on ***Advanced -> Upgrade Firmware -> From MicroSD***. Select the firmware to use, wait for the Coldcard to update.
+***Note:*** *The Coldcard came with 2 MicroSD cards. Use one for the encrypted wallet backup that you'll generate after wallet creation. Use the second to save an encrypted copy of your Passphrase and for signing transactions.*
 
-<br>
+**1\.** From the main page, press on **New Wallet**. After a moment 24 words will appear.
 
-<h5 class="text-xl pb-2 text-[#f7931a] font-semibold">Setting a Pin</h5>
+**2\.** So as to not fully trust Coldcard's random number generator, we'll add our own entropy and we'll do so by rolling some dice.
 
-**12\.** The PIN grants complete access to your Coldcard so choose it wisely. It consists of a prefix and a suffix each comprised of 2-6 digits.
-        **There is no way to recover this PIN so keep it safe!**
+**3\.** Press 4 to add dice rolls to your seed.
 
-<br>
+**4\.** Roll a **minimum** of 100 dice, adding each roll to the Coldcard, when finished press the **Checkmark**. Don't cheat, make sure you actually roll the dice and enter the number, otherwise your security may be weakened.
 
-**13\.** Select **Choose Pin Code**.
+**5\.** A new list of 24 words will be displayed. Copy these words to the backup card. Take your time and make sure you copy them correctly.
 
-<br>
+**6\.** Time for a test. Coldcard will ask you to confirm all the words in an arbitrary order.
 
-**14\.** Enter the prefix (first part of the pin), I recommend using at least 4 digits. Write it down on the included backup card.
+**7\.** Congrats, you've successfully created a new seed (private key) on your Coldcard. But we're not done yet.
 
-<br>
+**8\.** If you're using this device to protect large sums of bitcoin you'll want to make sure you did everything correctly. To confirm that you did, you'll delete the seed from the device and restore it using the words you wrote down.
 
-**15\.** After pressing the **Checkmark** you'll be presented with **2 anti-phishing words**. Make note of these on the backup card. These words
-        will appear each time you enter your prefix. They confirm that your Coldcard has not been tampered with since you last accessed it.
+**9\.** Every seed generates a unique Fingerprint (AKA Extended/Master Fingerprint), let's write that down. Click on ***Advanced -> View Identity***. A unique Fingerprint will appear, write it down.
 
-<br>
+**10\.** Let's delete the current seed on your Coldcard. Go to ***Advanced -> Danger Zone -> Seed Functions -> Destroy Seed***. Read and agree to the warnings.
 
-**16\.** Now enter the suffix, again use a minimum of 4-6 digits and write them down on the backup card.
+**11\.** Re-enter your pin to access your Coldcard. Go to ***Import Existing -> 24 words***. Re-enter your seed. Use the arrows to scroll down to select the first letter, second letter and so on, repeat the process for each word. Once you get to the 23rd word, Coldcard will present you with several options for the 24th word, select the correct one. If your 24th word does not appear you either made a mistake or incorrectly copied the words (try re-entering the words).
 
-<br>
+**12\.** Once you've entered all 24 words press on the **Checkmark** to confirm. Go to ***Advanced -> View Identity*** and confirm that you've actually restored the original seed words by verifying that the **Extended Fingerprint** matches.
 
-**17\.** You'll be asked to re-enter the prefix & suffix and confirm the anti-phising words. Make sure you wrote everything down correctly.
+<h5>Adding a Passphrase</h5>
 
-<br>
+**1\.** A Passphrase acts as a **"25th word"** and helps add additional security to your seed words. Adding a Passphrase would help prevent access to your wallet if someone was able to obtain your 24 words. Remember, the original 24 words result in a valid wallet, adding a 25th word creates an entirely new wallet.
 
-<h5 class="text-xl pb-2 text-[#f7931a] font-semibold">Creating a New Wallet</h5>
+**2\.** Adding a Passphrase to your 24 seed words will result in a new Extended Fingerprint. It's important to write this down since the Coldcard cannot confirm if you've entered the correct Passphrase. But you can confirm it via the unique Extended Fingerprint.
 
-**NOTE: The Coldcard came with 2 MicroSD cards. Use one of the 2 for the encrypted wallet backup that you'll generate after wallet creation. Use the second to save an encrypted copy of your Passphrase and for 
-        signing transactions.**
+**3\.** Let's begin. Select **Passphrase** from the main menu.
 
-<br>
+**4\.** Read the warnings and press the **Checkmark**.
 
-**18\.** From the main page, press on **New Wallet**. After a moment 24 words will appear.
+**5\.** I recommend selecting a combination of words, numbers and special characters, make sure it's at least 12 characters in length.
 
-<br>
+**6\.** Write this Passphrase down and/or stamp it onto steel, then store it in a safe place. **Don't store it with your seed words**, but keep it safe - **it's just as important as your 24 seed words.**
 
-**19\.** So as to not fully trust Coldcard's random number generator, we'll add our own entropy and we'll do so by rolling some dice.
+**7\.** Copy the **XFP (Extended/Master Fingerprint)** down as well. If you ever restore your wallet, you'll use the Fingerprint to confirm that you've entered the correct seed words and Passphrase.
 
-<br>
+**8\.** When satisfied, press on **APPLY**. Ensure you have the second MicroSD card inserted and press 1 to create & save an encrypted backup of the Passphrase. The previous encrypted backup you made of the seed words does NOT save your Passphrase. Make sure that you've also written the Passphrase down and keep it safe! For more information on the encrypted backups created by Coldcard see the <a href="https://coldcard.com/docs/backups/#background" target="_blank" rel="noopener noreferrer">Coldcard Docs</a>.
 
-**20\.** Press 4 to add dice rolls to your seed.
+**9\.** Your Coldcard is now using a new wallet comprised of the 24 original words plus your Passphrase.
 
-<br>
+***Note:*** *The Coldcard does not remember your Passphrase, you must enter it every time you turn on the device. To do so, enter your PIN, insert the MicroSD card and select Passphrase -> Restore Saved. Select the correct Passphrase - after loading, the Passphrase will be in effect until you log out. For more detailed information on Passphrases see the* <a href="https://coldcard.com/docs/passphrase/#using-a-saved-passphrase" target="_blank" rel="noopener noreferrer">Coldcard Docs</a>.
 
-**21\.** Roll a **minimum** of 100 dice, adding each roll to the Coldcard, when finished press the **Checkmark**. Don't cheat, make sure you actually roll the dice and enter the number, otherwise your security may be weaken.
+<h5>Summary</h5>
 
-<br>
+Congrats, you've successfully set up your Coldcard with a 24 word seed and a Passphrase. At this point you should have the following:
+a backup card with your **PIN suffix + prefix** as well as your **2 anti-phishing words**, your **24 seed words** and that seed's **Extended Fingerprint**.
+You should also have an encrypted backup of your **Seed Words**, your **Passphrase** and the new **Master Fingerprint**.
 
-**22\.** A new list of 24 words will be displayed. Copy these words to the backup card. Take your time and make sure you copy them correctly.
+***Note:*** *Your Coldcard stores your 24 seed words but not your Passphrase. Every time you access your wallet you'll need to enter your Passphrase. After adding the Passphrase, double check that it's the correct wallet by confirming that the Extended Fingerprint matches.*
 
-<br>
-
-**23\.** Time for a test. Coldcard will ask you to confirm all the words in an arbitrary order.  
-
-<br>
-
-**24\.** Congrats, you've successfully created a new seed (private key) on your Coldcard. But we're not done yet. 
-
-<br>
-
-**25\.** If you're using this device to protect large sums of bitcoin you'll want to make sure you did everything correctly. To confirm that you did, you'll delete the seed from the device
-and restore it using the words you wrote down. 
-
-<br>
-
-**26\.** Every seed generates a unique Fingerprint (AKA Extended/Master Fingerprint), let's write that down. Click on ***Advanced -> View Identity***. A unique Fingerprint will appear, write it down.
-
-<br>
-
-**27\.** Let's delete the current seed on your Coldcard. Go to ***Advanced -> Danger Zone -> Seed Functions -> Destroy Seed***. Read and agree to the warnings.
-
-<br>
-
-**28\.** Re-enter your pin to access your Coldcard. Go to ***Import Existing -> 24 words***. Re-enter your seed. Use the arrows to scroll down to select the first letter, 
-second letter and so on, repeat the process for each word. Once you get to the 23rd word, Coldcard with present you with several options for the 24th word, select the correct one. If your 24th word
-does not appear you either made a mistake or incorrectly copied the words (try re-entering the words). 
-
-<br>
-
-**29\.** Once you've entered all 24 words press on the **Checkmark** to confirm. Go to ***Advanced -> View Identity*** and confirm that you've actually restored the original seed words
-         by verifying that the **Extended Fingerprint** matches. 
-
-<br>
-
-<h5 class="text-xl pb-4 text-[#f7931a] font-semibold">Adding a Passphrass</h5>
-
-**30\.** A Passphrase acts as **"25th word"** and helps add additional security to your seed words. Adding a Passphrase would help prevent access to your wallet if someone 
-was able to obtain your 24 words. Remember, the original 24 words result in a valid wallet, adding a 25th word creates an entirely new wallet.
-
-<br>
-
-**31\.** Adding a Passphrase to your 24 seed words will result in a new Extended Fingerprint. It's important to write this down since the Coldcard cannot confirm if you've entered
-the correct Passphrase. But you can confirm it via the unique Extended Fingerprint.
-
-<br>
-
-**32\.** Let's begin. Select **Passphrase** from the main menu. 
-
-<br>
-
-**33\.** Read the warnings and press the **Checkmark**. 
-
-<br>
-
-**34\.** I recommend selecting a combination of words, numbers and special characters, make sure it's at least 12 chars in length.
-
-<br>
-
-**35\.** Write this Passphrase down and/or stamp it onto steel, then store it in a safe place. Also, **don't store it with your seed words**. 
-         But keep it safe since, **it's just as important as your 24 seed words.**
-
-<br>
-
-**36\.** Copy the **XFP (Extended/Master Fingerprint)** down as well. If you ever restore your wallet, you'll use the Fingerprint to confirm that you've entered the correct seed words and Passphrase. 
-
-<br>
-
-**37\.** When satisfied, press on **APPLY**. Ensure you have the second MicroSD card inserted and press 1 to create & save an encrypted backup of the Passphrase. 
-         The previous encrypted backup you made of the seed words does NOT save your Passphrase. Make sure that you've also written the Passphrase down and keep it safe! 
-         For more information on the encrypted backups created by Coldcard see the 
-         <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://coldcard.com/docs/backups/#background" target="_blank" rel="noopener noreferrer">ColdCard Docs</a>.
-
-<br>
-
-**38\.**  Your Coldcard is now using a new wallet comprised of the 24 original words plus your Passphrase. 
-
-<br>
-
-***Note:*** *The ColdCard does not remember your Passphrase, you must enter it everytime you turn on the device. To do so enter your PIN, insert the MicroSD card and select ***Passphrase --> Restore Saved***. 
-        Select the correct Passphrase, after loading the Passphrase will be in effect until you logout. 
-        For more detailed information on Passphrases see the*
-        <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://coldcard.com/docs/passphrase/#using-a-saved-passphrase" target="_blank" rel="noopener noreferrer">ColdCard Docs</a>.
-
-<br>
-
-<h5 class="text-xl pb-2 text-[#f7931a] font-semibold">Summary</h5>
-
-Congrats, you've successfully set up your Coldcard with a 24 word seed and a Passphrase. at this point you should have the following:
-a backup card with your **pin suffix + prefix** as well as your **2 anti-phishings** words, your **24 seed words** and that seed's **Extended Fingerprint**. 
-You should also have an encrypted backup of your **Seed Words**, your **Passphrase** and the new **Master Fingerprint**. 
-
-<br>
-
-***Note:*** *Your Coldcard stores your 24 seed words but not your Passphrase, everytime you access your wallet you'll need to enter your Passphrase.*
-*after adding the Passphrase double check that it's the correct wallet by confirming that the Extended Fingerprint matches.*
-
-<br>
-
-- For more details on how Passphrases work click
-<a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://coldcard.com/docs/passphrase/#passphrases-and-your-coldcard" target="_blank" rel="noopener noreferrer">here</a>.
-
-<br>
-
-- To view Coldcard's official documention click 
-<a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://coldcard.com/docs/" target="_blank" rel="noopener noreferrer">here</a>.
-
-<br>
-
-- To learn about some of Coldcard's best features checkout Econoalchemist's great blog post
-<a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://www.econoalchemist.com/post/my-top-10-coldcard-features" target="_blank" rel="noopener noreferrer">here</a>.
-
+<ul>
+    <li><a href="https://coldcard.com/docs/passphrase/#passphrases-and-your-coldcard" target="_blank" rel="noopener noreferrer">How Passphrases work</a> - Coldcard's official documentation on Passphrases.</li>
+    <li><a href="https://coldcard.com/docs/" target="_blank" rel="noopener noreferrer">Coldcard Documentation</a> - Official Coldcard documentation.</li>
+    <li><a href="https://www.econoalchemist.com/post/my-top-10-coldcard-features" target="_blank" rel="noopener noreferrer">Top 10 Coldcard Features</a> - Econoalchemist's blog post on Coldcard's best features.</li>
+</ul>
