@@ -5,7 +5,7 @@ or memory pool, is a temporary repository for unconfirmed transactions on the bi
 Every node, or computer, participating in the network maintains its own mempool, which stores these transactions until 
 they are confirmed by a miner and added to a block.
 
-You can visualize a mempool as follows. Imagine going to the dentist, you'll check-in at reception (broadcast a transaction) than wait in the waiting room. However,
+You can visualize a mempool as follows. Imagine going to the dentist, you'll check-in at reception (broadcast a transaction) then wait in the waiting room. However,
 this dentist is somewhat of a capitalist and will see patients based on the fee that they are willing to pay. The higher the fee, the quicker
 you get to see the dentist. The lower the fee the longer you wait. Although simplified, the mempool works in a similar fashion. As transactions
 get broadcasted they sit unconfirmed in the mempool waiting for a bitcoin miner to include them in their block template. Miners are incentivized to include

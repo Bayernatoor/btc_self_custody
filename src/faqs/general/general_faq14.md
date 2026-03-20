@@ -25,7 +25,7 @@
     </li>
     <li>
         <a href="https://academy.saifedean.com/product/tbs-hardcover/" target="_blank" rel="noopener noreferrer">The Bitcoin Standard</a>
-        <span>by Saifedaen Ammous</span>
+        <span>by Saifedean Ammous</span>
     </li>
     <li>
         <a href="https://www.amazon.com/Bitcoin-Technical-innovations-Sjors-Provoost/dp/9090360425" target="_blank" rel="noopener noreferrer">Bitcoin: A Work In Progress</a>

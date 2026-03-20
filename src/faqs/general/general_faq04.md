@@ -10,5 +10,5 @@ That is to say, someone who owns and controls their bitcoin private keys and the
 wealth, without the need for a third party intermediary (e.g. banks). 
 
 As the old bitcoin adage goes
-**not your keys, not your coins**. For a deep dive on self-sovereignty and it's importance see this article by 
+**not your keys, not your coins**. For a deep dive on self-sovereignty and its importance see this article by 
 <a href="https://bitcoinmagazine.com/culture/bitcoin-self-custody-and-financial-sovereignty" target="_blank" rel="noopener noreferrer">Kudzai Kutukwa.</a>

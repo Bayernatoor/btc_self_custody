@@ -13,7 +13,7 @@
 
 **4\.** 10x your Bitcoin security with <strong>Michael Flaxman's</strong> <a href="https://btcguide.github.io/" target="_blank" rel="noopener noreferrer">10x security Bitcoin Guide.</a>
 
-**5\.** Fantastic video guides for all things Bitcoin at </strong> <a href="https://www.btcsessions.ca/" target="_blank" rel="noopener noreferrer">btcsessions.ca</a> created by <strong>BTCsessions</strong>.
+**5\.** Fantastic video guides for all things Bitcoin at <a href="https://www.btcsessions.ca/" target="_blank" rel="noopener noreferrer">btcsessions.ca</a> created by <strong>BTCsessions</strong>.
 
 **6\.** Highly thought-provoking essays, writings and musings can be found at <a href="https://dergigi.com" target="_blank" rel="noopener noreferrer">dergigi.com</a> created by <strong>Gigi</strong>. 
 

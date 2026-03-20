@@ -8,7 +8,7 @@ pub fn HomePage() -> impl IntoView {
         <Title text="WE HODL BTC — Bitcoin Self-Custody Guides"/>
 
         // Hero
-        <section aria-label="Hero" class="grid gap-2 mx-auto justify-items-center max-w-3xl mt-14 px-6 opacity-0 animate-fadeinone md:grid-cols-1 lg:grid-cols-2 md:my-24 lg:pb-24 md:max-w-4xl lg:max-w-5xl lg:px-8">
+        <section aria-label="Hero" class="grid gap-2 mx-auto justify-items-center max-w-4xl mt-14 px-6 opacity-0 animate-fadeinone md:grid-cols-1 lg:grid-cols-2 md:my-24 lg:pb-28 lg:px-8">
             <div class="flex flex-col text-center text-white leading-normal md:text-center lg:text-left md:pt-8 lg:pt-0">
                 <h1 class="text-5xl font-title font-normal tracking-tight md:text-6xl lg:text-[5rem]">
                     "Be your" <br/> "own bank"
@@ -38,7 +38,7 @@ pub fn HomePage() -> impl IntoView {
         </section>
 
         // Why Self-Custody
-        <section aria-label="Why self-custody" class="max-w-4xl mx-auto px-6 pb-16 lg:px-8">
+        <section aria-label="Why self-custody" class="max-w-4xl mx-auto px-6 pt-8 pb-24 lg:pb-28 lg:px-8">
             <div class="text-center mb-10">
                 <h2 class="text-2xl lg:text-3xl font-title text-white mb-2">"Why Self-Custody?"</h2>
                 <div class="w-12 h-0.5 bg-[#f7931a] mx-auto mt-2"></div>
@@ -81,7 +81,7 @@ pub fn HomePage() -> impl IntoView {
         </section>
 
         // Guide levels preview
-        <section aria-label="Guide levels" class="max-w-4xl mx-auto px-6 pb-20 lg:px-8">
+        <section aria-label="Guide levels" class="max-w-4xl mx-auto px-6 pb-28 lg:pb-32 lg:px-8">
             <div class="text-center mb-10">
                 <h2 class="text-2xl lg:text-3xl font-title text-white mb-2">"A Guide For Every Level"</h2>
                 <div class="w-12 h-0.5 bg-[#f7931a] mx-auto mt-2 mb-4"></div>
@@ -97,7 +97,7 @@ pub fn HomePage() -> impl IntoView {
                         </p>
                     </div>
                 </a>
-                <a href="/guides" class="block opacity-0 animate-slideup" style="animation-delay: 200ms">
+                <a href="/guides/intermediate/desktop" class="block opacity-0 animate-slideup" style="animation-delay: 200ms">
                     <div class="group bg-white/5 border border-white/10 rounded-xl p-5 hover:bg-white/10 hover:border-white/20 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 h-full">
                         <div class="text-[#f7931a] text-xs font-semibold uppercase tracking-widest mb-2">"Intermediate"</div>
                         <h3 class="text-base font-semibold text-white mb-1.5 group-hover:text-[#f4a949] transition-colors">"Hardware Wallet & Node"</h3>
@@ -106,7 +106,7 @@ pub fn HomePage() -> impl IntoView {
                         </p>
                     </div>
                 </a>
-                <a href="/guides" class="block opacity-0 animate-slideup" style="animation-delay: 300ms">
+                <a href="/guides/advanced/desktop" class="block opacity-0 animate-slideup" style="animation-delay: 300ms">
                     <div class="group bg-white/5 border border-white/10 rounded-xl p-5 hover:bg-white/10 hover:border-white/20 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 h-full">
                         <div class="text-[#f7931a] text-xs font-semibold uppercase tracking-widest mb-2">"Advanced"</div>
                         <h3 class="text-base font-semibold text-white mb-1.5 group-hover:text-[#f4a949] transition-colors">"Multisig Setup"</h3>

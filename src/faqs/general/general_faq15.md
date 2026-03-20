@@ -5,11 +5,11 @@
 
 Bitcoin can be acquired in several ways. Ideally, you can provide a service and accept payment in Bitcoin. If earning Bitcoin isn’t an option, you can purchase it through an exchange. However, not all exchanges are the same—some require more personal information than others. Below are my recommendations, but keep in mind that the availability of certain exchanges may vary depending on your location.
 
-<p class ="py-2 text-sm">*Some of the provided links may be referral links. If you choose to use them they will help support the site. </p>
+<p class="py-2 text-sm">*Some of the provided links may be referral links. If you choose to use them they will help support the site. </p>
 
 <h4>Peer to Peer Exchanges:</h4>
 
-<p class ="pb-2">Keep your identity & personal information safe by buying bitcoin like it was meant to be, Peer-to-Peer.</p>
+<p class="pb-2">Keep your identity & personal information safe by buying bitcoin like it was meant to be, Peer-to-Peer.</p>
 
 <ol>
     <li>
@@ -37,7 +37,7 @@ Bitcoin can be acquired in several ways. Ideally, you can provide a service and 
 <h4>KYC Exchanges:</h4>
 
 
-<p class ="pb-2">Regulated Exchanges that require identity verification.</p>
+<p class="pb-2">Regulated Exchanges that require identity verification.</p>
 
 <ol>
     <li>
