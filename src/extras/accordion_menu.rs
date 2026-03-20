@@ -50,7 +50,6 @@ pub async fn fetch_faq(faq_name: String) -> Result<Vec<FAQ>, ServerFnError> {
     Ok(faqs)
 }
 
-
 #[component]
 #[allow(non_snake_case)]
 fn Menu(
