@@ -20,18 +20,12 @@ I recommend following their amazing getting started guide here: <a href="https:/
 
 <h5>However, before you begin:</h5>
 
-**1\.** Sparrow's quick start guide does not make use of the passphrase when creating a wallet. I recommend that you do. When copying your 12 words, you'll notice a checkbox called
-**Use passphrase?**, check it and a field will appear. Add a passphrase (13th word). Make sure it's unique and atleast 12 characters in length
-(use letters, numbers). Write it down and store it apart from your 12 words, it as important as your 12 words!
-
-**2\.** Anytime you open this wallet you'll be asked to enter your wallet passphrase. This is not the same as a password! The password you setup on Sparrow 
-after wallet creation is only meant to prevent unauthorized access to the Sparrow application and can be changed. 
-
-**3\.** Unless you've already got your own bitcoin node. Using a **Public Server** is a fine way to get started. Later guides will touch on setting up a bitcoin node. Which
-will help increase your privacy.
-
-**4\.** Keeping your setup simple at first is best. Future guides will touch on more complex setups. 
-    Normally, the more bitcoin you have to protect the more security you want. A good rule of thumb is to protect your bitcoin as if it was worth 10x its current value.
+<ul>
+    <li>Sparrow's quick start guide does not make use of the passphrase when creating a wallet. I recommend that you do. When copying your 12 words, you'll notice a checkbox called <strong>Use passphrase?</strong>, check it and a field will appear. Add a passphrase (13th word). Make sure it's unique and at least 12 characters in length (use letters, numbers). Write it down and store it apart from your 12 words, it is as important as your 12 words!</li>
+    <li>Anytime you open this wallet you'll be asked to enter your wallet passphrase. This is not the same as a password! The password you set up on Sparrow after wallet creation is only meant to prevent unauthorized access to the Sparrow application and can be changed.</li>
+    <li>Unless you've already got your own bitcoin node, using a <strong>Public Server</strong> is a fine way to get started. Later guides will touch on setting up a bitcoin node, which will help increase your privacy.</li>
+    <li>Keeping your setup simple at first is best. Future guides will touch on more complex setups. Normally, the more bitcoin you have to protect the more security you want. A good rule of thumb is to protect your bitcoin as if it was worth 10x its current value.</li>
+</ul>
 
 Sparrow summarizes it well in this article:
 <a href="https://sparrowwallet.com/docs/best-practices.html#summary" target="_blank" rel="noopener noreferrer">Best Practices</a>

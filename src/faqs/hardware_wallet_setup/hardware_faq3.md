@@ -31,16 +31,13 @@ By now you should have received your Seedplate from Coinkite. Let's transfer the
 
 Let's recap everything we've done so far in terms of backing up our sensitive wallet information. Make sure that you've done the following:
 
-**1\.** Written down your 24 seed words on paper and created an encrypted backup of your Coldcard wallet onto a MicroSD card.  
-
-**2\.** Written down your Passphrase on paper and created an encrypted backup of your Coldcard's Passphrase onto a separate MicroSD card. 
-
-**3\.** Made a backup of your seed words into at least 1 steelplate. Using multiple steelplates allows you to store them in multiple locations for increased safety. It does however, increase the chances of someone finding one.
-
-**4\.** Optionally, you made a backup of your Passphrase into a steelplate. Remember, the Passphrase is as important as the seed words.
-
-**5\.** Do NOT store your 24 seed words with your Passphrase. You may store your Passphrase and the wallet's Extended(Master) Fingerprint together.
-
-**6\.** Do NOT store any of this information online, no not take a digital photo of your seed words. The security/safety of this setup is dependent on keeping everything completely offline. 
+<ul>
+    <li>Written down your 24 seed words on paper and created an encrypted backup of your Coldcard wallet onto a MicroSD card.</li>
+    <li>Written down your Passphrase on paper and created an encrypted backup of your Coldcard's Passphrase onto a separate MicroSD card.</li>
+    <li>Made a backup of your seed words into at least 1 steelplate. Using multiple steelplates allows you to store them in multiple locations for increased safety. It does however, increase the chances of someone finding one.</li>
+    <li>Optionally, made a backup of your Passphrase into a steelplate. Remember, the Passphrase is as important as the seed words.</li>
+    <li>Do NOT store your 24 seed words with your Passphrase. You may store your Passphrase and the wallet's Extended (Master) Fingerprint together.</li>
+    <li>Do NOT store any of this information online. Do not take a digital photo of your seed words. The security/safety of this setup is dependent on keeping everything completely offline.</li>
+</ul>
 
 Last but not least... remember to always KISS! **<a href="https://en.wikipedia.org/wiki/KISS_principle" target="_blank" rel="noreferrer noopener">Keep It Simple Stupid</a>**.

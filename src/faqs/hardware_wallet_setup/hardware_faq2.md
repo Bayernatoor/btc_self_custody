@@ -127,12 +127,9 @@ You should also have an encrypted backup of your **Seed Words**, your **Passphra
 ***Note:*** *Your Coldcard stores your 24 seed words but not your Passphrase, everytime you access your wallet you'll need to enter your Passphrase.*
 *after adding the Passphrase double check that it's the correct wallet by confirming that the Extended Fingerprint matches.*
 
-- For more details on how Passphrases work click
-<a href="https://coldcard.com/docs/passphrase/#passphrases-and-your-coldcard" target="_blank" rel="noopener noreferrer">here</a>.
-
-- To view Coldcard's official documention click 
-<a href="https://coldcard.com/docs/" target="_blank" rel="noopener noreferrer">here</a>.
-
-- To learn about some of Coldcard's best features checkout Econoalchemist's great blog post
-<a href="https://www.econoalchemist.com/post/my-top-10-coldcard-features" target="_blank" rel="noopener noreferrer">here</a>.
+<ul>
+    <li><a href="https://coldcard.com/docs/passphrase/#passphrases-and-your-coldcard" target="_blank" rel="noopener noreferrer">How Passphrases work</a> — Coldcard's official documentation on Passphrases.</li>
+    <li><a href="https://coldcard.com/docs/" target="_blank" rel="noopener noreferrer">Coldcard Documentation</a> — Official Coldcard documentation.</li>
+    <li><a href="https://www.econoalchemist.com/post/my-top-10-coldcard-features" target="_blank" rel="noopener noreferrer">Top 10 Coldcard Features</a> — Econoalchemist's blog post on Coldcard's best features.</li>
+</ul>
 

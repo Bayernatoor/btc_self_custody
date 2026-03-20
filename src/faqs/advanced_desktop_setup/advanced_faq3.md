@@ -12,17 +12,13 @@ in the foot...as the old adage goes, Keep It Simple Stupid.
 
 <h4>Important Considerations</h4>
 
-**1\.** How many co-signers (N) will be used?
-
-**2\.** How many co-signers (M) will be required to approve a transaction? 
-
-**3\.** What hardware will you use to store the private keys. I recommend using the latest Coldcard (Mk4 as of this writing) 
-        but to eliminate vendor risk you can chose hardware from various manufacturers (make sure they support Multisig).
-        Some more options can be found on **<a href="https://thebitcoinhole.com/hardware-wallets" target="_blank" rel="noopener noreferrer">The Bitcoin Hole</a>**.
-
-**4\.** You'll need 2 MicroSD cards per Coldcard (1 for the encrypted wallet backup and the other for the Passphrase), plus 1 more for the Multisig setup (you can technically use any MicroSD card for this, such as the one used for a Passphrase).
-
-**5\.** You'll need to obtain each wallets XPUB, XFP(extended Fingerprint) and the key derivation path. No worries, the guide below will cover all of this. 
+<ul>
+    <li>How many co-signers (N) will be used?</li>
+    <li>How many co-signers (M) will be required to approve a transaction?</li>
+    <li>What hardware will you use to store the private keys? I recommend using the latest Coldcard (Mk4 as of this writing) but to eliminate vendor risk you can choose hardware from various manufacturers (make sure they support Multisig). Some more options can be found on <a href="https://thebitcoinhole.com/hardware-wallets" target="_blank" rel="noopener noreferrer">The Bitcoin Hole</a>.</li>
+    <li>You'll need 2 MicroSD cards per Coldcard (1 for the encrypted wallet backup and the other for the Passphrase), plus 1 more for the Multisig setup (you can technically use any MicroSD card for this, such as the one used for a Passphrase).</li>
+    <li>You'll need to obtain each wallet's XPUB, XFP (extended Fingerprint) and the key derivation path. The guide below will cover all of this.</li>
+</ul>
 
 ***Note: For this guide we will set up a 2-of-3 Multisig using 3 Mk4 Coldcards, we'll then import it into Sparrow Wallet for easier visualization and support.***
 

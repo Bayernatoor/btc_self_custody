@@ -2,8 +2,6 @@
 
 Bitcoin is the result of decades of research in cryptography and dozens of attempts at creating a digitally native money.
 
-&nbsp;
-
 In 2008 an anonymous person by the name of Satoshi Nakamoto released a whitepaper entitled
 <a href="https://bitcoin.org/bitcoin.pdf" target="_blank" rel="noopener noreferrer">"Bitcoin: A Peer-to-Peer Electronic Cash System."</a>
 The bitcoin network went live on January 3rd, 2009 with the mining of the first block. The block itself

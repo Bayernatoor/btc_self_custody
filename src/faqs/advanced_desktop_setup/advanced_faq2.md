@@ -13,24 +13,20 @@ To recover the funds locked in a Multisig wallet you will need **M** private key
 
 <h5>DO NOTs:</h5>
 
-**1\.** Do not take digital photos of your Seed Words.
-
-**2\.** Do not store your Seed Words on an internet connected device.
-
-**3\.** Do not create/invent new backup methods, make sure you follow all the latest standards. DIY security is a bad idea.
+<ul>
+    <li>Do not take digital photos of your Seed Words.</li>
+    <li>Do not store your Seed Words on an internet connected device.</li>
+    <li>Do not create/invent new backup methods, make sure you follow all the latest standards. DIY security is a bad idea.</li>
+</ul>
 
 <h5>DOs:</h5>
 
-**1\.** Write down your 12 or 24 Seed Words, your Passphrase and your extended Fingerprint on **separate pieces of paper**. 
-        Passphrase + Fingerprint can be stored together, but stored apart from the Seed Words.
-
-**2\.** On the Coldcard, create an **encrypted backup** of the Seed Words and save it to a MicroSD card. Also, save your Passphrase to a separate MicroSD card. 
-
-**3\.** For each Coldcard you've setup add the 12 or 24 Seed Words to a Seedplate or other steel backup solution. You may also want to save your Passphrases in steel. 
-
-**4\.** When finalizing the Multisig wallet setup in Sparrow save the **Wallet Output descriptor** as a PDF and keep this file safe. 
-        Funds cannot be stolen with this file but it's required to re-create the Multisig wallet.
-        You may also export a text file containing the XPUBS and Extended Fingerprints of the Multisig wallet.
+<ul>
+    <li>Write down your 12 or 24 Seed Words, your Passphrase and your extended Fingerprint on <strong>separate pieces of paper</strong>. Passphrase + Fingerprint can be stored together, but stored apart from the Seed Words.</li>
+    <li>On the Coldcard, create an <strong>encrypted backup</strong> of the Seed Words and save it to a MicroSD card. Also, save your Passphrase to a separate MicroSD card.</li>
+    <li>For each Coldcard you've set up, add the 12 or 24 Seed Words to a Seedplate or other steel backup solution. You may also want to save your Passphrases in steel.</li>
+    <li>When finalizing the Multisig wallet setup in Sparrow, save the <strong>Wallet Output descriptor</strong> as a PDF and keep this file safe. Funds cannot be stolen with this file but it's required to re-create the Multisig wallet. You may also export a text file containing the XPUBS and Extended Fingerprints of the Multisig wallet.</li>
+</ul>
 
 <a href="./../../../sparrow_wallet_export.png" target="_blank">
     <img id="sparrow_wallet_export" src="./../../../sparrow_wallet_export.png" alt="sparrow_wallet_export" width="600"/> 
@@ -42,7 +38,7 @@ To recover the funds locked in a Multisig wallet you will need **M** private key
     <img id="xpub_backup" src="./../../../wehodlbtc_xpub_backup.png" alt="xpub_backup" width="800"/> 
 </a>
 
-**5\.** Listen to this amazing podcast on 10Xing your Bitcoin security by **<a href="https://stephanlivera.com/episode/215/" target="_blank" rel="noopener noreferrer" >Stephan Livera with Michael Flaxman</a>**.
+Listen to this amazing podcast on 10Xing your Bitcoin security by <a href="https://stephanlivera.com/episode/215/" target="_blank" rel="noopener noreferrer">Stephan Livera with Michael Flaxman</a>.
 
 <h5>Storage Best Practices</h5>
 

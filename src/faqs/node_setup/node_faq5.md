@@ -9,37 +9,32 @@ For those who want to get their hands dirty with a Raspiberry Pi. You can't go w
     <img id="raspiblitz" src="./../../../raspiblitz_graphics.jpg" alt="raspiblitz graphics" width="600"/> 
 </a>
 
-<h4>Features:</h4>
+<h4>Features</h4>
 
--- RaspiBlitz is <a href="https://github.com/fusion44/raspiblitz/blob/dev/LICENSE" target="_blank" rel="noopener noreferrer">open-source and available under an MIT license</a>
+<ul>
+    <li>RaspiBlitz is <a href="https://github.com/fusion44/raspiblitz/blob/dev/LICENSE" target="_blank" rel="noopener noreferrer">open-source and available under an MIT license</a>.</li>
+    <li>Supports LND & CoreLightning implementations.</li>
+    <li>Comes with optional Graphical display for easy initial setup and monitoring.</li>
+    <li>JAM a Joinmarket Web UI for increased privacy.</li>
+    <li>Several other services available via the SSH menu.</li>
+    <li>The original DIY node, excellent for tinkerers.</li>
+</ul>
 
--- Supports LND & CoreLightning implementations.
+<h4>Considerations</h4>
 
--- Comes with optional Graphical display for easy initial setup and monitoring.
+<ul>
+    <li>Advanced features are only available via SSH.</li>
+    <li>Recommended hardware stack uses Raspberry Pi, not suitable for large scale deployment.</li>
+    <li>Bitcoin + Lightning only. Is not an all-in-one personal home server like Start9.</li>
+</ul>
 
--- JAM a Joinmarket Web UI for increased privacy.
+<h4>Resources</h4>
 
--- Several other services available via the SSH menu
-
--- The original DIY node, excellent for thinkerers.
-
-<h4>Considerations:</h4>
-
--- Advanced features are only available via SSH.
-
--- Recommended hardware stack uses Raspiberry Pi, not suitable for large scale deployment
-
--- Bitcoin + Lightning only. Is not an all-in-one personal home server like Start9.
-
-<h4>Resources:</h4>
-
-**\-** <a href="https://shop.fulmo.org/" target="_blank" rel="noopener noreferrer">Buy a pre-made RaspiBlitz</a>
-
-**\-** <a href="https://docs.raspiblitz.org/docs/intro/" target="_blank" rel="noopener noreferrer">Build your own RaspiBlitz</a>
-
-**\-** <a href="https://docs.raspiblitz.org/docs/category/community-resources" target="_blank" rel="noopener noreferrer">Get Support</a>
-
-**\-** <a href="https://docs.raspiblitz.org/docs/category/faqs" target="_blank" rel="noopener noreferrer">RaspiBlitz's FAQs</a>
-
-**\-** <a href="https://github.com/raspiblitz/raspiblitz?tab=readme-ov-file" target="_blank" rel="noopener noreferrer">RaspiBlitz's Github</a>
+<ul>
+    <li><a href="https://shop.fulmo.org/" target="_blank" rel="noopener noreferrer">Buy a pre-made RaspiBlitz</a></li>
+    <li><a href="https://docs.raspiblitz.org/docs/intro/" target="_blank" rel="noopener noreferrer">Build your own RaspiBlitz</a></li>
+    <li><a href="https://docs.raspiblitz.org/docs/category/community-resources" target="_blank" rel="noopener noreferrer">Get Support</a></li>
+    <li><a href="https://docs.raspiblitz.org/docs/category/faqs" target="_blank" rel="noopener noreferrer">RaspiBlitz's FAQs</a></li>
+    <li><a href="https://github.com/raspiblitz/raspiblitz?tab=readme-ov-file" target="_blank" rel="noopener noreferrer">RaspiBlitz's Github</a></li>
+</ul>
 
