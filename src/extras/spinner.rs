@@ -1,8 +1,6 @@
-use leptos::*;
+use leptos::prelude::*;
 
 // generic orange spinner svg
-// will expand on this component to allow for params to be passed in
-// so as to customize the spinner
 #[component]
 pub fn Spinner() -> impl IntoView {
     view! {

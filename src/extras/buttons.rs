@@ -1,61 +1,49 @@
-use leptos::*;
+//! Shared button components used across guide and product pages.
 
-// TODO: rework all buttons and standardize them.
+use leptos::prelude::*;
 
-/// button to for internal redirects
-/// 1. path is required
-/// 2. wallet_title is required (will be renamed, it's simply a title text)
-/// all other params are optional
+/// Internal link button with optional icon and description.
 #[component]
 #[allow(non_snake_case)]
 pub fn GenericButton(
     path: String,
     wallet_title: String,
-    #[prop(default = "xl".to_string())] text_size: String,
     #[prop(optional)] short_desc: String,
     #[prop(optional)] img_url: String,
     #[prop(optional)] img_alt: String,
     #[prop(optional)] text_color: String,
-    #[prop(optional)] new_height: String,
-    #[prop(optional)] new_width: String,
+    #[prop(default = "8".to_string())] new_height: String,
+    #[prop(default = "8".to_string())] new_width: String,
 ) -> impl IntoView {
-    let (width, set_width) = create_signal("12".to_string());
-    let (height, set_heigth) = create_signal("12".to_string());
-
-    if !new_height.is_empty() {
-        set_heigth(new_height)
-    }
-
-    if !new_width.is_empty() {
-        set_width(new_width)
-    }
+    let has_img = !img_url.is_empty();
+    let color = if text_color.is_empty() {
+        "#123c64".to_string()
+    } else {
+        text_color
+    };
 
     view! {
-        <a href=path>
-            <button class="flex justify-center shrink-0 h-18 w-72 p-2 mx-auto bg-white rounded-xl items-center hover:bg-[#f2f2f2]">
-                <div class="flex justify-center basis-1/3 shrink-0">
+        <a href=path class="block">
+            <button class="flex items-center gap-3 w-full max-w-xs px-4 py-2.5 mx-auto bg-white/95 border border-white/20 rounded-lg hover:bg-white hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 transition-all duration-200">
+                {has_img.then(|| view! {
                     <img
-                        class=format!("h-{} w-{}", height.get(), width.get())
-                        src=img_url
-                        alt=img_alt
+                        class=format!("h-{} w-{} shrink-0 object-contain", new_height, new_width)
+                        src=img_url.clone()
+                        alt=img_alt.clone()
                     />
-                </div>
-                <div class="basis-2/3">
-                    <h3 class=format!(
-                        "text-{text_size} font-semibold text-[{text_color}]",
-                    )>{wallet_title}</h3>
-                    <p class="text-slate-500">{short_desc}</p>
+                })}
+                <div class="text-left">
+                    <span class="text-sm font-medium" style=format!("color: {color}")>{wallet_title}</span>
+                    {(!short_desc.is_empty()).then(|| view! {
+                        <p class="text-xs text-slate-500 mt-0.5">{short_desc.clone()}</p>
+                    })}
                 </div>
             </button>
         </a>
     }
 }
 
-/// button for external redirects
-/// 1. path is required
-/// 2. wallet_title is required (will be renamed, it's simply a title text)
-/// all other params are optional
-/// same as GenericButton but is for outside links
+/// External link button with optional icon and description.
 #[component]
 #[allow(non_snake_case)]
 pub fn GenericExternalButton(
@@ -65,68 +53,30 @@ pub fn GenericExternalButton(
     #[prop(optional)] img_url: String,
     #[prop(optional)] img_alt: String,
     #[prop(optional)] text_color: String,
-    #[prop(optional)] new_height: String,
-    #[prop(optional)] new_width: String,
+    #[prop(default = "8".to_string())] new_height: String,
+    #[prop(default = "8".to_string())] new_width: String,
 ) -> impl IntoView {
-    let (width, set_width) = create_signal("12".to_string());
-    let (height, set_heigth) = create_signal("12".to_string());
-
-    if !new_height.is_empty() {
-        set_heigth(new_height)
-    }
-
-    if !new_width.is_empty() {
-        set_width(new_width)
-    }
+    let has_img = !img_url.is_empty();
+    let color = if text_color.is_empty() {
+        "#123c64".to_string()
+    } else {
+        text_color
+    };
 
     view! {
-        <a href=path rel="noreferrer" target="_blank" rel="noreferrer">
-            <button class="flex flex-col justify-center h-auto w-72 p-2 mx-auto bg-white rounded-xl items-center hover:bg-[#f2f2f2]">
-                <div class="flex justify-center basis-1/2">
+        <a href=path rel="noreferrer" target="_blank" class="block">
+            <button class="flex flex-col items-center gap-1.5 w-full max-w-xs px-4 py-3 mx-auto bg-white/95 border border-white/20 rounded-lg hover:bg-white hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 transition-all duration-200">
+                {has_img.then(|| view! {
                     <img
-                        class=format!("h-{} w-{}", height.get(), width.get())
-                        src=img_url
-                        alt=img_alt
+                        class=format!("h-{} w-{} shrink-0 object-contain", new_height, new_width)
+                        src=img_url.clone()
+                        alt=img_alt.clone()
                     />
-                </div>
-                <div class="basis-1/2">
-                    <p class=format!(
-                        "text-md mt-1.5 font-semibold text-[{text_color}]",
-                    )>{wallet_title}</p>
-                    <p class="text-slate-500">{short_desc}</p>
-                </div>
-            </button>
-        </a>
-    }
-}
-
-/// internal button
-/// important params are:
-/// 1. path (href) is required
-/// 2. title
-/// 3. short_desc - location below title
-/// 4. an img - location to the left of text.
-/// all params are optional except path
-#[component]
-#[allow(non_snake_case)]
-pub fn GenericImageSubTextButton(
-    path: String,
-    #[prop(optional)] title: String,
-    #[prop(optional)] short_desc: String,
-    #[prop(optional)] _img_url: String,
-    #[prop(optional)] _img_alt: String,
-    #[prop(optional)] text_color: String,
-    #[prop(optional)] _new_height: String,
-    #[prop(optional)] _new_width: String,
-) -> impl IntoView {
-    view! {
-        <a href=path rel="noreferrer" target="_blank">
-            <button class="flex justify-center shrink-0 h-18 w-72 p-2 mx-auto bg-white rounded-xl items-center space-x-4 shadow-inner hover:bg-[#f2f2f2]">
-                <div>
-                    // <img class=format!("h-{} w-{} inline-flex", height.get(), width.get()) src=img_url alt=img_alt/>
-                    <h3 class=format!("text-lg font-medium text-[{text_color}]")>{title}</h3>
-                    <p class="text-slate-600">{short_desc}</p>
-                </div>
+                })}
+                <span class="text-xs font-medium" style=format!("color: {color}")>{wallet_title}</span>
+                {(!short_desc.is_empty()).then(|| view! {
+                    <p class="text-xs text-slate-500">{short_desc.clone()}</p>
+                })}
             </button>
         </a>
     }

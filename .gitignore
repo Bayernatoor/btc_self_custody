@@ -12,8 +12,20 @@ test-results/
 end2end/playwright-report/
 playwright/.cache/
 
-# other files
+# OS / IDE
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+
+# Project files (not committed)
 resources.txt
 bin/*
 notes.md
 todo.md
+ARCHITECTURE.md
