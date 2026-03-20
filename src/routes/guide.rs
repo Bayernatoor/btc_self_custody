@@ -57,11 +57,11 @@ fn WalletCard(wallet: &'static WalletDef, platform: String, level: String) -> im
     let color = wallet.color;
     view! {
         <a href=path class="block">
-            <button class="flex items-center gap-3 w-full max-w-xs px-4 py-2.5 mx-auto bg-white/95 border border-white/20 rounded-lg hover:bg-white hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 transition-all duration-200">
-                <img class="h-9 w-9 rounded-md shrink-0" src=wallet.logo alt=wallet.logo_alt/>
+            <button class="flex items-center gap-3 w-full max-w-sm px-5 py-3.5 mx-auto bg-white/95 border border-white/20 rounded-xl hover:bg-white hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 transition-all duration-200 cursor-pointer">
+                <img class="h-10 w-10 rounded-md shrink-0" src=wallet.logo alt=wallet.logo_alt/>
                 <div class="text-left">
-                    <h3 class="text-sm font-medium" style=format!("color: {color}")>{wallet.name}</h3>
-                    <p class="text-xs text-slate-500">{wallet.tagline}</p>
+                    <h3 class="text-base font-semibold" style=format!("color: {color}")>{wallet.name}</h3>
+                    <p class="text-sm text-slate-500">{wallet.tagline}</p>
                 </div>
             </button>
         </a>

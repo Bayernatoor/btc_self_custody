@@ -9,7 +9,7 @@ pub fn BlogPage() -> impl IntoView {
 
         <div
             id="about"
-            class="grid gap-6 max-w-5xl mx-auto pb-20 animate-fadeinone grid-rows-[auto_auto_1fr] lg:gap-8 md:my-28"
+            class="grid gap-6 max-w-5xl mx-auto pb-20 px-6 animate-fadeinone grid-rows-[auto_auto_1fr] lg:gap-8 lg:px-8 md:my-28"
         >
             // Section 1: Title and Subtitle
             <div class="flex flex-col mx-auto px-4 pt-10 lg:pt-0">
