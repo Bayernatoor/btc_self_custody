@@ -93,7 +93,7 @@ fn Menu(
                 <button
                     type="button"
                     class="group flex items-center justify-between w-full px-5 py-3.5 text-left bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 hover:border-white/20 transition-all duration-200 cursor-pointer"
-                    aria-expanded=move || is_open()
+                    aria-expanded=is_open
                     on:click=handle_menu_click
                     node_ref=title_ref
                 >

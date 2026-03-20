@@ -16,7 +16,11 @@ pub fn GenericButton(
     #[prop(default = "8".to_string())] new_width: String,
 ) -> impl IntoView {
     let has_img = !img_url.is_empty();
-    let color = if text_color.is_empty() { "#123c64".to_string() } else { text_color };
+    let color = if text_color.is_empty() {
+        "#123c64".to_string()
+    } else {
+        text_color
+    };
 
     view! {
         <a href=path class="block">
@@ -53,7 +57,11 @@ pub fn GenericExternalButton(
     #[prop(default = "8".to_string())] new_width: String,
 ) -> impl IntoView {
     let has_img = !img_url.is_empty();
-    let color = if text_color.is_empty() { "#123c64".to_string() } else { text_color };
+    let color = if text_color.is_empty() {
+        "#123c64".to_string()
+    } else {
+        text_color
+    };
 
     view! {
         <a href=path rel="noreferrer" target="_blank" class="block">

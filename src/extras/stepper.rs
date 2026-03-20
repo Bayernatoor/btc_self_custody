@@ -35,7 +35,8 @@ fn StepperProgress(
     set_current: WriteSignal<usize>,
 ) -> impl IntoView {
     let total = steps.len();
-    let titles: Vec<String> = steps.iter().map(|f| strip_title(&f.title)).collect();
+    let titles: Vec<String> =
+        steps.iter().map(|f| strip_title(&f.title)).collect();
     let titles_clone = titles.clone();
 
     view! {
@@ -68,7 +69,6 @@ fn StepperProgress(
         <nav aria-label="Guide progress" class="hidden lg:block">
             <ol class="flex items-center justify-center w-full">
                 {(0..total).map(|i| {
-                    let set_current = set_current.clone();
                     view! {
                         <li
                             class="flex items-center cursor-pointer"
@@ -99,7 +99,10 @@ fn StepperProgress(
 }
 
 #[component]
-fn StepperContent(current: ReadSignal<usize>, steps: Vec<FAQ>) -> impl IntoView {
+fn StepperContent(
+    current: ReadSignal<usize>,
+    steps: Vec<FAQ>,
+) -> impl IntoView {
     view! {
         <article>
             {move || {
@@ -136,11 +139,15 @@ fn StepperNav(
 ) -> impl IntoView {
     let go_prev = move |_| {
         let cur = current.get();
-        if cur > 0 { set_current.set(cur - 1); }
+        if cur > 0 {
+            set_current.set(cur - 1);
+        }
     };
     let go_next = move |_| {
         let cur = current.get();
-        if cur < total - 1 { set_current.set(cur + 1); }
+        if cur < total - 1 {
+            set_current.set(cur + 1);
+        }
     };
 
     view! {

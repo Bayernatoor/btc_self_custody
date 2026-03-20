@@ -8,7 +8,9 @@ use leptos::prelude::*;
 use leptos_meta::*;
 
 use crate::extras::stepper::Stepper;
-use crate::guides::{self, DownloadLink, GuideLevelDef, ProductLink, WalletDef};
+use crate::guides::{
+    self, DownloadLink, GuideLevelDef, ProductLink, WalletDef,
+};
 
 // =============================================================================
 // Shared sub-components
@@ -42,7 +44,9 @@ fn PageHeader(
 
 #[component]
 fn DownloadButton(download: &'static DownloadLink) -> impl IntoView {
-    let is_filled = download.icon.contains("fill-rule") || download.icon.contains("M18.71") || download.icon.contains("M3.609");
+    let is_filled = download.icon.contains("fill-rule")
+        || download.icon.contains("M18.71")
+        || download.icon.contains("M3.609");
     view! {
         <a href=download.url rel="noreferrer" target="_blank" class="block w-full">
             <button
@@ -73,7 +77,11 @@ fn DownloadButton(download: &'static DownloadLink) -> impl IntoView {
 }
 
 #[component]
-fn WalletCard(wallet: &'static WalletDef, platform: String, level: String) -> impl IntoView {
+fn WalletCard(
+    wallet: &'static WalletDef,
+    platform: String,
+    level: String,
+) -> impl IntoView {
     let path = format!("/guides/{}/{}/{}", level, platform, wallet.id);
     let color = wallet.color;
     view! {
@@ -118,7 +126,14 @@ fn centered_layout() -> &'static str {
 // Route: /guides/:level/:segment — dispatches to level page or step page
 // =============================================================================
 
-const PLATFORMS: &[&str] = &["android", "ios", "desktop", "desktop-linux", "desktop-macos", "desktop-windows"];
+const PLATFORMS: &[&str] = &[
+    "android",
+    "ios",
+    "desktop",
+    "desktop-linux",
+    "desktop-macos",
+    "desktop-windows",
+];
 
 #[component]
 pub fn GuideTwoSegment() -> impl IntoView {
@@ -152,7 +167,10 @@ pub fn GuideTwoSegment() -> impl IntoView {
     }
 }
 
-fn render_level_page(level: &'static GuideLevelDef, platform: &str) -> impl IntoView {
+fn render_level_page(
+    level: &'static GuideLevelDef,
+    platform: &str,
+) -> impl IntoView {
     let platform_display = guides::platform_display(platform);
     let page_title = format!("{} | WE HODL BTC", level.title);
     let wallets = guides::wallets_for(level, platform);
@@ -216,7 +234,10 @@ fn render_level_page(level: &'static GuideLevelDef, platform: &str) -> impl Into
     }
 }
 
-fn render_level_intro(level: &'static GuideLevelDef, _platform: &str) -> impl IntoView {
+fn render_level_intro(
+    level: &'static GuideLevelDef,
+    _platform: &str,
+) -> impl IntoView {
     match level.id {
         "intermediate" => view! {
             <div class="bg-white/5 border border-white/10 rounded-xl p-5">
@@ -309,7 +330,10 @@ pub fn GuideWalletPage() -> impl IntoView {
     }
 }
 
-fn render_wallet_page(wallet: &'static WalletDef, platform: &str) -> impl IntoView {
+fn render_wallet_page(
+    wallet: &'static WalletDef,
+    platform: &str,
+) -> impl IntoView {
     let page_title = format!("{} Guide | WE HODL BTC", wallet.name);
     let downloads = guides::downloads_for(wallet, platform);
 
@@ -338,7 +362,10 @@ fn render_wallet_page(wallet: &'static WalletDef, platform: &str) -> impl IntoVi
     }
 }
 
-fn render_step_page(step: &'static guides::GuideStep, level_id: &str) -> impl IntoView {
+fn render_step_page(
+    step: &'static guides::GuideStep,
+    level_id: &str,
+) -> impl IntoView {
     let page_title = format!("{} | WE HODL BTC", step.title);
 
     view! {
