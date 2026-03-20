@@ -217,7 +217,10 @@ fn render_level_page(
 
     let crumbs = vec![
         (level.name.to_string(), "/guides".to_string()),
-        (platform_display.to_string(), format!("/guides/{}/{}", level.id, platform)),
+        (
+            platform_display.to_string(),
+            format!("/guides/{}/{}", level.id, platform),
+        ),
     ];
 
     let is_desktop = guides::is_desktop_os(platform);
@@ -391,14 +394,21 @@ fn render_wallet_page(
     let downloads = guides::downloads_for(wallet, platform);
     let level_name = level.map(|l| l.name).unwrap_or("Guide");
     let platform_display = guides::platform_display(platform);
-    let os_tip = guides::os_tip(platform).map(|(t, b)| (t.to_string(), b.to_string()));
+    let os_tip =
+        guides::os_tip(platform).map(|(t, b)| (t.to_string(), b.to_string()));
     let is_desktop = guides::is_desktop_os(platform);
     let platform_display_owned = platform_display.to_string();
 
     let crumbs = vec![
         (level_name.to_string(), "/guides".to_string()),
-        (platform_display.to_string(), format!("/guides/{}/{}", level_id, platform)),
-        (wallet.name.to_string(), format!("/guides/{}/{}/{}", level_id, platform, wallet.id)),
+        (
+            platform_display.to_string(),
+            format!("/guides/{}/{}", level_id, platform),
+        ),
+        (
+            wallet.name.to_string(),
+            format!("/guides/{}/{}/{}", level_id, platform, wallet.id),
+        ),
     ];
 
     view! {
@@ -461,7 +471,10 @@ fn render_step_page(
 
     let crumbs = vec![
         (level_name.to_string(), "/guides".to_string()),
-        (step.name.to_string(), format!("/guides/{}/{}", level_id, step.id)),
+        (
+            step.name.to_string(),
+            format!("/guides/{}/{}", level_id, step.id),
+        ),
     ];
 
     view! {
