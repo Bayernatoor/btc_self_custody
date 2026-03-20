@@ -37,4 +37,4 @@ got a BIP39 mnemonic seed.
     <img id="sparrow wallet recovery complete" src="./../../../sparrow_wallet_recovery_complete.png" alt="sparrow wallet recovery complete" width="800"/> 
 </a>
 
-Need additional help? Reach out to us via the information on <a href="/faq" target="_blank">our help desk page</a>.
+Need additional help? Reach out to me via the information on <a href="/faq" target="_blank">the help desk page</a>.

@@ -8,7 +8,7 @@ Another term for a bitcoin wallet is a **bitcoin signing device**. This term mor
 storing your keys and facilitating the creation and signing of transactions using your private key. As long as you safeguard your bitcoin private key, 
 you can access your funds using any modern bitcoin wallet software.
 
-See the <a href="/guides">guides</a> for our wallet recommendations.
+See the <a href="/guides">guides</a> for my wallet recommendations.
 
 Wallets allow you to easily manage your UTXOs, view your balance, and create transactions.
 

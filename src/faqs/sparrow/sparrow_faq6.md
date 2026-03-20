@@ -56,4 +56,4 @@ After one confirmation, the Bitcoin is confirmed and is now owned by the recipie
 It is typically recommended to wait for six confirmations before the transaction is considered entirely settled. 
 One confirmation typically takes about 10 minutes on average.
 
-Need additional help? Reach out to me via the information on <a href="/faq">our help desk page</a>.
+Need additional help? Reach out to me via the information on <a href="/faq">the help desk page</a>.

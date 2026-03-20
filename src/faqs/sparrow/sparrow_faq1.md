@@ -8,4 +8,4 @@ same time educating the user on the inner workings of Bitcoin. I highly recommen
 read their <a href="https://sparrowwallet.com/docs/" target="_blank" rel="noopener noreferrer">documentation and guides</a>. 
 You'll be up and running before you know it!
 
-Need additional help? Reach out to me via the information on <a href="/faq">our help desk page</a>.
+Need additional help? Reach out to me via the information on <a href="/faq">the help desk page</a>.

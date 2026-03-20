@@ -34,4 +34,4 @@ Once the bitcoin is sent it must be included in a block (confirmed/mined). The t
 You'll notice it says **0 conf**. It takes a minimum of 1 confirmation before you can consider the bitcoin yours. 
 It is typically recommended to wait for 6 confirmations before the transaction is considered settled. 1 confirmation typically takes 10 minutes (on average). 
 
-For more general bitcoin questions/answers <a href="/faq">read our FAQs</a>.
+For more general bitcoin questions/answers <a href="/faq">read the FAQs</a>.

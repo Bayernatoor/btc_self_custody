@@ -31,4 +31,4 @@
 **5\.** That's it! You've received your first bitcoin transaction. It is typically recommended to wait for atleast 1 confirmation before considering the bitcoin yours. If 
         the amount is large I recommend waiting up to 6 confirmations (If you sold your car for bitcoin and are about to hand over the keys ;) ).
 
-For more general bitcoin questions/answers <a href="/faq">read our FAQs</a>.
+For more general bitcoin questions/answers <a href="/faq">read the FAQs</a>.

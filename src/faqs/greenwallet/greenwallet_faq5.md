@@ -24,4 +24,4 @@ If you've lost your phone or accidentally deleted the Green wallet app you can e
 
 **Be patient**, after pressing continue it will ask you to set a PIN and attempt to recover your wallet. If successful, it will redirect you to your wallet, your balance and transactions should appear. 
 
-Need additional help? Reach out to us via the information on <a href="/faq">our help desk page</a>.
+Need additional help? Reach out to me via the information on <a href="/faq">the help desk page</a>.

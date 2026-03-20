@@ -20,4 +20,4 @@ As with any other bitcoin wallet, receiving a transaction is quite simple.
 **3\.** The wallet software automatically detects if that specific address receives bitcoin and when it does, it updates to a new receive address. ***Never reuse addresses***. 
         If you're unsure you can click **Get New Address** in the bottom right corner.
 
-Need additional help? Reach out to me via the information on <a href="/faq">our help desk page</a>.
+Need additional help? Reach out to me via the information on <a href="/faq">the help desk page</a>.
