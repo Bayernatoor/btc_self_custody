@@ -55,6 +55,4 @@ so you can create multiple backups if you wish and store them separately in diff
 Ultimately, you must decide what your threat level is and what level of security you require.
 Do not overcomplicate this for the sake of wanting **"The Best"** setup. Just KISS, **<a href="https://en.wikipedia.org/wiki/KISS_principle" target="_blank" rel="noreferrer noopener">Keep It Simple Stupid</a>**.
 
-***More advanced solutions can be found below***
-
 
