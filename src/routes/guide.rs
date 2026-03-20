@@ -118,7 +118,7 @@ fn centered_layout() -> &'static str {
 // Route: /guides/:level/:segment — dispatches to level page or step page
 // =============================================================================
 
-const PLATFORMS: &[&str] = &["android", "ios", "desktop"];
+const PLATFORMS: &[&str] = &["android", "ios", "desktop", "desktop-linux", "desktop-macos", "desktop-windows"];
 
 #[component]
 pub fn GuideTwoSegment() -> impl IntoView {
@@ -153,17 +153,16 @@ pub fn GuideTwoSegment() -> impl IntoView {
 }
 
 fn render_level_page(level: &'static GuideLevelDef, platform: &str) -> impl IntoView {
+    let platform_display = guides::platform_display(platform);
     let page_title = format!("{} | WE HODL BTC", level.title);
     let wallets = guides::wallets_for(level, platform);
     let platform_owned = platform.to_string();
-    let platform_display = match platform {
-        "android" => "Android",
-        "ios" => "iOS",
-        "desktop" => "Desktop",
-        _ => platform,
-    };
     let full_title = if level.id == "basic" {
-        format!("Basic {} Self-Custody Guide", platform_display)
+        if guides::is_desktop_os(platform) {
+            format!("Basic Desktop Self-Custody Guide — {}", platform_display)
+        } else {
+            format!("Basic {} Self-Custody Guide", platform_display)
+        }
     } else {
         level.title.to_string()
     };

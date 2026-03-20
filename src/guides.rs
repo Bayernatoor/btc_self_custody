@@ -178,9 +178,34 @@ pub static SPARROW_WALLET: WalletDef = WalletDef {
         logo_alt: "Download Sparrow Wallet",
         color: "#6f767c",
         icon: r#"<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>"#,
-        platforms: &["desktop"],
+        platforms: &["desktop-linux", "desktop-macos", "desktop-windows"],
     }],
 };
+
+/// Desktop sub-platforms (OS options shown when "Desktop" is selected).
+pub static DESKTOP_OS: &[(&str, &str)] = &[
+    ("desktop-linux", "Linux"),
+    ("desktop-macos", "macOS"),
+    ("desktop-windows", "Windows"),
+];
+
+/// Check if a platform is a desktop OS variant.
+pub fn is_desktop_os(platform: &str) -> bool {
+    platform.starts_with("desktop-")
+}
+
+/// Get display name for any platform.
+pub fn platform_display(platform: &str) -> &str {
+    match platform {
+        "android" => "Android",
+        "ios" => "iOS",
+        "desktop" => "Desktop",
+        "desktop-linux" => "Linux",
+        "desktop-macos" => "macOS",
+        "desktop-windows" => "Windows",
+        p => p,
+    }
+}
 
 pub static ALL_WALLETS: &[&WalletDef] =
     &[&BLUE_WALLET, &GREEN_WALLET, &SPARROW_WALLET];

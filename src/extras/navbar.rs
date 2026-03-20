@@ -24,12 +24,12 @@ pub fn NavBar() -> impl IntoView {
         <nav class="bg-[#123c64] text-white sticky top-0 z-30 w-full">
             <div class="mx-auto px-6 py-3 2xl:px-8 2xl:py-4 flex justify-between items-center border-b border-white/15">
                 // Logo
-                <a href="/" class="text-lg 2xl:text-xl font-medium font-title hover:text-[#f7931a] transition-colors">
+                <a href="/" class="text-xl 2xl:text-2xl font-medium font-title hover:text-[#f7931a] transition-colors">
                     "WE HODL BTC"
                 </a>
 
                 // Desktop nav
-                <div class="hidden text-sm 2xl:text-base space-x-6 lg:flex">
+                <div class="hidden text-base 2xl:text-lg space-x-7 lg:flex">
                     <a href="/guides" class="text-white/80 hover:text-white transition-colors">"Guides"</a>
                     <a href="/faq" class="text-white/80 hover:text-white transition-colors">"Help Desk"</a>
                     <a href="/about" class="text-white/80 hover:text-white transition-colors">"About"</a>
