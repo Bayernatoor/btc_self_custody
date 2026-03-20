@@ -1,8 +1,8 @@
-//! Unified guide pages — replaces beginner.rs, intermediate.rs, advanced.rs.
+//! Unified guide pages - replaces beginner.rs, intermediate.rs, advanced.rs.
 //!
 //! Two route components:
-//! - GuideTwoSegment: /guides/:level/:segment — dispatches to level page or step page
-//! - GuideWalletPage: /guides/:level/:platform/:wallet — wallet-specific stepper
+//! - GuideTwoSegment: /guides/:level/:segment - dispatches to level page or step page
+//! - GuideWalletPage: /guides/:level/:platform/:wallet - wallet-specific stepper
 
 use leptos::prelude::*;
 use leptos_meta::*;
@@ -153,7 +153,7 @@ fn centered_layout() -> &'static str {
 }
 
 // =============================================================================
-// Route: /guides/:level/:segment — dispatches to level page or step page
+// Route: /guides/:level/:segment - dispatches to level page or step page
 // =============================================================================
 
 const PLATFORMS: &[&str] = &[
@@ -207,7 +207,7 @@ fn render_level_page(
     let platform_owned = platform.to_string();
     let full_title = if level.id == "basic" {
         if guides::is_desktop_os(platform) {
-            format!("Basic Desktop Self-Custody Guide — {}", platform_display)
+            format!("Basic Desktop Self-Custody Guide - {}", platform_display)
         } else {
             format!("Basic {} Self-Custody Guide", platform_display)
         }
@@ -352,7 +352,7 @@ fn render_step_navigation(level: &'static GuideLevelDef) -> impl IntoView {
 }
 
 // =============================================================================
-// Route: /guides/:level/:platform/:wallet — Wallet-specific guide stepper
+// Route: /guides/:level/:platform/:wallet - Wallet-specific guide stepper
 // =============================================================================
 
 #[component]

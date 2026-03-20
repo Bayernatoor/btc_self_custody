@@ -5,7 +5,7 @@ use leptos_meta::*;
 #[component]
 pub fn HomePage() -> impl IntoView {
     view! {
-        <Title text="WE HODL BTC — Bitcoin Self-Custody Guides"/>
+        <Title text="WE HODL BTC - Bitcoin Self-Custody Guides"/>
 
         // Hero
         <section aria-label="Hero" class="grid gap-2 mx-auto justify-items-center max-w-4xl mt-14 px-6 opacity-0 animate-fadeinone md:grid-cols-1 lg:grid-cols-2 md:my-24 lg:pb-28 lg:px-8">

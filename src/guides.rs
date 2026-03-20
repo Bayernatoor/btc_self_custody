@@ -1,6 +1,6 @@
 //! Guide definitions: all wallet, level, and platform metadata lives here.
 //!
-//! Single source of truth — no guide content is hardcoded in route components.
+//! Single source of truth - no guide content is hardcoded in route components.
 
 /// A downloadable wallet application.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -198,11 +198,11 @@ pub fn os_tip(platform: &str) -> Option<(&'static str, &'static str)> {
         )),
         "desktop-macos" => Some((
             "macOS Tip",
-            "Sparrow is distributed as a .dmg file. After opening, drag Sparrow to your Applications folder. On first launch, macOS may block it — go to System Settings → Privacy & Security and click Open Anyway."
+            "Sparrow is distributed as a .dmg file. After opening, drag Sparrow to your Applications folder. On first launch, macOS may block it - go to System Settings → Privacy & Security and click Open Anyway."
         )),
         "desktop-windows" => Some((
             "Windows Tip",
-            "Sparrow is distributed as an .exe installer. Windows Defender may flag it on first run — click More Info → Run Anyway. Always verify the download signature to ensure it hasn't been tampered with."
+            "Sparrow is distributed as an .exe installer. Windows Defender may flag it on first run - click More Info → Run Anyway. Always verify the download signature to ensure it hasn't been tampered with."
         )),
         _ => None,
     }

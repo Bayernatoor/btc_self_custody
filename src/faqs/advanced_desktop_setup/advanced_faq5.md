@@ -38,7 +38,7 @@ This greatly increases your security as all parts would need to be recombined to
 
 To understand how this works, please visit the <a href="https://seedxor.com/" target="_blank" rel="noopener noreferrer">official SeedXOR documentation</a>.
 
-<h5>Honorable Mention — Coldcard HSM Mode and CKBunker</h5>
+<h5>Honorable Mention - Coldcard HSM Mode and CKBunker</h5>
 
 
 This Coldcard feature is among the more advanced, so I won’t dive into the details, 

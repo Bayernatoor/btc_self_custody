@@ -3,7 +3,7 @@
 <h4>Supply List</h4>
 
 First things first, get yourself a Coldcard directly from Coinkite's website above.
-The basic bundle comes with a Coldcard MK4, 2 industrial SD cards, and costs around $220—a small price to pay to protect generational wealth.
+The basic bundle comes with a Coldcard MK4, 2 industrial SD cards, and costs around $220. A small price to pay to protect generational wealth.
 
 At the same time, pick up a Seedplate and a Center Punch; you'll need those to back up your seed words. 
 Also, if you don’t have any, grab <a href="https://www.amazon.com/GSE-Games-Sports-Expert-Serialized/dp/B07DF7C279/ref=sr_1_1?sr=8-1">a set of casino dice</a>; 

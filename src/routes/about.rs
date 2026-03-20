@@ -15,7 +15,7 @@ pub fn AboutPage() -> impl IntoView {
                 </h1>
                 <div class="w-16 h-0.5 bg-[#f7931a] mx-auto mt-3 mb-5"></div>
                 <p class="text-[0.9rem] text-white/80 max-w-2xl mx-auto leading-relaxed">
-                    "WE HODL BTC helps you take true ownership of your bitcoin — whether it's your first 100 sats or your life savings. Self-sovereignty starts with self-custody."
+                    "WE HODL BTC helps you take true ownership of your bitcoin - whether it's your first 100 sats or your life savings. Self-sovereignty starts with self-custody."
                 </p>
             </header>
 
@@ -116,7 +116,7 @@ pub fn AboutPage() -> impl IntoView {
                     <h2 class="text-base text-[#f7931a] font-semibold mb-3">"Contribute"</h2>
                     <p class="text-[0.85rem] text-white/80 leading-relaxed">
                         "This project is entirely free and open-sourced under an MIT license.
-                        Contributions are always welcome — feel free to open an "
+                        Contributions are always welcome - feel free to open an "
                         <a
                             class="text-blue-400 hover:text-blue-300 transition-colors"
                             href="https://github.com/Bayernatoor/btc_self_custody"

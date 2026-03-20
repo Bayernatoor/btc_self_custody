@@ -61,12 +61,12 @@ fn StepperProgress(
             <span class="text-xs text-white/50">
                 {move || {
                     let title = titles_clone.get(current.get()).cloned().unwrap_or_default();
-                    format!("Step {} of {} — {}", current.get() + 1, total, title)
+                    format!("Step {} of {} - {}", current.get() + 1, total, title)
                 }}
             </span>
         </div>
 
-        // Desktop: numbered circles with connecting lines (no titles — scales to any step count)
+        // Desktop: numbered circles with connecting lines (no titles - scales to any step count)
         <nav aria-label="Guide progress" class="hidden lg:block">
             <ol class="flex items-center justify-center w-full">
                 {(0..total).map(|i| {

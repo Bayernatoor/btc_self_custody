@@ -7,15 +7,15 @@ pub fn Footer() -> impl IntoView {
             <div class="max-w-4xl mx-auto px-6 py-6 lg:px-8">
                 <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
 
-                    // Left — branding + tagline
+                    // Left - branding + tagline
                     <div class="lg:max-w-sm">
                         <div class="text-base font-semibold text-white uppercase tracking-wide">"WE HODL BTC"</div>
                         <p class="text-sm text-white/50 mt-1.5 leading-relaxed">
-                            "A free resource to help bitcoiners easily take self-custody — whether it's 100 sats or 100 bitcoin."
+                            "A free resource to help bitcoiners easily take self-custody - whether it's 100 sats or 100 bitcoin."
                         </p>
                     </div>
 
-                    // Right — social icons
+                    // Right - social icons
                     <div class="flex items-center gap-2">
                         // GitHub
                         <a

@@ -1,4 +1,4 @@
-//! Guide selector — multi-step flow with slide animations.
+//! Guide selector - multi-step flow with slide animations.
 //!
 //! Step 1: Pick a level (Basic / Intermediate / Advanced)
 //! Step 2: Pick a platform (Android / iOS / Desktop)

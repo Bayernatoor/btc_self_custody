@@ -2,7 +2,7 @@
 
 Bitcoin is money. Bitcoin is a store of value. Bitcoin is an exit.
 
-It's money for the digital age — controlled by no one, accessible to everyone. 
+It's money for the digital age - controlled by no one, accessible to everyone. 
 It's an exit to the current monetary system, which is flawed, inflationary, and not designed to preserve long-term value, 
 thus promoting spending over saving.
 

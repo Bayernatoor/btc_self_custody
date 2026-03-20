@@ -18,7 +18,7 @@ software and hardware.
 <ul>
     <li>The Start9 OS is <a href="https://github.com/start9labs/start-os" target="_blank" rel="noopener noreferrer">open-source and available under an MIT license</a>.</li>
     <li>World class <a href="https://docs.start9.com/0.3.5.x/support/" target="_blank" rel="noopener noreferrer">community support</a>.</li>
-    <li>A clean and intuitive Graphical User interface — no command lines involved.</li>
+    <li>A clean and intuitive Graphical User interface - no command lines involved.</li>
     <li>Easy to use System Backups.</li>
     <li>Encrypted connection over home network.</li>
     <li>A <a href="https://marketplace.start9.com" target="_blank" rel="noopener noreferrer">marketplace</a> for all your sovereign app needs. Many apps are packaged by the community, reducing trust on Start9.</li>
