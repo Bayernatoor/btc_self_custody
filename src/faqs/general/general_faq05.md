@@ -4,7 +4,7 @@ Simply put, a bitcoin transaction represents the transfer of value between 1 or 
 
 <br>
 
-A bitcoin transaction consists of 1 or more inputs and 1 or more outputs. Ultimately, all inputs/ouputs are
+A bitcoin transaction consists of 1 or more inputs and 1 or more outputs. Ultimately, all inputs/outputs are
 called ***unspent transaction outputs*** or UTXO for short. The collection of all UTXOs is called the UXTO set, which 
 can be calculated & verified by anyone running a bitcoin node. This UTXO set is equal to all "bitcoins" or more accurately "satoshis" in circulation.  
 

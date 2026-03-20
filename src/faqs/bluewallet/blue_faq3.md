@@ -1,7 +1,7 @@
 ### [How do I receive bitcoin?](#bluewallet-receiving-bitcoin)
 
 
-<h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Receiving Your First Transaction:</h3>
+<h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Receiving Your First Transaction:</h4>
 
 **1\.** From the main page tap on your newly created wallet. 
 
@@ -49,9 +49,9 @@
 <br>
 
 Once the bitcoin is sent it must be included in a block (confirmed/mined). The transaction will appear as ***Pending*** below ***Transactions***. 
-You'll notice it says **0 conf**. It takes a mininum of 1 confirmation before you can consider the bitcoin yours. 
+You'll notice it says **0 conf**. It takes a minimum of 1 confirmation before you can consider the bitcoin yours. 
 It is typically recommended to wait for 6 confirmations before the transaction is considered settled. 1 confirmation typically takes 10 minutes (on average). 
 
 <br>
 
-For more general bitcoin questions/answers <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="/faq">read our FAQs<a>.
+For more general bitcoin questions/answers <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="/faq">read our FAQs</a>.

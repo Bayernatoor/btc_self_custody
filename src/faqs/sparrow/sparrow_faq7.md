@@ -2,7 +2,7 @@
 
 <h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Recovering or Importing an Existing Wallet</h4>
 
-Wallet recovery can be done using any software that supports **<a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://en.bitcoin.it/wiki/BIP_0039" rel="noopener noreferrer" target="blank">BIP39<a>** 
+Wallet recovery can be done using any software that supports **<a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://en.bitcoin.it/wiki/BIP_0039" rel="noopener noreferrer" target="blank">BIP39</a>** 
 mnemonic seeds. If you followed this guide, including Sparrow's quick start guide, than you've 
 got a BIP39 mnemonic seed. 
 
@@ -53,10 +53,10 @@ got a BIP39 mnemonic seed.
  
 <br>
 
-<a href="./../../../sparrow_wallet_recovery_compelete.png" target="_blank">
+<a href="./../../../sparrow_wallet_recovery_complete.png" target="_blank">
     <img id="sparrow wallet recovery complete" src="./../../../sparrow_wallet_recovery_complete.png" alt="sparrow wallet recovery complete" width="800"/> 
 </a>
 
 <br>
 
-Need additional help? Reach out to us via the information on <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="/faq" target="_blank">our help desk page<a>.
+Need additional help? Reach out to us via the information on <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="/faq" target="_blank">our help desk page</a>.

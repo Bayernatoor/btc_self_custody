@@ -26,7 +26,7 @@ in the foot...as the old adage goes, Keep It Simple Stupid.
 
 **3\.** What hardware will you use to store the private keys. I recommend using the latest Coldcard (Mk4 as of this writing) 
         but to eliminate vendor risk you can chose hardware from various manufacturers (make sure they support Multisig).
-        Some more options can be found on **<a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://thebitcoinhole.com/hardware-wallets" target="_blank" rel="noopener noreferrer">The Bitcoin Hole<a>**.
+        Some more options can be found on **<a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://thebitcoinhole.com/hardware-wallets" target="_blank" rel="noopener noreferrer">The Bitcoin Hole</a>**.
 
 <br>
 
@@ -45,7 +45,7 @@ in the foot...as the old adage goes, Keep It Simple Stupid.
 <h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Preparing your Coldcards</h4>
 
 **1\.** Prepare each of the N Coldcards (signing devices) that will be used in the Multisig quorum. If you've forgotten the steps, please read **Setting up the Coldcard** in the 
-        **<a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="/guides/intermediate/hardware-wallet#setting-up-the-coldcard" target="_blank">Intermediate Guide<a>**. 
+        **<a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="/guides/intermediate/hardware-wallet#setting-up-the-coldcard" target="_blank">Intermediate Guide</a>**. 
         Remember to write down the Seed Words, Passphrase and XFP (Extended/Master Fingerprint) of each wallet you create. 
 
 <br>
@@ -53,7 +53,7 @@ in the foot...as the old adage goes, Keep It Simple Stupid.
 **Note:** *The Coldcard does not remember your Passphrase, you must enter it everytime you turn on the device. To do so enter your PIN, insert the MicroSD card that stores your encrypted Passphrase
         then select **Passphrase --> Restore Saved**. The Passphrase is now in effect until you logout. 
         For more detailed information on Passphrases see the* **<a class="text-[#8cb4ff] underline-offset-auto font-semibold" 
-        href="https://coldcard.com/docs/passphrase/#using-a-saved-passphrase" target="_blank" rel="noopener noreferrer">Coldcard Docs<a>.**
+        href="https://coldcard.com/docs/passphrase/#using-a-saved-passphrase" target="_blank" rel="noopener noreferrer">Coldcard Docs</a>.**
 
 <br>
 
@@ -142,7 +142,7 @@ in the foot...as the old adage goes, Keep It Simple Stupid.
 
 <br>
 
-<p class="text-xl pb-2 text-white font-semibold">Importing the Coldcard ccxp file</4>
+<p class="text-xl pb-2 text-white font-semibold">Importing the Coldcard ccxp file</p>
 
 <a href="./../../../sparrow_multisig_import.png" target="_blank">
     <img id="sparrow_multisig_import" src="./../../../sparrow_multisig_import.png" alt="sparrow_multisig_import" width="600"/> 

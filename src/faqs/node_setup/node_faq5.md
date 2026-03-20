@@ -2,7 +2,7 @@
 
 <h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Choice #3: RaspiBlitz</h4>
 
-RaspiBlitz is the Do-It-Yourselfers wet dream. One of the original DIY Bitcoin and Ligthning node implementations.
+RaspiBlitz is the Do-It-Yourselfers wet dream. One of the original DIY Bitcoin and Lightning node implementations.
 For those who want to get their hands dirty with a Raspiberry Pi. You can't go wrong with RaspiBlitz.
 
 <br>

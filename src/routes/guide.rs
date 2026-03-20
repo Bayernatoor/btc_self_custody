@@ -186,7 +186,7 @@ fn render_level_page(level: &'static GuideLevelDef, platform: &str) -> impl Into
                 {if !wallets.is_empty() {
                     view! {
                         <div class="animate-slideup" style="animation-delay: 200ms">
-                            <h2 class="text-base text-[#f7931a] font-semibold text-center mb-4">"Pick A Wallet"</h2>
+                            <h2 class="text-base text-[#f7931a] font-semibold text-center mb-4">"Pick a Wallet"</h2>
                             <div class="flex flex-col gap-3">
                                 {wallets.iter().enumerate().map(|(i, w)| {
                                     let delay = format!("animation-delay: {}ms", 250 + i * 80);

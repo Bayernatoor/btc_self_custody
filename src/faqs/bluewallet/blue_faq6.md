@@ -13,4 +13,4 @@ funds from your old wallet to this new wallet.**
 
 <br>
 
-Need additional help? Reach out to us via the information on <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="/faq">our help desk page<a>.
+Need additional help? Reach out to us via the information on <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="/faq">our help desk page</a>.

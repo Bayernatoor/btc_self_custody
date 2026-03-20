@@ -52,7 +52,7 @@ click on **Create Transaction**.
  
 <br>
 
-**2\.** On the next screen you'll have the opportunity to verify your transaction. Feel free to review the inputs and ouputs on the left hand side. Confirm that the 
+**2\.** On the next screen you'll have the opportunity to verify your transaction. Feel free to review the inputs and outputs on the left hand side. Confirm that the 
         receiving address is correct. Click on **Details** to view specific/technical details about the transaction. Under **Signatures** you'll find the wallet 
         responsible for signing, in this case it's our Multisig wallet. When you're ready, click on **Finalize Transaction for Signing**.
 

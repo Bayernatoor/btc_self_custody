@@ -17,4 +17,4 @@ it wont be the same you originally created. Make sure you enter the correct pass
 <br>
 
 For more details take a look at Sparrow's FAQ: 
-<a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://sparrowwallet.com/docs/faq.html#all-my-addresses-have-changed" target="_blank" rel="noopener noreferrer">Wallet Recovery<a>.
+<a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://sparrowwallet.com/docs/faq.html#all-my-addresses-have-changed" target="_blank" rel="noopener noreferrer">Wallet Recovery</a>.

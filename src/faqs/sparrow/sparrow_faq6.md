@@ -25,7 +25,7 @@ if you wish to do a self transfer.
 <br>
 
 **5\.** Sparrow automatically calculates a medium-priority fee rate for you. This may, 
-in some circumstances, be too high or low. I always recommend visiting <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://mempool.space/" target="_blank" rel="noopener noreferrer">Mempool.space<a>
+in some circumstances, be too high or low. I always recommend visiting <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://mempool.space/" target="_blank" rel="noopener noreferrer">Mempool.space</a>
 to get a better idea of current fees. If this transaction is very important and needs to be sent quickly, 
 you may want to change to a higher fee. Conversely, if you have time and don’t mind waiting, 
 you can go ahead and slide the fee to a lower amount. Be careful not to set the fee too low, as your transaction could take weeks or might never get confirmed.
@@ -57,7 +57,7 @@ you can go ahead and slide the fee to a lower amount. Be careful not to set the 
 
 <br>
 
-<a href="./../../../sparrow_wallet_send_signing,png" target="_blank">
+<a href="./../../../sparrow_wallet_send_signing.png" target="_blank">
     <img id="sparrow wallet send signing" src="./../../../sparrow_wallet_send_signing.png" alt="sparrow wallet sending signing" width="800"/> 
 </a>
 
@@ -91,4 +91,4 @@ One confirmation typically takes about 10 minutes on average.
 
 <br>
 
-Need additional help? Reach out to me via the information on <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="/faq">our help desk page<a>.
+Need additional help? Reach out to me via the information on <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="/faq">our help desk page</a>.

@@ -42,7 +42,7 @@
 
 ***A note on fees:*** *Bitcoin blocks have limited space which naturally creates a fee market. Fees will go up as demand for block space increases. Although
              wallets do a decent job in suggesting a feerate based on how quickly you need the transaction confirmed, I 
-             recommend checking <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://mempool.space/" target="_blank" rel="noopener noreferrer">Mempool Space<a> to determine
+             recommend checking <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://mempool.space/" target="_blank" rel="noopener noreferrer">Mempool Space</a> to determine
              an appropriate fee to set (Green wallet let's you set a custom fee). If you're in no rush, setting it low can help you save some sats.*
 
 
@@ -78,7 +78,7 @@
 
 <br>
 
-**7\.** Tap on the transcation to view some details such as: number of confirmations, the time it was sent, the transaction id. You'll also have the ability to **Speed up Transaction** if you wish to do so by replacing with a higher fee. 
+**7\.** Tap on the transaction to view some details such as: number of confirmations, the time it was sent, the transaction id. You'll also have the ability to **Speed up Transaction** if you wish to do so by replacing with a higher fee. 
 
 <br>
 

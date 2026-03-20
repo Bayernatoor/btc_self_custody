@@ -28,8 +28,8 @@ pub fn FaqPage() -> impl IntoView {
                 // Intro
                 <div class="bg-white/5 border border-white/10 rounded-xl p-5 max-w-2xl mx-auto">
                     <p class="text-[0.85rem] text-white/80 leading-relaxed">
-                        "The guides are opinionated, recommending few options to help cut through the noise and streamline the self-custody process.
-                        All software recommendations use open and permissive licenses — you don't need to trust me, you can verify it for yourself."
+                        "The guides are opinionated, recommending only a few options to cut through the noise and streamline the self-custody process.
+                        All software recommendations use open and permissive licenses — you don't need to trust me, you can verify it yourself."
                     </p>
                 </div>
             </header>

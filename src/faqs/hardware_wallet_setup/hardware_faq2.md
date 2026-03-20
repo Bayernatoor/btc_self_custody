@@ -154,7 +154,7 @@ does not appear you either made a mistake or incorrectly copied the words (try r
 
 <br>
 
-<h5 class="text-xl pb-4 text-[#f7931a] font-semibold">Adding a Passphrass</h5>
+<h5 class="text-xl pb-4 text-[#f7931a] font-semibold">Adding a Passphrase</h5>
 
 **30\.** A Passphrase acts as **"25th word"** and helps add additional security to your seed words. Adding a Passphrase would help prevent access to your wallet if someone 
 was able to obtain your 24 words. Remember, the original 24 words result in a valid wallet, adding a 25th word creates an entirely new wallet.

@@ -6,7 +6,7 @@ If you've lost your phone or accidentally deleted the BlueWallet app you can eas
 
 <br>
 
-**1\.** Re-install BlueWallet or any **<a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://en.bitcoin.it/wiki/BIP_0039" rel="noopener noreferrer" target="blank">BIP39<a>** compatible wallet. 
+**1\.** Re-install BlueWallet or any **<a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="https://en.bitcoin.it/wiki/BIP_0039" rel="noopener noreferrer" target="blank">BIP39</a>** compatible wallet. 
 
 <br>
 
@@ -48,4 +48,4 @@ If you've lost your phone or accidentally deleted the BlueWallet app you can eas
 
 <br>
 
-Need additional help? Reach out to us via the information on <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="/faq">our help desk page<a>.
+Need additional help? Reach out to us via the information on <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="/faq">our help desk page</a>.

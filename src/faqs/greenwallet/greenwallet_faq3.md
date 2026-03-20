@@ -1,6 +1,6 @@
 ### [How do I receive bitcoin?](#greenwallet-receiving-bitcoin)
 
-<h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Receiving Your First Transaction:</h3>
+<h4 class="text-2xl pb-4 text-[#f7931a] font-semibold">Receiving Your First Transaction:</h4>
 
 **1\.** If you've been following along, you should only have 1 Bitcoin wallet. Enter your PIN if necessary then tap on **Receive**.
 
@@ -16,7 +16,7 @@
 
 <br>
 
-**2\.** From this page you can either have the sender scan the QR code or you can copy the address starting wtih **bc1** and send that to the sender. 
+**2\.** From this page you can either have the sender scan the QR code or you can copy the address starting with **bc1** and send that to the sender. 
 
 <br>
 
@@ -51,4 +51,4 @@
 
 <br>
 
-For more general bitcoin questions/answers <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="/faq">read our FAQs<a>.
+For more general bitcoin questions/answers <a class="text-[#8cb4ff] underline-offset-auto font-semibold" href="/faq">read our FAQs</a>.
