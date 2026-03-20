@@ -220,6 +220,9 @@ fn render_level_page(
         (platform_display.to_string(), format!("/guides/{}/{}", level.id, platform)),
     ];
 
+    let is_desktop = guides::is_desktop_os(platform);
+    let pd = platform_display.to_string();
+
     view! {
         <Title text=page_title/>
         <div class=centered_layout()>
@@ -229,6 +232,15 @@ fn render_level_page(
                 quote=level.quote.to_string()
                 quote_author=level.quote_author.to_string()
             />
+
+            // OS badge for desktop variants
+            {is_desktop.then(|| view! {
+                <div class="flex justify-center mb-4">
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-[#f7931a]/10 text-[#f7931a] border border-[#f7931a]/20">
+                        {pd.clone()}
+                    </span>
+                </div>
+            })}
 
             // Intro
             <div class="w-full mb-8 animate-slideup" style="animation-delay: 100ms">
@@ -379,6 +391,9 @@ fn render_wallet_page(
     let downloads = guides::downloads_for(wallet, platform);
     let level_name = level.map(|l| l.name).unwrap_or("Guide");
     let platform_display = guides::platform_display(platform);
+    let os_tip = guides::os_tip(platform).map(|(t, b)| (t.to_string(), b.to_string()));
+    let is_desktop = guides::is_desktop_os(platform);
+    let platform_display_owned = platform_display.to_string();
 
     let crumbs = vec![
         (level_name.to_string(), "/guides".to_string()),
@@ -395,6 +410,30 @@ fn render_wallet_page(
                 subtitle=wallet.tagline.to_string()
                 quote=wallet.description.to_string()
             />
+
+            // OS badge
+            {is_desktop.then(|| view! {
+                <div class="flex justify-center mb-4 opacity-0 animate-slideup" style="animation-delay: 50ms">
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-[#f7931a]/10 text-[#f7931a] border border-[#f7931a]/20">
+                        {platform_display_owned.clone()}
+                    </span>
+                </div>
+            })}
+
+            // OS-specific tip
+            {os_tip.map(|(title, body)| view! {
+                <div class="w-full mb-6 opacity-0 animate-slideup" style="animation-delay: 80ms">
+                    <div class="flex gap-3 p-4 bg-[#f7931a]/5 border border-[#f7931a]/10 rounded-xl">
+                        <svg class="w-5 h-5 text-[#f7931a] shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <div>
+                            <p class="text-sm font-medium text-[#f7931a] mb-1">{title}</p>
+                            <p class="text-[0.8rem] text-white/60 leading-relaxed">{body}</p>
+                        </div>
+                    </div>
+                </div>
+            })}
 
             // Downloads
             <div class="w-full max-w-sm mx-auto flex flex-col gap-3 mb-8 opacity-0 animate-slideup" style="animation-delay: 100ms">

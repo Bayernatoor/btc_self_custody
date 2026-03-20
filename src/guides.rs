@@ -189,6 +189,25 @@ pub static DESKTOP_OS: &[(&str, &str)] = &[
     ("desktop-windows", "Windows"),
 ];
 
+/// OS-specific tips shown at the top of desktop guide pages.
+pub fn os_tip(platform: &str) -> Option<(&'static str, &'static str)> {
+    match platform {
+        "desktop-linux" => Some((
+            "Linux Tip",
+            "Sparrow is distributed as an AppImage or .deb package. You may need to set executable permissions: right-click the file → Properties → Permissions → Allow executing, or run chmod +x in your terminal. If using the .deb, install with sudo dpkg -i."
+        )),
+        "desktop-macos" => Some((
+            "macOS Tip",
+            "Sparrow is distributed as a .dmg file. After opening, drag Sparrow to your Applications folder. On first launch, macOS may block it — go to System Settings → Privacy & Security and click Open Anyway."
+        )),
+        "desktop-windows" => Some((
+            "Windows Tip",
+            "Sparrow is distributed as an .exe installer. Windows Defender may flag it on first run — click More Info → Run Anyway. Always verify the download signature to ensure it hasn't been tampered with."
+        )),
+        _ => None,
+    }
+}
+
 /// Check if a platform is a desktop OS variant.
 pub fn is_desktop_os(platform: &str) -> bool {
     platform.starts_with("desktop-")
