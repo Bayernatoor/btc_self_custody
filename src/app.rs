@@ -67,6 +67,9 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 <meta name="msapplication-TileColor" content="#123c64"/>
                 <meta name="theme-color" content="#123c64"/>
 
+                // Fallback for browsers without WebAssembly (e.g. Vanadium)
+                <script defer src="/wasm-fallback.js"></script>
+
                 // Schema.org JSON-LD for search engines and LLMs
                 <script defer src="/jsonld.js"></script>
 
