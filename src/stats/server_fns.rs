@@ -1,0 +1,349 @@
+//! Server functions that wrap stats DB queries for Leptos.
+//!
+//! Each function extracts the shared `StatsState` from the Axum extensions,
+//! queries the database (or RPC), and returns shared types from `super::types`.
+
+use leptos::prelude::*;
+use leptos::server;
+
+use super::types::*;
+
+#[cfg(feature = "ssr")]
+use axum::extract::Extension;
+
+#[server(prefix = "/api", endpoint = "stats_summary")]
+pub async fn fetch_stats_summary() -> Result<StatsSummary, ServerFnError> {
+    let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
+        leptos_axum::extract().await.map_err(|e| {
+            ServerFnError::new(format!("Stats not available: {e}"))
+        })?;
+    let conn = state.db.lock().unwrap();
+    let stats = super::db::query_stats(&conn)
+        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+    match stats {
+        Some(s) => Ok(StatsSummary {
+            block_count: s.block_count,
+            min_height: s.min_height,
+            max_height: s.max_height,
+            latest_timestamp: s.latest_timestamp,
+        }),
+        None => Ok(StatsSummary {
+            block_count: 0,
+            min_height: 0,
+            max_height: 0,
+            latest_timestamp: 0,
+        }),
+    }
+}
+
+#[server(prefix = "/api", endpoint = "stats_blocks")]
+pub async fn fetch_blocks(
+    from: u64,
+    to: u64,
+) -> Result<Vec<BlockSummary>, ServerFnError> {
+    let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
+        leptos_axum::extract().await.map_err(|e| {
+            ServerFnError::new(format!("Stats not available: {e}"))
+        })?;
+    let conn = state.db.lock().unwrap();
+    let rows = super::db::query_blocks(&conn, from, to)
+        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+    Ok(rows
+        .into_iter()
+        .map(|r| BlockSummary {
+            height: r.height,
+            hash: r.hash,
+            timestamp: r.timestamp,
+            tx_count: r.tx_count,
+            size: r.size,
+            weight: r.weight,
+            difficulty: r.difficulty,
+            total_fees: r.total_fees,
+            median_fee: r.median_fee,
+            median_fee_rate: r.median_fee_rate,
+        })
+        .collect())
+}
+
+#[server(prefix = "/api", endpoint = "stats_block_detail")]
+pub async fn fetch_block_detail(
+    height: u64,
+) -> Result<Option<BlockDetail>, ServerFnError> {
+    let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
+        leptos_axum::extract().await.map_err(|e| {
+            ServerFnError::new(format!("Stats not available: {e}"))
+        })?;
+    let conn = state.db.lock().unwrap();
+    let row = super::db::query_block_by_height(&conn, height)
+        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+    Ok(row.map(|r| BlockDetail {
+        height: r.height,
+        hash: r.hash,
+        timestamp: r.timestamp,
+        tx_count: r.tx_count,
+        size: r.size,
+        weight: r.weight,
+        difficulty: r.difficulty,
+        op_return_count: r.op_return_count,
+        op_return_bytes: r.op_return_bytes,
+        runes_count: r.runes_count,
+        runes_bytes: r.runes_bytes,
+        data_carrier_count: r.data_carrier_count,
+        data_carrier_bytes: r.data_carrier_bytes,
+        version: r.version,
+        total_fees: r.total_fees,
+        median_fee: r.median_fee,
+        median_fee_rate: r.median_fee_rate,
+        coinbase_locktime: r.coinbase_locktime,
+        coinbase_sequence: r.coinbase_sequence,
+        miner: r.miner,
+    }))
+}
+
+#[server(prefix = "/api", endpoint = "stats_live")]
+pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
+    use std::time::Instant;
+
+    let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
+        leptos_axum::extract().await.map_err(|e| {
+            ServerFnError::new(format!("Stats not available: {e}"))
+        })?;
+
+    let blockchain = state
+        .rpc
+        .get_blockchain_info()
+        .await
+        .map_err(|e| ServerFnError::new(format!("RPC error: {e}")))?;
+    let mempool = state
+        .rpc
+        .get_mempool_info()
+        .await
+        .map_err(|e| ServerFnError::new(format!("RPC error: {e}")))?;
+
+    // Price cache: only fetch from mempool.space if cache is >60s old
+    let price_usd = {
+        let cached = state.price_cache.lock().unwrap().clone();
+        let need_refresh = match &cached {
+            Some((_, ts)) => ts.elapsed().as_secs() > 60,
+            None => true,
+        };
+        if need_refresh {
+            match state.rpc.fetch_price().await {
+                Ok(p) => {
+                    let usd = p.usd;
+                    *state.price_cache.lock().unwrap() =
+                        Some((p, Instant::now()));
+                    usd
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to fetch price: {e}");
+                    cached.map(|(p, _)| p.usd).unwrap_or(0.0)
+                }
+            }
+        } else {
+            cached.map(|(p, _)| p.usd).unwrap_or(0.0)
+        }
+    };
+
+    const MAX_SUPPLY: f64 = 21_000_000.0;
+
+    let total_supply = super::types::calc_supply(blockchain.blocks);
+
+    let percent_issued = (total_supply / MAX_SUPPLY) * 100.0;
+    let sats_per_dollar = if price_usd > 0.0 {
+        (100_000_000.0 / price_usd).round() as u64
+    } else {
+        0
+    };
+    let market_cap = price_usd * total_supply;
+    let chain_size_gb = blockchain.size_on_disk as f64 / 1_000_000_000.0;
+    let utxo_count = state.utxo_count.lock().unwrap().unwrap_or(0);
+
+    // Next-block fee estimate (non-fatal if it fails)
+    let next_block_fee = state.rpc.estimate_smart_fee(1).await.unwrap_or(0.0);
+
+    Ok(LiveStats {
+        blockchain: LiveBlockchain {
+            blocks: blockchain.blocks,
+            chain: blockchain.chain,
+            difficulty: blockchain.difficulty,
+            verification_progress: blockchain.verification_progress,
+            size_on_disk: blockchain.size_on_disk,
+            bestblockhash: blockchain.bestblockhash,
+        },
+        mempool: LiveMempool {
+            size: mempool.size,
+            bytes: mempool.bytes,
+            usage: mempool.usage,
+            total_fee: mempool.total_fee,
+            maxmempool: mempool.maxmempool,
+            mempoolminfee: mempool.mempoolminfee,
+        },
+        next_block_fee,
+        network: LiveNetwork {
+            price_usd,
+            sats_per_dollar,
+            market_cap_usd: market_cap,
+            total_supply,
+            max_supply: MAX_SUPPLY,
+            percent_issued: (percent_issued * 100.0).round() / 100.0,
+            utxo_count,
+            chain_size_gb: (chain_size_gb * 10.0).round() / 10.0,
+        },
+    })
+}
+
+#[server(prefix = "/api", endpoint = "stats_op_returns")]
+pub async fn fetch_op_returns(
+    from: u64,
+    to: u64,
+) -> Result<Vec<OpReturnBlock>, ServerFnError> {
+    let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
+        leptos_axum::extract().await.map_err(|e| {
+            ServerFnError::new(format!("Stats not available: {e}"))
+        })?;
+    let conn = state.db.lock().unwrap();
+    let rows = super::db::query_op_returns(&conn, from, to)
+        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+    Ok(rows
+        .into_iter()
+        .map(|r| OpReturnBlock {
+            height: r.height,
+            timestamp: r.timestamp,
+            tx_count: r.tx_count,
+            op_return_count: r.op_return_count,
+            op_return_bytes: r.op_return_bytes,
+            runes_count: r.runes_count,
+            runes_bytes: r.runes_bytes,
+            data_carrier_count: r.data_carrier_count,
+            data_carrier_bytes: r.data_carrier_bytes,
+        })
+        .collect())
+}
+
+#[server(prefix = "/api", endpoint = "stats_daily_aggregates")]
+pub async fn fetch_daily_aggregates(
+    from_ts: u64,
+    to_ts: u64,
+) -> Result<Vec<DailyAggregate>, ServerFnError> {
+    let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
+        leptos_axum::extract().await.map_err(|e| {
+            ServerFnError::new(format!("Stats not available: {e}"))
+        })?;
+    let conn = state.db.lock().unwrap();
+    let rows = super::db::query_daily_aggregates(&conn, from_ts, to_ts)
+        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+    Ok(rows
+        .into_iter()
+        .map(|r| DailyAggregate {
+            date: r.date,
+            block_count: r.block_count,
+            avg_size: r.avg_size,
+            avg_weight: r.avg_weight,
+            avg_tx_count: r.avg_tx_count,
+            avg_difficulty: r.avg_difficulty,
+            total_op_return_count: r.total_op_return_count,
+            total_op_return_bytes: r.total_op_return_bytes,
+            total_runes_count: r.total_runes_count,
+            total_runes_bytes: r.total_runes_bytes,
+            total_data_carrier_count: r.total_data_carrier_count,
+            total_data_carrier_bytes: r.total_data_carrier_bytes,
+            total_fees: r.total_fees,
+        })
+        .collect())
+}
+
+#[server(prefix = "/api", endpoint = "stats_signaling")]
+pub async fn fetch_signaling(
+    bit: u32,
+    method: String,
+    from: u64,
+    to: u64,
+) -> Result<(Vec<SignalingBlock>, PeriodStats), ServerFnError> {
+    let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
+        leptos_axum::extract().await.map_err(|e| {
+            ServerFnError::new(format!("Stats not available: {e}"))
+        })?;
+    let conn = state.db.lock().unwrap();
+    let use_locktime = method == "locktime";
+
+    let blocks = if use_locktime {
+        super::db::query_signaling_locktime(&conn, from, to)
+    } else {
+        super::db::query_signaling_bit(&conn, bit, from, to)
+    }
+    .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+
+    // Period stats: retarget block boundary
+    let period_start = (to / 2016) * 2016;
+    let period_end = period_start + 2015;
+    let period_blocks = if use_locktime {
+        super::db::query_signaling_locktime(&conn, period_start, period_end)
+    } else {
+        super::db::query_signaling_bit(&conn, bit, period_start, period_end)
+    }
+    .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+
+    let signaled_count =
+        period_blocks.iter().filter(|b| b.signaled).count() as u64;
+    let raw_total = period_blocks.len() as u64;
+    // "Blocks since adjustment" excludes the retarget block itself (matches mempool.space)
+    let mined = if raw_total > 0 { raw_total - 1 } else { 0 };
+    let pct = if mined > 0 {
+        signaled_count as f64 / mined as f64 * 100.0
+    } else {
+        0.0
+    };
+
+    let signaling_blocks: Vec<SignalingBlock> = blocks
+        .into_iter()
+        .map(|b| SignalingBlock {
+            height: b.height,
+            timestamp: b.timestamp,
+            signaled: b.signaled,
+            miner: b.miner,
+        })
+        .collect();
+
+    Ok((
+        signaling_blocks,
+        PeriodStats {
+            period_start,
+            period_end,
+            total_blocks: mined,
+            signaled_count,
+            signaled_pct: pct,
+        },
+    ))
+}
+
+#[server(prefix = "/api", endpoint = "stats_signaling_periods")]
+pub async fn fetch_signaling_periods(
+    bit: u32,
+    method: String,
+) -> Result<Vec<SignalingPeriod>, ServerFnError> {
+    let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
+        leptos_axum::extract().await.map_err(|e| {
+            ServerFnError::new(format!("Stats not available: {e}"))
+        })?;
+    let conn = state.db.lock().unwrap();
+    let use_locktime = method == "locktime";
+
+    let periods = if use_locktime {
+        super::db::query_signaling_periods_locktime(&conn)
+    } else {
+        super::db::query_signaling_periods_bit(&conn, bit)
+    }
+    .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+
+    Ok(periods
+        .into_iter()
+        .map(|p| SignalingPeriod {
+            start_height: p.start_height,
+            end_height: p.end_height,
+            signaled_count: p.signaled_count,
+            total_blocks: p.total_blocks,
+            signaled_pct: p.signaled_pct,
+        })
+        .collect())
+}
