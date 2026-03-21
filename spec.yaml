@@ -14,7 +14,7 @@ services:
     # Active probe used by DO to ensure app is healthy
     health_check:
       # Path to health check endpoint
-      http_path: /server/health_check
+      http_path: /
     # The port the application will be listening on for incoming requests
     # Should match what we specified in configuration/producation.yaml
     http_port: 8000
