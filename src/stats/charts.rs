@@ -849,7 +849,10 @@ pub fn signaling_chart(blocks: &[SignalingBlock]) -> String {
 }
 
 /// Signaling percentage per retarget period bar chart.
-pub fn signaling_periods_chart(periods: &[SignalingPeriod]) -> String {
+pub fn signaling_periods_chart(
+    periods: &[SignalingPeriod],
+    threshold: f64,
+) -> String {
     if periods.is_empty() {
         return no_data_chart("Signaling Periods");
     }
@@ -857,11 +860,10 @@ pub fn signaling_periods_chart(periods: &[SignalingPeriod]) -> String {
     let cats: Vec<String> =
         periods.iter().map(|p| format_num(p.start_height)).collect();
 
-    // Color bars: green if >= threshold (we don't know threshold here, use green for >0, dark for 0)
     let bar_data: Vec<serde_json::Value> = periods
         .iter()
         .map(|p| {
-            let color = if p.signaled_pct >= 50.0 {
+            let color = if p.signaled_pct >= threshold {
                 SIGNAL_YES
             } else if p.signaled_pct > 0.0 {
                 TARGET_COLOR
@@ -898,7 +900,12 @@ pub fn signaling_periods_chart(periods: &[SignalingPeriod]) -> String {
         "series": [
             {
                 "name": "Signaled %", "type": "bar", "data": bar_data,
-                "barMaxWidth": 40
+                "barMaxWidth": 40,
+                "markLine": {
+                    "silent": true, "symbol": "none",
+                    "lineStyle": { "color": "#f7931a", "type": "dashed", "width": 2 },
+                    "data": [{ "yAxis": threshold, "label": { "formatter": format!("{}%", threshold), "color": "#f7931a", "fontSize": 12 } }]
+                }
             }
         ]
     }))
