@@ -76,7 +76,7 @@ fn Chart(
     });
 
     let css_class =
-        class.unwrap_or_else(|| "w-full h-[400px] lg:h-[550px]".to_string());
+        class.unwrap_or_else(|| "w-full h-[350px] lg:h-[600px]".to_string());
 
     view! {
         <div id=id class=css_class></div>
@@ -93,9 +93,9 @@ fn LiveCard(
     #[prop(into)] value: Signal<String>,
 ) -> impl IntoView {
     view! {
-        <div class="bg-white/[0.07] border border-white/10 rounded-lg p-3">
-            <div class="text-[0.7rem] text-white/50 uppercase tracking-wider mb-1">{label}</div>
-            <div class="text-[0.95rem] text-white font-medium truncate">{move || value.get()}</div>
+        <div class="bg-white/[0.07] border border-white/10 rounded-lg p-3 text-center">
+            <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">{label}</div>
+            <div class="text-lg lg:text-xl text-[#f7931a] font-bold font-mono truncate">{move || value.get()}</div>
         </div>
     }
 }
@@ -106,6 +106,70 @@ fn LiveCard(
 
 #[component]
 pub fn StatsPage() -> impl IntoView {
+    // Check if stats backend is available
+    let availability = LocalResource::new(move || fetch_stats_summary());
+
+    let is_available = Signal::derive(move || {
+        availability.get().map(|r| r.is_ok()).unwrap_or(false)
+    });
+
+    view! {
+        <Title text="Bitcoin Stats - WE HODL BTC"/>
+        <Show
+            when=move || is_available.get()
+            fallback=move || view! { <StatsComingSoon/> }
+        >
+            <StatsContent/>
+        </Show>
+    }
+}
+
+#[component]
+fn StatsComingSoon() -> impl IntoView {
+    view! {
+        <section class="max-w-3xl mx-auto px-6 pt-20 pb-32 opacity-0 animate-fadeinone">
+            <div class="flex flex-col items-center justify-center min-h-[60vh] text-center">
+                // Bitcoin logo SVG
+                <div class="mb-8 opacity-10">
+                    <svg class="w-24 h-24 lg:w-32 lg:h-32 text-[#f7931a]" viewBox="0 0 64 64" fill="currentColor">
+                        <path d="M63.04 39.741c-4.274 17.143-21.638 27.575-38.783 23.301C7.12 58.768-3.313 41.404.962 24.262 5.234 7.117 22.597-3.317 39.737.957c17.144 4.274 27.576 21.64 23.302 38.784z"/>
+                        <path d="M46.11 27.441c.636-4.258-2.606-6.547-7.039-8.074l1.438-5.768-3.512-.875-1.4 5.616c-.923-.23-1.871-.447-2.813-.662l1.41-5.653-3.509-.875-1.439 5.766c-.764-.174-1.514-.346-2.242-.527l.004-.018-4.842-1.209-.934 3.75s2.605.597 2.55.634c1.422.355 1.68 1.296 1.636 2.042l-1.638 6.571c.098.025.225.061.365.117l-.37-.092-2.297 9.205c-.174.432-.615 1.08-1.609.834.035.051-2.552-.637-2.552-.637l-1.743 4.02 4.57 1.139c.85.213 1.683.436 2.502.646l-1.453 5.835 3.507.875 1.44-5.772c.957.26 1.887.5 2.797.726L27.504 50.8l3.511.875 1.453-5.823c5.987 1.133 10.49.676 12.383-4.738 1.527-4.36-.075-6.875-3.225-8.516 2.294-.529 4.022-2.038 4.483-5.157zM38.087 38.69c-1.086 4.36-8.426 2.004-10.807 1.412l1.928-7.729c2.38.594 10.011 1.77 8.88 6.317zm1.085-11.312c-.99 3.966-7.1 1.951-9.083 1.457l1.748-7.01c1.983.494 8.367 1.416 7.335 5.553z" fill="#fff"/>
+                    </svg>
+                </div>
+
+                <h1 class="text-3xl lg:text-5xl font-title text-white mb-4">"Bitcoin Stats"</h1>
+                <div class="w-16 h-0.5 bg-[#f7931a] mx-auto mb-6"></div>
+
+                <p class="text-lg text-white/60 mb-3">"Coming Soon"</p>
+                <p class="text-sm text-white/40 max-w-md leading-relaxed mb-10">
+                    "Live blockchain metrics, block data analysis, OP_RETURN tracking, and BIP signaling \u{2014} powered by our own Bitcoin full node."
+                </p>
+
+                // Feature preview cards
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full max-w-2xl">
+                    <div class="bg-white/5 border border-white/10 rounded-xl p-5 text-center">
+                        <div class="text-2xl mb-2">"#"</div>
+                        <div class="text-sm text-white/70 font-medium mb-1">"Live Dashboard"</div>
+                        <div class="text-xs text-white/40">"Real-time block, mempool, and network stats"</div>
+                    </div>
+                    <div class="bg-white/5 border border-white/10 rounded-xl p-5 text-center">
+                        <div class="text-2xl mb-2">"\u{21a9}"</div>
+                        <div class="text-sm text-white/70 font-medium mb-1">"OP_RETURN Analysis"</div>
+                        <div class="text-xs text-white/40">"Track Runes and data carrier usage over time"</div>
+                    </div>
+                    <div class="bg-white/5 border border-white/10 rounded-xl p-5 text-center">
+                        <div class="text-2xl mb-2">"\u{2691}"</div>
+                        <div class="text-sm text-white/70 font-medium mb-1">"BIP Signaling"</div>
+                        <div class="text-xs text-white/40">"Monitor softfork activation progress"</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    }
+}
+
+#[component]
+fn StatsContent() -> impl IntoView {
     let (tab, set_tab) = signal("dashboard".to_string());
     let (range, set_range) = signal("all".to_string());
     let (fee_unit, set_fee_unit) = signal("sats".to_string());
@@ -482,7 +546,7 @@ pub fn StatsPage() -> impl IntoView {
     view! {
         <Title text="Bitcoin Stats - WE HODL BTC"/>
 
-        <section class="max-w-[1400px] mx-auto px-4 lg:px-8 pt-10 pb-28 opacity-0 animate-fadeinone">
+        <section class="max-w-[1600px] mx-auto px-4 lg:px-10 pt-10 pb-28 opacity-0 animate-fadeinone">
             // Page header
             <div class="text-center mb-8">
                 <h1 class="text-3xl lg:text-4xl font-title text-white mb-2">"Bitcoin Stats"</h1>
@@ -602,14 +666,14 @@ pub fn StatsPage() -> impl IntoView {
                     {move || {
                         let _d = dashboard_data.get();
                         view! {
-                            <div class="space-y-4">
-                                <div class="bg-white/5 border border-white/10 rounded-xl p-3 animate-slideup" style="animation-delay: 150ms">
+                            <div class="space-y-10">
+                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 150ms">
                                     <Chart id="chart-size" option=size_option/>
                                 </div>
-                                <div class="bg-white/5 border border-white/10 rounded-xl p-3 animate-slideup" style="animation-delay: 200ms">
+                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 200ms">
                                     <Chart id="chart-txcount" option=tx_option/>
                                 </div>
-                                <div class="bg-white/5 border border-white/10 rounded-xl p-3 animate-slideup" style="animation-delay: 250ms">
+                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 250ms">
                                     <div class="flex justify-end mb-1">
                                         <button
                                             class="text-xs text-white/40 hover:text-white/60 px-2 py-1 rounded border border-white/10 cursor-pointer"
@@ -624,10 +688,10 @@ pub fn StatsPage() -> impl IntoView {
                                     </div>
                                     <Chart id="chart-fees" option=fees_option/>
                                 </div>
-                                <div class="bg-white/5 border border-white/10 rounded-xl p-3 animate-slideup" style="animation-delay: 300ms">
+                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 300ms">
                                     <Chart id="chart-difficulty" option=diff_option/>
                                 </div>
-                                <div class="bg-white/5 border border-white/10 rounded-xl p-3 animate-slideup" style="animation-delay: 350ms">
+                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 350ms">
                                     <Chart id="chart-interval" option=interval_option/>
                                 </div>
                             </div>
@@ -647,14 +711,14 @@ pub fn StatsPage() -> impl IntoView {
                     {move || {
                         let _d = op_data.get();
                         view! {
-                            <div class="space-y-4">
-                                <div class="bg-white/5 border border-white/10 rounded-xl p-3 animate-slideup" style="animation-delay: 100ms">
+                            <div class="space-y-10">
+                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 100ms">
                                     <Chart id="chart-opreturn-count" option=op_count_option/>
                                 </div>
-                                <div class="bg-white/5 border border-white/10 rounded-xl p-3 animate-slideup" style="animation-delay: 150ms">
+                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 150ms">
                                     <Chart id="chart-opreturn-bytes" option=op_bytes_option/>
                                 </div>
-                                <div class="bg-white/5 border border-white/10 rounded-xl p-3 animate-slideup" style="animation-delay: 200ms">
+                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 200ms">
                                     <Chart id="chart-runes-pct" option=runes_pct_option/>
                                 </div>
                             </div>
@@ -791,10 +855,10 @@ pub fn StatsPage() -> impl IntoView {
                                         .filter(|p| p.end_height >= start_height)
                                         .cloned()
                                         .collect();
-                                    let periods_chart = crate::stats::charts::signaling_periods_chart(&filtered);
+                                    let periods_chart = crate::stats::charts::signaling_periods_chart(&filtered, threshold);
 
                                     view! {
-                                        <div class="space-y-4">
+                                        <div class="space-y-10">
                                             // Progress bar
                                             <div class="bg-white/5 border border-white/10 rounded-xl p-4">
                                                 <div class="h-3 bg-white/5 rounded-full overflow-hidden mb-2">
@@ -817,7 +881,7 @@ pub fn StatsPage() -> impl IntoView {
                                             </div>
 
                                             // History chart
-                                            <div class="bg-white/5 border border-white/10 rounded-xl p-3">
+                                            <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6">
                                                 <Chart id="chart-signaling-periods" option=Signal::derive(move || periods_chart.clone())/>
                                             </div>
                                         </div>
