@@ -2,6 +2,8 @@
 
 /// SSR server - Axum serves pre-rendered HTML + static assets.
 /// The WASM client hydrates on load for client-side interactivity.
+/// When BITCOIN_STATS_RPC_URL is set, the stats module activates
+/// and serves blockchain analytics at /api/stats/ and /stats.
 #[cfg(feature = "ssr")]
 #[tokio::main]
 async fn main() {
@@ -11,12 +13,22 @@ async fn main() {
     use tokio::net::TcpListener;
     use we_hodl_btc::app::{shell, App};
 
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "info".into()),
+        )
+        .init();
+
     let conf = get_configuration(None).unwrap();
     let addr = conf.leptos_options.site_addr;
     let leptos_options = conf.leptos_options;
     let routes = generate_route_list(App);
 
-    let app = Router::new()
+    // Try to initialize stats module (returns None if BITCOIN_STATS_RPC_URL not set)
+    let stats = we_hodl_btc::stats::startup::init().await;
+
+    let mut app = Router::new()
         .leptos_routes(&leptos_options, routes, {
             let leptos_options = leptos_options.clone();
             move || shell(leptos_options.clone())
@@ -24,8 +36,19 @@ async fn main() {
         .fallback(leptos_axum::file_and_error_handler(shell))
         .with_state(leptos_options);
 
+    if let Some((stats_state, stats_router)) = stats {
+        use axum::Extension;
+        tracing::info!("Stats module active — API at /api/stats/");
+        app = app
+            .nest("/api/stats", stats_router)
+            .layer(Extension(stats_state.clone()));
+        we_hodl_btc::stats::startup::spawn_background_tasks(stats_state);
+    } else {
+        tracing::info!("Stats module dormant (BITCOIN_STATS_RPC_URL not set)");
+    }
+
     let listener = TcpListener::bind(&addr).await.unwrap();
-    println!("Server listening on http://{}", addr);
+    tracing::info!("Server listening on http://{}", addr);
     axum::serve(listener, app.into_make_service())
         .await
         .unwrap();

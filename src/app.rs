@@ -16,8 +16,9 @@ use crate::routes::about::AboutPage;
 use crate::routes::blog::BlogPage;
 use crate::routes::faq::FaqPage;
 use crate::routes::guide::{GuideTwoSegment, GuideWalletPage};
-use crate::routes::guideselector::{GuideSelector, GuideLevelSelector};
+use crate::routes::guideselector::{GuideLevelSelector, GuideSelector};
 use crate::routes::homepage::HomePage;
+use crate::routes::stats::StatsPage;
 use leptos::prelude::*;
 use leptos_meta::*;
 use leptos_router::{
@@ -66,6 +67,10 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 <link rel="mask-icon" href="/safari-pinned-tab.svg"/>
                 <meta name="msapplication-TileColor" content="#123c64"/>
                 <meta name="theme-color" content="#123c64"/>
+
+                // ECharts for stats dashboard
+                <script defer src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+                <script defer src="/stats.js"></script>
 
                 // Fallback for browsers without WebAssembly (e.g. Vanadium)
                 <script defer src="/wasm-fallback.js"></script>
@@ -122,6 +127,8 @@ pub fn App() -> impl IntoView {
                         // Unified guide routes (2 parameterized routes replace 14 static ones)
                         <Route path=path!("/guides/:level/:segment") view=GuideTwoSegment/>
                         <Route path=path!("/guides/:level/:platform/:wallet") view=GuideWalletPage/>
+                        // Stats dashboard
+                        <Route path=path!("/stats") view=StatsPage/>
                         // Other routes
                         <Route path=path!("/blog") view=BlogPage/>
                         <Route path=path!("/faq") view=FaqPage/>

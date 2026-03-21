@@ -15,6 +15,7 @@ pub mod extras;
 pub mod guides;
 pub mod helpers;
 pub mod routes;
+pub mod stats;
 
 /// WASM entry point — hydrates the server-rendered HTML.
 #[cfg(feature = "hydrate")]

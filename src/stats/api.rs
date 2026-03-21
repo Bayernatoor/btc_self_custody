@@ -1,0 +1,297 @@
+//! REST API endpoints.
+//!
+//! Endpoints:
+//! - GET /api/blocks?from=&to=          -- raw block data (default: last 144 blocks)
+//! - GET /api/blocks/:height            -- single block detail
+//! - GET /api/stats                     -- DB summary (block count, height range)
+//! - GET /api/live                      -- real-time node + mempool + network stats
+//! - GET /api/op-returns?from=&to=      -- OP_RETURN classification data (default: last 10k blocks)
+//! - GET /api/aggregates/daily?from=&to= -- daily aggregated metrics (timestamps)
+//! - GET /api/signaling?bit=N or method=locktime -- per-block signaling status
+//! - GET /api/signaling/periods?bit=N   -- signaling % per retarget period
+
+use std::sync::{Arc, Mutex};
+use std::time::Instant;
+
+use axum::extract::{Path, Query, State};
+use axum::Json;
+use rusqlite::Connection;
+use serde::Deserialize;
+
+use super::db;
+use super::error::StatsError;
+use super::rpc::{BitcoinRpc, PriceInfo};
+
+pub struct StatsState {
+    pub db: Mutex<Connection>,
+    pub rpc: BitcoinRpc,
+    /// Cached price with timestamp, refreshed at most every 60 seconds.
+    pub price_cache: Mutex<Option<(PriceInfo, Instant)>>,
+    pub utxo_count: Mutex<Option<u64>>,
+}
+
+pub type SharedStatsState = Arc<StatsState>;
+
+const MAX_SUPPLY: f64 = 21_000_000.0;
+
+#[derive(Deserialize)]
+pub struct BlocksQuery {
+    pub from: Option<u64>,
+    pub to: Option<u64>,
+}
+
+#[derive(Deserialize)]
+pub struct TimestampQuery {
+    pub from: Option<u64>,
+    pub to: Option<u64>,
+}
+
+#[derive(Deserialize)]
+pub struct SignalingQuery {
+    pub bit: Option<u32>,
+    pub method: Option<String>, // "bit" (default) or "locktime"
+    pub from: Option<u64>,
+    pub to: Option<u64>,
+}
+
+#[derive(Deserialize)]
+pub struct SignalingPeriodsQuery {
+    pub bit: Option<u32>,
+    pub method: Option<String>,
+}
+
+pub async fn get_blocks(
+    State(state): State<SharedStatsState>,
+    Query(params): Query<BlocksQuery>,
+) -> Result<Json<serde_json::Value>, StatsError> {
+    let conn = state.db.lock().unwrap();
+
+    let (from, to) = match (params.from, params.to) {
+        (Some(f), Some(t)) => (f, t),
+        _ => {
+            let stats = db::query_stats(&conn)?;
+            match stats {
+                Some(s) => {
+                    let to = params.to.unwrap_or(s.max_height);
+                    let from = params.from.unwrap_or(to.saturating_sub(144));
+                    (from, to)
+                }
+                None => return Ok(Json(serde_json::json!({ "blocks": [] }))),
+            }
+        }
+    };
+
+    let blocks = db::query_blocks(&conn, from, to)?;
+    Ok(Json(serde_json::json!({ "blocks": blocks })))
+}
+
+pub async fn get_block_detail(
+    State(state): State<SharedStatsState>,
+    Path(height): Path<u64>,
+) -> Result<Json<serde_json::Value>, StatsError> {
+    let conn = state.db.lock().unwrap();
+    let block = db::query_block_by_height(&conn, height)?;
+    match block {
+        Some(b) => Ok(Json(serde_json::to_value(b).unwrap())),
+        None => Ok(Json(serde_json::json!({ "error": "Block not found" }))),
+    }
+}
+
+pub async fn get_stats(
+    State(state): State<SharedStatsState>,
+) -> Result<Json<serde_json::Value>, StatsError> {
+    let conn = state.db.lock().unwrap();
+    let stats = db::query_stats(&conn)?;
+    match stats {
+        Some(s) => Ok(Json(serde_json::to_value(s).unwrap())),
+        None => Ok(Json(serde_json::json!({
+            "block_count": 0,
+            "min_height": 0,
+            "max_height": 0,
+            "latest_timestamp": 0
+        }))),
+    }
+}
+
+pub async fn get_live(
+    State(state): State<SharedStatsState>,
+) -> Result<Json<serde_json::Value>, StatsError> {
+    let blockchain = state.rpc.get_blockchain_info().await?;
+    let mempool = state.rpc.get_mempool_info().await?;
+
+    // Price cache: only fetch from mempool.space if cache is >60s old
+    let price_usd = {
+        let cached = state.price_cache.lock().unwrap().clone();
+        let need_refresh = match &cached {
+            Some((_, ts)) => ts.elapsed().as_secs() > 60,
+            None => true,
+        };
+        if need_refresh {
+            match state.rpc.fetch_price().await {
+                Ok(p) => {
+                    let usd = p.usd;
+                    *state.price_cache.lock().unwrap() =
+                        Some((p, Instant::now()));
+                    usd
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to fetch price: {e}");
+                    cached.map(|(p, _)| p.usd).unwrap_or(0.0)
+                }
+            }
+        } else {
+            cached.map(|(p, _)| p.usd).unwrap_or(0.0)
+        }
+    };
+
+    let total_supply = super::types::calc_supply(blockchain.blocks);
+    let percent_issued = (total_supply / MAX_SUPPLY) * 100.0;
+
+    let sats_per_dollar = if price_usd > 0.0 {
+        (100_000_000.0 / price_usd).round() as u64
+    } else {
+        0
+    };
+    let market_cap = price_usd * total_supply;
+    let chain_size_gb = blockchain.size_on_disk as f64 / 1_000_000_000.0;
+
+    let utxo_count = state.utxo_count.lock().unwrap().unwrap_or(0);
+
+    // Next-block fee estimate (non-fatal if it fails)
+    let next_block_fee = state.rpc.estimate_smart_fee(1).await.unwrap_or(0.0);
+
+    Ok(Json(serde_json::json!({
+        "blockchain": blockchain,
+        "mempool": mempool,
+        "next_block_fee": next_block_fee,
+        "network": {
+            "price_usd": price_usd,
+            "sats_per_dollar": sats_per_dollar,
+            "market_cap_usd": market_cap,
+            "total_supply": total_supply,
+            "max_supply": MAX_SUPPLY,
+            "percent_issued": (percent_issued * 100.0).round() / 100.0,
+            "utxo_count": utxo_count,
+            "chain_size_gb": (chain_size_gb * 10.0).round() / 10.0
+        }
+    })))
+}
+
+pub async fn get_op_returns(
+    State(state): State<SharedStatsState>,
+    Query(params): Query<BlocksQuery>,
+) -> Result<Json<serde_json::Value>, StatsError> {
+    let conn = state.db.lock().unwrap();
+
+    let (from, to) = match (params.from, params.to) {
+        (Some(f), Some(t)) => (f, t),
+        _ => {
+            let stats = db::query_stats(&conn)?;
+            match stats {
+                Some(s) => {
+                    let to = params.to.unwrap_or(s.max_height);
+                    let from = params.from.unwrap_or(to.saturating_sub(10000));
+                    (from, to)
+                }
+                None => return Ok(Json(serde_json::json!({ "blocks": [] }))),
+            }
+        }
+    };
+
+    let blocks = db::query_op_returns(&conn, from, to)?;
+    Ok(Json(serde_json::json!({ "blocks": blocks })))
+}
+
+pub async fn get_daily_aggregates(
+    State(state): State<SharedStatsState>,
+    Query(params): Query<TimestampQuery>,
+) -> Result<Json<serde_json::Value>, StatsError> {
+    let conn = state.db.lock().unwrap();
+
+    let from_ts = params.from.unwrap_or(0);
+    let to_ts = params.to.unwrap_or(u64::MAX);
+
+    let days = db::query_daily_aggregates(&conn, from_ts, to_ts)?;
+    Ok(Json(serde_json::json!({ "days": days })))
+}
+
+pub async fn get_signaling(
+    State(state): State<SharedStatsState>,
+    Query(params): Query<SignalingQuery>,
+) -> Result<Json<serde_json::Value>, StatsError> {
+    let conn = state.db.lock().unwrap();
+    let use_locktime = params.method.as_deref() == Some("locktime");
+
+    let stats = db::query_stats(&conn)?;
+    let (from, to) = match stats {
+        Some(s) => {
+            let to = params.to.unwrap_or(s.max_height);
+            let from = params.from.unwrap_or(to.saturating_sub(2016));
+            (from, to)
+        }
+        None => {
+            return Ok(Json(
+                serde_json::json!({ "blocks": [], "period_stats": null }),
+            ))
+        }
+    };
+
+    let blocks = if use_locktime {
+        db::query_signaling_locktime(&conn, from, to)?
+    } else {
+        db::query_signaling_bit(&conn, params.bit.unwrap_or(0), from, to)?
+    };
+
+    // Period stats: retarget block (period_start) is the boundary between periods.
+    // "Blocks since adjustment" starts at period_start (inclusive), matching mempool.space.
+    let period_start = (to / 2016) * 2016;
+    let period_end = period_start + 2015;
+    // Query from period_start but report mined as tip - period_start (excluding the retarget block)
+    let period_blocks = if use_locktime {
+        db::query_signaling_locktime(&conn, period_start, period_end)?
+    } else {
+        db::query_signaling_bit(
+            &conn,
+            params.bit.unwrap_or(0),
+            period_start,
+            period_end,
+        )?
+    };
+    let signaled_count =
+        period_blocks.iter().filter(|b| b.signaled).count() as u64;
+    let raw_total = period_blocks.len() as u64;
+    // "Blocks since adjustment" excludes the retarget block itself (matches mempool.space)
+    let mined = if raw_total > 0 { raw_total - 1 } else { 0 };
+    let pct = if mined > 0 {
+        signaled_count as f64 / mined as f64 * 100.0
+    } else {
+        0.0
+    };
+
+    Ok(Json(serde_json::json!({
+        "blocks": blocks,
+        "period_stats": {
+            "period_start": period_start,
+            "period_end": period_end,
+            "total_blocks": mined,
+            "signaled_count": signaled_count,
+            "signaled_pct": pct
+        }
+    })))
+}
+
+pub async fn get_signaling_periods(
+    State(state): State<SharedStatsState>,
+    Query(params): Query<SignalingPeriodsQuery>,
+) -> Result<Json<serde_json::Value>, StatsError> {
+    let conn = state.db.lock().unwrap();
+    let use_locktime = params.method.as_deref() == Some("locktime");
+    let periods = if use_locktime {
+        db::query_signaling_periods_locktime(&conn)?
+    } else {
+        db::query_signaling_periods_bit(&conn, params.bit.unwrap_or(0))?
+    };
+    Ok(Json(serde_json::json!({
+        "periods": periods
+    })))
+}
