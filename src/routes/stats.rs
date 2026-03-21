@@ -1,4 +1,4 @@
-//! Bitcoin Stats dashboard page.
+//! Chain Pulse dashboard page.
 //!
 //! Tabs: Dashboard | OP_RETURN | BIP Signaling
 //! Data fetched via server functions, charts rendered with ECharts via wasm_bindgen.
@@ -114,7 +114,7 @@ pub fn StatsPage() -> impl IntoView {
     });
 
     view! {
-        <Title text="Bitcoin Stats - WE HODL BTC"/>
+        <Title text="Chain Pulse - WE HODL BTC"/>
         <Show
             when=move || is_available.get()
             fallback=move || view! { <StatsComingSoon/> }
@@ -137,7 +137,7 @@ fn StatsComingSoon() -> impl IntoView {
                     </svg>
                 </div>
 
-                <h1 class="text-3xl lg:text-5xl font-title text-white mb-4">"Bitcoin Stats"</h1>
+                <h1 class="text-3xl lg:text-5xl font-title text-white mb-4">"Chain Pulse"</h1>
                 <div class="w-16 h-0.5 bg-[#f7931a] mx-auto mb-6"></div>
 
                 <p class="text-lg text-white/60 mb-3">"Coming Soon"</p>
@@ -544,12 +544,12 @@ fn StatsContent() -> impl IntoView {
     };
 
     view! {
-        <Title text="Bitcoin Stats - WE HODL BTC"/>
+        <Title text="Chain Pulse - WE HODL BTC"/>
 
         <section class="max-w-[1600px] mx-auto px-4 lg:px-10 pt-10 pb-28 opacity-0 animate-fadeinone">
             // Page header
             <div class="text-center mb-8">
-                <h1 class="text-3xl lg:text-4xl font-title text-white mb-2">"Bitcoin Stats"</h1>
+                <h1 class="text-3xl lg:text-4xl font-title text-white mb-2">"Chain Pulse"</h1>
                 <div class="w-12 h-0.5 bg-[#f7931a] mx-auto mt-2 mb-3"></div>
                 <p class="text-sm text-white/50 max-w-lg mx-auto">
                     "Live blockchain metrics, block data, OP_RETURN analysis, and BIP signaling tracker."
