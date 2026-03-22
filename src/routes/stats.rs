@@ -84,6 +84,69 @@ fn Chart(
 }
 
 // ---------------------------------------------------------------------------
+// Chart card with expand toggle
+// ---------------------------------------------------------------------------
+
+#[component]
+fn ChartCard(
+    #[prop(into)] title: String,
+    #[prop(into)] description: String,
+    #[prop(into)] chart_id: String,
+    #[prop(into)] option: Signal<String>,
+    /// Optional content to render in the header right area (e.g. toggle button)
+    #[prop(optional)]
+    children: Option<Children>,
+) -> impl IntoView {
+    let (expanded, set_expanded) = signal(false);
+
+    let card_class = move || {
+        if expanded.get() {
+            "bg-white/[0.07] border border-white/15 rounded-2xl p-5 lg:p-6 transition-all duration-300"
+        } else {
+            "bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 transition-all duration-300"
+        }
+    };
+
+    let chart_wrapper_class = move || {
+        if expanded.get() {
+            "h-[80vh]"
+        } else {
+            "h-[350px] lg:h-[600px]"
+        }
+    };
+
+    view! {
+        <div class=card_class>
+            <div class="flex items-start justify-between mb-4">
+                <div>
+                    <h3 class="text-base text-white font-semibold">{title}</h3>
+                    <p class="text-xs text-white/40 mt-0.5">{description}</p>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    {children.map(|c| c())}
+                    <button
+                        class="text-white/30 hover:text-white/60 transition-colors cursor-pointer p-1"
+                        title=move || if expanded.get() { "Collapse" } else { "Expand" }
+                        on:click=move |_| set_expanded.update(|e| *e = !*e)
+                    >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                            {move || if expanded.get() {
+                                view! { <path stroke-linecap="round" stroke-linejoin="round" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M15 9h4.5M15 9V4.5M15 9l5.25-5.25M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25"/> }.into_any()
+                            } else {
+                                view! { <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15"/> }.into_any()
+                            }}
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class=chart_wrapper_class>
+                <Chart id=chart_id option=option class="w-full h-full".to_string()/>
+            </div>
+        </div>
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Live stat card
 // ---------------------------------------------------------------------------
 
@@ -963,41 +1026,36 @@ fn StatsContent() -> impl IntoView {
                         let _d = dashboard_data.get();
                         view! {
                             <div class="space-y-10">
-                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6">
-                                    <div class="mb-4">
-                                        <h3 class="text-base text-white font-semibold">"Block Size"</h3>
-                                        <p class="text-xs text-white/40 mt-0.5">"Raw block size in megabytes over time"</p>
-                                    </div>
-                                    <Chart id="chart-size" option=size_option/>
-                                </div>
-                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6">
-                                    <div class="mb-4">
-                                        <h3 class="text-base text-white font-semibold">"Weight Utilization"</h3>
-                                        <p class="text-xs text-white/40 mt-0.5">"Block weight as percentage of the 4 MWU limit"</p>
-                                    </div>
-                                    <Chart id="chart-weight-util" option=weight_util_option/>
-                                </div>
-                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6">
-                                    <div class="mb-4">
-                                        <h3 class="text-base text-white font-semibold">"Transaction Count"</h3>
-                                        <p class="text-xs text-white/40 mt-0.5">"Number of transactions per block"</p>
-                                    </div>
-                                    <Chart id="chart-txcount" option=tx_option/>
-                                </div>
-                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6">
-                                    <div class="mb-4">
-                                        <h3 class="text-base text-white font-semibold">"Avg Transaction Size"</h3>
-                                        <p class="text-xs text-white/40 mt-0.5">"Average transaction size in bytes (block size / tx count)"</p>
-                                    </div>
-                                    <Chart id="chart-avg-tx-size" option=avg_tx_size_option/>
-                                </div>
-                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6">
-                                    <div class="mb-4">
-                                        <h3 class="text-base text-white font-semibold">"Block Interval"</h3>
-                                        <p class="text-xs text-white/40 mt-0.5">"Time between consecutive blocks in minutes"</p>
-                                    </div>
-                                    <Chart id="chart-interval" option=interval_option/>
-                                </div>
+                                <ChartCard
+                                    title="Block Size"
+                                    description="Raw block size in megabytes over time"
+                                    chart_id="chart-size"
+                                    option=size_option
+                                />
+                                <ChartCard
+                                    title="Weight Utilization"
+                                    description="Block weight as percentage of the 4 MWU limit"
+                                    chart_id="chart-weight-util"
+                                    option=weight_util_option
+                                />
+                                <ChartCard
+                                    title="Transaction Count"
+                                    description="Number of transactions per block"
+                                    chart_id="chart-txcount"
+                                    option=tx_option
+                                />
+                                <ChartCard
+                                    title="Avg Transaction Size"
+                                    description="Average transaction size in bytes (block size / tx count)"
+                                    chart_id="chart-avg-tx-size"
+                                    option=avg_tx_size_option
+                                />
+                                <ChartCard
+                                    title="Block Interval"
+                                    description="Time between consecutive blocks in minutes"
+                                    chart_id="chart-interval"
+                                    option=interval_option
+                                />
 
                                 // Section divider: Adoption
                                 <div class="flex items-center gap-3 my-8">
@@ -1006,20 +1064,18 @@ fn StatsContent() -> impl IntoView {
                                     <div class="flex-1 h-px bg-white/10"></div>
                                 </div>
 
-                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6">
-                                    <div class="mb-4">
-                                        <h3 class="text-base text-white font-semibold">"SegWit Adoption"</h3>
-                                        <p class="text-xs text-white/40 mt-0.5">"Percentage of transactions using Segregated Witness"</p>
-                                    </div>
-                                    <Chart id="chart-segwit" option=segwit_option/>
-                                </div>
-                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6">
-                                    <div class="mb-4">
-                                        <h3 class="text-base text-white font-semibold">"Taproot Outputs"</h3>
-                                        <p class="text-xs text-white/40 mt-0.5">"Number of Taproot (v1 witness) outputs created per block"</p>
-                                    </div>
-                                    <Chart id="chart-taproot" option=taproot_option/>
-                                </div>
+                                <ChartCard
+                                    title="SegWit Adoption"
+                                    description="Percentage of transactions using Segregated Witness"
+                                    chart_id="chart-segwit"
+                                    option=segwit_option
+                                />
+                                <ChartCard
+                                    title="Taproot Outputs"
+                                    description="Number of Taproot (v1 witness) outputs created per block"
+                                    chart_id="chart-taproot"
+                                    option=taproot_option
+                                />
                             </div>
                         }
                     }}
@@ -1039,32 +1095,29 @@ fn StatsContent() -> impl IntoView {
                         let _d = dashboard_data.get();
                         view! {
                             <div class="space-y-10">
-                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6">
-                                    <div class="flex items-start justify-between mb-4">
-                                        <div>
-                                            <h3 class="text-base text-white font-semibold">"Total Fees per Block"</h3>
-                                            <p class="text-xs text-white/40 mt-0.5">"Total fees collected by miners per block"</p>
-                                        </div>
-                                        <button
-                                            class="text-xs text-white/40 hover:text-white/60 px-2 py-1 rounded border border-white/10 cursor-pointer"
-                                            on:click=move |_| {
-                                                set_fee_unit.update(|u| {
-                                                    *u = if *u == "sats" { "btc".to_string() } else { "sats".to_string() }
-                                                });
-                                            }
-                                        >
-                                            {move || if fee_unit.get() == "sats" { "Switch to BTC" } else { "Switch to sats" }}
-                                        </button>
-                                    </div>
-                                    <Chart id="chart-fees" option=fees_option/>
-                                </div>
-                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6">
-                                    <div class="mb-4">
-                                        <h3 class="text-base text-white font-semibold">"Subsidy vs Fees"</h3>
-                                        <p class="text-xs text-white/40 mt-0.5">"Block reward breakdown: subsidy (coinbase) vs transaction fees in BTC"</p>
-                                    </div>
-                                    <Chart id="chart-subsidy-fees" option=subsidy_fees_option/>
-                                </div>
+                                <ChartCard
+                                    title="Total Fees per Block"
+                                    description="Total fees collected by miners per block"
+                                    chart_id="chart-fees"
+                                    option=fees_option
+                                >
+                                    <button
+                                        class="text-xs text-white/40 hover:text-white/60 px-2 py-1 rounded border border-white/10 cursor-pointer"
+                                        on:click=move |_| {
+                                            set_fee_unit.update(|u| {
+                                                *u = if *u == "sats" { "btc".to_string() } else { "sats".to_string() }
+                                            });
+                                        }
+                                    >
+                                        {move || if fee_unit.get() == "sats" { "Switch to BTC" } else { "Switch to sats" }}
+                                    </button>
+                                </ChartCard>
+                                <ChartCard
+                                    title="Subsidy vs Fees"
+                                    description="Block reward breakdown: subsidy (coinbase) vs transaction fees in BTC"
+                                    chart_id="chart-subsidy-fees"
+                                    option=subsidy_fees_option
+                                />
                             </div>
                         }
                     }}
@@ -1086,13 +1139,12 @@ fn StatsContent() -> impl IntoView {
                         let _m = mining_data.get();
                         view! {
                             <div class="space-y-10">
-                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6">
-                                    <div class="mb-4">
-                                        <h3 class="text-base text-white font-semibold">"Difficulty"</h3>
-                                        <p class="text-xs text-white/40 mt-0.5">"Mining difficulty target, adjusts every 2,016 blocks"</p>
-                                    </div>
-                                    <Chart id="chart-difficulty" option=diff_option/>
-                                </div>
+                                <ChartCard
+                                    title="Difficulty"
+                                    description="Mining difficulty target, adjusts every 2,016 blocks"
+                                    chart_id="chart-difficulty"
+                                    option=diff_option
+                                />
 
                                 // Section divider: Pool Distribution
                                 <div class="flex items-center gap-3 my-8">
@@ -1101,20 +1153,18 @@ fn StatsContent() -> impl IntoView {
                                     <div class="flex-1 h-px bg-white/10"></div>
                                 </div>
 
-                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6">
-                                    <div class="mb-4">
-                                        <h3 class="text-base text-white font-semibold">"Miner Dominance"</h3>
-                                        <p class="text-xs text-white/40 mt-0.5">"Mining pool market share for the selected period"</p>
-                                    </div>
-                                    <Chart id="chart-miner-dominance" option=miner_chart_option class="w-full h-[450px] lg:h-[600px]".to_string()/>
-                                </div>
-                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6">
-                                    <div class="mb-4">
-                                        <h3 class="text-base text-white font-semibold">"Empty Blocks"</h3>
-                                        <p class="text-xs text-white/40 mt-0.5">"Blocks containing only the coinbase transaction (no user transactions)"</p>
-                                    </div>
-                                    <Chart id="chart-empty-blocks" option=empty_blocks_option/>
-                                </div>
+                                <ChartCard
+                                    title="Miner Dominance"
+                                    description="Mining pool market share for the selected period"
+                                    chart_id="chart-miner-dominance"
+                                    option=miner_chart_option
+                                />
+                                <ChartCard
+                                    title="Empty Blocks"
+                                    description="Blocks containing only the coinbase transaction (no user transactions)"
+                                    chart_id="chart-empty-blocks"
+                                    option=empty_blocks_option
+                                />
                             </div>
                         }
                     }}
@@ -1135,27 +1185,24 @@ fn StatsContent() -> impl IntoView {
                         let _d = op_data.get();
                         view! {
                             <div class="space-y-10">
-                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6">
-                                    <div class="mb-4">
-                                        <h3 class="text-base text-white font-semibold">"OP_RETURN Count"</h3>
-                                        <p class="text-xs text-white/40 mt-0.5">"OP_RETURN outputs by protocol type (Runes vs data carriers)"</p>
-                                    </div>
-                                    <Chart id="chart-opreturn-count" option=op_count_option/>
-                                </div>
-                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6">
-                                    <div class="mb-4">
-                                        <h3 class="text-base text-white font-semibold">"OP_RETURN Volume"</h3>
-                                        <p class="text-xs text-white/40 mt-0.5">"Data volume embedded in OP_RETURN outputs by type"</p>
-                                    </div>
-                                    <Chart id="chart-opreturn-bytes" option=op_bytes_option/>
-                                </div>
-                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6">
-                                    <div class="mb-4">
-                                        <h3 class="text-base text-white font-semibold">"Runes Dominance"</h3>
-                                        <p class="text-xs text-white/40 mt-0.5">"Runes protocol outputs as percentage of all OP_RETURN outputs"</p>
-                                    </div>
-                                    <Chart id="chart-runes-pct" option=runes_pct_option/>
-                                </div>
+                                <ChartCard
+                                    title="OP_RETURN Count"
+                                    description="OP_RETURN outputs by protocol type (Runes vs data carriers)"
+                                    chart_id="chart-opreturn-count"
+                                    option=op_count_option
+                                />
+                                <ChartCard
+                                    title="OP_RETURN Volume"
+                                    description="Data volume embedded in OP_RETURN outputs by type"
+                                    chart_id="chart-opreturn-bytes"
+                                    option=op_bytes_option
+                                />
+                                <ChartCard
+                                    title="Runes Dominance"
+                                    description="Runes protocol outputs as percentage of all OP_RETURN outputs"
+                                    chart_id="chart-runes-pct"
+                                    option=runes_pct_option
+                                />
                             </div>
                         }
                     }}
