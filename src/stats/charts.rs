@@ -124,6 +124,11 @@ fn ts_ms(unix_secs: u64) -> u64 {
     unix_secs * 1000
 }
 
+/// Whether to show moving average (skip for short ranges like 1D)
+fn show_ma(data_len: usize) -> bool {
+    data_len >= 200
+}
+
 /// Merge chart_defaults with additional fields.
 fn build_option(extra: serde_json::Value) -> String {
     let mut base = chart_defaults();
@@ -161,24 +166,29 @@ pub fn block_size_chart(blocks: &[BlockSummary]) -> String {
         .collect();
 
     let x_axis = x_axis_for(false, &[]);
+    let has_ma = show_ma(blocks.len());
+
+    let mut series = vec![json!({
+        "name": "Size", "type": "line", "sampling": "lttb", "data": raw_data,
+        "lineStyle": { "width": if has_ma { 1.0 } else { 1.5 }, "color": DATA_COLOR },
+        "itemStyle": { "color": DATA_COLOR }, "symbol": "none",
+        "opacity": if has_ma { 0.4 } else { 1.0 }
+    })];
+    if has_ma {
+        series.push(json!({
+            "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_data,
+            "lineStyle": { "width": 2, "color": MA_COLOR },
+            "itemStyle": { "color": MA_COLOR }, "symbol": "none"
+        }));
+    }
 
     build_option(json!({
         "xAxis": x_axis,
         "yAxis": y_axis("MB"),
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
-        "series": [
-            {
-                "name": "Size", "type": "line", "sampling": "lttb", "data": raw_data,
-                "lineStyle": { "width": 1, "color": DATA_COLOR },
-                "itemStyle": { "color": DATA_COLOR }, "symbol": "none", "opacity": 0.4
-            },
-            {
-                "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_data,
-                "lineStyle": { "width": 2, "color": MA_COLOR },
-                "itemStyle": { "color": MA_COLOR }, "symbol": "none"
-            }
-        ]
+        "legend": { "show": has_ma },
+        "series": series
     }))
 }
 
@@ -238,23 +248,29 @@ pub fn tx_count_chart(blocks: &[BlockSummary]) -> String {
         .filter_map(|(b, m)| m.map(|v| json!([ts_ms(b.timestamp), v])))
         .collect();
 
+    let has_ma = show_ma(blocks.len());
+
+    let mut series = vec![json!({
+        "name": "Tx Count", "type": "line", "sampling": "lttb", "data": raw,
+        "lineStyle": { "width": if has_ma { 1.0 } else { 1.5 }, "color": DATA_COLOR },
+        "itemStyle": { "color": DATA_COLOR }, "symbol": "none",
+        "opacity": if has_ma { 0.4 } else { 1.0 }
+    })];
+    if has_ma {
+        series.push(json!({
+            "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_series,
+            "lineStyle": { "width": 2, "color": MA_COLOR },
+            "itemStyle": { "color": MA_COLOR }, "symbol": "none"
+        }));
+    }
+
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
         "yAxis": y_axis("Txs"),
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
-        "series": [
-            {
-                "name": "Tx Count", "type": "line", "sampling": "lttb", "data": raw,
-                "lineStyle": { "width": 1, "color": DATA_COLOR },
-                "itemStyle": { "color": DATA_COLOR }, "symbol": "none", "opacity": 0.4
-            },
-            {
-                "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_series,
-                "lineStyle": { "width": 2, "color": MA_COLOR },
-                "itemStyle": { "color": MA_COLOR }, "symbol": "none"
-            }
-        ]
+        "legend": { "show": has_ma },
+        "series": series
     }))
 }
 
@@ -442,34 +458,39 @@ pub fn block_interval_chart(blocks: &[BlockSummary]) -> String {
         .filter_map(|(b, m)| m.map(|v| json!([ts_ms(b.timestamp), v])))
         .collect();
 
+    let has_ma = show_ma(interval_vals.len());
+
+    let mut series = vec![json!({
+        "name": "Interval", "type": "scatter", "data": dots,
+        "symbolSize": 5,
+        "itemStyle": {
+            "color": DATA_COLOR
+        }
+    })];
+    if has_ma {
+        series.push(json!({
+            "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_series,
+            "lineStyle": { "width": 2, "color": MA_COLOR },
+            "itemStyle": { "color": MA_COLOR }, "symbol": "none"
+        }));
+    }
+    series.push(json!({
+        "name": "Target", "type": "line",
+        "markLine": {
+            "silent": true, "symbol": "none",
+            "lineStyle": { "type": "dashed", "color": TARGET_COLOR, "width": 1 },
+            "data": [{ "yAxis": 10, "label": { "formatter": "10 min", "color": TARGET_COLOR } }]
+        },
+        "data": []
+    }));
+
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
         "yAxis": y_axis("min"),
         "dataZoom": data_zoom(),
         "tooltip": { "trigger": "item" },
-        "series": [
-            {
-                "name": "Interval", "type": "scatter", "data": dots,
-                "symbolSize": 5,
-                "itemStyle": {
-                    "color": DATA_COLOR
-                }
-            },
-            {
-                "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_series,
-                "lineStyle": { "width": 2, "color": MA_COLOR },
-                "itemStyle": { "color": MA_COLOR }, "symbol": "none"
-            },
-            {
-                "name": "Target", "type": "line",
-                "markLine": {
-                    "silent": true, "symbol": "none",
-                    "lineStyle": { "type": "dashed", "color": TARGET_COLOR, "width": 1 },
-                    "data": [{ "yAxis": 10, "label": { "formatter": "10 min", "color": TARGET_COLOR } }]
-                },
-                "data": []
-            }
-        ]
+        "legend": { "show": has_ma },
+        "series": series
     }))
 }
 
@@ -619,23 +640,29 @@ pub fn runes_pct_chart(blocks: &[OpReturnBlock]) -> String {
         .filter_map(|(b, m)| m.map(|v| json!([ts_ms(b.timestamp), v])))
         .collect();
 
+    let has_ma = show_ma(blocks.len());
+
+    let mut series = vec![json!({
+        "name": "Runes %", "type": "line", "sampling": "lttb", "data": raw,
+        "lineStyle": { "width": if has_ma { 1.0 } else { 1.5 }, "color": RUNES_COLOR },
+        "itemStyle": { "color": RUNES_COLOR }, "symbol": "none",
+        "opacity": if has_ma { 0.4 } else { 1.0 }
+    })];
+    if has_ma {
+        series.push(json!({
+            "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_series,
+            "lineStyle": { "width": 2, "color": MA_COLOR },
+            "itemStyle": { "color": MA_COLOR }, "symbol": "none"
+        }));
+    }
+
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
         "yAxis": y_axis("%"),
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
-        "series": [
-            {
-                "name": "Runes %", "type": "line", "sampling": "lttb", "data": raw,
-                "lineStyle": { "width": 1, "color": RUNES_COLOR },
-                "itemStyle": { "color": RUNES_COLOR }, "symbol": "none", "opacity": 0.4
-            },
-            {
-                "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_series,
-                "lineStyle": { "width": 2, "color": MA_COLOR },
-                "itemStyle": { "color": MA_COLOR }, "symbol": "none"
-            }
-        ]
+        "legend": { "show": has_ma },
+        "series": series
     }))
 }
 
@@ -898,23 +925,29 @@ pub fn weight_utilization_chart(blocks: &[BlockSummary]) -> String {
         .filter_map(|(b, m)| m.map(|v| json!([ts_ms(b.timestamp), v])))
         .collect();
 
+    let has_ma = show_ma(blocks.len());
+
+    let mut series = vec![json!({
+        "name": "Utilization %", "type": "line", "sampling": "lttb", "data": raw,
+        "lineStyle": { "width": if has_ma { 1.0 } else { 1.5 }, "color": DATA_COLOR },
+        "itemStyle": { "color": DATA_COLOR }, "symbol": "none",
+        "opacity": if has_ma { 0.4 } else { 1.0 }
+    })];
+    if has_ma {
+        series.push(json!({
+            "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_series,
+            "lineStyle": { "width": 2, "color": MA_COLOR },
+            "itemStyle": { "color": MA_COLOR }, "symbol": "none"
+        }));
+    }
+
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
         "yAxis": y_axis("%"),
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
-        "series": [
-            {
-                "name": "Utilization %", "type": "line", "sampling": "lttb", "data": raw,
-                "lineStyle": { "width": 1, "color": DATA_COLOR },
-                "itemStyle": { "color": DATA_COLOR }, "symbol": "none", "opacity": 0.4
-            },
-            {
-                "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_series,
-                "lineStyle": { "width": 2, "color": MA_COLOR },
-                "itemStyle": { "color": MA_COLOR }, "symbol": "none"
-            }
-        ]
+        "legend": { "show": has_ma },
+        "series": series
     }))
 }
 
@@ -1097,23 +1130,29 @@ pub fn avg_tx_size_chart(blocks: &[BlockSummary]) -> String {
         .filter_map(|(b, m)| m.map(|v| json!([ts_ms(b.timestamp), v])))
         .collect();
 
+    let has_ma = show_ma(blocks.len());
+
+    let mut series = vec![json!({
+        "name": "Avg Tx Size", "type": "line", "sampling": "lttb", "data": raw,
+        "lineStyle": { "width": if has_ma { 1.0 } else { 1.5 }, "color": DATA_COLOR },
+        "itemStyle": { "color": DATA_COLOR }, "symbol": "none",
+        "opacity": if has_ma { 0.4 } else { 1.0 }
+    })];
+    if has_ma {
+        series.push(json!({
+            "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_series,
+            "lineStyle": { "width": 2, "color": MA_COLOR },
+            "itemStyle": { "color": MA_COLOR }, "symbol": "none"
+        }));
+    }
+
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
         "yAxis": y_axis("bytes"),
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
-        "series": [
-            {
-                "name": "Avg Tx Size", "type": "line", "sampling": "lttb", "data": raw,
-                "lineStyle": { "width": 1, "color": DATA_COLOR },
-                "itemStyle": { "color": DATA_COLOR }, "symbol": "none", "opacity": 0.4
-            },
-            {
-                "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_series,
-                "lineStyle": { "width": 2, "color": MA_COLOR },
-                "itemStyle": { "color": MA_COLOR }, "symbol": "none"
-            }
-        ]
+        "legend": { "show": has_ma },
+        "series": series
     }))
 }
 
@@ -1415,23 +1454,29 @@ pub fn segwit_adoption_chart(blocks: &[BlockSummary]) -> String {
         .filter_map(|(b, m)| m.map(|v| json!([ts_ms(b.timestamp), v])))
         .collect();
 
+    let has_ma = show_ma(blocks.len());
+
+    let mut series = vec![json!({
+        "name": "SegWit %", "type": "line", "sampling": "lttb", "data": raw,
+        "lineStyle": { "width": if has_ma { 1.0 } else { 1.5 }, "color": DATA_COLOR },
+        "itemStyle": { "color": DATA_COLOR }, "symbol": "none",
+        "opacity": if has_ma { 0.4 } else { 1.0 }
+    })];
+    if has_ma {
+        series.push(json!({
+            "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_series,
+            "lineStyle": { "width": 2, "color": MA_COLOR },
+            "itemStyle": { "color": MA_COLOR }, "symbol": "none"
+        }));
+    }
+
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
         "yAxis": y_axis("%"),
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
-        "series": [
-            {
-                "name": "SegWit %", "type": "line", "sampling": "lttb", "data": raw,
-                "lineStyle": { "width": 1, "color": DATA_COLOR },
-                "itemStyle": { "color": DATA_COLOR }, "symbol": "none", "opacity": 0.4
-            },
-            {
-                "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_series,
-                "lineStyle": { "width": 2, "color": MA_COLOR },
-                "itemStyle": { "color": MA_COLOR }, "symbol": "none"
-            }
-        ]
+        "legend": { "show": has_ma },
+        "series": series
     }))
 }
 
@@ -1509,23 +1554,29 @@ pub fn taproot_chart(blocks: &[BlockSummary]) -> String {
         .filter_map(|(b, m)| m.map(|v| json!([ts_ms(b.timestamp), v])))
         .collect();
 
+    let has_ma = show_ma(blocks.len());
+
+    let mut series = vec![json!({
+        "name": "Taproot Outputs", "type": "line", "sampling": "lttb", "data": raw,
+        "lineStyle": { "width": if has_ma { 1.0 } else { 1.5 }, "color": TAPROOT_COLOR },
+        "itemStyle": { "color": TAPROOT_COLOR }, "symbol": "none",
+        "opacity": if has_ma { 0.4 } else { 1.0 }
+    })];
+    if has_ma {
+        series.push(json!({
+            "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_series,
+            "lineStyle": { "width": 2, "color": MA_COLOR },
+            "itemStyle": { "color": MA_COLOR }, "symbol": "none"
+        }));
+    }
+
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
         "yAxis": y_axis("Outputs"),
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
-        "series": [
-            {
-                "name": "Taproot Outputs", "type": "line", "sampling": "lttb", "data": raw,
-                "lineStyle": { "width": 1, "color": TAPROOT_COLOR },
-                "itemStyle": { "color": TAPROOT_COLOR }, "symbol": "none", "opacity": 0.4
-            },
-            {
-                "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_series,
-                "lineStyle": { "width": 2, "color": MA_COLOR },
-                "itemStyle": { "color": MA_COLOR }, "symbol": "none"
-            }
-        ]
+        "legend": { "show": has_ma },
+        "series": series
     }))
 }
 
