@@ -221,17 +221,17 @@ fn StatsComingSoon() -> impl IntoView {
 
                 // Feature preview cards
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full max-w-2xl">
-                    <div class="bg-[#0d2137] border border-white/10 rounded-xl p-5 text-center">
+                    <div class="bg-white/5 border border-white/10 rounded-xl p-5 text-center">
                         <div class="text-2xl mb-2">"#"</div>
                         <div class="text-sm text-white/70 font-medium mb-1">"Live Dashboard"</div>
                         <div class="text-xs text-white/40">"Real-time block, mempool, and network stats"</div>
                     </div>
-                    <div class="bg-[#0d2137] border border-white/10 rounded-xl p-5 text-center">
+                    <div class="bg-white/5 border border-white/10 rounded-xl p-5 text-center">
                         <div class="text-2xl mb-2">"\u{21a9}"</div>
                         <div class="text-sm text-white/70 font-medium mb-1">"OP_RETURN Analysis"</div>
                         <div class="text-xs text-white/40">"Track Runes and data carrier usage over time"</div>
                     </div>
-                    <div class="bg-[#0d2137] border border-white/10 rounded-xl p-5 text-center">
+                    <div class="bg-white/5 border border-white/10 rounded-xl p-5 text-center">
                         <div class="text-2xl mb-2">"\u{2691}"</div>
                         <div class="text-sm text-white/70 font-medium mb-1">"BIP Signaling"</div>
                         <div class="text-xs text-white/40">"Monitor softfork activation progress"</div>
@@ -294,8 +294,9 @@ fn StatsContent() -> impl IntoView {
     let block_height = Signal::derive(move || {
         live_field(|s| format_number(s.blockchain.blocks))
     });
-    let chain =
-        Signal::derive(move || live_field(|s| s.blockchain.chain.clone()));
+    let chain_size = Signal::derive(move || {
+        live_field(|s| format!("{:.1} GB", s.network.chain_size_gb))
+    });
     let difficulty = Signal::derive(move || {
         live_field(|s| format!("{:.2}T", s.blockchain.difficulty / 1e12))
     });
@@ -330,11 +331,13 @@ fn StatsContent() -> impl IntoView {
             }
         })
     });
-    let chain_size = Signal::derive(move || {
-        live_field(|s| format!("{:.1} GB", s.network.chain_size_gb))
-    });
     let supply_pct = Signal::derive(move || {
         live_field(|s| format!("{:.2}%", s.network.percent_issued))
+    });
+    let total_supply = Signal::derive(move || {
+        live_field(|s| {
+            format!("{} BTC", format_number_f64(s.network.total_supply, 0))
+        })
     });
     let next_fee = Signal::derive(move || {
         live_field(|s| format!("{:.1} sat/vB", s.next_block_fee))
@@ -886,6 +889,12 @@ fn StatsContent() -> impl IntoView {
                         }
                     }).collect::<Vec<_>>()}
                 </div>
+                <span class="ml-3 text-xs text-white/30 self-center">
+                    {move || {
+                        let n = range_to_blocks(&range.get());
+                        if n > 5_000 { "daily averages" } else { "per block" }
+                    }}
+                </span>
             </div>
 
             // ===== OVERVIEW TAB =====
@@ -939,7 +948,6 @@ fn StatsContent() -> impl IntoView {
                                         <h3 class="text-sm font-bold text-[#f7931a] uppercase tracking-widest mb-4">"Mining"</h3>
                                         <div class="grid grid-cols-2 gap-3 mb-2">
                                             <LiveCard label="Block Height" value=block_height/>
-                                            <LiveCard label="Chain" value=chain/>
                                             <LiveCard label="Difficulty" value=difficulty/>
                                             <LiveCard label="Chain Size" value=chain_size/>
                                         </div>
@@ -952,7 +960,8 @@ fn StatsContent() -> impl IntoView {
                                             <LiveCard label="Price (USD)" value=price_usd/>
                                             <LiveCard label="Sats/Dollar" value=sats_per_dollar/>
                                             <LiveCard label="Market Cap" value=market_cap/>
-                                            <LiveCard label="Supply Issued" value=supply_pct/>
+                                            <LiveCard label="Total Supply" value=total_supply/>
+                                            <LiveCard label="% Issued" value=supply_pct/>
                                             <LiveCard label="UTXO Count" value=utxo_count/>
                                         </div>
                                     </div>
