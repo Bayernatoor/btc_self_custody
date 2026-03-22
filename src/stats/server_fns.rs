@@ -61,6 +61,8 @@ pub async fn fetch_blocks(
             total_fees: r.total_fees,
             median_fee: r.median_fee,
             median_fee_rate: r.median_fee_rate,
+            segwit_spend_count: r.segwit_spend_count,
+            taproot_spend_count: r.taproot_spend_count,
         })
         .collect())
 }
@@ -97,6 +99,8 @@ pub async fn fetch_block_detail(
         coinbase_locktime: r.coinbase_locktime,
         coinbase_sequence: r.coinbase_sequence,
         miner: r.miner,
+        segwit_spend_count: r.segwit_spend_count,
+        taproot_spend_count: r.taproot_spend_count,
     }))
 }
 
@@ -249,6 +253,8 @@ pub async fn fetch_daily_aggregates(
             total_data_carrier_count: r.total_data_carrier_count,
             total_data_carrier_bytes: r.total_data_carrier_bytes,
             total_fees: r.total_fees,
+            avg_segwit_spend_count: r.avg_segwit_spend_count,
+            avg_taproot_spend_count: r.avg_taproot_spend_count,
         })
         .collect())
 }
@@ -344,6 +350,82 @@ pub async fn fetch_signaling_periods(
             signaled_count: p.signaled_count,
             total_blocks: p.total_blocks,
             signaled_pct: p.signaled_pct,
+        })
+        .collect())
+}
+
+#[server(prefix = "/api", endpoint = "stats_miner_dominance")]
+pub async fn fetch_miner_dominance(
+    from: u64,
+    to: u64,
+) -> Result<Vec<MinerShare>, ServerFnError> {
+    let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
+        leptos_axum::extract().await.map_err(|e| {
+            ServerFnError::new(format!("Stats not available: {e}"))
+        })?;
+    let conn = state.db.lock().unwrap();
+    let rows = super::db::query_miner_dominance(&conn, from, to)
+        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+    let total: u64 = rows.iter().map(|r| r.count).sum();
+    Ok(rows
+        .into_iter()
+        .map(|r| MinerShare {
+            miner: r.miner,
+            count: r.count,
+            percentage: if total > 0 {
+                (r.count as f64 / total as f64 * 100.0 * 100.0).round() / 100.0
+            } else {
+                0.0
+            },
+        })
+        .collect())
+}
+
+#[server(prefix = "/api", endpoint = "stats_miner_dominance_daily")]
+pub async fn fetch_miner_dominance_daily(
+    from_ts: u64,
+    to_ts: u64,
+) -> Result<Vec<MinerShare>, ServerFnError> {
+    let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
+        leptos_axum::extract().await.map_err(|e| {
+            ServerFnError::new(format!("Stats not available: {e}"))
+        })?;
+    let conn = state.db.lock().unwrap();
+    let rows = super::db::query_miner_dominance_daily(&conn, from_ts, to_ts)
+        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+    let total: u64 = rows.iter().map(|r| r.count).sum();
+    Ok(rows
+        .into_iter()
+        .map(|r| MinerShare {
+            miner: r.miner,
+            count: r.count,
+            percentage: if total > 0 {
+                (r.count as f64 / total as f64 * 100.0 * 100.0).round() / 100.0
+            } else {
+                0.0
+            },
+        })
+        .collect())
+}
+
+#[server(prefix = "/api", endpoint = "stats_empty_blocks")]
+pub async fn fetch_empty_blocks(
+    from: u64,
+    to: u64,
+) -> Result<Vec<EmptyBlock>, ServerFnError> {
+    let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
+        leptos_axum::extract().await.map_err(|e| {
+            ServerFnError::new(format!("Stats not available: {e}"))
+        })?;
+    let conn = state.db.lock().unwrap();
+    let rows = super::db::query_empty_blocks(&conn, from, to)
+        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+    Ok(rows
+        .into_iter()
+        .map(|(height, timestamp, miner)| EmptyBlock {
+            height,
+            timestamp,
+            miner,
         })
         .collect())
 }

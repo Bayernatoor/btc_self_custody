@@ -12,7 +12,7 @@ use super::rpc::Block;
 
 /// Bump this when adding new columns that require re-fetching existing blocks.
 /// The backfill loop processes all blocks with backfill_version < BACKFILL_VERSION.
-pub const BACKFILL_VERSION: u64 = 1;
+pub const BACKFILL_VERSION: u64 = 2;
 
 pub fn open(path: &Path) -> rusqlite::Result<Connection> {
     let conn = Connection::open(path)?;
@@ -83,6 +83,20 @@ pub fn open(path: &Path) -> rusqlite::Result<Connection> {
         )?;
     }
 
+    // Migration: add segwit/taproot spend counts
+    let has_segwit: bool = conn
+        .prepare("SELECT segwit_spend_count FROM blocks LIMIT 0")
+        .is_ok();
+    if !has_segwit {
+        tracing::info!(
+            "Migrating: adding segwit_spend_count, taproot_spend_count columns"
+        );
+        conn.execute_batch(
+            "ALTER TABLE blocks ADD COLUMN segwit_spend_count INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE blocks ADD COLUMN taproot_spend_count INTEGER NOT NULL DEFAULT 0;",
+        )?;
+    }
+
     // Migration: add backfill_version column if missing
     // Tracks which backfill pass has been applied. Blocks with
     // backfill_version < BACKFILL_VERSION are re-fetched on startup.
@@ -123,8 +137,9 @@ pub fn insert_blocks(
               op_return_count, op_return_bytes, runes_count, runes_bytes,
               data_carrier_count, data_carrier_bytes, version, total_fees, miner,
               median_fee, median_fee_rate, coinbase_locktime, coinbase_sequence,
+              segwit_spend_count, taproot_spend_count,
               backfill_version)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23)",
         )?;
         for block in blocks {
             stmt.execute(params![
@@ -148,6 +163,8 @@ pub fn insert_blocks(
                 block.median_fee_rate,
                 block.coinbase_locktime,
                 block.coinbase_sequence,
+                block.segwit_spend_count,
+                block.taproot_spend_count,
                 BACKFILL_VERSION,
             ])?;
         }
@@ -186,7 +203,7 @@ pub fn update_block_extras(
     let tx = conn.unchecked_transaction()?;
     {
         let mut stmt = tx.prepare_cached(
-            "UPDATE blocks SET version = ?1, total_fees = ?2, miner = ?3, median_fee = ?4, median_fee_rate = ?5, coinbase_locktime = ?6, coinbase_sequence = ?7, backfill_version = ?8 WHERE height = ?9",
+            "UPDATE blocks SET version = ?1, total_fees = ?2, miner = ?3, median_fee = ?4, median_fee_rate = ?5, coinbase_locktime = ?6, coinbase_sequence = ?7, segwit_spend_count = ?8, taproot_spend_count = ?9, backfill_version = ?10 WHERE height = ?11",
         )?;
         for block in blocks {
             stmt.execute(params![
@@ -197,6 +214,8 @@ pub fn update_block_extras(
                 block.median_fee_rate,
                 block.coinbase_locktime,
                 block.coinbase_sequence,
+                block.segwit_spend_count,
+                block.taproot_spend_count,
                 BACKFILL_VERSION,
                 block.height
             ])?;
@@ -220,6 +239,8 @@ pub struct BlockRow {
     pub total_fees: u64,
     pub median_fee: u64,
     pub median_fee_rate: f64,
+    pub segwit_spend_count: u64,
+    pub taproot_spend_count: u64,
 }
 
 pub fn query_blocks(
@@ -229,7 +250,8 @@ pub fn query_blocks(
 ) -> rusqlite::Result<Vec<BlockRow>> {
     let mut stmt = conn.prepare(
         "SELECT height, hash, timestamp, tx_count, size, weight, difficulty,
-                total_fees, median_fee, median_fee_rate
+                total_fees, median_fee, median_fee_rate,
+                segwit_spend_count, taproot_spend_count
          FROM blocks WHERE height >= ?1 AND height <= ?2 ORDER BY height ASC",
     )?;
     let rows = stmt.query_map(params![from, to], |row| {
@@ -244,6 +266,8 @@ pub fn query_blocks(
             total_fees: row.get(7)?,
             median_fee: row.get(8)?,
             median_fee_rate: row.get(9)?,
+            segwit_spend_count: row.get(10)?,
+            taproot_spend_count: row.get(11)?,
         })
     })?;
     rows.collect()
@@ -271,6 +295,8 @@ pub struct FullBlockRow {
     pub coinbase_locktime: u64,
     pub coinbase_sequence: u64,
     pub miner: String,
+    pub segwit_spend_count: u64,
+    pub taproot_spend_count: u64,
 }
 
 pub fn query_block_by_height(
@@ -281,7 +307,8 @@ pub fn query_block_by_height(
         "SELECT height, hash, timestamp, tx_count, size, weight, difficulty,
                 op_return_count, op_return_bytes, runes_count, runes_bytes,
                 data_carrier_count, data_carrier_bytes, version, total_fees, miner,
-                median_fee, median_fee_rate, coinbase_locktime, coinbase_sequence
+                median_fee, median_fee_rate, coinbase_locktime, coinbase_sequence,
+                segwit_spend_count, taproot_spend_count
          FROM blocks WHERE height = ?1",
         params![height],
         |row| {
@@ -306,6 +333,8 @@ pub fn query_block_by_height(
                 median_fee_rate: row.get(17)?,
                 coinbase_locktime: row.get(18)?,
                 coinbase_sequence: row.get(19)?,
+                segwit_spend_count: row.get(20)?,
+                taproot_spend_count: row.get(21)?,
             }))
         },
     )
@@ -370,6 +399,8 @@ pub struct DailyRow {
     pub total_runes_bytes: u64,
     pub total_data_carrier_bytes: u64,
     pub total_fees: u64,
+    pub avg_segwit_spend_count: f64,
+    pub avg_taproot_spend_count: f64,
 }
 
 pub fn query_daily_aggregates(
@@ -383,7 +414,8 @@ pub fn query_daily_aggregates(
                 AVG(size), AVG(weight), AVG(tx_count), AVG(difficulty),
                 SUM(op_return_count), SUM(runes_count), SUM(data_carrier_count),
                 SUM(op_return_bytes), SUM(runes_bytes), SUM(data_carrier_bytes),
-                SUM(total_fees)
+                SUM(total_fees),
+                AVG(segwit_spend_count), AVG(taproot_spend_count)
          FROM blocks
          WHERE timestamp >= ?1 AND timestamp <= ?2
          GROUP BY day
@@ -404,6 +436,8 @@ pub fn query_daily_aggregates(
             total_runes_bytes: row.get(10)?,
             total_data_carrier_bytes: row.get(11)?,
             total_fees: row.get(12)?,
+            avg_segwit_spend_count: row.get(13)?,
+            avg_taproot_spend_count: row.get(14)?,
         })
     })?;
     rows.collect()
@@ -542,6 +576,69 @@ pub struct Stats {
     pub min_height: u64,
     pub max_height: u64,
     pub latest_timestamp: u64,
+}
+
+/// Miner block counts for a height range
+#[derive(serde::Serialize)]
+pub struct MinerCount {
+    pub miner: String,
+    pub count: u64,
+}
+
+pub fn query_miner_dominance(
+    conn: &Connection,
+    from: u64,
+    to: u64,
+) -> rusqlite::Result<Vec<MinerCount>> {
+    let mut stmt = conn.prepare(
+        "SELECT miner, COUNT(*) as cnt FROM blocks
+         WHERE height >= ?1 AND height <= ?2 AND miner != ''
+         GROUP BY miner ORDER BY cnt DESC",
+    )?;
+    let rows = stmt.query_map(params![from, to], |row| {
+        Ok(MinerCount {
+            miner: row.get(0)?,
+            count: row.get(1)?,
+        })
+    })?;
+    rows.collect()
+}
+
+/// Daily miner dominance
+pub fn query_miner_dominance_daily(
+    conn: &Connection,
+    from_ts: u64,
+    to_ts: u64,
+) -> rusqlite::Result<Vec<MinerCount>> {
+    let mut stmt = conn.prepare(
+        "SELECT miner, COUNT(*) as cnt FROM blocks
+         WHERE timestamp >= ?1 AND timestamp <= ?2 AND miner != ''
+         GROUP BY miner ORDER BY cnt DESC",
+    )?;
+    let rows = stmt.query_map(params![from_ts, to_ts], |row| {
+        Ok(MinerCount {
+            miner: row.get(0)?,
+            count: row.get(1)?,
+        })
+    })?;
+    rows.collect()
+}
+
+/// Empty blocks (tx_count == 1, coinbase only) for a height range
+pub fn query_empty_blocks(
+    conn: &Connection,
+    from: u64,
+    to: u64,
+) -> rusqlite::Result<Vec<(u64, u64, String)>> {
+    let mut stmt = conn.prepare(
+        "SELECT height, timestamp, miner FROM blocks
+         WHERE height >= ?1 AND height <= ?2 AND tx_count <= 1
+         ORDER BY height ASC",
+    )?;
+    let rows = stmt.query_map(params![from, to], |row| {
+        Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+    })?;
+    rows.collect()
 }
 
 pub fn query_stats(conn: &Connection) -> rusqlite::Result<Option<Stats>> {

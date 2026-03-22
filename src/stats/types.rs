@@ -25,6 +25,8 @@ pub struct BlockSummary {
     pub total_fees: u64,
     pub median_fee: u64,
     pub median_fee_rate: f64,
+    pub segwit_spend_count: u64,
+    pub taproot_spend_count: u64,
 }
 
 /// Full block detail (from query_block_by_height).
@@ -50,6 +52,8 @@ pub struct BlockDetail {
     pub coinbase_locktime: u64,
     pub coinbase_sequence: u64,
     pub miner: String,
+    pub segwit_spend_count: u64,
+    pub taproot_spend_count: u64,
 }
 
 /// OP_RETURN block data (from query_op_returns).
@@ -82,6 +86,8 @@ pub struct DailyAggregate {
     pub total_data_carrier_count: u64,
     pub total_data_carrier_bytes: u64,
     pub total_fees: u64,
+    pub avg_segwit_spend_count: f64,
+    pub avg_taproot_spend_count: f64,
 }
 
 /// Per-block signaling status.
@@ -155,6 +161,20 @@ pub struct LiveNetwork {
     pub percent_issued: f64,
     pub utxo_count: u64,
     pub chain_size_gb: f64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MinerShare {
+    pub miner: String,
+    pub count: u64,
+    pub percentage: f64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct EmptyBlock {
+    pub height: u64,
+    pub timestamp: u64,
+    pub miner: String,
 }
 
 // ---------------------------------------------------------------------------

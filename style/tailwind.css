@@ -1,12 +1,12 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300..700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@200..700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Questrial&display=swap');
 
 @import 'tailwindcss';
 
 @source "../src/**/*.rs";
 
 @theme {
-  --font-questrial: "Questrial", sans-serif;
+  --font-inter: "Inter", system-ui, sans-serif;
   --font-title: "Oswald", sans-serif;
 
   --animate-fadein: fadein 2s ease-in-out forwards;
@@ -51,10 +51,10 @@
 
 @layer base {
   body {
-    font-family: var(--font-questrial);
+    font-family: var(--font-inter);
   }
   h1, h2, h3, h4, h5, h6 {
-    font-family: var(--font-questrial);
+    font-family: var(--font-inter);
   }
 }
 

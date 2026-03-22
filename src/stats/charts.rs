@@ -28,7 +28,7 @@ const SIGNAL_NO: &str = "rgba(231,76,60,0.3)"; // Not signaled (faded red)
 fn chart_defaults() -> serde_json::Value {
     json!({
         "backgroundColor": "transparent",
-        "textStyle": { "color": "#aaa", "fontFamily": "system-ui, sans-serif" },
+        "textStyle": { "color": "#aaa", "fontFamily": "Inter, system-ui, sans-serif" },
         "grid": { "left": 55, "right": 20, "top": 50, "bottom": 65 },
         "legend": { "textStyle": { "color": "#ccc", "fontSize": 11 }, "top": 28, "left": "center" },
         "toolbox": {
@@ -911,6 +911,322 @@ pub fn signaling_periods_chart(
     }))
 }
 
+// ---------------------------------------------------------------------------
+// New chart builders
+// ---------------------------------------------------------------------------
+
+/// Block subsidy in satoshis for a given height.
+fn block_subsidy(height: u64) -> u64 {
+    let halvings = height / 210_000;
+    if halvings >= 64 {
+        return 0;
+    }
+    5_000_000_000u64 >> halvings
+}
+
+/// Block weight utilization as % of max (4,000,000 WU).
+pub fn weight_utilization_chart(
+    blocks: &[BlockSummary],
+    _is_daily: bool,
+) -> String {
+    if blocks.is_empty() {
+        return no_data_chart("Weight Utilization");
+    }
+
+    let vals: Vec<f64> = blocks
+        .iter()
+        .map(|b| {
+            (b.weight as f64 / 4_000_000.0 * 100.0 * 1000.0).round() / 1000.0
+        })
+        .collect();
+
+    let raw: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(vals.iter())
+        .map(|(b, v)| json!([ts_ms(b.timestamp), v]))
+        .collect();
+
+    let ma = moving_average(&vals, 144);
+    let ma_series: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(ma.iter())
+        .filter_map(|(b, m)| m.map(|v| json!([ts_ms(b.timestamp), v])))
+        .collect();
+
+    build_option(json!({
+        "title": { "text": "Block Weight Utilization", "textStyle": { "color": "#ccc", "fontSize": 14 } },
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("%"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "series": [
+            {
+                "name": "Utilization %", "type": "line", "data": raw,
+                "lineStyle": { "width": 1, "color": DATA_COLOR },
+                "itemStyle": { "color": DATA_COLOR }, "symbol": "none", "opacity": 0.4
+            },
+            {
+                "name": "144-block MA", "type": "line", "data": ma_series,
+                "lineStyle": { "width": 2, "color": MA_COLOR },
+                "itemStyle": { "color": MA_COLOR }, "symbol": "none"
+            }
+        ]
+    }))
+}
+
+/// Block weight utilization from daily aggregates.
+pub fn weight_utilization_chart_daily(days: &[DailyAggregate]) -> String {
+    if days.is_empty() {
+        return no_data_chart("Weight Utilization");
+    }
+
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    let vals: Vec<f64> = days
+        .iter()
+        .map(|d| (d.avg_weight / 4_000_000.0 * 100.0 * 1000.0).round() / 1000.0)
+        .collect();
+    let ma = moving_average(&vals, 7);
+    let ma_vals: Vec<serde_json::Value> = ma
+        .iter()
+        .map(|v| match v {
+            Some(x) => json!(x),
+            None => json!(null),
+        })
+        .collect();
+
+    build_option(json!({
+        "title": { "text": "Weight Utilization (Daily Avg)", "textStyle": { "color": "#ccc", "fontSize": 14 } },
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": y_axis("%"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "series": [
+            {
+                "name": "Utilization %", "type": "line", "data": vals,
+                "lineStyle": { "width": 1, "color": DATA_COLOR },
+                "itemStyle": { "color": DATA_COLOR }, "symbol": "none", "opacity": 0.4
+            },
+            {
+                "name": "7-day MA", "type": "line", "data": ma_vals,
+                "lineStyle": { "width": 2, "color": MA_COLOR },
+                "itemStyle": { "color": MA_COLOR }, "symbol": "none"
+            }
+        ]
+    }))
+}
+
+const SUBSIDY_COLOR: &str = "#9b59b6";
+
+/// Block subsidy vs fee revenue ratio (stacked area).
+pub fn subsidy_vs_fees_chart(
+    blocks: &[BlockSummary],
+    _is_daily: bool,
+) -> String {
+    if blocks.is_empty() {
+        return no_data_chart("Subsidy vs Fees");
+    }
+
+    let subsidy_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .map(|b| {
+            let sub = block_subsidy(b.height) as f64 / 100_000_000.0;
+            let rounded = (sub * 1000.0).round() / 1000.0;
+            json!([ts_ms(b.timestamp), rounded])
+        })
+        .collect();
+
+    let fee_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .map(|b| {
+            let fee = b.total_fees as f64 / 100_000_000.0;
+            let rounded = (fee * 1000.0).round() / 1000.0;
+            json!([ts_ms(b.timestamp), rounded])
+        })
+        .collect();
+
+    build_option(json!({
+        "title": { "text": "Subsidy vs Fees (BTC)", "textStyle": { "color": "#ccc", "fontSize": 14 } },
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("BTC"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "series": [
+            {
+                "name": "Subsidy", "type": "line", "stack": "reward", "data": subsidy_data,
+                "lineStyle": { "width": 1, "color": SUBSIDY_COLOR },
+                "itemStyle": { "color": SUBSIDY_COLOR }, "symbol": "none",
+                "areaStyle": { "color": "rgba(155,89,182,0.3)" }
+            },
+            {
+                "name": "Fees", "type": "line", "stack": "reward", "data": fee_data,
+                "lineStyle": { "width": 1, "color": DATA_COLOR },
+                "itemStyle": { "color": DATA_COLOR }, "symbol": "none",
+                "areaStyle": { "color": DATA_COLOR_FADED }
+            }
+        ]
+    }))
+}
+
+/// Subsidy vs fees from daily aggregates.
+pub fn subsidy_vs_fees_chart_daily(days: &[DailyAggregate]) -> String {
+    if days.is_empty() {
+        return no_data_chart("Subsidy vs Fees");
+    }
+
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+
+    // Determine subsidy per day based on known halving dates
+    let subsidy_vals: Vec<f64> = days
+        .iter()
+        .map(|d| {
+            if d.date.as_str() >= "2024-04-20" {
+                3.125
+            } else if d.date.as_str() >= "2020-05-11" {
+                6.25
+            } else if d.date.as_str() >= "2016-07-09" {
+                12.5
+            } else if d.date.as_str() >= "2012-11-28" {
+                25.0
+            } else {
+                50.0
+            }
+        })
+        .collect();
+    let fee_vals: Vec<serde_json::Value> = days
+        .iter()
+        .map(|d| {
+            if d.total_fees > 0 && d.block_count > 0 {
+                let v =
+                    d.total_fees as f64 / d.block_count as f64 / 100_000_000.0;
+                let rounded = (v * 1000.0).round() / 1000.0;
+                json!(rounded)
+            } else {
+                json!(null)
+            }
+        })
+        .collect();
+
+    build_option(json!({
+        "title": { "text": "Subsidy vs Fees (Daily Avg BTC)", "textStyle": { "color": "#ccc", "fontSize": 14 } },
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": y_axis("BTC"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "series": [
+            {
+                "name": "Subsidy", "type": "line", "stack": "reward", "data": subsidy_vals,
+                "lineStyle": { "width": 1, "color": SUBSIDY_COLOR },
+                "itemStyle": { "color": SUBSIDY_COLOR }, "symbol": "none",
+                "areaStyle": { "color": "rgba(155,89,182,0.3)" }
+            },
+            {
+                "name": "Avg Fees", "type": "line", "stack": "reward", "data": fee_vals,
+                "lineStyle": { "width": 1, "color": DATA_COLOR },
+                "itemStyle": { "color": DATA_COLOR }, "symbol": "none",
+                "areaStyle": { "color": DATA_COLOR_FADED }
+            }
+        ]
+    }))
+}
+
+/// Average transaction size in bytes.
+pub fn avg_tx_size_chart(blocks: &[BlockSummary], _is_daily: bool) -> String {
+    if blocks.is_empty() {
+        return no_data_chart("Avg Transaction Size");
+    }
+
+    let vals: Vec<f64> = blocks
+        .iter()
+        .map(|b| {
+            if b.tx_count > 0 {
+                (b.size as f64 / b.tx_count as f64 * 1000.0).round() / 1000.0
+            } else {
+                0.0
+            }
+        })
+        .collect();
+
+    let raw: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(vals.iter())
+        .map(|(b, v)| json!([ts_ms(b.timestamp), v]))
+        .collect();
+
+    let ma = moving_average(&vals, 144);
+    let ma_series: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(ma.iter())
+        .filter_map(|(b, m)| m.map(|v| json!([ts_ms(b.timestamp), v])))
+        .collect();
+
+    build_option(json!({
+        "title": { "text": "Avg Transaction Size", "textStyle": { "color": "#ccc", "fontSize": 14 } },
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("bytes"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "series": [
+            {
+                "name": "Avg Tx Size", "type": "line", "data": raw,
+                "lineStyle": { "width": 1, "color": DATA_COLOR },
+                "itemStyle": { "color": DATA_COLOR }, "symbol": "none", "opacity": 0.4
+            },
+            {
+                "name": "144-block MA", "type": "line", "data": ma_series,
+                "lineStyle": { "width": 2, "color": MA_COLOR },
+                "itemStyle": { "color": MA_COLOR }, "symbol": "none"
+            }
+        ]
+    }))
+}
+
+/// Avg transaction size from daily aggregates.
+pub fn avg_tx_size_chart_daily(days: &[DailyAggregate]) -> String {
+    if days.is_empty() {
+        return no_data_chart("Avg Transaction Size");
+    }
+
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    let vals: Vec<f64> = days
+        .iter()
+        .map(|d| {
+            if d.avg_tx_count > 0.0 {
+                (d.avg_size / d.avg_tx_count * 1000.0).round() / 1000.0
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    let ma = moving_average(&vals, 7);
+    let ma_vals: Vec<serde_json::Value> = ma
+        .iter()
+        .map(|v| match v {
+            Some(x) => json!(x),
+            None => json!(null),
+        })
+        .collect();
+
+    build_option(json!({
+        "title": { "text": "Avg Transaction Size (Daily)", "textStyle": { "color": "#ccc", "fontSize": 14 } },
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": y_axis("bytes"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "series": [
+            {
+                "name": "Avg Tx Size", "type": "line", "data": vals,
+                "lineStyle": { "width": 1, "color": DATA_COLOR },
+                "itemStyle": { "color": DATA_COLOR }, "symbol": "none", "opacity": 0.4
+            },
+            {
+                "name": "7-day MA", "type": "line", "data": ma_vals,
+                "lineStyle": { "width": 2, "color": MA_COLOR },
+                "itemStyle": { "color": MA_COLOR }, "symbol": "none"
+            }
+        ]
+    }))
+}
+
 fn format_num(n: u64) -> String {
     let s = n.to_string();
     let bytes = s.as_bytes();
@@ -1006,6 +1322,334 @@ pub fn fees_chart_daily_unit(days: &[DailyAggregate], unit: &str) -> String {
                 "lineStyle": { "width": 1.5, "color": DATA_COLOR },
                 "itemStyle": { "color": DATA_COLOR }, "symbol": "none",
                 "areaStyle": { "color": DATA_COLOR_FADED }
+            }
+        ]
+    }))
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2: Mining & Adoption charts
+// ---------------------------------------------------------------------------
+
+const PIE_COLORS: [&str; 11] = [
+    "#4ecdc4", "#f7931a", "#ff6b6b", "#bb8fff", "#2ecc71", "#e74c3c",
+    "#3498db", "#e67e22", "#1abc9c", "#9b59b6", "#95a5a6",
+];
+
+/// Miner dominance donut chart.
+pub fn miner_dominance_chart(miners: &[MinerShare]) -> String {
+    if miners.is_empty() {
+        return no_data_chart("Miner Dominance");
+    }
+
+    // Top 10 + "Other"
+    let (top, rest) = if miners.len() > 10 {
+        (&miners[..10], &miners[10..])
+    } else {
+        (miners, &[][..])
+    };
+
+    let mut pie_data: Vec<serde_json::Value> = top
+        .iter()
+        .map(|m| {
+            json!({
+                "name": m.miner,
+                "value": m.count
+            })
+        })
+        .collect();
+
+    if !rest.is_empty() {
+        let other_count: u64 = rest.iter().map(|m| m.count).sum();
+        pie_data.push(json!({
+            "name": "Other",
+            "value": other_count
+        }));
+    }
+
+    let colors: Vec<&str> =
+        PIE_COLORS.iter().copied().take(pie_data.len()).collect();
+
+    serde_json::to_string(&json!({
+        "backgroundColor": "transparent",
+        "color": colors,
+        "title": {
+            "text": "Miner Dominance",
+            "textStyle": { "color": "#ccc", "fontSize": 14 }
+        },
+        "tooltip": {
+            "trigger": "item",
+            "formatter": "{b}: {c} blocks ({d}%)"
+        },
+        "legend": {
+            "orient": "vertical",
+            "right": 10,
+            "top": 50,
+            "textStyle": { "color": "#ccc", "fontSize": 11 }
+        },
+        "series": [{
+            "name": "Miners",
+            "type": "pie",
+            "radius": ["45%", "70%"],
+            "center": ["40%", "55%"],
+            "avoidLabelOverlap": true,
+            "itemStyle": {
+                "borderRadius": 4,
+                "borderColor": "#0e2a47",
+                "borderWidth": 2
+            },
+            "label": {
+                "show": true,
+                "color": "#ccc",
+                "fontSize": 11,
+                "formatter": "{b}\n{d}%"
+            },
+            "emphasis": {
+                "label": { "fontSize": 14, "fontWeight": "bold" }
+            },
+            "data": pie_data
+        }]
+    }))
+    .unwrap_or_default()
+}
+
+/// Empty blocks scatter chart.
+pub fn empty_blocks_chart(blocks: &[EmptyBlock]) -> String {
+    if blocks.is_empty() {
+        return no_data_chart("Empty Blocks");
+    }
+
+    // Group by miner for color coding
+    let mut miner_series: std::collections::HashMap<
+        String,
+        Vec<serde_json::Value>,
+    > = std::collections::HashMap::new();
+    for b in blocks {
+        let miner = if b.miner.is_empty() {
+            "Unknown".to_string()
+        } else {
+            b.miner.clone()
+        };
+        miner_series.entry(miner).or_default().push(json!([
+            ts_ms(b.timestamp),
+            1,
+            b.height
+        ]));
+    }
+
+    let mut series: Vec<serde_json::Value> = Vec::new();
+    for (i, (miner, data)) in miner_series.iter().enumerate() {
+        let color = PIE_COLORS[i % PIE_COLORS.len()];
+        series.push(json!({
+            "name": miner,
+            "type": "scatter",
+            "data": data,
+            "symbolSize": 8,
+            "itemStyle": { "color": color }
+        }));
+    }
+
+    build_option(json!({
+        "title": { "text": "Empty Blocks (coinbase only)", "textStyle": { "color": "#ccc", "fontSize": 14 } },
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": {
+            "type": "value", "show": false, "min": 0, "max": 2
+        },
+        "dataZoom": data_zoom(),
+        "tooltip": {
+            "trigger": "item",
+            "formatter": "{a}<br/>Block: {c}"
+        },
+        "series": series
+    }))
+}
+
+/// SegWit adoption % chart (per-block).
+pub fn segwit_adoption_chart(
+    blocks: &[BlockSummary],
+    _is_daily: bool,
+) -> String {
+    if blocks.is_empty() {
+        return no_data_chart("SegWit Adoption %");
+    }
+
+    let vals: Vec<f64> = blocks
+        .iter()
+        .map(|b| {
+            if b.tx_count > 1 {
+                let pct = b.segwit_spend_count as f64 / (b.tx_count - 1) as f64
+                    * 100.0;
+                (pct * 100.0).round() / 100.0
+            } else {
+                0.0
+            }
+        })
+        .collect();
+
+    let raw: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(vals.iter())
+        .map(|(b, v)| json!([ts_ms(b.timestamp), v]))
+        .collect();
+
+    let ma = moving_average(&vals, 144);
+    let ma_series: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(ma.iter())
+        .filter_map(|(b, m)| m.map(|v| json!([ts_ms(b.timestamp), v])))
+        .collect();
+
+    build_option(json!({
+        "title": { "text": "SegWit Adoption % (tx with witness data)", "textStyle": { "color": "#ccc", "fontSize": 14 } },
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("%"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "series": [
+            {
+                "name": "SegWit %", "type": "line", "data": raw,
+                "lineStyle": { "width": 1, "color": DATA_COLOR },
+                "itemStyle": { "color": DATA_COLOR }, "symbol": "none", "opacity": 0.4
+            },
+            {
+                "name": "144-block MA", "type": "line", "data": ma_series,
+                "lineStyle": { "width": 2, "color": MA_COLOR },
+                "itemStyle": { "color": MA_COLOR }, "symbol": "none"
+            }
+        ]
+    }))
+}
+
+/// SegWit adoption % from daily aggregates.
+pub fn segwit_adoption_chart_daily(days: &[DailyAggregate]) -> String {
+    if days.is_empty() {
+        return no_data_chart("SegWit Adoption %");
+    }
+
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    let vals: Vec<f64> = days
+        .iter()
+        .map(|d| {
+            if d.avg_tx_count > 1.0 {
+                let pct =
+                    d.avg_segwit_spend_count / (d.avg_tx_count - 1.0) * 100.0;
+                (pct * 100.0).round() / 100.0
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    let ma = moving_average(&vals, 7);
+    let ma_vals: Vec<serde_json::Value> = ma
+        .iter()
+        .map(|v| match v {
+            Some(x) => json!(x),
+            None => json!(null),
+        })
+        .collect();
+
+    build_option(json!({
+        "title": { "text": "SegWit Adoption % (Daily Avg)", "textStyle": { "color": "#ccc", "fontSize": 14 } },
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": y_axis("%"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "series": [
+            {
+                "name": "SegWit %", "type": "line", "data": vals,
+                "lineStyle": { "width": 1, "color": DATA_COLOR },
+                "itemStyle": { "color": DATA_COLOR }, "symbol": "none", "opacity": 0.4
+            },
+            {
+                "name": "7-day MA", "type": "line", "data": ma_vals,
+                "lineStyle": { "width": 2, "color": MA_COLOR },
+                "itemStyle": { "color": MA_COLOR }, "symbol": "none"
+            }
+        ]
+    }))
+}
+
+const TAPROOT_COLOR: &str = "#f7931a";
+
+/// Taproot outputs per block chart.
+pub fn taproot_chart(blocks: &[BlockSummary], _is_daily: bool) -> String {
+    if blocks.is_empty() {
+        return no_data_chart("Taproot Outputs");
+    }
+
+    let vals: Vec<f64> = blocks
+        .iter()
+        .map(|b| b.taproot_spend_count as f64)
+        .collect();
+
+    let raw: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(vals.iter())
+        .map(|(b, v)| json!([ts_ms(b.timestamp), v]))
+        .collect();
+
+    let ma = moving_average(&vals, 144);
+    let ma_series: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(ma.iter())
+        .filter_map(|(b, m)| m.map(|v| json!([ts_ms(b.timestamp), v])))
+        .collect();
+
+    build_option(json!({
+        "title": { "text": "Taproot Outputs per Block", "textStyle": { "color": "#ccc", "fontSize": 14 } },
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("Outputs"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "series": [
+            {
+                "name": "Taproot Outputs", "type": "line", "data": raw,
+                "lineStyle": { "width": 1, "color": TAPROOT_COLOR },
+                "itemStyle": { "color": TAPROOT_COLOR }, "symbol": "none", "opacity": 0.4
+            },
+            {
+                "name": "144-block MA", "type": "line", "data": ma_series,
+                "lineStyle": { "width": 2, "color": MA_COLOR },
+                "itemStyle": { "color": MA_COLOR }, "symbol": "none"
+            }
+        ]
+    }))
+}
+
+/// Taproot outputs from daily aggregates.
+pub fn taproot_chart_daily(days: &[DailyAggregate]) -> String {
+    if days.is_empty() {
+        return no_data_chart("Taproot Outputs");
+    }
+
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    let vals: Vec<f64> =
+        days.iter().map(|d| d.avg_taproot_spend_count).collect();
+    let ma = moving_average(&vals, 7);
+    let ma_vals: Vec<serde_json::Value> = ma
+        .iter()
+        .map(|v| match v {
+            Some(x) => json!(x),
+            None => json!(null),
+        })
+        .collect();
+
+    build_option(json!({
+        "title": { "text": "Taproot Outputs (Daily Avg per Block)", "textStyle": { "color": "#ccc", "fontSize": 14 } },
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": y_axis("Outputs"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "series": [
+            {
+                "name": "Taproot Outputs", "type": "line", "data": vals,
+                "lineStyle": { "width": 1, "color": TAPROOT_COLOR },
+                "itemStyle": { "color": TAPROOT_COLOR }, "symbol": "none", "opacity": 0.4
+            },
+            {
+                "name": "7-day MA", "type": "line", "data": ma_vals,
+                "lineStyle": { "width": 2, "color": MA_COLOR },
+                "itemStyle": { "color": MA_COLOR }, "symbol": "none"
             }
         ]
     }))
