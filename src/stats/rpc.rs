@@ -143,6 +143,14 @@ impl BitcoinRpc {
             .map_err(|e| StatsError::Rpc(e.to_string()))
     }
 
+    /// Estimated network hash rate (hashes per second).
+    pub async fn get_network_hashps(&self) -> Result<f64, StatsError> {
+        let result = self.call("getnetworkhashps", &[]).await?;
+        result
+            .as_f64()
+            .ok_or_else(|| StatsError::Rpc("Expected number for hashps".to_string()))
+    }
+
     /// Estimate fee rate (sat/vB) to confirm within `target` blocks.
     pub async fn estimate_smart_fee(
         &self,
