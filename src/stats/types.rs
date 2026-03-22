@@ -161,6 +161,7 @@ pub struct LiveNetwork {
     pub percent_issued: f64,
     pub utxo_count: u64,
     pub chain_size_gb: f64,
+    pub hashrate: f64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

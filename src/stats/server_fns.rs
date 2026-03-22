@@ -163,6 +163,9 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
     let chain_size_gb = blockchain.size_on_disk as f64 / 1_000_000_000.0;
     let utxo_count = state.utxo_count.lock().unwrap().unwrap_or(0);
 
+    // Network hashrate (non-fatal if it fails)
+    let hashrate = state.rpc.get_network_hashps().await.unwrap_or(0.0);
+
     // Next-block fee estimate (non-fatal if it fails)
     let next_block_fee = state.rpc.estimate_smart_fee(1).await.unwrap_or(0.0);
 
@@ -193,6 +196,7 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
             percent_issued: (percent_issued * 100.0).round() / 100.0,
             utxo_count,
             chain_size_gb: (chain_size_gb * 10.0).round() / 10.0,
+            hashrate,
         },
     })
 }

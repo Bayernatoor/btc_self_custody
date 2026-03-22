@@ -299,6 +299,18 @@ fn StatsContent() -> impl IntoView {
     let difficulty = Signal::derive(move || {
         live_field(|s| format!("{:.2}T", s.blockchain.difficulty / 1e12))
     });
+    let hashrate = Signal::derive(move || {
+        live_field(|s| {
+            let h = s.network.hashrate;
+            if h >= 1e18 {
+                format!("{:.0} EH/s", h / 1e18)
+            } else if h >= 1e15 {
+                format!("{:.0} PH/s", h / 1e15)
+            } else {
+                format!("{:.0} TH/s", h / 1e12)
+            }
+        })
+    });
     let mempool_size =
         Signal::derive(move || live_field(|s| format_number(s.mempool.size)));
     let mempool_bytes = Signal::derive(move || {
@@ -942,6 +954,7 @@ fn StatsContent() -> impl IntoView {
                             <div class="grid grid-cols-2 gap-3 mb-2">
                                 <LiveCard label="Block Height" value=block_height/>
                                 <LiveCard label="Difficulty" value=difficulty/>
+                                <LiveCard label="Hashrate" value=hashrate/>
                                 <LiveCard label="Chain Size" value=chain_size/>
                             </div>
                         </div>
