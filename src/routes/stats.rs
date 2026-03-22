@@ -104,8 +104,8 @@ fn ChartCard(
         <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6">
             <div class="flex items-start justify-between mb-4">
                 <div>
-                    <h3 class="text-base text-white font-semibold">{title.clone()}</h3>
-                    <p class="text-xs text-white/40 mt-0.5">{description.clone()}</p>
+                    <h3 class="text-lg text-white font-semibold">{title.clone()}</h3>
+                    <p class="text-sm text-white/50 mt-0.5">{description.clone()}</p>
                 </div>
                 <div class="flex items-center gap-2 shrink-0">
                     {children.map(|c| c())}
@@ -859,41 +859,43 @@ fn StatsContent() -> impl IntoView {
                 if t == "overview" || t == "signaling" {
                     "hidden"
                 } else {
-                    "flex flex-wrap gap-1.5 justify-center mb-8"
+                    "flex justify-center mb-8"
                 }
             }>
-                {["1d", "1w", "1m", "3m", "6m", "1y", "2y", "5y", "10y", "all"].into_iter().map(|r| {
-                    let r_str = r.to_string();
-                    let r_display = r.to_uppercase();
-                    let r_clone = r_str.clone();
-                    view! {
-                        <button
-                            class=move || {
-                                if range.get() == r_clone {
-                                    "px-3 py-1.5 text-xs rounded-lg bg-white/10 text-white border border-white/20 font-medium cursor-pointer"
-                                } else {
-                                    "px-3 py-1.5 text-xs rounded-lg text-white/50 hover:text-white/80 hover:bg-white/5 transition-all cursor-pointer"
+                <div class="inline-flex flex-wrap gap-1.5 bg-[#0a1a2e] rounded-xl p-1.5 border border-white/5">
+                    {["1d", "1w", "1m", "3m", "6m", "1y", "2y", "5y", "10y", "all"].into_iter().map(|r| {
+                        let r_str = r.to_string();
+                        let r_display = r.to_uppercase();
+                        let r_clone = r_str.clone();
+                        view! {
+                            <button
+                                class=move || {
+                                    if range.get() == r_clone {
+                                        "px-3 py-1 text-xs rounded-lg bg-[#f7931a] text-[#1a1a2e] font-semibold cursor-pointer"
+                                    } else {
+                                        "px-3 py-1 text-xs rounded-lg text-white/40 hover:text-white/70 hover:bg-white/5 transition-all cursor-pointer"
+                                    }
                                 }
-                            }
-                            on:click={
-                                let r = r_str.clone();
-                                move |_| set_range.set(r.clone())
-                            }
-                        >
-                            {r_display}
-                        </button>
-                    }
-                }).collect::<Vec<_>>()}
+                                on:click={
+                                    let r = r_str.clone();
+                                    move |_| set_range.set(r.clone())
+                                }
+                            >
+                                {r_display}
+                            </button>
+                        }
+                    }).collect::<Vec<_>>()}
+                </div>
             </div>
 
             // ===== OVERVIEW TAB =====
             <div class=move || if tab.get() == "overview" { "block" } else { "hidden" }>
 
                 // Live stats panel
-                <div class="bg-[#0d2137] border border-white/10 rounded-xl p-4 mb-6">
+                <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-6 lg:p-8 mb-8">
                     <div class="flex items-center gap-2 mb-3 flex-wrap">
                         <div class="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"></div>
-                        <span class="text-base text-white font-semibold">"Live Node Stats"</span>
+                        <span class="text-lg text-white font-bold">"Live Node Stats"</span>
                         <div class="flex items-center gap-2 ml-auto">
                             <span class="text-xs text-white/30">{move || last_updated.get()}</span>
                             <span class="text-xs text-white/20">
@@ -920,9 +922,9 @@ fn StatsContent() -> impl IntoView {
                             view! {
                                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
                                     // Mempool section
-                                    <div class="bg-[#0a1a2e] border border-white/10 rounded-xl p-4 overflow-hidden">
+                                    <div class="bg-[#0a1a2e] border border-white/10 rounded-xl p-5 overflow-hidden">
                                         <h3 class="text-sm font-bold text-[#f7931a] uppercase tracking-widest mb-4">"Mempool"</h3>
-                                        <div class="grid grid-cols-2 gap-2 mb-3">
+                                        <div class="grid grid-cols-2 gap-3 mb-3">
                                             <LiveCard label="Transactions" value=mempool_size/>
                                             <LiveCard label="Size" value=mempool_bytes/>
                                             <LiveCard label="Next Block Fee" value=next_fee/>
@@ -933,9 +935,9 @@ fn StatsContent() -> impl IntoView {
                                     </div>
 
                                     // Mining section
-                                    <div class="bg-[#0a1a2e] border border-white/10 rounded-xl p-4">
+                                    <div class="bg-[#0a1a2e] border border-white/10 rounded-xl p-5">
                                         <h3 class="text-sm font-bold text-[#f7931a] uppercase tracking-widest mb-4">"Mining"</h3>
-                                        <div class="grid grid-cols-2 gap-2 mb-2">
+                                        <div class="grid grid-cols-2 gap-3 mb-2">
                                             <LiveCard label="Block Height" value=block_height/>
                                             <LiveCard label="Chain" value=chain/>
                                             <LiveCard label="Difficulty" value=difficulty/>
@@ -944,9 +946,9 @@ fn StatsContent() -> impl IntoView {
                                     </div>
 
                                     // Economic section
-                                    <div class="bg-[#0a1a2e] border border-white/10 rounded-xl p-4">
+                                    <div class="bg-[#0a1a2e] border border-white/10 rounded-xl p-5">
                                         <h3 class="text-sm font-bold text-[#f7931a] uppercase tracking-widest mb-4">"Economic"</h3>
-                                        <div class="grid grid-cols-2 gap-2">
+                                        <div class="grid grid-cols-2 gap-3">
                                             <LiveCard label="Price (USD)" value=price_usd/>
                                             <LiveCard label="Sats/Dollar" value=sats_per_dollar/>
                                             <LiveCard label="Market Cap" value=market_cap/>
@@ -961,7 +963,7 @@ fn StatsContent() -> impl IntoView {
                 </div>
 
                 // Difficulty adjustment predictor
-                <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 mt-6">
+                <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 mt-8">
                     <h3 class="text-lg text-white font-semibold mb-3">"Next Difficulty Adjustment"</h3>
                     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
                         <div class="text-center">
@@ -994,7 +996,7 @@ fn StatsContent() -> impl IntoView {
                 </div>
 
                 // Halving countdown
-                <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 mt-6">
+                <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 mt-8">
                     <h3 class="text-lg text-white font-semibold mb-3">"Next Halving"</h3>
                     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
                         <div class="text-center">
@@ -1070,7 +1072,7 @@ fn StatsContent() -> impl IntoView {
                                 // Section divider: Adoption
                                 <div class="flex items-center gap-3 my-8">
                                     <div class="flex-1 h-px bg-white/10"></div>
-                                    <span class="text-xs text-white/30 uppercase tracking-widest">"Adoption"</span>
+                                    <span class="text-sm text-white/40 font-medium uppercase tracking-widest">"Adoption"</span>
                                     <div class="flex-1 h-px bg-white/10"></div>
                                 </div>
 
@@ -1159,7 +1161,7 @@ fn StatsContent() -> impl IntoView {
                                 // Section divider: Pool Distribution
                                 <div class="flex items-center gap-3 my-8">
                                     <div class="flex-1 h-px bg-white/10"></div>
-                                    <span class="text-xs text-white/30 uppercase tracking-widest">"Pool Distribution"</span>
+                                    <span class="text-sm text-white/40 font-medium uppercase tracking-widest">"Pool Distribution"</span>
                                     <div class="flex-1 h-px bg-white/10"></div>
                                 </div>
 
@@ -1344,7 +1346,7 @@ fn StatsContent() -> impl IntoView {
                                         let h = b.height;
                                         view! {
                                             <div
-                                                class=format!("w-3 h-3 rounded-sm cursor-pointer hover:ring-1 hover:ring-white/50 {color}")
+                                                class=format!("w-3.5 h-3.5 lg:w-4 lg:h-4 rounded-sm cursor-pointer hover:ring-1 hover:ring-white/50 {color}")
                                                 title=title
                                                 on:click=move |_| { show_block_detail(h); }
                                             ></div>
@@ -1377,7 +1379,7 @@ fn StatsContent() -> impl IntoView {
                                                 <p class="text-sm text-white/50 mb-3">
                                                     {format!("Blocks {} \u{2013} {} (click for details)", format_number(p_start), format_number(p_end))}
                                                 </p>
-                                                <div class="flex flex-wrap gap-[3px]">
+                                                <div class="flex flex-wrap gap-1">
                                                     {grid_cells}
                                                 </div>
                                             </div>
