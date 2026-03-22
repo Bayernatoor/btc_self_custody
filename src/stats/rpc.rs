@@ -82,6 +82,7 @@ pub struct Block {
     pub coinbase_sequence: u64,
     pub miner: String,
     pub segwit_spend_count: u64,
+    /// Taproot v1 witness outputs created (not spends). Named _spend_ for historical reasons.
     pub taproot_spend_count: u64,
 }
 

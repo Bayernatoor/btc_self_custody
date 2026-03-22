@@ -107,6 +107,7 @@ fn LiveCard(
 #[component]
 pub fn StatsPage() -> impl IntoView {
     // Check if stats backend is available
+    #[allow(clippy::redundant_closure)]
     let availability = LocalResource::new(move || fetch_stats_summary());
 
     let is_available = Signal::derive(move || {
@@ -316,7 +317,7 @@ fn StatsContent() -> impl IntoView {
             .and_then(|r| r.ok())
             .map(|data| match data {
                 DashboardData::PerBlock(ref blocks) => {
-                    crate::stats::charts::block_size_chart(blocks, false)
+                    crate::stats::charts::block_size_chart(blocks)
                 }
                 DashboardData::Daily(ref days) => {
                     crate::stats::charts::block_size_chart_daily(days)
@@ -332,7 +333,7 @@ fn StatsContent() -> impl IntoView {
             .and_then(|r| r.ok())
             .map(|data| match data {
                 DashboardData::PerBlock(ref blocks) => {
-                    crate::stats::charts::tx_count_chart(blocks, false)
+                    crate::stats::charts::tx_count_chart(blocks)
                 }
                 DashboardData::Daily(ref days) => {
                     crate::stats::charts::tx_count_chart_daily(days)
@@ -365,7 +366,7 @@ fn StatsContent() -> impl IntoView {
             .and_then(|r| r.ok())
             .map(|data| match data {
                 DashboardData::PerBlock(ref blocks) => {
-                    crate::stats::charts::difficulty_chart(blocks, false)
+                    crate::stats::charts::difficulty_chart(blocks)
                 }
                 DashboardData::Daily(ref days) => {
                     crate::stats::charts::difficulty_chart_daily(days)
@@ -397,9 +398,7 @@ fn StatsContent() -> impl IntoView {
             .and_then(|r| r.ok())
             .map(|data| match data {
                 DashboardData::PerBlock(ref blocks) => {
-                    crate::stats::charts::weight_utilization_chart(
-                        blocks, false,
-                    )
+                    crate::stats::charts::weight_utilization_chart(blocks)
                 }
                 DashboardData::Daily(ref days) => {
                     crate::stats::charts::weight_utilization_chart_daily(days)
@@ -415,7 +414,7 @@ fn StatsContent() -> impl IntoView {
             .and_then(|r| r.ok())
             .map(|data| match data {
                 DashboardData::PerBlock(ref blocks) => {
-                    crate::stats::charts::subsidy_vs_fees_chart(blocks, false)
+                    crate::stats::charts::subsidy_vs_fees_chart(blocks)
                 }
                 DashboardData::Daily(ref days) => {
                     crate::stats::charts::subsidy_vs_fees_chart_daily(days)
@@ -431,7 +430,7 @@ fn StatsContent() -> impl IntoView {
             .and_then(|r| r.ok())
             .map(|data| match data {
                 DashboardData::PerBlock(ref blocks) => {
-                    crate::stats::charts::avg_tx_size_chart(blocks, false)
+                    crate::stats::charts::avg_tx_size_chart(blocks)
                 }
                 DashboardData::Daily(ref days) => {
                     crate::stats::charts::avg_tx_size_chart_daily(days)
@@ -467,7 +466,7 @@ fn StatsContent() -> impl IntoView {
 
     let halving_est_days = Signal::derive(move || {
         let remaining = halving_blocks_remaining.get();
-        remaining * 10 / 1440
+        (remaining as f64 * 10.0 / 1440.0 * 10.0).round() / 10.0
     });
 
     let current_subsidy_btc = Signal::derive(move || {
@@ -563,7 +562,7 @@ fn StatsContent() -> impl IntoView {
             .and_then(|r| r.ok())
             .map(|data| match data {
                 OpData::PerBlock(ref b) => {
-                    crate::stats::charts::op_return_count_chart(b, false)
+                    crate::stats::charts::op_return_count_chart(b)
                 }
                 OpData::Daily(ref d) => {
                     crate::stats::charts::op_return_count_chart_daily(d)
@@ -578,7 +577,7 @@ fn StatsContent() -> impl IntoView {
             .and_then(|r| r.ok())
             .map(|data| match data {
                 OpData::PerBlock(ref b) => {
-                    crate::stats::charts::op_return_bytes_chart(b, false)
+                    crate::stats::charts::op_return_bytes_chart(b)
                 }
                 OpData::Daily(ref d) => {
                     crate::stats::charts::op_return_bytes_chart_daily(d)
@@ -593,7 +592,7 @@ fn StatsContent() -> impl IntoView {
             .and_then(|r| r.ok())
             .map(|data| match data {
                 OpData::PerBlock(ref b) => {
-                    crate::stats::charts::runes_pct_chart(b, false)
+                    crate::stats::charts::runes_pct_chart(b)
                 }
                 OpData::Daily(ref d) => {
                     crate::stats::charts::runes_pct_chart_daily(d)
@@ -668,7 +667,7 @@ fn StatsContent() -> impl IntoView {
             .and_then(|r| r.ok())
             .map(|data| match data {
                 DashboardData::PerBlock(ref blocks) => {
-                    crate::stats::charts::segwit_adoption_chart(blocks, false)
+                    crate::stats::charts::segwit_adoption_chart(blocks)
                 }
                 DashboardData::Daily(ref days) => {
                     crate::stats::charts::segwit_adoption_chart_daily(days)
@@ -684,7 +683,7 @@ fn StatsContent() -> impl IntoView {
             .and_then(|r| r.ok())
             .map(|data| match data {
                 DashboardData::PerBlock(ref blocks) => {
-                    crate::stats::charts::taproot_chart(blocks, false)
+                    crate::stats::charts::taproot_chart(blocks)
                 }
                 DashboardData::Daily(ref days) => {
                     crate::stats::charts::taproot_chart_daily(days)
@@ -932,7 +931,7 @@ fn StatsContent() -> impl IntoView {
                             </div>
                             <div class="text-center">
                                 <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Est. Days"</div>
-                                <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format_number(halving_est_days.get())}</div>
+                                <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format!("{:.1}", halving_est_days.get())}</div>
                             </div>
                             <div class="text-center">
                                 <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Current Subsidy"</div>

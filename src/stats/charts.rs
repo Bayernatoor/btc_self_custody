@@ -138,49 +138,25 @@ fn build_option(extra: serde_json::Value) -> String {
 // ---------------------------------------------------------------------------
 
 /// Block size line chart with moving average.
-pub fn block_size_chart(blocks: &[BlockSummary], is_daily: bool) -> String {
+pub fn block_size_chart(blocks: &[BlockSummary]) -> String {
     if blocks.is_empty() {
         return no_data_chart("Block Size");
     }
 
-    let (categories, raw_data, ma_data) = if is_daily {
-        // For daily we don't actually have DailyAggregate here; the caller
-        // should use the daily-specific overload below. This handles per-block.
-        let cats: Vec<String> = Vec::new();
-        let raw: Vec<serde_json::Value> = blocks
-            .iter()
-            .map(|b| json!([ts_ms(b.timestamp), b.size as f64 / 1_000_000.0]))
-            .collect();
-        let vals: Vec<f64> =
-            blocks.iter().map(|b| b.size as f64 / 1_000_000.0).collect();
-        let ma = moving_average(&vals, 144);
-        let ma_series: Vec<serde_json::Value> = blocks
-            .iter()
-            .zip(ma.iter())
-            .filter_map(|(b, m)| m.map(|v| json!([ts_ms(b.timestamp), v])))
-            .collect();
-        (cats, raw, ma_series)
-    } else {
-        let raw: Vec<serde_json::Value> = blocks
-            .iter()
-            .map(|b| json!([ts_ms(b.timestamp), b.size as f64 / 1_000_000.0]))
-            .collect();
-        let vals: Vec<f64> =
-            blocks.iter().map(|b| b.size as f64 / 1_000_000.0).collect();
-        let ma = moving_average(&vals, 144);
-        let ma_series: Vec<serde_json::Value> = blocks
-            .iter()
-            .zip(ma.iter())
-            .filter_map(|(b, m)| m.map(|v| json!([ts_ms(b.timestamp), v])))
-            .collect();
-        (Vec::new(), raw, ma_series)
-    };
+    let raw_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .map(|b| json!([ts_ms(b.timestamp), b.size as f64 / 1_000_000.0]))
+        .collect();
+    let vals: Vec<f64> =
+        blocks.iter().map(|b| b.size as f64 / 1_000_000.0).collect();
+    let ma = moving_average(&vals, 144);
+    let ma_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(ma.iter())
+        .filter_map(|(b, m)| m.map(|v| json!([ts_ms(b.timestamp), v])))
+        .collect();
 
-    let x_axis = if !categories.is_empty() {
-        x_axis_for(true, &categories)
-    } else {
-        x_axis_for(false, &[])
-    };
+    let x_axis = x_axis_for(false, &[]);
 
     build_option(json!({
         "title": { "text": "Block Size", "textStyle": { "color": "#ccc", "fontSize": 14 } },
@@ -243,12 +219,11 @@ pub fn block_size_chart_daily(days: &[DailyAggregate]) -> String {
 }
 
 /// Transaction count line chart with moving average.
-pub fn tx_count_chart(blocks: &[BlockSummary], is_daily: bool) -> String {
+pub fn tx_count_chart(blocks: &[BlockSummary]) -> String {
     if blocks.is_empty() {
         return no_data_chart("Transaction Count");
     }
 
-    let _ = is_daily;
     let raw: Vec<serde_json::Value> = blocks
         .iter()
         .map(|b| json!([ts_ms(b.timestamp), b.tx_count]))
@@ -321,11 +296,7 @@ pub fn tx_count_chart_daily(days: &[DailyAggregate]) -> String {
 }
 
 /// Fees line chart (per-block: total fees in sats).
-pub fn fees_chart(
-    blocks: &[BlockSummary],
-    _daily: &[DailyAggregate],
-    _is_daily: bool,
-) -> String {
+pub fn fees_chart(blocks: &[BlockSummary]) -> String {
     if blocks.is_empty() {
         return no_data_chart("Fees");
     }
@@ -394,7 +365,7 @@ pub fn fees_chart_daily(days: &[DailyAggregate]) -> String {
 }
 
 /// Difficulty line chart.
-pub fn difficulty_chart(blocks: &[BlockSummary], _is_daily: bool) -> String {
+pub fn difficulty_chart(blocks: &[BlockSummary]) -> String {
     if blocks.is_empty() {
         return no_data_chart("Difficulty");
     }
@@ -557,15 +528,11 @@ pub fn block_interval_chart_daily(days: &[DailyAggregate]) -> String {
 }
 
 /// OP_RETURN count bar chart (runes vs data carriers).
-pub fn op_return_count_chart(
-    blocks: &[OpReturnBlock],
-    is_daily: bool,
-) -> String {
+pub fn op_return_count_chart(blocks: &[OpReturnBlock]) -> String {
     if blocks.is_empty() {
         return no_data_chart("OP_RETURN Count");
     }
 
-    let _ = is_daily;
     let runes: Vec<serde_json::Value> = blocks
         .iter()
         .map(|b| json!([ts_ms(b.timestamp), b.runes_count]))
@@ -595,15 +562,11 @@ pub fn op_return_count_chart(
 }
 
 /// OP_RETURN bytes bar chart.
-pub fn op_return_bytes_chart(
-    blocks: &[OpReturnBlock],
-    is_daily: bool,
-) -> String {
+pub fn op_return_bytes_chart(blocks: &[OpReturnBlock]) -> String {
     if blocks.is_empty() {
         return no_data_chart("OP_RETURN Bytes");
     }
 
-    let _ = is_daily;
     let runes: Vec<serde_json::Value> = blocks
         .iter()
         .map(|b| json!([ts_ms(b.timestamp), b.runes_bytes]))
@@ -633,12 +596,11 @@ pub fn op_return_bytes_chart(
 }
 
 /// Runes dominance percentage line chart with moving average.
-pub fn runes_pct_chart(blocks: &[OpReturnBlock], is_daily: bool) -> String {
+pub fn runes_pct_chart(blocks: &[OpReturnBlock]) -> String {
     if blocks.is_empty() {
         return no_data_chart("Runes Dominance %");
     }
 
-    let _ = is_daily;
     let vals: Vec<f64> = blocks
         .iter()
         .map(|b| {
@@ -741,10 +703,10 @@ pub fn op_return_bytes_chart_daily(days: &[DailyAggregate]) -> String {
         .iter()
         .map(|d| {
             if d.block_count > 0 {
-                (d.total_runes_bytes as f64 / d.block_count as f64 / 1000.0
-                    * 1000.0)
+                ((d.total_runes_bytes as f64 / d.block_count as f64 / 1000.0)
+                    * 10.0)
                     .round()
-                    / 1000.0
+                    / 10.0
             } else {
                 0.0
             }
@@ -754,12 +716,12 @@ pub fn op_return_bytes_chart_daily(days: &[DailyAggregate]) -> String {
         .iter()
         .map(|d| {
             if d.block_count > 0 {
-                (d.total_data_carrier_bytes as f64
+                ((d.total_data_carrier_bytes as f64
                     / d.block_count as f64
-                    / 1000.0
-                    * 1000.0)
+                    / 1000.0)
+                    * 10.0)
                     .round()
-                    / 1000.0
+                    / 10.0
             } else {
                 0.0
             }
@@ -925,10 +887,7 @@ fn block_subsidy(height: u64) -> u64 {
 }
 
 /// Block weight utilization as % of max (4,000,000 WU).
-pub fn weight_utilization_chart(
-    blocks: &[BlockSummary],
-    _is_daily: bool,
-) -> String {
+pub fn weight_utilization_chart(blocks: &[BlockSummary]) -> String {
     if blocks.is_empty() {
         return no_data_chart("Weight Utilization");
     }
@@ -1018,10 +977,7 @@ pub fn weight_utilization_chart_daily(days: &[DailyAggregate]) -> String {
 const SUBSIDY_COLOR: &str = "#9b59b6";
 
 /// Block subsidy vs fee revenue ratio (stacked area).
-pub fn subsidy_vs_fees_chart(
-    blocks: &[BlockSummary],
-    _is_daily: bool,
-) -> String {
+pub fn subsidy_vs_fees_chart(blocks: &[BlockSummary]) -> String {
     if blocks.is_empty() {
         return no_data_chart("Subsidy vs Fees");
     }
@@ -1130,7 +1086,7 @@ pub fn subsidy_vs_fees_chart_daily(days: &[DailyAggregate]) -> String {
 }
 
 /// Average transaction size in bytes.
-pub fn avg_tx_size_chart(blocks: &[BlockSummary], _is_daily: bool) -> String {
+pub fn avg_tx_size_chart(blocks: &[BlockSummary]) -> String {
     if blocks.is_empty() {
         return no_data_chart("Avg Transaction Size");
     }
@@ -1416,7 +1372,7 @@ pub fn miner_dominance_chart(miners: &[MinerShare]) -> String {
 /// Empty blocks scatter chart.
 pub fn empty_blocks_chart(blocks: &[EmptyBlock]) -> String {
     if blocks.is_empty() {
-        return no_data_chart("Empty Blocks");
+        return no_data_chart("No empty blocks in this range");
     }
 
     // Group by miner for color coding
@@ -1465,10 +1421,7 @@ pub fn empty_blocks_chart(blocks: &[EmptyBlock]) -> String {
 }
 
 /// SegWit adoption % chart (per-block).
-pub fn segwit_adoption_chart(
-    blocks: &[BlockSummary],
-    _is_daily: bool,
-) -> String {
+pub fn segwit_adoption_chart(blocks: &[BlockSummary]) -> String {
     if blocks.is_empty() {
         return no_data_chart("SegWit Adoption %");
     }
@@ -1572,7 +1525,7 @@ pub fn segwit_adoption_chart_daily(days: &[DailyAggregate]) -> String {
 const TAPROOT_COLOR: &str = "#f7931a";
 
 /// Taproot outputs per block chart.
-pub fn taproot_chart(blocks: &[BlockSummary], _is_daily: bool) -> String {
+pub fn taproot_chart(blocks: &[BlockSummary]) -> String {
     if blocks.is_empty() {
         return no_data_chart("Taproot Outputs");
     }
