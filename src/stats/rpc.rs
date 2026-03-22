@@ -81,6 +81,8 @@ pub struct Block {
     pub coinbase_locktime: u64,
     pub coinbase_sequence: u64,
     pub miner: String,
+    pub segwit_spend_count: u64,
+    pub taproot_spend_count: u64,
 }
 
 impl BitcoinRpc {
@@ -315,6 +317,36 @@ impl BitcoinRpc {
             }
         }
 
+        // === SegWit and Taproot counting ===
+        let mut segwit_spend_count = 0u64;
+        let mut taproot_spend_count = 0u64;
+
+        if let Some(txs) = result["tx"].as_array() {
+            for tx in txs.iter().skip(1) {
+                // SegWit: any vin with txinwitness means this tx spends a SegWit input
+                let has_witness = tx["vin"]
+                    .as_array()
+                    .map(|vins| {
+                        vins.iter().any(|v| v.get("txinwitness").is_some())
+                    })
+                    .unwrap_or(false);
+                if has_witness {
+                    segwit_spend_count += 1;
+                }
+
+                // Taproot: count v1 witness outputs created
+                if let Some(vouts) = tx["vout"].as_array() {
+                    for vout in vouts {
+                        if vout["scriptPubKey"]["type"].as_str()
+                            == Some("witness_v1_taproot")
+                        {
+                            taproot_spend_count += 1;
+                        }
+                    }
+                }
+            }
+        }
+
         Ok(Block {
             hash,
             height,
@@ -336,6 +368,8 @@ impl BitcoinRpc {
             coinbase_locktime,
             coinbase_sequence,
             miner,
+            segwit_spend_count,
+            taproot_spend_count,
         })
     }
 

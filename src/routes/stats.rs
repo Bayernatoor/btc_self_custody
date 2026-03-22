@@ -173,6 +173,7 @@ fn StatsContent() -> impl IntoView {
     let (tab, set_tab) = signal("dashboard".to_string());
     let (range, set_range) = signal("all".to_string());
     let (fee_unit, set_fee_unit) = signal("sats".to_string());
+    let (dashboard_sub, set_dashboard_sub) = signal("overview".to_string());
 
     // ---- Live stats (auto-refresh 30s) ----
     #[allow(clippy::redundant_closure)]
@@ -389,6 +390,141 @@ fn StatsContent() -> impl IntoView {
             .unwrap_or_default()
     });
 
+    let weight_util_option = Signal::derive(move || {
+        let _r = range.get();
+        dashboard_data
+            .get()
+            .and_then(|r| r.ok())
+            .map(|data| match data {
+                DashboardData::PerBlock(ref blocks) => {
+                    crate::stats::charts::weight_utilization_chart(
+                        blocks, false,
+                    )
+                }
+                DashboardData::Daily(ref days) => {
+                    crate::stats::charts::weight_utilization_chart_daily(days)
+                }
+            })
+            .unwrap_or_default()
+    });
+
+    let subsidy_fees_option = Signal::derive(move || {
+        let _r = range.get();
+        dashboard_data
+            .get()
+            .and_then(|r| r.ok())
+            .map(|data| match data {
+                DashboardData::PerBlock(ref blocks) => {
+                    crate::stats::charts::subsidy_vs_fees_chart(blocks, false)
+                }
+                DashboardData::Daily(ref days) => {
+                    crate::stats::charts::subsidy_vs_fees_chart_daily(days)
+                }
+            })
+            .unwrap_or_default()
+    });
+
+    let avg_tx_size_option = Signal::derive(move || {
+        let _r = range.get();
+        dashboard_data
+            .get()
+            .and_then(|r| r.ok())
+            .map(|data| match data {
+                DashboardData::PerBlock(ref blocks) => {
+                    crate::stats::charts::avg_tx_size_chart(blocks, false)
+                }
+                DashboardData::Daily(ref days) => {
+                    crate::stats::charts::avg_tx_size_chart_daily(days)
+                }
+            })
+            .unwrap_or_default()
+    });
+
+    // Halving countdown derived values
+    let raw_block_height = Signal::derive(move || {
+        live.get()
+            .and_then(|r| r.ok())
+            .map(|s| s.blockchain.blocks)
+            .unwrap_or(0)
+    });
+
+    let next_halving_height = Signal::derive(move || {
+        let h = raw_block_height.get();
+        if h == 0 {
+            return 0u64;
+        }
+        ((h / 210_000) + 1) * 210_000
+    });
+
+    let halving_blocks_remaining = Signal::derive(move || {
+        let nh = next_halving_height.get();
+        let h = raw_block_height.get();
+        if nh == 0 {
+            return 0u64;
+        }
+        nh.saturating_sub(h)
+    });
+
+    let halving_est_days = Signal::derive(move || {
+        let remaining = halving_blocks_remaining.get();
+        remaining * 10 / 1440
+    });
+
+    let current_subsidy_btc = Signal::derive(move || {
+        let h = raw_block_height.get();
+        if h == 0 {
+            return "---".to_string();
+        }
+        let halvings = h / 210_000;
+        if halvings >= 64 {
+            return "0".to_string();
+        }
+        let sats = 5_000_000_000u64 >> halvings;
+        format!("{:.4} BTC", sats as f64 / 100_000_000.0)
+    });
+
+    let next_subsidy_btc = Signal::derive(move || {
+        let h = raw_block_height.get();
+        if h == 0 {
+            return "---".to_string();
+        }
+        let next_halvings = (h / 210_000) + 1;
+        if next_halvings >= 64 {
+            return "0 BTC".to_string();
+        }
+        let sats = 5_000_000_000u64 >> next_halvings;
+        format!("{:.4} BTC", sats as f64 / 100_000_000.0)
+    });
+
+    // Difficulty adjustment predictor derived values
+    let diff_period_start = Signal::derive(move || {
+        let h = raw_block_height.get();
+        if h == 0 {
+            return 0u64;
+        }
+        (h / 2016) * 2016
+    });
+
+    let diff_blocks_into_period = Signal::derive(move || {
+        let h = raw_block_height.get();
+        let ps = diff_period_start.get();
+        h.saturating_sub(ps)
+    });
+
+    let diff_blocks_remaining = Signal::derive(move || {
+        2016u64.saturating_sub(diff_blocks_into_period.get())
+    });
+
+    let diff_progress_pct = Signal::derive(move || {
+        let into = diff_blocks_into_period.get();
+        (into as f64 / 2016.0 * 100.0 * 10.0).round() / 10.0
+    });
+
+    let diff_est_remaining_days = Signal::derive(move || {
+        let remaining = diff_blocks_remaining.get();
+        format!("{:.1}", remaining as f64 * 10.0 / 1440.0)
+    });
+
     // ---- OP_RETURN data ----
     #[derive(Clone)]
     enum OpData {
@@ -466,6 +602,97 @@ fn StatsContent() -> impl IntoView {
             .unwrap_or_default()
     });
 
+    // ---- Mining tab data ----
+    let mining_data = LocalResource::new(move || {
+        let r = range.get();
+        async move {
+            let stats =
+                fetch_stats_summary().await.map_err(|e| e.to_string())?;
+            let n = range_to_blocks(&r);
+            let is_daily = n > 5_000;
+
+            if is_daily {
+                let from_ts = stats.latest_timestamp.saturating_sub(n * 600);
+                let miners = fetch_miner_dominance_daily(
+                    from_ts,
+                    stats.latest_timestamp,
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+                // For empty blocks in daily mode, use height range approximation
+                let from =
+                    stats.min_height.max(stats.max_height.saturating_sub(n));
+                let empty = fetch_empty_blocks(from, stats.max_height)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                Ok::<_, String>((miners, empty))
+            } else {
+                let from =
+                    stats.min_height.max(stats.max_height.saturating_sub(n));
+                let miners = fetch_miner_dominance(from, stats.max_height)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                let empty = fetch_empty_blocks(from, stats.max_height)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                Ok((miners, empty))
+            }
+        }
+    });
+
+    let miner_chart_option = Signal::derive(move || {
+        mining_data
+            .get()
+            .and_then(|r| r.ok())
+            .map(|(ref miners, _)| {
+                crate::stats::charts::miner_dominance_chart(miners)
+            })
+            .unwrap_or_default()
+    });
+
+    let empty_blocks_option = Signal::derive(move || {
+        mining_data
+            .get()
+            .and_then(|r| r.ok())
+            .map(|(_, ref empty)| {
+                crate::stats::charts::empty_blocks_chart(empty)
+            })
+            .unwrap_or_default()
+    });
+
+    // ---- SegWit / Taproot chart options (from dashboard_data) ----
+    let segwit_option = Signal::derive(move || {
+        let _r = range.get();
+        dashboard_data
+            .get()
+            .and_then(|r| r.ok())
+            .map(|data| match data {
+                DashboardData::PerBlock(ref blocks) => {
+                    crate::stats::charts::segwit_adoption_chart(blocks, false)
+                }
+                DashboardData::Daily(ref days) => {
+                    crate::stats::charts::segwit_adoption_chart_daily(days)
+                }
+            })
+            .unwrap_or_default()
+    });
+
+    let taproot_option = Signal::derive(move || {
+        let _r = range.get();
+        dashboard_data
+            .get()
+            .and_then(|r| r.ok())
+            .map(|data| match data {
+                DashboardData::PerBlock(ref blocks) => {
+                    crate::stats::charts::taproot_chart(blocks, false)
+                }
+                DashboardData::Daily(ref days) => {
+                    crate::stats::charts::taproot_chart_daily(days)
+                }
+            })
+            .unwrap_or_default()
+    });
+
     // ---- BIP Signaling data ----
     let (bip_method, set_bip_method) = signal("bit".to_string());
     // Period offset: 0 = current, 1 = previous, etc.
@@ -509,6 +736,7 @@ fn StatsContent() -> impl IntoView {
     // ---- Tab names and ranges ----
     let tabs = vec![
         ("dashboard", "Dashboard"),
+        ("mining", "Mining"),
         ("opreturn", "OP_RETURN"),
         ("signaling", "BIP Signaling"),
     ];
@@ -548,16 +776,16 @@ fn StatsContent() -> impl IntoView {
 
         <section class="max-w-[1600px] mx-auto px-4 lg:px-10 pt-10 pb-28 opacity-0 animate-fadeinone">
             // Page header
-            <div class="text-center mb-8">
-                <h1 class="text-3xl lg:text-4xl font-title text-white mb-2">"Chain Pulse"</h1>
-                <div class="w-12 h-0.5 bg-[#f7931a] mx-auto mt-2 mb-3"></div>
-                <p class="text-sm text-white/50 max-w-lg mx-auto">
+            <div class="text-center mb-10">
+                <h1 class="text-4xl lg:text-5xl font-title text-white mb-3">"Chain Pulse"</h1>
+                <div class="w-16 h-0.5 bg-[#f7931a] mx-auto mt-3 mb-4"></div>
+                <p class="text-base text-white/50 max-w-xl mx-auto">
                     "Live blockchain metrics, block data, OP_RETURN analysis, and BIP signaling tracker."
                 </p>
             </div>
 
             // Tab navigation
-            <div class="flex flex-wrap gap-2 justify-center mb-6">
+            <div class="flex flex-wrap gap-3 justify-center mb-8">
                 {tabs.into_iter().map(|(id, label)| {
                     let id = id.to_string();
                     let label = label.to_string();
@@ -566,9 +794,9 @@ fn StatsContent() -> impl IntoView {
                         <button
                             class=move || {
                                 if tab.get() == id_clone {
-                                    "px-4 py-2 text-sm rounded-lg bg-[#f7931a] text-[#1a1a2e] font-semibold cursor-pointer"
+                                    "px-5 py-2.5 text-base rounded-xl bg-[#f7931a] text-[#1a1a2e] font-semibold cursor-pointer transition-all"
                                 } else {
-                                    "px-4 py-2 text-sm rounded-lg text-white/60 hover:text-white hover:bg-white/5 transition-all cursor-pointer"
+                                    "px-5 py-2.5 text-base rounded-xl text-white/50 hover:text-white hover:bg-white/10 border border-transparent hover:border-white/10 transition-all cursor-pointer"
                                 }
                             }
                             on:click={
@@ -585,70 +813,209 @@ fn StatsContent() -> impl IntoView {
             // ===== DASHBOARD TAB =====
             <div class=move || if tab.get() == "dashboard" { "block" } else { "hidden" }>
 
-                // Live stats panel
-                <div class="bg-white/5 border border-white/10 rounded-xl p-4 mb-6 animate-slideup" style="animation-delay: 100ms">
-                    <div class="flex items-center gap-2 mb-3 flex-wrap">
-                        <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                        <span class="text-sm text-white font-medium">"Live Node Stats"</span>
-                        <div class="flex items-center gap-2 ml-auto">
-                            <span class="text-xs text-white/30">{move || last_updated.get()}</span>
-                            <span class="text-xs text-white/20">
-                                {move || format!("{}s", countdown.get())}
-                            </span>
+                // Dashboard sub-tabs
+                <div class="flex flex-wrap gap-2 justify-center mb-6">
+                    {["overview", "blocks", "fees"].into_iter().map(|sub| {
+                        let sub_id = sub.to_string();
+                        let sub_label = match sub {
+                            "overview" => "Overview",
+                            "blocks" => "Blocks",
+                            "fees" => "Fees",
+                            _ => sub,
+                        }.to_string();
+                        let sub_clone = sub_id.clone();
+                        view! {
                             <button
-                                class="text-xs text-white/40 hover:text-white/70 px-2 py-0.5 rounded border border-white/10 hover:border-white/20 cursor-pointer transition-all"
-                                on:click=move |_| {
-                                    set_countdown.set(30);
-                                    live.refetch();
-                                    set_last_updated.set(format!("updated {}", chrono::Local::now().format("%H:%M:%S")));
+                                class=move || {
+                                    if dashboard_sub.get() == sub_clone {
+                                        "px-3 py-1.5 text-xs rounded-lg bg-white/15 text-white border border-white/20 font-medium cursor-pointer"
+                                    } else {
+                                        "px-3 py-1.5 text-xs rounded-lg text-white/40 hover:text-white/70 hover:bg-white/5 transition-all cursor-pointer"
+                                    }
+                                }
+                                on:click={
+                                    let s = sub_id.clone();
+                                    move |_| set_dashboard_sub.set(s.clone())
                                 }
                             >
-                                "Refresh"
+                                {sub_label}
                             </button>
+                        }
+                    }).collect::<Vec<_>>()}
+                </div>
+
+                // ---- Overview sub-tab ----
+                <div class=move || if dashboard_sub.get() == "overview" { "block" } else { "hidden" }>
+
+                    // Live stats panel
+                    <div class="bg-white/5 border border-white/10 rounded-xl p-4 mb-6 animate-slideup" style="animation-delay: 100ms">
+                        <div class="flex items-center gap-2 mb-3 flex-wrap">
+                            <div class="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"></div>
+                            <span class="text-base text-white font-semibold">"Live Node Stats"</span>
+                            <div class="flex items-center gap-2 ml-auto">
+                                <span class="text-xs text-white/30">{move || last_updated.get()}</span>
+                                <span class="text-xs text-white/20">
+                                    {move || format!("{}s", countdown.get())}
+                                </span>
+                                <button
+                                    class="text-xs text-white/40 hover:text-white/70 px-2 py-0.5 rounded border border-white/10 hover:border-white/20 cursor-pointer transition-all"
+                                    on:click=move |_| {
+                                        set_countdown.set(30);
+                                        live.refetch();
+                                        set_last_updated.set(format!("updated {}", chrono::Local::now().format("%H:%M:%S")));
+                                    }
+                                >
+                                    "Refresh"
+                                </button>
+                            </div>
+                        </div>
+
+                        <Suspense fallback=move || view! {
+                            <div class="flex justify-center py-6"><Spinner/></div>
+                        }>
+                            {move || {
+                                let _l = live.get();
+                                view! {
+                                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                                        // Mempool section
+                                        <div class="bg-white/[0.03] border border-white/[0.07] rounded-xl p-4 overflow-hidden">
+                                            <h3 class="text-sm font-bold text-[#f7931a] uppercase tracking-widest mb-4">"Mempool"</h3>
+                                            <div class="grid grid-cols-2 gap-2 mb-3">
+                                                <LiveCard label="Transactions" value=mempool_size/>
+                                                <LiveCard label="Size" value=mempool_bytes/>
+                                                <LiveCard label="Next Block Fee" value=next_fee/>
+                                            </div>
+                                            <div class="flex justify-center">
+                                                <Chart id="mempool-gauge".to_string() option=gauge_option class="w-[220px] h-[200px]".to_string()/>
+                                            </div>
+                                        </div>
+
+                                        // Mining section
+                                        <div class="bg-white/[0.03] border border-white/[0.07] rounded-xl p-4">
+                                            <h3 class="text-sm font-bold text-[#f7931a] uppercase tracking-widest mb-4">"Mining"</h3>
+                                            <div class="grid grid-cols-2 gap-2 mb-2">
+                                                <LiveCard label="Block Height" value=block_height/>
+                                                <LiveCard label="Chain" value=chain/>
+                                                <LiveCard label="Difficulty" value=difficulty/>
+                                                <LiveCard label="Chain Size" value=chain_size/>
+                                            </div>
+                                        </div>
+
+                                        // Economic section
+                                        <div class="bg-white/[0.03] border border-white/[0.07] rounded-xl p-4">
+                                            <h3 class="text-sm font-bold text-[#f7931a] uppercase tracking-widest mb-4">"Economic"</h3>
+                                            <div class="grid grid-cols-2 gap-2">
+                                                <LiveCard label="Price (USD)" value=price_usd/>
+                                                <LiveCard label="Sats/Dollar" value=sats_per_dollar/>
+                                                <LiveCard label="Market Cap" value=market_cap/>
+                                                <LiveCard label="Supply Issued" value=supply_pct/>
+                                                <LiveCard label="UTXO Count" value=utxo_count/>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            }}
+                        </Suspense>
+                    </div>
+
+                    // Halving countdown
+                    <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 mt-6">
+                        <h3 class="text-lg text-white font-semibold mb-3">"Next Halving"</h3>
+                        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div class="text-center">
+                                <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Target Height"</div>
+                                <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format_number(next_halving_height.get())}</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Blocks Remaining"</div>
+                                <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format_number(halving_blocks_remaining.get())}</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Est. Days"</div>
+                                <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format_number(halving_est_days.get())}</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Current Subsidy"</div>
+                                <div class="text-lg text-[#f7931a] font-bold font-mono">{move || current_subsidy_btc.get()}</div>
+                            </div>
+                        </div>
+                        <div class="mt-3 text-center">
+                            <span class="text-xs text-white/40">"Next subsidy: "</span>
+                            <span class="text-xs text-white/60 font-mono">{move || next_subsidy_btc.get()}</span>
                         </div>
                     </div>
 
+                    // Difficulty adjustment predictor
+                    <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 mt-6">
+                        <h3 class="text-lg text-white font-semibold mb-3">"Next Difficulty Adjustment"</h3>
+                        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div class="text-center">
+                                <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Period Start"</div>
+                                <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format_number(diff_period_start.get())}</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Blocks Into Period"</div>
+                                <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format_number(diff_blocks_into_period.get())}</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Blocks Remaining"</div>
+                                <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format_number(diff_blocks_remaining.get())}</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Est. Days Left"</div>
+                                <div class="text-lg text-[#f7931a] font-bold font-mono">{move || diff_est_remaining_days.get()}</div>
+                            </div>
+                        </div>
+                        // Progress bar
+                        <div class="mt-4">
+                            <div class="h-2 bg-white/5 rounded-full overflow-hidden">
+                                <div
+                                    class="h-full rounded-full bg-[#f7931a] transition-all duration-500"
+                                    style=move || format!("width: {}%", diff_progress_pct.get())
+                                ></div>
+                            </div>
+                            <p class="text-xs text-white/40 text-center mt-1">{move || format!("{:.1}% through retarget period", diff_progress_pct.get())}</p>
+                        </div>
+                    </div>
+
+                </div>
+
+                // ---- Blocks sub-tab ----
+                <div class=move || if dashboard_sub.get() == "blocks" { "block" } else { "hidden" }>
+
+                    // Range selector
+                    {range_buttons()}
+
                     <Suspense fallback=move || view! {
-                        <div class="flex justify-center py-6"><Spinner/></div>
+                        <div class="flex justify-center py-12"><Spinner/></div>
                     }>
                         {move || {
-                            let _l = live.get();
+                            let _d = dashboard_data.get();
                             view! {
-                                <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                                    // Mempool section
-                                    <div class="bg-white/[0.03] border border-white/[0.07] rounded-xl p-4 overflow-hidden">
-                                        <h3 class="text-xs font-semibold text-[#f7931a] uppercase tracking-wider mb-3">"Mempool"</h3>
-                                        <div class="grid grid-cols-2 gap-2 mb-3">
-                                            <LiveCard label="Transactions" value=mempool_size/>
-                                            <LiveCard label="Size" value=mempool_bytes/>
-                                            <LiveCard label="Next Block Fee" value=next_fee/>
-                                        </div>
-                                        <div class="flex justify-center">
-                                            <Chart id="mempool-gauge".to_string() option=gauge_option class="w-[220px] h-[200px]".to_string()/>
-                                        </div>
+                                <div class="space-y-10">
+                                    <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 150ms">
+                                        <Chart id="chart-size" option=size_option/>
                                     </div>
-
-                                    // Mining section
-                                    <div class="bg-white/[0.03] border border-white/[0.07] rounded-xl p-4">
-                                        <h3 class="text-xs font-semibold text-[#f7931a] uppercase tracking-wider mb-3">"Mining"</h3>
-                                        <div class="grid grid-cols-2 gap-2 mb-2">
-                                            <LiveCard label="Block Height" value=block_height/>
-                                            <LiveCard label="Chain" value=chain/>
-                                            <LiveCard label="Difficulty" value=difficulty/>
-                                            <LiveCard label="Chain Size" value=chain_size/>
-                                        </div>
+                                    <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 200ms">
+                                        <Chart id="chart-weight-util" option=weight_util_option/>
                                     </div>
-
-                                    // Economic section
-                                    <div class="bg-white/[0.03] border border-white/[0.07] rounded-xl p-4">
-                                        <h3 class="text-xs font-semibold text-[#f7931a] uppercase tracking-wider mb-3">"Economic"</h3>
-                                        <div class="grid grid-cols-2 gap-2">
-                                            <LiveCard label="Price (USD)" value=price_usd/>
-                                            <LiveCard label="Sats/Dollar" value=sats_per_dollar/>
-                                            <LiveCard label="Market Cap" value=market_cap/>
-                                            <LiveCard label="Supply Issued" value=supply_pct/>
-                                            <LiveCard label="UTXO Count" value=utxo_count/>
-                                        </div>
+                                    <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 250ms">
+                                        <Chart id="chart-txcount" option=tx_option/>
+                                    </div>
+                                    <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 300ms">
+                                        <Chart id="chart-avg-tx-size" option=avg_tx_size_option/>
+                                    </div>
+                                    <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 350ms">
+                                        <Chart id="chart-interval" option=interval_option/>
+                                    </div>
+                                    <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 400ms">
+                                        <Chart id="chart-difficulty" option=diff_option/>
+                                    </div>
+                                    <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 450ms">
+                                        <Chart id="chart-segwit" option=segwit_option/>
+                                    </div>
+                                    <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 500ms">
+                                        <Chart id="chart-taproot" option=taproot_option/>
                                     </div>
                                 </div>
                             }
@@ -656,43 +1023,62 @@ fn StatsContent() -> impl IntoView {
                     </Suspense>
                 </div>
 
+                // ---- Fees sub-tab ----
+                <div class=move || if dashboard_sub.get() == "fees" { "block" } else { "hidden" }>
+
+                    // Range selector
+                    {range_buttons()}
+
+                    <Suspense fallback=move || view! {
+                        <div class="flex justify-center py-12"><Spinner/></div>
+                    }>
+                        {move || {
+                            let _d = dashboard_data.get();
+                            view! {
+                                <div class="space-y-10">
+                                    <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 150ms">
+                                        <div class="flex justify-end mb-1">
+                                            <button
+                                                class="text-xs text-white/40 hover:text-white/60 px-2 py-1 rounded border border-white/10 cursor-pointer"
+                                                on:click=move |_| {
+                                                    set_fee_unit.update(|u| {
+                                                        *u = if *u == "sats" { "btc".to_string() } else { "sats".to_string() }
+                                                    });
+                                                }
+                                            >
+                                                {move || if fee_unit.get() == "sats" { "Switch to BTC" } else { "Switch to sats" }}
+                                            </button>
+                                        </div>
+                                        <Chart id="chart-fees" option=fees_option/>
+                                    </div>
+                                    <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 200ms">
+                                        <Chart id="chart-subsidy-fees" option=subsidy_fees_option/>
+                                    </div>
+                                </div>
+                            }
+                        }}
+                    </Suspense>
+                </div>
+
+            </div>
+
+            // ===== MINING TAB =====
+            <div class=move || if tab.get() == "mining" { "block" } else { "hidden" }>
                 // Range selector
                 {range_buttons()}
 
-                // Charts
                 <Suspense fallback=move || view! {
                     <div class="flex justify-center py-12"><Spinner/></div>
                 }>
                     {move || {
-                        let _d = dashboard_data.get();
+                        let _d = mining_data.get();
                         view! {
                             <div class="space-y-10">
+                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 100ms">
+                                    <Chart id="chart-miner-dominance" option=miner_chart_option class="w-full h-[450px] lg:h-[600px]".to_string()/>
+                                </div>
                                 <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 150ms">
-                                    <Chart id="chart-size" option=size_option/>
-                                </div>
-                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 200ms">
-                                    <Chart id="chart-txcount" option=tx_option/>
-                                </div>
-                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 250ms">
-                                    <div class="flex justify-end mb-1">
-                                        <button
-                                            class="text-xs text-white/40 hover:text-white/60 px-2 py-1 rounded border border-white/10 cursor-pointer"
-                                            on:click=move |_| {
-                                                set_fee_unit.update(|u| {
-                                                    *u = if *u == "sats" { "btc".to_string() } else { "sats".to_string() }
-                                                });
-                                            }
-                                        >
-                                            {move || if fee_unit.get() == "sats" { "Switch to BTC" } else { "Switch to sats" }}
-                                        </button>
-                                    </div>
-                                    <Chart id="chart-fees" option=fees_option/>
-                                </div>
-                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 300ms">
-                                    <Chart id="chart-difficulty" option=diff_option/>
-                                </div>
-                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 350ms">
-                                    <Chart id="chart-interval" option=interval_option/>
+                                    <Chart id="chart-empty-blocks" option=empty_blocks_option/>
                                 </div>
                             </div>
                         }
@@ -734,9 +1120,9 @@ fn StatsContent() -> impl IntoView {
                 <div class="flex flex-wrap gap-2 justify-center mb-6">
                     <button
                         class=move || if bip_method.get() == "bit" {
-                            "px-4 py-2 text-sm rounded-lg bg-[#f7931a] text-[#1a1a2e] font-semibold cursor-pointer"
+                            "px-5 py-2.5 text-base rounded-xl bg-[#f7931a] text-[#1a1a2e] font-semibold cursor-pointer transition-all"
                         } else {
-                            "px-4 py-2 text-sm rounded-lg text-white/60 hover:text-white hover:bg-white/5 transition-all cursor-pointer"
+                            "px-5 py-2.5 text-base rounded-xl text-white/50 hover:text-white hover:bg-white/10 border border-transparent hover:border-white/10 transition-all cursor-pointer"
                         }
                         on:click=move |_| set_bip_method.set("bit".to_string())
                     >
@@ -744,9 +1130,9 @@ fn StatsContent() -> impl IntoView {
                     </button>
                     <button
                         class=move || if bip_method.get() == "locktime" {
-                            "px-4 py-2 text-sm rounded-lg bg-[#f7931a] text-[#1a1a2e] font-semibold cursor-pointer"
+                            "px-5 py-2.5 text-base rounded-xl bg-[#f7931a] text-[#1a1a2e] font-semibold cursor-pointer transition-all"
                         } else {
-                            "px-4 py-2 text-sm rounded-lg text-white/60 hover:text-white hover:bg-white/5 transition-all cursor-pointer"
+                            "px-5 py-2.5 text-base rounded-xl text-white/50 hover:text-white hover:bg-white/10 border border-transparent hover:border-white/10 transition-all cursor-pointer"
                         }
                         on:click=move |_| set_bip_method.set("locktime".to_string())
                     >
@@ -755,22 +1141,23 @@ fn StatsContent() -> impl IntoView {
                 </div>
 
                 // BIP info card
-                <div class="bg-white/5 border border-white/10 rounded-xl p-4 mb-4 text-sm text-white/70">
+                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 mb-6">
                     {move || {
                         if bip_method.get() == "locktime" {
                             view! {
                                 <div>
-                                    <div class="text-white font-medium mb-1">"BIP-54: Consensus Cleanup"</div>
-                                    <p class="text-xs text-white/50">"Fixes timewarp attack, reduces worst-case validation time, prevents Merkle tree weaknesses. Signaled by setting coinbase nLockTime to block height - 1 and nSequence != 0xffffffff."</p>
-                                    <p class="text-xs text-white/40 mt-1">"Signal method: Coinbase locktime | Threshold: 95%"</p>
+                                    <h3 class="text-lg text-white font-semibold mb-2">"BIP-54: Consensus Cleanup"</h3>
+                                    <p class="text-sm text-white/60 leading-relaxed mb-3">"Fixes timewarp attack, reduces worst-case validation time (2,500 sigop limit), prevents 64-byte transaction exploits, and eliminates duplicate coinbase issues. After activation, all blocks must set coinbase nLockTime = height - 1 and nSequence != 0xffffffff as a consensus rule."</p>
+                                    <p class="text-sm text-white/60 leading-relaxed mb-3">"The chart below tracks miners already complying with the coinbase requirement. This may indicate readiness, not formal BIP-9 signaling."</p>
+                                    <p class="text-sm text-[#f7931a]/70 font-mono">"Tracking: Coinbase locktime compliance | Activation threshold: 95%"</p>
                                 </div>
                             }.into_any()
                         } else {
                             view! {
                                 <div>
-                                    <div class="text-white font-medium mb-1">"BIP-110: OP_RETURN Data Limits"</div>
-                                    <p class="text-xs text-white/50">"Caps transaction outputs at 34 bytes and OP_RETURN data at 83 bytes. Temporary softfork \u{2014} expires after 52,416 blocks (~1 year). Modified BIP9: 55% threshold (1,109/2,016). Signaled via version bit 4."</p>
-                                    <p class="text-xs text-white/40 mt-1">"Signal method: Version bit 4 | Threshold: 55%"</p>
+                                    <h3 class="text-lg text-white font-semibold mb-2">"BIP-110: OP_RETURN Data Limits"</h3>
+                                    <p class="text-sm text-white/60 leading-relaxed mb-3">"Caps transaction outputs at 34 bytes and OP_RETURN data at 83 bytes. Temporary softfork \u{2014} expires after 52,416 blocks (~1 year). Modified BIP9: 55% threshold (1,109/2,016). Signaled via version bit 4."</p>
+                                    <p class="text-sm text-[#f7931a]/70 font-mono">"Signal: Version bit 4 | Threshold: 55%"</p>
                                 </div>
                             }.into_any()
                         }
@@ -778,14 +1165,17 @@ fn StatsContent() -> impl IntoView {
                 </div>
 
                 // Period navigator
-                <div class="flex items-center justify-center gap-3 mb-6">
+                <div class="flex items-center justify-center gap-4 mb-8">
                     <button
-                        class="px-3 py-1.5 text-xs rounded-lg text-white/50 hover:text-white hover:bg-white/5 transition-all cursor-pointer"
+                        class="inline-flex items-center gap-2 px-4 py-2 text-sm rounded-xl text-white/70 border border-white/10 hover:text-white hover:border-white/25 hover:bg-white/5 transition-all cursor-pointer"
                         on:click=move |_| set_period_offset.update(|o| *o = (*o + 1).min(11))
                     >
-                        "\u{2190} Older"
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                        </svg>
+                        "Older"
                     </button>
-                    <span class="text-xs text-white/40">
+                    <span class="text-sm text-white/60 font-medium min-w-[140px] text-center">
                         {move || {
                             let o = period_offset.get();
                             if o == 0 { "Current Period".to_string() } else { format!("{} periods ago", o) }
@@ -794,15 +1184,18 @@ fn StatsContent() -> impl IntoView {
                     <button
                         class=move || {
                             if period_offset.get() == 0 {
-                                "px-3 py-1.5 text-xs rounded-lg text-white/20 cursor-not-allowed"
+                                "inline-flex items-center gap-2 px-4 py-2 text-sm rounded-xl text-white/20 border border-white/5 cursor-not-allowed"
                             } else {
-                                "px-3 py-1.5 text-xs rounded-lg text-white/50 hover:text-white hover:bg-white/5 transition-all cursor-pointer"
+                                "inline-flex items-center gap-2 px-4 py-2 text-sm rounded-xl text-white/70 border border-white/10 hover:text-white hover:border-white/25 hover:bg-white/5 transition-all cursor-pointer"
                             }
                         }
                         disabled=move || period_offset.get() == 0
                         on:click=move |_| set_period_offset.update(|o| *o = o.saturating_sub(1))
                     >
-                        "Newer \u{2192}"
+                        "Newer"
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                        </svg>
                     </button>
                 </div>
 
@@ -842,7 +1235,7 @@ fn StatsContent() -> impl IntoView {
                                         let h = b.height;
                                         view! {
                                             <div
-                                                class=format!("w-2.5 h-2.5 rounded-sm cursor-pointer hover:ring-1 hover:ring-white/40 {color}")
+                                                class=format!("w-3 h-3 rounded-sm cursor-pointer hover:ring-1 hover:ring-white/50 {color}")
                                                 title=title
                                                 on:click=move |_| { show_block_detail(h); }
                                             ></div>
@@ -867,12 +1260,12 @@ fn StatsContent() -> impl IntoView {
                                                         style=format!("width: {bar_width}; background: {bar_color}")
                                                     ></div>
                                                 </div>
-                                                <p class="text-xs text-white/50 text-center">{period_text}</p>
+                                                <p class="text-sm text-white/60 text-center font-mono">{period_text}</p>
                                             </div>
 
                                             // Block grid
                                             <div class="bg-white/5 border border-white/10 rounded-xl p-4">
-                                                <p class="text-xs text-white/40 mb-2">
+                                                <p class="text-sm text-white/50 mb-3">
                                                     {format!("Blocks {} \u{2013} {} (click for details)", format_number(p_start), format_number(p_end))}
                                                 </p>
                                                 <div class="flex flex-wrap gap-[3px]">
