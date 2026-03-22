@@ -29,8 +29,8 @@ fn chart_defaults() -> serde_json::Value {
     json!({
         "backgroundColor": "transparent",
         "textStyle": { "color": "#aaa", "fontFamily": "Inter, system-ui, sans-serif" },
-        "grid": { "left": 55, "right": 20, "top": 50, "bottom": 65 },
-        "legend": { "textStyle": { "color": "#ccc", "fontSize": 11 }, "top": 28, "left": "center" },
+        "grid": { "left": 55, "right": 20, "top": 35, "bottom": 65 },
+        "legend": { "textStyle": { "color": "#ccc", "fontSize": 11 }, "top": 8, "left": "center" },
         "toolbox": {
             "feature": {
                 "restore": { "title": "Reset zoom" },
@@ -163,7 +163,6 @@ pub fn block_size_chart(blocks: &[BlockSummary]) -> String {
     let x_axis = x_axis_for(false, &[]);
 
     build_option(json!({
-        "title": { "text": "Block Size", "textStyle": { "color": "#ccc", "fontSize": 14 } },
         "xAxis": x_axis,
         "yAxis": y_axis("MB"),
         "dataZoom": data_zoom(),
@@ -202,7 +201,6 @@ pub fn block_size_chart_daily(days: &[DailyAggregate]) -> String {
         .collect();
 
     build_option(json!({
-        "title": { "text": "Block Size (Daily Avg)", "textStyle": { "color": "#ccc", "fontSize": 14 } },
         "xAxis": x_axis_for(true, &cats),
         "yAxis": y_axis("MB"),
         "dataZoom": data_zoom(),
@@ -241,7 +239,6 @@ pub fn tx_count_chart(blocks: &[BlockSummary]) -> String {
         .collect();
 
     build_option(json!({
-        "title": { "text": "Transaction Count", "textStyle": { "color": "#ccc", "fontSize": 14 } },
         "xAxis": x_axis_for(false, &[]),
         "yAxis": y_axis("Txs"),
         "dataZoom": data_zoom(),
@@ -279,7 +276,6 @@ pub fn tx_count_chart_daily(days: &[DailyAggregate]) -> String {
         .collect();
 
     build_option(json!({
-        "title": { "text": "Transaction Count (Daily Avg)", "textStyle": { "color": "#ccc", "fontSize": 14 } },
         "xAxis": x_axis_for(true, &cats),
         "yAxis": y_axis("Txs"),
         "dataZoom": data_zoom(),
@@ -317,7 +313,6 @@ pub fn fees_chart(blocks: &[BlockSummary]) -> String {
         .collect();
 
     build_option(json!({
-        "title": { "text": "Total Fees per Block (sats)", "textStyle": { "color": "#ccc", "fontSize": 14 } },
         "xAxis": x_axis_for(false, &[]),
         "yAxis": y_axis("sats"),
         "dataZoom": data_zoom(),
@@ -352,7 +347,6 @@ pub fn fees_chart_daily(days: &[DailyAggregate]) -> String {
         .collect();
 
     build_option(json!({
-        "title": { "text": "Avg Fees per Block (sats/day)", "textStyle": { "color": "#ccc", "fontSize": 14 } },
         "xAxis": x_axis_for(true, &cats),
         "yAxis": y_axis("sats"),
         "dataZoom": data_zoom(),
@@ -380,7 +374,6 @@ pub fn difficulty_chart(blocks: &[BlockSummary]) -> String {
         .collect();
 
     build_option(json!({
-        "title": { "text": "Difficulty", "textStyle": { "color": "#ccc", "fontSize": 14 } },
         "xAxis": x_axis_for(false, &[]),
         "yAxis": y_axis("T"),
         "dataZoom": data_zoom(),
@@ -406,7 +399,6 @@ pub fn difficulty_chart_daily(days: &[DailyAggregate]) -> String {
     let vals: Vec<f64> = days.iter().map(|d| d.avg_difficulty / 1e12).collect();
 
     build_option(json!({
-        "title": { "text": "Difficulty (Daily Avg)", "textStyle": { "color": "#ccc", "fontSize": 14 } },
         "xAxis": x_axis_for(true, &cats),
         "yAxis": y_axis("T"),
         "dataZoom": data_zoom(),
@@ -451,7 +443,6 @@ pub fn block_interval_chart(blocks: &[BlockSummary]) -> String {
         .collect();
 
     build_option(json!({
-        "title": { "text": "Block Interval", "textStyle": { "color": "#ccc", "fontSize": 14 } },
         "xAxis": x_axis_for(false, &[]),
         "yAxis": y_axis("min"),
         "dataZoom": data_zoom(),
@@ -502,7 +493,6 @@ pub fn block_interval_chart_daily(days: &[DailyAggregate]) -> String {
     let ma = moving_average(&vals, 7);
 
     build_option(json!({
-        "title": { "text": "Avg Block Interval (daily)", "textStyle": { "color": "#ccc", "fontSize": 14 } },
         "xAxis": x_axis_for(true, &dates),
         "yAxis": y_axis("min"),
         "dataZoom": data_zoom(),
@@ -547,7 +537,6 @@ pub fn op_return_count_chart(blocks: &[OpReturnBlock]) -> String {
         .collect();
 
     build_option(json!({
-        "title": { "text": "OP_RETURN Count by Type", "textStyle": { "color": "#ccc", "fontSize": 14 } },
         "xAxis": x_axis_for(false, &[]),
         "yAxis": y_axis("Count"),
         "dataZoom": data_zoom(),
@@ -581,7 +570,6 @@ pub fn op_return_bytes_chart(blocks: &[OpReturnBlock]) -> String {
         .collect();
 
     build_option(json!({
-        "title": { "text": "OP_RETURN Bytes by Type", "textStyle": { "color": "#ccc", "fontSize": 14 } },
         "xAxis": x_axis_for(false, &[]),
         "yAxis": y_axis("Bytes"),
         "dataZoom": data_zoom(),
@@ -632,7 +620,6 @@ pub fn runes_pct_chart(blocks: &[OpReturnBlock]) -> String {
         .collect();
 
     build_option(json!({
-        "title": { "text": "Runes Dominance %", "textStyle": { "color": "#ccc", "fontSize": 14 } },
         "xAxis": x_axis_for(false, &[]),
         "yAxis": y_axis("%"),
         "dataZoom": data_zoom(),
@@ -685,7 +672,6 @@ pub fn op_return_count_chart_daily(days: &[DailyAggregate]) -> String {
         .collect();
 
     build_option(json!({
-        "title": { "text": "OP_RETURN Count by Type (daily avg per block)", "textStyle": { "color": "#ccc", "fontSize": 14 } },
         "xAxis": x_axis_for(true, &dates),
         "yAxis": y_axis("Count"),
         "dataZoom": data_zoom(),
@@ -733,7 +719,6 @@ pub fn op_return_bytes_chart_daily(days: &[DailyAggregate]) -> String {
         .collect();
 
     build_option(json!({
-        "title": { "text": "OP_RETURN Bytes by Type (daily avg KB per block)", "textStyle": { "color": "#ccc", "fontSize": 14 } },
         "xAxis": x_axis_for(true, &dates),
         "yAxis": y_axis("KB"),
         "dataZoom": data_zoom(),
@@ -766,7 +751,6 @@ pub fn runes_pct_chart_daily(days: &[DailyAggregate]) -> String {
     let ma = moving_average(&vals, 7);
 
     build_option(json!({
-        "title": { "text": "Runes Dominance % (daily)", "textStyle": { "color": "#ccc", "fontSize": 14 } },
         "xAxis": x_axis_for(true, &dates),
         "yAxis": y_axis("%"),
         "dataZoom": data_zoom(),
@@ -790,7 +774,6 @@ pub fn signaling_chart(blocks: &[SignalingBlock]) -> String {
         .collect();
 
     build_option(json!({
-        "title": { "text": "Per-Block Signaling", "textStyle": { "color": "#ccc", "fontSize": 14 } },
         "xAxis": x_axis_for(false, &[]),
         "yAxis": {
             "type": "value", "name": "Signaled",
@@ -844,7 +827,6 @@ pub fn signaling_periods_chart(
         .collect();
 
     build_option(json!({
-        "title": { "text": "Signaling % per Retarget Period", "textStyle": { "color": "#ccc", "fontSize": 14 } },
         "xAxis": {
             "type": "category", "data": cats,
             "axisLabel": { "color": "#aaa", "rotate": 45, "fontSize": 10 },
@@ -857,7 +839,7 @@ pub fn signaling_periods_chart(
             "axisLine": { "lineStyle": { "color": "#555" } },
             "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.20)", "type": "dashed" } }
         },
-        "grid": { "left": 45, "right": 20, "top": 50, "bottom": 80 },
+        "grid": { "left": 45, "right": 20, "top": 35, "bottom": 80 },
         "dataZoom": data_zoom(),
         "tooltip": {
             "trigger": "axis",
@@ -917,7 +899,6 @@ pub fn weight_utilization_chart(blocks: &[BlockSummary]) -> String {
         .collect();
 
     build_option(json!({
-        "title": { "text": "Block Weight Utilization", "textStyle": { "color": "#ccc", "fontSize": 14 } },
         "xAxis": x_axis_for(false, &[]),
         "yAxis": y_axis("%"),
         "dataZoom": data_zoom(),
@@ -958,7 +939,6 @@ pub fn weight_utilization_chart_daily(days: &[DailyAggregate]) -> String {
         .collect();
 
     build_option(json!({
-        "title": { "text": "Weight Utilization (Daily Avg)", "textStyle": { "color": "#ccc", "fontSize": 14 } },
         "xAxis": x_axis_for(true, &cats),
         "yAxis": y_axis("%"),
         "dataZoom": data_zoom(),
@@ -1005,7 +985,6 @@ pub fn subsidy_vs_fees_chart(blocks: &[BlockSummary]) -> String {
         .collect();
 
     build_option(json!({
-        "title": { "text": "Subsidy vs Fees (BTC)", "textStyle": { "color": "#ccc", "fontSize": 14 } },
         "xAxis": x_axis_for(false, &[]),
         "yAxis": y_axis("BTC"),
         "dataZoom": data_zoom(),
@@ -1067,7 +1046,6 @@ pub fn subsidy_vs_fees_chart_daily(days: &[DailyAggregate]) -> String {
         .collect();
 
     build_option(json!({
-        "title": { "text": "Subsidy vs Fees (Daily Avg BTC)", "textStyle": { "color": "#ccc", "fontSize": 14 } },
         "xAxis": x_axis_for(true, &cats),
         "yAxis": y_axis("BTC"),
         "dataZoom": data_zoom(),
@@ -1120,7 +1098,6 @@ pub fn avg_tx_size_chart(blocks: &[BlockSummary]) -> String {
         .collect();
 
     build_option(json!({
-        "title": { "text": "Avg Transaction Size", "textStyle": { "color": "#ccc", "fontSize": 14 } },
         "xAxis": x_axis_for(false, &[]),
         "yAxis": y_axis("bytes"),
         "dataZoom": data_zoom(),
@@ -1167,7 +1144,6 @@ pub fn avg_tx_size_chart_daily(days: &[DailyAggregate]) -> String {
         .collect();
 
     build_option(json!({
-        "title": { "text": "Avg Transaction Size (Daily)", "textStyle": { "color": "#ccc", "fontSize": 14 } },
         "xAxis": x_axis_for(true, &cats),
         "yAxis": y_axis("bytes"),
         "dataZoom": data_zoom(),
@@ -1206,11 +1182,6 @@ pub fn fees_chart_unit(blocks: &[BlockSummary], unit: &str) -> String {
 
     let divisor = if unit == "btc" { 100_000_000.0 } else { 1.0 };
     let y_name = if unit == "btc" { "BTC" } else { "sats" };
-    let title = if unit == "btc" {
-        "Total Fees per Block (BTC)"
-    } else {
-        "Total Fees per Block (sats)"
-    };
 
     let raw: Vec<serde_json::Value> = blocks
         .iter()
@@ -1226,7 +1197,6 @@ pub fn fees_chart_unit(blocks: &[BlockSummary], unit: &str) -> String {
         .collect();
 
     build_option(json!({
-        "title": { "text": title, "textStyle": { "color": "#ccc", "fontSize": 14 } },
         "xAxis": x_axis_for(false, &[]),
         "yAxis": y_axis(y_name),
         "dataZoom": data_zoom(),
@@ -1250,11 +1220,6 @@ pub fn fees_chart_daily_unit(days: &[DailyAggregate], unit: &str) -> String {
 
     let divisor = if unit == "btc" { 100_000_000.0 } else { 1.0 };
     let y_name = if unit == "btc" { "BTC" } else { "sats" };
-    let title = if unit == "btc" {
-        "Avg Fees per Block (BTC/day)"
-    } else {
-        "Avg Fees per Block (sats/day)"
-    };
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
     let vals: Vec<serde_json::Value> = days
@@ -1271,7 +1236,6 @@ pub fn fees_chart_daily_unit(days: &[DailyAggregate], unit: &str) -> String {
         .collect();
 
     build_option(json!({
-        "title": { "text": title, "textStyle": { "color": "#ccc", "fontSize": 14 } },
         "xAxis": x_axis_for(true, &cats),
         "yAxis": y_axis(y_name),
         "dataZoom": data_zoom(),
@@ -1333,10 +1297,6 @@ pub fn miner_dominance_chart(miners: &[MinerShare]) -> String {
     serde_json::to_string(&json!({
         "backgroundColor": "transparent",
         "color": colors,
-        "title": {
-            "text": "Miner Dominance",
-            "textStyle": { "color": "#ccc", "fontSize": 14 }
-        },
         "tooltip": {
             "trigger": "item",
             "formatter": "{b}: {c} blocks ({d}%)"
@@ -1410,7 +1370,6 @@ pub fn empty_blocks_chart(blocks: &[EmptyBlock]) -> String {
     }
 
     build_option(json!({
-        "title": { "text": "Empty Blocks (coinbase only)", "textStyle": { "color": "#ccc", "fontSize": 14 } },
         "xAxis": x_axis_for(false, &[]),
         "yAxis": {
             "type": "value", "show": false, "min": 0, "max": 2
@@ -1457,7 +1416,6 @@ pub fn segwit_adoption_chart(blocks: &[BlockSummary]) -> String {
         .collect();
 
     build_option(json!({
-        "title": { "text": "SegWit Adoption % (tx with witness data)", "textStyle": { "color": "#ccc", "fontSize": 14 } },
         "xAxis": x_axis_for(false, &[]),
         "yAxis": y_axis("%"),
         "dataZoom": data_zoom(),
@@ -1506,7 +1464,6 @@ pub fn segwit_adoption_chart_daily(days: &[DailyAggregate]) -> String {
         .collect();
 
     build_option(json!({
-        "title": { "text": "SegWit Adoption % (Daily Avg)", "textStyle": { "color": "#ccc", "fontSize": 14 } },
         "xAxis": x_axis_for(true, &cats),
         "yAxis": y_axis("%"),
         "dataZoom": data_zoom(),
@@ -1553,7 +1510,6 @@ pub fn taproot_chart(blocks: &[BlockSummary]) -> String {
         .collect();
 
     build_option(json!({
-        "title": { "text": "Taproot Outputs per Block", "textStyle": { "color": "#ccc", "fontSize": 14 } },
         "xAxis": x_axis_for(false, &[]),
         "yAxis": y_axis("Outputs"),
         "dataZoom": data_zoom(),
@@ -1592,7 +1548,6 @@ pub fn taproot_chart_daily(days: &[DailyAggregate]) -> String {
         .collect();
 
     build_option(json!({
-        "title": { "text": "Taproot Outputs (Daily Avg per Block)", "textStyle": { "color": "#ccc", "fontSize": 14 } },
         "xAxis": x_axis_for(true, &cats),
         "yAxis": y_axis("Outputs"),
         "dataZoom": data_zoom(),
