@@ -1,6 +1,6 @@
 //! Chain Pulse dashboard page.
 //!
-//! Tabs: Dashboard | OP_RETURN | BIP Signaling
+//! Tabs: Overview | Network | Fees | Mining | OP_RETURN | Signaling
 //! Data fetched via server functions, charts rendered with ECharts via wasm_bindgen.
 
 use leptos::prelude::*;
@@ -171,10 +171,9 @@ fn StatsComingSoon() -> impl IntoView {
 
 #[component]
 fn StatsContent() -> impl IntoView {
-    let (tab, set_tab) = signal("dashboard".to_string());
+    let (tab, set_tab) = signal("overview".to_string());
     let (range, set_range) = signal("all".to_string());
     let (fee_unit, set_fee_unit) = signal("sats".to_string());
-    let (dashboard_sub, set_dashboard_sub) = signal("overview".to_string());
 
     // ---- Live stats (auto-refresh 30s) ----
     #[allow(clippy::redundant_closure)]
@@ -734,41 +733,13 @@ fn StatsContent() -> impl IntoView {
 
     // ---- Tab names and ranges ----
     let tabs = vec![
-        ("dashboard", "Dashboard"),
+        ("overview", "Overview"),
+        ("network", "Network"),
+        ("fees", "Fees"),
         ("mining", "Mining"),
         ("opreturn", "OP_RETURN"),
-        ("signaling", "BIP Signaling"),
+        ("signaling", "Signaling"),
     ];
-    let range_buttons = move || {
-        let ranges =
-            vec!["1d", "1w", "1m", "3m", "6m", "1y", "2y", "5y", "10y", "all"];
-        view! {
-            <div class="flex flex-wrap gap-1.5 justify-center mb-6">
-                {ranges.into_iter().map(|r| {
-                    let r_str = r.to_string();
-                    let r_display = r.to_uppercase();
-                    let r_clone = r_str.clone();
-                    view! {
-                        <button
-                            class=move || {
-                                if range.get() == r_clone {
-                                    "px-3 py-1.5 text-xs rounded-lg bg-white/10 text-white border border-white/20 font-medium cursor-pointer"
-                                } else {
-                                    "px-3 py-1.5 text-xs rounded-lg text-white/50 hover:text-white/80 hover:bg-white/5 transition-all cursor-pointer"
-                                }
-                            }
-                            on:click={
-                                let r = r_str.clone();
-                                move |_| set_range.set(r.clone())
-                            }
-                        >
-                            {r_display}
-                        </button>
-                    }
-                }).collect::<Vec<_>>()}
-            </div>
-        }
-    };
 
     view! {
         <Title text="Chain Pulse - WE HODL BTC"/>
@@ -809,212 +780,106 @@ fn StatsContent() -> impl IntoView {
                 }).collect::<Vec<_>>()}
             </div>
 
-            // ===== DASHBOARD TAB =====
-            <div class=move || if tab.get() == "dashboard" { "block" } else { "hidden" }>
-
-                // Dashboard sub-tabs
-                <div class="flex flex-wrap gap-2 justify-center mb-6">
-                    {["overview", "blocks", "fees"].into_iter().map(|sub| {
-                        let sub_id = sub.to_string();
-                        let sub_label = match sub {
-                            "overview" => "Overview",
-                            "blocks" => "Blocks",
-                            "fees" => "Fees",
-                            _ => sub,
-                        }.to_string();
-                        let sub_clone = sub_id.clone();
-                        view! {
-                            <button
-                                class=move || {
-                                    if dashboard_sub.get() == sub_clone {
-                                        "px-3 py-1.5 text-xs rounded-lg bg-white/15 text-white border border-white/20 font-medium cursor-pointer"
-                                    } else {
-                                        "px-3 py-1.5 text-xs rounded-lg text-white/40 hover:text-white/70 hover:bg-white/5 transition-all cursor-pointer"
-                                    }
+            // Range selector (hidden on overview and signaling tabs)
+            <div class=move || {
+                let t = tab.get();
+                if t == "overview" || t == "signaling" {
+                    "hidden"
+                } else {
+                    "flex flex-wrap gap-1.5 justify-center mb-8"
+                }
+            }>
+                {["1d", "1w", "1m", "3m", "6m", "1y", "2y", "5y", "10y", "all"].into_iter().map(|r| {
+                    let r_str = r.to_string();
+                    let r_display = r.to_uppercase();
+                    let r_clone = r_str.clone();
+                    view! {
+                        <button
+                            class=move || {
+                                if range.get() == r_clone {
+                                    "px-3 py-1.5 text-xs rounded-lg bg-white/10 text-white border border-white/20 font-medium cursor-pointer"
+                                } else {
+                                    "px-3 py-1.5 text-xs rounded-lg text-white/50 hover:text-white/80 hover:bg-white/5 transition-all cursor-pointer"
                                 }
-                                on:click={
-                                    let s = sub_id.clone();
-                                    move |_| set_dashboard_sub.set(s.clone())
+                            }
+                            on:click={
+                                let r = r_str.clone();
+                                move |_| set_range.set(r.clone())
+                            }
+                        >
+                            {r_display}
+                        </button>
+                    }
+                }).collect::<Vec<_>>()}
+            </div>
+
+            // ===== OVERVIEW TAB =====
+            <div class=move || if tab.get() == "overview" { "block" } else { "hidden" }>
+
+                // Live stats panel
+                <div class="bg-white/5 border border-white/10 rounded-xl p-4 mb-6">
+                    <div class="flex items-center gap-2 mb-3 flex-wrap">
+                        <div class="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"></div>
+                        <span class="text-base text-white font-semibold">"Live Node Stats"</span>
+                        <div class="flex items-center gap-2 ml-auto">
+                            <span class="text-xs text-white/30">{move || last_updated.get()}</span>
+                            <span class="text-xs text-white/20">
+                                {move || format!("{}s", countdown.get())}
+                            </span>
+                            <button
+                                class="text-xs text-white/40 hover:text-white/70 px-2 py-0.5 rounded border border-white/10 hover:border-white/20 cursor-pointer transition-all"
+                                on:click=move |_| {
+                                    set_countdown.set(30);
+                                    live.refetch();
+                                    set_last_updated.set(format!("updated {}", chrono::Local::now().format("%H:%M:%S")));
                                 }
                             >
-                                {sub_label}
+                                "Refresh"
                             </button>
-                        }
-                    }).collect::<Vec<_>>()}
-                </div>
-
-                // ---- Overview sub-tab ----
-                <div class=move || if dashboard_sub.get() == "overview" { "block" } else { "hidden" }>
-
-                    // Live stats panel
-                    <div class="bg-white/5 border border-white/10 rounded-xl p-4 mb-6 animate-slideup" style="animation-delay: 100ms">
-                        <div class="flex items-center gap-2 mb-3 flex-wrap">
-                            <div class="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"></div>
-                            <span class="text-base text-white font-semibold">"Live Node Stats"</span>
-                            <div class="flex items-center gap-2 ml-auto">
-                                <span class="text-xs text-white/30">{move || last_updated.get()}</span>
-                                <span class="text-xs text-white/20">
-                                    {move || format!("{}s", countdown.get())}
-                                </span>
-                                <button
-                                    class="text-xs text-white/40 hover:text-white/70 px-2 py-0.5 rounded border border-white/10 hover:border-white/20 cursor-pointer transition-all"
-                                    on:click=move |_| {
-                                        set_countdown.set(30);
-                                        live.refetch();
-                                        set_last_updated.set(format!("updated {}", chrono::Local::now().format("%H:%M:%S")));
-                                    }
-                                >
-                                    "Refresh"
-                                </button>
-                            </div>
-                        </div>
-
-                        <Suspense fallback=move || view! {
-                            <div class="flex justify-center py-6"><Spinner/></div>
-                        }>
-                            {move || {
-                                let _l = live.get();
-                                view! {
-                                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                                        // Mempool section
-                                        <div class="bg-white/[0.03] border border-white/[0.07] rounded-xl p-4 overflow-hidden">
-                                            <h3 class="text-sm font-bold text-[#f7931a] uppercase tracking-widest mb-4">"Mempool"</h3>
-                                            <div class="grid grid-cols-2 gap-2 mb-3">
-                                                <LiveCard label="Transactions" value=mempool_size/>
-                                                <LiveCard label="Size" value=mempool_bytes/>
-                                                <LiveCard label="Next Block Fee" value=next_fee/>
-                                            </div>
-                                            <div class="flex justify-center">
-                                                <Chart id="mempool-gauge".to_string() option=gauge_option class="w-[220px] h-[200px]".to_string()/>
-                                            </div>
-                                        </div>
-
-                                        // Mining section
-                                        <div class="bg-white/[0.03] border border-white/[0.07] rounded-xl p-4">
-                                            <h3 class="text-sm font-bold text-[#f7931a] uppercase tracking-widest mb-4">"Mining"</h3>
-                                            <div class="grid grid-cols-2 gap-2 mb-2">
-                                                <LiveCard label="Block Height" value=block_height/>
-                                                <LiveCard label="Chain" value=chain/>
-                                                <LiveCard label="Difficulty" value=difficulty/>
-                                                <LiveCard label="Chain Size" value=chain_size/>
-                                            </div>
-                                        </div>
-
-                                        // Economic section
-                                        <div class="bg-white/[0.03] border border-white/[0.07] rounded-xl p-4">
-                                            <h3 class="text-sm font-bold text-[#f7931a] uppercase tracking-widest mb-4">"Economic"</h3>
-                                            <div class="grid grid-cols-2 gap-2">
-                                                <LiveCard label="Price (USD)" value=price_usd/>
-                                                <LiveCard label="Sats/Dollar" value=sats_per_dollar/>
-                                                <LiveCard label="Market Cap" value=market_cap/>
-                                                <LiveCard label="Supply Issued" value=supply_pct/>
-                                                <LiveCard label="UTXO Count" value=utxo_count/>
-                                            </div>
-                                        </div>
-                                    </div>
-                                }
-                            }}
-                        </Suspense>
-                    </div>
-
-                    // Halving countdown
-                    <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 mt-6">
-                        <h3 class="text-lg text-white font-semibold mb-3">"Next Halving"</h3>
-                        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                            <div class="text-center">
-                                <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Target Height"</div>
-                                <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format_number(next_halving_height.get())}</div>
-                            </div>
-                            <div class="text-center">
-                                <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Blocks Remaining"</div>
-                                <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format_number(halving_blocks_remaining.get())}</div>
-                            </div>
-                            <div class="text-center">
-                                <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Est. Days"</div>
-                                <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format!("{:.1}", halving_est_days.get())}</div>
-                            </div>
-                            <div class="text-center">
-                                <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Current Subsidy"</div>
-                                <div class="text-lg text-[#f7931a] font-bold font-mono">{move || current_subsidy_btc.get()}</div>
-                            </div>
-                        </div>
-                        <div class="mt-3 text-center">
-                            <span class="text-xs text-white/40">"Next subsidy: "</span>
-                            <span class="text-xs text-white/60 font-mono">{move || next_subsidy_btc.get()}</span>
                         </div>
                     </div>
-
-                    // Difficulty adjustment predictor
-                    <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 mt-6">
-                        <h3 class="text-lg text-white font-semibold mb-3">"Next Difficulty Adjustment"</h3>
-                        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                            <div class="text-center">
-                                <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Period Start"</div>
-                                <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format_number(diff_period_start.get())}</div>
-                            </div>
-                            <div class="text-center">
-                                <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Blocks Into Period"</div>
-                                <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format_number(diff_blocks_into_period.get())}</div>
-                            </div>
-                            <div class="text-center">
-                                <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Blocks Remaining"</div>
-                                <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format_number(diff_blocks_remaining.get())}</div>
-                            </div>
-                            <div class="text-center">
-                                <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Est. Days Left"</div>
-                                <div class="text-lg text-[#f7931a] font-bold font-mono">{move || diff_est_remaining_days.get()}</div>
-                            </div>
-                        </div>
-                        // Progress bar
-                        <div class="mt-4">
-                            <div class="h-2 bg-white/5 rounded-full overflow-hidden">
-                                <div
-                                    class="h-full rounded-full bg-[#f7931a] transition-all duration-500"
-                                    style=move || format!("width: {}%", diff_progress_pct.get())
-                                ></div>
-                            </div>
-                            <p class="text-xs text-white/40 text-center mt-1">{move || format!("{:.1}% through retarget period", diff_progress_pct.get())}</p>
-                        </div>
-                    </div>
-
-                </div>
-
-                // ---- Blocks sub-tab ----
-                <div class=move || if dashboard_sub.get() == "blocks" { "block" } else { "hidden" }>
-
-                    // Range selector
-                    {range_buttons()}
 
                     <Suspense fallback=move || view! {
-                        <div class="flex justify-center py-12"><Spinner/></div>
+                        <div class="flex justify-center py-6"><Spinner/></div>
                     }>
                         {move || {
-                            let _d = dashboard_data.get();
+                            let _l = live.get();
                             view! {
-                                <div class="space-y-10">
-                                    <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 150ms">
-                                        <Chart id="chart-size" option=size_option/>
+                                <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                                    // Mempool section
+                                    <div class="bg-white/[0.03] border border-white/[0.07] rounded-xl p-4 overflow-hidden">
+                                        <h3 class="text-sm font-bold text-[#f7931a] uppercase tracking-widest mb-4">"Mempool"</h3>
+                                        <div class="grid grid-cols-2 gap-2 mb-3">
+                                            <LiveCard label="Transactions" value=mempool_size/>
+                                            <LiveCard label="Size" value=mempool_bytes/>
+                                            <LiveCard label="Next Block Fee" value=next_fee/>
+                                        </div>
+                                        <div class="flex justify-center">
+                                            <Chart id="mempool-gauge".to_string() option=gauge_option class="w-[220px] h-[200px]".to_string()/>
+                                        </div>
                                     </div>
-                                    <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 200ms">
-                                        <Chart id="chart-weight-util" option=weight_util_option/>
+
+                                    // Mining section
+                                    <div class="bg-white/[0.03] border border-white/[0.07] rounded-xl p-4">
+                                        <h3 class="text-sm font-bold text-[#f7931a] uppercase tracking-widest mb-4">"Mining"</h3>
+                                        <div class="grid grid-cols-2 gap-2 mb-2">
+                                            <LiveCard label="Block Height" value=block_height/>
+                                            <LiveCard label="Chain" value=chain/>
+                                            <LiveCard label="Difficulty" value=difficulty/>
+                                            <LiveCard label="Chain Size" value=chain_size/>
+                                        </div>
                                     </div>
-                                    <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 250ms">
-                                        <Chart id="chart-txcount" option=tx_option/>
-                                    </div>
-                                    <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 300ms">
-                                        <Chart id="chart-avg-tx-size" option=avg_tx_size_option/>
-                                    </div>
-                                    <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 350ms">
-                                        <Chart id="chart-interval" option=interval_option/>
-                                    </div>
-                                    <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 400ms">
-                                        <Chart id="chart-difficulty" option=diff_option/>
-                                    </div>
-                                    <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 450ms">
-                                        <Chart id="chart-segwit" option=segwit_option/>
-                                    </div>
-                                    <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 500ms">
-                                        <Chart id="chart-taproot" option=taproot_option/>
+
+                                    // Economic section
+                                    <div class="bg-white/[0.03] border border-white/[0.07] rounded-xl p-4">
+                                        <h3 class="text-sm font-bold text-[#f7931a] uppercase tracking-widest mb-4">"Economic"</h3>
+                                        <div class="grid grid-cols-2 gap-2">
+                                            <LiveCard label="Price (USD)" value=price_usd/>
+                                            <LiveCard label="Sats/Dollar" value=sats_per_dollar/>
+                                            <LiveCard label="Market Cap" value=market_cap/>
+                                            <LiveCard label="Supply Issued" value=supply_pct/>
+                                            <LiveCard label="UTXO Count" value=utxo_count/>
+                                        </div>
                                     </div>
                                 </div>
                             }
@@ -1022,61 +887,232 @@ fn StatsContent() -> impl IntoView {
                     </Suspense>
                 </div>
 
-                // ---- Fees sub-tab ----
-                <div class=move || if dashboard_sub.get() == "fees" { "block" } else { "hidden" }>
+                // Halving countdown
+                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 mt-6">
+                    <h3 class="text-lg text-white font-semibold mb-3">"Next Halving"</h3>
+                    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div class="text-center">
+                            <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Target Height"</div>
+                            <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format_number(next_halving_height.get())}</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Blocks Remaining"</div>
+                            <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format_number(halving_blocks_remaining.get())}</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Est. Days"</div>
+                            <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format!("{:.1}", halving_est_days.get())}</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Current Subsidy"</div>
+                            <div class="text-lg text-[#f7931a] font-bold font-mono">{move || current_subsidy_btc.get()}</div>
+                        </div>
+                    </div>
+                    <div class="mt-3 text-center">
+                        <span class="text-xs text-white/40">"Next subsidy: "</span>
+                        <span class="text-xs text-white/60 font-mono">{move || next_subsidy_btc.get()}</span>
+                    </div>
+                </div>
 
-                    // Range selector
-                    {range_buttons()}
-
-                    <Suspense fallback=move || view! {
-                        <div class="flex justify-center py-12"><Spinner/></div>
-                    }>
-                        {move || {
-                            let _d = dashboard_data.get();
-                            view! {
-                                <div class="space-y-10">
-                                    <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 150ms">
-                                        <div class="flex justify-end mb-1">
-                                            <button
-                                                class="text-xs text-white/40 hover:text-white/60 px-2 py-1 rounded border border-white/10 cursor-pointer"
-                                                on:click=move |_| {
-                                                    set_fee_unit.update(|u| {
-                                                        *u = if *u == "sats" { "btc".to_string() } else { "sats".to_string() }
-                                                    });
-                                                }
-                                            >
-                                                {move || if fee_unit.get() == "sats" { "Switch to BTC" } else { "Switch to sats" }}
-                                            </button>
-                                        </div>
-                                        <Chart id="chart-fees" option=fees_option/>
-                                    </div>
-                                    <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 200ms">
-                                        <Chart id="chart-subsidy-fees" option=subsidy_fees_option/>
-                                    </div>
-                                </div>
-                            }
-                        }}
-                    </Suspense>
+                // Difficulty adjustment predictor
+                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 mt-6">
+                    <h3 class="text-lg text-white font-semibold mb-3">"Next Difficulty Adjustment"</h3>
+                    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div class="text-center">
+                            <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Period Start"</div>
+                            <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format_number(diff_period_start.get())}</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Blocks Into Period"</div>
+                            <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format_number(diff_blocks_into_period.get())}</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Blocks Remaining"</div>
+                            <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format_number(diff_blocks_remaining.get())}</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Est. Days Left"</div>
+                            <div class="text-lg text-[#f7931a] font-bold font-mono">{move || diff_est_remaining_days.get()}</div>
+                        </div>
+                    </div>
+                    // Progress bar
+                    <div class="mt-4">
+                        <div class="h-2 bg-white/5 rounded-full overflow-hidden">
+                            <div
+                                class="h-full rounded-full bg-[#f7931a] transition-all duration-500"
+                                style=move || format!("width: {}%", diff_progress_pct.get())
+                            ></div>
+                        </div>
+                        <p class="text-xs text-white/40 text-center mt-1">{move || format!("{:.1}% through retarget period", diff_progress_pct.get())}</p>
+                    </div>
                 </div>
 
             </div>
 
-            // ===== MINING TAB =====
-            <div class=move || if tab.get() == "mining" { "block" } else { "hidden" }>
-                // Range selector
-                {range_buttons()}
+            // ===== NETWORK TAB =====
+            <div class=move || if tab.get() == "network" { "block" } else { "hidden" }>
 
                 <Suspense fallback=move || view! {
-                    <div class="flex justify-center py-12"><Spinner/></div>
+                    <div class="space-y-10">
+                        <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
+                        <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
+                        <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
+                    </div>
                 }>
                     {move || {
-                        let _d = mining_data.get();
+                        let _d = dashboard_data.get();
                         view! {
                             <div class="space-y-10">
-                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 100ms">
+                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6">
+                                    <div class="mb-4">
+                                        <h3 class="text-base text-white font-semibold">"Block Size"</h3>
+                                        <p class="text-xs text-white/40 mt-0.5">"Raw block size in megabytes over time"</p>
+                                    </div>
+                                    <Chart id="chart-size" option=size_option/>
+                                </div>
+                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6">
+                                    <div class="mb-4">
+                                        <h3 class="text-base text-white font-semibold">"Weight Utilization"</h3>
+                                        <p class="text-xs text-white/40 mt-0.5">"Block weight as percentage of the 4 MWU limit"</p>
+                                    </div>
+                                    <Chart id="chart-weight-util" option=weight_util_option/>
+                                </div>
+                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6">
+                                    <div class="mb-4">
+                                        <h3 class="text-base text-white font-semibold">"Transaction Count"</h3>
+                                        <p class="text-xs text-white/40 mt-0.5">"Number of transactions per block"</p>
+                                    </div>
+                                    <Chart id="chart-txcount" option=tx_option/>
+                                </div>
+                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6">
+                                    <div class="mb-4">
+                                        <h3 class="text-base text-white font-semibold">"Avg Transaction Size"</h3>
+                                        <p class="text-xs text-white/40 mt-0.5">"Average transaction size in bytes (block size / tx count)"</p>
+                                    </div>
+                                    <Chart id="chart-avg-tx-size" option=avg_tx_size_option/>
+                                </div>
+                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6">
+                                    <div class="mb-4">
+                                        <h3 class="text-base text-white font-semibold">"Block Interval"</h3>
+                                        <p class="text-xs text-white/40 mt-0.5">"Time between consecutive blocks in minutes"</p>
+                                    </div>
+                                    <Chart id="chart-interval" option=interval_option/>
+                                </div>
+
+                                // Section divider: Adoption
+                                <div class="flex items-center gap-3 my-8">
+                                    <div class="flex-1 h-px bg-white/10"></div>
+                                    <span class="text-xs text-white/30 uppercase tracking-widest">"Adoption"</span>
+                                    <div class="flex-1 h-px bg-white/10"></div>
+                                </div>
+
+                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6">
+                                    <div class="mb-4">
+                                        <h3 class="text-base text-white font-semibold">"SegWit Adoption"</h3>
+                                        <p class="text-xs text-white/40 mt-0.5">"Percentage of transactions using Segregated Witness"</p>
+                                    </div>
+                                    <Chart id="chart-segwit" option=segwit_option/>
+                                </div>
+                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6">
+                                    <div class="mb-4">
+                                        <h3 class="text-base text-white font-semibold">"Taproot Outputs"</h3>
+                                        <p class="text-xs text-white/40 mt-0.5">"Number of Taproot (v1 witness) outputs created per block"</p>
+                                    </div>
+                                    <Chart id="chart-taproot" option=taproot_option/>
+                                </div>
+                            </div>
+                        }
+                    }}
+                </Suspense>
+            </div>
+
+            // ===== FEES TAB =====
+            <div class=move || if tab.get() == "fees" { "block" } else { "hidden" }>
+
+                <Suspense fallback=move || view! {
+                    <div class="space-y-10">
+                        <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
+                        <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
+                    </div>
+                }>
+                    {move || {
+                        let _d = dashboard_data.get();
+                        view! {
+                            <div class="space-y-10">
+                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6">
+                                    <div class="flex items-start justify-between mb-4">
+                                        <div>
+                                            <h3 class="text-base text-white font-semibold">"Total Fees per Block"</h3>
+                                            <p class="text-xs text-white/40 mt-0.5">"Total fees collected by miners per block"</p>
+                                        </div>
+                                        <button
+                                            class="text-xs text-white/40 hover:text-white/60 px-2 py-1 rounded border border-white/10 cursor-pointer"
+                                            on:click=move |_| {
+                                                set_fee_unit.update(|u| {
+                                                    *u = if *u == "sats" { "btc".to_string() } else { "sats".to_string() }
+                                                });
+                                            }
+                                        >
+                                            {move || if fee_unit.get() == "sats" { "Switch to BTC" } else { "Switch to sats" }}
+                                        </button>
+                                    </div>
+                                    <Chart id="chart-fees" option=fees_option/>
+                                </div>
+                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6">
+                                    <div class="mb-4">
+                                        <h3 class="text-base text-white font-semibold">"Subsidy vs Fees"</h3>
+                                        <p class="text-xs text-white/40 mt-0.5">"Block reward breakdown: subsidy (coinbase) vs transaction fees in BTC"</p>
+                                    </div>
+                                    <Chart id="chart-subsidy-fees" option=subsidy_fees_option/>
+                                </div>
+                            </div>
+                        }
+                    }}
+                </Suspense>
+            </div>
+
+            // ===== MINING TAB =====
+            <div class=move || if tab.get() == "mining" { "block" } else { "hidden" }>
+
+                <Suspense fallback=move || view! {
+                    <div class="space-y-10">
+                        <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
+                        <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
+                        <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
+                    </div>
+                }>
+                    {move || {
+                        let _d = dashboard_data.get();
+                        let _m = mining_data.get();
+                        view! {
+                            <div class="space-y-10">
+                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6">
+                                    <div class="mb-4">
+                                        <h3 class="text-base text-white font-semibold">"Difficulty"</h3>
+                                        <p class="text-xs text-white/40 mt-0.5">"Mining difficulty target, adjusts every 2,016 blocks"</p>
+                                    </div>
+                                    <Chart id="chart-difficulty" option=diff_option/>
+                                </div>
+
+                                // Section divider: Pool Distribution
+                                <div class="flex items-center gap-3 my-8">
+                                    <div class="flex-1 h-px bg-white/10"></div>
+                                    <span class="text-xs text-white/30 uppercase tracking-widest">"Pool Distribution"</span>
+                                    <div class="flex-1 h-px bg-white/10"></div>
+                                </div>
+
+                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6">
+                                    <div class="mb-4">
+                                        <h3 class="text-base text-white font-semibold">"Miner Dominance"</h3>
+                                        <p class="text-xs text-white/40 mt-0.5">"Mining pool market share for the selected period"</p>
+                                    </div>
                                     <Chart id="chart-miner-dominance" option=miner_chart_option class="w-full h-[450px] lg:h-[600px]".to_string()/>
                                 </div>
-                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 150ms">
+                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6">
+                                    <div class="mb-4">
+                                        <h3 class="text-base text-white font-semibold">"Empty Blocks"</h3>
+                                        <p class="text-xs text-white/40 mt-0.5">"Blocks containing only the coinbase transaction (no user transactions)"</p>
+                                    </div>
                                     <Chart id="chart-empty-blocks" option=empty_blocks_option/>
                                 </div>
                             </div>
@@ -1087,23 +1123,37 @@ fn StatsContent() -> impl IntoView {
 
             // ===== OP_RETURN TAB =====
             <div class=move || if tab.get() == "opreturn" { "block" } else { "hidden" }>
-                // Range selector
-                {range_buttons()}
 
                 <Suspense fallback=move || view! {
-                    <div class="flex justify-center py-12"><Spinner/></div>
+                    <div class="space-y-10">
+                        <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
+                        <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
+                        <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
+                    </div>
                 }>
                     {move || {
                         let _d = op_data.get();
                         view! {
                             <div class="space-y-10">
-                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 100ms">
+                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6">
+                                    <div class="mb-4">
+                                        <h3 class="text-base text-white font-semibold">"OP_RETURN Count"</h3>
+                                        <p class="text-xs text-white/40 mt-0.5">"OP_RETURN outputs by protocol type (Runes vs data carriers)"</p>
+                                    </div>
                                     <Chart id="chart-opreturn-count" option=op_count_option/>
                                 </div>
-                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 150ms">
+                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6">
+                                    <div class="mb-4">
+                                        <h3 class="text-base text-white font-semibold">"OP_RETURN Volume"</h3>
+                                        <p class="text-xs text-white/40 mt-0.5">"Data volume embedded in OP_RETURN outputs by type"</p>
+                                    </div>
                                     <Chart id="chart-opreturn-bytes" option=op_bytes_option/>
                                 </div>
-                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 animate-slideup" style="animation-delay: 200ms">
+                                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6">
+                                    <div class="mb-4">
+                                        <h3 class="text-base text-white font-semibold">"Runes Dominance"</h3>
+                                        <p class="text-xs text-white/40 mt-0.5">"Runes protocol outputs as percentage of all OP_RETURN outputs"</p>
+                                    </div>
                                     <Chart id="chart-runes-pct" option=runes_pct_option/>
                                 </div>
                             </div>
@@ -1112,7 +1162,7 @@ fn StatsContent() -> impl IntoView {
                 </Suspense>
             </div>
 
-            // ===== BIP SIGNALING TAB =====
+            // ===== SIGNALING TAB =====
             <div class=move || if tab.get() == "signaling" { "block" } else { "hidden" }>
 
                 // BIP selector
@@ -1199,7 +1249,10 @@ fn StatsContent() -> impl IntoView {
                 </div>
 
                 <Suspense fallback=move || view! {
-                    <div class="flex justify-center py-12"><Spinner/></div>
+                    <div class="space-y-10">
+                        <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
+                        <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
+                    </div>
                 }>
                     {move || {
                         signaling_data.get().map(|result| {
