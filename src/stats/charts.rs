@@ -1378,47 +1378,39 @@ pub fn empty_blocks_chart(blocks: &[EmptyBlock]) -> String {
         return no_data_chart("No empty blocks in this range");
     }
 
-    // Group by miner for color coding
-    let mut miner_series: std::collections::HashMap<
-        String,
-        Vec<serde_json::Value>,
-    > = std::collections::HashMap::new();
+    // Group empty blocks by month for a bar chart
+    let mut monthly: std::collections::BTreeMap<String, u64> =
+        std::collections::BTreeMap::new();
     for b in blocks {
-        let miner = if b.miner.is_empty() {
-            "Unknown".to_string()
-        } else {
-            b.miner.clone()
-        };
-        miner_series.entry(miner).or_default().push(json!([
-            ts_ms(b.timestamp),
-            1,
-            b.height
-        ]));
+        // Convert timestamp to YYYY-MM
+        let dt = chrono::DateTime::from_timestamp(b.timestamp as i64, 0)
+            .unwrap_or_default();
+        let month = dt.format("%Y-%m").to_string();
+        *monthly.entry(month).or_default() += 1;
     }
 
-    let mut series: Vec<serde_json::Value> = Vec::new();
-    for (i, (miner, data)) in miner_series.iter().enumerate() {
-        let color = PIE_COLORS[i % PIE_COLORS.len()];
-        series.push(json!({
-            "name": miner,
-            "type": "scatter",
-            "data": data,
-            "symbolSize": 8,
-            "itemStyle": { "color": color }
-        }));
-    }
+    let months: Vec<String> = monthly.keys().cloned().collect();
+    let counts: Vec<u64> = monthly.values().copied().collect();
 
     build_option(json!({
-        "xAxis": x_axis_for(false, &[]),
-        "yAxis": {
-            "type": "value", "show": false, "min": 0, "max": 2
+        "xAxis": {
+            "type": "category",
+            "data": months,
+            "axisLabel": { "color": "#aaa", "rotate": 45, "fontSize": 10 },
+            "axisLine": { "lineStyle": { "color": "#555" } }
         },
+        "yAxis": y_axis("Count"),
         "dataZoom": data_zoom(),
-        "tooltip": {
-            "trigger": "item",
-            "formatter": "{a}<br/>Block: {c}"
-        },
-        "series": series
+        "tooltip": { "trigger": "axis" },
+        "legend": { "show": false },
+        "grid": { "left": 45, "right": 20, "top": 25, "bottom": 80 },
+        "series": [{
+            "name": "Empty Blocks",
+            "type": "bar",
+            "data": counts,
+            "itemStyle": { "color": DATA_COLOR },
+            "barMaxWidth": 20
+        }]
     }))
 }
 
