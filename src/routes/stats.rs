@@ -6,7 +6,6 @@
 use leptos::prelude::*;
 use leptos_meta::*;
 
-use crate::extras::spinner::Spinner;
 use crate::stats::server_fns::*;
 use crate::stats::types::*;
 
@@ -923,52 +922,43 @@ fn StatsContent() -> impl IntoView {
                         </div>
                     </div>
 
-                    <Suspense fallback=move || view! {
-                        <div class="flex justify-center py-6"><Spinner/></div>
-                    }>
-                        {move || {
-                            let _l = live.get();
-                            view! {
-                                <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                                    // Mempool section
-                                    <div class="bg-[#0a1a2e] border border-white/10 rounded-xl p-5 overflow-hidden">
-                                        <h3 class="text-sm font-bold text-[#f7931a] uppercase tracking-widest mb-4">"Mempool"</h3>
-                                        <div class="grid grid-cols-2 gap-3 mb-3">
-                                            <LiveCard label="Transactions" value=mempool_size/>
-                                            <LiveCard label="Size" value=mempool_bytes/>
-                                            <LiveCard label="Next Block Fee" value=next_fee/>
-                                        </div>
-                                        <div class="flex justify-center">
-                                            <Chart id="mempool-gauge".to_string() option=gauge_option class="w-[220px] h-[200px]".to_string()/>
-                                        </div>
-                                    </div>
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                        // Mempool section
+                        <div class="bg-[#0a1a2e] border border-white/10 rounded-xl p-5 overflow-hidden">
+                            <h3 class="text-sm font-bold text-[#f7931a] uppercase tracking-widest mb-4">"Mempool"</h3>
+                            <div class="grid grid-cols-2 gap-3 mb-3">
+                                <LiveCard label="Transactions" value=mempool_size/>
+                                <LiveCard label="Size" value=mempool_bytes/>
+                                <LiveCard label="Next Block Fee" value=next_fee/>
+                            </div>
+                            <div class="flex justify-center">
+                                <Chart id="mempool-gauge".to_string() option=gauge_option class="w-[220px] h-[200px]".to_string()/>
+                            </div>
+                        </div>
 
-                                    // Mining section
-                                    <div class="bg-[#0a1a2e] border border-white/10 rounded-xl p-5">
-                                        <h3 class="text-sm font-bold text-[#f7931a] uppercase tracking-widest mb-4">"Mining"</h3>
-                                        <div class="grid grid-cols-2 gap-3 mb-2">
-                                            <LiveCard label="Block Height" value=block_height/>
-                                            <LiveCard label="Difficulty" value=difficulty/>
-                                            <LiveCard label="Chain Size" value=chain_size/>
-                                        </div>
-                                    </div>
+                        // Mining section
+                        <div class="bg-[#0a1a2e] border border-white/10 rounded-xl p-5">
+                            <h3 class="text-sm font-bold text-[#f7931a] uppercase tracking-widest mb-4">"Mining"</h3>
+                            <div class="grid grid-cols-2 gap-3 mb-2">
+                                <LiveCard label="Block Height" value=block_height/>
+                                <LiveCard label="Difficulty" value=difficulty/>
+                                <LiveCard label="Chain Size" value=chain_size/>
+                            </div>
+                        </div>
 
-                                    // Economic section
-                                    <div class="bg-[#0a1a2e] border border-white/10 rounded-xl p-5">
-                                        <h3 class="text-sm font-bold text-[#f7931a] uppercase tracking-widest mb-4">"Economic"</h3>
-                                        <div class="grid grid-cols-2 gap-3">
-                                            <LiveCard label="Price (USD)" value=price_usd/>
-                                            <LiveCard label="Sats/Dollar" value=sats_per_dollar/>
-                                            <LiveCard label="Market Cap" value=market_cap/>
-                                            <LiveCard label="Total Supply" value=total_supply/>
-                                            <LiveCard label="% Issued" value=supply_pct/>
-                                            <LiveCard label="UTXO Count" value=utxo_count/>
-                                        </div>
-                                    </div>
-                                </div>
-                            }
-                        }}
-                    </Suspense>
+                        // Economic section
+                        <div class="bg-[#0a1a2e] border border-white/10 rounded-xl p-5">
+                            <h3 class="text-sm font-bold text-[#f7931a] uppercase tracking-widest mb-4">"Economic"</h3>
+                            <div class="grid grid-cols-2 gap-3">
+                                <LiveCard label="Price (USD)" value=price_usd/>
+                                <LiveCard label="Sats/Dollar" value=sats_per_dollar/>
+                                <LiveCard label="Market Cap" value=market_cap/>
+                                <LiveCard label="Total Supply" value=total_supply/>
+                                <LiveCard label="% Issued" value=supply_pct/>
+                                <LiveCard label="UTXO Count" value=utxo_count/>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 // Difficulty adjustment predictor
