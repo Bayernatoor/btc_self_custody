@@ -29,6 +29,7 @@ extern "C" {
 extern "C" {
     #[wasm_bindgen(js_name = showBlockDetail)]
     fn show_block_detail(height: u64);
+
 }
 
 #[cfg(not(feature = "hydrate"))]
@@ -98,51 +99,60 @@ fn ChartCard(
     children: Option<Children>,
 ) -> impl IntoView {
     let (expanded, set_expanded) = signal(false);
-
-    let card_class = move || {
-        if expanded.get() {
-            "bg-white/[0.07] border border-white/15 rounded-2xl p-5 lg:p-6 transition-all duration-300"
-        } else {
-            "bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 transition-all duration-300"
-        }
-    };
-
-    let chart_wrapper_class = move || {
-        if expanded.get() {
-            "h-[80vh]"
-        } else {
-            "h-[350px] lg:h-[600px]"
-        }
-    };
-
     view! {
-        <div class=card_class>
+        // Normal inline card
+        <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6">
             <div class="flex items-start justify-between mb-4">
                 <div>
-                    <h3 class="text-base text-white font-semibold">{title}</h3>
-                    <p class="text-xs text-white/40 mt-0.5">{description}</p>
+                    <h3 class="text-base text-white font-semibold">{title.clone()}</h3>
+                    <p class="text-xs text-white/40 mt-0.5">{description.clone()}</p>
                 </div>
                 <div class="flex items-center gap-2 shrink-0">
                     {children.map(|c| c())}
                     <button
                         class="text-white/30 hover:text-white/60 transition-colors cursor-pointer p-1"
-                        title=move || if expanded.get() { "Collapse" } else { "Expand" }
-                        on:click=move |_| set_expanded.update(|e| *e = !*e)
+                        title="Expand"
+                        on:click=move |_| set_expanded.set(true)
                     >
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                            {move || if expanded.get() {
-                                view! { <path stroke-linecap="round" stroke-linejoin="round" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M15 9h4.5M15 9V4.5M15 9l5.25-5.25M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25"/> }.into_any()
-                            } else {
-                                view! { <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15"/> }.into_any()
-                            }}
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15"/>
                         </svg>
                     </button>
                 </div>
             </div>
-            <div class=chart_wrapper_class>
-                <Chart id=chart_id option=option class="w-full h-full".to_string()/>
+            <div class="h-[350px] lg:h-[600px]">
+                <Chart id=chart_id.clone() option=option class="w-full h-full".to_string()/>
             </div>
         </div>
+
+        // Fullscreen overlay when expanded
+        <Show when=move || expanded.get()>
+            <div
+                class="fixed inset-0 flex flex-col pt-14 pb-4 px-4 lg:pt-16 lg:pb-6 lg:px-8 overflow-hidden"
+                style="z-index: 9999; background: #0a1929"
+            >
+                // Header with close button
+                <div class="flex items-center justify-between mb-3 shrink-0">
+                    <div>
+                        <h3 class="text-lg text-white font-semibold">{title.clone()}</h3>
+                        <p class="text-sm text-white/50 mt-0.5">{description.clone()}</p>
+                    </div>
+                    <button
+                        class="text-white/60 hover:text-white transition-colors cursor-pointer p-2.5 rounded-xl hover:bg-white/10 border border-white/10 hover:border-white/20"
+                        title="Close (Esc)"
+                        on:click=move |_| set_expanded.set(false)
+                    >
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+                // Chart fills remaining space
+                <div class="flex-1 min-h-0 bg-[#0a1a2e] border border-white/10 rounded-xl p-2">
+                    <Chart id=format!("{}-fullscreen", chart_id) option=option class="w-full h-full".to_string()/>
+                </div>
+            </div>
+        </Show>
     }
 }
 
@@ -156,7 +166,7 @@ fn LiveCard(
     #[prop(into)] value: Signal<String>,
 ) -> impl IntoView {
     view! {
-        <div class="bg-white/[0.07] border border-white/10 rounded-lg p-3 text-center">
+        <div class="bg-[#0d2137] border border-white/10 rounded-lg p-3 text-center">
             <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">{label}</div>
             <div class="text-lg lg:text-xl text-[#f7931a] font-bold font-mono truncate">{move || value.get()}</div>
         </div>
@@ -211,17 +221,17 @@ fn StatsComingSoon() -> impl IntoView {
 
                 // Feature preview cards
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full max-w-2xl">
-                    <div class="bg-white/5 border border-white/10 rounded-xl p-5 text-center">
+                    <div class="bg-[#0d2137] border border-white/10 rounded-xl p-5 text-center">
                         <div class="text-2xl mb-2">"#"</div>
                         <div class="text-sm text-white/70 font-medium mb-1">"Live Dashboard"</div>
                         <div class="text-xs text-white/40">"Real-time block, mempool, and network stats"</div>
                     </div>
-                    <div class="bg-white/5 border border-white/10 rounded-xl p-5 text-center">
+                    <div class="bg-[#0d2137] border border-white/10 rounded-xl p-5 text-center">
                         <div class="text-2xl mb-2">"\u{21a9}"</div>
                         <div class="text-sm text-white/70 font-medium mb-1">"OP_RETURN Analysis"</div>
                         <div class="text-xs text-white/40">"Track Runes and data carrier usage over time"</div>
                     </div>
-                    <div class="bg-white/5 border border-white/10 rounded-xl p-5 text-center">
+                    <div class="bg-[#0d2137] border border-white/10 rounded-xl p-5 text-center">
                         <div class="text-2xl mb-2">"\u{2691}"</div>
                         <div class="text-sm text-white/70 font-medium mb-1">"BIP Signaling"</div>
                         <div class="text-xs text-white/40">"Monitor softfork activation progress"</div>
@@ -880,7 +890,7 @@ fn StatsContent() -> impl IntoView {
             <div class=move || if tab.get() == "overview" { "block" } else { "hidden" }>
 
                 // Live stats panel
-                <div class="bg-white/5 border border-white/10 rounded-xl p-4 mb-6">
+                <div class="bg-[#0d2137] border border-white/10 rounded-xl p-4 mb-6">
                     <div class="flex items-center gap-2 mb-3 flex-wrap">
                         <div class="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"></div>
                         <span class="text-base text-white font-semibold">"Live Node Stats"</span>
@@ -910,7 +920,7 @@ fn StatsContent() -> impl IntoView {
                             view! {
                                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
                                     // Mempool section
-                                    <div class="bg-white/[0.03] border border-white/[0.07] rounded-xl p-4 overflow-hidden">
+                                    <div class="bg-[#0a1a2e] border border-white/10 rounded-xl p-4 overflow-hidden">
                                         <h3 class="text-sm font-bold text-[#f7931a] uppercase tracking-widest mb-4">"Mempool"</h3>
                                         <div class="grid grid-cols-2 gap-2 mb-3">
                                             <LiveCard label="Transactions" value=mempool_size/>
@@ -923,7 +933,7 @@ fn StatsContent() -> impl IntoView {
                                     </div>
 
                                     // Mining section
-                                    <div class="bg-white/[0.03] border border-white/[0.07] rounded-xl p-4">
+                                    <div class="bg-[#0a1a2e] border border-white/10 rounded-xl p-4">
                                         <h3 class="text-sm font-bold text-[#f7931a] uppercase tracking-widest mb-4">"Mining"</h3>
                                         <div class="grid grid-cols-2 gap-2 mb-2">
                                             <LiveCard label="Block Height" value=block_height/>
@@ -934,7 +944,7 @@ fn StatsContent() -> impl IntoView {
                                     </div>
 
                                     // Economic section
-                                    <div class="bg-white/[0.03] border border-white/[0.07] rounded-xl p-4">
+                                    <div class="bg-[#0a1a2e] border border-white/10 rounded-xl p-4">
                                         <h3 class="text-sm font-bold text-[#f7931a] uppercase tracking-widest mb-4">"Economic"</h3>
                                         <div class="grid grid-cols-2 gap-2">
                                             <LiveCard label="Price (USD)" value=price_usd/>
@@ -950,35 +960,8 @@ fn StatsContent() -> impl IntoView {
                     </Suspense>
                 </div>
 
-                // Halving countdown
-                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 mt-6">
-                    <h3 class="text-lg text-white font-semibold mb-3">"Next Halving"</h3>
-                    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                        <div class="text-center">
-                            <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Target Height"</div>
-                            <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format_number(next_halving_height.get())}</div>
-                        </div>
-                        <div class="text-center">
-                            <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Blocks Remaining"</div>
-                            <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format_number(halving_blocks_remaining.get())}</div>
-                        </div>
-                        <div class="text-center">
-                            <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Est. Days"</div>
-                            <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format!("{:.1}", halving_est_days.get())}</div>
-                        </div>
-                        <div class="text-center">
-                            <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Current Subsidy"</div>
-                            <div class="text-lg text-[#f7931a] font-bold font-mono">{move || current_subsidy_btc.get()}</div>
-                        </div>
-                    </div>
-                    <div class="mt-3 text-center">
-                        <span class="text-xs text-white/40">"Next subsidy: "</span>
-                        <span class="text-xs text-white/60 font-mono">{move || next_subsidy_btc.get()}</span>
-                    </div>
-                </div>
-
                 // Difficulty adjustment predictor
-                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 mt-6">
+                <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 mt-6">
                     <h3 class="text-lg text-white font-semibold mb-3">"Next Difficulty Adjustment"</h3>
                     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
                         <div class="text-center">
@@ -1010,6 +993,33 @@ fn StatsContent() -> impl IntoView {
                     </div>
                 </div>
 
+                // Halving countdown
+                <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 mt-6">
+                    <h3 class="text-lg text-white font-semibold mb-3">"Next Halving"</h3>
+                    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div class="text-center">
+                            <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Target Height"</div>
+                            <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format_number(next_halving_height.get())}</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Blocks Remaining"</div>
+                            <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format_number(halving_blocks_remaining.get())}</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Est. Days"</div>
+                            <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format!("{:.1}", halving_est_days.get())}</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Current Subsidy"</div>
+                            <div class="text-lg text-[#f7931a] font-bold font-mono">{move || current_subsidy_btc.get()}</div>
+                        </div>
+                    </div>
+                    <div class="mt-3 text-center">
+                        <span class="text-xs text-white/40">"Next subsidy: "</span>
+                        <span class="text-xs text-white/60 font-mono">{move || next_subsidy_btc.get()}</span>
+                    </div>
+                </div>
+
             </div>
 
             // ===== NETWORK TAB =====
@@ -1017,9 +1027,9 @@ fn StatsContent() -> impl IntoView {
 
                 <Suspense fallback=move || view! {
                     <div class="space-y-10">
-                        <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
-                        <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
-                        <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
+                        <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
+                        <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
+                        <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
                     </div>
                 }>
                     {move || {
@@ -1087,8 +1097,8 @@ fn StatsContent() -> impl IntoView {
 
                 <Suspense fallback=move || view! {
                     <div class="space-y-10">
-                        <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
-                        <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
+                        <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
+                        <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
                     </div>
                 }>
                     {move || {
@@ -1129,9 +1139,9 @@ fn StatsContent() -> impl IntoView {
 
                 <Suspense fallback=move || view! {
                     <div class="space-y-10">
-                        <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
-                        <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
-                        <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
+                        <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
+                        <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
+                        <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
                     </div>
                 }>
                     {move || {
@@ -1176,9 +1186,9 @@ fn StatsContent() -> impl IntoView {
 
                 <Suspense fallback=move || view! {
                     <div class="space-y-10">
-                        <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
-                        <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
-                        <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
+                        <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
+                        <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
+                        <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
                     </div>
                 }>
                     {move || {
@@ -1237,7 +1247,7 @@ fn StatsContent() -> impl IntoView {
                 </div>
 
                 // BIP info card
-                <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 mb-6">
+                <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 mb-6">
                     {move || {
                         if bip_method.get() == "locktime" {
                             view! {
@@ -1297,8 +1307,8 @@ fn StatsContent() -> impl IntoView {
 
                 <Suspense fallback=move || view! {
                     <div class="space-y-10">
-                        <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
-                        <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
+                        <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
+                        <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
                     </div>
                 }>
                     {move || {
@@ -1352,7 +1362,7 @@ fn StatsContent() -> impl IntoView {
                                     view! {
                                         <div class="space-y-10">
                                             // Progress bar
-                                            <div class="bg-white/5 border border-white/10 rounded-xl p-4">
+                                            <div class="bg-[#0d2137] border border-white/10 rounded-xl p-4">
                                                 <div class="h-3 bg-white/5 rounded-full overflow-hidden mb-2">
                                                     <div
                                                         class="h-full rounded-full transition-all duration-500"
@@ -1363,7 +1373,7 @@ fn StatsContent() -> impl IntoView {
                                             </div>
 
                                             // Block grid
-                                            <div class="bg-white/5 border border-white/10 rounded-xl p-4">
+                                            <div class="bg-[#0d2137] border border-white/10 rounded-xl p-4">
                                                 <p class="text-sm text-white/50 mb-3">
                                                     {format!("Blocks {} \u{2013} {} (click for details)", format_number(p_start), format_number(p_end))}
                                                 </p>
@@ -1373,7 +1383,7 @@ fn StatsContent() -> impl IntoView {
                                             </div>
 
                                             // History chart
-                                            <div class="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6">
+                                            <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6">
                                                 <Chart id="chart-signaling-periods" option=Signal::derive(move || periods_chart.clone())/>
                                             </div>
                                         </div>
