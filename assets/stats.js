@@ -7,6 +7,19 @@
         return d.innerHTML;
     }
 
+    window.scrollChartIntoView = function(elementId) {
+        var el = document.getElementById(elementId);
+        if (!el) return;
+        // Find the parent card (rounded-2xl container)
+        var card = el.closest('[class*="rounded-2xl"]') || el;
+        // Small delay to let expand transition start
+        setTimeout(function() {
+            var rect = card.getBoundingClientRect();
+            var offset = window.scrollY + rect.top - 70;
+            window.scrollTo({ top: offset, behavior: 'smooth' });
+        }, 50);
+    };
+
     window.initChart = function(elementId) {
         var el = document.getElementById(elementId);
         if (!el || el._chart) return;
@@ -24,7 +37,12 @@
         }
         if (el._chart) {
             try {
-                el._chart.setOption(JSON.parse(optionJson), true);
+                var opts = JSON.parse(optionJson);
+                // Disable animation for fullscreen charts (faster render)
+                if (elementId.indexOf('-fullscreen') !== -1) {
+                    opts.animation = false;
+                }
+                el._chart.setOption(opts, true);
             } catch(e) { console.error('Chart error:', e); }
             // Auto-register click handler for block detail (data format: [ts, value, height])
             if (!el._clickRegistered) {

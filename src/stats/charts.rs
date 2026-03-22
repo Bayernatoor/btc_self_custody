@@ -11,8 +11,8 @@ use super::types::*;
 // ---------------------------------------------------------------------------
 
 // Consistent chart color palette
-const DATA_COLOR: &str = "#4ecdc4"; // Primary data (teal)
-const DATA_COLOR_FADED: &str = "rgba(78,205,196,0.3)"; // Primary data area fill
+const DATA_COLOR: &str = "#f7931a"; // Primary data (bitcoin orange)
+const DATA_COLOR_FADED: &str = "rgba(247,147,26,0.15)"; // Primary data area fill
 const MA_COLOR: &str = "rgba(255,255,255,0.85)"; // Moving average (white)
 const TARGET_COLOR: &str = "#e74c3c"; // Target/reference lines (red)
 const RUNES_COLOR: &str = "#ff6b6b"; // Runes (coral red)
@@ -40,7 +40,11 @@ fn chart_defaults() -> serde_json::Value {
             "iconStyle": { "borderColor": "#aaa" },
             "emphasis": { "iconStyle": { "borderColor": "#f7931a" } },
             "right": 10, "top": 0
-        }
+        },
+        "animation": true,
+        "animationDuration": 300,
+        "progressive": 500,
+        "progressiveThreshold": 3000
     })
 }
 
@@ -166,12 +170,12 @@ pub fn block_size_chart(blocks: &[BlockSummary]) -> String {
         "tooltip": tooltip_axis(),
         "series": [
             {
-                "name": "Size", "type": "line", "data": raw_data,
+                "name": "Size", "type": "line", "sampling": "lttb", "data": raw_data,
                 "lineStyle": { "width": 1, "color": DATA_COLOR },
                 "itemStyle": { "color": DATA_COLOR }, "symbol": "none", "opacity": 0.4
             },
             {
-                "name": "144-block MA", "type": "line", "data": ma_data,
+                "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_data,
                 "lineStyle": { "width": 2, "color": MA_COLOR },
                 "itemStyle": { "color": MA_COLOR }, "symbol": "none"
             }
@@ -205,12 +209,12 @@ pub fn block_size_chart_daily(days: &[DailyAggregate]) -> String {
         "tooltip": tooltip_axis(),
         "series": [
             {
-                "name": "Avg Size", "type": "line", "data": sizes,
+                "name": "Avg Size", "type": "line", "sampling": "lttb", "data": sizes,
                 "lineStyle": { "width": 1, "color": DATA_COLOR },
                 "itemStyle": { "color": DATA_COLOR }, "symbol": "none", "opacity": 0.4
             },
             {
-                "name": "7-day MA", "type": "line", "data": ma_vals,
+                "name": "7-day MA", "type": "line", "sampling": "lttb", "data": ma_vals,
                 "lineStyle": { "width": 2, "color": MA_COLOR },
                 "itemStyle": { "color": MA_COLOR }, "symbol": "none"
             }
@@ -244,12 +248,12 @@ pub fn tx_count_chart(blocks: &[BlockSummary]) -> String {
         "tooltip": tooltip_axis(),
         "series": [
             {
-                "name": "Tx Count", "type": "line", "data": raw,
+                "name": "Tx Count", "type": "line", "sampling": "lttb", "data": raw,
                 "lineStyle": { "width": 1, "color": DATA_COLOR },
                 "itemStyle": { "color": DATA_COLOR }, "symbol": "none", "opacity": 0.4
             },
             {
-                "name": "144-block MA", "type": "line", "data": ma_series,
+                "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_series,
                 "lineStyle": { "width": 2, "color": MA_COLOR },
                 "itemStyle": { "color": MA_COLOR }, "symbol": "none"
             }
@@ -282,12 +286,12 @@ pub fn tx_count_chart_daily(days: &[DailyAggregate]) -> String {
         "tooltip": tooltip_axis(),
         "series": [
             {
-                "name": "Avg Tx Count", "type": "line", "data": vals,
+                "name": "Avg Tx Count", "type": "line", "sampling": "lttb", "data": vals,
                 "lineStyle": { "width": 1, "color": DATA_COLOR },
                 "itemStyle": { "color": DATA_COLOR }, "symbol": "none", "opacity": 0.4
             },
             {
-                "name": "7-day MA", "type": "line", "data": ma_vals,
+                "name": "7-day MA", "type": "line", "sampling": "lttb", "data": ma_vals,
                 "lineStyle": { "width": 2, "color": MA_COLOR },
                 "itemStyle": { "color": MA_COLOR }, "symbol": "none"
             }
@@ -320,7 +324,7 @@ pub fn fees_chart(blocks: &[BlockSummary]) -> String {
         "tooltip": tooltip_axis(),
         "series": [
             {
-                "name": "Fees", "type": "line", "data": raw,
+                "name": "Fees", "type": "line", "sampling": "lttb", "data": raw,
                 "lineStyle": { "width": 1.5, "color": DATA_COLOR },
                 "itemStyle": { "color": DATA_COLOR }, "symbol": "none",
                 "areaStyle": { "color": DATA_COLOR_FADED }
@@ -355,7 +359,7 @@ pub fn fees_chart_daily(days: &[DailyAggregate]) -> String {
         "tooltip": tooltip_axis(),
         "series": [
             {
-                "name": "Avg Fees", "type": "line", "data": vals,
+                "name": "Avg Fees", "type": "line", "sampling": "lttb", "data": vals,
                 "lineStyle": { "width": 1.5, "color": DATA_COLOR },
                 "itemStyle": { "color": DATA_COLOR }, "symbol": "none",
                 "areaStyle": { "color": DATA_COLOR_FADED }
@@ -383,7 +387,7 @@ pub fn difficulty_chart(blocks: &[BlockSummary]) -> String {
         "tooltip": tooltip_axis(),
         "series": [
             {
-                "name": "Difficulty", "type": "line", "data": raw,
+                "name": "Difficulty", "type": "line", "sampling": "lttb", "data": raw,
                 "lineStyle": { "width": 2, "color": DATA_COLOR },
                 "itemStyle": { "color": DATA_COLOR }, "symbol": "none",
                 "areaStyle": { "color": DATA_COLOR_FADED }
@@ -409,7 +413,7 @@ pub fn difficulty_chart_daily(days: &[DailyAggregate]) -> String {
         "tooltip": tooltip_axis(),
         "series": [
             {
-                "name": "Difficulty", "type": "line", "data": vals,
+                "name": "Difficulty", "type": "line", "sampling": "lttb", "data": vals,
                 "lineStyle": { "width": 2, "color": DATA_COLOR },
                 "itemStyle": { "color": DATA_COLOR }, "symbol": "none",
                 "areaStyle": { "color": DATA_COLOR_FADED }
@@ -461,7 +465,7 @@ pub fn block_interval_chart(blocks: &[BlockSummary]) -> String {
                 }
             },
             {
-                "name": "144-block MA", "type": "line", "data": ma_series,
+                "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_series,
                 "lineStyle": { "width": 2, "color": MA_COLOR },
                 "itemStyle": { "color": MA_COLOR }, "symbol": "none"
             },
@@ -505,12 +509,12 @@ pub fn block_interval_chart_daily(days: &[DailyAggregate]) -> String {
         "tooltip": tooltip_axis(),
         "series": [
             {
-                "name": "Avg Interval", "type": "line", "data": vals,
+                "name": "Avg Interval", "type": "line", "sampling": "lttb", "data": vals,
                 "lineStyle": { "width": 1, "color": DATA_COLOR },
                 "itemStyle": { "color": DATA_COLOR }, "symbol": "none", "opacity": 0.4
             },
             {
-                "name": "7-day MA", "type": "line", "data": ma,
+                "name": "7-day MA", "type": "line", "sampling": "lttb", "data": ma,
                 "lineStyle": { "width": 2, "color": MA_COLOR },
                 "itemStyle": { "color": MA_COLOR }, "symbol": "none"
             },
@@ -635,12 +639,12 @@ pub fn runes_pct_chart(blocks: &[OpReturnBlock]) -> String {
         "tooltip": tooltip_axis(),
         "series": [
             {
-                "name": "Runes %", "type": "line", "data": raw,
+                "name": "Runes %", "type": "line", "sampling": "lttb", "data": raw,
                 "lineStyle": { "width": 1, "color": RUNES_COLOR },
                 "itemStyle": { "color": RUNES_COLOR }, "symbol": "none", "opacity": 0.4
             },
             {
-                "name": "144-block MA", "type": "line", "data": ma_series,
+                "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_series,
                 "lineStyle": { "width": 2, "color": MA_COLOR },
                 "itemStyle": { "color": MA_COLOR }, "symbol": "none"
             }
@@ -768,8 +772,8 @@ pub fn runes_pct_chart_daily(days: &[DailyAggregate]) -> String {
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
         "series": [
-            { "name": "Runes %", "type": "line", "data": vals, "lineStyle": { "width": 1, "color": RUNES_COLOR }, "itemStyle": { "color": RUNES_COLOR }, "symbol": "none", "opacity": 0.4 },
-            { "name": "7-day MA", "type": "line", "data": ma, "lineStyle": { "width": 2, "color": MA_COLOR }, "itemStyle": { "color": MA_COLOR }, "symbol": "none" }
+            { "name": "Runes %", "type": "line", "sampling": "lttb", "data": vals, "lineStyle": { "width": 1, "color": RUNES_COLOR }, "itemStyle": { "color": RUNES_COLOR }, "symbol": "none", "opacity": 0.4 },
+            { "name": "7-day MA", "type": "line", "sampling": "lttb", "data": ma, "lineStyle": { "width": 2, "color": MA_COLOR }, "itemStyle": { "color": MA_COLOR }, "symbol": "none" }
         ]
     }))
 }
@@ -920,12 +924,12 @@ pub fn weight_utilization_chart(blocks: &[BlockSummary]) -> String {
         "tooltip": tooltip_axis(),
         "series": [
             {
-                "name": "Utilization %", "type": "line", "data": raw,
+                "name": "Utilization %", "type": "line", "sampling": "lttb", "data": raw,
                 "lineStyle": { "width": 1, "color": DATA_COLOR },
                 "itemStyle": { "color": DATA_COLOR }, "symbol": "none", "opacity": 0.4
             },
             {
-                "name": "144-block MA", "type": "line", "data": ma_series,
+                "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_series,
                 "lineStyle": { "width": 2, "color": MA_COLOR },
                 "itemStyle": { "color": MA_COLOR }, "symbol": "none"
             }
@@ -961,12 +965,12 @@ pub fn weight_utilization_chart_daily(days: &[DailyAggregate]) -> String {
         "tooltip": tooltip_axis(),
         "series": [
             {
-                "name": "Utilization %", "type": "line", "data": vals,
+                "name": "Utilization %", "type": "line", "sampling": "lttb", "data": vals,
                 "lineStyle": { "width": 1, "color": DATA_COLOR },
                 "itemStyle": { "color": DATA_COLOR }, "symbol": "none", "opacity": 0.4
             },
             {
-                "name": "7-day MA", "type": "line", "data": ma_vals,
+                "name": "7-day MA", "type": "line", "sampling": "lttb", "data": ma_vals,
                 "lineStyle": { "width": 2, "color": MA_COLOR },
                 "itemStyle": { "color": MA_COLOR }, "symbol": "none"
             }
@@ -1123,12 +1127,12 @@ pub fn avg_tx_size_chart(blocks: &[BlockSummary]) -> String {
         "tooltip": tooltip_axis(),
         "series": [
             {
-                "name": "Avg Tx Size", "type": "line", "data": raw,
+                "name": "Avg Tx Size", "type": "line", "sampling": "lttb", "data": raw,
                 "lineStyle": { "width": 1, "color": DATA_COLOR },
                 "itemStyle": { "color": DATA_COLOR }, "symbol": "none", "opacity": 0.4
             },
             {
-                "name": "144-block MA", "type": "line", "data": ma_series,
+                "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_series,
                 "lineStyle": { "width": 2, "color": MA_COLOR },
                 "itemStyle": { "color": MA_COLOR }, "symbol": "none"
             }
@@ -1170,12 +1174,12 @@ pub fn avg_tx_size_chart_daily(days: &[DailyAggregate]) -> String {
         "tooltip": tooltip_axis(),
         "series": [
             {
-                "name": "Avg Tx Size", "type": "line", "data": vals,
+                "name": "Avg Tx Size", "type": "line", "sampling": "lttb", "data": vals,
                 "lineStyle": { "width": 1, "color": DATA_COLOR },
                 "itemStyle": { "color": DATA_COLOR }, "symbol": "none", "opacity": 0.4
             },
             {
-                "name": "7-day MA", "type": "line", "data": ma_vals,
+                "name": "7-day MA", "type": "line", "sampling": "lttb", "data": ma_vals,
                 "lineStyle": { "width": 2, "color": MA_COLOR },
                 "itemStyle": { "color": MA_COLOR }, "symbol": "none"
             }
@@ -1229,7 +1233,7 @@ pub fn fees_chart_unit(blocks: &[BlockSummary], unit: &str) -> String {
         "tooltip": tooltip_axis(),
         "series": [
             {
-                "name": "Fees", "type": "line", "data": raw,
+                "name": "Fees", "type": "line", "sampling": "lttb", "data": raw,
                 "lineStyle": { "width": 1.5, "color": DATA_COLOR },
                 "itemStyle": { "color": DATA_COLOR }, "symbol": "none",
                 "areaStyle": { "color": DATA_COLOR_FADED }
@@ -1274,7 +1278,7 @@ pub fn fees_chart_daily_unit(days: &[DailyAggregate], unit: &str) -> String {
         "tooltip": tooltip_axis(),
         "series": [
             {
-                "name": "Avg Fees", "type": "line", "data": vals,
+                "name": "Avg Fees", "type": "line", "sampling": "lttb", "data": vals,
                 "lineStyle": { "width": 1.5, "color": DATA_COLOR },
                 "itemStyle": { "color": DATA_COLOR }, "symbol": "none",
                 "areaStyle": { "color": DATA_COLOR_FADED }
@@ -1460,12 +1464,12 @@ pub fn segwit_adoption_chart(blocks: &[BlockSummary]) -> String {
         "tooltip": tooltip_axis(),
         "series": [
             {
-                "name": "SegWit %", "type": "line", "data": raw,
+                "name": "SegWit %", "type": "line", "sampling": "lttb", "data": raw,
                 "lineStyle": { "width": 1, "color": DATA_COLOR },
                 "itemStyle": { "color": DATA_COLOR }, "symbol": "none", "opacity": 0.4
             },
             {
-                "name": "144-block MA", "type": "line", "data": ma_series,
+                "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_series,
                 "lineStyle": { "width": 2, "color": MA_COLOR },
                 "itemStyle": { "color": MA_COLOR }, "symbol": "none"
             }
@@ -1509,12 +1513,12 @@ pub fn segwit_adoption_chart_daily(days: &[DailyAggregate]) -> String {
         "tooltip": tooltip_axis(),
         "series": [
             {
-                "name": "SegWit %", "type": "line", "data": vals,
+                "name": "SegWit %", "type": "line", "sampling": "lttb", "data": vals,
                 "lineStyle": { "width": 1, "color": DATA_COLOR },
                 "itemStyle": { "color": DATA_COLOR }, "symbol": "none", "opacity": 0.4
             },
             {
-                "name": "7-day MA", "type": "line", "data": ma_vals,
+                "name": "7-day MA", "type": "line", "sampling": "lttb", "data": ma_vals,
                 "lineStyle": { "width": 2, "color": MA_COLOR },
                 "itemStyle": { "color": MA_COLOR }, "symbol": "none"
             }
@@ -1556,12 +1560,12 @@ pub fn taproot_chart(blocks: &[BlockSummary]) -> String {
         "tooltip": tooltip_axis(),
         "series": [
             {
-                "name": "Taproot Outputs", "type": "line", "data": raw,
+                "name": "Taproot Outputs", "type": "line", "sampling": "lttb", "data": raw,
                 "lineStyle": { "width": 1, "color": TAPROOT_COLOR },
                 "itemStyle": { "color": TAPROOT_COLOR }, "symbol": "none", "opacity": 0.4
             },
             {
-                "name": "144-block MA", "type": "line", "data": ma_series,
+                "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_series,
                 "lineStyle": { "width": 2, "color": MA_COLOR },
                 "itemStyle": { "color": MA_COLOR }, "symbol": "none"
             }
@@ -1595,12 +1599,12 @@ pub fn taproot_chart_daily(days: &[DailyAggregate]) -> String {
         "tooltip": tooltip_axis(),
         "series": [
             {
-                "name": "Taproot Outputs", "type": "line", "data": vals,
+                "name": "Taproot Outputs", "type": "line", "sampling": "lttb", "data": vals,
                 "lineStyle": { "width": 1, "color": TAPROOT_COLOR },
                 "itemStyle": { "color": TAPROOT_COLOR }, "symbol": "none", "opacity": 0.4
             },
             {
-                "name": "7-day MA", "type": "line", "data": ma_vals,
+                "name": "7-day MA", "type": "line", "sampling": "lttb", "data": ma_vals,
                 "lineStyle": { "width": 2, "color": MA_COLOR },
                 "itemStyle": { "color": MA_COLOR }, "symbol": "none"
             }
