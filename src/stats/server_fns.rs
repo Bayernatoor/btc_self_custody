@@ -219,6 +219,7 @@ pub async fn fetch_op_returns(
             height: r.height,
             timestamp: r.timestamp,
             tx_count: r.tx_count,
+            size: r.size,
             op_return_count: r.op_return_count,
             op_return_bytes: r.op_return_bytes,
             runes_count: r.runes_count,
@@ -432,4 +433,51 @@ pub async fn fetch_empty_blocks(
             miner,
         })
         .collect())
+}
+
+#[server(prefix = "/api", endpoint = "stats_price_history")]
+pub async fn fetch_price_history(
+    from_ts: u64,
+    to_ts: u64,
+) -> Result<Vec<PricePoint>, ServerFnError> {
+    use std::time::Instant;
+
+    // Silence unused warnings — range filtering now happens client-side
+    let _ = (from_ts, to_ts);
+
+    let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
+        leptos_axum::extract().await.map_err(|e| {
+            ServerFnError::new(format!("Stats not available: {e}"))
+        })?;
+
+    // Return cached full dataset if fresh (< 1 hour old)
+    {
+        let cached = state.price_history_cache.lock().unwrap();
+        if let Some((_, _, ref data, ref ts)) = *cached {
+            if ts.elapsed().as_secs() < 3600 {
+                return Ok(data.clone());
+            }
+        }
+    }
+
+    // Fetch full history from blockchain.info (daily granularity, all time)
+    let prices = state
+        .rpc
+        .fetch_price_history_all()
+        .await
+        .map_err(|e| ServerFnError::new(format!("Price history error: {e}")))?;
+
+    let all_points: Vec<PricePoint> = prices
+        .into_iter()
+        .map(|(ts_ms, price)| PricePoint {
+            timestamp_ms: ts_ms,
+            price_usd: price,
+        })
+        .collect();
+
+    // Cache full dataset
+    *state.price_history_cache.lock().unwrap() =
+        Some((0, u64::MAX, all_points.clone(), Instant::now()));
+
+    Ok(all_points)
 }

@@ -21,6 +21,7 @@ use serde::Deserialize;
 use super::db;
 use super::error::StatsError;
 use super::rpc::{BitcoinRpc, PriceInfo};
+use super::types::PricePoint;
 
 pub struct StatsState {
     pub db: Mutex<Connection>,
@@ -28,6 +29,8 @@ pub struct StatsState {
     /// Cached price with timestamp, refreshed at most every 60 seconds.
     pub price_cache: Mutex<Option<(PriceInfo, Instant)>>,
     pub utxo_count: Mutex<Option<u64>>,
+    /// Cached price history: (from_ts, to_ts, data, fetched_at).
+    pub price_history_cache: Mutex<Option<(u64, u64, Vec<PricePoint>, Instant)>>,
 }
 
 pub type SharedStatsState = Arc<StatsState>;

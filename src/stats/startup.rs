@@ -32,6 +32,7 @@ pub async fn init() -> Option<(Arc<StatsState>, Router)> {
         rpc,
         price_cache: Mutex::new(None),
         utxo_count: Mutex::new(None),
+        price_history_cache: Mutex::new(None),
     });
 
     // Build the API router

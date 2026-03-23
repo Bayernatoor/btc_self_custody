@@ -167,7 +167,10 @@ fn LiveCard(
     view! {
         <div class="bg-[#0d2137] border border-white/10 rounded-lg p-3 text-center">
             <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">{label}</div>
-            <div class="text-lg lg:text-xl text-[#f7931a] font-bold font-mono truncate">{move || value.get()}</div>
+            <div
+                class="text-lg lg:text-xl text-[#f7931a] font-bold font-mono truncate"
+                title=move || value.get()
+            >{move || value.get()}</div>
         </div>
     }
 }
@@ -250,6 +253,45 @@ fn StatsContent() -> impl IntoView {
     // ---- Live stats (auto-refresh 30s) ----
     #[allow(clippy::redundant_closure)]
     let live = LocalResource::new(move || fetch_live_stats());
+
+    // Overlay toggles
+    let (overlay_halvings, set_overlay_halvings) = signal(false);
+    let (overlay_bips, set_overlay_bips) = signal(false);
+    let (overlay_core, set_overlay_core) = signal(false);
+    let (overlay_price, set_overlay_price) = signal(false);
+    let (overlay_chain_size, set_overlay_chain_size) = signal(false);
+    let (overlay_events, set_overlay_events) = signal(false);
+    let (overlay_panel_open, set_overlay_panel_open) = signal(false);
+
+    // Price history resource — fetches full history + live price once when enabled
+    let price_history = LocalResource::new(move || {
+        let enabled = overlay_price.get();
+        async move {
+            if !enabled {
+                return Vec::new();
+            }
+            let mut data: Vec<(u64, f64)> = match fetch_price_history(0, 4_000_000_000).await {
+                Ok(pts) => pts.into_iter().map(|p| (p.timestamp_ms, p.price_usd)).collect(),
+                Err(e) => {
+                    leptos::logging::warn!("Price history fetch failed: {e}");
+                    Vec::new()
+                }
+            };
+            // Append live price to fill blockchain.info's ~1 week data gap
+            if let Ok(live_stats) = fetch_live_stats().await {
+                let now_ms = chrono::Utc::now().timestamp() as u64 * 1000;
+                if live_stats.network.price_usd > 0.0 {
+                    let last_ts = data.last().map(|&(ts, _)| ts).unwrap_or(0);
+                    if now_ms > last_ts {
+                        data.push((now_ms, live_stats.network.price_usd));
+                    }
+                }
+            }
+            data
+        }
+    });
+
+    // overlay_flags is defined after dashboard_data (needs chain size data from it)
     let (countdown, set_countdown) = signal(30u32);
     let (last_updated, set_last_updated) = signal("connecting...".to_string());
 
@@ -395,135 +437,140 @@ fn StatsContent() -> impl IntoView {
         }
     });
 
-    // ---- Dashboard chart options ----
-    let size_option = Signal::derive(move || {
-        let _r = range.get();
-        dashboard_data
-            .get()
-            .and_then(|r| r.ok())
-            .map(|data| match data {
-                DashboardData::PerBlock(ref blocks) => {
-                    crate::stats::charts::block_size_chart(blocks)
-                }
-                DashboardData::Daily(ref days) => {
-                    crate::stats::charts::block_size_chart_daily(days)
-                }
-            })
-            .unwrap_or_default()
+    let overlay_flags = Signal::derive(move || {
+        let price_data = if overlay_price.get() {
+            price_history.get().unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
+        let chain_size_data = if overlay_chain_size.get() {
+            dashboard_data
+                .get()
+                .and_then(|r| r.ok())
+                .map(|data| {
+                    let mut cumulative: f64 = 0.0;
+                    match data {
+                        DashboardData::PerBlock(ref blocks) => blocks
+                            .iter()
+                            .map(|b| {
+                                cumulative += b.size as f64 / 1_000_000_000.0;
+                                (b.timestamp * 1000, (cumulative * 1000.0).round() / 1000.0)
+                            })
+                            .collect(),
+                        DashboardData::Daily(ref days) => days
+                            .iter()
+                            .filter_map(|d| {
+                                cumulative += d.avg_size * d.block_count as f64 / 1_000_000_000.0;
+                                let ts = chrono::NaiveDate::parse_from_str(&d.date, "%Y-%m-%d")
+                                    .map(|dt| {
+                                        dt.and_hms_opt(12, 0, 0)
+                                            .unwrap()
+                                            .and_utc()
+                                            .timestamp() as u64
+                                            * 1000
+                                    })
+                                    .ok()?;
+                                Some((ts, (cumulative * 1000.0).round() / 1000.0))
+                            })
+                            .collect(),
+                    }
+                })
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
+        crate::stats::charts::OverlayFlags {
+            halvings: overlay_halvings.get(),
+            bip_activations: overlay_bips.get(),
+            core_releases: overlay_core.get(),
+            events: overlay_events.get(),
+            price_data,
+            chain_size_data,
+        }
     });
 
-    let tx_option = Signal::derive(move || {
-        let _r = range.get();
-        dashboard_data
-            .get()
-            .and_then(|r| r.ok())
-            .map(|data| match data {
-                DashboardData::PerBlock(ref blocks) => {
-                    crate::stats::charts::tx_count_chart(blocks)
-                }
-                DashboardData::Daily(ref days) => {
-                    crate::stats::charts::tx_count_chart_daily(days)
-                }
+    // ---- Dashboard chart options (with overlay support) ----
+    // Helper: build a chart option signal that applies overlays.
+    // `chart_fn` returns (json_string, is_daily) so apply_overlays knows the axis type.
+    macro_rules! chart_signal {
+        ($data:expr, $range:expr, $overlays:expr, |$blocks:ident| $per_block:expr, |$days:ident| $daily:expr) => {
+            Signal::derive(move || {
+                let _r = $range.get();
+                let flags = $overlays.get();
+                $data
+                    .get()
+                    .and_then(|r| r.ok())
+                    .map(|data| match data {
+                        DashboardData::PerBlock(ref $blocks) => {
+                            let json = $per_block;
+                            crate::stats::charts::apply_overlays(&json, &flags, false)
+                        }
+                        DashboardData::Daily(ref $days) => {
+                            let json = $daily;
+                            crate::stats::charts::apply_overlays(&json, &flags, true)
+                        }
+                    })
+                    .unwrap_or_default()
             })
-            .unwrap_or_default()
-    });
+        };
+    }
+
+    let size_option = chart_signal!(dashboard_data, range, overlay_flags,
+        |blocks| crate::stats::charts::block_size_chart(blocks),
+        |days| crate::stats::charts::block_size_chart_daily(days)
+    );
+
+    let tx_option = chart_signal!(dashboard_data, range, overlay_flags,
+        |blocks| crate::stats::charts::tx_count_chart(blocks),
+        |days| crate::stats::charts::tx_count_chart_daily(days)
+    );
 
     let fees_option = Signal::derive(move || {
         let _r = range.get();
         let unit = fee_unit.get();
+        let flags = overlay_flags.get();
         dashboard_data
             .get()
             .and_then(|r| r.ok())
             .map(|data| match data {
                 DashboardData::PerBlock(ref blocks) => {
-                    crate::stats::charts::fees_chart_unit(blocks, &unit)
+                    let json = crate::stats::charts::fees_chart_unit(blocks, &unit);
+                    crate::stats::charts::apply_overlays(&json, &flags, false)
                 }
                 DashboardData::Daily(ref days) => {
-                    crate::stats::charts::fees_chart_daily_unit(days, &unit)
+                    let json = crate::stats::charts::fees_chart_daily_unit(days, &unit);
+                    crate::stats::charts::apply_overlays(&json, &flags, true)
                 }
             })
             .unwrap_or_default()
     });
 
-    let diff_option = Signal::derive(move || {
-        let _r = range.get();
-        dashboard_data
-            .get()
-            .and_then(|r| r.ok())
-            .map(|data| match data {
-                DashboardData::PerBlock(ref blocks) => {
-                    crate::stats::charts::difficulty_chart(blocks)
-                }
-                DashboardData::Daily(ref days) => {
-                    crate::stats::charts::difficulty_chart_daily(days)
-                }
-            })
-            .unwrap_or_default()
-    });
+    let diff_option = chart_signal!(dashboard_data, range, overlay_flags,
+        |blocks| crate::stats::charts::difficulty_chart(blocks),
+        |days| crate::stats::charts::difficulty_chart_daily(days)
+    );
 
-    let interval_option = Signal::derive(move || {
-        let _r = range.get();
-        dashboard_data
-            .get()
-            .and_then(|r| r.ok())
-            .map(|data| match data {
-                DashboardData::PerBlock(ref blocks) => {
-                    crate::stats::charts::block_interval_chart(blocks)
-                }
-                DashboardData::Daily(ref days) => {
-                    crate::stats::charts::block_interval_chart_daily(days)
-                }
-            })
-            .unwrap_or_default()
-    });
+    let interval_option = chart_signal!(dashboard_data, range, overlay_flags,
+        |blocks| crate::stats::charts::block_interval_chart(blocks),
+        |days| crate::stats::charts::block_interval_chart_daily(days)
+    );
 
-    let weight_util_option = Signal::derive(move || {
-        let _r = range.get();
-        dashboard_data
-            .get()
-            .and_then(|r| r.ok())
-            .map(|data| match data {
-                DashboardData::PerBlock(ref blocks) => {
-                    crate::stats::charts::weight_utilization_chart(blocks)
-                }
-                DashboardData::Daily(ref days) => {
-                    crate::stats::charts::weight_utilization_chart_daily(days)
-                }
-            })
-            .unwrap_or_default()
-    });
+    let weight_util_option = chart_signal!(dashboard_data, range, overlay_flags,
+        |blocks| crate::stats::charts::weight_utilization_chart(blocks),
+        |days| crate::stats::charts::weight_utilization_chart_daily(days)
+    );
 
-    let subsidy_fees_option = Signal::derive(move || {
-        let _r = range.get();
-        dashboard_data
-            .get()
-            .and_then(|r| r.ok())
-            .map(|data| match data {
-                DashboardData::PerBlock(ref blocks) => {
-                    crate::stats::charts::subsidy_vs_fees_chart(blocks)
-                }
-                DashboardData::Daily(ref days) => {
-                    crate::stats::charts::subsidy_vs_fees_chart_daily(days)
-                }
-            })
-            .unwrap_or_default()
-    });
+    let subsidy_fees_option = chart_signal!(dashboard_data, range, overlay_flags,
+        |blocks| crate::stats::charts::subsidy_vs_fees_chart(blocks),
+        |days| crate::stats::charts::subsidy_vs_fees_chart_daily(days)
+    );
 
-    let avg_tx_size_option = Signal::derive(move || {
-        let _r = range.get();
-        dashboard_data
-            .get()
-            .and_then(|r| r.ok())
-            .map(|data| match data {
-                DashboardData::PerBlock(ref blocks) => {
-                    crate::stats::charts::avg_tx_size_chart(blocks)
-                }
-                DashboardData::Daily(ref days) => {
-                    crate::stats::charts::avg_tx_size_chart_daily(days)
-                }
-            })
-            .unwrap_or_default()
-    });
+    let avg_tx_size_option = chart_signal!(dashboard_data, range, overlay_flags,
+        |blocks| crate::stats::charts::avg_tx_size_chart(blocks),
+        |days| crate::stats::charts::avg_tx_size_chart_daily(days)
+    );
 
     // Halving countdown derived values
     let raw_block_height = Signal::derive(move || {
@@ -548,6 +595,23 @@ fn StatsContent() -> impl IntoView {
             return 0u64;
         }
         nh.saturating_sub(h)
+    });
+
+    let halving_progress_pct = Signal::derive(move || {
+        let remaining = halving_blocks_remaining.get();
+        let elapsed = 210_000u64.saturating_sub(remaining);
+        (elapsed as f64 / 210_000.0 * 100.0 * 10.0).round() / 10.0
+    });
+
+    let halving_est_date = Signal::derive(move || {
+        let remaining = halving_blocks_remaining.get();
+        if remaining == 0 {
+            return "\u{2014}".to_string();
+        }
+        let days = remaining as f64 * 10.0 / 1440.0;
+        let est = chrono::Utc::now()
+            + chrono::Duration::seconds((days * 86400.0) as i64);
+        est.format("%b %d, %Y").to_string()
     });
 
     let halving_est_days = Signal::derive(move || {
@@ -610,6 +674,17 @@ fn StatsContent() -> impl IntoView {
         format!("{:.1}", remaining as f64 * 10.0 / 1440.0)
     });
 
+    let diff_est_date = Signal::derive(move || {
+        let remaining = diff_blocks_remaining.get();
+        if remaining == 0 {
+            return "\u{2014}".to_string();
+        }
+        let days = remaining as f64 * 10.0 / 1440.0;
+        let est = chrono::Utc::now()
+            + chrono::Duration::seconds((days * 86400.0) as i64);
+        est.format("%b %d, %Y").to_string()
+    });
+
     // ---- OP_RETURN data ----
     #[derive(Clone)]
     enum OpData {
@@ -643,45 +718,72 @@ fn StatsContent() -> impl IntoView {
     });
 
     let op_count_option = Signal::derive(move || {
+        let flags = overlay_flags.get();
         op_data
             .get()
             .and_then(|r| r.ok())
             .map(|data| match data {
                 OpData::PerBlock(ref b) => {
-                    crate::stats::charts::op_return_count_chart(b)
+                    let json = crate::stats::charts::op_return_count_chart(b);
+                    crate::stats::charts::apply_overlays(&json, &flags, false)
                 }
                 OpData::Daily(ref d) => {
-                    crate::stats::charts::op_return_count_chart_daily(d)
+                    let json = crate::stats::charts::op_return_count_chart_daily(d);
+                    crate::stats::charts::apply_overlays(&json, &flags, true)
                 }
             })
             .unwrap_or_default()
     });
 
     let op_bytes_option = Signal::derive(move || {
+        let flags = overlay_flags.get();
         op_data
             .get()
             .and_then(|r| r.ok())
             .map(|data| match data {
                 OpData::PerBlock(ref b) => {
-                    crate::stats::charts::op_return_bytes_chart(b)
+                    let json = crate::stats::charts::op_return_bytes_chart(b);
+                    crate::stats::charts::apply_overlays(&json, &flags, false)
                 }
                 OpData::Daily(ref d) => {
-                    crate::stats::charts::op_return_bytes_chart_daily(d)
+                    let json = crate::stats::charts::op_return_bytes_chart_daily(d);
+                    crate::stats::charts::apply_overlays(&json, &flags, true)
                 }
             })
             .unwrap_or_default()
     });
 
     let runes_pct_option = Signal::derive(move || {
+        let flags = overlay_flags.get();
         op_data
             .get()
             .and_then(|r| r.ok())
             .map(|data| match data {
                 OpData::PerBlock(ref b) => {
-                    crate::stats::charts::runes_pct_chart(b)
+                    let json = crate::stats::charts::runes_pct_chart(b);
+                    crate::stats::charts::apply_overlays(&json, &flags, false)
                 }
                 OpData::Daily(ref d) => {
-                    crate::stats::charts::runes_pct_chart_daily(d)
+                    let json = crate::stats::charts::runes_pct_chart_daily(d);
+                    crate::stats::charts::apply_overlays(&json, &flags, true)
+                }
+            })
+            .unwrap_or_default()
+    });
+
+    let op_block_share_option = Signal::derive(move || {
+        let flags = overlay_flags.get();
+        op_data
+            .get()
+            .and_then(|r| r.ok())
+            .map(|data| match data {
+                OpData::PerBlock(ref b) => {
+                    let json = crate::stats::charts::op_return_block_share_chart(b);
+                    crate::stats::charts::apply_overlays(&json, &flags, false)
+                }
+                OpData::Daily(ref d) => {
+                    let json = crate::stats::charts::op_return_block_share_chart_daily(d);
+                    crate::stats::charts::apply_overlays(&json, &flags, true)
                 }
             })
             .unwrap_or_default()
@@ -736,47 +838,71 @@ fn StatsContent() -> impl IntoView {
     });
 
     let empty_blocks_option = Signal::derive(move || {
+        let flags = overlay_flags.get();
         mining_data
             .get()
             .and_then(|r| r.ok())
             .map(|(_, ref empty)| {
-                crate::stats::charts::empty_blocks_chart(empty)
+                let json = crate::stats::charts::empty_blocks_chart(empty);
+                // Empty blocks chart uses category axis (monthly bars)
+                crate::stats::charts::apply_overlays(&json, &flags, true)
             })
             .unwrap_or_default()
     });
 
     // ---- SegWit / Taproot chart options (from dashboard_data) ----
-    let segwit_option = Signal::derive(move || {
+    let segwit_option = chart_signal!(dashboard_data, range, overlay_flags,
+        |blocks| crate::stats::charts::segwit_adoption_chart(blocks),
+        |days| crate::stats::charts::segwit_adoption_chart_daily(days)
+    );
+
+    let taproot_option = chart_signal!(dashboard_data, range, overlay_flags,
+        |blocks| crate::stats::charts::taproot_chart(blocks),
+        |days| crate::stats::charts::taproot_chart_daily(days)
+    );
+
+    let witness_version_option = chart_signal!(dashboard_data, range, overlay_flags,
+        |blocks| crate::stats::charts::witness_version_chart(blocks),
+        |days| crate::stats::charts::witness_version_chart_daily(days)
+    );
+
+    let chain_size_option = Signal::derive(move || {
         let _r = range.get();
+        let flags = overlay_flags.get();
+        // Read disk size without reactive tracking to avoid 30s chart resets
+        let disk_gb = {
+            let guard = live.read_untracked();
+            guard
+                .as_ref()
+                .and_then(|r| r.as_ref().ok())
+                .map(|s| s.network.chain_size_gb)
+                .unwrap_or(0.0)
+        };
         dashboard_data
             .get()
             .and_then(|r| r.ok())
             .map(|data| match data {
                 DashboardData::PerBlock(ref blocks) => {
-                    crate::stats::charts::segwit_adoption_chart(blocks)
+                    let json = crate::stats::charts::chain_size_chart(blocks, disk_gb);
+                    crate::stats::charts::apply_overlays(&json, &flags, false)
                 }
                 DashboardData::Daily(ref days) => {
-                    crate::stats::charts::segwit_adoption_chart_daily(days)
+                    let json = crate::stats::charts::chain_size_chart_daily(days, disk_gb);
+                    crate::stats::charts::apply_overlays(&json, &flags, true)
                 }
             })
             .unwrap_or_default()
     });
 
-    let taproot_option = Signal::derive(move || {
-        let _r = range.get();
-        dashboard_data
-            .get()
-            .and_then(|r| r.ok())
-            .map(|data| match data {
-                DashboardData::PerBlock(ref blocks) => {
-                    crate::stats::charts::taproot_chart(blocks)
-                }
-                DashboardData::Daily(ref days) => {
-                    crate::stats::charts::taproot_chart_daily(days)
-                }
-            })
-            .unwrap_or_default()
-    });
+    let witness_pct_option = chart_signal!(dashboard_data, range, overlay_flags,
+        |blocks| crate::stats::charts::witness_version_pct_chart(blocks),
+        |days| crate::stats::charts::witness_version_pct_chart_daily(days)
+    );
+
+    let witness_tx_pct_option = chart_signal!(dashboard_data, range, overlay_flags,
+        |blocks| crate::stats::charts::witness_version_tx_pct_chart(blocks),
+        |days| crate::stats::charts::witness_version_tx_pct_chart_daily(days)
+    );
 
     // ---- BIP Signaling data ----
     let (bip_method, set_bip_method) = signal("bit".to_string());
@@ -908,6 +1034,100 @@ fn StatsContent() -> impl IntoView {
                 </span>
             </div>
 
+            // ===== FLOATING OVERLAY PANEL =====
+            <div class="fixed left-4 bottom-4 z-50">
+                <Show
+                    when=move || overlay_panel_open.get()
+                    fallback=move || view! {
+                        <button
+                            class="bg-[#0d2137] border border-white/10 hover:border-[#f7931a]/50 text-white/60 hover:text-white rounded-xl p-3 shadow-lg cursor-pointer transition-all"
+                            title="Chart Overlays"
+                            on:click=move |_| set_overlay_panel_open.set(true)
+                        >
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 13.5V3.75m0 9.75a1.5 1.5 0 0 1 0 3m0-3a1.5 1.5 0 0 0 0 3m0 3.75V16.5m12-3V3.75m0 9.75a1.5 1.5 0 0 1 0 3m0-3a1.5 1.5 0 0 0 0 3m0 3.75V16.5m-6-9V3.75m0 3.75a1.5 1.5 0 0 1 0 3m0-3a1.5 1.5 0 0 0 0 3m0 9.75V10.5"/>
+                            </svg>
+                        </button>
+                    }
+                >
+                    <div class="bg-[#0d2137] border border-white/10 rounded-xl p-4 shadow-xl min-w-[180px]">
+                        <div class="flex items-center justify-between mb-3">
+                            <span class="text-xs text-white/50 uppercase tracking-widest font-semibold">"Overlays"</span>
+                            <button
+                                class="text-white/30 hover:text-white/60 cursor-pointer p-0.5"
+                                on:click=move |_| set_overlay_panel_open.set(false)
+                            >
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="space-y-2">
+                            <label class="flex items-center gap-2 cursor-pointer group">
+                                <input
+                                    type="checkbox"
+                                    class="accent-[#f7931a] w-3.5 h-3.5 cursor-pointer"
+                                    prop:checked=move || overlay_halvings.get()
+                                    on:change=move |_| set_overlay_halvings.update(|v| *v = !*v)
+                                />
+                                <span class="text-sm text-white/60 group-hover:text-white/80 transition-colors">"Halvings"</span>
+                                <span class="text-xs text-[#f7931a]/60 ml-auto">"- -"</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer group">
+                                <input
+                                    type="checkbox"
+                                    class="accent-[#4ecdc4] w-3.5 h-3.5 cursor-pointer"
+                                    prop:checked=move || overlay_bips.get()
+                                    on:change=move |_| set_overlay_bips.update(|v| *v = !*v)
+                                />
+                                <span class="text-sm text-white/60 group-hover:text-white/80 transition-colors">"BIP Activations"</span>
+                                <span class="text-xs text-[#4ecdc4]/60 ml-auto">"\u{2026}"</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer group">
+                                <input
+                                    type="checkbox"
+                                    class="accent-[#a855f7] w-3.5 h-3.5 cursor-pointer"
+                                    prop:checked=move || overlay_core.get()
+                                    on:change=move |_| set_overlay_core.update(|v| *v = !*v)
+                                />
+                                <span class="text-sm text-white/60 group-hover:text-white/80 transition-colors">"Core Releases"</span>
+                                <span class="text-xs text-[#a855f7]/60 ml-auto">"\u{2026}"</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer group">
+                                <input
+                                    type="checkbox"
+                                    class="accent-[#ef4444] w-3.5 h-3.5 cursor-pointer"
+                                    prop:checked=move || overlay_events.get()
+                                    on:change=move |_| set_overlay_events.update(|v| *v = !*v)
+                                />
+                                <span class="text-sm text-white/60 group-hover:text-white/80 transition-colors">"Events"</span>
+                                <span class="text-xs text-[#ef4444]/60 ml-auto">"\u{2605}"</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer group">
+                                <input
+                                    type="checkbox"
+                                    class="accent-[#e6c84e] w-3.5 h-3.5 cursor-pointer"
+                                    prop:checked=move || overlay_price.get()
+                                    on:change=move |_| set_overlay_price.update(|v| *v = !*v)
+                                />
+                                <span class="text-sm text-white/60 group-hover:text-white/80 transition-colors">"Price (USD)"</span>
+                                <span class="text-xs text-[#e6c84e]/60 ml-auto">"$"</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer group">
+                                <input
+                                    type="checkbox"
+                                    class="accent-[#10b981] w-3.5 h-3.5 cursor-pointer"
+                                    prop:checked=move || overlay_chain_size.get()
+                                    on:change=move |_| set_overlay_chain_size.update(|v| *v = !*v)
+                                />
+                                <span class="text-sm text-white/60 group-hover:text-white/80 transition-colors">"Chain Size"</span>
+                                <span class="text-xs text-[#10b981]/60 ml-auto">"GB"</span>
+                            </label>
+                        </div>
+                    </div>
+                </Show>
+            </div>
+
             // ===== OVERVIEW TAB =====
             <div class=move || if tab.get() == "overview" { "block" } else { "hidden" }>
 
@@ -995,15 +1215,21 @@ fn StatsContent() -> impl IntoView {
                             <div class="text-lg text-[#f7931a] font-bold font-mono">{move || diff_est_remaining_days.get()}</div>
                         </div>
                     </div>
-                    // Progress bar
-                    <div class="mt-4">
-                        <div class="h-2 bg-white/5 rounded-full overflow-hidden">
+                    <div class="mt-4 px-1">
+                        <div class="flex items-center justify-between mb-1.5">
+                            <span class="text-xs text-white/40">"Progress"</span>
+                            <span class="text-xs text-[#f7931a] font-mono font-semibold">{move || format!("{:.1}%", diff_progress_pct.get())}</span>
+                        </div>
+                        <div class="w-full h-2.5 bg-white/5 rounded-full overflow-hidden border border-white/10">
                             <div
-                                class="h-full rounded-full bg-[#f7931a] transition-all duration-500"
+                                class="h-full bg-gradient-to-r from-[#f7931a] to-[#fbbf24] rounded-full transition-all duration-500"
                                 style=move || format!("width: {}%", diff_progress_pct.get())
                             ></div>
                         </div>
-                        <p class="text-xs text-white/40 text-center mt-1">{move || format!("{:.1}% through retarget period", diff_progress_pct.get())}</p>
+                    </div>
+                    <div class="mt-3 text-center">
+                        <span class="text-xs text-white/40">"Est. date: "</span>
+                        <span class="text-xs text-white/60 font-mono">{move || diff_est_date.get()}</span>
                     </div>
                 </div>
 
@@ -1028,8 +1254,22 @@ fn StatsContent() -> impl IntoView {
                             <div class="text-lg text-[#f7931a] font-bold font-mono">{move || current_subsidy_btc.get()}</div>
                         </div>
                     </div>
+                    <div class="mt-4 px-1">
+                        <div class="flex items-center justify-between mb-1.5">
+                            <span class="text-xs text-white/40">"Progress"</span>
+                            <span class="text-xs text-[#f7931a] font-mono font-semibold">{move || format!("{:.1}%", halving_progress_pct.get())}</span>
+                        </div>
+                        <div class="w-full h-2.5 bg-white/5 rounded-full overflow-hidden border border-white/10">
+                            <div
+                                class="h-full bg-gradient-to-r from-[#f7931a] to-[#fbbf24] rounded-full transition-all duration-500"
+                                style=move || format!("width: {}%", halving_progress_pct.get())
+                            ></div>
+                        </div>
+                    </div>
                     <div class="mt-3 text-center">
-                        <span class="text-xs text-white/40">"Next subsidy: "</span>
+                        <span class="text-xs text-white/40">"Est. date: "</span>
+                        <span class="text-xs text-white/60 font-mono">{move || halving_est_date.get()}</span>
+                        <span class="text-xs text-white/30">" · Next subsidy: "</span>
                         <span class="text-xs text-white/60 font-mono">{move || next_subsidy_btc.get()}</span>
                     </div>
                 </div>
@@ -1080,6 +1320,12 @@ fn StatsContent() -> impl IntoView {
                                     chart_id="chart-interval"
                                     option=interval_option
                                 />
+                                <ChartCard
+                                    title="Chain Size Growth"
+                                    description="Cumulative blockchain size — visualize growth acceleration after protocol changes"
+                                    chart_id="chart-chain-size"
+                                    option=chain_size_option
+                                />
 
                                 // Section divider: Adoption
                                 <div class="flex items-center gap-3 my-8">
@@ -1099,6 +1345,24 @@ fn StatsContent() -> impl IntoView {
                                     description="Number of Taproot (v1 witness) outputs created per block"
                                     chart_id="chart-taproot"
                                     option=taproot_option
+                                />
+                                <ChartCard
+                                    title="Witness Version Comparison"
+                                    description="SegWit v0 vs Taproot v1 witness spends — stacked to show total and relative adoption"
+                                    chart_id="chart-witness-versions"
+                                    option=witness_version_option
+                                />
+                                <ChartCard
+                                    title="Witness Version Share"
+                                    description="SegWit v0 vs Taproot v1 as percentage of total witness spends"
+                                    chart_id="chart-witness-pct"
+                                    option=witness_pct_option
+                                />
+                                <ChartCard
+                                    title="Transaction Type Breakdown"
+                                    description="Legacy vs SegWit v0 vs Taproot v1 as percentage of all transactions"
+                                    chart_id="chart-witness-tx-pct"
+                                    option=witness_tx_pct_option
                                 />
                             </div>
                         }
@@ -1226,6 +1490,12 @@ fn StatsContent() -> impl IntoView {
                                     description="Runes protocol outputs as percentage of all OP_RETURN outputs"
                                     chart_id="chart-runes-pct"
                                     option=runes_pct_option
+                                />
+                                <ChartCard
+                                    title="OP_RETURN Block Share"
+                                    description="OP_RETURN data as percentage of total block size"
+                                    chart_id="chart-op-block-share"
+                                    option=op_block_share_option
                                 />
                             </div>
                         }
