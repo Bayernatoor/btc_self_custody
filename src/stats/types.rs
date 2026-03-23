@@ -39,6 +39,8 @@ pub struct BlockSummary {
     pub output_count: u64,
     pub rbf_count: u64,
     pub witness_bytes: u64,
+    pub inscription_count: u64,
+    pub inscription_bytes: u64,
 }
 
 /// Full block detail (from query_block_by_height).
@@ -121,6 +123,8 @@ pub struct DailyAggregate {
     pub avg_output_count: f64,
     pub avg_rbf_count: f64,
     pub avg_witness_bytes: f64,
+    pub avg_inscription_count: f64,
+    pub avg_inscription_bytes: f64,
 }
 
 /// Per-block signaling status.

@@ -1,6 +1,6 @@
 [package]
 name = "we_hodl_btc"
-version = "0.2.0"
+version = "0.4.0"
 authors = ["Bayer <bayernator@protonmail.com>"]
 edition = "2021"
 

@@ -75,6 +75,8 @@ pub async fn fetch_blocks(
             output_count: r.output_count,
             rbf_count: r.rbf_count,
             witness_bytes: r.witness_bytes,
+            inscription_count: r.inscription_count,
+            inscription_bytes: r.inscription_bytes,
         })
         .collect())
 }
@@ -292,6 +294,8 @@ pub async fn fetch_daily_aggregates(
             avg_output_count: r.avg_output_count,
             avg_rbf_count: r.avg_rbf_count,
             avg_witness_bytes: r.avg_witness_bytes,
+            avg_inscription_count: r.avg_inscription_count,
+            avg_inscription_bytes: r.avg_inscription_bytes,
         })
         .collect())
 }

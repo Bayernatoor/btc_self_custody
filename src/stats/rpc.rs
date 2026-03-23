@@ -103,6 +103,9 @@ pub struct Block {
     pub rbf_count: u64,
     // Size breakdown
     pub witness_bytes: u64,
+    // Ordinals inscriptions
+    pub inscription_count: u64,
+    pub inscription_bytes: u64,
 }
 
 impl BitcoinRpc {
@@ -272,6 +275,9 @@ impl BitcoinRpc {
         }
 
         // === Single pass over non-coinbase txs: fees, OP_RETURN, outputs, inputs, RBF, witness ===
+        let mut inscription_count = 0u64;
+        let mut inscription_bytes = 0u64;
+
         let cap = n_tx.saturating_sub(1) as usize;
         let mut tx_fees: Vec<u64> = Vec::with_capacity(cap);
         let mut tx_fee_rates: Vec<f64> = Vec::with_capacity(cap);
@@ -319,12 +325,21 @@ impl BitcoinRpc {
                 if let Some(vins) = tx["vin"].as_array() {
                     input_count += vins.len() as u64;
                     for vin in vins {
-                        // Witness detection + byte counting in one check
+                        // Witness detection + byte counting + inscription detection
                         if let Some(wit) = vin["txinwitness"].as_array() {
                             has_witness = true;
                             for item in wit {
                                 if let Some(hex) = item.as_str() {
-                                    witness_bytes += (hex.len() as u64) / 2;
+                                    let item_bytes = (hex.len() as u64) / 2;
+                                    witness_bytes += item_bytes;
+                                    // Ordinals inscription envelope:
+                                    // OP_FALSE(00) OP_IF(63) OP_PUSH3(03) "ord"(6f7264)
+                                    if hex.contains("0063036f7264") {
+                                        inscription_count += 1;
+                                        // Estimate inscription size as the witness item size
+                                        // minus the envelope overhead (~10 bytes)
+                                        inscription_bytes += item_bytes.saturating_sub(10);
+                                    }
                                 }
                             }
                         }
@@ -450,6 +465,8 @@ impl BitcoinRpc {
             output_count,
             rbf_count,
             witness_bytes,
+            inscription_count,
+            inscription_bytes,
         })
     }
 

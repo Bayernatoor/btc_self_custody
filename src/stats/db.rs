@@ -12,7 +12,7 @@ use super::rpc::Block;
 
 /// Bump this when adding new columns that require re-fetching existing blocks.
 /// The backfill loop processes all blocks with backfill_version < BACKFILL_VERSION.
-pub const BACKFILL_VERSION: u64 = 4;
+pub const BACKFILL_VERSION: u64 = 5;
 
 pub fn open(path: &Path) -> rusqlite::Result<Connection> {
     let conn = Connection::open(path)?;
@@ -128,12 +128,34 @@ pub fn open(path: &Path) -> rusqlite::Result<Connection> {
              ALTER TABLE blocks ADD COLUMN p2wpkh_count INTEGER NOT NULL DEFAULT 0;
              ALTER TABLE blocks ADD COLUMN p2wsh_count INTEGER NOT NULL DEFAULT 0;
              ALTER TABLE blocks ADD COLUMN p2tr_count INTEGER NOT NULL DEFAULT 0;
-             ALTER TABLE blocks ADD COLUMN multisig_count INTEGER NOT NULL DEFAULT 0;
              ALTER TABLE blocks ADD COLUMN unknown_script_count INTEGER NOT NULL DEFAULT 0;
              ALTER TABLE blocks ADD COLUMN input_count INTEGER NOT NULL DEFAULT 0;
              ALTER TABLE blocks ADD COLUMN output_count INTEGER NOT NULL DEFAULT 0;
              ALTER TABLE blocks ADD COLUMN rbf_count INTEGER NOT NULL DEFAULT 0;
              ALTER TABLE blocks ADD COLUMN witness_bytes INTEGER NOT NULL DEFAULT 0;",
+        )?;
+    }
+
+    // Migration: add multisig_count (split from unknown_script_count)
+    let has_multisig: bool = conn
+        .prepare("SELECT multisig_count FROM blocks LIMIT 0")
+        .is_ok();
+    if !has_multisig {
+        tracing::info!("Migrating: adding multisig_count column");
+        conn.execute_batch(
+            "ALTER TABLE blocks ADD COLUMN multisig_count INTEGER NOT NULL DEFAULT 0;",
+        )?;
+    }
+
+    // Migration: add inscription tracking columns
+    let has_inscriptions: bool = conn
+        .prepare("SELECT inscription_count FROM blocks LIMIT 0")
+        .is_ok();
+    if !has_inscriptions {
+        tracing::info!("Migrating: adding inscription_count, inscription_bytes columns");
+        conn.execute_batch(
+            "ALTER TABLE blocks ADD COLUMN inscription_count INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE blocks ADD COLUMN inscription_bytes INTEGER NOT NULL DEFAULT 0;",
         )?;
     }
 
@@ -182,8 +204,9 @@ pub fn insert_blocks(
               p2pk_count, p2pkh_count, p2sh_count, p2wpkh_count, p2wsh_count,
               p2tr_count, multisig_count, unknown_script_count,
               input_count, output_count, rbf_count, witness_bytes,
+              inscription_count, inscription_bytes,
               backfill_version)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36,?37,?38,?39)",
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36,?37,?38,?39,?40,?41)",
         )?;
         for block in blocks {
             stmt.execute(params![
@@ -225,6 +248,8 @@ pub fn insert_blocks(
                 block.output_count,
                 block.rbf_count,
                 block.witness_bytes,
+                block.inscription_count,
+                block.inscription_bytes,
                 BACKFILL_VERSION,
             ])?;
         }
@@ -263,7 +288,7 @@ pub fn update_block_extras(
     let tx = conn.unchecked_transaction()?;
     {
         let mut stmt = tx.prepare_cached(
-            "UPDATE blocks SET version = ?1, total_fees = ?2, miner = ?3, median_fee = ?4, median_fee_rate = ?5, coinbase_locktime = ?6, coinbase_sequence = ?7, segwit_spend_count = ?8, taproot_spend_count = ?9, omni_count = ?10, omni_bytes = ?11, counterparty_count = ?12, counterparty_bytes = ?13, runes_count = ?14, runes_bytes = ?15, data_carrier_count = ?16, data_carrier_bytes = ?17, p2pk_count = ?18, p2pkh_count = ?19, p2sh_count = ?20, p2wpkh_count = ?21, p2wsh_count = ?22, p2tr_count = ?23, multisig_count = ?24, unknown_script_count = ?25, input_count = ?26, output_count = ?27, rbf_count = ?28, witness_bytes = ?29, backfill_version = ?30 WHERE height = ?31",
+            "UPDATE blocks SET version = ?1, total_fees = ?2, miner = ?3, median_fee = ?4, median_fee_rate = ?5, coinbase_locktime = ?6, coinbase_sequence = ?7, segwit_spend_count = ?8, taproot_spend_count = ?9, omni_count = ?10, omni_bytes = ?11, counterparty_count = ?12, counterparty_bytes = ?13, runes_count = ?14, runes_bytes = ?15, data_carrier_count = ?16, data_carrier_bytes = ?17, p2pk_count = ?18, p2pkh_count = ?19, p2sh_count = ?20, p2wpkh_count = ?21, p2wsh_count = ?22, p2tr_count = ?23, multisig_count = ?24, unknown_script_count = ?25, input_count = ?26, output_count = ?27, rbf_count = ?28, witness_bytes = ?29, inscription_count = ?30, inscription_bytes = ?31, backfill_version = ?32 WHERE height = ?33",
         )?;
         for block in blocks {
             stmt.execute(params![
@@ -296,6 +321,8 @@ pub fn update_block_extras(
                 block.output_count,
                 block.rbf_count,
                 block.witness_bytes,
+                block.inscription_count,
+                block.inscription_bytes,
                 BACKFILL_VERSION,
                 block.height
             ])?;
@@ -333,6 +360,8 @@ pub struct BlockRow {
     pub output_count: u64,
     pub rbf_count: u64,
     pub witness_bytes: u64,
+    pub inscription_count: u64,
+    pub inscription_bytes: u64,
 }
 
 pub fn query_blocks(
@@ -346,7 +375,8 @@ pub fn query_blocks(
                 segwit_spend_count, taproot_spend_count,
                 p2pk_count, p2pkh_count, p2sh_count, p2wpkh_count, p2wsh_count,
                 p2tr_count, multisig_count, unknown_script_count,
-                input_count, output_count, rbf_count, witness_bytes
+                input_count, output_count, rbf_count, witness_bytes,
+                inscription_count, inscription_bytes
          FROM blocks WHERE height >= ?1 AND height <= ?2 ORDER BY height ASC",
     )?;
     let rows = stmt.query_map(params![from, to], |row| {
@@ -375,6 +405,8 @@ pub fn query_blocks(
             output_count: row.get(21)?,
             rbf_count: row.get(22)?,
             witness_bytes: row.get(23)?,
+            inscription_count: row.get(24)?,
+            inscription_bytes: row.get(25)?,
         })
     })?;
     rows.collect()
@@ -536,6 +568,8 @@ pub struct DailyRow {
     pub avg_output_count: f64,
     pub avg_rbf_count: f64,
     pub avg_witness_bytes: f64,
+    pub avg_inscription_count: f64,
+    pub avg_inscription_bytes: f64,
 }
 
 pub fn query_daily_aggregates(
@@ -557,7 +591,8 @@ pub fn query_daily_aggregates(
                 AVG(p2wpkh_count), AVG(p2wsh_count), AVG(p2tr_count),
                 AVG(multisig_count), AVG(unknown_script_count),
                 AVG(input_count), AVG(output_count), AVG(rbf_count),
-                AVG(witness_bytes)
+                AVG(witness_bytes),
+                AVG(inscription_count), AVG(inscription_bytes)
          FROM blocks
          WHERE timestamp >= ?1 AND timestamp <= ?2
          GROUP BY day
@@ -596,6 +631,8 @@ pub fn query_daily_aggregates(
             avg_output_count: row.get(28)?,
             avg_rbf_count: row.get(29)?,
             avg_witness_bytes: row.get(30)?,
+            avg_inscription_count: row.get(31)?,
+            avg_inscription_bytes: row.get(32)?,
         })
     })?;
     rows.collect()

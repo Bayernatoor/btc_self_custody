@@ -2348,6 +2348,144 @@ pub fn op_return_block_share_chart_daily(days: &[DailyAggregate]) -> String {
     }))
 }
 
+const INSCRIPTION_COLOR: &str = "#ec4899"; // Pink for inscriptions
+
+/// Ordinals inscription count per block.
+pub fn inscription_chart(blocks: &[BlockSummary]) -> String {
+    if blocks.is_empty() {
+        return no_data_chart("Inscriptions");
+    }
+
+    let vals: Vec<f64> = blocks.iter().map(|b| b.inscription_count as f64).collect();
+    let raw: Vec<serde_json::Value> = blocks.iter().zip(vals.iter())
+        .map(|(b, v)| json!([ts_ms(b.timestamp), v])).collect();
+    let ma = moving_average(&vals, 144);
+    let ma_data: Vec<serde_json::Value> = blocks.iter().zip(ma.iter())
+        .filter_map(|(b, m)| m.map(|v| json!([ts_ms(b.timestamp), v]))).collect();
+    let has_ma = show_ma(blocks.len());
+
+    let mut series = vec![json!({
+        "name": "Inscriptions", "type": "line", "sampling": "lttb", "data": raw,
+        "lineStyle": { "width": if has_ma { 1.0 } else { 1.5 }, "color": INSCRIPTION_COLOR },
+        "itemStyle": { "color": INSCRIPTION_COLOR }, "symbol": "none",
+        "opacity": if has_ma { 0.4 } else { 1.0 }
+    })];
+    if has_ma {
+        series.push(json!({
+            "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_data,
+            "lineStyle": { "width": 2, "color": MA_COLOR },
+            "itemStyle": { "color": MA_COLOR }, "symbol": "none"
+        }));
+    }
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("Count"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": has_ma },
+        "series": series
+    }))
+}
+
+/// Ordinals inscription count (daily).
+pub fn inscription_chart_daily(days: &[DailyAggregate]) -> String {
+    if days.is_empty() {
+        return no_data_chart("Inscriptions");
+    }
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    let vals: Vec<f64> = days.iter().map(|d| d.avg_inscription_count).collect();
+    let ma = moving_average(&vals, 7);
+    let ma_vals: Vec<serde_json::Value> = ma.iter()
+        .map(|v| match v { Some(x) => json!(x), None => json!(null) }).collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": y_axis("Avg/Block"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "series": [
+            { "name": "Inscriptions", "type": "line", "sampling": "lttb", "data": vals,
+              "lineStyle": { "width": 1, "color": INSCRIPTION_COLOR },
+              "itemStyle": { "color": INSCRIPTION_COLOR }, "symbol": "none", "opacity": 0.4 },
+            { "name": "7-day MA", "type": "line", "sampling": "lttb", "data": ma_vals,
+              "lineStyle": { "width": 2, "color": MA_COLOR },
+              "itemStyle": { "color": MA_COLOR }, "symbol": "none" }
+        ]
+    }))
+}
+
+/// Inscription data as % of block size (per-block).
+pub fn inscription_share_chart(blocks: &[BlockSummary]) -> String {
+    if blocks.is_empty() {
+        return no_data_chart("Inscription Block Share");
+    }
+
+    let vals: Vec<f64> = blocks.iter().map(|b| {
+        if b.size > 0 { (b.inscription_bytes as f64 / b.size as f64 * 100.0 * 100.0).round() / 100.0 } else { 0.0 }
+    }).collect();
+    let raw: Vec<serde_json::Value> = blocks.iter().zip(vals.iter())
+        .map(|(b, v)| json!([ts_ms(b.timestamp), v])).collect();
+    let ma = moving_average(&vals, 144);
+    let ma_data: Vec<serde_json::Value> = blocks.iter().zip(ma.iter())
+        .filter_map(|(b, m)| m.map(|v| json!([ts_ms(b.timestamp), v]))).collect();
+    let has_ma = show_ma(blocks.len());
+
+    let mut series = vec![json!({
+        "name": "Inscriptions %", "type": "line", "sampling": "lttb", "data": raw,
+        "areaStyle": { "color": INSCRIPTION_COLOR, "opacity": 0.15 },
+        "lineStyle": { "width": if has_ma { 1.0 } else { 1.5 }, "color": INSCRIPTION_COLOR },
+        "itemStyle": { "color": INSCRIPTION_COLOR }, "symbol": "none",
+        "opacity": if has_ma { 0.4 } else { 1.0 }
+    })];
+    if has_ma {
+        series.push(json!({
+            "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_data,
+            "lineStyle": { "width": 2, "color": MA_COLOR },
+            "itemStyle": { "color": MA_COLOR }, "symbol": "none"
+        }));
+    }
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("% of Block"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": has_ma },
+        "series": series
+    }))
+}
+
+/// Inscription data as % of block size (daily).
+pub fn inscription_share_chart_daily(days: &[DailyAggregate]) -> String {
+    if days.is_empty() {
+        return no_data_chart("Inscription Block Share");
+    }
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    let vals: Vec<f64> = days.iter().map(|d| {
+        if d.avg_size > 0.0 { (d.avg_inscription_bytes / d.avg_size * 100.0 * 100.0).round() / 100.0 } else { 0.0 }
+    }).collect();
+    let ma = moving_average(&vals, 7);
+    let ma_vals: Vec<serde_json::Value> = ma.iter()
+        .map(|v| match v { Some(x) => json!(x), None => json!(null) }).collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": y_axis("% of Block"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "series": [
+            { "name": "Inscriptions %", "type": "line", "sampling": "lttb", "data": vals,
+              "areaStyle": { "color": INSCRIPTION_COLOR, "opacity": 0.15 },
+              "lineStyle": { "width": 1, "color": INSCRIPTION_COLOR },
+              "itemStyle": { "color": INSCRIPTION_COLOR }, "symbol": "none", "opacity": 0.4 },
+            { "name": "7-day MA", "type": "line", "sampling": "lttb", "data": ma_vals,
+              "lineStyle": { "width": 2, "color": MA_COLOR },
+              "itemStyle": { "color": MA_COLOR }, "symbol": "none" }
+        ]
+    }))
+}
+
 const DISK_COLOR: &str = "#e74c3c"; // Red for disk size
 
 /// Cumulative chain size over time (per-block).
