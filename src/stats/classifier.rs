@@ -11,10 +11,10 @@
 pub enum OpReturnType {
     SegwitCommit,
     Runes,
+    Omni,
+    Counterparty,
     DataCarrier,
 }
-
-use OpReturnType::DataCarrier;
 
 /// Classify a nulldata output by its scriptPubKey hex string.
 pub fn classify(hex: &str) -> OpReturnType {
@@ -35,7 +35,32 @@ pub fn classify(hex: &str) -> OpReturnType {
         return OpReturnType::Runes;
     }
 
-    DataCarrier
+    // After OP_RETURN (6a), the next byte(s) are a push length.
+    // We need to check the pushed data payload, which starts after the push opcode(s).
+    // For most protocols, the prefix appears right after "6a" + push length byte(s).
+    let payload = &hex[2..]; // skip 6a (OP_RETURN)
+
+    // Omni Layer: payload starts with "6f6d6e69" ("omni" in ASCII)
+    // Typical format: 6a 14 6f6d6e69... (OP_RETURN OP_PUSHBYTES_20 "omni"...)
+    if contains_payload(payload, "6f6d6e69") {
+        return OpReturnType::Omni;
+    }
+
+    // Counterparty: payload starts with "434e545250525459" ("CNTRPRTY" in ASCII)
+    // Typical format: 6a 28 434e545250525459... (OP_RETURN OP_PUSHBYTES_40 "CNTRPRTY"...)
+    if contains_payload(payload, "434e545250525459") {
+        return OpReturnType::Counterparty;
+    }
+
+    OpReturnType::DataCarrier
+}
+
+/// Check if the payload (after OP_RETURN) contains the given hex prefix.
+/// Skips the push-length opcode byte(s) to find the actual data.
+fn contains_payload(payload: &str, prefix: &str) -> bool {
+    // Simple approach: check if the prefix appears anywhere in the payload.
+    // This handles various push opcode lengths (OP_PUSHBYTES_N, OP_PUSHDATA1, etc.)
+    payload.contains(prefix)
 }
 
 /// Decode coinbase hex to ASCII and identify the mining pool.

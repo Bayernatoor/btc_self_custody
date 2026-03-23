@@ -72,6 +72,10 @@ pub struct Block {
     pub op_return_bytes: u64,
     pub runes_count: u64,
     pub runes_bytes: u64,
+    pub omni_count: u64,
+    pub omni_bytes: u64,
+    pub counterparty_count: u64,
+    pub counterparty_bytes: u64,
     pub data_carrier_count: u64,
     pub data_carrier_bytes: u64,
     pub version: u32,
@@ -289,6 +293,10 @@ impl BitcoinRpc {
         let mut op_return_bytes = 0u64;
         let mut runes_count = 0u64;
         let mut runes_bytes = 0u64;
+        let mut omni_count = 0u64;
+        let mut omni_bytes = 0u64;
+        let mut counterparty_count = 0u64;
+        let mut counterparty_bytes = 0u64;
         let mut data_carrier_count = 0u64;
         let mut data_carrier_bytes = 0u64;
 
@@ -310,6 +318,14 @@ impl BitcoinRpc {
                                     OpReturnType::Runes => {
                                         runes_count += 1;
                                         runes_bytes += bytes;
+                                    }
+                                    OpReturnType::Omni => {
+                                        omni_count += 1;
+                                        omni_bytes += bytes;
+                                    }
+                                    OpReturnType::Counterparty => {
+                                        counterparty_count += 1;
+                                        counterparty_bytes += bytes;
                                     }
                                     OpReturnType::DataCarrier => {
                                         data_carrier_count += 1;
@@ -368,6 +384,10 @@ impl BitcoinRpc {
             op_return_bytes,
             runes_count,
             runes_bytes,
+            omni_count,
+            omni_bytes,
+            counterparty_count,
+            counterparty_bytes,
             data_carrier_count,
             data_carrier_bytes,
             version,

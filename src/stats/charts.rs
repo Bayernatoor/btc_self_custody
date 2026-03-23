@@ -16,7 +16,9 @@ const DATA_COLOR_FADED: &str = "rgba(247,147,26,0.15)"; // Primary data area fil
 const MA_COLOR: &str = "rgba(255,255,255,0.85)"; // Moving average (white)
 const TARGET_COLOR: &str = "#e74c3c"; // Target/reference lines (red)
 const RUNES_COLOR: &str = "#ff6b6b"; // Runes (coral red)
-const CARRIER_COLOR: &str = "#bb8fff"; // Data carriers (purple)
+const OMNI_COLOR: &str = "#3b82f6"; // Omni Layer (blue)
+const COUNTERPARTY_COLOR: &str = "#f59e0b"; // Counterparty (amber)
+const CARRIER_COLOR: &str = "#bb8fff"; // Data carriers / other (purple)
 const SIGNAL_YES: &str = "#2ecc71"; // Signaled (green)
 
 // ---------------------------------------------------------------------------
@@ -258,11 +260,25 @@ const CORE_RELEASE_DATES: &[(&str, &str)] = &[
 
 /// Notable Bitcoin events (timestamp unix seconds, label).
 const EVENTS: &[(u64, &str)] = &[
+    (1392163200, "Mt. Gox Collapse"),
+    (1495756800, "SegWit2x (NYA)"),
+    (1501545600, "BCH Fork"),
+    (1510358400, "SegWit2x Cancelled"),
+    (1521072000, "Lightning Mainnet"),
+    (1621900800, "China Mining Ban"),
     (1674259200, "Ordinals Launch"),
+    (1678838400, "BRC-20 Launch"),
     (1713571767, "Runes Launch"),
 ];
 const EVENT_DATES: &[(&str, &str)] = &[
+    ("2014-02-12", "Mt. Gox Collapse"),
+    ("2017-05-26", "SegWit2x (NYA)"),
+    ("2017-08-01", "BCH Fork"),
+    ("2017-11-11", "SegWit2x Cancelled"),
+    ("2018-03-15", "Lightning Mainnet"),
+    ("2021-05-25", "China Mining Ban"),
     ("2023-01-21", "Ordinals Launch"),
+    ("2023-03-15", "BRC-20 Launch"),
     ("2024-04-20", "Runes Launch"),
 ];
 
@@ -1213,17 +1229,13 @@ pub fn block_interval_chart_daily(days: &[DailyAggregate]) -> String {
 /// OP_RETURN count bar chart (runes vs data carriers).
 pub fn op_return_count_chart(blocks: &[OpReturnBlock]) -> String {
     if blocks.is_empty() {
-        return no_data_chart("OP_RETURN Count");
+        return no_data_chart("Embedded Data Count");
     }
 
-    let runes: Vec<serde_json::Value> = blocks
-        .iter()
-        .map(|b| json!([ts_ms(b.timestamp), b.runes_count]))
-        .collect();
-    let carriers: Vec<serde_json::Value> = blocks
-        .iter()
-        .map(|b| json!([ts_ms(b.timestamp), b.data_carrier_count]))
-        .collect();
+    let runes: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.runes_count])).collect();
+    let omni: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.omni_count])).collect();
+    let xcp: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.counterparty_count])).collect();
+    let other: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.data_carrier_count])).collect();
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
@@ -1231,14 +1243,10 @@ pub fn op_return_count_chart(blocks: &[OpReturnBlock]) -> String {
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
         "series": [
-            {
-                "name": "Runes", "type": "bar", "stack": "total", "data": runes,
-                "itemStyle": { "color": RUNES_COLOR }
-            },
-            {
-                "name": "Data Carriers", "type": "bar", "stack": "total", "data": carriers,
-                "itemStyle": { "color": CARRIER_COLOR }
-            }
+            { "name": "Runes", "type": "bar", "stack": "total", "data": runes, "itemStyle": { "color": RUNES_COLOR } },
+            { "name": "Omni", "type": "bar", "stack": "total", "data": omni, "itemStyle": { "color": OMNI_COLOR } },
+            { "name": "Counterparty", "type": "bar", "stack": "total", "data": xcp, "itemStyle": { "color": COUNTERPARTY_COLOR } },
+            { "name": "Other", "type": "bar", "stack": "total", "data": other, "itemStyle": { "color": CARRIER_COLOR } }
         ]
     }))
 }
@@ -1246,17 +1254,13 @@ pub fn op_return_count_chart(blocks: &[OpReturnBlock]) -> String {
 /// OP_RETURN bytes bar chart.
 pub fn op_return_bytes_chart(blocks: &[OpReturnBlock]) -> String {
     if blocks.is_empty() {
-        return no_data_chart("OP_RETURN Bytes");
+        return no_data_chart("Embedded Data Volume");
     }
 
-    let runes: Vec<serde_json::Value> = blocks
-        .iter()
-        .map(|b| json!([ts_ms(b.timestamp), b.runes_bytes]))
-        .collect();
-    let carriers: Vec<serde_json::Value> = blocks
-        .iter()
-        .map(|b| json!([ts_ms(b.timestamp), b.data_carrier_bytes]))
-        .collect();
+    let runes: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.runes_bytes])).collect();
+    let omni: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.omni_bytes])).collect();
+    let xcp: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.counterparty_bytes])).collect();
+    let other: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.data_carrier_bytes])).collect();
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
@@ -1264,116 +1268,85 @@ pub fn op_return_bytes_chart(blocks: &[OpReturnBlock]) -> String {
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
         "series": [
-            {
-                "name": "Runes", "type": "bar", "stack": "total", "data": runes,
-                "itemStyle": { "color": RUNES_COLOR }
-            },
-            {
-                "name": "Data Carriers", "type": "bar", "stack": "total", "data": carriers,
-                "itemStyle": { "color": CARRIER_COLOR }
-            }
+            { "name": "Runes", "type": "bar", "stack": "total", "data": runes, "itemStyle": { "color": RUNES_COLOR } },
+            { "name": "Omni", "type": "bar", "stack": "total", "data": omni, "itemStyle": { "color": OMNI_COLOR } },
+            { "name": "Counterparty", "type": "bar", "stack": "total", "data": xcp, "itemStyle": { "color": COUNTERPARTY_COLOR } },
+            { "name": "Other", "type": "bar", "stack": "total", "data": other, "itemStyle": { "color": CARRIER_COLOR } }
         ]
     }))
 }
 
-/// Runes dominance percentage line chart with moving average.
+/// Protocol dominance — 100% stacked area showing share of each protocol.
 pub fn runes_pct_chart(blocks: &[OpReturnBlock]) -> String {
     if blocks.is_empty() {
-        return no_data_chart("Runes Dominance %");
+        return no_data_chart("Protocol Dominance");
     }
 
-    let vals: Vec<f64> = blocks
-        .iter()
-        .map(|b| {
-            let total = b.runes_count + b.data_carrier_count;
-            if total > 0 {
-                let v = b.runes_count as f64 / total as f64 * 100.0;
-                (v * 1000.0).round() / 1000.0
-            } else {
-                0.0
-            }
-        })
-        .collect();
+    let pct = |count: u64, total: u64| -> f64 {
+        if total > 0 { (count as f64 / total as f64 * 100.0 * 100.0).round() / 100.0 } else { 0.0 }
+    };
 
-    let raw: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(vals.iter())
-        .map(|(b, v)| json!([ts_ms(b.timestamp), v]))
-        .collect();
-
-    let ma = moving_average(&vals, 144);
-    let ma_series: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(ma.iter())
-        .filter_map(|(b, m)| m.map(|v| json!([ts_ms(b.timestamp), v])))
-        .collect();
-
-    let has_ma = show_ma(blocks.len());
-
-    let mut series = vec![json!({
-        "name": "Runes %", "type": "line", "sampling": "lttb", "data": raw,
-        "lineStyle": { "width": if has_ma { 1.0 } else { 1.5 }, "color": RUNES_COLOR },
-        "itemStyle": { "color": RUNES_COLOR }, "symbol": "none",
-        "opacity": if has_ma { 0.4 } else { 1.0 }
-    })];
-    if has_ma {
-        series.push(json!({
-            "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_series,
-            "lineStyle": { "width": 2, "color": MA_COLOR },
-            "itemStyle": { "color": MA_COLOR }, "symbol": "none"
-        }));
-    }
+    let runes_data: Vec<serde_json::Value> = blocks.iter().map(|b| {
+        let total = b.op_return_count;
+        json!([ts_ms(b.timestamp), pct(b.runes_count, total)])
+    }).collect();
+    let omni_data: Vec<serde_json::Value> = blocks.iter().map(|b| {
+        let total = b.op_return_count;
+        json!([ts_ms(b.timestamp), pct(b.omni_count, total)])
+    }).collect();
+    let xcp_data: Vec<serde_json::Value> = blocks.iter().map(|b| {
+        let total = b.op_return_count;
+        json!([ts_ms(b.timestamp), pct(b.counterparty_count, total)])
+    }).collect();
+    let other_data: Vec<serde_json::Value> = blocks.iter().map(|b| {
+        let total = b.op_return_count;
+        json!([ts_ms(b.timestamp), pct(b.data_carrier_count, total)])
+    }).collect();
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
-        "yAxis": y_axis("%"),
+        "yAxis": { "type": "value", "name": "%", "max": 100,
+            "nameTextStyle": { "color": "#aaa" },
+            "axisLabel": { "color": "#aaa" },
+            "axisLine": { "lineStyle": { "color": "#555" } },
+            "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.20)", "type": "dashed" } }
+        },
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
-        "legend": { "show": has_ma },
-        "series": series
+        "legend": { "show": true },
+        "series": [
+            { "name": "Runes", "type": "line", "sampling": "lttb", "data": runes_data, "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": RUNES_COLOR }, "itemStyle": { "color": RUNES_COLOR }, "symbol": "none" },
+            { "name": "Omni", "type": "line", "sampling": "lttb", "data": omni_data, "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": OMNI_COLOR }, "itemStyle": { "color": OMNI_COLOR }, "symbol": "none" },
+            { "name": "Counterparty", "type": "line", "sampling": "lttb", "data": xcp_data, "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": COUNTERPARTY_COLOR }, "itemStyle": { "color": COUNTERPARTY_COLOR }, "symbol": "none" },
+            { "name": "Other", "type": "line", "sampling": "lttb", "data": other_data, "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": CARRIER_COLOR }, "itemStyle": { "color": CARRIER_COLOR }, "symbol": "none" }
+        ]
     }))
 }
 
 /// OP_RETURN count chart from daily aggregates.
 pub fn op_return_count_chart_daily(days: &[DailyAggregate]) -> String {
     if days.is_empty() {
-        return no_data_chart("OP_RETURN Count (daily)");
+        return no_data_chart("Embedded Data Count (daily)");
     }
     let dates: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let runes: Vec<f64> = days
-        .iter()
-        .map(|d| {
-            if d.block_count > 0 {
-                (d.total_runes_count as f64 / d.block_count as f64 * 1000.0)
-                    .round()
-                    / 1000.0
-            } else {
-                0.0
-            }
-        })
-        .collect();
-    let carriers: Vec<f64> = days
-        .iter()
-        .map(|d| {
-            if d.block_count > 0 {
-                (d.total_data_carrier_count as f64 / d.block_count as f64
-                    * 1000.0)
-                    .round()
-                    / 1000.0
-            } else {
-                0.0
-            }
-        })
-        .collect();
+    let avg = |total: u64, bc: u64| -> f64 {
+        if bc > 0 { (total as f64 / bc as f64 * 1000.0).round() / 1000.0 } else { 0.0 }
+    };
+    let runes: Vec<f64> = days.iter().map(|d| avg(d.total_runes_count, d.block_count)).collect();
+    let omni: Vec<f64> = days.iter().map(|d| avg(d.total_omni_count, d.block_count)).collect();
+    let xcp: Vec<f64> = days.iter().map(|d| avg(d.total_counterparty_count, d.block_count)).collect();
+    let other: Vec<f64> = days.iter().map(|d| avg(d.total_data_carrier_count, d.block_count)).collect();
 
     build_option(json!({
         "xAxis": x_axis_for(true, &dates),
-        "yAxis": y_axis("Count"),
+        "yAxis": y_axis("Avg/Block"),
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
         "series": [
             { "name": "Runes", "type": "bar", "stack": "total", "data": runes, "itemStyle": { "color": RUNES_COLOR } },
-            { "name": "Data Carriers", "type": "bar", "stack": "total", "data": carriers, "itemStyle": { "color": CARRIER_COLOR } }
+            { "name": "Omni", "type": "bar", "stack": "total", "data": omni, "itemStyle": { "color": OMNI_COLOR } },
+            { "name": "Counterparty", "type": "bar", "stack": "total", "data": xcp, "itemStyle": { "color": COUNTERPARTY_COLOR } },
+            { "name": "Other", "type": "bar", "stack": "total", "data": other, "itemStyle": { "color": CARRIER_COLOR } }
         ]
     }))
 }
@@ -1381,78 +1354,61 @@ pub fn op_return_count_chart_daily(days: &[DailyAggregate]) -> String {
 /// OP_RETURN bytes chart from daily aggregates.
 pub fn op_return_bytes_chart_daily(days: &[DailyAggregate]) -> String {
     if days.is_empty() {
-        return no_data_chart("OP_RETURN Bytes (daily)");
+        return no_data_chart("Embedded Data Volume (daily)");
     }
     let dates: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let runes: Vec<f64> = days
-        .iter()
-        .map(|d| {
-            if d.block_count > 0 {
-                ((d.total_runes_bytes as f64 / d.block_count as f64 / 1000.0)
-                    * 10.0)
-                    .round()
-                    / 10.0
-            } else {
-                0.0
-            }
-        })
-        .collect();
-    let carriers: Vec<f64> = days
-        .iter()
-        .map(|d| {
-            if d.block_count > 0 {
-                ((d.total_data_carrier_bytes as f64
-                    / d.block_count as f64
-                    / 1000.0)
-                    * 10.0)
-                    .round()
-                    / 10.0
-            } else {
-                0.0
-            }
-        })
-        .collect();
+    let avg_kb = |total: u64, bc: u64| -> f64 {
+        if bc > 0 { ((total as f64 / bc as f64 / 1000.0) * 10.0).round() / 10.0 } else { 0.0 }
+    };
+    let runes: Vec<f64> = days.iter().map(|d| avg_kb(d.total_runes_bytes, d.block_count)).collect();
+    let omni: Vec<f64> = days.iter().map(|d| avg_kb(d.total_omni_bytes, d.block_count)).collect();
+    let xcp: Vec<f64> = days.iter().map(|d| avg_kb(d.total_counterparty_bytes, d.block_count)).collect();
+    let other: Vec<f64> = days.iter().map(|d| avg_kb(d.total_data_carrier_bytes, d.block_count)).collect();
 
     build_option(json!({
         "xAxis": x_axis_for(true, &dates),
-        "yAxis": y_axis("KB"),
+        "yAxis": y_axis("KB/Block"),
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
         "series": [
             { "name": "Runes", "type": "bar", "stack": "total", "data": runes, "itemStyle": { "color": RUNES_COLOR } },
-            { "name": "Data Carriers", "type": "bar", "stack": "total", "data": carriers, "itemStyle": { "color": CARRIER_COLOR } }
+            { "name": "Omni", "type": "bar", "stack": "total", "data": omni, "itemStyle": { "color": OMNI_COLOR } },
+            { "name": "Counterparty", "type": "bar", "stack": "total", "data": xcp, "itemStyle": { "color": COUNTERPARTY_COLOR } },
+            { "name": "Other", "type": "bar", "stack": "total", "data": other, "itemStyle": { "color": CARRIER_COLOR } }
         ]
     }))
 }
 
-/// Runes dominance % from daily aggregates.
+/// Protocol dominance % from daily aggregates — 100% stacked area.
 pub fn runes_pct_chart_daily(days: &[DailyAggregate]) -> String {
     if days.is_empty() {
-        return no_data_chart("Runes Dominance % (daily)");
+        return no_data_chart("Protocol Dominance (daily)");
     }
     let dates: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let vals: Vec<f64> = days
-        .iter()
-        .map(|d| {
-            let total = d.total_runes_count + d.total_data_carrier_count;
-            if total > 0 {
-                let v = d.total_runes_count as f64 / total as f64 * 100.0;
-                (v * 1000.0).round() / 1000.0
-            } else {
-                0.0
-            }
-        })
-        .collect();
-    let ma = moving_average(&vals, 7);
+    let pct = |count: u64, total: u64| -> f64 {
+        if total > 0 { (count as f64 / total as f64 * 100.0 * 100.0).round() / 100.0 } else { 0.0 }
+    };
+    let runes: Vec<f64> = days.iter().map(|d| pct(d.total_runes_count, d.total_op_return_count)).collect();
+    let omni: Vec<f64> = days.iter().map(|d| pct(d.total_omni_count, d.total_op_return_count)).collect();
+    let xcp: Vec<f64> = days.iter().map(|d| pct(d.total_counterparty_count, d.total_op_return_count)).collect();
+    let other: Vec<f64> = days.iter().map(|d| pct(d.total_data_carrier_count, d.total_op_return_count)).collect();
 
     build_option(json!({
         "xAxis": x_axis_for(true, &dates),
-        "yAxis": y_axis("%"),
+        "yAxis": { "type": "value", "name": "%", "max": 100,
+            "nameTextStyle": { "color": "#aaa" },
+            "axisLabel": { "color": "#aaa" },
+            "axisLine": { "lineStyle": { "color": "#555" } },
+            "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.20)", "type": "dashed" } }
+        },
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
+        "legend": { "show": true },
         "series": [
-            { "name": "Runes %", "type": "line", "sampling": "lttb", "data": vals, "lineStyle": { "width": 1, "color": RUNES_COLOR }, "itemStyle": { "color": RUNES_COLOR }, "symbol": "none", "opacity": 0.4 },
-            { "name": "7-day MA", "type": "line", "sampling": "lttb", "data": ma, "lineStyle": { "width": 2, "color": MA_COLOR }, "itemStyle": { "color": MA_COLOR }, "symbol": "none" }
+            { "name": "Runes", "type": "line", "sampling": "lttb", "data": runes, "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": RUNES_COLOR }, "itemStyle": { "color": RUNES_COLOR }, "symbol": "none" },
+            { "name": "Omni", "type": "line", "sampling": "lttb", "data": omni, "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": OMNI_COLOR }, "itemStyle": { "color": OMNI_COLOR }, "symbol": "none" },
+            { "name": "Counterparty", "type": "line", "sampling": "lttb", "data": xcp, "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": COUNTERPARTY_COLOR }, "itemStyle": { "color": COUNTERPARTY_COLOR }, "symbol": "none" },
+            { "name": "Other", "type": "line", "sampling": "lttb", "data": other, "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": CARRIER_COLOR }, "itemStyle": { "color": CARRIER_COLOR }, "symbol": "none" }
         ]
     }))
 }
@@ -2281,7 +2237,7 @@ pub fn taproot_chart_daily(days: &[DailyAggregate]) -> String {
 /// OP_RETURN bytes as percentage of total block size (per-block).
 pub fn op_return_block_share_chart(blocks: &[OpReturnBlock]) -> String {
     if blocks.is_empty() {
-        return no_data_chart("OP_RETURN Block Share");
+        return no_data_chart("Embedded Data Block Share");
     }
 
     let vals: Vec<f64> = blocks
@@ -2338,7 +2294,7 @@ pub fn op_return_block_share_chart(blocks: &[OpReturnBlock]) -> String {
 /// OP_RETURN bytes as percentage of total block size (daily).
 pub fn op_return_block_share_chart_daily(days: &[DailyAggregate]) -> String {
     if days.is_empty() {
-        return no_data_chart("OP_RETURN Block Share");
+        return no_data_chart("Embedded Data Block Share");
     }
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();

@@ -1,6 +1,6 @@
 //! Chain Pulse dashboard page.
 //!
-//! Tabs: Overview | Network | Fees | Mining | OP_RETURN | Signaling
+//! Tabs: Overview | Network | Fees | Mining | Embedded Data | Signaling
 //! Data fetched via server functions, charts rendered with ECharts via wasm_bindgen.
 
 use leptos::prelude::*;
@@ -218,7 +218,7 @@ fn StatsComingSoon() -> impl IntoView {
 
                 <p class="text-lg text-white/60 mb-3">"Coming Soon"</p>
                 <p class="text-sm text-white/40 max-w-md leading-relaxed mb-10">
-                    "Live blockchain metrics, block data analysis, OP_RETURN tracking, and BIP signaling \u{2014} powered by our own Bitcoin full node."
+                    "Live blockchain metrics, block data analysis, embedded data tracking, and BIP signaling \u{2014} powered by our own Bitcoin full node."
                 </p>
 
                 // Feature preview cards
@@ -230,8 +230,8 @@ fn StatsComingSoon() -> impl IntoView {
                     </div>
                     <div class="bg-white/5 border border-white/10 rounded-xl p-5 text-center">
                         <div class="text-2xl mb-2">"\u{21a9}"</div>
-                        <div class="text-sm text-white/70 font-medium mb-1">"OP_RETURN Analysis"</div>
-                        <div class="text-xs text-white/40">"Track Runes and data carrier usage over time"</div>
+                        <div class="text-sm text-white/70 font-medium mb-1">"Embedded Data"</div>
+                        <div class="text-xs text-white/40">"Track Runes, Omni, Counterparty, and data embedding protocols"</div>
                     </div>
                     <div class="bg-white/5 border border-white/10 rounded-xl p-5 text-center">
                         <div class="text-2xl mb-2">"\u{2691}"</div>
@@ -950,7 +950,7 @@ fn StatsContent() -> impl IntoView {
         ("network", "Network"),
         ("fees", "Fees"),
         ("mining", "Mining"),
-        ("opreturn", "OP_RETURN"),
+        ("opreturn", "Embedded Data"),
         ("signaling", "Signaling"),
     ];
 
@@ -963,7 +963,7 @@ fn StatsContent() -> impl IntoView {
                 <h1 class="text-4xl lg:text-5xl font-title text-white mb-3">"Chain Pulse"</h1>
                 <div class="w-16 h-0.5 bg-[#f7931a] mx-auto mt-3 mb-4"></div>
                 <p class="text-base text-white/50 max-w-xl mx-auto">
-                    "Live blockchain metrics, block data, OP_RETURN analysis, and BIP signaling tracker."
+                    "Live blockchain metrics, block data, embedded data analysis, and BIP signaling tracker."
                 </p>
             </div>
 
@@ -1459,7 +1459,7 @@ fn StatsContent() -> impl IntoView {
                 </Suspense>
             </div>
 
-            // ===== OP_RETURN TAB =====
+            // ===== EMBEDDED DATA TAB =====
             <div class=move || if tab.get() == "opreturn" { "block" } else { "hidden" }>
 
                 <Suspense fallback=move || view! {
@@ -1474,26 +1474,26 @@ fn StatsContent() -> impl IntoView {
                         view! {
                             <div class="space-y-10">
                                 <ChartCard
-                                    title="OP_RETURN Count"
-                                    description="OP_RETURN outputs by protocol type (Runes vs data carriers)"
+                                    title="Embedded Data Count"
+                                    description="OP_RETURN outputs by protocol (Runes, Omni, Counterparty, Other)"
                                     chart_id="chart-opreturn-count"
                                     option=op_count_option
                                 />
                                 <ChartCard
-                                    title="OP_RETURN Volume"
-                                    description="Data volume embedded in OP_RETURN outputs by type"
+                                    title="Embedded Data Volume"
+                                    description="Data volume in OP_RETURN outputs by protocol (bytes)"
                                     chart_id="chart-opreturn-bytes"
                                     option=op_bytes_option
                                 />
                                 <ChartCard
-                                    title="Runes Dominance"
-                                    description="Runes protocol outputs as percentage of all OP_RETURN outputs"
+                                    title="Protocol Dominance"
+                                    description="Share of OP_RETURN outputs by protocol — Runes, Omni, Counterparty, Other"
                                     chart_id="chart-runes-pct"
                                     option=runes_pct_option
                                 />
                                 <ChartCard
-                                    title="OP_RETURN Block Share"
-                                    description="OP_RETURN data as percentage of total block size"
+                                    title="Embedded Data Block Share"
+                                    description="Embedded data (OP_RETURN) as percentage of total block size"
                                     chart_id="chart-op-block-share"
                                     option=op_block_share_option
                                 />
