@@ -36,6 +36,9 @@
             new ResizeObserver(function() { if (el._chart) el._chart.resize(); }).observe(el);
         }
         if (el._chart) {
+            // Skip if option JSON unchanged (prevents zoom/pan reset)
+            if (el._lastOptionJson === optionJson) return;
+            el._lastOptionJson = optionJson;
             try {
                 var opts = JSON.parse(optionJson);
                 // Disable animation for fullscreen charts (faster render)

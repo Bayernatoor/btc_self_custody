@@ -31,6 +31,8 @@ pub struct BlockchainInfo {
     pub verification_progress: f64,
     pub size_on_disk: u64,
     pub bestblockhash: String,
+    #[serde(default)]
+    pub time: u64,
 }
 
 #[derive(Debug, Deserialize, serde::Serialize)]

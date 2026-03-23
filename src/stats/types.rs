@@ -174,6 +174,7 @@ pub struct LiveBlockchain {
     pub verification_progress: f64,
     pub size_on_disk: u64,
     pub bestblockhash: String,
+    pub time: u64,
 }
 
 /// Mempool info from getmempoolinfo.
