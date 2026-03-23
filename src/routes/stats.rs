@@ -904,6 +904,26 @@ fn StatsContent() -> impl IntoView {
         |days| crate::stats::charts::witness_version_tx_pct_chart_daily(days)
     );
 
+    let address_type_option = chart_signal!(dashboard_data, range, overlay_flags,
+        |blocks| crate::stats::charts::address_type_chart(blocks),
+        |days| crate::stats::charts::address_type_chart_daily(days)
+    );
+
+    let witness_share_option = chart_signal!(dashboard_data, range, overlay_flags,
+        |blocks| crate::stats::charts::witness_share_chart(blocks),
+        |days| crate::stats::charts::witness_share_chart_daily(days)
+    );
+
+    let rbf_option = chart_signal!(dashboard_data, range, overlay_flags,
+        |blocks| crate::stats::charts::rbf_chart(blocks),
+        |days| crate::stats::charts::rbf_chart_daily(days)
+    );
+
+    let utxo_flow_option = chart_signal!(dashboard_data, range, overlay_flags,
+        |blocks| crate::stats::charts::utxo_flow_chart(blocks),
+        |days| crate::stats::charts::utxo_flow_chart_daily(days)
+    );
+
     // ---- BIP Signaling data ----
     let (bip_method, set_bip_method) = signal("bit".to_string());
     // Period offset: 0 = current, 1 = previous, etc.
@@ -1363,6 +1383,38 @@ fn StatsContent() -> impl IntoView {
                                     description="Legacy vs SegWit v0 vs Taproot v1 as percentage of all transactions"
                                     chart_id="chart-witness-tx-pct"
                                     option=witness_tx_pct_option
+                                />
+                                <ChartCard
+                                    title="Address Type Evolution"
+                                    description="Output script types over time — P2PKH, P2SH, P2WPKH, P2WSH, P2TR, P2PK"
+                                    chart_id="chart-address-types"
+                                    option=address_type_option
+                                />
+                                <ChartCard
+                                    title="Witness Data Share"
+                                    description="Witness data as percentage of total block size — shows SegWit discount impact"
+                                    chart_id="chart-witness-share"
+                                    option=witness_share_option
+                                />
+
+                                // Section divider: Transaction Metrics
+                                <div class="flex items-center gap-3 my-8">
+                                    <div class="flex-1 h-px bg-white/10"></div>
+                                    <span class="text-sm text-white/40 font-medium uppercase tracking-widest">"Transaction Metrics"</span>
+                                    <div class="flex-1 h-px bg-white/10"></div>
+                                </div>
+
+                                <ChartCard
+                                    title="RBF Adoption"
+                                    description="Percentage of transactions signaling Replace-By-Fee (nSequence < 0xFFFFFFFE)"
+                                    chart_id="chart-rbf"
+                                    option=rbf_option
+                                />
+                                <ChartCard
+                                    title="UTXO Flow"
+                                    description="Inputs consumed vs outputs created per block — net UTXO set growth"
+                                    chart_id="chart-utxo-flow"
+                                    option=utxo_flow_option
                                 />
                             </div>
                         }

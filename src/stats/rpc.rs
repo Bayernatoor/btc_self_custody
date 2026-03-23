@@ -88,6 +88,21 @@ pub struct Block {
     pub segwit_spend_count: u64,
     /// Taproot v1 witness outputs created (not spends). Named _spend_ for historical reasons.
     pub taproot_spend_count: u64,
+    // Output script type counts
+    pub p2pk_count: u64,
+    pub p2pkh_count: u64,
+    pub p2sh_count: u64,
+    pub p2wpkh_count: u64,
+    pub p2wsh_count: u64,
+    pub p2tr_count: u64,
+    pub multisig_count: u64,
+    pub unknown_script_count: u64,
+    // Transaction-level metrics
+    pub input_count: u64,
+    pub output_count: u64,
+    pub rbf_count: u64,
+    // Size breakdown
+    pub witness_bytes: u64,
 }
 
 impl BitcoinRpc {
@@ -128,7 +143,7 @@ impl BitcoinRpc {
             )));
         }
 
-        let result: Value = resp.json().await?;
+        let mut result: Value = resp.json().await?;
 
         if let Some(error) = result.get("error") {
             if !error.is_null() {
@@ -136,7 +151,7 @@ impl BitcoinRpc {
             }
         }
 
-        Ok(result["result"].clone())
+        Ok(result["result"].take())
     }
 
     pub async fn get_blockchain_info(
@@ -195,7 +210,7 @@ impl BitcoinRpc {
         let mut total_fees = 0u64;
         let mut coinbase_locktime = 0u64;
         let mut coinbase_sequence = 0xFFFF_FFFFu64;
-        let mut miner = String::from("Unknown");
+        let mut miner: &str = "Unknown";
         if let Some(txs) = result["tx"].as_array() {
             if let Some(coinbase_tx) = txs.first() {
                 // BIP-54 signaling: coinbase nLockTime == height - 1 AND nSequence != 0xffffffff
@@ -256,39 +271,10 @@ impl BitcoinRpc {
             }
         }
 
-        // === Median fee calculation from per-tx fee data (requires txindex) ===
-        let mut tx_fees: Vec<u64> = Vec::new();
-        let mut tx_fee_rates: Vec<f64> = Vec::new();
-        if let Some(txs) = result["tx"].as_array() {
-            for tx in txs.iter().skip(1) {
-                if let Some(fee_btc) = tx["fee"].as_f64() {
-                    let fee_sats = (fee_btc * 100_000_000.0).round() as u64;
-                    tx_fees.push(fee_sats);
-                    if let Some(vsize) = tx["vsize"].as_u64() {
-                        if vsize > 0 {
-                            tx_fee_rates.push(fee_sats as f64 / vsize as f64);
-                        }
-                    }
-                }
-            }
-        }
-        tx_fees.sort_unstable();
-        tx_fee_rates.sort_unstable_by(|a, b| {
-            a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
-        });
-        // Lower median (matches Bitcoin Core convention)
-        let median_fee = if tx_fees.is_empty() {
-            0
-        } else {
-            tx_fees[(tx_fees.len() - 1) / 2]
-        };
-        let median_fee_rate = if tx_fee_rates.is_empty() {
-            0.0
-        } else {
-            tx_fee_rates[(tx_fee_rates.len() - 1) / 2]
-        };
-
-        // === OP_RETURN classification ===
+        // === Single pass over non-coinbase txs: fees, OP_RETURN, outputs, inputs, RBF, witness ===
+        let cap = n_tx.saturating_sub(1) as usize;
+        let mut tx_fees: Vec<u64> = Vec::with_capacity(cap);
+        let mut tx_fee_rates: Vec<f64> = Vec::with_capacity(cap);
         let mut op_return_count = 0u64;
         let mut op_return_bytes = 0u64;
         let mut runes_count = 0u64;
@@ -299,78 +285,131 @@ impl BitcoinRpc {
         let mut counterparty_bytes = 0u64;
         let mut data_carrier_count = 0u64;
         let mut data_carrier_bytes = 0u64;
+        let mut segwit_spend_count = 0u64;
+        let mut taproot_spend_count = 0u64;
+        let mut p2pk_count = 0u64;
+        let mut p2pkh_count = 0u64;
+        let mut p2sh_count = 0u64;
+        let mut p2wpkh_count = 0u64;
+        let mut p2wsh_count = 0u64;
+        let mut p2tr_count = 0u64;
+        let mut multisig_count = 0u64;
+        let mut unknown_script_count = 0u64;
+        let mut input_count = 0u64;
+        let mut output_count = 0u64;
+        let mut rbf_count = 0u64;
+        let mut witness_bytes = 0u64;
 
         if let Some(txs) = result["tx"].as_array() {
-            for tx in txs {
-                if let Some(vouts) = tx["vout"].as_array() {
-                    for vout in vouts {
-                        if vout["scriptPubKey"]["type"].as_str()
-                            == Some("nulldata")
-                        {
-                            if let Some(hex) =
-                                vout["scriptPubKey"]["hex"].as_str()
-                            {
-                                let bytes = (hex.len() as u64) / 2;
-                                let classification = classifier::classify(hex);
+            for tx in txs.iter().skip(1) {
+                // --- Fees ---
+                if let Some(fee_btc) = tx["fee"].as_f64() {
+                    let fee_sats = (fee_btc * 100_000_000.0).round() as u64;
+                    tx_fees.push(fee_sats);
+                    if let Some(vsize) = tx["vsize"].as_u64() {
+                        if vsize > 0 {
+                            tx_fee_rates.push(fee_sats as f64 / vsize as f64);
+                        }
+                    }
+                }
 
-                                match classification {
-                                    OpReturnType::SegwitCommit => continue,
-                                    OpReturnType::Runes => {
-                                        runes_count += 1;
-                                        runes_bytes += bytes;
-                                    }
-                                    OpReturnType::Omni => {
-                                        omni_count += 1;
-                                        omni_bytes += bytes;
-                                    }
-                                    OpReturnType::Counterparty => {
-                                        counterparty_count += 1;
-                                        counterparty_bytes += bytes;
-                                    }
-                                    OpReturnType::DataCarrier => {
-                                        data_carrier_count += 1;
-                                        data_carrier_bytes += bytes;
-                                    }
+                // --- Inputs: counting, SegWit detection, RBF, witness bytes ---
+                let mut has_witness = false;
+                let mut is_rbf = false;
+                if let Some(vins) = tx["vin"].as_array() {
+                    input_count += vins.len() as u64;
+                    for vin in vins {
+                        // Witness detection + byte counting in one check
+                        if let Some(wit) = vin["txinwitness"].as_array() {
+                            has_witness = true;
+                            for item in wit {
+                                if let Some(hex) = item.as_str() {
+                                    witness_bytes += (hex.len() as u64) / 2;
                                 }
-
-                                op_return_count += 1;
-                                op_return_bytes += bytes;
+                            }
+                        }
+                        // RBF: nSequence < 0xFFFFFFFE signals replaceability
+                        if let Some(seq) = vin["sequence"].as_u64() {
+                            if seq < 0xFFFF_FFFE {
+                                is_rbf = true;
                             }
                         }
                     }
                 }
-            }
-        }
-
-        // === SegWit and Taproot counting ===
-        let mut segwit_spend_count = 0u64;
-        let mut taproot_spend_count = 0u64;
-
-        if let Some(txs) = result["tx"].as_array() {
-            for tx in txs.iter().skip(1) {
-                // SegWit: any vin with txinwitness means this tx spends a SegWit input
-                let has_witness = tx["vin"]
-                    .as_array()
-                    .map(|vins| {
-                        vins.iter().any(|v| v.get("txinwitness").is_some())
-                    })
-                    .unwrap_or(false);
                 if has_witness {
                     segwit_spend_count += 1;
                 }
+                if is_rbf {
+                    rbf_count += 1;
+                }
 
-                // Taproot: count v1 witness outputs created
+                // --- Outputs: counting, script type classification, OP_RETURN ---
                 if let Some(vouts) = tx["vout"].as_array() {
+                    output_count += vouts.len() as u64;
                     for vout in vouts {
-                        if vout["scriptPubKey"]["type"].as_str()
-                            == Some("witness_v1_taproot")
-                        {
-                            taproot_spend_count += 1;
+                        match vout["scriptPubKey"]["type"].as_str() {
+                            Some("pubkey") => p2pk_count += 1,
+                            Some("pubkeyhash") => p2pkh_count += 1,
+                            Some("scripthash") => p2sh_count += 1,
+                            Some("witness_v0_keyhash") => p2wpkh_count += 1,
+                            Some("witness_v0_scripthash") => p2wsh_count += 1,
+                            Some("witness_v1_taproot") => {
+                                p2tr_count += 1;
+                                taproot_spend_count += 1;
+                            }
+                            Some("nulldata") => {
+                                // OP_RETURN classification
+                                if let Some(hex) = vout["scriptPubKey"]["hex"].as_str() {
+                                    let bytes = (hex.len() as u64) / 2;
+                                    let classification = classifier::classify(hex);
+                                    match classification {
+                                        OpReturnType::SegwitCommit => continue,
+                                        OpReturnType::Runes => {
+                                            runes_count += 1;
+                                            runes_bytes += bytes;
+                                        }
+                                        OpReturnType::Omni => {
+                                            omni_count += 1;
+                                            omni_bytes += bytes;
+                                        }
+                                        OpReturnType::Counterparty => {
+                                            counterparty_count += 1;
+                                            counterparty_bytes += bytes;
+                                        }
+                                        OpReturnType::DataCarrier => {
+                                            data_carrier_count += 1;
+                                            data_carrier_bytes += bytes;
+                                        }
+                                    }
+                                    op_return_count += 1;
+                                    op_return_bytes += bytes;
+                                }
+                            }
+                            Some("multisig") => multisig_count += 1,
+                            Some("nonstandard") => {
+                                unknown_script_count += 1;
+                            }
+                            _ => unknown_script_count += 1,
                         }
                     }
                 }
             }
         }
+
+        tx_fees.sort_unstable();
+        tx_fee_rates.sort_unstable_by(|a, b| {
+            a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        let median_fee = if tx_fees.is_empty() {
+            0
+        } else {
+            tx_fees[(tx_fees.len() - 1) / 2]
+        };
+        let median_fee_rate = if tx_fee_rates.is_empty() {
+            0.0
+        } else {
+            tx_fee_rates[(tx_fee_rates.len() - 1) / 2]
+        };
 
         Ok(Block {
             hash,
@@ -396,9 +435,21 @@ impl BitcoinRpc {
             median_fee_rate,
             coinbase_locktime,
             coinbase_sequence,
-            miner,
+            miner: miner.to_string(),
             segwit_spend_count,
             taproot_spend_count,
+            p2pk_count,
+            p2pkh_count,
+            p2sh_count,
+            p2wpkh_count,
+            p2wsh_count,
+            p2tr_count,
+            multisig_count,
+            unknown_script_count,
+            input_count,
+            output_count,
+            rbf_count,
+            witness_bytes,
         })
     }
 
