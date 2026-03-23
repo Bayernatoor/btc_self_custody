@@ -27,6 +27,18 @@ pub struct BlockSummary {
     pub median_fee_rate: f64,
     pub segwit_spend_count: u64,
     pub taproot_spend_count: u64,
+    pub p2pk_count: u64,
+    pub p2pkh_count: u64,
+    pub p2sh_count: u64,
+    pub p2wpkh_count: u64,
+    pub p2wsh_count: u64,
+    pub p2tr_count: u64,
+    pub multisig_count: u64,
+    pub unknown_script_count: u64,
+    pub input_count: u64,
+    pub output_count: u64,
+    pub rbf_count: u64,
+    pub witness_bytes: u64,
 }
 
 /// Full block detail (from query_block_by_height).
@@ -97,6 +109,18 @@ pub struct DailyAggregate {
     pub total_fees: u64,
     pub avg_segwit_spend_count: f64,
     pub avg_taproot_spend_count: f64,
+    pub avg_p2pk_count: f64,
+    pub avg_p2pkh_count: f64,
+    pub avg_p2sh_count: f64,
+    pub avg_p2wpkh_count: f64,
+    pub avg_p2wsh_count: f64,
+    pub avg_p2tr_count: f64,
+    pub avg_multisig_count: f64,
+    pub avg_unknown_script_count: f64,
+    pub avg_input_count: f64,
+    pub avg_output_count: f64,
+    pub avg_rbf_count: f64,
+    pub avg_witness_bytes: f64,
 }
 
 /// Per-block signaling status.

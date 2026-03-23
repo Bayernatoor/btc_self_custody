@@ -63,6 +63,18 @@ pub async fn fetch_blocks(
             median_fee_rate: r.median_fee_rate,
             segwit_spend_count: r.segwit_spend_count,
             taproot_spend_count: r.taproot_spend_count,
+            p2pk_count: r.p2pk_count,
+            p2pkh_count: r.p2pkh_count,
+            p2sh_count: r.p2sh_count,
+            p2wpkh_count: r.p2wpkh_count,
+            p2wsh_count: r.p2wsh_count,
+            p2tr_count: r.p2tr_count,
+            multisig_count: r.multisig_count,
+            unknown_script_count: r.unknown_script_count,
+            input_count: r.input_count,
+            output_count: r.output_count,
+            rbf_count: r.rbf_count,
+            witness_bytes: r.witness_bytes,
         })
         .collect())
 }
@@ -268,6 +280,18 @@ pub async fn fetch_daily_aggregates(
             total_fees: r.total_fees,
             avg_segwit_spend_count: r.avg_segwit_spend_count,
             avg_taproot_spend_count: r.avg_taproot_spend_count,
+            avg_p2pk_count: r.avg_p2pk_count,
+            avg_p2pkh_count: r.avg_p2pkh_count,
+            avg_p2sh_count: r.avg_p2sh_count,
+            avg_p2wpkh_count: r.avg_p2wpkh_count,
+            avg_p2wsh_count: r.avg_p2wsh_count,
+            avg_p2tr_count: r.avg_p2tr_count,
+            avg_multisig_count: r.avg_multisig_count,
+            avg_unknown_script_count: r.avg_unknown_script_count,
+            avg_input_count: r.avg_input_count,
+            avg_output_count: r.avg_output_count,
+            avg_rbf_count: r.avg_rbf_count,
+            avg_witness_bytes: r.avg_witness_bytes,
         })
         .collect())
 }

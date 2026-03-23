@@ -65,7 +65,7 @@ fn contains_payload(payload: &str, prefix: &str) -> bool {
 
 /// Decode coinbase hex to ASCII and identify the mining pool.
 /// Uses case-insensitive substring matching against known pool tags.
-pub fn identify_miner(coinbase_hex: &str) -> String {
+pub fn identify_miner(coinbase_hex: &str) -> &'static str {
     let bytes: Vec<u8> = (0..coinbase_hex.len())
         .step_by(2)
         .filter_map(|i| {
@@ -115,11 +115,11 @@ pub fn identify_miner(coinbase_hex: &str) -> String {
 
     for (pattern, name) in pools {
         if ascii.contains(pattern) {
-            return name.to_string();
+            return name;
         }
     }
 
-    "Unknown".to_string()
+    "Unknown"
 }
 
 /// Calculate block subsidy in satoshis for a given height.

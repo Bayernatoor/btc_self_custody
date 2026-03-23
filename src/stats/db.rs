@@ -12,7 +12,7 @@ use super::rpc::Block;
 
 /// Bump this when adding new columns that require re-fetching existing blocks.
 /// The backfill loop processes all blocks with backfill_version < BACKFILL_VERSION.
-pub const BACKFILL_VERSION: u64 = 3;
+pub const BACKFILL_VERSION: u64 = 4;
 
 pub fn open(path: &Path) -> rusqlite::Result<Connection> {
     let conn = Connection::open(path)?;
@@ -128,6 +128,7 @@ pub fn open(path: &Path) -> rusqlite::Result<Connection> {
              ALTER TABLE blocks ADD COLUMN p2wpkh_count INTEGER NOT NULL DEFAULT 0;
              ALTER TABLE blocks ADD COLUMN p2wsh_count INTEGER NOT NULL DEFAULT 0;
              ALTER TABLE blocks ADD COLUMN p2tr_count INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE blocks ADD COLUMN multisig_count INTEGER NOT NULL DEFAULT 0;
              ALTER TABLE blocks ADD COLUMN unknown_script_count INTEGER NOT NULL DEFAULT 0;
              ALTER TABLE blocks ADD COLUMN input_count INTEGER NOT NULL DEFAULT 0;
              ALTER TABLE blocks ADD COLUMN output_count INTEGER NOT NULL DEFAULT 0;
@@ -178,8 +179,11 @@ pub fn insert_blocks(
               data_carrier_count, data_carrier_bytes, version, total_fees, miner,
               median_fee, median_fee_rate, coinbase_locktime, coinbase_sequence,
               segwit_spend_count, taproot_spend_count,
+              p2pk_count, p2pkh_count, p2sh_count, p2wpkh_count, p2wsh_count,
+              p2tr_count, multisig_count, unknown_script_count,
+              input_count, output_count, rbf_count, witness_bytes,
               backfill_version)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27)",
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36,?37,?38,?39)",
         )?;
         for block in blocks {
             stmt.execute(params![
@@ -209,6 +213,18 @@ pub fn insert_blocks(
                 block.coinbase_sequence,
                 block.segwit_spend_count,
                 block.taproot_spend_count,
+                block.p2pk_count,
+                block.p2pkh_count,
+                block.p2sh_count,
+                block.p2wpkh_count,
+                block.p2wsh_count,
+                block.p2tr_count,
+                block.multisig_count,
+                block.unknown_script_count,
+                block.input_count,
+                block.output_count,
+                block.rbf_count,
+                block.witness_bytes,
                 BACKFILL_VERSION,
             ])?;
         }
@@ -247,7 +263,7 @@ pub fn update_block_extras(
     let tx = conn.unchecked_transaction()?;
     {
         let mut stmt = tx.prepare_cached(
-            "UPDATE blocks SET version = ?1, total_fees = ?2, miner = ?3, median_fee = ?4, median_fee_rate = ?5, coinbase_locktime = ?6, coinbase_sequence = ?7, segwit_spend_count = ?8, taproot_spend_count = ?9, omni_count = ?10, omni_bytes = ?11, counterparty_count = ?12, counterparty_bytes = ?13, runes_count = ?14, runes_bytes = ?15, data_carrier_count = ?16, data_carrier_bytes = ?17, backfill_version = ?18 WHERE height = ?19",
+            "UPDATE blocks SET version = ?1, total_fees = ?2, miner = ?3, median_fee = ?4, median_fee_rate = ?5, coinbase_locktime = ?6, coinbase_sequence = ?7, segwit_spend_count = ?8, taproot_spend_count = ?9, omni_count = ?10, omni_bytes = ?11, counterparty_count = ?12, counterparty_bytes = ?13, runes_count = ?14, runes_bytes = ?15, data_carrier_count = ?16, data_carrier_bytes = ?17, p2pk_count = ?18, p2pkh_count = ?19, p2sh_count = ?20, p2wpkh_count = ?21, p2wsh_count = ?22, p2tr_count = ?23, multisig_count = ?24, unknown_script_count = ?25, input_count = ?26, output_count = ?27, rbf_count = ?28, witness_bytes = ?29, backfill_version = ?30 WHERE height = ?31",
         )?;
         for block in blocks {
             stmt.execute(params![
@@ -268,6 +284,18 @@ pub fn update_block_extras(
                 block.runes_bytes,
                 block.data_carrier_count,
                 block.data_carrier_bytes,
+                block.p2pk_count,
+                block.p2pkh_count,
+                block.p2sh_count,
+                block.p2wpkh_count,
+                block.p2wsh_count,
+                block.p2tr_count,
+                block.multisig_count,
+                block.unknown_script_count,
+                block.input_count,
+                block.output_count,
+                block.rbf_count,
+                block.witness_bytes,
                 BACKFILL_VERSION,
                 block.height
             ])?;
@@ -293,6 +321,18 @@ pub struct BlockRow {
     pub median_fee_rate: f64,
     pub segwit_spend_count: u64,
     pub taproot_spend_count: u64,
+    pub p2pk_count: u64,
+    pub p2pkh_count: u64,
+    pub p2sh_count: u64,
+    pub p2wpkh_count: u64,
+    pub p2wsh_count: u64,
+    pub p2tr_count: u64,
+    pub multisig_count: u64,
+    pub unknown_script_count: u64,
+    pub input_count: u64,
+    pub output_count: u64,
+    pub rbf_count: u64,
+    pub witness_bytes: u64,
 }
 
 pub fn query_blocks(
@@ -303,7 +343,10 @@ pub fn query_blocks(
     let mut stmt = conn.prepare(
         "SELECT height, hash, timestamp, tx_count, size, weight, difficulty,
                 total_fees, median_fee, median_fee_rate,
-                segwit_spend_count, taproot_spend_count
+                segwit_spend_count, taproot_spend_count,
+                p2pk_count, p2pkh_count, p2sh_count, p2wpkh_count, p2wsh_count,
+                p2tr_count, multisig_count, unknown_script_count,
+                input_count, output_count, rbf_count, witness_bytes
          FROM blocks WHERE height >= ?1 AND height <= ?2 ORDER BY height ASC",
     )?;
     let rows = stmt.query_map(params![from, to], |row| {
@@ -320,6 +363,18 @@ pub fn query_blocks(
             median_fee_rate: row.get(9)?,
             segwit_spend_count: row.get(10)?,
             taproot_spend_count: row.get(11)?,
+            p2pk_count: row.get(12)?,
+            p2pkh_count: row.get(13)?,
+            p2sh_count: row.get(14)?,
+            p2wpkh_count: row.get(15)?,
+            p2wsh_count: row.get(16)?,
+            p2tr_count: row.get(17)?,
+            multisig_count: row.get(18)?,
+            unknown_script_count: row.get(19)?,
+            input_count: row.get(20)?,
+            output_count: row.get(21)?,
+            rbf_count: row.get(22)?,
+            witness_bytes: row.get(23)?,
         })
     })?;
     rows.collect()
@@ -469,6 +524,18 @@ pub struct DailyRow {
     pub total_fees: u64,
     pub avg_segwit_spend_count: f64,
     pub avg_taproot_spend_count: f64,
+    pub avg_p2pk_count: f64,
+    pub avg_p2pkh_count: f64,
+    pub avg_p2sh_count: f64,
+    pub avg_p2wpkh_count: f64,
+    pub avg_p2wsh_count: f64,
+    pub avg_p2tr_count: f64,
+    pub avg_multisig_count: f64,
+    pub avg_unknown_script_count: f64,
+    pub avg_input_count: f64,
+    pub avg_output_count: f64,
+    pub avg_rbf_count: f64,
+    pub avg_witness_bytes: f64,
 }
 
 pub fn query_daily_aggregates(
@@ -485,7 +552,12 @@ pub fn query_daily_aggregates(
                 SUM(op_return_bytes), SUM(runes_bytes), SUM(omni_bytes),
                 SUM(counterparty_bytes), SUM(data_carrier_bytes),
                 SUM(total_fees),
-                AVG(segwit_spend_count), AVG(taproot_spend_count)
+                AVG(segwit_spend_count), AVG(taproot_spend_count),
+                AVG(p2pk_count), AVG(p2pkh_count), AVG(p2sh_count),
+                AVG(p2wpkh_count), AVG(p2wsh_count), AVG(p2tr_count),
+                AVG(multisig_count), AVG(unknown_script_count),
+                AVG(input_count), AVG(output_count), AVG(rbf_count),
+                AVG(witness_bytes)
          FROM blocks
          WHERE timestamp >= ?1 AND timestamp <= ?2
          GROUP BY day
@@ -512,6 +584,18 @@ pub fn query_daily_aggregates(
             total_fees: row.get(16)?,
             avg_segwit_spend_count: row.get(17)?,
             avg_taproot_spend_count: row.get(18)?,
+            avg_p2pk_count: row.get(19)?,
+            avg_p2pkh_count: row.get(20)?,
+            avg_p2sh_count: row.get(21)?,
+            avg_p2wpkh_count: row.get(22)?,
+            avg_p2wsh_count: row.get(23)?,
+            avg_p2tr_count: row.get(24)?,
+            avg_multisig_count: row.get(25)?,
+            avg_unknown_script_count: row.get(26)?,
+            avg_input_count: row.get(27)?,
+            avg_output_count: row.get(28)?,
+            avg_rbf_count: row.get(29)?,
+            avg_witness_bytes: row.get(30)?,
         })
     })?;
     rows.collect()
