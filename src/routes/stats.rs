@@ -924,6 +924,16 @@ fn StatsContent() -> impl IntoView {
         |days| crate::stats::charts::utxo_flow_chart_daily(days)
     );
 
+    let inscription_option = chart_signal!(dashboard_data, range, overlay_flags,
+        |blocks| crate::stats::charts::inscription_chart(blocks),
+        |days| crate::stats::charts::inscription_chart_daily(days)
+    );
+
+    let inscription_share_option = chart_signal!(dashboard_data, range, overlay_flags,
+        |blocks| crate::stats::charts::inscription_share_chart(blocks),
+        |days| crate::stats::charts::inscription_share_chart_daily(days)
+    );
+
     // ---- BIP Signaling data ----
     let (bip_method, set_bip_method) = signal("bit".to_string());
     // Period offset: 0 = current, 1 = previous, etc.
@@ -1548,6 +1558,26 @@ fn StatsContent() -> impl IntoView {
                                     description="Embedded data (OP_RETURN) as percentage of total block size"
                                     chart_id="chart-op-block-share"
                                     option=op_block_share_option
+                                />
+
+                                // Section divider: Witness Embedding
+                                <div class="flex items-center gap-3 my-8">
+                                    <div class="flex-1 h-px bg-white/10"></div>
+                                    <span class="text-sm text-white/40 font-medium uppercase tracking-widest">"Witness Embedding (Ordinals)"</span>
+                                    <div class="flex-1 h-px bg-white/10"></div>
+                                </div>
+
+                                <ChartCard
+                                    title="Ordinals Inscriptions"
+                                    description="Number of Ordinals inscriptions detected per block (witness envelope pattern)"
+                                    chart_id="chart-inscriptions"
+                                    option=inscription_option
+                                />
+                                <ChartCard
+                                    title="Inscription Block Share"
+                                    description="Inscription data as percentage of total block size"
+                                    chart_id="chart-inscription-share"
+                                    option=inscription_share_option
                                 />
                             </div>
                         }

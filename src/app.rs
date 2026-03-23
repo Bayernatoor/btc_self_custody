@@ -39,7 +39,7 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous"/>
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 
-                <meta name="description" content="Free, opinionated Bitcoin self-custody guides. Learn to secure your Bitcoin with mobile wallets, hardware wallets, and multisig setups. From beginner to advanced."/>
+                <meta name="description" content="Free, opinionated Bitcoin self-custody guides. Learn to secure your Bitcoin with mobile & desktop wallets, hardware wallets, and multisig setups. From beginner to advanced."/>
                 <meta name="keywords" content="Bitcoin, self-custody, hardware wallet, Coldcard, Sparrow Wallet, multisig, Bitcoin security, Bitcoin guide, self sovereign, Bitcoin node"/>
 
                 // Open Graph
