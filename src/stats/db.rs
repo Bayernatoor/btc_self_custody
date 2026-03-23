@@ -6,7 +6,7 @@
 
 use std::path::Path;
 
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 
 use super::rpc::Block;
 
@@ -171,6 +171,11 @@ pub fn open(path: &Path) -> rusqlite::Result<Connection> {
             "ALTER TABLE blocks ADD COLUMN backfill_version INTEGER NOT NULL DEFAULT 0;",
         )?;
     }
+
+    // Ensure indexes exist (safe to run every startup)
+    conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_blocks_backfill ON blocks(backfill_version);",
+    )?;
 
     Ok(conn)
 }
@@ -853,4 +858,17 @@ pub fn query_stats(conn: &Connection) -> rusqlite::Result<Option<Stats>> {
             }))
         },
     )
+}
+
+/// Get the timestamp of a block at a specific height.
+pub fn query_block_timestamp(
+    conn: &Connection,
+    height: u64,
+) -> rusqlite::Result<Option<u64>> {
+    conn.query_row(
+        "SELECT timestamp FROM blocks WHERE height = ?1",
+        params![height],
+        |row| row.get(0),
+    )
+    .optional()
 }

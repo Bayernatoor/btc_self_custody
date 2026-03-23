@@ -133,6 +133,12 @@ fn ts_ms(unix_secs: u64) -> u64 {
     unix_secs * 1000
 }
 
+/// Round to N decimal places.
+fn round(val: f64, decimals: u32) -> f64 {
+    let factor = 10f64.powi(decimals as i32);
+    (val * factor).round() / factor
+}
+
 /// Whether to show moving average (skip for short ranges like 1D)
 fn show_ma(data_len: usize) -> bool {
     data_len >= 200
@@ -847,10 +853,10 @@ pub fn block_size_chart(blocks: &[BlockSummary]) -> String {
 
     let raw_data: Vec<serde_json::Value> = blocks
         .iter()
-        .map(|b| json!([ts_ms(b.timestamp), b.size as f64 / 1_000_000.0]))
+        .map(|b| json!([ts_ms(b.timestamp), round(b.size as f64 / 1_000_000.0, 3)]))
         .collect();
     let vals: Vec<f64> =
-        blocks.iter().map(|b| b.size as f64 / 1_000_000.0).collect();
+        blocks.iter().map(|b| round(b.size as f64 / 1_000_000.0, 3)).collect();
     let ma = moving_average(&vals, 144);
     let ma_data: Vec<serde_json::Value> = blocks
         .iter()
@@ -893,7 +899,7 @@ pub fn block_size_chart_daily(days: &[DailyAggregate]) -> String {
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
     let sizes: Vec<f64> =
-        days.iter().map(|d| d.avg_size / 1_000_000.0).collect();
+        days.iter().map(|d| round(d.avg_size / 1_000_000.0, 3)).collect();
     let ma = moving_average(&sizes, 7);
     let ma_vals: Vec<serde_json::Value> = ma
         .iter()
@@ -974,12 +980,12 @@ pub fn tx_count_chart_daily(days: &[DailyAggregate]) -> String {
     }
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let vals: Vec<f64> = days.iter().map(|d| d.avg_tx_count).collect();
+    let vals: Vec<f64> = days.iter().map(|d| round(d.avg_tx_count, 1)).collect();
     let ma = moving_average(&vals, 7);
     let ma_vals: Vec<serde_json::Value> = ma
         .iter()
         .map(|v| match v {
-            Some(x) => json!(x),
+            Some(x) => json!(round(*x, 1)),
             None => json!(null),
         })
         .collect();
@@ -2213,7 +2219,7 @@ pub fn taproot_chart_daily(days: &[DailyAggregate]) -> String {
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
     let vals: Vec<f64> =
-        days.iter().map(|d| d.avg_taproot_spend_count).collect();
+        days.iter().map(|d| round(d.avg_taproot_spend_count, 1)).collect();
     let ma = moving_average(&vals, 7);
     let ma_vals: Vec<serde_json::Value> = ma
         .iter()
@@ -2394,7 +2400,7 @@ pub fn inscription_chart_daily(days: &[DailyAggregate]) -> String {
         return no_data_chart("Inscriptions");
     }
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let vals: Vec<f64> = days.iter().map(|d| d.avg_inscription_count).collect();
+    let vals: Vec<f64> = days.iter().map(|d| round(d.avg_inscription_count, 1)).collect();
     let ma = moving_average(&vals, 7);
     let ma_vals: Vec<serde_json::Value> = ma.iter()
         .map(|v| match v { Some(x) => json!(x), None => json!(null) }).collect();
@@ -2656,12 +2662,12 @@ pub fn witness_version_chart_daily(days: &[DailyAggregate]) -> String {
     let v0_vals: Vec<f64> = days
         .iter()
         .map(|d| {
-            (d.avg_segwit_spend_count - d.avg_taproot_spend_count).max(0.0)
+            round((d.avg_segwit_spend_count - d.avg_taproot_spend_count).max(0.0), 1)
         })
         .collect();
     let v1_vals: Vec<f64> = days
         .iter()
-        .map(|d| d.avg_taproot_spend_count)
+        .map(|d| round(d.avg_taproot_spend_count, 1))
         .collect();
 
     build_option(json!({
@@ -3014,12 +3020,12 @@ pub fn address_type_chart_daily(days: &[DailyAggregate]) -> String {
         "tooltip": tooltip_axis(),
         "legend": { "show": true },
         "series": [
-            { "name": "P2PKH", "type": "line", "sampling": "lttb", "data": days.iter().map(|d| d.avg_p2pkh_count).collect::<Vec<f64>>(), "stack": "addr", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2PKH_COLOR }, "itemStyle": { "color": P2PKH_COLOR }, "symbol": "none" },
-            { "name": "P2SH", "type": "line", "sampling": "lttb", "data": days.iter().map(|d| d.avg_p2sh_count).collect::<Vec<f64>>(), "stack": "addr", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2SH_COLOR }, "itemStyle": { "color": P2SH_COLOR }, "symbol": "none" },
-            { "name": "P2WPKH", "type": "line", "sampling": "lttb", "data": days.iter().map(|d| d.avg_p2wpkh_count).collect::<Vec<f64>>(), "stack": "addr", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2WPKH_COLOR }, "itemStyle": { "color": P2WPKH_COLOR }, "symbol": "none" },
-            { "name": "P2WSH", "type": "line", "sampling": "lttb", "data": days.iter().map(|d| d.avg_p2wsh_count).collect::<Vec<f64>>(), "stack": "addr", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2WSH_COLOR }, "itemStyle": { "color": P2WSH_COLOR }, "symbol": "none" },
-            { "name": "P2TR", "type": "line", "sampling": "lttb", "data": days.iter().map(|d| d.avg_p2tr_count).collect::<Vec<f64>>(), "stack": "addr", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2TR_COLOR }, "itemStyle": { "color": P2TR_COLOR }, "symbol": "none" },
-            { "name": "P2PK", "type": "line", "sampling": "lttb", "data": days.iter().map(|d| d.avg_p2pk_count).collect::<Vec<f64>>(), "stack": "addr", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2PK_COLOR }, "itemStyle": { "color": P2PK_COLOR }, "symbol": "none" }
+            { "name": "P2PKH", "type": "line", "sampling": "lttb", "data": days.iter().map(|d| round(d.avg_p2pkh_count, 1)).collect::<Vec<f64>>(), "stack": "addr", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2PKH_COLOR }, "itemStyle": { "color": P2PKH_COLOR }, "symbol": "none" },
+            { "name": "P2SH", "type": "line", "sampling": "lttb", "data": days.iter().map(|d| round(d.avg_p2sh_count, 1)).collect::<Vec<f64>>(), "stack": "addr", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2SH_COLOR }, "itemStyle": { "color": P2SH_COLOR }, "symbol": "none" },
+            { "name": "P2WPKH", "type": "line", "sampling": "lttb", "data": days.iter().map(|d| round(d.avg_p2wpkh_count, 1)).collect::<Vec<f64>>(), "stack": "addr", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2WPKH_COLOR }, "itemStyle": { "color": P2WPKH_COLOR }, "symbol": "none" },
+            { "name": "P2WSH", "type": "line", "sampling": "lttb", "data": days.iter().map(|d| round(d.avg_p2wsh_count, 1)).collect::<Vec<f64>>(), "stack": "addr", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2WSH_COLOR }, "itemStyle": { "color": P2WSH_COLOR }, "symbol": "none" },
+            { "name": "P2TR", "type": "line", "sampling": "lttb", "data": days.iter().map(|d| round(d.avg_p2tr_count, 1)).collect::<Vec<f64>>(), "stack": "addr", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2TR_COLOR }, "itemStyle": { "color": P2TR_COLOR }, "symbol": "none" },
+            { "name": "P2PK", "type": "line", "sampling": "lttb", "data": days.iter().map(|d| round(d.avg_p2pk_count, 1)).collect::<Vec<f64>>(), "stack": "addr", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2PK_COLOR }, "itemStyle": { "color": P2PK_COLOR }, "symbol": "none" }
         ]
     }))
 }
@@ -3179,8 +3185,8 @@ pub fn utxo_flow_chart_daily(days: &[DailyAggregate]) -> String {
         return no_data_chart("UTXO Flow");
     }
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let inputs: Vec<f64> = days.iter().map(|d| d.avg_input_count).collect();
-    let outputs: Vec<f64> = days.iter().map(|d| d.avg_output_count).collect();
+    let inputs: Vec<f64> = days.iter().map(|d| round(d.avg_input_count, 1)).collect();
+    let outputs: Vec<f64> = days.iter().map(|d| round(d.avg_output_count, 1)).collect();
 
     build_option(json!({
         "xAxis": x_axis_for(true, &cats),

@@ -17,7 +17,7 @@ pub async fn fetch_stats_summary() -> Result<StatsSummary, ServerFnError> {
         leptos_axum::extract().await.map_err(|e| {
             ServerFnError::new(format!("Stats not available: {e}"))
         })?;
-    let conn = state.db.lock().unwrap();
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
     let stats = super::db::query_stats(&conn)
         .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
     match stats {
@@ -45,7 +45,7 @@ pub async fn fetch_blocks(
         leptos_axum::extract().await.map_err(|e| {
             ServerFnError::new(format!("Stats not available: {e}"))
         })?;
-    let conn = state.db.lock().unwrap();
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
     let rows = super::db::query_blocks(&conn, from, to)
         .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
     Ok(rows
@@ -89,7 +89,7 @@ pub async fn fetch_block_detail(
         leptos_axum::extract().await.map_err(|e| {
             ServerFnError::new(format!("Stats not available: {e}"))
         })?;
-    let conn = state.db.lock().unwrap();
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
     let row = super::db::query_block_by_height(&conn, height)
         .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
     Ok(row.map(|r| BlockDetail {
@@ -140,7 +140,7 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
 
     // Price cache: only fetch from mempool.space if cache is >60s old
     let price_usd = {
-        let cached = state.price_cache.lock().unwrap().clone();
+        let cached = state.price_cache.lock().unwrap_or_else(|e| e.into_inner()).clone();
         let need_refresh = match &cached {
             Some((_, ts)) => ts.elapsed().as_secs() > 60,
             None => true,
@@ -149,7 +149,7 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
             match state.rpc.fetch_price().await {
                 Ok(p) => {
                     let usd = p.usd;
-                    *state.price_cache.lock().unwrap() =
+                    *state.price_cache.lock().unwrap_or_else(|e| e.into_inner()) =
                         Some((p, Instant::now()));
                     usd
                 }
@@ -175,7 +175,7 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
     };
     let market_cap = price_usd * total_supply;
     let chain_size_gb = blockchain.size_on_disk as f64 / 1_000_000_000.0;
-    let utxo_count = state.utxo_count.lock().unwrap().unwrap_or(0);
+    let utxo_count = state.utxo_count.lock().unwrap_or_else(|e| e.into_inner()).unwrap_or(0);
 
     // Network hashrate (non-fatal if it fails)
     let hashrate = state.rpc.get_network_hashps().await.unwrap_or(0.0);
@@ -191,6 +191,7 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
             verification_progress: blockchain.verification_progress,
             size_on_disk: blockchain.size_on_disk,
             bestblockhash: blockchain.bestblockhash,
+            time: blockchain.time,
         },
         mempool: LiveMempool {
             size: mempool.size,
@@ -224,7 +225,7 @@ pub async fn fetch_op_returns(
         leptos_axum::extract().await.map_err(|e| {
             ServerFnError::new(format!("Stats not available: {e}"))
         })?;
-    let conn = state.db.lock().unwrap();
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
     let rows = super::db::query_op_returns(&conn, from, to)
         .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
     Ok(rows
@@ -257,7 +258,7 @@ pub async fn fetch_daily_aggregates(
         leptos_axum::extract().await.map_err(|e| {
             ServerFnError::new(format!("Stats not available: {e}"))
         })?;
-    let conn = state.db.lock().unwrap();
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
     let rows = super::db::query_daily_aggregates(&conn, from_ts, to_ts)
         .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
     Ok(rows
@@ -311,7 +312,7 @@ pub async fn fetch_signaling(
         leptos_axum::extract().await.map_err(|e| {
             ServerFnError::new(format!("Stats not available: {e}"))
         })?;
-    let conn = state.db.lock().unwrap();
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
     let use_locktime = method == "locktime";
 
     let blocks = if use_locktime {
@@ -373,7 +374,7 @@ pub async fn fetch_signaling_periods(
         leptos_axum::extract().await.map_err(|e| {
             ServerFnError::new(format!("Stats not available: {e}"))
         })?;
-    let conn = state.db.lock().unwrap();
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
     let use_locktime = method == "locktime";
 
     let periods = if use_locktime {
@@ -404,7 +405,7 @@ pub async fn fetch_miner_dominance(
         leptos_axum::extract().await.map_err(|e| {
             ServerFnError::new(format!("Stats not available: {e}"))
         })?;
-    let conn = state.db.lock().unwrap();
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
     let rows = super::db::query_miner_dominance(&conn, from, to)
         .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
     let total: u64 = rows.iter().map(|r| r.count).sum();
@@ -431,7 +432,7 @@ pub async fn fetch_miner_dominance_daily(
         leptos_axum::extract().await.map_err(|e| {
             ServerFnError::new(format!("Stats not available: {e}"))
         })?;
-    let conn = state.db.lock().unwrap();
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
     let rows = super::db::query_miner_dominance_daily(&conn, from_ts, to_ts)
         .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
     let total: u64 = rows.iter().map(|r| r.count).sum();
@@ -458,7 +459,7 @@ pub async fn fetch_empty_blocks(
         leptos_axum::extract().await.map_err(|e| {
             ServerFnError::new(format!("Stats not available: {e}"))
         })?;
-    let conn = state.db.lock().unwrap();
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
     let rows = super::db::query_empty_blocks(&conn, from, to)
         .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
     Ok(rows
@@ -488,7 +489,7 @@ pub async fn fetch_price_history(
 
     // Return cached full dataset if fresh (< 1 hour old)
     {
-        let cached = state.price_history_cache.lock().unwrap();
+        let cached = state.price_history_cache.lock().unwrap_or_else(|e| e.into_inner());
         if let Some((_, _, ref data, ref ts)) = *cached {
             if ts.elapsed().as_secs() < 3600 {
                 return Ok(data.clone());
@@ -512,8 +513,21 @@ pub async fn fetch_price_history(
         .collect();
 
     // Cache full dataset
-    *state.price_history_cache.lock().unwrap() =
+    *state.price_history_cache.lock().unwrap_or_else(|e| e.into_inner()) =
         Some((0, u64::MAX, all_points.clone(), Instant::now()));
 
     Ok(all_points)
+}
+
+#[server(prefix = "/api", endpoint = "stats_block_timestamp")]
+pub async fn fetch_block_timestamp(
+    height: u64,
+) -> Result<Option<u64>, ServerFnError> {
+    let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
+        leptos_axum::extract().await.map_err(|e| {
+            ServerFnError::new(format!("Stats not available: {e}"))
+        })?;
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
+    Ok(super::db::query_block_timestamp(&conn, height)
+        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?)
 }

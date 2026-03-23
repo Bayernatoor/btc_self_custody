@@ -674,6 +674,53 @@ fn StatsContent() -> impl IntoView {
         format!("{:.1}", remaining as f64 * 10.0 / 1440.0)
     });
 
+    // Fetch the period start block timestamp for difficulty change calculation
+    let period_start_ts = LocalResource::new(move || {
+        let ps = diff_period_start.get();
+        async move {
+            if ps == 0 {
+                return 0u64;
+            }
+            fetch_block_timestamp(ps).await.ok().flatten().unwrap_or(0)
+        }
+    });
+
+    // Expected difficulty change: (target_time / projected_time - 1) * 100%
+    let diff_expected_change = Signal::derive(move || {
+        let blocks_in = diff_blocks_into_period.get();
+        if blocks_in < 10 {
+            return "\u{2014}".to_string();
+        }
+        let start_ts = period_start_ts.get().unwrap_or(0);
+        if start_ts == 0 {
+            return "\u{2014}".to_string();
+        }
+        // Get current block timestamp (non-reactive)
+        let guard = live.read_untracked();
+        let current_ts = guard
+            .as_ref()
+            .and_then(|r| r.as_ref().ok())
+            .map(|s| s.blockchain.time)
+            .unwrap_or(0);
+        if current_ts <= start_ts {
+            return "\u{2014}".to_string();
+        }
+
+        let elapsed = (current_ts - start_ts) as f64;
+        // Project total period time: elapsed * 2016 / blocks_in
+        let projected = elapsed * 2016.0 / blocks_in as f64;
+        // Target total time: 2016 * 600 = 1,209,600 seconds
+        let target = 2016.0 * 600.0;
+        // Change = (target / projected - 1) * 100
+        let change = (target / projected - 1.0) * 100.0;
+        let rounded = (change * 10.0).round() / 10.0;
+        if rounded >= 0.0 {
+            format!("+{:.1}%", rounded)
+        } else {
+            format!("{:.1}%", rounded)
+        }
+    });
+
     let diff_est_date = Signal::derive(move || {
         let remaining = diff_blocks_remaining.get();
         if remaining == 0 {
@@ -1226,7 +1273,10 @@ fn StatsContent() -> impl IntoView {
 
                 // Difficulty adjustment predictor
                 <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 mt-8">
-                    <h3 class="text-lg text-white font-semibold mb-3">"Next Difficulty Adjustment"</h3>
+                    <div class="flex items-baseline justify-between mb-3">
+                        <h3 class="text-lg text-white font-semibold">"Next Difficulty Adjustment"</h3>
+                        <span class="text-xs text-white/40 font-mono">{move || diff_est_date.get()}</span>
+                    </div>
                     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
                         <div class="text-center">
                             <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Period Start"</div>
@@ -1258,14 +1308,17 @@ fn StatsContent() -> impl IntoView {
                         </div>
                     </div>
                     <div class="mt-3 text-center">
-                        <span class="text-xs text-white/40">"Est. date: "</span>
-                        <span class="text-xs text-white/60 font-mono">{move || diff_est_date.get()}</span>
+                        <span class="text-xs text-white/40">"Expected change: "</span>
+                        <span class="text-xs text-white/70 font-mono font-semibold">{move || diff_expected_change.get()}</span>
                     </div>
                 </div>
 
                 // Halving countdown
                 <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 mt-8">
-                    <h3 class="text-lg text-white font-semibold mb-3">"Next Halving"</h3>
+                    <div class="flex items-baseline justify-between mb-3">
+                        <h3 class="text-lg text-white font-semibold">"Next Halving"</h3>
+                        <span class="text-xs text-white/40 font-mono">{move || halving_est_date.get()}</span>
+                    </div>
                     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
                         <div class="text-center">
                             <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Target Height"</div>
@@ -1297,9 +1350,7 @@ fn StatsContent() -> impl IntoView {
                         </div>
                     </div>
                     <div class="mt-3 text-center">
-                        <span class="text-xs text-white/40">"Est. date: "</span>
-                        <span class="text-xs text-white/60 font-mono">{move || halving_est_date.get()}</span>
-                        <span class="text-xs text-white/30">" · Next subsidy: "</span>
+                        <span class="text-xs text-white/40">"Next subsidy: "</span>
                         <span class="text-xs text-white/60 font-mono">{move || next_subsidy_btc.get()}</span>
                     </div>
                 </div>

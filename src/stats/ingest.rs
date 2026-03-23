@@ -55,7 +55,7 @@ pub async fn poll_new_blocks(rpc: &BitcoinRpc, db: &Mutex<Connection>) {
     };
 
     let db_max = {
-        let conn = db.lock().unwrap();
+        let conn = db.lock().unwrap_or_else(|e| e.into_inner());
         db::max_height(&conn).unwrap_or(None).unwrap_or(0)
     };
 
@@ -83,7 +83,7 @@ pub async fn poll_new_blocks(rpc: &BitcoinRpc, db: &Mutex<Connection>) {
     blocks.sort_by_key(|b| b.height);
 
     {
-        let conn = db.lock().unwrap();
+        let conn = db.lock().unwrap_or_else(|e| e.into_inner());
         if let Err(e) = db::insert_blocks(&conn, &blocks) {
             tracing::error!("Poll: DB insert error: {e}");
         }
@@ -95,7 +95,7 @@ pub async fn poll_new_blocks(rpc: &BitcoinRpc, db: &Mutex<Connection>) {
 /// Background: backfill blocks with backfill_version < BACKFILL_VERSION.
 pub async fn backfill_extras(rpc: &BitcoinRpc, db: &Mutex<Connection>) {
     let needs_backfill = {
-        let conn = db.lock().unwrap();
+        let conn = db.lock().unwrap_or_else(|e| e.into_inner());
         db::count_needs_backfill(&conn).unwrap_or(0)
     };
 
@@ -117,7 +117,7 @@ pub async fn backfill_extras(rpc: &BitcoinRpc, db: &Mutex<Connection>) {
 
     loop {
         let heights = {
-            let conn = db.lock().unwrap();
+            let conn = db.lock().unwrap_or_else(|e| e.into_inner());
             db::heights_needing_backfill(&conn, DB_BATCH_SIZE as u64)
                 .unwrap_or_default()
         };
@@ -146,7 +146,7 @@ pub async fn backfill_extras(rpc: &BitcoinRpc, db: &Mutex<Connection>) {
         }
 
         {
-            let conn = db.lock().unwrap();
+            let conn = db.lock().unwrap_or_else(|e| e.into_inner());
             if let Err(e) = db::update_block_extras(&conn, &blocks) {
                 tracing::error!("Backfill DB error: {e}");
                 return;
@@ -180,7 +180,7 @@ pub async fn backfill_backwards(rpc: &BitcoinRpc, db: &Mutex<Connection>) {
     tokio::time::sleep(std::time::Duration::from_secs(10)).await;
 
     let min_height = {
-        let conn = db.lock().unwrap();
+        let conn = db.lock().unwrap_or_else(|e| e.into_inner());
         db::min_height(&conn).unwrap_or(Some(0)).unwrap_or(0)
     };
 
@@ -225,7 +225,7 @@ pub async fn backfill_backwards(rpc: &BitcoinRpc, db: &Mutex<Connection>) {
         blocks.sort_by_key(|b| b.height);
 
         {
-            let conn = db.lock().unwrap();
+            let conn = db.lock().unwrap_or_else(|e| e.into_inner());
             if let Err(e) = db::insert_blocks(&conn, &blocks) {
                 tracing::error!("Backward backfill DB error: {e}");
                 return;

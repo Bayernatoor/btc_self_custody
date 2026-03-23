@@ -67,7 +67,7 @@ pub async fn get_blocks(
     State(state): State<SharedStatsState>,
     Query(params): Query<BlocksQuery>,
 ) -> Result<Json<serde_json::Value>, StatsError> {
-    let conn = state.db.lock().unwrap();
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
 
     let (from, to) = match (params.from, params.to) {
         (Some(f), Some(t)) => (f, t),
@@ -92,10 +92,10 @@ pub async fn get_block_detail(
     State(state): State<SharedStatsState>,
     Path(height): Path<u64>,
 ) -> Result<Json<serde_json::Value>, StatsError> {
-    let conn = state.db.lock().unwrap();
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
     let block = db::query_block_by_height(&conn, height)?;
     match block {
-        Some(b) => Ok(Json(serde_json::to_value(b).unwrap())),
+        Some(b) => Ok(Json(serde_json::to_value(b).map_err(|e| StatsError::Rpc(e.to_string()))?)),
         None => Ok(Json(serde_json::json!({ "error": "Block not found" }))),
     }
 }
@@ -103,10 +103,10 @@ pub async fn get_block_detail(
 pub async fn get_stats(
     State(state): State<SharedStatsState>,
 ) -> Result<Json<serde_json::Value>, StatsError> {
-    let conn = state.db.lock().unwrap();
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
     let stats = db::query_stats(&conn)?;
     match stats {
-        Some(s) => Ok(Json(serde_json::to_value(s).unwrap())),
+        Some(s) => Ok(Json(serde_json::to_value(s).map_err(|e| StatsError::Rpc(e.to_string()))?)),
         None => Ok(Json(serde_json::json!({
             "block_count": 0,
             "min_height": 0,
@@ -124,7 +124,7 @@ pub async fn get_live(
 
     // Price cache: only fetch from mempool.space if cache is >60s old
     let price_usd = {
-        let cached = state.price_cache.lock().unwrap().clone();
+        let cached = state.price_cache.lock().unwrap_or_else(|e| e.into_inner()).clone();
         let need_refresh = match &cached {
             Some((_, ts)) => ts.elapsed().as_secs() > 60,
             None => true,
@@ -133,7 +133,7 @@ pub async fn get_live(
             match state.rpc.fetch_price().await {
                 Ok(p) => {
                     let usd = p.usd;
-                    *state.price_cache.lock().unwrap() =
+                    *state.price_cache.lock().unwrap_or_else(|e| e.into_inner()) =
                         Some((p, Instant::now()));
                     usd
                 }
@@ -158,7 +158,7 @@ pub async fn get_live(
     let market_cap = price_usd * total_supply;
     let chain_size_gb = blockchain.size_on_disk as f64 / 1_000_000_000.0;
 
-    let utxo_count = state.utxo_count.lock().unwrap().unwrap_or(0);
+    let utxo_count = state.utxo_count.lock().unwrap_or_else(|e| e.into_inner()).unwrap_or(0);
 
     // Network hashrate (non-fatal if it fails)
     let hashrate = state.rpc.get_network_hashps().await.unwrap_or(0.0);
@@ -188,7 +188,7 @@ pub async fn get_op_returns(
     State(state): State<SharedStatsState>,
     Query(params): Query<BlocksQuery>,
 ) -> Result<Json<serde_json::Value>, StatsError> {
-    let conn = state.db.lock().unwrap();
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
 
     let (from, to) = match (params.from, params.to) {
         (Some(f), Some(t)) => (f, t),
@@ -213,7 +213,7 @@ pub async fn get_daily_aggregates(
     State(state): State<SharedStatsState>,
     Query(params): Query<TimestampQuery>,
 ) -> Result<Json<serde_json::Value>, StatsError> {
-    let conn = state.db.lock().unwrap();
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
 
     let from_ts = params.from.unwrap_or(0);
     let to_ts = params.to.unwrap_or(u64::MAX);
@@ -226,7 +226,7 @@ pub async fn get_signaling(
     State(state): State<SharedStatsState>,
     Query(params): Query<SignalingQuery>,
 ) -> Result<Json<serde_json::Value>, StatsError> {
-    let conn = state.db.lock().unwrap();
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
     let use_locktime = params.method.as_deref() == Some("locktime");
 
     let stats = db::query_stats(&conn)?;
@@ -291,7 +291,7 @@ pub async fn get_signaling_periods(
     State(state): State<SharedStatsState>,
     Query(params): Query<SignalingPeriodsQuery>,
 ) -> Result<Json<serde_json::Value>, StatsError> {
-    let conn = state.db.lock().unwrap();
+    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
     let use_locktime = params.method.as_deref() == Some("locktime");
     let periods = if use_locktime {
         db::query_signaling_periods_locktime(&conn)?
