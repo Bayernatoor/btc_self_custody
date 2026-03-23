@@ -18,8 +18,6 @@ const TARGET_COLOR: &str = "#e74c3c"; // Target/reference lines (red)
 const RUNES_COLOR: &str = "#ff6b6b"; // Runes (coral red)
 const CARRIER_COLOR: &str = "#bb8fff"; // Data carriers (purple)
 const SIGNAL_YES: &str = "#2ecc71"; // Signaled (green)
-#[allow(dead_code)]
-const SIGNAL_NO: &str = "rgba(231,76,60,0.3)"; // Not signaled (faded red)
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -136,10 +134,680 @@ fn build_option(extra: serde_json::Value) -> String {
         (base.as_object_mut(), extra.as_object())
     {
         for (k, v) in extra_obj {
+            // Deep-merge legend so "show" doesn't wipe out default textStyle/position
+            if k == "legend" {
+                if let (Some(base_legend), Some(extra_legend)) = (
+                    base_obj.get_mut("legend").and_then(|l| l.as_object_mut()),
+                    v.as_object(),
+                ) {
+                    for (lk, lv) in extra_legend {
+                        base_legend.insert(lk.clone(), lv.clone());
+                    }
+                    continue;
+                }
+            }
             base_obj.insert(k.clone(), v.clone());
         }
     }
     serde_json::to_string(&base).unwrap_or_default()
+}
+
+// ---------------------------------------------------------------------------
+// Overlay constants
+// ---------------------------------------------------------------------------
+
+/// Halving block heights and approximate timestamps (Unix seconds).
+const HALVINGS: &[(u64, u64, &str)] = &[
+    (210_000, 1_354_116_278, "Halving #1"),
+    (420_000, 1_468_082_773, "Halving #2"),
+    (630_000, 1_589_225_023, "Halving #3"),
+    (840_000, 1_713_571_767, "Halving #4"),
+];
+
+/// Halving dates for daily-mode charts (YYYY-MM-DD).
+const HALVING_DATES: &[&str] = &[
+    "2012-11-28",
+    "2016-07-09",
+    "2020-05-11",
+    "2024-04-20",
+];
+
+/// Notable BIP activation block heights and timestamps.
+const BIP_ACTIVATIONS: &[(u64, u64, &str)] = &[
+    (227_931, 1_363_636_474, "BIP-16 (P2SH)"),
+    (363_725, 1_436_486_408, "BIP-66 (Strict DER)"),
+    (388_381, 1_449_187_214, "BIP-65 (CLTV)"),
+    (419_328, 1_467_331_589, "BIP-68/112/113 (CSV)"),
+    (481_824, 1_503_539_857, "BIP-141 (SegWit)"),
+    (709_632, 1_636_839_505, "BIP-341 (Taproot)"),
+];
+
+/// BIP activation dates for daily-mode charts (derived from block timestamps above).
+const BIP_ACTIVATION_DATES: &[(&str, &str)] = &[
+    ("2013-03-18", "BIP-16 (P2SH)"),
+    ("2015-07-10", "BIP-66 (Strict DER)"),
+    ("2015-12-04", "BIP-65 (CLTV)"),
+    ("2016-07-01", "BIP-68/112/113 (CSV)"),
+    ("2017-08-24", "BIP-141 (SegWit)"),
+    ("2021-11-13", "BIP-341 (Taproot)"),
+];
+
+/// Bitcoin Core major release timestamps (Unix seconds) and labels.
+const CORE_RELEASES: &[(u64, &str)] = &[
+    (1231444060, "v0.1"),
+    (1316736000, "v0.4"),
+    (1321884081, "v0.5"),
+    (1333065600, "v0.6"),
+    (1347840000, "v0.7"),
+    (1361232000, "v0.8"),
+    (1395187200, "v0.9"),
+    (1424044800, "v0.10"),
+    (1436659200, "v0.11"),
+    (1456185600, "v0.12"),
+    (1471910400, "v0.13"),
+    (1488931200, "v0.14"),
+    (1505347200, "v0.15"),
+    (1519603200, "v0.16"),
+    (1538524800, "v0.17"),
+    (1556755200, "v0.18"),
+    (1573171200, "v0.19"),
+    (1591142400, "v0.20"),
+    (1610582400, "v0.21"),
+    (1631577600, "v22"),
+    (1650844800, "v23"),
+    (1670803200, "v24"),
+    (1685059200, "v25"),
+    (1701820800, "v26"),
+    (1712016000, "v27"),
+    (1727827200, "v28"),
+    (1744588800, "v29"),
+    (1760083200, "v30"),
+];
+
+/// Bitcoin Core major release dates for daily-mode charts.
+const CORE_RELEASE_DATES: &[(&str, &str)] = &[
+    ("2009-01-08", "v0.1"),
+    ("2011-09-23", "v0.4"),
+    ("2011-11-21", "v0.5"),
+    ("2012-03-30", "v0.6"),
+    ("2012-09-17", "v0.7"),
+    ("2013-02-19", "v0.8"),
+    ("2014-03-19", "v0.9"),
+    ("2015-02-16", "v0.10"),
+    ("2015-07-12", "v0.11"),
+    ("2016-02-23", "v0.12"),
+    ("2016-08-23", "v0.13"),
+    ("2017-03-08", "v0.14"),
+    ("2017-09-14", "v0.15"),
+    ("2018-02-26", "v0.16"),
+    ("2018-10-03", "v0.17"),
+    ("2019-05-02", "v0.18"),
+    ("2019-11-08", "v0.19"),
+    ("2020-06-03", "v0.20"),
+    ("2021-01-14", "v0.21"),
+    ("2021-09-14", "v22"),
+    ("2022-04-25", "v23"),
+    ("2022-12-12", "v24"),
+    ("2023-05-26", "v25"),
+    ("2023-12-06", "v26"),
+    ("2024-04-02", "v27"),
+    ("2024-10-02", "v28"),
+    ("2025-04-14", "v29"),
+    ("2025-10-10", "v30"),
+];
+
+/// Notable Bitcoin events (timestamp unix seconds, label).
+const EVENTS: &[(u64, &str)] = &[
+    (1674259200, "Ordinals Launch"),
+    (1713571767, "Runes Launch"),
+];
+const EVENT_DATES: &[(&str, &str)] = &[
+    ("2023-01-21", "Ordinals Launch"),
+    ("2024-04-20", "Runes Launch"),
+];
+
+/// Overlay flags — which overlays to merge into a chart option.
+#[derive(Clone, Debug, Default)]
+pub struct OverlayFlags {
+    pub halvings: bool,
+    pub bip_activations: bool,
+    pub core_releases: bool,
+    pub events: bool,
+    /// Price overlay data (timestamp_ms, price_usd). Empty vec = disabled.
+    pub price_data: Vec<(u64, f64)>,
+    /// Chain size overlay data (timestamp_ms, cumulative_gb). Empty vec = disabled.
+    pub chain_size_data: Vec<(u64, f64)>,
+}
+
+/// Merge overlay markLines and series into an already-built chart option JSON string.
+/// Works for both time-axis (per-block) and category-axis (daily) charts.
+pub fn apply_overlays(option_json: &str, overlays: &OverlayFlags, is_daily: bool) -> String {
+    let has_any = overlays.halvings
+        || overlays.bip_activations
+        || overlays.core_releases
+        || overlays.events
+        || !overlays.price_data.is_empty()
+        || !overlays.chain_size_data.is_empty();
+
+    if !has_any {
+        return option_json.to_string();
+    }
+
+    let mut opt: serde_json::Value = match serde_json::from_str(option_json) {
+        Ok(v) => v,
+        Err(_) => return option_json.to_string(),
+    };
+
+    let obj = match opt.as_object_mut() {
+        Some(o) => o,
+        None => return option_json.to_string(),
+    };
+
+    // Widen grid.right when we have price axis or markLine labels
+    let need_right_space = !overlays.price_data.is_empty()
+        || overlays.halvings
+        || overlays.bip_activations
+        || overlays.core_releases
+        || overlays.events;
+    if need_right_space {
+        if let Some(grid) = obj.get_mut("grid") {
+            if let Some(g) = grid.as_object_mut() {
+                let right = if !overlays.price_data.is_empty() { 70 } else { 60 };
+                g.insert("right".into(), json!(right));
+            }
+        }
+    }
+
+    // Move toolbox to the left when price axis takes the right side
+    if !overlays.price_data.is_empty() {
+        if let Some(toolbox) = obj.get_mut("toolbox") {
+            if let Some(t) = toolbox.as_object_mut() {
+                t.remove("right");
+                t.insert("left".into(), json!(55));
+            }
+        }
+    }
+
+    // --- Mark lines (halvings, BIP activations) ---
+    let mut mark_lines: Vec<serde_json::Value> = Vec::new();
+
+    if overlays.halvings {
+        if is_daily {
+            for &date in HALVING_DATES {
+                mark_lines.push(json!({
+                    "xAxis": date,
+                    "lineStyle": { "color": "#f7931a", "type": "dashed", "width": 1.5 },
+                    "label": { "show": true, "formatter": "½", "color": "#f7931a", "fontSize": 10, "position": "insideEndTop" }
+                }));
+            }
+        } else {
+            for &(_, ts, _label) in HALVINGS {
+                mark_lines.push(json!({
+                    "xAxis": ts * 1000,
+                    "lineStyle": { "color": "#f7931a", "type": "dashed", "width": 1.5 },
+                    "label": { "show": true, "formatter": "½", "color": "#f7931a", "fontSize": 10, "position": "insideEndTop" }
+                }));
+            }
+        }
+    }
+
+    if overlays.bip_activations {
+        if is_daily {
+            for &(date, name) in BIP_ACTIVATION_DATES {
+                mark_lines.push(json!({
+                    "xAxis": date,
+                    "lineStyle": { "color": "#4ecdc4", "type": "dotted", "width": 1 },
+                    "label": { "show": true, "formatter": name, "color": "#4ecdc4", "fontSize": 9, "position": "insideEndTop", "rotate": 90 }
+                }));
+            }
+        } else {
+            for &(_, ts, name) in BIP_ACTIVATIONS {
+                mark_lines.push(json!({
+                    "xAxis": ts * 1000,
+                    "lineStyle": { "color": "#4ecdc4", "type": "dotted", "width": 1 },
+                    "label": { "show": true, "formatter": name, "color": "#4ecdc4", "fontSize": 9, "position": "insideEndTop", "rotate": 90 }
+                }));
+            }
+        }
+    }
+
+    if overlays.core_releases {
+        if is_daily {
+            for &(date, name) in CORE_RELEASE_DATES {
+                mark_lines.push(json!({
+                    "xAxis": date,
+                    "lineStyle": { "color": "#a855f7", "type": "dotted", "width": 1 },
+                    "label": { "show": true, "formatter": name, "color": "#a855f7", "fontSize": 8, "position": "insideEndTop", "rotate": 90 }
+                }));
+            }
+        } else {
+            for &(ts, name) in CORE_RELEASES {
+                mark_lines.push(json!({
+                    "xAxis": ts * 1000,
+                    "lineStyle": { "color": "#a855f7", "type": "dotted", "width": 1 },
+                    "label": { "show": true, "formatter": name, "color": "#a855f7", "fontSize": 8, "position": "insideEndTop", "rotate": 90 }
+                }));
+            }
+        }
+    }
+
+    if overlays.events {
+        if is_daily {
+            for &(date, name) in EVENT_DATES {
+                mark_lines.push(json!({
+                    "xAxis": date,
+                    "lineStyle": { "color": "#ef4444", "type": "solid", "width": 2 },
+                    "label": { "show": true, "formatter": name, "color": "#ef4444", "fontSize": 9, "position": "insideEndTop", "rotate": 90 }
+                }));
+            }
+        } else {
+            for &(ts, name) in EVENTS {
+                mark_lines.push(json!({
+                    "xAxis": ts * 1000,
+                    "lineStyle": { "color": "#ef4444", "type": "solid", "width": 2 },
+                    "label": { "show": true, "formatter": name, "color": "#ef4444", "fontSize": 9, "position": "insideEndTop", "rotate": 90 }
+                }));
+            }
+        }
+    }
+
+    // Attach markLines to the first series
+    if !mark_lines.is_empty() {
+        if let Some(series) = obj.get_mut("series") {
+            if let Some(arr) = series.as_array_mut() {
+                if let Some(first) = arr.first_mut() {
+                    if let Some(s) = first.as_object_mut() {
+                        s.insert(
+                            "markLine".into(),
+                            json!({
+                                "silent": true,
+                                "symbol": "none",
+                                "data": mark_lines
+                            }),
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    // --- Price overlay (secondary Y-axis + line series) ---
+    if !overlays.price_data.is_empty() {
+        // Determine the chart's visible time range from existing data
+        let (chart_min_ms, chart_max_ms) = if is_daily {
+            let cats = obj
+                .get("xAxis")
+                .and_then(|x| x.get("data"))
+                .and_then(|d| d.as_array());
+            if let Some(cats) = cats {
+                let parse_date = |s: &str| -> u64 {
+                    chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d")
+                        .map(|d| {
+                            d.and_hms_opt(0, 0, 0)
+                                .unwrap()
+                                .and_utc()
+                                .timestamp() as u64
+                                * 1000
+                        })
+                        .unwrap_or(0)
+                };
+                let first = cats.first().and_then(|v| v.as_str()).unwrap_or("");
+                let last = cats.last().and_then(|v| v.as_str()).unwrap_or("");
+                (parse_date(first), parse_date(last))
+            } else {
+                (0, u64::MAX)
+            }
+        } else {
+            // For time-axis charts, scan first series data for min/max timestamps
+            let mut min_ts = u64::MAX;
+            let mut max_ts = 0u64;
+            if let Some(series) = obj.get("series") {
+                if let Some(first_s) = series.as_array().and_then(|a| a.first()) {
+                    if let Some(data) = first_s.get("data").and_then(|d| d.as_array()) {
+                        for pt in data {
+                            if let Some(arr) = pt.as_array() {
+                                // Handle both u64 and f64 number representations
+                                let ts = arr.first().and_then(|v| {
+                                    v.as_u64().or_else(|| v.as_f64().map(|f| f as u64))
+                                });
+                                if let Some(ts) = ts {
+                                    min_ts = min_ts.min(ts);
+                                    max_ts = max_ts.max(ts);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if min_ts == u64::MAX { min_ts = 0; }
+            (min_ts, max_ts)
+        };
+
+        // Add padding (1 day each side) and filter price data to visible range
+        let range_min = chart_min_ms.saturating_sub(86_400_000);
+        let range_max = chart_max_ms.saturating_add(86_400_000);
+        let filtered_prices: Vec<(u64, f64)> = overlays
+            .price_data
+            .iter()
+            .filter(|&&(ts_ms, _)| ts_ms >= range_min && ts_ms <= range_max)
+            .copied()
+            .collect();
+
+        // Only add overlay if we have price data in range
+        if filtered_prices.is_empty() {
+            return serde_json::to_string(&opt).unwrap_or_default();
+        }
+
+        // Convert existing yAxis to array if it's a single object
+        let y_axis = obj.remove("yAxis");
+        let mut y_axes = match y_axis {
+            Some(serde_json::Value::Array(arr)) => arr,
+            Some(obj_val) => vec![obj_val],
+            None => vec![json!({ "type": "value" })],
+        };
+
+        // Add price Y-axis on the right
+        let price_axis_idx = y_axes.len();
+        y_axes.push(json!({
+            "type": "value",
+            "name": "USD",
+            "nameTextStyle": { "color": "#e6c84e" },
+            "position": "right",
+            "axisLabel": { "color": "#e6c84e", "fontSize": 10 },
+            "axisLine": { "lineStyle": { "color": "#e6c84e" } },
+            "splitLine": { "show": false }
+        }));
+
+        obj.insert("yAxis".into(), json!(y_axes));
+
+        // Ensure existing series explicitly reference yAxisIndex: 0
+        if let Some(series) = obj.get_mut("series") {
+            if let Some(arr) = series.as_array_mut() {
+                for s in arr.iter_mut() {
+                    if let Some(s_obj) = s.as_object_mut() {
+                        s_obj.entry("yAxisIndex").or_insert(json!(0));
+                    }
+                }
+            }
+        }
+
+        // Build price series data using interpolation for smooth coverage.
+        // Price data is daily but chart categories may not align exactly.
+        let price_series_data: Vec<serde_json::Value> = if is_daily {
+            // For daily/category charts: interpolate between price data points.
+            // Convert each category date to a timestamp, then interpolate.
+            let categories = obj
+                .get("xAxis")
+                .and_then(|x| x.get("data"))
+                .and_then(|d| d.as_array())
+                .cloned()
+                .unwrap_or_default();
+
+            // Price data is already sorted by timestamp (blockchain.info returns chronological)
+            categories
+                .iter()
+                .map(|cat| {
+                    let date_str = cat.as_str().unwrap_or_default();
+                    let cat_ms = chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
+                        .map(|d| {
+                            d.and_hms_opt(12, 0, 0) // noon UTC for better matching
+                                .unwrap()
+                                .and_utc()
+                                .timestamp() as u64
+                                * 1000
+                        })
+                        .unwrap_or(0);
+
+                    if cat_ms == 0 {
+                        return json!(null);
+                    }
+
+                    // Binary search for surrounding price points and interpolate
+                    match filtered_prices.binary_search_by_key(&cat_ms, |&(ts, _)| ts) {
+                        Ok(idx) => json!(filtered_prices[idx].1),
+                        Err(idx) => {
+                            if idx == 0 {
+                                // Before first price point
+                                json!(null)
+                            } else if idx >= filtered_prices.len() {
+                                // After last price point — use last known
+                                json!(filtered_prices.last().unwrap().1)
+                            } else {
+                                // Interpolate between surrounding points
+                                let (t0, p0) = filtered_prices[idx - 1];
+                                let (t1, p1) = filtered_prices[idx];
+                                if t1 == t0 {
+                                    json!(p0)
+                                } else {
+                                    let frac = (cat_ms - t0) as f64 / (t1 - t0) as f64;
+                                    let interpolated = p0 + frac * (p1 - p0);
+                                    json!((interpolated * 100.0).round() / 100.0)
+                                }
+                            }
+                        }
+                    }
+                })
+                .collect()
+        } else {
+            // For time-axis charts, use [ts_ms, price] pairs (already filtered)
+            filtered_prices
+                .iter()
+                .map(|&(ts_ms, price)| json!([ts_ms, price]))
+                .collect()
+        };
+
+        // Add price line series on the secondary y-axis
+        let price_series = json!({
+            "name": "Price (USD)",
+            "type": "line",
+            "yAxisIndex": price_axis_idx,
+            "data": price_series_data,
+            "connectNulls": true,
+            "lineStyle": { "color": "#e6c84e", "width": 1.5, "opacity": 0.8 },
+            "itemStyle": { "color": "#e6c84e" },
+            "symbol": "none",
+            "smooth": true,
+            "z": 1
+        });
+
+        if let Some(series) = obj.get_mut("series") {
+            if let Some(arr) = series.as_array_mut() {
+                arr.push(price_series);
+            }
+        }
+
+        // Add Price to legend
+        if let Some(legend) = obj.get_mut("legend") {
+            if let Some(l) = legend.as_object_mut() {
+                l.insert("show".into(), json!(true));
+            }
+        }
+
+    }
+
+    // --- Chain size overlay (secondary Y-axis + line series) ---
+    if !overlays.chain_size_data.is_empty() {
+        // Determine visible range (reuse same logic as price)
+        let (cs_min_ms, cs_max_ms) = if is_daily {
+            let cats = obj
+                .get("xAxis")
+                .and_then(|x| x.get("data"))
+                .and_then(|d| d.as_array());
+            if let Some(cats) = cats {
+                let parse_date = |s: &str| -> u64 {
+                    chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d")
+                        .map(|d| {
+                            d.and_hms_opt(12, 0, 0)
+                                .unwrap()
+                                .and_utc()
+                                .timestamp() as u64
+                                * 1000
+                        })
+                        .unwrap_or(0)
+                };
+                let first = cats.first().and_then(|v| v.as_str()).unwrap_or("");
+                let last = cats.last().and_then(|v| v.as_str()).unwrap_or("");
+                (parse_date(first), parse_date(last))
+            } else {
+                (0, u64::MAX)
+            }
+        } else {
+            let mut min_ts = u64::MAX;
+            let mut max_ts = 0u64;
+            if let Some(series) = obj.get("series") {
+                if let Some(first_s) = series.as_array().and_then(|a| a.first()) {
+                    if let Some(data) = first_s.get("data").and_then(|d| d.as_array()) {
+                        for pt in data {
+                            if let Some(arr) = pt.as_array() {
+                                let ts = arr.first().and_then(|v| {
+                                    v.as_u64().or_else(|| v.as_f64().map(|f| f as u64))
+                                });
+                                if let Some(ts) = ts {
+                                    min_ts = min_ts.min(ts);
+                                    max_ts = max_ts.max(ts);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if min_ts == u64::MAX { min_ts = 0; }
+            (min_ts, max_ts)
+        };
+
+        let cs_range_min = cs_min_ms.saturating_sub(86_400_000);
+        let cs_range_max = cs_max_ms.saturating_add(86_400_000);
+        let filtered_cs: Vec<(u64, f64)> = overlays
+            .chain_size_data
+            .iter()
+            .filter(|&&(ts_ms, _)| ts_ms >= cs_range_min && ts_ms <= cs_range_max)
+            .copied()
+            .collect();
+
+        if !filtered_cs.is_empty() {
+            // Add or extend yAxis array
+            let y_axis_val = obj.remove("yAxis");
+            let mut y_axes = match y_axis_val {
+                Some(serde_json::Value::Array(arr)) => arr,
+                Some(obj_val) => vec![obj_val],
+                None => vec![json!({ "type": "value" })],
+            };
+
+            let cs_axis_idx = y_axes.len();
+            y_axes.push(json!({
+                "type": "value",
+                "name": "GB",
+                "nameTextStyle": { "color": "#10b981" },
+                "position": "right",
+                "offset": if y_axes.len() > 1 { 60 } else { 0 },
+                "axisLabel": { "color": "#10b981", "fontSize": 10 },
+                "axisLine": { "lineStyle": { "color": "#10b981" } },
+                "splitLine": { "show": false }
+            }));
+
+            obj.insert("yAxis".into(), json!(y_axes));
+
+            // Ensure existing series have explicit yAxisIndex
+            if let Some(series) = obj.get_mut("series") {
+                if let Some(arr) = series.as_array_mut() {
+                    for s in arr.iter_mut() {
+                        if let Some(s_obj) = s.as_object_mut() {
+                            s_obj.entry("yAxisIndex").or_insert(json!(0));
+                        }
+                    }
+                }
+            }
+
+            // Widen grid for the extra axis
+            if let Some(grid) = obj.get_mut("grid") {
+                if let Some(g) = grid.as_object_mut() {
+                    let current = g.get("right").and_then(|v| v.as_u64()).unwrap_or(20);
+                    g.insert("right".into(), json!(current.max(70) + if cs_axis_idx > 1 { 60 } else { 0 }));
+                }
+            }
+
+            let cs_series_data: Vec<serde_json::Value> = if is_daily {
+                let categories = obj
+                    .get("xAxis")
+                    .and_then(|x| x.get("data"))
+                    .and_then(|d| d.as_array())
+                    .cloned()
+                    .unwrap_or_default();
+
+                categories
+                    .iter()
+                    .map(|cat| {
+                        let date_str = cat.as_str().unwrap_or_default();
+                        let cat_ms = chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
+                            .map(|d| {
+                                d.and_hms_opt(12, 0, 0)
+                                    .unwrap()
+                                    .and_utc()
+                                    .timestamp() as u64
+                                    * 1000
+                            })
+                            .unwrap_or(0);
+
+                        if cat_ms == 0 {
+                            return json!(null);
+                        }
+
+                        match filtered_cs.binary_search_by_key(&cat_ms, |&(ts, _)| ts) {
+                            Ok(idx) => json!(filtered_cs[idx].1),
+                            Err(idx) => {
+                                if idx == 0 {
+                                    json!(null)
+                                } else if idx >= filtered_cs.len() {
+                                    json!(filtered_cs.last().unwrap().1)
+                                } else {
+                                    let (t0, v0) = filtered_cs[idx - 1];
+                                    let (t1, v1) = filtered_cs[idx];
+                                    if t1 == t0 {
+                                        json!(v0)
+                                    } else {
+                                        let frac = (cat_ms - t0) as f64 / (t1 - t0) as f64;
+                                        json!((( v0 + frac * (v1 - v0)) * 100.0).round() / 100.0)
+                                    }
+                                }
+                            }
+                        }
+                    })
+                    .collect()
+            } else {
+                filtered_cs
+                    .iter()
+                    .map(|&(ts_ms, gb)| json!([ts_ms, gb]))
+                    .collect()
+            };
+
+            let cs_series = json!({
+                "name": "Chain Size (GB)",
+                "type": "line",
+                "yAxisIndex": cs_axis_idx,
+                "data": cs_series_data,
+                "connectNulls": true,
+                "lineStyle": { "color": "#10b981", "width": 1.5, "opacity": 0.8 },
+                "itemStyle": { "color": "#10b981" },
+                "symbol": "none",
+                "smooth": true,
+                "z": 1
+            });
+
+            if let Some(series) = obj.get_mut("series") {
+                if let Some(arr) = series.as_array_mut() {
+                    arr.push(cs_series);
+                }
+            }
+
+            if let Some(legend) = obj.get_mut("legend") {
+                if let Some(l) = legend.as_object_mut() {
+                    l.insert("show".into(), json!(true));
+                }
+            }
+        }
+    }
+
+    serde_json::to_string(&opt).unwrap_or_default()
 }
 
 // ---------------------------------------------------------------------------
@@ -1605,6 +2273,593 @@ pub fn taproot_chart_daily(days: &[DailyAggregate]) -> String {
                 "name": "7-day MA", "type": "line", "sampling": "lttb", "data": ma_vals,
                 "lineStyle": { "width": 2, "color": MA_COLOR },
                 "itemStyle": { "color": MA_COLOR }, "symbol": "none"
+            }
+        ]
+    }))
+}
+
+/// OP_RETURN bytes as percentage of total block size (per-block).
+pub fn op_return_block_share_chart(blocks: &[OpReturnBlock]) -> String {
+    if blocks.is_empty() {
+        return no_data_chart("OP_RETURN Block Share");
+    }
+
+    let vals: Vec<f64> = blocks
+        .iter()
+        .map(|b| {
+            if b.size > 0 {
+                (b.op_return_bytes as f64 / b.size as f64 * 100.0 * 100.0).round() / 100.0
+            } else {
+                0.0
+            }
+        })
+        .collect();
+
+    let raw: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(vals.iter())
+        .map(|(b, v)| json!([ts_ms(b.timestamp), v]))
+        .collect();
+
+    let ma = moving_average(&vals, 144);
+    let ma_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(ma.iter())
+        .filter_map(|(b, m)| m.map(|v| json!([ts_ms(b.timestamp), v])))
+        .collect();
+
+    let has_ma = show_ma(blocks.len());
+
+    let mut series = vec![json!({
+        "name": "OP_RETURN %", "type": "line", "sampling": "lttb", "data": raw,
+        "areaStyle": { "color": RUNES_COLOR, "opacity": 0.15 },
+        "lineStyle": { "width": if has_ma { 1.0 } else { 1.5 }, "color": RUNES_COLOR },
+        "itemStyle": { "color": RUNES_COLOR }, "symbol": "none",
+        "opacity": if has_ma { 0.4 } else { 1.0 }
+    })];
+    if has_ma {
+        series.push(json!({
+            "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_data,
+            "lineStyle": { "width": 2, "color": MA_COLOR },
+            "itemStyle": { "color": MA_COLOR }, "symbol": "none"
+        }));
+    }
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("% of Block"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": has_ma },
+        "series": series
+    }))
+}
+
+/// OP_RETURN bytes as percentage of total block size (daily).
+pub fn op_return_block_share_chart_daily(days: &[DailyAggregate]) -> String {
+    if days.is_empty() {
+        return no_data_chart("OP_RETURN Block Share");
+    }
+
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    let vals: Vec<f64> = days
+        .iter()
+        .map(|d| {
+            let total_size = d.avg_size * d.block_count as f64;
+            if total_size > 0.0 {
+                (d.total_op_return_bytes as f64 / total_size * 100.0 * 100.0).round() / 100.0
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    let ma = moving_average(&vals, 7);
+    let ma_vals: Vec<serde_json::Value> = ma
+        .iter()
+        .map(|v| match v {
+            Some(x) => json!(x),
+            None => json!(null),
+        })
+        .collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": y_axis("% of Block"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "series": [
+            {
+                "name": "OP_RETURN %", "type": "line", "sampling": "lttb", "data": vals,
+                "areaStyle": { "color": RUNES_COLOR, "opacity": 0.15 },
+                "lineStyle": { "width": 1, "color": RUNES_COLOR },
+                "itemStyle": { "color": RUNES_COLOR }, "symbol": "none", "opacity": 0.4
+            },
+            {
+                "name": "7-day MA", "type": "line", "sampling": "lttb", "data": ma_vals,
+                "lineStyle": { "width": 2, "color": MA_COLOR },
+                "itemStyle": { "color": MA_COLOR }, "symbol": "none"
+            }
+        ]
+    }))
+}
+
+const DISK_COLOR: &str = "#e74c3c"; // Red for disk size
+
+/// Cumulative chain size over time (per-block).
+/// `disk_size_gb` is the current size_on_disk from getblockchaininfo.
+pub fn chain_size_chart(blocks: &[BlockSummary], disk_size_gb: f64) -> String {
+    if blocks.is_empty() {
+        return no_data_chart("Chain Size");
+    }
+
+    let mut cumulative: f64 = 0.0;
+    let block_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .map(|b| {
+            cumulative += b.size as f64 / 1_000_000_000.0;
+            json!([ts_ms(b.timestamp), (cumulative * 1000.0).round() / 1000.0])
+        })
+        .collect();
+
+    // Estimate disk size at each point using the known ratio at the tip
+    let block_total = cumulative;
+    let ratio = if block_total > 0.0 { disk_size_gb / block_total } else { 1.0 };
+    let mut cumulative2: f64 = 0.0;
+    let disk_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .map(|b| {
+            cumulative2 += b.size as f64 / 1_000_000_000.0;
+            let estimated = cumulative2 * ratio;
+            json!([ts_ms(b.timestamp), (estimated * 1000.0).round() / 1000.0])
+        })
+        .collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("GB"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            {
+                "name": "Block Data", "type": "line", "sampling": "lttb", "data": block_data,
+                "areaStyle": { "color": DATA_COLOR, "opacity": 0.1 },
+                "lineStyle": { "width": 2, "color": DATA_COLOR },
+                "itemStyle": { "color": DATA_COLOR }, "symbol": "none"
+            },
+            {
+                "name": "Disk Size (est.)", "type": "line", "sampling": "lttb", "data": disk_data,
+                "lineStyle": { "width": 1.5, "color": DISK_COLOR, "type": "dashed" },
+                "itemStyle": { "color": DISK_COLOR }, "symbol": "none"
+            }
+        ]
+    }))
+}
+
+/// Cumulative chain size over time (daily).
+pub fn chain_size_chart_daily(days: &[DailyAggregate], disk_size_gb: f64) -> String {
+    if days.is_empty() {
+        return no_data_chart("Chain Size");
+    }
+
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    let mut cumulative: f64 = 0.0;
+    let block_data: Vec<f64> = days
+        .iter()
+        .map(|d| {
+            cumulative += d.avg_size * d.block_count as f64 / 1_000_000_000.0;
+            (cumulative * 1000.0).round() / 1000.0
+        })
+        .collect();
+
+    let block_total = cumulative;
+    let ratio = if block_total > 0.0 { disk_size_gb / block_total } else { 1.0 };
+    let mut cumulative2: f64 = 0.0;
+    let disk_data: Vec<f64> = days
+        .iter()
+        .map(|d| {
+            cumulative2 += d.avg_size * d.block_count as f64 / 1_000_000_000.0;
+            let estimated = cumulative2 * ratio;
+            (estimated * 1000.0).round() / 1000.0
+        })
+        .collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": y_axis("GB"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            {
+                "name": "Block Data", "type": "line", "sampling": "lttb", "data": block_data,
+                "areaStyle": { "color": DATA_COLOR, "opacity": 0.1 },
+                "lineStyle": { "width": 2, "color": DATA_COLOR },
+                "itemStyle": { "color": DATA_COLOR }, "symbol": "none"
+            },
+            {
+                "name": "Disk Size (est.)", "type": "line", "sampling": "lttb", "data": disk_data,
+                "lineStyle": { "width": 1.5, "color": DISK_COLOR, "type": "dashed" },
+                "itemStyle": { "color": DISK_COLOR }, "symbol": "none"
+            }
+        ]
+    }))
+}
+
+const SEGWIT_V0_COLOR: &str = "#3b82f6"; // Blue for SegWit v0
+const SEGWIT_V1_COLOR: &str = "#22c55e"; // Green for Taproot v1
+
+/// SegWit v0 vs Taproot v1 stacked area chart (per-block).
+pub fn witness_version_chart(blocks: &[BlockSummary]) -> String {
+    if blocks.is_empty() {
+        return no_data_chart("Witness Versions");
+    }
+
+    // v0 = segwit_spend_count - taproot_spend_count (segwit includes all witness spends)
+    // If segwit_spend_count already excludes taproot, use it directly
+    let v0_vals: Vec<f64> = blocks
+        .iter()
+        .map(|b| {
+            let v0 = b.segwit_spend_count.saturating_sub(b.taproot_spend_count);
+            v0 as f64
+        })
+        .collect();
+    let v1_vals: Vec<f64> = blocks
+        .iter()
+        .map(|b| b.taproot_spend_count as f64)
+        .collect();
+
+    let v0_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(v0_vals.iter())
+        .map(|(b, v)| json!([ts_ms(b.timestamp), v]))
+        .collect();
+    let v1_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(v1_vals.iter())
+        .map(|(b, v)| json!([ts_ms(b.timestamp), v]))
+        .collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("Spends"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            {
+                "name": "SegWit v0", "type": "line", "sampling": "lttb", "data": v0_data,
+                "stack": "witness", "areaStyle": { "opacity": 0.5 },
+                "lineStyle": { "width": 0.5, "color": SEGWIT_V0_COLOR },
+                "itemStyle": { "color": SEGWIT_V0_COLOR }, "symbol": "none"
+            },
+            {
+                "name": "Taproot v1", "type": "line", "sampling": "lttb", "data": v1_data,
+                "stack": "witness", "areaStyle": { "opacity": 0.5 },
+                "lineStyle": { "width": 0.5, "color": SEGWIT_V1_COLOR },
+                "itemStyle": { "color": SEGWIT_V1_COLOR }, "symbol": "none"
+            }
+        ]
+    }))
+}
+
+/// SegWit v0 vs Taproot v1 stacked area chart (daily).
+pub fn witness_version_chart_daily(days: &[DailyAggregate]) -> String {
+    if days.is_empty() {
+        return no_data_chart("Witness Versions");
+    }
+
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    let v0_vals: Vec<f64> = days
+        .iter()
+        .map(|d| {
+            (d.avg_segwit_spend_count - d.avg_taproot_spend_count).max(0.0)
+        })
+        .collect();
+    let v1_vals: Vec<f64> = days
+        .iter()
+        .map(|d| d.avg_taproot_spend_count)
+        .collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": y_axis("Avg Spends"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            {
+                "name": "SegWit v0", "type": "line", "sampling": "lttb", "data": v0_vals,
+                "stack": "witness", "areaStyle": { "opacity": 0.5 },
+                "lineStyle": { "width": 0.5, "color": SEGWIT_V0_COLOR },
+                "itemStyle": { "color": SEGWIT_V0_COLOR }, "symbol": "none"
+            },
+            {
+                "name": "Taproot v1", "type": "line", "sampling": "lttb", "data": v1_vals,
+                "stack": "witness", "areaStyle": { "opacity": 0.5 },
+                "lineStyle": { "width": 0.5, "color": SEGWIT_V1_COLOR },
+                "itemStyle": { "color": SEGWIT_V1_COLOR }, "symbol": "none"
+            }
+        ]
+    }))
+}
+
+/// Witness version percentage share — v0% vs v1% of total witness spends (per-block).
+pub fn witness_version_pct_chart(blocks: &[BlockSummary]) -> String {
+    if blocks.is_empty() {
+        return no_data_chart("Witness Version Share");
+    }
+
+    let v0_pct: Vec<f64> = blocks
+        .iter()
+        .map(|b| {
+            let total = b.segwit_spend_count;
+            if total > 0 {
+                let v0 = total.saturating_sub(b.taproot_spend_count);
+                (v0 as f64 / total as f64 * 100.0 * 100.0).round() / 100.0
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    let v1_pct: Vec<f64> = blocks
+        .iter()
+        .map(|b| {
+            let total = b.segwit_spend_count;
+            if total > 0 {
+                (b.taproot_spend_count as f64 / total as f64 * 100.0 * 100.0).round() / 100.0
+            } else {
+                0.0
+            }
+        })
+        .collect();
+
+    let v0_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(v0_pct.iter())
+        .map(|(b, v)| json!([ts_ms(b.timestamp), v]))
+        .collect();
+    let v1_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(v1_pct.iter())
+        .map(|(b, v)| json!([ts_ms(b.timestamp), v]))
+        .collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": { "type": "value", "name": "%", "max": 100,
+            "nameTextStyle": { "color": "#aaa" },
+            "axisLabel": { "color": "#aaa" },
+            "axisLine": { "lineStyle": { "color": "#555" } },
+            "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.20)", "type": "dashed" } }
+        },
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            {
+                "name": "SegWit v0", "type": "line", "sampling": "lttb", "data": v0_data,
+                "stack": "pct", "areaStyle": { "opacity": 0.6 },
+                "lineStyle": { "width": 0, "color": SEGWIT_V0_COLOR },
+                "itemStyle": { "color": SEGWIT_V0_COLOR }, "symbol": "none"
+            },
+            {
+                "name": "Taproot v1", "type": "line", "sampling": "lttb", "data": v1_data,
+                "stack": "pct", "areaStyle": { "opacity": 0.6 },
+                "lineStyle": { "width": 0, "color": SEGWIT_V1_COLOR },
+                "itemStyle": { "color": SEGWIT_V1_COLOR }, "symbol": "none"
+            }
+        ]
+    }))
+}
+
+/// Witness version percentage share (daily).
+pub fn witness_version_pct_chart_daily(days: &[DailyAggregate]) -> String {
+    if days.is_empty() {
+        return no_data_chart("Witness Version Share");
+    }
+
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    let v0_pct: Vec<f64> = days
+        .iter()
+        .map(|d| {
+            let total = d.avg_segwit_spend_count;
+            if total > 0.0 {
+                let v0 = (total - d.avg_taproot_spend_count).max(0.0);
+                (v0 / total * 100.0 * 100.0).round() / 100.0
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    let v1_pct: Vec<f64> = days
+        .iter()
+        .map(|d| {
+            let total = d.avg_segwit_spend_count;
+            if total > 0.0 {
+                (d.avg_taproot_spend_count / total * 100.0 * 100.0).round() / 100.0
+            } else {
+                0.0
+            }
+        })
+        .collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": { "type": "value", "name": "%", "max": 100,
+            "nameTextStyle": { "color": "#aaa" },
+            "axisLabel": { "color": "#aaa" },
+            "axisLine": { "lineStyle": { "color": "#555" } },
+            "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.20)", "type": "dashed" } }
+        },
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            {
+                "name": "SegWit v0", "type": "line", "sampling": "lttb", "data": v0_pct,
+                "stack": "pct", "areaStyle": { "opacity": 0.6 },
+                "lineStyle": { "width": 0, "color": SEGWIT_V0_COLOR },
+                "itemStyle": { "color": SEGWIT_V0_COLOR }, "symbol": "none"
+            },
+            {
+                "name": "Taproot v1", "type": "line", "sampling": "lttb", "data": v1_pct,
+                "stack": "pct", "areaStyle": { "opacity": 0.6 },
+                "lineStyle": { "width": 0, "color": SEGWIT_V1_COLOR },
+                "itemStyle": { "color": SEGWIT_V1_COLOR }, "symbol": "none"
+            }
+        ]
+    }))
+}
+
+/// Witness version as percentage of all transactions (per-block).
+pub fn witness_version_tx_pct_chart(blocks: &[BlockSummary]) -> String {
+    if blocks.is_empty() {
+        return no_data_chart("Witness Tx Share");
+    }
+
+    let v0_pct: Vec<f64> = blocks
+        .iter()
+        .map(|b| {
+            if b.tx_count > 1 {
+                let v0 = b.segwit_spend_count.saturating_sub(b.taproot_spend_count);
+                (v0 as f64 / (b.tx_count - 1) as f64 * 100.0 * 100.0).round() / 100.0
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    let v1_pct: Vec<f64> = blocks
+        .iter()
+        .map(|b| {
+            if b.tx_count > 1 {
+                (b.taproot_spend_count as f64 / (b.tx_count - 1) as f64 * 100.0 * 100.0).round()
+                    / 100.0
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    let legacy_pct: Vec<f64> = v0_pct
+        .iter()
+        .zip(v1_pct.iter())
+        .map(|(v0, v1)| (100.0 - v0 - v1).max(0.0))
+        .collect();
+
+    let v0_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(v0_pct.iter())
+        .map(|(b, v)| json!([ts_ms(b.timestamp), v]))
+        .collect();
+    let v1_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(v1_pct.iter())
+        .map(|(b, v)| json!([ts_ms(b.timestamp), v]))
+        .collect();
+    let legacy_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(legacy_pct.iter())
+        .map(|(b, v)| json!([ts_ms(b.timestamp), v]))
+        .collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": { "type": "value", "name": "% of Txs", "max": 100,
+            "nameTextStyle": { "color": "#aaa" },
+            "axisLabel": { "color": "#aaa" },
+            "axisLine": { "lineStyle": { "color": "#555" } },
+            "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.20)", "type": "dashed" } }
+        },
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            {
+                "name": "Legacy", "type": "line", "sampling": "lttb", "data": legacy_data,
+                "stack": "txpct", "areaStyle": { "opacity": 0.4 },
+                "lineStyle": { "width": 0, "color": "#888" },
+                "itemStyle": { "color": "#888" }, "symbol": "none"
+            },
+            {
+                "name": "SegWit v0", "type": "line", "sampling": "lttb", "data": v0_data,
+                "stack": "txpct", "areaStyle": { "opacity": 0.6 },
+                "lineStyle": { "width": 0, "color": SEGWIT_V0_COLOR },
+                "itemStyle": { "color": SEGWIT_V0_COLOR }, "symbol": "none"
+            },
+            {
+                "name": "Taproot v1", "type": "line", "sampling": "lttb", "data": v1_data,
+                "stack": "txpct", "areaStyle": { "opacity": 0.6 },
+                "lineStyle": { "width": 0, "color": SEGWIT_V1_COLOR },
+                "itemStyle": { "color": SEGWIT_V1_COLOR }, "symbol": "none"
+            }
+        ]
+    }))
+}
+
+/// Witness version as percentage of all transactions (daily).
+pub fn witness_version_tx_pct_chart_daily(days: &[DailyAggregate]) -> String {
+    if days.is_empty() {
+        return no_data_chart("Witness Tx Share");
+    }
+
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    let v0_pct: Vec<f64> = days
+        .iter()
+        .map(|d| {
+            if d.avg_tx_count > 1.0 {
+                let v0 = (d.avg_segwit_spend_count - d.avg_taproot_spend_count).max(0.0);
+                (v0 / (d.avg_tx_count - 1.0) * 100.0 * 100.0).round() / 100.0
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    let v1_pct: Vec<f64> = days
+        .iter()
+        .map(|d| {
+            if d.avg_tx_count > 1.0 {
+                (d.avg_taproot_spend_count / (d.avg_tx_count - 1.0) * 100.0 * 100.0).round()
+                    / 100.0
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    let legacy_pct: Vec<f64> = v0_pct
+        .iter()
+        .zip(v1_pct.iter())
+        .map(|(v0, v1)| (100.0 - v0 - v1).max(0.0))
+        .collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": { "type": "value", "name": "% of Txs", "max": 100,
+            "nameTextStyle": { "color": "#aaa" },
+            "axisLabel": { "color": "#aaa" },
+            "axisLine": { "lineStyle": { "color": "#555" } },
+            "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.20)", "type": "dashed" } }
+        },
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            {
+                "name": "Legacy", "type": "line", "sampling": "lttb", "data": legacy_pct,
+                "stack": "txpct", "areaStyle": { "opacity": 0.4 },
+                "lineStyle": { "width": 0, "color": "#888" },
+                "itemStyle": { "color": "#888" }, "symbol": "none"
+            },
+            {
+                "name": "SegWit v0", "type": "line", "sampling": "lttb", "data": v0_pct,
+                "stack": "txpct", "areaStyle": { "opacity": 0.6 },
+                "lineStyle": { "width": 0, "color": SEGWIT_V0_COLOR },
+                "itemStyle": { "color": SEGWIT_V0_COLOR }, "symbol": "none"
+            },
+            {
+                "name": "Taproot v1", "type": "line", "sampling": "lttb", "data": v1_pct,
+                "stack": "txpct", "areaStyle": { "opacity": 0.6 },
+                "lineStyle": { "width": 0, "color": SEGWIT_V1_COLOR },
+                "itemStyle": { "color": SEGWIT_V1_COLOR }, "symbol": "none"
             }
         ]
     }))

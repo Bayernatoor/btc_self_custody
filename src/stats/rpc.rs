@@ -413,4 +413,42 @@ impl BitcoinRpc {
         let price: PriceInfo = resp.json().await?;
         Ok(price)
     }
+
+    /// Fetch full historical daily BTC/USD prices from blockchain.info.
+    /// Returns Vec of (timestamp_ms, price_usd) covering all available history.
+    pub async fn fetch_price_history_all(
+        &self,
+    ) -> Result<Vec<(u64, f64)>, StatsError> {
+        let url =
+            "https://api.blockchain.info/charts/market-price?timespan=all&format=json";
+        let resp = self
+            .client
+            .get(url)
+            .send()
+            .await?;
+
+        if !resp.status().is_success() {
+            return Err(StatsError::Rpc(format!(
+                "blockchain.info returned {}",
+                resp.status()
+            )));
+        }
+
+        let body: serde_json::Value = resp.json().await?;
+        let values = body["values"]
+            .as_array()
+            .ok_or_else(|| StatsError::Rpc("No values array in blockchain.info response".into()))?;
+
+        let result: Vec<(u64, f64)> = values
+            .iter()
+            .filter_map(|p| {
+                let obj = p.as_object()?;
+                let ts = obj.get("x")?.as_u64()?;
+                let price = obj.get("y")?.as_f64()?;
+                Some((ts * 1000, price))
+            })
+            .collect();
+
+        Ok(result)
+    }
 }

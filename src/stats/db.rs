@@ -349,6 +349,7 @@ pub struct OpReturnRow {
     pub height: u64,
     pub timestamp: u64,
     pub tx_count: u64,
+    pub size: u64,
     pub op_return_count: u64,
     pub op_return_bytes: u64,
     pub runes_count: u64,
@@ -363,7 +364,7 @@ pub fn query_op_returns(
     to: u64,
 ) -> rusqlite::Result<Vec<OpReturnRow>> {
     let mut stmt = conn.prepare(
-        "SELECT height, timestamp, tx_count, op_return_count, op_return_bytes,
+        "SELECT height, timestamp, tx_count, size, op_return_count, op_return_bytes,
                 runes_count, runes_bytes, data_carrier_count, data_carrier_bytes
          FROM blocks WHERE height >= ?1 AND height <= ?2
          ORDER BY height ASC",
@@ -373,12 +374,13 @@ pub fn query_op_returns(
             height: row.get(0)?,
             timestamp: row.get(1)?,
             tx_count: row.get(2)?,
-            op_return_count: row.get(3)?,
-            op_return_bytes: row.get(4)?,
-            runes_count: row.get(5)?,
-            runes_bytes: row.get(6)?,
-            data_carrier_count: row.get(7)?,
-            data_carrier_bytes: row.get(8)?,
+            size: row.get(3)?,
+            op_return_count: row.get(4)?,
+            op_return_bytes: row.get(5)?,
+            runes_count: row.get(6)?,
+            runes_bytes: row.get(7)?,
+            data_carrier_count: row.get(8)?,
+            data_carrier_bytes: row.get(9)?,
         })
     })?;
     rows.collect()

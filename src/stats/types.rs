@@ -62,6 +62,7 @@ pub struct OpReturnBlock {
     pub height: u64,
     pub timestamp: u64,
     pub tx_count: u64,
+    pub size: u64,
     pub op_return_count: u64,
     pub op_return_bytes: u64,
     pub runes_count: u64,
@@ -162,6 +163,13 @@ pub struct LiveNetwork {
     pub utxo_count: u64,
     pub chain_size_gb: f64,
     pub hashrate: f64,
+}
+
+/// Historical price point (timestamp_ms, price_usd).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PricePoint {
+    pub timestamp_ms: u64,
+    pub price_usd: f64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
