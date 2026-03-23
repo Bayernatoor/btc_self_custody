@@ -12,7 +12,7 @@ use super::rpc::Block;
 
 /// Bump this when adding new columns that require re-fetching existing blocks.
 /// The backfill loop processes all blocks with backfill_version < BACKFILL_VERSION.
-pub const BACKFILL_VERSION: u64 = 2;
+pub const BACKFILL_VERSION: u64 = 3;
 
 pub fn open(path: &Path) -> rusqlite::Result<Connection> {
     let conn = Connection::open(path)?;
@@ -97,6 +97,45 @@ pub fn open(path: &Path) -> rusqlite::Result<Connection> {
         )?;
     }
 
+    // Migration: add omni/counterparty protocol columns
+    let has_omni: bool = conn
+        .prepare("SELECT omni_count FROM blocks LIMIT 0")
+        .is_ok();
+    if !has_omni {
+        tracing::info!(
+            "Migrating: adding omni_count, omni_bytes, counterparty_count, counterparty_bytes columns"
+        );
+        conn.execute_batch(
+            "ALTER TABLE blocks ADD COLUMN omni_count INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE blocks ADD COLUMN omni_bytes INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE blocks ADD COLUMN counterparty_count INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE blocks ADD COLUMN counterparty_bytes INTEGER NOT NULL DEFAULT 0;",
+        )?;
+    }
+
+    // Migration: add output type counts, tx metrics, and witness size columns
+    let has_p2pkh: bool = conn
+        .prepare("SELECT p2pkh_count FROM blocks LIMIT 0")
+        .is_ok();
+    if !has_p2pkh {
+        tracing::info!(
+            "Migrating: adding output type counts, input/output counts, rbf_count, witness_bytes"
+        );
+        conn.execute_batch(
+            "ALTER TABLE blocks ADD COLUMN p2pk_count INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE blocks ADD COLUMN p2pkh_count INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE blocks ADD COLUMN p2sh_count INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE blocks ADD COLUMN p2wpkh_count INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE blocks ADD COLUMN p2wsh_count INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE blocks ADD COLUMN p2tr_count INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE blocks ADD COLUMN unknown_script_count INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE blocks ADD COLUMN input_count INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE blocks ADD COLUMN output_count INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE blocks ADD COLUMN rbf_count INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE blocks ADD COLUMN witness_bytes INTEGER NOT NULL DEFAULT 0;",
+        )?;
+    }
+
     // Migration: add backfill_version column if missing
     // Tracks which backfill pass has been applied. Blocks with
     // backfill_version < BACKFILL_VERSION are re-fetched on startup.
@@ -135,11 +174,12 @@ pub fn insert_blocks(
             "INSERT OR IGNORE INTO blocks
              (height, hash, timestamp, tx_count, size, weight, difficulty,
               op_return_count, op_return_bytes, runes_count, runes_bytes,
+              omni_count, omni_bytes, counterparty_count, counterparty_bytes,
               data_carrier_count, data_carrier_bytes, version, total_fees, miner,
               median_fee, median_fee_rate, coinbase_locktime, coinbase_sequence,
               segwit_spend_count, taproot_spend_count,
               backfill_version)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27)",
         )?;
         for block in blocks {
             stmt.execute(params![
@@ -154,6 +194,10 @@ pub fn insert_blocks(
                 block.op_return_bytes,
                 block.runes_count,
                 block.runes_bytes,
+                block.omni_count,
+                block.omni_bytes,
+                block.counterparty_count,
+                block.counterparty_bytes,
                 block.data_carrier_count,
                 block.data_carrier_bytes,
                 block.version,
@@ -203,7 +247,7 @@ pub fn update_block_extras(
     let tx = conn.unchecked_transaction()?;
     {
         let mut stmt = tx.prepare_cached(
-            "UPDATE blocks SET version = ?1, total_fees = ?2, miner = ?3, median_fee = ?4, median_fee_rate = ?5, coinbase_locktime = ?6, coinbase_sequence = ?7, segwit_spend_count = ?8, taproot_spend_count = ?9, backfill_version = ?10 WHERE height = ?11",
+            "UPDATE blocks SET version = ?1, total_fees = ?2, miner = ?3, median_fee = ?4, median_fee_rate = ?5, coinbase_locktime = ?6, coinbase_sequence = ?7, segwit_spend_count = ?8, taproot_spend_count = ?9, omni_count = ?10, omni_bytes = ?11, counterparty_count = ?12, counterparty_bytes = ?13, runes_count = ?14, runes_bytes = ?15, data_carrier_count = ?16, data_carrier_bytes = ?17, backfill_version = ?18 WHERE height = ?19",
         )?;
         for block in blocks {
             stmt.execute(params![
@@ -216,6 +260,14 @@ pub fn update_block_extras(
                 block.coinbase_sequence,
                 block.segwit_spend_count,
                 block.taproot_spend_count,
+                block.omni_count,
+                block.omni_bytes,
+                block.counterparty_count,
+                block.counterparty_bytes,
+                block.runes_count,
+                block.runes_bytes,
+                block.data_carrier_count,
+                block.data_carrier_bytes,
                 BACKFILL_VERSION,
                 block.height
             ])?;
@@ -354,6 +406,10 @@ pub struct OpReturnRow {
     pub op_return_bytes: u64,
     pub runes_count: u64,
     pub runes_bytes: u64,
+    pub omni_count: u64,
+    pub omni_bytes: u64,
+    pub counterparty_count: u64,
+    pub counterparty_bytes: u64,
     pub data_carrier_count: u64,
     pub data_carrier_bytes: u64,
 }
@@ -365,7 +421,9 @@ pub fn query_op_returns(
 ) -> rusqlite::Result<Vec<OpReturnRow>> {
     let mut stmt = conn.prepare(
         "SELECT height, timestamp, tx_count, size, op_return_count, op_return_bytes,
-                runes_count, runes_bytes, data_carrier_count, data_carrier_bytes
+                runes_count, runes_bytes, omni_count, omni_bytes,
+                counterparty_count, counterparty_bytes,
+                data_carrier_count, data_carrier_bytes
          FROM blocks WHERE height >= ?1 AND height <= ?2
          ORDER BY height ASC",
     )?;
@@ -379,8 +437,12 @@ pub fn query_op_returns(
             op_return_bytes: row.get(5)?,
             runes_count: row.get(6)?,
             runes_bytes: row.get(7)?,
-            data_carrier_count: row.get(8)?,
-            data_carrier_bytes: row.get(9)?,
+            omni_count: row.get(8)?,
+            omni_bytes: row.get(9)?,
+            counterparty_count: row.get(10)?,
+            counterparty_bytes: row.get(11)?,
+            data_carrier_count: row.get(12)?,
+            data_carrier_bytes: row.get(13)?,
         })
     })?;
     rows.collect()
@@ -396,9 +458,13 @@ pub struct DailyRow {
     pub avg_difficulty: f64,
     pub total_op_return_count: u64,
     pub total_runes_count: u64,
+    pub total_omni_count: u64,
+    pub total_counterparty_count: u64,
     pub total_data_carrier_count: u64,
     pub total_op_return_bytes: u64,
     pub total_runes_bytes: u64,
+    pub total_omni_bytes: u64,
+    pub total_counterparty_bytes: u64,
     pub total_data_carrier_bytes: u64,
     pub total_fees: u64,
     pub avg_segwit_spend_count: f64,
@@ -414,8 +480,10 @@ pub fn query_daily_aggregates(
         "SELECT date(datetime(timestamp, 'unixepoch')) as day,
                 COUNT(*) as block_count,
                 AVG(size), AVG(weight), AVG(tx_count), AVG(difficulty),
-                SUM(op_return_count), SUM(runes_count), SUM(data_carrier_count),
-                SUM(op_return_bytes), SUM(runes_bytes), SUM(data_carrier_bytes),
+                SUM(op_return_count), SUM(runes_count), SUM(omni_count),
+                SUM(counterparty_count), SUM(data_carrier_count),
+                SUM(op_return_bytes), SUM(runes_bytes), SUM(omni_bytes),
+                SUM(counterparty_bytes), SUM(data_carrier_bytes),
                 SUM(total_fees),
                 AVG(segwit_spend_count), AVG(taproot_spend_count)
          FROM blocks
@@ -433,13 +501,17 @@ pub fn query_daily_aggregates(
             avg_difficulty: row.get(5)?,
             total_op_return_count: row.get(6)?,
             total_runes_count: row.get(7)?,
-            total_data_carrier_count: row.get(8)?,
-            total_op_return_bytes: row.get(9)?,
-            total_runes_bytes: row.get(10)?,
-            total_data_carrier_bytes: row.get(11)?,
-            total_fees: row.get(12)?,
-            avg_segwit_spend_count: row.get(13)?,
-            avg_taproot_spend_count: row.get(14)?,
+            total_omni_count: row.get(8)?,
+            total_counterparty_count: row.get(9)?,
+            total_data_carrier_count: row.get(10)?,
+            total_op_return_bytes: row.get(11)?,
+            total_runes_bytes: row.get(12)?,
+            total_omni_bytes: row.get(13)?,
+            total_counterparty_bytes: row.get(14)?,
+            total_data_carrier_bytes: row.get(15)?,
+            total_fees: row.get(16)?,
+            avg_segwit_spend_count: row.get(17)?,
+            avg_taproot_spend_count: row.get(18)?,
         })
     })?;
     rows.collect()
