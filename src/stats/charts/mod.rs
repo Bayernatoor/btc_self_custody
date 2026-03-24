@@ -70,7 +70,8 @@ pub(crate) fn chart_defaults() -> serde_json::Value {
             },
             "iconStyle": { "borderColor": "#aaa" },
             "emphasis": { "iconStyle": { "borderColor": "#f7931a" } },
-            "right": 10, "top": 0
+            "right": 10, "top": 0,
+            "itemSize": 18
         },
         "animation": true,
         "animationDuration": 300,
@@ -391,15 +392,8 @@ pub fn apply_overlays(option_json: &str, overlays: &OverlayFlags, is_daily: bool
         }
     }
 
-    // Move toolbox to the left when price axis takes the right side
-    if !overlays.price_data.is_empty() {
-        if let Some(toolbox) = obj.get_mut("toolbox") {
-            if let Some(t) = toolbox.as_object_mut() {
-                t.remove("right");
-                t.insert("left".into(), json!(55));
-            }
-        }
-    }
+    // Track whether any right-side axes will be added (for toolbox repositioning later)
+    let has_right_axis = !overlays.price_data.is_empty() || !overlays.chain_size_data.is_empty();
 
     // --- Mark lines (halvings, BIP activations) ---
     let mut mark_lines: Vec<serde_json::Value> = Vec::new();
@@ -908,6 +902,26 @@ pub fn apply_overlays(option_json: &str, overlays: &OverlayFlags, is_daily: bool
                 if let Some(l) = legend.as_object_mut() {
                     l.insert("show".into(), json!(true));
                 }
+            }
+        }
+    }
+
+    // After all overlays applied: reposition toolbox clear of any right-side axes
+    if has_right_axis {
+        let grid_right = obj
+            .get("grid")
+            .and_then(|g| g.get("right"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(20);
+        if let Some(grid) = obj.get_mut("grid") {
+            if let Some(g) = grid.as_object_mut() {
+                g.insert("top".into(), json!(45));
+            }
+        }
+        if let Some(toolbox) = obj.get_mut("toolbox") {
+            if let Some(t) = toolbox.as_object_mut() {
+                // Place toolbox just inside the grid area, past all right-axis labels
+                t.insert("right".into(), json!(grid_right + 25));
             }
         }
     }
