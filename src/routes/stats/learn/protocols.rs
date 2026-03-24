@@ -27,7 +27,7 @@ const PROTOCOLS: &[Protocol] = &[
     Protocol {
         id: "omni",
         name: "Omni Layer",
-        year: "2013",
+        year: "Jul 2013",
         method: "OP_RETURN",
         method_detail: "Commonly encodes token operations in OP_RETURN outputs using the \"omni\" magic prefix (hex: 6f6d6e69). Earlier versions used other encoding methods.",
         color: "#3b82f6",
@@ -42,7 +42,7 @@ const PROTOCOLS: &[Protocol] = &[
     Protocol {
         id: "counterparty",
         name: "Counterparty",
-        year: "2014",
+        year: "Jan 2014",
         method: "OP_RETURN",
         method_detail: "Messages identified by the \"CNTRPRTY\" prefix (hex: 434e545250525459), embedded via OP_RETURN and historically also multisig-style encodings.",
         color: "#f59e0b",
@@ -57,7 +57,7 @@ const PROTOCOLS: &[Protocol] = &[
     Protocol {
         id: "stamps",
         name: "Stamps / SRC-20",
-        year: "2023",
+        year: "Mar 2023",
         method: "Bare Multisig",
         method_detail: "Embeds data in bare multisig output scripts (not P2SH-wrapped). Supposed \"public keys\" in the multisig actually encode chunks of image data.",
         color: "#94a3b8",
@@ -72,7 +72,7 @@ const PROTOCOLS: &[Protocol] = &[
     Protocol {
         id: "ordinals",
         name: "Ordinals",
-        year: "Jan 2023",
+        year: "Jan 21, 2023",
         method: "Witness Data",
         method_detail: "Inscribes data inside a Taproot witness script using an envelope: OP_FALSE OP_IF OP_PUSH \"ord\" [content_type] [data] OP_ENDIF.",
         color: "#ec4899",
@@ -87,7 +87,7 @@ const PROTOCOLS: &[Protocol] = &[
     Protocol {
         id: "brc20",
         name: "BRC-20",
-        year: "Mar 2023",
+        year: "Mar 8, 2023",
         method: "Witness (JSON)",
         method_detail: "Ordinals inscriptions, typically with text content containing JSON such as {\"p\":\"brc-20\",\"op\":\"mint\",...}.",
         color: "#f472b6",
@@ -102,7 +102,7 @@ const PROTOCOLS: &[Protocol] = &[
     Protocol {
         id: "runes",
         name: "Runes",
-        year: "Apr 2024",
+        year: "Apr 20, 2024",
         method: "OP_RETURN",
         method_detail: "Stores a \"runestone\" message in an OP_RETURN output using compact integer-based encoding for token operations.",
         color: "#ff6b6b",
@@ -320,13 +320,14 @@ pub fn ProtocolGuidePage() -> impl IntoView {
             // CTA to charts
             <div class="text-center mt-12">
                 <a href="/stats"
-                    class="inline-flex items-center gap-2 px-5 py-2.5 bg-[#f7931a] text-white text-sm font-medium rounded-xl hover:bg-[#f4a949] hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
+                    class="inline-flex items-center gap-2 px-6 py-3 bg-[#f7931a] text-white text-base font-medium rounded-xl hover:bg-[#f4a949] hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
                 >
-                    "View Embedded Data Charts"
+                    "Explore The Bitcoin Observatory"
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
                     </svg>
                 </a>
+                <p class="text-xs text-white/30 mt-3">"View embedded data charts in the Embedded Data tab"</p>
             </div>
         </section>
     }
