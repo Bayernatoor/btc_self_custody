@@ -937,7 +937,7 @@ fn StatsContent() -> impl IntoView {
                 if t == "overview" || t == "signaling" {
                     "hidden"
                 } else {
-                    "flex justify-center mb-8"
+                    "flex justify-end items-center mb-4"
                 }
             }>
                 <div class="inline-flex flex-wrap gap-1.5 bg-[#0a1a2e] rounded-xl p-1.5 border border-white/5">
