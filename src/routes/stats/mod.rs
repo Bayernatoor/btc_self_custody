@@ -1409,8 +1409,6 @@ fn StatsContent() -> impl IntoView {
                             // --- Overview sub-section (unified view) ---
                             <div class=move || if embedded_section.get() == "overview" { "space-y-10" } else { "hidden" }>
                                 <ChartCard title="All Embedded Data — Block Share" description="OP_RETURN + Ordinals inscription data as percentage of total block size" chart_id="chart-all-embedded-share" option=all_embedded_share_option/>
-                                <ChartCard title="OP_RETURN Block Share" description="OP_RETURN data as percentage of total block size" chart_id="chart-op-block-share" option=op_block_share_option/>
-                                <ChartCard title="Inscription Block Share" description="Ordinals inscription data as percentage of total block size" chart_id="chart-inscription-share" option=inscription_share_option/>
                             </div>
 
                             // --- OP_RETURN Protocols sub-section ---
@@ -1418,12 +1416,13 @@ fn StatsContent() -> impl IntoView {
                                 <ChartCard title="Embedded Data Count" description="OP_RETURN outputs by protocol (Runes, Omni, Counterparty, Other)" chart_id="chart-opreturn-count" option=op_count_option/>
                                 <ChartCard title="Embedded Data Volume" description="Data volume in OP_RETURN outputs by protocol (bytes)" chart_id="chart-opreturn-bytes" option=op_bytes_option/>
                                 <ChartCard title="Protocol Dominance" description="Share of OP_RETURN outputs by protocol — Runes, Omni, Counterparty, Other" chart_id="chart-runes-pct" option=runes_pct_option/>
+                                <ChartCard title="OP_RETURN Block Share" description="OP_RETURN data as percentage of total block size" chart_id="chart-op-block-share" option=op_block_share_option/>
                             </div>
 
                             // --- Witness Embedding sub-section ---
                             <div class=move || if embedded_section.get() == "witness" { "space-y-10" } else { "hidden" }>
                                 <ChartCard title="Ordinals Inscriptions" description="Number of Ordinals inscriptions detected per block (witness envelope pattern)" chart_id="chart-inscriptions" option=inscription_option/>
-                                <ChartCard title="Inscription Block Share" description="Inscription data as percentage of total block size" chart_id="chart-inscription-share-2" option=inscription_share_option/>
+                                <ChartCard title="Inscription Block Share" description="Inscription data as percentage of total block size" chart_id="chart-inscription-share" option=inscription_share_option/>
                             </div>
                         }
                     }}
