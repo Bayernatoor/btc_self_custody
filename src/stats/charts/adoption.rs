@@ -204,18 +204,14 @@ pub fn witness_version_chart(blocks: &[BlockSummary]) -> String {
         return no_data_chart("Witness Versions");
     }
 
-    // v0 = segwit_spend_count - taproot_spend_count (segwit includes all witness spends)
-    // If segwit_spend_count already excludes taproot, use it directly
+    // v0 outputs = P2WPKH + P2WSH, v1 outputs = P2TR
     let v0_vals: Vec<f64> = blocks
         .iter()
-        .map(|b| {
-            let v0 = b.segwit_spend_count.saturating_sub(b.taproot_spend_count);
-            v0 as f64
-        })
+        .map(|b| (b.p2wpkh_count + b.p2wsh_count) as f64)
         .collect();
     let v1_vals: Vec<f64> = blocks
         .iter()
-        .map(|b| b.taproot_spend_count as f64)
+        .map(|b| b.p2tr_count as f64)
         .collect();
 
     let v0_data: Vec<serde_json::Value> = blocks
@@ -261,13 +257,11 @@ pub fn witness_version_chart_daily(days: &[DailyAggregate]) -> String {
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
     let v0_vals: Vec<f64> = days
         .iter()
-        .map(|d| {
-            round((d.avg_segwit_spend_count - d.avg_taproot_spend_count).max(0.0), 1)
-        })
+        .map(|d| round(d.avg_p2wpkh_count + d.avg_p2wsh_count, 1))
         .collect();
     let v1_vals: Vec<f64> = days
         .iter()
-        .map(|d| round(d.avg_taproot_spend_count, 1))
+        .map(|d| round(d.avg_p2tr_count, 1))
         .collect();
 
     build_option(json!({
@@ -302,9 +296,9 @@ pub fn witness_version_pct_chart(blocks: &[BlockSummary]) -> String {
     let v0_pct: Vec<f64> = blocks
         .iter()
         .map(|b| {
-            let total = b.segwit_spend_count;
+            let v0 = b.p2wpkh_count + b.p2wsh_count;
+            let total = v0 + b.p2tr_count;
             if total > 0 {
-                let v0 = total.saturating_sub(b.taproot_spend_count);
                 (v0 as f64 / total as f64 * 100.0 * 100.0).round() / 100.0
             } else {
                 0.0
@@ -314,9 +308,10 @@ pub fn witness_version_pct_chart(blocks: &[BlockSummary]) -> String {
     let v1_pct: Vec<f64> = blocks
         .iter()
         .map(|b| {
-            let total = b.segwit_spend_count;
+            let v0 = b.p2wpkh_count + b.p2wsh_count;
+            let total = v0 + b.p2tr_count;
             if total > 0 {
-                (b.taproot_spend_count as f64 / total as f64 * 100.0 * 100.0).round() / 100.0
+                (b.p2tr_count as f64 / total as f64 * 100.0 * 100.0).round() / 100.0
             } else {
                 0.0
             }
@@ -372,9 +367,9 @@ pub fn witness_version_pct_chart_daily(days: &[DailyAggregate]) -> String {
     let v0_pct: Vec<f64> = days
         .iter()
         .map(|d| {
-            let total = d.avg_segwit_spend_count;
+            let v0 = d.avg_p2wpkh_count + d.avg_p2wsh_count;
+            let total = v0 + d.avg_p2tr_count;
             if total > 0.0 {
-                let v0 = (total - d.avg_taproot_spend_count).max(0.0);
                 (v0 / total * 100.0 * 100.0).round() / 100.0
             } else {
                 0.0
@@ -384,9 +379,10 @@ pub fn witness_version_pct_chart_daily(days: &[DailyAggregate]) -> String {
     let v1_pct: Vec<f64> = days
         .iter()
         .map(|d| {
-            let total = d.avg_segwit_spend_count;
+            let v0 = d.avg_p2wpkh_count + d.avg_p2wsh_count;
+            let total = v0 + d.avg_p2tr_count;
             if total > 0.0 {
-                (d.avg_taproot_spend_count / total * 100.0 * 100.0).round() / 100.0
+                (d.avg_p2tr_count / total * 100.0 * 100.0).round() / 100.0
             } else {
                 0.0
             }
@@ -430,9 +426,9 @@ pub fn witness_version_tx_pct_chart(blocks: &[BlockSummary]) -> String {
     let v0_pct: Vec<f64> = blocks
         .iter()
         .map(|b| {
-            if b.tx_count > 1 {
-                let v0 = b.segwit_spend_count.saturating_sub(b.taproot_spend_count);
-                (v0 as f64 / (b.tx_count - 1) as f64 * 100.0 * 100.0).round() / 100.0
+            if b.output_count > 0 {
+                let v0 = b.p2wpkh_count + b.p2wsh_count;
+                (v0 as f64 / b.output_count as f64 * 100.0 * 100.0).round() / 100.0
             } else {
                 0.0
             }
@@ -441,8 +437,8 @@ pub fn witness_version_tx_pct_chart(blocks: &[BlockSummary]) -> String {
     let v1_pct: Vec<f64> = blocks
         .iter()
         .map(|b| {
-            if b.tx_count > 1 {
-                (b.taproot_spend_count as f64 / (b.tx_count - 1) as f64 * 100.0 * 100.0).round()
+            if b.output_count > 0 {
+                (b.p2tr_count as f64 / b.output_count as f64 * 100.0 * 100.0).round()
                     / 100.0
             } else {
                 0.0
@@ -473,7 +469,7 @@ pub fn witness_version_tx_pct_chart(blocks: &[BlockSummary]) -> String {
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
-        "yAxis": { "type": "value", "name": "% of Txs", "max": 100,
+        "yAxis": { "type": "value", "name": "% of Outputs", "max": 100,
             "nameTextStyle": { "color": "#aaa" },
             "axisLabel": { "color": "#aaa" },
             "axisLine": { "lineStyle": { "color": "#555" } },
@@ -515,9 +511,9 @@ pub fn witness_version_tx_pct_chart_daily(days: &[DailyAggregate]) -> String {
     let v0_pct: Vec<f64> = days
         .iter()
         .map(|d| {
-            if d.avg_tx_count > 1.0 {
-                let v0 = (d.avg_segwit_spend_count - d.avg_taproot_spend_count).max(0.0);
-                (v0 / (d.avg_tx_count - 1.0) * 100.0 * 100.0).round() / 100.0
+            if d.avg_output_count > 0.0 {
+                let v0 = d.avg_p2wpkh_count + d.avg_p2wsh_count;
+                (v0 / d.avg_output_count * 100.0 * 100.0).round() / 100.0
             } else {
                 0.0
             }
@@ -526,8 +522,8 @@ pub fn witness_version_tx_pct_chart_daily(days: &[DailyAggregate]) -> String {
     let v1_pct: Vec<f64> = days
         .iter()
         .map(|d| {
-            if d.avg_tx_count > 1.0 {
-                (d.avg_taproot_spend_count / (d.avg_tx_count - 1.0) * 100.0 * 100.0).round()
+            if d.avg_output_count > 0.0 {
+                (d.avg_p2tr_count / d.avg_output_count * 100.0 * 100.0).round()
                     / 100.0
             } else {
                 0.0
@@ -542,7 +538,7 @@ pub fn witness_version_tx_pct_chart_daily(days: &[DailyAggregate]) -> String {
 
     build_option(json!({
         "xAxis": x_axis_for(true, &cats),
-        "yAxis": { "type": "value", "name": "% of Txs", "max": 100,
+        "yAxis": { "type": "value", "name": "% of Outputs", "max": 100,
             "nameTextStyle": { "color": "#aaa" },
             "axisLabel": { "color": "#aaa" },
             "axisLine": { "lineStyle": { "color": "#555" } },
