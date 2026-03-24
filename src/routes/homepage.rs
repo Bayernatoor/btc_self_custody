@@ -8,7 +8,7 @@ pub fn HomePage() -> impl IntoView {
         <Title text="WE HODL BTC - Bitcoin Self-Custody Guides"/>
 
         // Hero
-        <section aria-label="Hero" class="grid gap-2 mx-auto justify-items-center max-w-4xl mt-14 px-6 opacity-0 animate-fadeinone md:grid-cols-1 lg:grid-cols-2 md:my-24 lg:pb-28 lg:px-8">
+        <section aria-label="Hero" class="grid gap-2 mx-auto justify-items-center max-w-5xl mt-14 px-6 opacity-0 animate-fadeinone md:grid-cols-1 lg:grid-cols-2 lg:max-w-6xl md:my-24 lg:pb-28 lg:px-8">
             <div class="flex flex-col text-center text-white leading-normal md:text-center lg:text-left md:pt-8 lg:pt-0">
                 <h1 class="text-5xl font-title font-normal tracking-tight md:text-6xl lg:text-[5rem]">
                     "Be your" <br/> "own bank"
@@ -38,7 +38,7 @@ pub fn HomePage() -> impl IntoView {
         </section>
 
         // Why Self-Custody
-        <section aria-label="Why self-custody" class="max-w-4xl mx-auto px-6 pt-8 pb-24 lg:pb-28 lg:px-8">
+        <section aria-label="Why self-custody" class="max-w-5xl mx-auto px-6 lg:max-w-6xl pt-8 pb-24 lg:pb-28 lg:px-8">
             <div class="text-center mb-10">
                 <h2 class="text-2xl lg:text-3xl font-title text-white mb-2">"Why Self-Custody?"</h2>
                 <div class="w-12 h-0.5 bg-[#f7931a] mx-auto mt-2"></div>
@@ -81,7 +81,7 @@ pub fn HomePage() -> impl IntoView {
         </section>
 
         // Guide levels preview
-        <section aria-label="Guide levels" class="max-w-4xl mx-auto px-6 pb-28 lg:pb-32 lg:px-8">
+        <section aria-label="Guide levels" class="max-w-5xl mx-auto px-6 lg:max-w-6xl pb-28 lg:pb-32 lg:px-8">
             <div class="text-center mb-10">
                 <h2 class="text-2xl lg:text-3xl font-title text-white mb-2">"A Guide For Every Level"</h2>
                 <div class="w-12 h-0.5 bg-[#f7931a] mx-auto mt-2 mb-4"></div>

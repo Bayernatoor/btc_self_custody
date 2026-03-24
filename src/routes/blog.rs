@@ -9,11 +9,11 @@ pub fn BlogPage() -> impl IntoView {
 
         <div
             id="about"
-            class="grid gap-6 max-w-5xl mx-auto pb-20 px-6 animate-fadeinone grid-rows-[auto_auto_1fr] lg:gap-8 lg:px-8 md:my-28"
+            class="grid gap-6 max-w-6xl mx-auto pb-20 px-6 animate-fadeinone grid-rows-[auto_auto_1fr] lg:gap-8 lg:px-8 md:my-28"
         >
             // Section 1: Title and Subtitle
             <div class="flex flex-col mx-auto px-4 pt-10 lg:pt-0">
-                <h1 class="text-center text-[1.75rem] text-[#f7931a] font-semibold font-title leading-tight md:text-[2rem] lg:text-[2.5rem]">
+                <h1 class="text-center text-3xl text-[#f7931a] font-semibold font-title leading-tight lg:text-4xl">
                     "Posts"
                 </h1>
                 <div class="text-center max-w-sm mx-auto pt-4">

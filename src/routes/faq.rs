@@ -8,18 +8,18 @@ pub fn FaqPage() -> impl IntoView {
     view! {
         <Title text="Help Desk | WE HODL BTC"/>
 
-        <div class="max-w-3xl mx-auto px-6 mt-10 mb-24 opacity-0 animate-fadeinone md:max-w-4xl lg:max-w-5xl lg:px-8 md:my-20">
+        <div class="max-w-5xl mx-auto px-6 mt-10 mb-24 opacity-0 animate-fadeinone lg:max-w-6xl lg:px-8 md:my-20">
 
             // Header
-            <header class="text-center mb-10">
-                <h1 class="text-[1.65rem] text-[#f7931a] font-semibold leading-tight font-title md:text-[2rem] lg:text-[2.5rem]">
+            <header class="text-center mb-12">
+                <h1 class="text-3xl text-[#f7931a] font-semibold leading-tight font-title lg:text-4xl">
                     "The Bitcoin Help Desk"
                 </h1>
                 <div class="w-16 h-0.5 bg-[#f7931a] mx-auto mt-3 mb-5"></div>
 
                 // Quote
                 <div class="max-w-xl mx-auto mb-6">
-                    <p class="text-[0.9rem] text-white/60 italic leading-relaxed">
+                    <p class="text-base text-white/60 italic leading-relaxed">
                         "\"Free software is a matter of liberty, not price. To understand the concept, you should think of 'free' as in 'free speech,' not as in 'free beer'.\""
                     </p>
                     <p class="text-xs text-white/40 mt-1">"— Richard Stallman"</p>
@@ -27,7 +27,7 @@ pub fn FaqPage() -> impl IntoView {
 
                 // Intro
                 <div class="bg-white/5 border border-white/10 rounded-xl p-5 max-w-2xl mx-auto">
-                    <p class="text-[0.85rem] text-white/80 leading-relaxed">
+                    <p class="text-sm text-white/75 lg:text-base leading-relaxed">
                         "The guides are opinionated, recommending only a few options to cut through the noise and streamline the self-custody process.
                         All software recommendations use open and permissive licenses - you don't need to trust me, you can verify it yourself."
                     </p>
@@ -46,7 +46,7 @@ pub fn FaqPage() -> impl IntoView {
                     <h3 class="text-base text-[#f7931a] font-semibold mb-4">"Need More Help?"</h3>
                     <div class="flex flex-col sm:flex-row gap-4">
                         <a
-                            class="inline-flex items-center gap-2 px-5 py-2.5 bg-white/5 border border-white/10 rounded-xl text-[0.85rem] text-white/80 hover:bg-white/10 hover:border-white/20 transition-all duration-200"
+                            class="inline-flex items-center gap-2 px-5 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white/75 lg:text-base hover:bg-white/10 hover:border-white/20 transition-all duration-200"
                             href="mailto:wehodlbtc@pm.me"
                         >
                             <svg class="w-4 h-4 text-[#f7931a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -55,7 +55,7 @@ pub fn FaqPage() -> impl IntoView {
                             "wehodlbtc@pm.me"
                         </a>
                         <a
-                            class="inline-flex items-center gap-2 px-5 py-2.5 bg-white/5 border border-white/10 rounded-xl text-[0.85rem] text-white/80 hover:bg-white/10 hover:border-white/20 transition-all duration-200"
+                            class="inline-flex items-center gap-2 px-5 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white/75 lg:text-base hover:bg-white/10 hover:border-white/20 transition-all duration-200"
                             href="https://github.com/simplex-chat"
                             target="_blank"
                             rel="noopener noreferrer"

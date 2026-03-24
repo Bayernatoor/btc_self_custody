@@ -6,15 +6,15 @@ use leptos_meta::*;
 pub fn AboutPage() -> impl IntoView {
     view! {
         <Title text="About | WE HODL BTC"/>
-        <div class="max-w-3xl mx-auto mt-10 mb-24 px-6 opacity-0 animate-fadeinone md:max-w-4xl lg:max-w-5xl lg:px-8 md:my-20">
+        <div class="max-w-5xl mx-auto mt-10 mb-24 px-6 opacity-0 animate-fadeinone lg:max-w-6xl lg:px-8 md:my-20">
 
             // Header
-            <header class="text-center mb-10">
-                <h1 class="text-[1.65rem] text-[#f7931a] font-semibold leading-tight font-title md:text-[2rem] lg:text-[2.5rem]">
+            <header class="text-center mb-12">
+                <h1 class="text-3xl text-[#f7931a] font-semibold leading-tight font-title lg:text-4xl">
                     "WE HODL BTC"
                 </h1>
                 <div class="w-16 h-0.5 bg-[#f7931a] mx-auto mt-3 mb-5"></div>
-                <p class="text-[0.9rem] text-white/80 max-w-2xl mx-auto leading-relaxed">
+                <p class="text-base text-white/80 max-w-2xl mx-auto leading-relaxed lg:text-lg">
                     "WE HODL BTC helps you take true ownership of your bitcoin - whether it's your first 100 sats or your life savings. Self-sovereignty starts with self-custody."
                 </p>
             </header>
@@ -25,7 +25,7 @@ pub fn AboutPage() -> impl IntoView {
                 // About card
                 <div class="bg-white/5 border border-white/10 rounded-xl p-5">
                     <h2 class="text-base text-[#f7931a] font-semibold mb-3">"About"</h2>
-                    <p class="text-[0.85rem] text-white/80 leading-relaxed">
+                    <p class="text-sm text-white/75 lg:text-base leading-relaxed">
                         "I go by Bayer. I'm a Bitcoiner who believes bitcoin is the most significant discovery of our time.
                         In a world conditioned to spend endlessly, bitcoin rewards those who embrace saving.
                         It fosters low time preference and incentivizes long-term thinking."
@@ -70,7 +70,7 @@ pub fn AboutPage() -> impl IntoView {
                 // Donate card
                 <div class="bg-white/5 border border-white/10 rounded-xl p-5">
                     <h2 class="text-base text-[#f7931a] font-semibold mb-3">"Donate"</h2>
-                    <p class="text-[0.85rem] text-white/80 leading-relaxed mb-4">
+                    <p class="text-sm text-white/75 lg:text-base leading-relaxed mb-4">
                         "Your contributions help keep the project running and are greatly appreciated."
                     </p>
                     <div class="flex flex-col gap-3 text-[0.85rem]">
@@ -114,7 +114,7 @@ pub fn AboutPage() -> impl IntoView {
                 // Contribute card
                 <div class="bg-white/5 border border-white/10 rounded-xl p-5">
                     <h2 class="text-base text-[#f7931a] font-semibold mb-3">"Contribute"</h2>
-                    <p class="text-[0.85rem] text-white/80 leading-relaxed">
+                    <p class="text-sm text-white/75 lg:text-base leading-relaxed">
                         "This project is entirely free and open-sourced under an MIT license.
                         Contributions are always welcome - feel free to open an "
                         <a
@@ -128,7 +128,7 @@ pub fn AboutPage() -> impl IntoView {
                         "."
                     </p>
                     <div class="mt-4 pt-4 border-t border-white/10">
-                        <p class="text-[0.85rem] text-white/80">
+                        <p class="text-sm text-white/75 lg:text-base">
                             <span class="text-white font-medium">"Questions? "</span>
                             "Reach out via Nostr or "
                             <a

@@ -155,7 +155,7 @@ pub fn guide_selector_view(
         <div class="flex flex-col items-center justify-center min-h-[70vh] px-6 opacity-0 animate-fadeinone">
             <StepIndicator step=step total_steps=total_steps/>
 
-            <div class="w-full max-w-md lg:max-w-xl">
+            <div class="w-full max-w-lg lg:max-w-2xl">
                 {move || {
                     let level_sel = selected_level.get();
                     let platform_sel = selected_platform.get();
