@@ -159,9 +159,20 @@ pub fn ProtocolGuidePage() -> impl IntoView {
                                 class=("bg-white/5", move || active_protocol.get() == id_check)
                                 on:click={
                                     let id = id_click.clone();
-                                    move |_| set_active_protocol.update(|a| {
-                                        if *a == id { a.clear() } else { *a = id.clone() }
-                                    })
+                                    let scroll_id = p.id.to_string();
+                                    move |_| {
+                                        set_active_protocol.update(|a| {
+                                            if *a == id { a.clear() } else { *a = id.clone() }
+                                        });
+                                        // Smooth scroll to the protocol card via JS
+                                        let target = format!("protocol-{}", scroll_id);
+                                        leptos::prelude::document()
+                                            .get_element_by_id(&target)
+                                            .map(|el| {
+                                                // Use basic scroll_into_view (smooth via CSS scroll-behavior)
+                                                el.scroll_into_view();
+                                            });
+                                    }
                                 }
                             >
                                 // Dot on the timeline
@@ -179,11 +190,9 @@ pub fn ProtocolGuidePage() -> impl IntoView {
                                 </div>
                                 // Status
                                 <span class="text-xs text-white/30 shrink-0 hidden lg:block">{p.status}</span>
-                                // Arrow
+                                // Down arrow (scroll to details)
                                 <svg class="w-4 h-4 text-white/20 group-hover:text-white/40 transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round"
-                                        d=move || { if active_protocol.get() == id.clone() { "M19 9l-7 7-7-7" } else { "M9 5l7 7-7 7" } }
-                                    />
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
                                 </svg>
                             </button>
                         }
