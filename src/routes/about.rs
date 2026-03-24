@@ -25,7 +25,7 @@ pub fn AboutPage() -> impl IntoView {
                 // About card
                 <div class="bg-white/5 border border-white/10 rounded-xl p-5">
                     <h2 class="text-base text-[#f7931a] font-semibold mb-3">"About"</h2>
-                    <p class="text-sm text-white/75 lg:text-base leading-relaxed">
+                    <p class="text-sm text-white/75 lg:text-[0.95rem] leading-relaxed">
                         "I go by Bayer. I'm a Bitcoiner who believes bitcoin is the most significant discovery of our time.
                         In a world conditioned to spend endlessly, bitcoin rewards those who embrace saving.
                         It fosters low time preference and incentivizes long-term thinking."
@@ -70,7 +70,7 @@ pub fn AboutPage() -> impl IntoView {
                 // Donate card
                 <div class="bg-white/5 border border-white/10 rounded-xl p-5">
                     <h2 class="text-base text-[#f7931a] font-semibold mb-3">"Donate"</h2>
-                    <p class="text-sm text-white/75 lg:text-base leading-relaxed mb-4">
+                    <p class="text-sm text-white/75 lg:text-[0.95rem] leading-relaxed mb-4">
                         "Your contributions help keep the project running and are greatly appreciated."
                     </p>
                     <div class="flex flex-col gap-3 text-[0.85rem]">
@@ -114,7 +114,7 @@ pub fn AboutPage() -> impl IntoView {
                 // Contribute card
                 <div class="bg-white/5 border border-white/10 rounded-xl p-5">
                     <h2 class="text-base text-[#f7931a] font-semibold mb-3">"Contribute"</h2>
-                    <p class="text-sm text-white/75 lg:text-base leading-relaxed">
+                    <p class="text-sm text-white/75 lg:text-[0.95rem] leading-relaxed">
                         "This project is entirely free and open-sourced under an MIT license.
                         Contributions are always welcome - feel free to open an "
                         <a
@@ -128,7 +128,7 @@ pub fn AboutPage() -> impl IntoView {
                         "."
                     </p>
                     <div class="mt-4 pt-4 border-t border-white/10">
-                        <p class="text-sm text-white/75 lg:text-base">
+                        <p class="text-sm text-white/75">
                             <span class="text-white font-medium">"Questions? "</span>
                             "Reach out via Nostr or "
                             <a

@@ -22,22 +22,40 @@ use crate::stats::types::*;
 
 #[component]
 pub fn StatsPage() -> impl IntoView {
-    // Check if stats backend is available
+    // Client-only availability check — avoids creating LocalResources during SSR
+    // which causes SendWrapper panics when dropped on a different tokio thread.
     #[allow(clippy::redundant_closure)]
     let availability = LocalResource::new(move || fetch_stats_summary());
 
-    let is_available = Signal::derive(move || {
-        availability.get().map(|r| r.is_ok()).unwrap_or(false)
+    // None = still loading, Some(Ok) = available, Some(Err) = unavailable
+    let state = Signal::derive(move || {
+        availability.get().map(|r| r.is_ok())
     });
 
     view! {
         <Title text="The Bitcoin Observatory - WE HODL BTC"/>
-        <Show
-            when=move || is_available.get()
-            fallback=move || view! { <StatsComingSoon/> }
-        >
-            <StatsContent/>
-        </Show>
+        {move || match state.get() {
+            None => view! { <StatsLoading/> }.into_any(),
+            Some(true) => view! { <StatsContent/> }.into_any(),
+            Some(false) => view! { <StatsComingSoon/> }.into_any(),
+        }}
+    }
+}
+
+#[component]
+fn StatsLoading() -> impl IntoView {
+    view! {
+        <section class="max-w-7xl mx-auto px-4 lg:px-8 pt-14 pb-32">
+            <div class="flex flex-col items-center justify-center min-h-[60vh]">
+                <div class="mb-6 opacity-20">
+                    <svg class="w-16 h-16 text-[#f7931a] animate-pulse" viewBox="0 0 64 64" fill="currentColor">
+                        <path d="M63.04 39.741c-4.274 17.143-21.638 27.575-38.783 23.301C7.12 58.768-3.313 41.404.962 24.262 5.234 7.117 22.597-3.317 39.737.957c17.144 4.274 27.576 21.64 23.302 38.784z"/>
+                        <path d="M46.11 27.441c.636-4.258-2.606-6.547-7.039-8.074l1.438-5.768-3.512-.875-1.4 5.616c-.923-.23-1.871-.447-2.813-.662l1.41-5.653-3.509-.875-1.439 5.766c-.764-.174-1.514-.346-2.242-.527l.004-.018-4.842-1.209-.934 3.75s2.605.597 2.55.634c1.422.355 1.68 1.296 1.636 2.042l-1.638 6.571c.098.025.225.061.365.117l-.37-.092-2.297 9.205c-.174.432-.615 1.08-1.609.834.035.051-2.552-.637-2.552-.637l-1.743 4.02 4.57 1.139c.85.213 1.683.436 2.502.646l-1.453 5.835 3.507.875 1.44-5.772c.957.26 1.887.5 2.797.726L27.504 50.8l3.511.875 1.453-5.823c5.987 1.133 10.49.676 12.383-4.738 1.527-4.36-.075-6.875-3.225-8.516 2.294-.529 4.022-2.038 4.483-5.157zM38.087 38.69c-1.086 4.36-8.426 2.004-10.807 1.412l1.928-7.729c2.38.594 10.011 1.77 8.88 6.317zm1.085-11.312c-.99 3.966-7.1 1.951-9.083 1.457l1.748-7.01c1.983.494 8.367 1.416 7.335 5.553z" fill="#fff"/>
+                    </svg>
+                </div>
+                <span class="text-sm text-[#8899aa]">"Connecting to node..."</span>
+            </div>
+        </section>
     }
 }
 
@@ -160,9 +178,11 @@ fn StatsContent() -> impl IntoView {
         1_000,
     );
 
-    // Mark as updated when first load completes
+    // Cache the latest successful LiveStats so refetch doesn't flash "—"
+    let (cached_live, set_cached_live) = signal::<Option<LiveStats>>(None);
     Effect::new(move |_| {
-        if live.get().is_some() {
+        if let Some(Ok(stats)) = live.get() {
+            set_cached_live.set(Some(stats));
             set_last_updated.set(format!(
                 "updated {}",
                 chrono::Local::now().format("%H:%M:%S")
@@ -170,10 +190,9 @@ fn StatsContent() -> impl IntoView {
         }
     });
 
-    // Helper to extract a field from live stats
+    // Helper to extract a field from cached live stats (no flicker on refetch)
     let live_field = move |f: fn(&LiveStats) -> String| -> String {
-        live.get()
-            .and_then(|r| r.ok())
+        cached_live.get()
             .map(|s| f(&s))
             .unwrap_or_else(|| "\u{2014}".to_string())
     };
@@ -244,8 +263,7 @@ fn StatsContent() -> impl IntoView {
 
     // Mempool gauge option
     let gauge_option = Signal::derive(move || {
-        live.get()
-            .and_then(|r| r.ok())
+        cached_live.get()
             .map(|s| {
                 crate::stats::charts::mempool_gauge(
                     s.mempool.usage,
@@ -460,8 +478,7 @@ fn StatsContent() -> impl IntoView {
 
     // Halving countdown derived values
     let raw_block_height = Signal::derive(move || {
-        live.get()
-            .and_then(|r| r.ok())
+        cached_live.get()
             .map(|s| s.blockchain.blocks)
             .unwrap_or(0)
     });
@@ -571,6 +588,61 @@ fn StatsContent() -> impl IntoView {
         }
     });
 
+    // Fetch previous period start timestamp (for last difficulty change %)
+    let prev_period_start_ts = LocalResource::new(move || {
+        let ps = diff_period_start.get();
+        async move {
+            if ps < 2016 {
+                return 0u64;
+            }
+            fetch_block_timestamp(ps - 2016).await.ok().flatten().unwrap_or(0)
+        }
+    });
+
+    // Previous difficulty change: how much did difficulty actually change at the last retarget
+    let prev_diff_change = Signal::derive(move || {
+        let ps = diff_period_start.get();
+        if ps < 2016 {
+            return "\u{2014}".to_string();
+        }
+        let prev_ts = prev_period_start_ts.get().unwrap_or(0);
+        let curr_ts = period_start_ts.get().unwrap_or(0);
+        if prev_ts == 0 || curr_ts == 0 || curr_ts <= prev_ts {
+            return "\u{2014}".to_string();
+        }
+        let actual_time = (curr_ts - prev_ts) as f64;
+        let target_time = 2016.0 * 600.0;
+        // Difficulty goes UP when blocks were faster than target (actual < target)
+        let change = (target_time / actual_time - 1.0) * 100.0;
+        let rounded = (change * 100.0).round() / 100.0;
+        if rounded >= 0.0 {
+            format!("+{:.2}%", rounded)
+        } else {
+            format!("{:.2}%", rounded)
+        }
+    });
+
+    // Average block time in current period (minutes per block)
+    let avg_block_time = Signal::derive(move || {
+        let blocks_in = diff_blocks_into_period.get();
+        if blocks_in < 2 {
+            return "\u{2014}".to_string();
+        }
+        let start_ts = period_start_ts.get().unwrap_or(0);
+        if start_ts == 0 {
+            return "\u{2014}".to_string();
+        }
+        let current_ts = cached_live.get_untracked()
+            .map(|s| s.blockchain.time)
+            .unwrap_or(0);
+        if current_ts <= start_ts {
+            return "\u{2014}".to_string();
+        }
+        let elapsed_min = (current_ts - start_ts) as f64 / 60.0;
+        let avg = elapsed_min / blocks_in as f64;
+        format!("{:.1} min", avg)
+    });
+
     // Expected difficulty change: (target_time / projected_time - 1) * 100%
     let diff_expected_change = Signal::derive(move || {
         let blocks_in = diff_blocks_into_period.get();
@@ -582,10 +654,7 @@ fn StatsContent() -> impl IntoView {
             return "\u{2014}".to_string();
         }
         // Get current block timestamp (non-reactive)
-        let guard = live.read_untracked();
-        let current_ts = guard
-            .as_ref()
-            .and_then(|r| r.as_ref().ok())
+        let current_ts = cached_live.get_untracked()
             .map(|s| s.blockchain.time)
             .unwrap_or(0);
         if current_ts <= start_ts {
@@ -803,14 +872,9 @@ fn StatsContent() -> impl IntoView {
         let _r = range.get();
         let flags = overlay_flags.get();
         // Read disk size without reactive tracking to avoid 30s chart resets
-        let disk_gb = {
-            let guard = live.read_untracked();
-            guard
-                .as_ref()
-                .and_then(|r| r.as_ref().ok())
-                .map(|s| s.network.chain_size_gb)
-                .unwrap_or(0.0)
-        };
+        let disk_gb = cached_live.get_untracked()
+            .map(|s| s.network.chain_size_gb)
+            .unwrap_or(0.0);
         dashboard_data
             .get()
             .and_then(|r| r.ok())
@@ -935,10 +999,10 @@ fn StatsContent() -> impl IntoView {
     view! {
         <Title text="The Bitcoin Observatory - WE HODL BTC"/>
 
-        <section class="max-w-[1600px] mx-auto px-4 lg:px-10 pt-10 pb-28 opacity-0 animate-fadeinone">
+        <section class="max-w-[1400px] mx-auto px-4 lg:px-8 pt-10 pb-28 opacity-0 animate-fadeinone">
             // Page header
             <div class="text-center mb-10">
-                <h1 class="text-4xl lg:text-5xl font-title text-white mb-3">"The Bitcoin Observatory"</h1>
+                <h1 class="text-3xl lg:text-4xl font-title text-white mb-3">"The Bitcoin Observatory"</h1>
                 <div class="w-16 h-0.5 bg-[#f7931a] mx-auto mt-3 mb-4"></div>
                 <p class="text-base text-white/50 max-w-xl mx-auto">
                     "Live blockchain metrics, block data, embedded data analysis, and BIP signaling tracker."
@@ -1114,6 +1178,8 @@ fn StatsContent() -> impl IntoView {
                                 <LiveCard label="Difficulty" value=difficulty/>
                                 <LiveCard label="Hashrate" value=hashrate/>
                                 <LiveCard label="Chain Size" value=chain_size/>
+                                <LiveCard label="Avg Block Time" value=avg_block_time/>
+                                <LiveCard label="Last Retarget" value=prev_diff_change/>
                             </div>
                         </div>
 
@@ -1140,19 +1206,19 @@ fn StatsContent() -> impl IntoView {
                     </div>
                     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
                         <div class="text-center">
-                            <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Period Start"</div>
+                            <div class="text-[0.7rem] text-[#8899aa] uppercase tracking-widest mb-1">"Period Start"</div>
                             <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format_number(diff_period_start.get())}</div>
                         </div>
                         <div class="text-center">
-                            <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Blocks Into Period"</div>
+                            <div class="text-[0.7rem] text-[#8899aa] uppercase tracking-widest mb-1">"Blocks Into Period"</div>
                             <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format_number(diff_blocks_into_period.get())}</div>
                         </div>
                         <div class="text-center">
-                            <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Blocks Remaining"</div>
+                            <div class="text-[0.7rem] text-[#8899aa] uppercase tracking-widest mb-1">"Blocks Remaining"</div>
                             <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format_number(diff_blocks_remaining.get())}</div>
                         </div>
                         <div class="text-center">
-                            <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Est. Days Left"</div>
+                            <div class="text-[0.7rem] text-[#8899aa] uppercase tracking-widest mb-1">"Est. Days Left"</div>
                             <div class="text-lg text-[#f7931a] font-bold font-mono">{move || diff_est_remaining_days.get()}</div>
                         </div>
                     </div>
@@ -1182,19 +1248,19 @@ fn StatsContent() -> impl IntoView {
                     </div>
                     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
                         <div class="text-center">
-                            <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Target Height"</div>
+                            <div class="text-[0.7rem] text-[#8899aa] uppercase tracking-widest mb-1">"Target Height"</div>
                             <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format_number(next_halving_height.get())}</div>
                         </div>
                         <div class="text-center">
-                            <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Blocks Remaining"</div>
+                            <div class="text-[0.7rem] text-[#8899aa] uppercase tracking-widest mb-1">"Blocks Remaining"</div>
                             <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format_number(halving_blocks_remaining.get())}</div>
                         </div>
                         <div class="text-center">
-                            <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Est. Days"</div>
+                            <div class="text-[0.7rem] text-[#8899aa] uppercase tracking-widest mb-1">"Est. Days"</div>
                             <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format!("{:.1}", halving_est_days.get())}</div>
                         </div>
                         <div class="text-center">
-                            <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">"Current Subsidy"</div>
+                            <div class="text-[0.7rem] text-[#8899aa] uppercase tracking-widest mb-1">"Current Subsidy"</div>
                             <div class="text-lg text-[#f7931a] font-bold font-mono">{move || current_subsidy_btc.get()}</div>
                         </div>
                     </div>
