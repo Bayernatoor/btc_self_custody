@@ -487,7 +487,8 @@ pub fn all_embedded_share_chart_daily(days: &[DailyAggregate]) -> String {
         if total_size > 0.0 { round(d.total_op_return_bytes as f64 / total_size * 100.0, 2) } else { 0.0 }
     }).collect();
     let insc_vals: Vec<f64> = days.iter().map(|d| {
-        if d.avg_size > 0.0 { round(d.avg_inscription_bytes / d.avg_size * 100.0, 2) } else { 0.0 }
+        let total_size = d.avg_size * d.block_count as f64;
+        if total_size > 0.0 { round(d.avg_inscription_bytes * d.block_count as f64 / total_size * 100.0, 2) } else { 0.0 }
     }).collect();
 
     build_option(json!({

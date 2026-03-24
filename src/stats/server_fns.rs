@@ -140,8 +140,14 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
         .map_err(|e| ServerFnError::new(format!("RPC error: {e}")))?;
     let mempool = mempool_res
         .map_err(|e| ServerFnError::new(format!("RPC error: {e}")))?;
-    let hashrate = hashrate_res.unwrap_or(0.0);
-    let next_block_fee = fee_res.unwrap_or(0.0);
+    let hashrate = hashrate_res.unwrap_or_else(|e| {
+        tracing::warn!("Failed to fetch hashrate: {e}");
+        0.0
+    });
+    let next_block_fee = fee_res.unwrap_or_else(|e| {
+        tracing::warn!("Failed to fetch fee estimate: {e}");
+        0.0
+    });
 
     // Price cache: only fetch from mempool.space if cache is >60s old
     let price_usd = {

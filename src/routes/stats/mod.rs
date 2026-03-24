@@ -1403,6 +1403,8 @@ fn StatsContent() -> impl IntoView {
                     </div>
                 }>
                     {move || {
+                        // Both resources must be tracked: op_data for Protocols/Witness charts,
+                        // dashboard_data for Overview charts (all_embedded_share uses BlockSummary)
                         let _d = op_data.get();
                         let _dd = dashboard_data.get();
                         view! {
