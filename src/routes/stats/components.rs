@@ -116,6 +116,17 @@ pub fn ChartCard(
 
         // Fullscreen overlay when expanded
         <Show when=move || expanded.get()>
+            // Close on Escape key
+            {
+                use leptos::ev::keydown;
+                let handle = leptos::prelude::window_event_listener(keydown, move |ev| {
+                    if ev.key() == "Escape" {
+                        set_expanded.set(false);
+                    }
+                });
+                leptos::prelude::on_cleanup(move || handle.remove());
+                ()
+            }
             <div
                 class="fixed inset-0 flex flex-col pt-14 pb-4 px-4 lg:pt-16 lg:pb-6 lg:px-8 overflow-hidden"
                 style="z-index: 9999; background: #0a1929"
