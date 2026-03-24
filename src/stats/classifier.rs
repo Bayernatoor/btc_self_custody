@@ -55,12 +55,29 @@ pub fn classify(hex: &str) -> OpReturnType {
     OpReturnType::DataCarrier
 }
 
-/// Check if the payload (after OP_RETURN) contains the given hex prefix.
-/// Skips the push-length opcode byte(s) to find the actual data.
+/// Check if the payload (after OP_RETURN) starts with the given prefix
+/// after skipping the push-length opcode byte(s).
 fn contains_payload(payload: &str, prefix: &str) -> bool {
-    // Simple approach: check if the prefix appears anywhere in the payload.
-    // This handles various push opcode lengths (OP_PUSHBYTES_N, OP_PUSHDATA1, etc.)
-    payload.contains(prefix)
+    // Most OP_RETURN: single push-length byte (OP_PUSHBYTES_1 to OP_PUSHBYTES_75)
+    // Data starts at hex offset 2 (1 byte = 2 hex chars for the push length)
+    if payload.len() >= 2 + prefix.len() && payload[2..].starts_with(prefix) {
+        return true;
+    }
+    // OP_PUSHDATA1: 0x4c + 1-byte length, data at hex offset 4
+    if payload.starts_with("4c")
+        && payload.len() >= 4 + prefix.len()
+        && payload[4..].starts_with(prefix)
+    {
+        return true;
+    }
+    // OP_PUSHDATA2: 0x4d + 2-byte length, data at hex offset 6
+    if payload.starts_with("4d")
+        && payload.len() >= 6 + prefix.len()
+        && payload[6..].starts_with(prefix)
+    {
+        return true;
+    }
+    false
 }
 
 /// Decode coinbase hex to ASCII and identify the mining pool.

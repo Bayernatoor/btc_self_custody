@@ -1260,7 +1260,7 @@ fn StatsContent() -> impl IntoView {
                                 <ChartCard title="Taproot Outputs" description="Number of Taproot (v1 witness) outputs created per block" chart_id="chart-taproot" option=taproot_option/>
                                 <ChartCard title="Witness Version Comparison" description="SegWit v0 vs Taproot v1 witness spends — stacked to show total and relative adoption" chart_id="chart-witness-versions" option=witness_version_option/>
                                 <ChartCard title="Witness Version Share" description="SegWit v0 vs Taproot v1 as percentage of total witness spends" chart_id="chart-witness-pct" option=witness_pct_option/>
-                                <ChartCard title="Transaction Type Breakdown" description="Legacy vs SegWit v0 vs Taproot v1 as percentage of all transactions" chart_id="chart-witness-tx-pct" option=witness_tx_pct_option/>
+                                <ChartCard title="Output Type Breakdown" description="Legacy vs SegWit v0 vs Taproot v1 as percentage of all outputs" chart_id="chart-witness-tx-pct" option=witness_tx_pct_option/>
                                 <ChartCard title="Address Type Evolution" description="Output script types over time — P2PKH, P2SH, P2WPKH, P2WSH, P2TR, P2PK" chart_id="chart-address-types" option=address_type_option/>
                                 <ChartCard title="Witness Data Share" description="Witness data as percentage of total block size — shows SegWit discount impact" chart_id="chart-witness-share" option=witness_share_option/>
                             </div>
