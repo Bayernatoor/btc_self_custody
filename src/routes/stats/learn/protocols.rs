@@ -135,34 +135,34 @@ pub fn ProtocolGuidePage() -> impl IntoView {
 
     view! {
         <Title text="Embedding Protocols — The Bitcoin Observatory"/>
-        <section class="max-w-5xl mx-auto px-6 pt-12 pb-24 opacity-0 animate-fadeinone">
+        <section class="max-w-6xl mx-auto px-6 pt-12 pb-24 opacity-0 animate-fadeinone">
 
             // Hero
-            <div class="text-center mb-12">
-                <a href="/stats" class="text-xs text-white/30 hover:text-white/50 transition-colors">
+            <div class="text-center mb-14">
+                <a href="/stats" class="text-sm text-white/40 hover:text-white/60 transition-colors">
                     "\u{2190} Back to The Bitcoin Observatory"
                 </a>
-                <h1 class="text-3xl lg:text-4xl font-title text-white mt-4 mb-3">
+                <h1 class="text-4xl lg:text-5xl font-title text-white mt-4 mb-3">
                     "Bitcoin Embedding Protocols"
                 </h1>
-                <div class="w-16 h-0.5 bg-[#f7931a] mx-auto mb-4"></div>
-                <p class="text-sm lg:text-base text-white/50 max-w-2xl mx-auto leading-relaxed">
+                <div class="w-16 h-0.5 bg-[#f7931a] mx-auto mb-5"></div>
+                <p class="text-base lg:text-lg text-white/70 max-w-2xl mx-auto leading-relaxed">
                     "Since 2013, developers have found ways to embed non-financial data into Bitcoin's blockchain. From token protocols to digital art, each approach uses a different part of the transaction structure \u{2014} with different trade-offs for cost, pruning, and chain impact."
                 </p>
             </div>
 
             // Timeline
-            <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 mb-10">
-                <h2 class="text-sm text-white/40 uppercase tracking-widest font-semibold mb-4">"Timeline"</h2>
-                <div class="relative h-32 lg:h-28 mb-2">
+            <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-6 lg:p-8 mb-10">
+                <h2 class="text-sm text-white/60 uppercase tracking-widest font-semibold mb-5">"Timeline"</h2>
+                <div class="relative h-40 lg:h-36 mb-2">
                     // Year markers
-                    <div class="absolute inset-x-0 bottom-0 flex justify-between text-[0.65rem] text-white/25 px-1">
+                    <div class="absolute inset-x-0 bottom-0 flex justify-between text-xs text-white/40 px-1">
                         {["2012", "2014", "2016", "2018", "2020", "2022", "2024", "2026"].into_iter().map(|y| {
                             view! { <span>{y}</span> }
                         }).collect::<Vec<_>>()}
                     </div>
                     // Baseline
-                    <div class="absolute inset-x-0 bottom-5 h-px bg-white/10"></div>
+                    <div class="absolute inset-x-0 bottom-6 h-px bg-white/10"></div>
                     // Halving markers
                     {["7%", "28.5%", "57%", "85.7%"].into_iter().map(|left| {
                         view! {
@@ -175,10 +175,10 @@ pub fn ProtocolGuidePage() -> impl IntoView {
                         let id = p.id.to_string();
                         let id_click = id.clone();
                         let id_check = id.clone();
-                        let bottom = format!("{}px", 20 + p.timeline_row as u32 * 22);
+                        let bottom = format!("{}px", 24 + p.timeline_row as u32 * 28);
                         view! {
                             <button
-                                class="absolute h-5 rounded-full cursor-pointer transition-all hover:brightness-125 border-2 flex items-center pl-2"
+                                class="absolute h-6 rounded-full cursor-pointer transition-all hover:brightness-125 border-2 flex items-center pl-2.5"
                                 class=("border-white/40", move || active_protocol.get() == id_check)
                                 class=("border-transparent", move || active_protocol.get() != id.clone())
                                 style=format!("left: {}; right: 1%; bottom: {}; background: {}", p.timeline_left, bottom, p.color)
@@ -190,7 +190,7 @@ pub fn ProtocolGuidePage() -> impl IntoView {
                                     })
                                 }
                             >
-                                <span class="text-[0.6rem] text-white/90 font-medium truncate pr-2">{p.name}</span>
+                                <span class="text-xs text-white/90 font-medium truncate pr-2">{p.name}</span>
                             </button>
                         }
                     }).collect::<Vec<_>>()}
@@ -198,7 +198,7 @@ pub fn ProtocolGuidePage() -> impl IntoView {
             </div>
 
             // Protocol cards
-            <div class="space-y-6">
+            <div class="space-y-8">
                 {PROTOCOLS.iter().map(|p| {
                     let id = p.id.to_string();
                     let id_scroll = id.clone();
@@ -210,44 +210,44 @@ pub fn ProtocolGuidePage() -> impl IntoView {
                             class=("ring-white/20", move || active_protocol.get() == id.clone())
                         >
                             // Header
-                            <div class="p-5 lg:p-6">
+                            <div class="p-6 lg:p-8">
                                 <div class="flex items-start gap-4">
-                                    <div class="w-1.5 h-12 rounded-full shrink-0" style=format!("background: {}", p.color)></div>
+                                    <div class="w-1.5 h-14 rounded-full shrink-0" style=format!("background: {}", p.color)></div>
                                     <div class="flex-1">
-                                        <div class="flex items-baseline flex-wrap gap-x-3 gap-y-1 mb-2">
-                                            <h3 class="text-xl text-white font-semibold">{p.name}</h3>
-                                            <span class="text-sm text-white/30 font-mono">{p.year}</span>
-                                            <span class="text-xs px-2.5 py-0.5 rounded-full border text-white/60"
+                                        <div class="flex items-baseline flex-wrap gap-x-3 gap-y-1 mb-3">
+                                            <h3 class="text-2xl text-white font-semibold">{p.name}</h3>
+                                            <span class="text-sm text-white/50 font-mono">{p.year}</span>
+                                            <span class="text-sm px-2.5 py-0.5 rounded-full border text-white/70"
                                                 style=format!("border-color: {}50", p.color)
                                             >{p.method}</span>
-                                            <span class="text-xs px-2 py-0.5 rounded-full bg-white/5 text-white/40">{p.status}</span>
+                                            <span class="text-sm px-2 py-0.5 rounded-full bg-white/5 text-white/50">{p.status}</span>
                                         </div>
-                                        <p class="text-sm text-white/60 leading-relaxed">{p.description}</p>
+                                        <p class="text-base text-white/70 leading-relaxed">{p.description}</p>
                                     </div>
                                 </div>
                             </div>
 
                             // How it works
-                            <div class="border-t border-white/5 px-5 lg:px-6 py-4 bg-[#0a1a2e]">
-                                <h4 class="text-xs text-white/40 uppercase tracking-widest mb-2">"How it works"</h4>
-                                <p class="text-sm text-white/50 leading-relaxed mb-2">{p.how_it_works}</p>
-                                <code class="text-xs text-[#f7931a]/60 font-mono">{p.method_detail}</code>
+                            <div class="border-t border-white/5 px-6 lg:px-8 py-5 bg-[#0a1a2e]">
+                                <h4 class="text-xs text-white/50 uppercase tracking-widest mb-3">"How it works"</h4>
+                                <p class="text-sm text-white/65 leading-relaxed mb-3">{p.how_it_works}</p>
+                                <code class="text-sm text-[#f7931a]/80 font-mono">{p.method_detail}</code>
                             </div>
 
                             // Footer: fun fact + properties
-                            <div class="border-t border-white/5 px-5 lg:px-6 py-4 flex flex-col lg:flex-row lg:items-center gap-3">
-                                <p class="text-xs text-white/40 italic flex-1">
-                                    <span class="text-[#f7931a]/60">{"\u{1f4a1} "}</span>
+                            <div class="border-t border-white/5 px-6 lg:px-8 py-5 flex flex-col lg:flex-row lg:items-center gap-3">
+                                <p class="text-sm text-white/50 italic flex-1">
+                                    <span class="text-[#f7931a]/70">{"\u{1f4a1} "}</span>
                                     {p.fun_fact}
                                 </p>
                                 <div class="flex gap-2 shrink-0">
-                                    <span class="text-[0.65rem] px-2 py-0.5 rounded border border-white/10"
-                                        class=("text-green-400/60", p.prunable)
-                                        class=("text-red-400/60", !p.prunable)
+                                    <span class="text-xs px-2.5 py-1 rounded border border-white/15"
+                                        class=("text-green-400/80", p.prunable)
+                                        class=("text-red-400/80", !p.prunable)
                                     >
                                         {if p.prunable { "Prunable" } else { "Unprunable" }}
                                     </span>
-                                    <span class="text-[0.65rem] px-2 py-0.5 rounded border border-white/10 text-white/40">
+                                    <span class="text-xs px-2.5 py-1 rounded border border-white/15 text-white/50">
                                         {if p.fungible { "Fungible tokens" } else { "Non-fungible / data" }}
                                     </span>
                                 </div>
@@ -258,12 +258,12 @@ pub fn ProtocolGuidePage() -> impl IntoView {
             </div>
 
             // Historical note: Colored Coins
-            <div class="bg-[#0a1a2e] border border-white/5 rounded-xl p-5 mt-8">
+            <div class="bg-[#0a1a2e] border border-white/5 rounded-xl p-6 mt-10">
                 <div class="flex items-start gap-3">
-                    <span class="text-white/20 text-lg shrink-0">{"\u{1f4dc}"}</span>
+                    <span class="text-white/30 text-xl shrink-0">{"\u{1f4dc}"}</span>
                     <div>
-                        <h4 class="text-sm text-white/50 font-semibold mb-1">"Historical note: Colored Coins (2012\u{2013}2015)"</h4>
-                        <p class="text-xs text-white/40 leading-relaxed">
+                        <h4 class="text-base text-white/60 font-semibold mb-2">"Historical note: Colored Coins (2012\u{2013}2015)"</h4>
+                        <p class="text-sm text-white/50 leading-relaxed">
                             "Colored Coins was the earliest concept for representing tokens on Bitcoin, predating all protocols listed above. Rather than a single protocol, it was a family of incompatible implementations (Open Assets, EPOBC, ChromaWay) that used various techniques \u{2014} from OP_RETURN markers to transaction output ordering \u{2014} to \"color\" specific satoshis as representing real-world assets. Most implementations relied on external metadata servers, making on-chain detection unreliable. Colored Coins saw limited adoption but were historically significant as the first tokenization experiments on Bitcoin, directly inspiring later protocols like Counterparty and Omni. They are not tracked in the Observatory charts due to their ambiguous on-chain footprint and low volume."
                         </p>
                     </div>
@@ -271,12 +271,12 @@ pub fn ProtocolGuidePage() -> impl IntoView {
             </div>
 
             // Comparison table
-            <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 mt-10">
-                <h2 class="text-sm text-white/40 uppercase tracking-widest font-semibold mb-4">"Comparison"</h2>
+            <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-6 lg:p-8 mt-10">
+                <h2 class="text-sm text-white/60 uppercase tracking-widest font-semibold mb-5">"Comparison"</h2>
                 <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
+                    <table class="w-full text-base">
                         <thead>
-                            <tr class="text-left text-white/40 text-xs uppercase tracking-wider">
+                            <tr class="text-left text-white/50 text-xs uppercase tracking-wider">
                                 <th class="pb-3 pr-4">"Protocol"</th>
                                 <th class="pb-3 pr-4">"Year"</th>
                                 <th class="pb-3 pr-4">"Embedding Method"</th>
@@ -285,27 +285,27 @@ pub fn ProtocolGuidePage() -> impl IntoView {
                                 <th class="pb-3">"Status"</th>
                             </tr>
                         </thead>
-                        <tbody class="text-white/60">
+                        <tbody class="text-white/70">
                             {PROTOCOLS.iter().map(|p| {
                                 view! {
                                     <tr class="border-t border-white/5">
-                                        <td class="py-2.5 pr-4 font-medium text-white/80">
+                                        <td class="py-3 pr-4 font-medium text-white/85">
                                             <div class="flex items-center gap-2">
                                                 <div class="w-2 h-2 rounded-full" style=format!("background: {}", p.color)></div>
                                                 {p.name}
                                             </div>
                                         </td>
-                                        <td class="py-2.5 pr-4 font-mono text-xs">{p.year}</td>
-                                        <td class="py-2.5 pr-4">{p.method}</td>
-                                        <td class="py-2.5 pr-4">
+                                        <td class="py-3 pr-4 font-mono text-sm">{p.year}</td>
+                                        <td class="py-3 pr-4">{p.method}</td>
+                                        <td class="py-3 pr-4">
                                             {if p.prunable {
                                                 view! { <span class="text-green-400/70">"Yes"</span> }.into_any()
                                             } else {
                                                 view! { <span class="text-red-400/70">"No"</span> }.into_any()
                                             }}
                                         </td>
-                                        <td class="py-2.5 pr-4">{if p.fungible { "Fungible" } else { "Non-fungible" }}</td>
-                                        <td class="py-2.5 text-xs">{p.status}</td>
+                                        <td class="py-3 pr-4">{if p.fungible { "Fungible" } else { "Non-fungible" }}</td>
+                                        <td class="py-3 text-sm">{p.status}</td>
                                     </tr>
                                 }
                             }).collect::<Vec<_>>()}
@@ -315,7 +315,7 @@ pub fn ProtocolGuidePage() -> impl IntoView {
             </div>
 
             // CTA to charts
-            <div class="text-center mt-10">
+            <div class="text-center mt-12">
                 <a href="/stats"
                     class="inline-flex items-center gap-2 px-5 py-2.5 bg-[#f7931a] text-white text-sm font-medium rounded-xl hover:bg-[#f4a949] hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
                 >
