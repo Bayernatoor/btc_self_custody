@@ -90,6 +90,11 @@ fn StatsContent() -> impl IntoView {
     let (range, set_range) = signal("all".to_string());
     let (fee_unit, set_fee_unit) = signal("sats".to_string());
 
+    // Sub-section navigation within tabs
+    let (network_section, set_network_section) = signal("blocks".to_string());
+    let (embedded_section, set_embedded_section) = signal("overview".to_string());
+    let (mining_section, set_mining_section) = signal("difficulty".to_string());
+
     // ---- Live stats (auto-refresh 30s) ----
     #[allow(clippy::redundant_closure)]
     let live = LocalResource::new(move || fetch_live_stats());
@@ -821,6 +826,11 @@ fn StatsContent() -> impl IntoView {
         |days| crate::stats::charts::inscription_share_chart_daily(days)
     );
 
+    let all_embedded_share_option = chart_signal!(dashboard_data, range, overlay_flags,
+        |blocks| crate::stats::charts::all_embedded_share_chart(blocks),
+        |days| crate::stats::charts::all_embedded_share_chart_daily(days)
+    );
+
     // ---- BIP Signaling data ----
     let (bip_method, set_bip_method) = signal("bit".to_string());
     // Period offset: 0 = current, 1 = previous, etc.
@@ -1200,9 +1210,33 @@ fn StatsContent() -> impl IntoView {
             // ===== NETWORK TAB =====
             <div class=move || if tab.get() == "network" { "block" } else { "hidden" }>
 
+                // Sub-section pills
+                <div class="flex flex-wrap gap-2 justify-center mb-6">
+                    {[("blocks", "Blocks"), ("adoption", "Adoption"), ("tx-metrics", "Transactions")].into_iter().map(|(id, label)| {
+                        let id_str = id.to_string();
+                        let id_clone = id_str.clone();
+                        view! {
+                            <button
+                                class=move || {
+                                    if network_section.get() == id_clone {
+                                        "px-4 py-1.5 text-xs rounded-lg bg-white/10 text-white font-semibold border border-white/20 cursor-pointer"
+                                    } else {
+                                        "px-4 py-1.5 text-xs rounded-lg text-white/40 hover:text-white/70 hover:bg-white/5 transition-all cursor-pointer"
+                                    }
+                                }
+                                on:click={
+                                    let id = id_str.clone();
+                                    move |_| set_network_section.set(id.clone())
+                                }
+                            >
+                                {label}
+                            </button>
+                        }
+                    }).collect::<Vec<_>>()}
+                </div>
+
                 <Suspense fallback=move || view! {
                     <div class="space-y-10">
-                        <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
                         <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
                         <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
                     </div>
@@ -1210,113 +1244,31 @@ fn StatsContent() -> impl IntoView {
                     {move || {
                         let _d = dashboard_data.get();
                         view! {
-                            <div class="space-y-10">
-                                <ChartCard
-                                    title="Block Size"
-                                    description="Raw block size in megabytes over time"
-                                    chart_id="chart-size"
-                                    option=size_option
-                                />
-                                <ChartCard
-                                    title="Weight Utilization"
-                                    description="Block weight as percentage of the 4 MWU limit"
-                                    chart_id="chart-weight-util"
-                                    option=weight_util_option
-                                />
-                                <ChartCard
-                                    title="Transaction Count"
-                                    description="Number of transactions per block"
-                                    chart_id="chart-txcount"
-                                    option=tx_option
-                                />
-                                <ChartCard
-                                    title="Avg Transaction Size"
-                                    description="Average transaction size in bytes (block size / tx count)"
-                                    chart_id="chart-avg-tx-size"
-                                    option=avg_tx_size_option
-                                />
-                                <ChartCard
-                                    title="Block Interval"
-                                    description="Time between consecutive blocks in minutes"
-                                    chart_id="chart-interval"
-                                    option=interval_option
-                                />
-                                <ChartCard
-                                    title="Chain Size Growth"
-                                    description="Cumulative blockchain size — visualize growth acceleration after protocol changes"
-                                    chart_id="chart-chain-size"
-                                    option=chain_size_option
-                                />
+                            // --- Blocks sub-section ---
+                            <div class=move || if network_section.get() == "blocks" { "space-y-10" } else { "hidden" }>
+                                <ChartCard title="Block Size" description="Raw block size in megabytes over time" chart_id="chart-size" option=size_option/>
+                                <ChartCard title="Weight Utilization" description="Block weight as percentage of the 4 MWU limit" chart_id="chart-weight-util" option=weight_util_option/>
+                                <ChartCard title="Transaction Count" description="Number of transactions per block" chart_id="chart-txcount" option=tx_option/>
+                                <ChartCard title="Avg Transaction Size" description="Average transaction size in bytes (block size / tx count)" chart_id="chart-avg-tx-size" option=avg_tx_size_option/>
+                                <ChartCard title="Block Interval" description="Time between consecutive blocks in minutes" chart_id="chart-interval" option=interval_option/>
+                                <ChartCard title="Chain Size Growth" description="Cumulative blockchain size — visualize growth acceleration after protocol changes" chart_id="chart-chain-size" option=chain_size_option/>
+                            </div>
 
-                                // Section divider: Adoption
-                                <div class="flex items-center gap-3 my-8">
-                                    <div class="flex-1 h-px bg-white/10"></div>
-                                    <span class="text-sm text-white/40 font-medium uppercase tracking-widest">"Adoption"</span>
-                                    <div class="flex-1 h-px bg-white/10"></div>
-                                </div>
+                            // --- Adoption sub-section ---
+                            <div class=move || if network_section.get() == "adoption" { "space-y-10" } else { "hidden" }>
+                                <ChartCard title="SegWit Adoption" description="Percentage of transactions using Segregated Witness" chart_id="chart-segwit" option=segwit_option/>
+                                <ChartCard title="Taproot Outputs" description="Number of Taproot (v1 witness) outputs created per block" chart_id="chart-taproot" option=taproot_option/>
+                                <ChartCard title="Witness Version Comparison" description="SegWit v0 vs Taproot v1 witness spends — stacked to show total and relative adoption" chart_id="chart-witness-versions" option=witness_version_option/>
+                                <ChartCard title="Witness Version Share" description="SegWit v0 vs Taproot v1 as percentage of total witness spends" chart_id="chart-witness-pct" option=witness_pct_option/>
+                                <ChartCard title="Transaction Type Breakdown" description="Legacy vs SegWit v0 vs Taproot v1 as percentage of all transactions" chart_id="chart-witness-tx-pct" option=witness_tx_pct_option/>
+                                <ChartCard title="Address Type Evolution" description="Output script types over time — P2PKH, P2SH, P2WPKH, P2WSH, P2TR, P2PK" chart_id="chart-address-types" option=address_type_option/>
+                                <ChartCard title="Witness Data Share" description="Witness data as percentage of total block size — shows SegWit discount impact" chart_id="chart-witness-share" option=witness_share_option/>
+                            </div>
 
-                                <ChartCard
-                                    title="SegWit Adoption"
-                                    description="Percentage of transactions using Segregated Witness"
-                                    chart_id="chart-segwit"
-                                    option=segwit_option
-                                />
-                                <ChartCard
-                                    title="Taproot Outputs"
-                                    description="Number of Taproot (v1 witness) outputs created per block"
-                                    chart_id="chart-taproot"
-                                    option=taproot_option
-                                />
-                                <ChartCard
-                                    title="Witness Version Comparison"
-                                    description="SegWit v0 vs Taproot v1 witness spends — stacked to show total and relative adoption"
-                                    chart_id="chart-witness-versions"
-                                    option=witness_version_option
-                                />
-                                <ChartCard
-                                    title="Witness Version Share"
-                                    description="SegWit v0 vs Taproot v1 as percentage of total witness spends"
-                                    chart_id="chart-witness-pct"
-                                    option=witness_pct_option
-                                />
-                                <ChartCard
-                                    title="Transaction Type Breakdown"
-                                    description="Legacy vs SegWit v0 vs Taproot v1 as percentage of all transactions"
-                                    chart_id="chart-witness-tx-pct"
-                                    option=witness_tx_pct_option
-                                />
-                                <ChartCard
-                                    title="Address Type Evolution"
-                                    description="Output script types over time — P2PKH, P2SH, P2WPKH, P2WSH, P2TR, P2PK"
-                                    chart_id="chart-address-types"
-                                    option=address_type_option
-                                />
-                                <ChartCard
-                                    title="Witness Data Share"
-                                    description="Witness data as percentage of total block size — shows SegWit discount impact"
-                                    chart_id="chart-witness-share"
-                                    option=witness_share_option
-                                />
-
-                                // Section divider: Transaction Metrics
-                                <div class="flex items-center gap-3 my-8">
-                                    <div class="flex-1 h-px bg-white/10"></div>
-                                    <span class="text-sm text-white/40 font-medium uppercase tracking-widest">"Transaction Metrics"</span>
-                                    <div class="flex-1 h-px bg-white/10"></div>
-                                </div>
-
-                                <ChartCard
-                                    title="RBF Adoption"
-                                    description="Percentage of transactions signaling Replace-By-Fee (nSequence < 0xFFFFFFFE)"
-                                    chart_id="chart-rbf"
-                                    option=rbf_option
-                                />
-                                <ChartCard
-                                    title="UTXO Flow"
-                                    description="Inputs consumed vs outputs created per block — net UTXO set growth"
-                                    chart_id="chart-utxo-flow"
-                                    option=utxo_flow_option
-                                />
+                            // --- Transaction Metrics sub-section ---
+                            <div class=move || if network_section.get() == "tx-metrics" { "space-y-10" } else { "hidden" }>
+                                <ChartCard title="RBF Adoption" description="Percentage of transactions signaling Replace-By-Fee (nSequence < 0xFFFFFFFE)" chart_id="chart-rbf" option=rbf_option/>
+                                <ChartCard title="UTXO Flow" description="Inputs consumed vs outputs created per block — net UTXO set growth" chart_id="chart-utxo-flow" option=utxo_flow_option/>
                             </div>
                         }
                     }}
@@ -1368,10 +1320,33 @@ fn StatsContent() -> impl IntoView {
             // ===== MINING TAB =====
             <div class=move || if tab.get() == "mining" { "block" } else { "hidden" }>
 
+                // Sub-section pills
+                <div class="flex flex-wrap gap-2 justify-center mb-6">
+                    {[("difficulty", "Difficulty"), ("pools", "Pool Distribution")].into_iter().map(|(id, label)| {
+                        let id_str = id.to_string();
+                        let id_clone = id_str.clone();
+                        view! {
+                            <button
+                                class=move || {
+                                    if mining_section.get() == id_clone {
+                                        "px-4 py-1.5 text-xs rounded-lg bg-white/10 text-white font-semibold border border-white/20 cursor-pointer"
+                                    } else {
+                                        "px-4 py-1.5 text-xs rounded-lg text-white/40 hover:text-white/70 hover:bg-white/5 transition-all cursor-pointer"
+                                    }
+                                }
+                                on:click={
+                                    let id = id_str.clone();
+                                    move |_| set_mining_section.set(id.clone())
+                                }
+                            >
+                                {label}
+                            </button>
+                        }
+                    }).collect::<Vec<_>>()}
+                </div>
+
                 <Suspense fallback=move || view! {
                     <div class="space-y-10">
-                        <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
-                        <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
                         <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
                     </div>
                 }>
@@ -1379,33 +1354,15 @@ fn StatsContent() -> impl IntoView {
                         let _d = dashboard_data.get();
                         let _m = mining_data.get();
                         view! {
-                            <div class="space-y-10">
-                                <ChartCard
-                                    title="Difficulty"
-                                    description="Mining difficulty target, adjusts every 2,016 blocks"
-                                    chart_id="chart-difficulty"
-                                    option=diff_option
-                                />
+                            // --- Difficulty sub-section ---
+                            <div class=move || if mining_section.get() == "difficulty" { "space-y-10" } else { "hidden" }>
+                                <ChartCard title="Difficulty" description="Mining difficulty target, adjusts every 2,016 blocks" chart_id="chart-difficulty" option=diff_option/>
+                            </div>
 
-                                // Section divider: Pool Distribution
-                                <div class="flex items-center gap-3 my-8">
-                                    <div class="flex-1 h-px bg-white/10"></div>
-                                    <span class="text-sm text-white/40 font-medium uppercase tracking-widest">"Pool Distribution"</span>
-                                    <div class="flex-1 h-px bg-white/10"></div>
-                                </div>
-
-                                <ChartCard
-                                    title="Miner Dominance"
-                                    description="Mining pool market share for the selected period"
-                                    chart_id="chart-miner-dominance"
-                                    option=miner_chart_option
-                                />
-                                <ChartCard
-                                    title="Empty Blocks"
-                                    description="Blocks containing only the coinbase transaction (no user transactions)"
-                                    chart_id="chart-empty-blocks"
-                                    option=empty_blocks_option
-                                />
+                            // --- Pool Distribution sub-section ---
+                            <div class=move || if mining_section.get() == "pools" { "space-y-10" } else { "hidden" }>
+                                <ChartCard title="Miner Dominance" description="Mining pool market share for the selected period" chart_id="chart-miner-dominance" option=miner_chart_option/>
+                                <ChartCard title="Empty Blocks" description="Blocks containing only the coinbase transaction (no user transactions)" chart_id="chart-empty-blocks" option=empty_blocks_option/>
                             </div>
                         }
                     }}
@@ -1415,61 +1372,58 @@ fn StatsContent() -> impl IntoView {
             // ===== EMBEDDED DATA TAB =====
             <div class=move || if tab.get() == "opreturn" { "block" } else { "hidden" }>
 
+                // Sub-section pills
+                <div class="flex flex-wrap gap-2 justify-center mb-6">
+                    {[("overview", "Overview"), ("protocols", "OP_RETURN Protocols"), ("witness", "Witness Embedding")].into_iter().map(|(id, label)| {
+                        let id_str = id.to_string();
+                        let id_clone = id_str.clone();
+                        view! {
+                            <button
+                                class=move || {
+                                    if embedded_section.get() == id_clone {
+                                        "px-4 py-1.5 text-xs rounded-lg bg-white/10 text-white font-semibold border border-white/20 cursor-pointer"
+                                    } else {
+                                        "px-4 py-1.5 text-xs rounded-lg text-white/40 hover:text-white/70 hover:bg-white/5 transition-all cursor-pointer"
+                                    }
+                                }
+                                on:click={
+                                    let id = id_str.clone();
+                                    move |_| set_embedded_section.set(id.clone())
+                                }
+                            >
+                                {label}
+                            </button>
+                        }
+                    }).collect::<Vec<_>>()}
+                </div>
+
                 <Suspense fallback=move || view! {
                     <div class="space-y-10">
-                        <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
-                        <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
                         <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
                     </div>
                 }>
                     {move || {
                         let _d = op_data.get();
+                        let _dd = dashboard_data.get();
                         view! {
-                            <div class="space-y-10">
-                                <ChartCard
-                                    title="Embedded Data Count"
-                                    description="OP_RETURN outputs by protocol (Runes, Omni, Counterparty, Other)"
-                                    chart_id="chart-opreturn-count"
-                                    option=op_count_option
-                                />
-                                <ChartCard
-                                    title="Embedded Data Volume"
-                                    description="Data volume in OP_RETURN outputs by protocol (bytes)"
-                                    chart_id="chart-opreturn-bytes"
-                                    option=op_bytes_option
-                                />
-                                <ChartCard
-                                    title="Protocol Dominance"
-                                    description="Share of OP_RETURN outputs by protocol — Runes, Omni, Counterparty, Other"
-                                    chart_id="chart-runes-pct"
-                                    option=runes_pct_option
-                                />
-                                <ChartCard
-                                    title="Embedded Data Block Share"
-                                    description="Embedded data (OP_RETURN) as percentage of total block size"
-                                    chart_id="chart-op-block-share"
-                                    option=op_block_share_option
-                                />
+                            // --- Overview sub-section (unified view) ---
+                            <div class=move || if embedded_section.get() == "overview" { "space-y-10" } else { "hidden" }>
+                                <ChartCard title="All Embedded Data — Block Share" description="OP_RETURN + Ordinals inscription data as percentage of total block size" chart_id="chart-all-embedded-share" option=all_embedded_share_option/>
+                                <ChartCard title="OP_RETURN Block Share" description="OP_RETURN data as percentage of total block size" chart_id="chart-op-block-share" option=op_block_share_option/>
+                                <ChartCard title="Inscription Block Share" description="Ordinals inscription data as percentage of total block size" chart_id="chart-inscription-share" option=inscription_share_option/>
+                            </div>
 
-                                // Section divider: Witness Embedding
-                                <div class="flex items-center gap-3 my-8">
-                                    <div class="flex-1 h-px bg-white/10"></div>
-                                    <span class="text-sm text-white/40 font-medium uppercase tracking-widest">"Witness Embedding (Ordinals)"</span>
-                                    <div class="flex-1 h-px bg-white/10"></div>
-                                </div>
+                            // --- OP_RETURN Protocols sub-section ---
+                            <div class=move || if embedded_section.get() == "protocols" { "space-y-10" } else { "hidden" }>
+                                <ChartCard title="Embedded Data Count" description="OP_RETURN outputs by protocol (Runes, Omni, Counterparty, Other)" chart_id="chart-opreturn-count" option=op_count_option/>
+                                <ChartCard title="Embedded Data Volume" description="Data volume in OP_RETURN outputs by protocol (bytes)" chart_id="chart-opreturn-bytes" option=op_bytes_option/>
+                                <ChartCard title="Protocol Dominance" description="Share of OP_RETURN outputs by protocol — Runes, Omni, Counterparty, Other" chart_id="chart-runes-pct" option=runes_pct_option/>
+                            </div>
 
-                                <ChartCard
-                                    title="Ordinals Inscriptions"
-                                    description="Number of Ordinals inscriptions detected per block (witness envelope pattern)"
-                                    chart_id="chart-inscriptions"
-                                    option=inscription_option
-                                />
-                                <ChartCard
-                                    title="Inscription Block Share"
-                                    description="Inscription data as percentage of total block size"
-                                    chart_id="chart-inscription-share"
-                                    option=inscription_share_option
-                                />
+                            // --- Witness Embedding sub-section ---
+                            <div class=move || if embedded_section.get() == "witness" { "space-y-10" } else { "hidden" }>
+                                <ChartCard title="Ordinals Inscriptions" description="Number of Ordinals inscriptions detected per block (witness envelope pattern)" chart_id="chart-inscriptions" option=inscription_option/>
+                                <ChartCard title="Inscription Block Share" description="Inscription data as percentage of total block size" chart_id="chart-inscription-share-2" option=inscription_share_option/>
                             </div>
                         }
                     }}

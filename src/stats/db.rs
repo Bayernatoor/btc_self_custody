@@ -367,6 +367,7 @@ pub struct BlockRow {
     pub witness_bytes: u64,
     pub inscription_count: u64,
     pub inscription_bytes: u64,
+    pub op_return_bytes: u64,
 }
 
 pub fn query_blocks(
@@ -381,7 +382,7 @@ pub fn query_blocks(
                 p2pk_count, p2pkh_count, p2sh_count, p2wpkh_count, p2wsh_count,
                 p2tr_count, multisig_count, unknown_script_count,
                 input_count, output_count, rbf_count, witness_bytes,
-                inscription_count, inscription_bytes
+                inscription_count, inscription_bytes, op_return_bytes
          FROM blocks WHERE height >= ?1 AND height <= ?2 ORDER BY height ASC",
     )?;
     let rows = stmt.query_map(params![from, to], |row| {
@@ -412,6 +413,7 @@ pub fn query_blocks(
             witness_bytes: row.get(23)?,
             inscription_count: row.get(24)?,
             inscription_bytes: row.get(25)?,
+            op_return_bytes: row.get(26)?,
         })
     })?;
     rows.collect()

@@ -77,6 +77,7 @@ pub async fn fetch_blocks(
             witness_bytes: r.witness_bytes,
             inscription_count: r.inscription_count,
             inscription_bytes: r.inscription_bytes,
+            op_return_bytes: r.op_return_bytes,
         })
         .collect())
 }
