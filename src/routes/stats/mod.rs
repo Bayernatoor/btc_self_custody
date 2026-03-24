@@ -363,6 +363,46 @@ fn StatsContent() -> impl IntoView {
         };
     }
 
+    // Helper: range selector view (reused in multiple tabs)
+    macro_rules! range_selector {
+        () => {
+            view! {
+                <div class="flex justify-end items-center mb-4">
+                    <div class="inline-flex flex-wrap gap-1.5 bg-[#0a1a2e] rounded-xl p-1.5 border border-white/5">
+                        {["1d", "1w", "1m", "3m", "6m", "1y", "2y", "5y", "10y", "all"].into_iter().map(|r| {
+                            let r_str = r.to_string();
+                            let r_display = r.to_uppercase();
+                            let r_clone = r_str.clone();
+                            view! {
+                                <button
+                                    class=move || {
+                                        if range.get() == r_clone {
+                                            "px-3 py-1 text-xs rounded-lg bg-[#f7931a] text-[#1a1a2e] font-semibold cursor-pointer"
+                                        } else {
+                                            "px-3 py-1 text-xs rounded-lg text-white/40 hover:text-white/70 hover:bg-white/5 transition-all cursor-pointer"
+                                        }
+                                    }
+                                    on:click={
+                                        let r = r_str.clone();
+                                        move |_| set_range.set(r.clone())
+                                    }
+                                >
+                                    {r_display}
+                                </button>
+                            }
+                        }).collect::<Vec<_>>()}
+                    </div>
+                    <span class="ml-3 text-xs text-white/30 self-center">
+                        {move || {
+                            let n = range_to_blocks(&range.get());
+                            if n > 5_000 { "daily averages" } else { "per block" }
+                        }}
+                    </span>
+                </div>
+            }
+        };
+    }
+
     let size_option = chart_signal!(dashboard_data, range, overlay_flags,
         |blocks| crate::stats::charts::block_size_chart(blocks),
         |days| crate::stats::charts::block_size_chart_daily(days)
@@ -932,47 +972,6 @@ fn StatsContent() -> impl IntoView {
             </div>
             <div class="h-px bg-white/10 mb-6"></div>
 
-            // Range selector (hidden on overview and signaling tabs)
-            <div class=move || {
-                let t = tab.get();
-                if t == "overview" || t == "signaling" {
-                    "hidden"
-                } else {
-                    "flex justify-end items-center mb-4"
-                }
-            }>
-                <div class="inline-flex flex-wrap gap-1.5 bg-[#0a1a2e] rounded-xl p-1.5 border border-white/5">
-                    {["1d", "1w", "1m", "3m", "6m", "1y", "2y", "5y", "10y", "all"].into_iter().map(|r| {
-                        let r_str = r.to_string();
-                        let r_display = r.to_uppercase();
-                        let r_clone = r_str.clone();
-                        view! {
-                            <button
-                                class=move || {
-                                    if range.get() == r_clone {
-                                        "px-3 py-1 text-xs rounded-lg bg-[#f7931a] text-[#1a1a2e] font-semibold cursor-pointer"
-                                    } else {
-                                        "px-3 py-1 text-xs rounded-lg text-white/40 hover:text-white/70 hover:bg-white/5 transition-all cursor-pointer"
-                                    }
-                                }
-                                on:click={
-                                    let r = r_str.clone();
-                                    move |_| set_range.set(r.clone())
-                                }
-                            >
-                                {r_display}
-                            </button>
-                        }
-                    }).collect::<Vec<_>>()}
-                </div>
-                <span class="ml-3 text-xs text-white/30 self-center">
-                    {move || {
-                        let n = range_to_blocks(&range.get());
-                        if n > 5_000 { "daily averages" } else { "per block" }
-                    }}
-                </span>
-            </div>
-
             // ===== FLOATING OVERLAY PANEL =====
             <div class="fixed left-4 bottom-4 z-50">
                 <Show
@@ -1247,6 +1246,8 @@ fn StatsContent() -> impl IntoView {
                     }).collect::<Vec<_>>()}
                 </div>
 
+                {range_selector!()}
+
                 <Suspense fallback=move || view! {
                     <div class="space-y-10">
                         <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
@@ -1289,6 +1290,8 @@ fn StatsContent() -> impl IntoView {
 
             // ===== FEES TAB =====
             <div class=move || if tab.get() == "fees" { "block" } else { "hidden" }>
+
+                {range_selector!()}
 
                 <Suspense fallback=move || view! {
                     <div class="space-y-10">
@@ -1357,6 +1360,8 @@ fn StatsContent() -> impl IntoView {
                     }).collect::<Vec<_>>()}
                 </div>
 
+                {range_selector!()}
+
                 <Suspense fallback=move || view! {
                     <div class="space-y-10">
                         <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
@@ -1420,6 +1425,8 @@ fn StatsContent() -> impl IntoView {
                         }
                     }).collect::<Vec<_>>()}
                 </div>
+
+                {range_selector!()}
 
                 <Suspense fallback=move || view! {
                     <div class="space-y-10">
