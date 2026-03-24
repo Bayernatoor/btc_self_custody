@@ -513,3 +513,127 @@ pub fn all_embedded_share_chart_daily(days: &[DailyAggregate]) -> String {
         ]
     }))
 }
+
+const STAMPS_COLOR: &str = "#94a3b8"; // Slate gray for Stamps/multisig
+
+/// Unified embedded data count — all protocols + inscriptions + stamps (per-block).
+pub fn unified_embedded_count_chart(blocks: &[BlockSummary]) -> String {
+    if blocks.is_empty() {
+        return no_data_chart("All Embedded Data Count");
+    }
+
+    let runes: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.runes_count])).collect();
+    let omni: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.omni_count])).collect();
+    let xcp: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.counterparty_count])).collect();
+    let other_op: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.data_carrier_count])).collect();
+    let inscriptions: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.inscription_count])).collect();
+    let stamps: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.multisig_count])).collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("Count"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            { "name": "Runes", "type": "bar", "stack": "total", "data": runes, "itemStyle": { "color": RUNES_COLOR } },
+            { "name": "Omni", "type": "bar", "stack": "total", "data": omni, "itemStyle": { "color": OMNI_COLOR } },
+            { "name": "Counterparty", "type": "bar", "stack": "total", "data": xcp, "itemStyle": { "color": COUNTERPARTY_COLOR } },
+            { "name": "Other OP_RETURN", "type": "bar", "stack": "total", "data": other_op, "itemStyle": { "color": CARRIER_COLOR } },
+            { "name": "Inscriptions", "type": "bar", "stack": "total", "data": inscriptions, "itemStyle": { "color": INSCRIPTION_COLOR } },
+            { "name": "Stamps (multisig)", "type": "bar", "stack": "total", "data": stamps, "itemStyle": { "color": STAMPS_COLOR } }
+        ]
+    }))
+}
+
+/// Unified embedded data count (daily).
+pub fn unified_embedded_count_chart_daily(days: &[DailyAggregate]) -> String {
+    if days.is_empty() {
+        return no_data_chart("All Embedded Data Count");
+    }
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    let avg = |total: u64, bc: u64| -> f64 {
+        if bc > 0 { round(total as f64 / bc as f64, 1) } else { 0.0 }
+    };
+    let runes: Vec<f64> = days.iter().map(|d| avg(d.total_runes_count, d.block_count)).collect();
+    let omni: Vec<f64> = days.iter().map(|d| avg(d.total_omni_count, d.block_count)).collect();
+    let xcp: Vec<f64> = days.iter().map(|d| avg(d.total_counterparty_count, d.block_count)).collect();
+    let other_op: Vec<f64> = days.iter().map(|d| avg(d.total_data_carrier_count, d.block_count)).collect();
+    let inscriptions: Vec<f64> = days.iter().map(|d| round(d.avg_inscription_count, 1)).collect();
+    let stamps: Vec<f64> = days.iter().map(|d| round(d.avg_multisig_count, 1)).collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": y_axis("Avg/Block"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            { "name": "Runes", "type": "bar", "stack": "total", "data": runes, "itemStyle": { "color": RUNES_COLOR } },
+            { "name": "Omni", "type": "bar", "stack": "total", "data": omni, "itemStyle": { "color": OMNI_COLOR } },
+            { "name": "Counterparty", "type": "bar", "stack": "total", "data": xcp, "itemStyle": { "color": COUNTERPARTY_COLOR } },
+            { "name": "Other OP_RETURN", "type": "bar", "stack": "total", "data": other_op, "itemStyle": { "color": CARRIER_COLOR } },
+            { "name": "Inscriptions", "type": "bar", "stack": "total", "data": inscriptions, "itemStyle": { "color": INSCRIPTION_COLOR } },
+            { "name": "Stamps (multisig)", "type": "bar", "stack": "total", "data": stamps, "itemStyle": { "color": STAMPS_COLOR } }
+        ]
+    }))
+}
+
+/// Unified embedded data volume — all protocols by bytes (per-block).
+pub fn unified_embedded_volume_chart(blocks: &[BlockSummary]) -> String {
+    if blocks.is_empty() {
+        return no_data_chart("All Embedded Data Volume");
+    }
+
+    let runes: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.runes_bytes])).collect();
+    let omni: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.omni_bytes])).collect();
+    let xcp: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.counterparty_bytes])).collect();
+    let other_op: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.data_carrier_bytes])).collect();
+    let inscriptions: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.inscription_bytes])).collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("Bytes"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            { "name": "Runes", "type": "bar", "stack": "total", "data": runes, "itemStyle": { "color": RUNES_COLOR } },
+            { "name": "Omni", "type": "bar", "stack": "total", "data": omni, "itemStyle": { "color": OMNI_COLOR } },
+            { "name": "Counterparty", "type": "bar", "stack": "total", "data": xcp, "itemStyle": { "color": COUNTERPARTY_COLOR } },
+            { "name": "Other OP_RETURN", "type": "bar", "stack": "total", "data": other_op, "itemStyle": { "color": CARRIER_COLOR } },
+            { "name": "Inscriptions", "type": "bar", "stack": "total", "data": inscriptions, "itemStyle": { "color": INSCRIPTION_COLOR } }
+        ]
+    }))
+}
+
+/// Unified embedded data volume (daily).
+pub fn unified_embedded_volume_chart_daily(days: &[DailyAggregate]) -> String {
+    if days.is_empty() {
+        return no_data_chart("All Embedded Data Volume");
+    }
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    let avg_kb = |total: u64, bc: u64| -> f64 {
+        if bc > 0 { round(total as f64 / bc as f64 / 1000.0, 1) } else { 0.0 }
+    };
+    let runes: Vec<f64> = days.iter().map(|d| avg_kb(d.total_runes_bytes, d.block_count)).collect();
+    let omni: Vec<f64> = days.iter().map(|d| avg_kb(d.total_omni_bytes, d.block_count)).collect();
+    let xcp: Vec<f64> = days.iter().map(|d| avg_kb(d.total_counterparty_bytes, d.block_count)).collect();
+    let other_op: Vec<f64> = days.iter().map(|d| avg_kb(d.total_data_carrier_bytes, d.block_count)).collect();
+    let inscriptions: Vec<f64> = days.iter().map(|d| round(d.avg_inscription_bytes / 1000.0, 1)).collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": y_axis("KB/Block"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            { "name": "Runes", "type": "bar", "stack": "total", "data": runes, "itemStyle": { "color": RUNES_COLOR } },
+            { "name": "Omni", "type": "bar", "stack": "total", "data": omni, "itemStyle": { "color": OMNI_COLOR } },
+            { "name": "Counterparty", "type": "bar", "stack": "total", "data": xcp, "itemStyle": { "color": COUNTERPARTY_COLOR } },
+            { "name": "Other OP_RETURN", "type": "bar", "stack": "total", "data": other_op, "itemStyle": { "color": CARRIER_COLOR } },
+            { "name": "Inscriptions", "type": "bar", "stack": "total", "data": inscriptions, "itemStyle": { "color": INSCRIPTION_COLOR } }
+        ]
+    }))
+}

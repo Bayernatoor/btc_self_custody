@@ -831,6 +831,16 @@ fn StatsContent() -> impl IntoView {
         |days| crate::stats::charts::all_embedded_share_chart_daily(days)
     );
 
+    let unified_count_option = chart_signal!(dashboard_data, range, overlay_flags,
+        |blocks| crate::stats::charts::unified_embedded_count_chart(blocks),
+        |days| crate::stats::charts::unified_embedded_count_chart_daily(days)
+    );
+
+    let unified_volume_option = chart_signal!(dashboard_data, range, overlay_flags,
+        |blocks| crate::stats::charts::unified_embedded_volume_chart(blocks),
+        |days| crate::stats::charts::unified_embedded_volume_chart_daily(days)
+    );
+
     // ---- BIP Signaling data ----
     let (bip_method, set_bip_method) = signal("bit".to_string());
     // Period offset: 0 = current, 1 = previous, etc.
@@ -1411,6 +1421,8 @@ fn StatsContent() -> impl IntoView {
                             // --- Overview sub-section (unified view) ---
                             <div class=move || if embedded_section.get() == "overview" { "space-y-10" } else { "hidden" }>
                                 <ChartCard title="All Embedded Data — Block Share" description="OP_RETURN + Ordinals inscription data as percentage of total block size" chart_id="chart-all-embedded-share" option=all_embedded_share_option/>
+                                <ChartCard title="All Embedded Data — Count" description="All embedding protocols: Runes, Omni, Counterparty, Other OP_RETURN, Ordinals, Stamps" chart_id="chart-unified-count" option=unified_count_option/>
+                                <ChartCard title="All Embedded Data — Volume" description="Data volume by protocol across all embedding methods (bytes)" chart_id="chart-unified-volume" option=unified_volume_option/>
                             </div>
 
                             // --- OP_RETURN Protocols sub-section ---

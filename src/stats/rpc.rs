@@ -108,6 +108,7 @@ pub struct Block {
     // Ordinals inscriptions
     pub inscription_count: u64,
     pub inscription_bytes: u64,
+    pub brc20_count: u64,
 }
 
 impl BitcoinRpc {
@@ -279,6 +280,7 @@ impl BitcoinRpc {
         // === Single pass over non-coinbase txs: fees, OP_RETURN, outputs, inputs, RBF, witness ===
         let mut inscription_count = 0u64;
         let mut inscription_bytes = 0u64;
+        let mut brc20_count = 0u64;
 
         let cap = n_tx.saturating_sub(1) as usize;
         let mut tx_fees: Vec<u64> = Vec::with_capacity(cap);
@@ -338,9 +340,11 @@ impl BitcoinRpc {
                                     // OP_FALSE(00) OP_IF(63) OP_PUSH3(03) "ord"(6f7264)
                                     if hex.contains("0063036f7264") {
                                         inscription_count += 1;
-                                        // Estimate inscription size as the witness item size
-                                        // minus the envelope overhead (~10 bytes)
                                         inscription_bytes += item_bytes.saturating_sub(10);
+                                        // BRC-20: inscription containing {"p":"brc-20"
+                                        if hex.contains("7b2270223a226272632d3230") {
+                                            brc20_count += 1;
+                                        }
                                     }
                                 }
                             }
@@ -469,6 +473,7 @@ impl BitcoinRpc {
             witness_bytes,
             inscription_count,
             inscription_bytes,
+            brc20_count,
         })
     }
 
