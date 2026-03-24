@@ -193,6 +193,16 @@
   - Verify daily aggregation mode produces correct values
   - Test edge cases: empty data, single data point, very large ranges
 
+## TODO: Stats Route Performance Optimization
+- [ ] Noticeable lag when switching tabs and loading/changing chart ranges
+  - Profile where time is spent: data fetching, chart JSON building, overlay application, ECharts rendering
+  - Consider lazy-loading tab content (don't build chart signals until tab is first visited)
+  - Investigate if dashboard_data cloning is a bottleneck (large block/daily vecs)
+  - Review server-side query performance (SQLite indexes, query plans)
+  - Consider caching server responses client-side across range switches
+  - Evaluate ECharts `notMerge` vs merge behavior on option updates
+  - Test with reduced data density (more aggressive sampling for large ranges)
+
 ## Completed: Codebase Refactoring (2026-03-24)
 - [x] Split `charts.rs` (3239 lines) into 9 module files:
   - `charts/mod.rs` — helpers, constants, colors, build_option, apply_overlays
