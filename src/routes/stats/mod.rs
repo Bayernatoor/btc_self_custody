@@ -906,7 +906,7 @@ fn StatsContent() -> impl IntoView {
             </div>
 
             // Tab navigation
-            <div class="flex flex-wrap gap-3 justify-center mb-8">
+            <div class="flex flex-wrap gap-3 justify-center mb-6">
                 {tabs.into_iter().map(|(id, label)| {
                     let id = id.to_string();
                     let label = label.to_string();
@@ -930,6 +930,7 @@ fn StatsContent() -> impl IntoView {
                     }
                 }).collect::<Vec<_>>()}
             </div>
+            <div class="h-px bg-white/10 mb-6"></div>
 
             // Range selector (hidden on overview and signaling tabs)
             <div class=move || {
