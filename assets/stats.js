@@ -32,7 +32,13 @@
         var el = document.getElementById(elementId);
         if (!el) return;
         if (typeof echarts === 'undefined') {
-            // ECharts not loaded yet — retry after a short delay
+            // ECharts not loaded yet — retry with limit to avoid infinite loop
+            if (!el._echartsRetry) el._echartsRetry = 0;
+            if (el._echartsRetry >= 25) { // ~5 seconds max
+                console.warn('ECharts failed to load for', elementId);
+                return;
+            }
+            el._echartsRetry++;
             setTimeout(function() { window.setChartOption(elementId, optionJson); }, 200);
             return;
         }
@@ -50,7 +56,6 @@
                 opts.animation = false;
             }
             el._chart.setOption(opts, true);
-        } catch(e) { console.error('Chart error:', e); }
             // Auto-register click handler for block detail (data format: [ts, value, height])
             if (!el._clickRegistered) {
                 el._clickRegistered = true;
@@ -60,7 +65,7 @@
                     }
                 });
             }
-        }
+        } catch(e) { console.error('Chart error:', e); }
     };
 
     window.disposeChart = function(elementId) {

@@ -129,8 +129,14 @@ pub async fn get_live(
 
     let blockchain = blockchain_res?;
     let mempool = mempool_res?;
-    let hashrate = hashrate_res.unwrap_or(0.0);
-    let next_block_fee = fee_res.unwrap_or(0.0);
+    let hashrate = hashrate_res.unwrap_or_else(|e| {
+        tracing::warn!("Failed to fetch hashrate: {e}");
+        0.0
+    });
+    let next_block_fee = fee_res.unwrap_or_else(|e| {
+        tracing::warn!("Failed to fetch fee estimate: {e}");
+        0.0
+    });
 
     // Price cache: only fetch from mempool.space if cache is >60s old
     let price_usd = {
