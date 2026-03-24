@@ -544,7 +544,7 @@ pub fn chain_size_chart(blocks: &[BlockSummary], disk_size_gb: f64) -> String {
     // On short ranges the cumulative starts at 0 (not the true chain total), making the ratio
     // wildly wrong.  Heuristic: need at least 100 GB of block data in the window.
     let block_total = cumulative;
-    let show_disk = block_total >= 100.0 && disk_size_gb > 0.0;
+    let show_disk = block_total >= 20.0 && disk_size_gb > 0.0;
 
     let mut series = vec![json!({
         "name": "Block Data", "type": "line", "sampling": "lttb", "data": block_data,
@@ -600,7 +600,7 @@ pub fn chain_size_chart_daily(days: &[DailyAggregate], disk_size_gb: f64) -> Str
     // Same heuristic as per-block: only show disk size when the window covers enough
     // of the chain for the ratio to be meaningful.
     let block_total = cumulative;
-    let show_disk = block_total >= 100.0 && disk_size_gb > 0.0;
+    let show_disk = block_total >= 20.0 && disk_size_gb > 0.0;
 
     let mut series = vec![json!({
         "name": "Block Data", "type": "line", "sampling": "lttb", "data": block_data,
