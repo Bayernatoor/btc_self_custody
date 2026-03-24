@@ -36,9 +36,11 @@ pub fn Chart(
     #[prop(optional, into)] class: Option<String>,
 ) -> impl IntoView {
     let id_clone = id.clone();
+    let last_json = std::cell::RefCell::new(String::new());
     Effect::new(move |_| {
         let json = option.get();
-        if !json.is_empty() {
+        if !json.is_empty() && *last_json.borrow() != json {
+            *last_json.borrow_mut() = json.clone();
             set_chart_option(&id_clone, &json);
         }
     });
