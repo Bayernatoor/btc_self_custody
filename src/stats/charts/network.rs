@@ -540,38 +540,44 @@ pub fn chain_size_chart(blocks: &[BlockSummary], disk_size_gb: f64) -> String {
         })
         .collect();
 
-    // Estimate disk size at each point using the known ratio at the tip
+    // Only show disk size estimate when we have enough history for the ratio to be meaningful.
+    // On short ranges the cumulative starts at 0 (not the true chain total), making the ratio
+    // wildly wrong.  Heuristic: need at least 100 GB of block data in the window.
     let block_total = cumulative;
-    let ratio = if block_total > 0.0 { disk_size_gb / block_total } else { 1.0 };
-    let mut cumulative2: f64 = 0.0;
-    let disk_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .map(|b| {
-            cumulative2 += b.size as f64 / 1_000_000_000.0;
-            let estimated = cumulative2 * ratio;
-            json!([ts_ms(b.timestamp), (estimated * 1000.0).round() / 1000.0])
-        })
-        .collect();
+    let show_disk = block_total >= 100.0 && disk_size_gb > 0.0;
+
+    let mut series = vec![json!({
+        "name": "Block Data", "type": "line", "sampling": "lttb", "data": block_data,
+        "areaStyle": { "color": DATA_COLOR, "opacity": 0.1 },
+        "lineStyle": { "width": 2, "color": DATA_COLOR },
+        "itemStyle": { "color": DATA_COLOR }, "symbol": "none"
+    })];
+
+    if show_disk {
+        let ratio = disk_size_gb / block_total;
+        let mut cumulative2: f64 = 0.0;
+        let disk_data: Vec<serde_json::Value> = blocks
+            .iter()
+            .map(|b| {
+                cumulative2 += b.size as f64 / 1_000_000_000.0;
+                let estimated = cumulative2 * ratio;
+                json!([ts_ms(b.timestamp), (estimated * 1000.0).round() / 1000.0])
+            })
+            .collect();
+        series.push(json!({
+            "name": "Disk Size (est.)", "type": "line", "sampling": "lttb", "data": disk_data,
+            "lineStyle": { "width": 1.5, "color": DISK_COLOR, "type": "dashed" },
+            "itemStyle": { "color": DISK_COLOR }, "symbol": "none"
+        }));
+    }
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
         "yAxis": y_axis("GB"),
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
-        "legend": { "show": true },
-        "series": [
-            {
-                "name": "Block Data", "type": "line", "sampling": "lttb", "data": block_data,
-                "areaStyle": { "color": DATA_COLOR, "opacity": 0.1 },
-                "lineStyle": { "width": 2, "color": DATA_COLOR },
-                "itemStyle": { "color": DATA_COLOR }, "symbol": "none"
-            },
-            {
-                "name": "Disk Size (est.)", "type": "line", "sampling": "lttb", "data": disk_data,
-                "lineStyle": { "width": 1.5, "color": DISK_COLOR, "type": "dashed" },
-                "itemStyle": { "color": DISK_COLOR }, "symbol": "none"
-            }
-        ]
+        "legend": { "show": show_disk },
+        "series": series
     }))
 }
 
@@ -591,36 +597,42 @@ pub fn chain_size_chart_daily(days: &[DailyAggregate], disk_size_gb: f64) -> Str
         })
         .collect();
 
+    // Same heuristic as per-block: only show disk size when the window covers enough
+    // of the chain for the ratio to be meaningful.
     let block_total = cumulative;
-    let ratio = if block_total > 0.0 { disk_size_gb / block_total } else { 1.0 };
-    let mut cumulative2: f64 = 0.0;
-    let disk_data: Vec<f64> = days
-        .iter()
-        .map(|d| {
-            cumulative2 += d.avg_size * d.block_count as f64 / 1_000_000_000.0;
-            let estimated = cumulative2 * ratio;
-            (estimated * 1000.0).round() / 1000.0
-        })
-        .collect();
+    let show_disk = block_total >= 100.0 && disk_size_gb > 0.0;
+
+    let mut series = vec![json!({
+        "name": "Block Data", "type": "line", "sampling": "lttb", "data": block_data,
+        "areaStyle": { "color": DATA_COLOR, "opacity": 0.1 },
+        "lineStyle": { "width": 2, "color": DATA_COLOR },
+        "itemStyle": { "color": DATA_COLOR }, "symbol": "none"
+    })];
+
+    if show_disk {
+        let ratio = disk_size_gb / block_total;
+        let mut cumulative2: f64 = 0.0;
+        let disk_data: Vec<f64> = days
+            .iter()
+            .map(|d| {
+                cumulative2 += d.avg_size * d.block_count as f64 / 1_000_000_000.0;
+                let estimated = cumulative2 * ratio;
+                (estimated * 1000.0).round() / 1000.0
+            })
+            .collect();
+        series.push(json!({
+            "name": "Disk Size (est.)", "type": "line", "sampling": "lttb", "data": disk_data,
+            "lineStyle": { "width": 1.5, "color": DISK_COLOR, "type": "dashed" },
+            "itemStyle": { "color": DISK_COLOR }, "symbol": "none"
+        }));
+    }
 
     build_option(json!({
         "xAxis": x_axis_for(true, &cats),
         "yAxis": y_axis("GB"),
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
-        "legend": { "show": true },
-        "series": [
-            {
-                "name": "Block Data", "type": "line", "sampling": "lttb", "data": block_data,
-                "areaStyle": { "color": DATA_COLOR, "opacity": 0.1 },
-                "lineStyle": { "width": 2, "color": DATA_COLOR },
-                "itemStyle": { "color": DATA_COLOR }, "symbol": "none"
-            },
-            {
-                "name": "Disk Size (est.)", "type": "line", "sampling": "lttb", "data": disk_data,
-                "lineStyle": { "width": 1.5, "color": DISK_COLOR, "type": "dashed" },
-                "itemStyle": { "color": DISK_COLOR }, "symbol": "none"
-            }
-        ]
+        "legend": { "show": show_disk },
+        "series": series
     }))
 }

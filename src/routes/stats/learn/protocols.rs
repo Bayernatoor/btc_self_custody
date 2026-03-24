@@ -232,7 +232,7 @@ pub fn ProtocolGuidePage() -> impl IntoView {
 
                             // How it works
                             <div class="border-t border-white/5 px-6 lg:px-8 py-5 bg-[#0a1a2e]">
-                                <h4 class="text-xs text-white/50 uppercase tracking-widest mb-3">"How it works"</h4>
+                                <h4 class="text-xs text-[#8899aa] uppercase tracking-widest mb-3">"How it works"</h4>
                                 <p class="text-sm text-white/65 leading-relaxed mb-3">{p.how_it_works}</p>
                                 <code class="text-sm text-[#f7931a]/80 font-mono">{p.method_detail}</code>
                             </div>

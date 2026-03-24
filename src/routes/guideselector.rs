@@ -183,10 +183,10 @@ pub fn guide_selector_view(
                                             let delay = format!("animation-delay: {}ms", i * 80);
                                             view! {
                                                 <a href=path class="block opacity-0 animate-slideup" style=delay>
-                                                    <button class="group flex items-center gap-4 w-full px-5 py-5 lg:px-6 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 hover:border-white/25 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer">
+                                                    <button class="group flex items-center gap-4 w-full px-5 py-4 lg:py-5 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 hover:border-white/25 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer">
                                                         <div class="w-10 h-10 rounded-lg bg-[#f7931a]/10 flex items-center justify-center text-[#f7931a] group-hover:bg-[#f7931a]/20 transition-colors" inner_html=icon_html></div>
                                                         <div class="flex-1 text-left">
-                                                            <div class="text-base lg:text-lg font-semibold text-white group-hover:text-[#f4a949] transition-colors">{*os_name}</div>
+                                                            <div class="text-base font-semibold text-white group-hover:text-[#f4a949] transition-colors">{*os_name}</div>
                                                         </div>
                                                         <svg class="w-5 h-5 text-white/30 group-hover:text-white/60 group-hover:translate-x-0.5 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
@@ -230,12 +230,12 @@ pub fn guide_selector_view(
                                                         view! {
                                                             <div class="opacity-0 animate-slideup" style=delay>
                                                                 <button
-                                                                    class="group flex items-center gap-4 w-full px-5 py-5 lg:px-6 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 hover:border-white/25 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer"
+                                                                    class="group flex items-center gap-4 w-full px-5 py-4 lg:py-5 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 hover:border-white/25 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer"
                                                                     on:click=move |_| set_selected_platform.set(Some("desktop"))
                                                                 >
                                                                     <div class="w-10 h-10 rounded-lg bg-[#f7931a]/10 flex items-center justify-center text-[#f7931a] group-hover:bg-[#f7931a]/20 transition-colors" inner_html=icon_html></div>
                                                                     <div class="flex-1 text-left">
-                                                                        <div class="text-base lg:text-lg font-semibold text-white group-hover:text-[#f4a949] transition-colors">{display}</div>
+                                                                        <div class="text-base font-semibold text-white group-hover:text-[#f4a949] transition-colors">{display}</div>
                                                                     </div>
                                                                     <svg class="w-5 h-5 text-white/30 group-hover:text-white/60 group-hover:translate-x-0.5 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
@@ -248,10 +248,10 @@ pub fn guide_selector_view(
                                                         let path = format!("/guides/{}/{}", lid, platform_str);
                                                         view! {
                                                             <a href=path class="block opacity-0 animate-slideup" style=delay>
-                                                                <button class="group flex items-center gap-4 w-full px-5 py-5 lg:px-6 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 hover:border-white/25 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer">
+                                                                <button class="group flex items-center gap-4 w-full px-5 py-4 lg:py-5 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 hover:border-white/25 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer">
                                                                     <div class="w-10 h-10 rounded-lg bg-[#f7931a]/10 flex items-center justify-center text-[#f7931a] group-hover:bg-[#f7931a]/20 transition-colors" inner_html=icon_html></div>
                                                                     <div class="flex-1 text-left">
-                                                                        <div class="text-base lg:text-lg font-semibold text-white group-hover:text-[#f4a949] transition-colors">{display}</div>
+                                                                        <div class="text-base font-semibold text-white group-hover:text-[#f4a949] transition-colors">{display}</div>
                                                                     </div>
                                                                     <svg class="w-5 h-5 text-white/30 group-hover:text-white/60 group-hover:translate-x-0.5 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
@@ -288,13 +288,13 @@ pub fn guide_selector_view(
                                             let delay = format!("animation-delay: {}ms", i * 80);
                                             view! {
                                                 <button
-                                                    class="opacity-0 animate-slideup group flex items-center w-full px-5 py-5 lg:px-6 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 hover:border-white/25 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer"
+                                                    class="opacity-0 animate-slideup group flex items-center w-full px-5 py-4 lg:py-5 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 hover:border-white/25 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer"
                                                     style=delay
                                                     on:click=move |_| set_selected_level.set(Some(level_id))
                                                 >
                                                     <div class="flex-1 text-left">
-                                                        <div class="text-lg lg:text-xl font-semibold text-[#f7931a] group-hover:text-[#f4a949] transition-colors">{level.name}</div>
-                                                        <p class="text-sm lg:text-base text-white/50 mt-0.5">{level.subtitle}</p>
+                                                        <div class="text-base font-semibold text-[#f7931a] group-hover:text-[#f4a949] transition-colors">{level.name}</div>
+                                                        <p class="text-sm text-white/50 mt-0.5">{level.subtitle}</p>
                                                     </div>
                                                     <svg class="w-5 h-5 text-white/30 group-hover:text-white/60 group-hover:translate-x-0.5 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>

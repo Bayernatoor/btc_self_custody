@@ -56,7 +56,7 @@ fn PageHeader(
 ) -> impl IntoView {
     view! {
         <header class="text-center mb-8 animate-scaleup">
-            <h1 class="text-[1.65rem] text-[#f7931a] font-semibold leading-tight font-title md:text-[2rem] lg:text-[2.75rem]">
+            <h1 class="text-[1.65rem] text-[#f7931a] font-semibold leading-tight font-title md:text-[2rem] lg:text-[2.5rem]">
                 {title}
             </h1>
             <div class="w-16 h-0.5 bg-[#f7931a] mx-auto mt-3 mb-4"></div>
@@ -150,7 +150,7 @@ fn ProductCard(product: &'static ProductLink) -> impl IntoView {
 }
 
 fn centered_layout() -> &'static str {
-    "flex flex-col items-center max-w-2xl mx-auto px-6 mt-10 mb-24 opacity-0 animate-fadeinone lg:px-8 lg:max-w-3xl xl:max-w-4xl md:my-20"
+    "flex flex-col items-center max-w-2xl mx-auto px-6 mt-10 mb-24 opacity-0 animate-fadeinone lg:px-8 lg:max-w-3xl md:my-20"
 }
 
 // =============================================================================

@@ -30,10 +30,10 @@ pub fn mempool_gauge(usage: u64, max: u64) -> String {
                 }
             },
             "pointer": { "width": 3, "length": "65%" },
-            "title": { "color": "#aaa", "fontSize": 11, "offsetCenter": [0, "82%"] },
+            "title": { "color": "#8899aa", "fontSize": 12, "offsetCenter": [0, "82%"] },
             "axisTick": { "show": false },
-            "splitLine": { "length": 8, "lineStyle": { "color": "#666" } },
-            "axisLabel": { "color": "#666", "distance": 15, "fontSize": 10 }
+            "splitLine": { "length": 8, "lineStyle": { "color": "#8899aa" } },
+            "axisLabel": { "color": "#8899aa", "distance": 15, "fontSize": 10 }
         }]
     }))
     .unwrap_or_default()

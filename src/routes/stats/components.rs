@@ -169,7 +169,7 @@ pub fn LiveCard(
 ) -> impl IntoView {
     view! {
         <div class="bg-[#0d2137] border border-white/10 rounded-lg p-3 text-center">
-            <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">{label}</div>
+            <div class="text-[0.7rem] text-[#8899aa] uppercase tracking-widest mb-1">{label}</div>
             <div
                 class="text-lg lg:text-xl text-[#f7931a] font-bold font-mono truncate"
                 title=move || value.get()
