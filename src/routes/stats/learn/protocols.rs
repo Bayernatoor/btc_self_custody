@@ -257,6 +257,19 @@ pub fn ProtocolGuidePage() -> impl IntoView {
                 }).collect::<Vec<_>>()}
             </div>
 
+            // Historical note: Colored Coins
+            <div class="bg-[#0a1a2e] border border-white/5 rounded-xl p-5 mt-8">
+                <div class="flex items-start gap-3">
+                    <span class="text-white/20 text-lg shrink-0">{"\u{1f4dc}"}</span>
+                    <div>
+                        <h4 class="text-sm text-white/50 font-semibold mb-1">"Historical note: Colored Coins (2012\u{2013}2015)"</h4>
+                        <p class="text-xs text-white/40 leading-relaxed">
+                            "Colored Coins was the earliest concept for representing tokens on Bitcoin, predating all protocols listed above. Rather than a single protocol, it was a family of incompatible implementations (Open Assets, EPOBC, ChromaWay) that used various techniques \u{2014} from OP_RETURN markers to transaction output ordering \u{2014} to \"color\" specific satoshis as representing real-world assets. Most implementations relied on external metadata servers, making on-chain detection unreliable. Colored Coins saw limited adoption but were historically significant as the first tokenization experiments on Bitcoin, directly inspiring later protocols like Counterparty and Omni. They are not tracked in the Observatory charts due to their ambiguous on-chain footprint and low volume."
+                        </p>
+                    </div>
+                </div>
+            </div>
+
             // Comparison table
             <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 mt-10">
                 <h2 class="text-sm text-white/40 uppercase tracking-widest font-semibold mb-4">"Comparison"</h2>
