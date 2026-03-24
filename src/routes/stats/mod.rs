@@ -1,179 +1,19 @@
-//! Chain Pulse dashboard page.
+//! The Bitcoin Observatory dashboard page.
 //!
 //! Tabs: Overview | Network | Fees | Mining | Embedded Data | Signaling
 //! Data fetched via server functions, charts rendered with ECharts via wasm_bindgen.
+
+mod components;
+mod helpers;
+
+use components::*;
+use helpers::*;
 
 use leptos::prelude::*;
 use leptos_meta::*;
 
 use crate::stats::server_fns::*;
 use crate::stats::types::*;
-
-// ---------------------------------------------------------------------------
-// wasm_bindgen extern — calls into assets/stats.js
-// ---------------------------------------------------------------------------
-
-#[cfg(feature = "hydrate")]
-use wasm_bindgen::prelude::*;
-
-#[cfg(feature = "hydrate")]
-#[wasm_bindgen]
-extern "C" {
-    #[wasm_bindgen(js_name = setChartOption)]
-    fn set_chart_option(id: &str, option_json: &str);
-}
-
-#[cfg(feature = "hydrate")]
-#[wasm_bindgen]
-extern "C" {
-    #[wasm_bindgen(js_name = showBlockDetail)]
-    fn show_block_detail(height: u64);
-
-}
-
-#[cfg(not(feature = "hydrate"))]
-fn set_chart_option(_id: &str, _json: &str) {}
-
-#[cfg(not(feature = "hydrate"))]
-fn show_block_detail(_height: u64) {}
-
-// ---------------------------------------------------------------------------
-// Range helper
-// ---------------------------------------------------------------------------
-
-fn range_to_blocks(range: &str) -> u64 {
-    match range {
-        "1d" => 144,
-        "1w" => 1_008,
-        "1m" => 4_320,
-        "3m" => 12_960,
-        "6m" => 25_920,
-        "1y" => 52_560,
-        "2y" => 105_120,
-        "5y" => 262_800,
-        "10y" => 525_600,
-        "all" => 999_999,
-        _ => 12_960,
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Chart component
-// ---------------------------------------------------------------------------
-
-#[component]
-fn Chart(
-    #[prop(into)] id: String,
-    #[prop(into)] option: Signal<String>,
-    #[prop(optional, into)] class: Option<String>,
-) -> impl IntoView {
-    let id_clone = id.clone();
-    Effect::new(move |_| {
-        let json = option.get();
-        if !json.is_empty() {
-            set_chart_option(&id_clone, &json);
-        }
-    });
-
-    let css_class =
-        class.unwrap_or_else(|| "w-full h-[350px] lg:h-[600px]".to_string());
-
-    view! {
-        <div id=id class=css_class></div>
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Chart card with expand toggle
-// ---------------------------------------------------------------------------
-
-#[component]
-fn ChartCard(
-    #[prop(into)] title: String,
-    #[prop(into)] description: String,
-    #[prop(into)] chart_id: String,
-    #[prop(into)] option: Signal<String>,
-    /// Optional content to render in the header right area (e.g. toggle button)
-    #[prop(optional)]
-    children: Option<Children>,
-) -> impl IntoView {
-    let (expanded, set_expanded) = signal(false);
-    view! {
-        // Normal inline card
-        <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6">
-            <div class="flex items-start justify-between mb-4">
-                <div>
-                    <h3 class="text-lg text-white font-semibold">{title.clone()}</h3>
-                    <p class="text-sm text-white/50 mt-0.5">{description.clone()}</p>
-                </div>
-                <div class="flex items-center gap-2 shrink-0">
-                    {children.map(|c| c())}
-                    <button
-                        class="text-white/30 hover:text-white/60 transition-colors cursor-pointer p-1"
-                        title="Expand"
-                        on:click=move |_| set_expanded.set(true)
-                    >
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15"/>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-            <div class="h-[350px] lg:h-[600px]">
-                <Chart id=chart_id.clone() option=option class="w-full h-full".to_string()/>
-            </div>
-        </div>
-
-        // Fullscreen overlay when expanded
-        <Show when=move || expanded.get()>
-            <div
-                class="fixed inset-0 flex flex-col pt-14 pb-4 px-4 lg:pt-16 lg:pb-6 lg:px-8 overflow-hidden"
-                style="z-index: 9999; background: #0a1929"
-            >
-                // Header with close button
-                <div class="flex items-center justify-between mb-3 shrink-0">
-                    <div>
-                        <h3 class="text-lg text-white font-semibold">{title.clone()}</h3>
-                        <p class="text-sm text-white/50 mt-0.5">{description.clone()}</p>
-                    </div>
-                    <button
-                        class="text-white/60 hover:text-white transition-colors cursor-pointer p-2.5 rounded-xl hover:bg-white/10 border border-white/10 hover:border-white/20"
-                        title="Close (Esc)"
-                        on:click=move |_| set_expanded.set(false)
-                    >
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
-                        </svg>
-                    </button>
-                </div>
-                // Chart fills remaining space
-                <div class="flex-1 min-h-0 bg-[#0a1a2e] border border-white/10 rounded-xl p-2">
-                    <Chart id=format!("{}-fullscreen", chart_id) option=option class="w-full h-full".to_string()/>
-                </div>
-            </div>
-        </Show>
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Live stat card
-// ---------------------------------------------------------------------------
-
-#[component]
-fn LiveCard(
-    #[prop(into)] label: String,
-    #[prop(into)] value: Signal<String>,
-) -> impl IntoView {
-    view! {
-        <div class="bg-[#0d2137] border border-white/10 rounded-lg p-3 text-center">
-            <div class="text-[0.65rem] text-white/50 uppercase tracking-widest mb-1">{label}</div>
-            <div
-                class="text-lg lg:text-xl text-[#f7931a] font-bold font-mono truncate"
-                title=move || value.get()
-            >{move || value.get()}</div>
-        </div>
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Main page
@@ -190,7 +30,7 @@ pub fn StatsPage() -> impl IntoView {
     });
 
     view! {
-        <Title text="Chain Pulse - WE HODL BTC"/>
+        <Title text="The Bitcoin Observatory - WE HODL BTC"/>
         <Show
             when=move || is_available.get()
             fallback=move || view! { <StatsComingSoon/> }
@@ -213,7 +53,7 @@ fn StatsComingSoon() -> impl IntoView {
                     </svg>
                 </div>
 
-                <h1 class="text-3xl lg:text-5xl font-title text-white mb-4">"Chain Pulse"</h1>
+                <h1 class="text-3xl lg:text-5xl font-title text-white mb-4">"The Bitcoin Observatory"</h1>
                 <div class="w-16 h-0.5 bg-[#f7931a] mx-auto mb-6"></div>
 
                 <p class="text-lg text-white/60 mb-3">"Coming Soon"</p>
@@ -1032,12 +872,12 @@ fn StatsContent() -> impl IntoView {
     ];
 
     view! {
-        <Title text="Chain Pulse - WE HODL BTC"/>
+        <Title text="The Bitcoin Observatory - WE HODL BTC"/>
 
         <section class="max-w-[1600px] mx-auto px-4 lg:px-10 pt-10 pb-28 opacity-0 animate-fadeinone">
             // Page header
             <div class="text-center mb-10">
-                <h1 class="text-4xl lg:text-5xl font-title text-white mb-3">"Chain Pulse"</h1>
+                <h1 class="text-4xl lg:text-5xl font-title text-white mb-3">"The Bitcoin Observatory"</h1>
                 <div class="w-16 h-0.5 bg-[#f7931a] mx-auto mt-3 mb-4"></div>
                 <p class="text-base text-white/50 max-w-xl mx-auto">
                     "Live blockchain metrics, block data, embedded data analysis, and BIP signaling tracker."
@@ -1853,38 +1693,4 @@ fn StatsContent() -> impl IntoView {
 enum DashboardData {
     PerBlock(Vec<BlockSummary>),
     Daily(Vec<DailyAggregate>),
-}
-
-// ---------------------------------------------------------------------------
-// Formatting helpers
-// ---------------------------------------------------------------------------
-
-fn format_number(n: u64) -> String {
-    let s = n.to_string();
-    let bytes = s.as_bytes();
-    bytes
-        .rchunks(3)
-        .rev()
-        .map(|c| std::str::from_utf8(c).unwrap())
-        .collect::<Vec<_>>()
-        .join(",")
-}
-
-fn format_number_f64(n: f64, decimals: usize) -> String {
-    let rounded = format!("{:.prec$}", n, prec = decimals);
-    // Add commas to the integer part
-    let parts: Vec<&str> = rounded.split('.').collect();
-    let int_part = parts[0];
-    let bytes = int_part.as_bytes();
-    let formatted = bytes
-        .rchunks(3)
-        .rev()
-        .map(|c| std::str::from_utf8(c).unwrap())
-        .collect::<Vec<_>>()
-        .join(",");
-    if parts.len() > 1 {
-        format!("{}.{}", formatted, parts[1])
-    } else {
-        formatted
-    }
 }
