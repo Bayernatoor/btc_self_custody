@@ -140,4 +140,15 @@
         var modal = document.getElementById('block-detail-modal');
         if (modal) modal.classList.add('hidden');
     };
+
+    // Global Escape key handler for modals
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            // Close block detail modal if open
+            var modal = document.getElementById('block-detail-modal');
+            if (modal && !modal.classList.contains('hidden')) {
+                modal.classList.add('hidden');
+            }
+        }
+    });
 })();
