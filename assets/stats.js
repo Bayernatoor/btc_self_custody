@@ -31,22 +31,26 @@
     window.setChartOption = function(elementId, optionJson) {
         var el = document.getElementById(elementId);
         if (!el) return;
-        if (!el._chart && typeof echarts !== 'undefined') {
+        if (typeof echarts === 'undefined') {
+            // ECharts not loaded yet — retry after a short delay
+            setTimeout(function() { window.setChartOption(elementId, optionJson); }, 200);
+            return;
+        }
+        if (!el._chart) {
             el._chart = echarts.init(el, null, { renderer: 'canvas' });
             new ResizeObserver(function() { if (el._chart) el._chart.resize(); }).observe(el);
         }
-        if (el._chart) {
-            // Skip if option JSON unchanged (prevents zoom/pan reset)
-            if (el._lastOptionJson === optionJson) return;
-            el._lastOptionJson = optionJson;
-            try {
-                var opts = JSON.parse(optionJson);
-                // Disable animation for fullscreen charts (faster render)
-                if (elementId.indexOf('-fullscreen') !== -1) {
-                    opts.animation = false;
-                }
-                el._chart.setOption(opts, true);
-            } catch(e) { console.error('Chart error:', e); }
+        // Skip if option JSON unchanged (prevents zoom/pan reset)
+        if (el._lastOptionJson === optionJson) return;
+        el._lastOptionJson = optionJson;
+        try {
+            var opts = JSON.parse(optionJson);
+            // Disable animation for fullscreen charts (faster render)
+            if (elementId.indexOf('-fullscreen') !== -1) {
+                opts.animation = false;
+            }
+            el._chart.setOption(opts, true);
+        } catch(e) { console.error('Chart error:', e); }
             // Auto-register click handler for block detail (data format: [ts, value, height])
             if (!el._clickRegistered) {
                 el._clickRegistered = true;
