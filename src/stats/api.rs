@@ -119,8 +119,18 @@ pub async fn get_stats(
 pub async fn get_live(
     State(state): State<SharedStatsState>,
 ) -> Result<Json<serde_json::Value>, StatsError> {
-    let blockchain = state.rpc.get_blockchain_info().await?;
-    let mempool = state.rpc.get_mempool_info().await?;
+    // Parallelize all RPC calls for faster response
+    let (blockchain_res, mempool_res, hashrate_res, fee_res) = tokio::join!(
+        state.rpc.get_blockchain_info(),
+        state.rpc.get_mempool_info(),
+        state.rpc.get_network_hashps(),
+        state.rpc.estimate_smart_fee(1),
+    );
+
+    let blockchain = blockchain_res?;
+    let mempool = mempool_res?;
+    let hashrate = hashrate_res.unwrap_or(0.0);
+    let next_block_fee = fee_res.unwrap_or(0.0);
 
     // Price cache: only fetch from mempool.space if cache is >60s old
     let price_usd = {
@@ -159,12 +169,6 @@ pub async fn get_live(
     let chain_size_gb = blockchain.size_on_disk as f64 / 1_000_000_000.0;
 
     let utxo_count = state.utxo_count.lock().unwrap_or_else(|e| e.into_inner()).unwrap_or(0);
-
-    // Network hashrate (non-fatal if it fails)
-    let hashrate = state.rpc.get_network_hashps().await.unwrap_or(0.0);
-
-    // Next-block fee estimate (non-fatal if it fails)
-    let next_block_fee = state.rpc.estimate_smart_fee(1).await.unwrap_or(0.0);
 
     Ok(Json(serde_json::json!({
         "blockchain": blockchain,

@@ -410,7 +410,11 @@ pub fn apply_overlays(option_json: &str, overlays: &OverlayFlags, is_daily: bool
                 mark_lines.push(json!({
                     "xAxis": date,
                     "lineStyle": { "color": "#f7931a", "type": "dashed", "width": 1.5 },
-                    "label": { "show": true, "formatter": "½", "color": "#f7931a", "fontSize": 10, "position": "insideEndTop" }
+                    "label": {
+                        "show": true, "formatter": "½", "color": "#f7931a",
+                        "fontSize": 13, "fontWeight": "bold", "position": "insideEndTop",
+                        "backgroundColor": "rgba(10,25,41,0.8)", "padding": [2, 4], "borderRadius": 2
+                    }
                 }));
             }
         } else {
@@ -418,7 +422,11 @@ pub fn apply_overlays(option_json: &str, overlays: &OverlayFlags, is_daily: bool
                 mark_lines.push(json!({
                     "xAxis": ts * 1000,
                     "lineStyle": { "color": "#f7931a", "type": "dashed", "width": 1.5 },
-                    "label": { "show": true, "formatter": "½", "color": "#f7931a", "fontSize": 10, "position": "insideEndTop" }
+                    "label": {
+                        "show": true, "formatter": "½", "color": "#f7931a",
+                        "fontSize": 13, "fontWeight": "bold", "position": "insideEndTop",
+                        "backgroundColor": "rgba(10,25,41,0.8)", "padding": [2, 4], "borderRadius": 2
+                    }
                 }));
             }
         }
@@ -430,7 +438,11 @@ pub fn apply_overlays(option_json: &str, overlays: &OverlayFlags, is_daily: bool
                 mark_lines.push(json!({
                     "xAxis": date,
                     "lineStyle": { "color": "#4ecdc4", "type": "dotted", "width": 1 },
-                    "label": { "show": true, "formatter": name, "color": "#4ecdc4", "fontSize": 9, "position": "insideEndTop", "rotate": 90 }
+                    "label": {
+                        "show": true, "formatter": name, "color": "#4ecdc4",
+                        "fontSize": 11, "position": "insideEndTop", "rotate": 90,
+                        "backgroundColor": "rgba(10,25,41,0.8)", "padding": [2, 4], "borderRadius": 2
+                    }
                 }));
             }
         } else {
@@ -438,7 +450,11 @@ pub fn apply_overlays(option_json: &str, overlays: &OverlayFlags, is_daily: bool
                 mark_lines.push(json!({
                     "xAxis": ts * 1000,
                     "lineStyle": { "color": "#4ecdc4", "type": "dotted", "width": 1 },
-                    "label": { "show": true, "formatter": name, "color": "#4ecdc4", "fontSize": 9, "position": "insideEndTop", "rotate": 90 }
+                    "label": {
+                        "show": true, "formatter": name, "color": "#4ecdc4",
+                        "fontSize": 11, "position": "insideEndTop", "rotate": 90,
+                        "backgroundColor": "rgba(10,25,41,0.8)", "padding": [2, 4], "borderRadius": 2
+                    }
                 }));
             }
         }
@@ -450,7 +466,11 @@ pub fn apply_overlays(option_json: &str, overlays: &OverlayFlags, is_daily: bool
                 mark_lines.push(json!({
                     "xAxis": date,
                     "lineStyle": { "color": "#a855f7", "type": "dotted", "width": 1 },
-                    "label": { "show": true, "formatter": name, "color": "#a855f7", "fontSize": 8, "position": "insideEndTop", "rotate": 90 }
+                    "label": {
+                        "show": true, "formatter": name, "color": "#a855f7",
+                        "fontSize": 10, "position": "insideEndTop", "rotate": 90,
+                        "backgroundColor": "rgba(10,25,41,0.8)", "padding": [2, 3], "borderRadius": 2
+                    }
                 }));
             }
         } else {
@@ -458,7 +478,11 @@ pub fn apply_overlays(option_json: &str, overlays: &OverlayFlags, is_daily: bool
                 mark_lines.push(json!({
                     "xAxis": ts * 1000,
                     "lineStyle": { "color": "#a855f7", "type": "dotted", "width": 1 },
-                    "label": { "show": true, "formatter": name, "color": "#a855f7", "fontSize": 8, "position": "insideEndTop", "rotate": 90 }
+                    "label": {
+                        "show": true, "formatter": name, "color": "#a855f7",
+                        "fontSize": 10, "position": "insideEndTop", "rotate": 90,
+                        "backgroundColor": "rgba(10,25,41,0.8)", "padding": [2, 3], "borderRadius": 2
+                    }
                 }));
             }
         }
@@ -470,7 +494,11 @@ pub fn apply_overlays(option_json: &str, overlays: &OverlayFlags, is_daily: bool
                 mark_lines.push(json!({
                     "xAxis": date,
                     "lineStyle": { "color": "#ef4444", "type": "solid", "width": 2 },
-                    "label": { "show": true, "formatter": name, "color": "#ef4444", "fontSize": 9, "position": "insideEndTop", "rotate": 90 }
+                    "label": {
+                        "show": true, "formatter": name, "color": "#ef4444",
+                        "fontSize": 11, "fontWeight": "bold", "position": "insideEndTop", "rotate": 90,
+                        "backgroundColor": "rgba(10,25,41,0.85)", "padding": [3, 5], "borderRadius": 3
+                    }
                 }));
             }
         } else {
@@ -478,7 +506,11 @@ pub fn apply_overlays(option_json: &str, overlays: &OverlayFlags, is_daily: bool
                 mark_lines.push(json!({
                     "xAxis": ts * 1000,
                     "lineStyle": { "color": "#ef4444", "type": "solid", "width": 2 },
-                    "label": { "show": true, "formatter": name, "color": "#ef4444", "fontSize": 9, "position": "insideEndTop", "rotate": 90 }
+                    "label": {
+                        "show": true, "formatter": name, "color": "#ef4444",
+                        "fontSize": 11, "fontWeight": "bold", "position": "insideEndTop", "rotate": 90,
+                        "backgroundColor": "rgba(10,25,41,0.85)", "padding": [3, 5], "borderRadius": 3
+                    }
                 }));
             }
         }
