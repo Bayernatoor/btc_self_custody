@@ -528,6 +528,6 @@ pub async fn fetch_block_timestamp(
             ServerFnError::new(format!("Stats not available: {e}"))
         })?;
     let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
-    Ok(super::db::query_block_timestamp(&conn, height)
-        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?)
+    super::db::query_block_timestamp(&conn, height)
+        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))
 }
