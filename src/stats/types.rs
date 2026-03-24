@@ -41,6 +41,7 @@ pub struct BlockSummary {
     pub witness_bytes: u64,
     pub inscription_count: u64,
     pub inscription_bytes: u64,
+    pub op_return_bytes: u64,
 }
 
 /// Full block detail (from query_block_by_height).

@@ -430,3 +430,85 @@ pub fn inscription_share_chart_daily(days: &[DailyAggregate]) -> String {
         ]
     }))
 }
+
+// ---------------------------------------------------------------------------
+// Unified embedded data charts (OP_RETURN + Inscriptions combined)
+// ---------------------------------------------------------------------------
+
+const OPRETURN_COLOR: &str = "#f59e0b"; // Amber for OP_RETURN aggregate
+
+/// All embedded data as % of block size — OP_RETURN + inscriptions stacked (per-block).
+pub fn all_embedded_share_chart(blocks: &[BlockSummary]) -> String {
+    if blocks.is_empty() {
+        return no_data_chart("All Embedded Data Share");
+    }
+
+    let op_data: Vec<serde_json::Value> = blocks.iter().map(|b| {
+        let v = if b.size > 0 { round(b.op_return_bytes as f64 / b.size as f64 * 100.0, 2) } else { 0.0 };
+        json!([ts_ms(b.timestamp), v])
+    }).collect();
+    let insc_data: Vec<serde_json::Value> = blocks.iter().map(|b| {
+        let v = if b.size > 0 { round(b.inscription_bytes as f64 / b.size as f64 * 100.0, 2) } else { 0.0 };
+        json!([ts_ms(b.timestamp), v])
+    }).collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("% of Block"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            {
+                "name": "OP_RETURN", "type": "line", "sampling": "lttb", "data": op_data,
+                "stack": "embed", "areaStyle": { "opacity": 0.5 },
+                "lineStyle": { "width": 0.5, "color": OPRETURN_COLOR },
+                "itemStyle": { "color": OPRETURN_COLOR }, "symbol": "none"
+            },
+            {
+                "name": "Inscriptions", "type": "line", "sampling": "lttb", "data": insc_data,
+                "stack": "embed", "areaStyle": { "opacity": 0.5 },
+                "lineStyle": { "width": 0.5, "color": INSCRIPTION_COLOR },
+                "itemStyle": { "color": INSCRIPTION_COLOR }, "symbol": "none"
+            }
+        ]
+    }))
+}
+
+/// All embedded data as % of block size — stacked (daily).
+pub fn all_embedded_share_chart_daily(days: &[DailyAggregate]) -> String {
+    if days.is_empty() {
+        return no_data_chart("All Embedded Data Share");
+    }
+
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    let op_vals: Vec<f64> = days.iter().map(|d| {
+        let total_size = d.avg_size * d.block_count as f64;
+        if total_size > 0.0 { round(d.total_op_return_bytes as f64 / total_size * 100.0, 2) } else { 0.0 }
+    }).collect();
+    let insc_vals: Vec<f64> = days.iter().map(|d| {
+        if d.avg_size > 0.0 { round(d.avg_inscription_bytes / d.avg_size * 100.0, 2) } else { 0.0 }
+    }).collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": y_axis("% of Block"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            {
+                "name": "OP_RETURN", "type": "line", "sampling": "lttb", "data": op_vals,
+                "stack": "embed", "areaStyle": { "opacity": 0.5 },
+                "lineStyle": { "width": 0.5, "color": OPRETURN_COLOR },
+                "itemStyle": { "color": OPRETURN_COLOR }, "symbol": "none"
+            },
+            {
+                "name": "Inscriptions", "type": "line", "sampling": "lttb", "data": insc_vals,
+                "stack": "embed", "areaStyle": { "opacity": 0.5 },
+                "lineStyle": { "width": 0.5, "color": INSCRIPTION_COLOR },
+                "itemStyle": { "color": INSCRIPTION_COLOR }, "symbol": "none"
+            }
+        ]
+    }))
+}
