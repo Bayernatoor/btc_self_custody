@@ -77,7 +77,17 @@ pub async fn fetch_blocks(
             witness_bytes: r.witness_bytes,
             inscription_count: r.inscription_count,
             inscription_bytes: r.inscription_bytes,
+            brc20_count: r.brc20_count,
+            op_return_count: r.op_return_count,
             op_return_bytes: r.op_return_bytes,
+            runes_count: r.runes_count,
+            runes_bytes: r.runes_bytes,
+            omni_count: r.omni_count,
+            omni_bytes: r.omni_bytes,
+            counterparty_count: r.counterparty_count,
+            counterparty_bytes: r.counterparty_bytes,
+            data_carrier_count: r.data_carrier_count,
+            data_carrier_bytes: r.data_carrier_bytes,
         })
         .collect())
 }
@@ -302,6 +312,7 @@ pub async fn fetch_daily_aggregates(
             avg_witness_bytes: r.avg_witness_bytes,
             avg_inscription_count: r.avg_inscription_count,
             avg_inscription_bytes: r.avg_inscription_bytes,
+            avg_brc20_count: r.avg_brc20_count,
         })
         .collect())
 }

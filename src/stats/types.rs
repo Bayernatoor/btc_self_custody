@@ -41,7 +41,17 @@ pub struct BlockSummary {
     pub witness_bytes: u64,
     pub inscription_count: u64,
     pub inscription_bytes: u64,
+    pub brc20_count: u64,
+    pub op_return_count: u64,
     pub op_return_bytes: u64,
+    pub runes_count: u64,
+    pub runes_bytes: u64,
+    pub omni_count: u64,
+    pub omni_bytes: u64,
+    pub counterparty_count: u64,
+    pub counterparty_bytes: u64,
+    pub data_carrier_count: u64,
+    pub data_carrier_bytes: u64,
 }
 
 /// Full block detail (from query_block_by_height).
@@ -126,6 +136,7 @@ pub struct DailyAggregate {
     pub avg_witness_bytes: f64,
     pub avg_inscription_count: f64,
     pub avg_inscription_bytes: f64,
+    pub avg_brc20_count: f64,
 }
 
 /// Per-block signaling status.
