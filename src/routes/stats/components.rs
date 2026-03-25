@@ -91,32 +91,22 @@ pub fn ChartCard(
             </div>
             <div class="h-[350px] lg:h-[600px] relative">
                 <Chart id=chart_id.clone() option=option class="w-full h-full".to_string()/>
-                {
-                    // Only show spinner on initial load, not on range changes
-                    let (has_loaded, set_has_loaded) = signal(false);
-                    Effect::new(move |_| {
-                        if !option.get().is_empty() {
-                            set_has_loaded.set(true);
-                        }
-                    });
-                    view! {
-                        <Show when=move || !has_loaded.get()>
-                            <div class="absolute inset-0 flex items-center justify-center bg-[#0d2137]/80 rounded-2xl">
-                                <div class="flex flex-col items-center gap-3">
-                                    <div class="animate-pulse">
-                                        <div class="w-12 h-12 rounded-lg bg-[#f7931a]/10 border border-[#f7931a]/20 flex items-center justify-center">
-                                            <svg class="w-6 h-6 text-[#f7931a]/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                                <rect x="3" y="3" width="18" height="18" rx="2"/>
-                                                <path d="M9 3v18M15 3v18M3 9h18M3 15h18"/>
-                                            </svg>
-                                        </div>
-                                    </div>
-                                    <span class="text-xs text-white/30">"Mining blocks..."</span>
+                // Show loading skeleton whenever chart data is empty
+                <Show when=move || option.get().is_empty()>
+                    <div class="absolute inset-0 flex items-center justify-center bg-[#0d2137] rounded-2xl">
+                        <div class="flex flex-col items-center gap-3">
+                            <div class="animate-pulse">
+                                <div class="w-12 h-12 rounded-lg bg-[#f7931a]/10 border border-[#f7931a]/20 flex items-center justify-center">
+                                    <svg class="w-6 h-6 text-[#f7931a]/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                                        <path d="M9 3v18M15 3v18M3 9h18M3 15h18"/>
+                                    </svg>
                                 </div>
                             </div>
-                        </Show>
-                    }
-                }
+                            <span class="text-xs text-white/30">"Mining blocks..."</span>
+                        </div>
+                    </div>
+                </Show>
             </div>
         </div>
 
