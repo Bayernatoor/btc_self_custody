@@ -302,7 +302,7 @@ pub async fn fetch_daily_aggregates(
     {
         let cached = state.daily_cache.lock().unwrap_or_else(|e| e.into_inner());
         if let Some((ref f, ref t, ref data, ref ts)) = *cached {
-            if *f == from_ts && *t == to_ts && ts.elapsed().as_secs() < 30 {
+            if *f == from_ts && *t == to_ts && ts.elapsed().as_secs() < 120 {
                 return Ok(data.clone());
             }
         }
