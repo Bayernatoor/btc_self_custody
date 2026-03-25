@@ -10,6 +10,7 @@
 //! - GET /api/signaling?bit=N or method=locktime -- per-block signaling status
 //! - GET /api/signaling/periods?bit=N   -- signaling % per retarget period
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -29,6 +30,8 @@ pub struct StatsState {
     pub live_cache: Mutex<Option<(super::types::LiveStats, Instant)>>,
     /// Cached price with timestamp, refreshed at most every 60 seconds.
     pub price_cache: Mutex<Option<(PriceInfo, Instant)>>,
+    /// Guard: prevents multiple concurrent price refreshes.
+    pub price_refreshing: AtomicBool,
     pub utxo_count: Mutex<Option<u64>>,
     /// Cached price history: (from_ts, to_ts, data, fetched_at).
     pub price_history_cache: Mutex<Option<(u64, u64, Vec<PricePoint>, Instant)>>,
@@ -139,15 +142,16 @@ pub async fn get_live(
         0.0
     });
 
-    // Price cache: only fetch from mempool.space if cache is >60s old
+    // Price cache: only fetch from mempool.space if cache is >60s old.
+    // Atomic guard prevents multiple concurrent HTTP requests on cache miss.
     let price_usd = {
         let cached = state.price_cache.lock().unwrap_or_else(|e| e.into_inner()).clone();
         let need_refresh = match &cached {
             Some((_, ts)) => ts.elapsed().as_secs() > 60,
             None => true,
         };
-        if need_refresh {
-            match state.rpc.fetch_price().await {
+        if need_refresh && !state.price_refreshing.swap(true, Ordering::AcqRel) {
+            let result = match state.rpc.fetch_price().await {
                 Ok(p) => {
                     let usd = p.usd;
                     *state.price_cache.lock().unwrap_or_else(|e| e.into_inner()) =
@@ -158,7 +162,9 @@ pub async fn get_live(
                     tracing::warn!("Failed to fetch price: {e}");
                     cached.map(|(p, _)| p.usd).unwrap_or(0.0)
                 }
-            }
+            };
+            state.price_refreshing.store(false, Ordering::Release);
+            result
         } else {
             cached.map(|(p, _)| p.usd).unwrap_or(0.0)
         }
