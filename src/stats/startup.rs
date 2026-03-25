@@ -35,6 +35,7 @@ pub async fn init() -> Option<(Arc<StatsState>, Router)> {
     let state = Arc::new(StatsState {
         db: pool,
         rpc,
+        live_cache: Mutex::new(None),
         price_cache: Mutex::new(None),
         utxo_count: Mutex::new(None),
         price_history_cache: Mutex::new(None),
