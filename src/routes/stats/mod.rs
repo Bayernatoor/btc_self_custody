@@ -1004,7 +1004,7 @@ fn StatsContent() -> impl IntoView {
 
     // ---- Tab names and ranges ----
     let tabs = vec![
-        ("overview", "Overview"),
+        ("overview", "Dashboard"),
         ("network", "Network"),
         ("fees", "Fees"),
         ("mining", "Mining"),
