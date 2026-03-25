@@ -1459,7 +1459,7 @@ fn StatsContent() -> impl IntoView {
 
                 // Sub-section pills
                 <div class="flex flex-wrap gap-2 justify-center mb-6">
-                    {[("overview", "Overview"), ("protocols", "OP_RETURN Protocols"), ("witness", "Witness Embedding")].into_iter().map(|(id, label)| {
+                    {[("overview", "Overview"), ("protocols", "Protocols"), ("witness", "Inscriptions")].into_iter().map(|(id, label)| {
                         let id_str = id.to_string();
                         let id_clone = id_str.clone();
                         view! {
