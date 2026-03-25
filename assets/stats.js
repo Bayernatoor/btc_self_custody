@@ -55,7 +55,16 @@
             if (elementId.indexOf('-fullscreen') !== -1) {
                 opts.animation = false;
             }
-            el._chart.setOption(opts, true);
+            // First render: disable animation to prevent legend flash
+            if (!el._hasRendered) {
+                opts.animation = false;
+                el._chart.setOption(opts, true);
+                // Re-enable animation for subsequent updates
+                el._hasRendered = true;
+                el._chart.setOption({ animation: true }, false);
+            } else {
+                el._chart.setOption(opts, true);
+            }
             // Auto-register click handler for block detail (data format: [ts, value, height])
             if (!el._clickRegistered) {
                 el._clickRegistered = true;

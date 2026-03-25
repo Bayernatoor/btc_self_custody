@@ -114,6 +114,14 @@ fn StatsContent() -> impl IntoView {
     let (embedded_section, set_embedded_section) = signal("overview".to_string());
     let (mining_section, set_mining_section) = signal("difficulty".to_string());
 
+    // Compound guard signals: tab + sub-section combined into a single string
+    // so chart_signal! macro can guard on both with one check.
+    let emb_guard = Signal::derive(move || format!("{}:{}", tab.get(), embedded_section.get()));
+    // Aliases for readability at call sites
+    let emb_overview = emb_guard;
+    let emb_protocols = emb_guard;
+    let emb_witness = emb_guard;
+
     // ---- Live stats (auto-refresh 30s) ----
     #[allow(clippy::redundant_closure)]
     let live = LocalResource::new(move || fetch_live_stats());
@@ -757,22 +765,22 @@ fn StatsContent() -> impl IntoView {
     });
 
     // ---- OP_RETURN charts (use dashboard_data — no separate fetch needed) ----
-    let op_count_option = chart_signal!(dashboard_data, range, overlay_flags, tab, "opreturn",
+    let op_count_option = chart_signal!(dashboard_data, range, overlay_flags, emb_protocols, "opreturn:protocols",
         |blocks| crate::stats::charts::op_return_count_chart(blocks),
         |days| crate::stats::charts::op_return_count_chart_daily(days)
     );
 
-    let op_bytes_option = chart_signal!(dashboard_data, range, overlay_flags, tab, "opreturn",
+    let op_bytes_option = chart_signal!(dashboard_data, range, overlay_flags, emb_protocols, "opreturn:protocols",
         |blocks| crate::stats::charts::op_return_bytes_chart(blocks),
         |days| crate::stats::charts::op_return_bytes_chart_daily(days)
     );
 
-    let runes_pct_option = chart_signal!(dashboard_data, range, overlay_flags, tab, "opreturn",
+    let runes_pct_option = chart_signal!(dashboard_data, range, overlay_flags, emb_protocols, "opreturn:protocols",
         |blocks| crate::stats::charts::runes_pct_chart(blocks),
         |days| crate::stats::charts::runes_pct_chart_daily(days)
     );
 
-    let op_block_share_option = chart_signal!(dashboard_data, range, overlay_flags, tab, "opreturn",
+    let op_block_share_option = chart_signal!(dashboard_data, range, overlay_flags, emb_protocols, "opreturn:protocols",
         |blocks| crate::stats::charts::op_return_block_share_chart(blocks),
         |days| crate::stats::charts::op_return_block_share_chart_daily(days)
     );
@@ -929,27 +937,27 @@ fn StatsContent() -> impl IntoView {
         |days| crate::stats::charts::utxo_flow_chart_daily(days)
     );
 
-    let inscription_option = chart_signal!(dashboard_data, range, overlay_flags, tab, "opreturn",
+    let inscription_option = chart_signal!(dashboard_data, range, overlay_flags, emb_witness, "opreturn:witness",
         |blocks| crate::stats::charts::inscription_chart(blocks),
         |days| crate::stats::charts::inscription_chart_daily(days)
     );
 
-    let inscription_share_option = chart_signal!(dashboard_data, range, overlay_flags, tab, "opreturn",
+    let inscription_share_option = chart_signal!(dashboard_data, range, overlay_flags, emb_witness, "opreturn:witness",
         |blocks| crate::stats::charts::inscription_share_chart(blocks),
         |days| crate::stats::charts::inscription_share_chart_daily(days)
     );
 
-    let all_embedded_share_option = chart_signal!(dashboard_data, range, overlay_flags, tab, "opreturn",
+    let all_embedded_share_option = chart_signal!(dashboard_data, range, overlay_flags, emb_overview, "opreturn:overview",
         |blocks| crate::stats::charts::all_embedded_share_chart(blocks),
         |days| crate::stats::charts::all_embedded_share_chart_daily(days)
     );
 
-    let unified_count_option = chart_signal!(dashboard_data, range, overlay_flags, tab, "opreturn",
+    let unified_count_option = chart_signal!(dashboard_data, range, overlay_flags, emb_overview, "opreturn:overview",
         |blocks| crate::stats::charts::unified_embedded_count_chart(blocks),
         |days| crate::stats::charts::unified_embedded_count_chart_daily(days)
     );
 
-    let unified_volume_option = chart_signal!(dashboard_data, range, overlay_flags, tab, "opreturn",
+    let unified_volume_option = chart_signal!(dashboard_data, range, overlay_flags, emb_overview, "opreturn:overview",
         |blocks| crate::stats::charts::unified_embedded_volume_chart(blocks),
         |days| crate::stats::charts::unified_embedded_volume_chart_daily(days)
     );
