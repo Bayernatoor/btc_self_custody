@@ -222,10 +222,21 @@
 - [x] Pre-cached chain_size cumulative data (no recompute on overlay toggle)
 - [x] `overlay_flags.read()` instead of `.get()` — avoids cloning 4000+ price points per chart
 
-### Remaining Ideas
+### Future: Tier 1 Scaling (2-5k concurrent users)
+- [ ] Cache `query_daily_aggregates` results server-side — heaviest query, same result for all
+      users on the same range. Key by (from_ts, to_ts), TTL 30-60s. Biggest single win remaining.
+- [ ] Cache `query_blocks` results for common ranges (1D, 1W, 1M) with short TTL
+- [ ] Pre-compute daily aggregates into a materialized table on new block ingestion —
+      avoids GROUP BY over 900k rows on every request
+- [ ] Bigger droplet (more RAM/CPU) if needed
 - [ ] Evaluate ECharts `notMerge` vs merge behavior on option updates
 - [ ] Consider reduced data density (more aggressive sampling for large ranges)
 - [ ] Consider client-side caching of server responses across range switches
+
+### Future: Tier 2 Scaling (10k+ — likely never needed)
+- [ ] PostgreSQL replacing SQLite (concurrent writes, proper connection pooling)
+- [ ] CDN (Cloudflare) for static assets + cached API responses at edge
+- [ ] Pre-rendered static pages for non-dynamic content
 
 ## Completed: Codebase Refactoring (2026-03-24)
 - [x] Split `charts.rs` (3239 lines) into 9 module files:
