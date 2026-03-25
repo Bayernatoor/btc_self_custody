@@ -47,6 +47,8 @@ pub struct StatsState {
     /// Guard: prevents multiple concurrent price refreshes.
     pub price_refreshing: AtomicBool,
     pub utxo_count: Mutex<Option<u64>>,
+    /// Cached signaling periods: (cache_key, results, fetched_at). 60s TTL.
+    pub signaling_periods_cache: Mutex<Option<(String, Vec<super::db::SignalingPeriod>, Instant)>>,
     /// Cached price history: (from_ts, to_ts, data, fetched_at).
     pub price_history_cache: Mutex<Option<(u64, u64, Vec<PricePoint>, Instant)>>,
 }
