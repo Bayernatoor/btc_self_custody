@@ -15,16 +15,15 @@ use std::time::Instant;
 
 use axum::extract::{Path, Query, State};
 use axum::Json;
-use rusqlite::Connection;
 use serde::Deserialize;
 
-use super::db;
+use super::db::{self, DbPool};
 use super::error::StatsError;
 use super::rpc::{BitcoinRpc, PriceInfo};
 use super::types::PricePoint;
 
 pub struct StatsState {
-    pub db: Mutex<Connection>,
+    pub db: DbPool,
     pub rpc: BitcoinRpc,
     /// Cached price with timestamp, refreshed at most every 60 seconds.
     pub price_cache: Mutex<Option<(PriceInfo, Instant)>>,
@@ -67,7 +66,7 @@ pub async fn get_blocks(
     State(state): State<SharedStatsState>,
     Query(params): Query<BlocksQuery>,
 ) -> Result<Json<serde_json::Value>, StatsError> {
-    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
+    let conn = state.db.get().map_err(|e| StatsError::Rpc(format!("DB pool: {e}")))?;
 
     let (from, to) = match (params.from, params.to) {
         (Some(f), Some(t)) => (f, t),
@@ -92,7 +91,7 @@ pub async fn get_block_detail(
     State(state): State<SharedStatsState>,
     Path(height): Path<u64>,
 ) -> Result<Json<serde_json::Value>, StatsError> {
-    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
+    let conn = state.db.get().map_err(|e| StatsError::Rpc(format!("DB pool: {e}")))?;
     let block = db::query_block_by_height(&conn, height)?;
     match block {
         Some(b) => Ok(Json(serde_json::to_value(b).map_err(|e| StatsError::Rpc(e.to_string()))?)),
@@ -103,7 +102,7 @@ pub async fn get_block_detail(
 pub async fn get_stats(
     State(state): State<SharedStatsState>,
 ) -> Result<Json<serde_json::Value>, StatsError> {
-    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
+    let conn = state.db.get().map_err(|e| StatsError::Rpc(format!("DB pool: {e}")))?;
     let stats = db::query_stats(&conn)?;
     match stats {
         Some(s) => Ok(Json(serde_json::to_value(s).map_err(|e| StatsError::Rpc(e.to_string()))?)),
@@ -198,7 +197,7 @@ pub async fn get_op_returns(
     State(state): State<SharedStatsState>,
     Query(params): Query<BlocksQuery>,
 ) -> Result<Json<serde_json::Value>, StatsError> {
-    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
+    let conn = state.db.get().map_err(|e| StatsError::Rpc(format!("DB pool: {e}")))?;
 
     let (from, to) = match (params.from, params.to) {
         (Some(f), Some(t)) => (f, t),
@@ -223,7 +222,7 @@ pub async fn get_daily_aggregates(
     State(state): State<SharedStatsState>,
     Query(params): Query<TimestampQuery>,
 ) -> Result<Json<serde_json::Value>, StatsError> {
-    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
+    let conn = state.db.get().map_err(|e| StatsError::Rpc(format!("DB pool: {e}")))?;
 
     let from_ts = params.from.unwrap_or(0);
     let to_ts = params.to.unwrap_or(u64::MAX);
@@ -236,7 +235,7 @@ pub async fn get_signaling(
     State(state): State<SharedStatsState>,
     Query(params): Query<SignalingQuery>,
 ) -> Result<Json<serde_json::Value>, StatsError> {
-    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
+    let conn = state.db.get().map_err(|e| StatsError::Rpc(format!("DB pool: {e}")))?;
     let use_locktime = params.method.as_deref() == Some("locktime");
 
     let stats = db::query_stats(&conn)?;
@@ -301,7 +300,7 @@ pub async fn get_signaling_periods(
     State(state): State<SharedStatsState>,
     Query(params): Query<SignalingPeriodsQuery>,
 ) -> Result<Json<serde_json::Value>, StatsError> {
-    let conn = state.db.lock().unwrap_or_else(|e| e.into_inner());
+    let conn = state.db.get().map_err(|e| StatsError::Rpc(format!("DB pool: {e}")))?;
     let use_locktime = params.method.as_deref() == Some("locktime");
     let periods = if use_locktime {
         db::query_signaling_periods_locktime(&conn)?

@@ -14,9 +14,37 @@ use super::rpc::Block;
 /// The backfill loop processes all blocks with backfill_version < BACKFILL_VERSION.
 pub const BACKFILL_VERSION: u64 = 6;
 
-pub fn open(path: &Path) -> rusqlite::Result<Connection> {
-    let conn = Connection::open(path)?;
+/// Type alias for the connection pool used throughout the stats module.
+pub type DbPool = r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>;
 
+/// Create a connection pool with WAL mode and proper initialization.
+pub fn open_pool(path: &Path, pool_size: u32) -> Result<DbPool, Box<dyn std::error::Error>> {
+    let manager = r2d2_sqlite::SqliteConnectionManager::file(path)
+        .with_init(|conn| {
+            conn.execute_batch(
+                "PRAGMA journal_mode = WAL;
+                 PRAGMA synchronous = NORMAL;
+                 PRAGMA busy_timeout = 5000;
+                 PRAGMA foreign_keys = ON;"
+            )?;
+            Ok(())
+        });
+
+    let pool = r2d2::Pool::builder()
+        .max_size(pool_size)
+        .build(manager)?;
+
+    // Run schema migrations on one connection
+    {
+        let conn = pool.get()?;
+        init_schema(&conn)?;
+    }
+
+    Ok(pool)
+}
+
+/// Run all schema creation and migrations on a connection.
+pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
     // Create table if not exists (original schema)
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS blocks (
@@ -188,6 +216,12 @@ pub fn open(path: &Path) -> rusqlite::Result<Connection> {
         "CREATE INDEX IF NOT EXISTS idx_blocks_backfill ON blocks(backfill_version);",
     )?;
 
+    Ok(())
+}
+
+pub fn open(path: &Path) -> rusqlite::Result<Connection> {
+    let conn = Connection::open(path)?;
+    init_schema(&conn)?;
     Ok(conn)
 }
 

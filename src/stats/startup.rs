@@ -18,17 +18,22 @@ pub async fn init() -> Option<(Arc<StatsState>, Router)> {
 
     let rpc =
         BitcoinRpc::new(config.rpc_url, config.rpc_user, config.rpc_password);
-    let conn =
-        db::open(&config.db_path).expect("Failed to open stats database");
 
-    // Forward ingestion (catch up to tip)
-    if let Err(e) = ingest::run(&rpc, &conn, config.initial_ingest_count).await
+    // Open connection pool (8 connections: readers + background tasks)
+    let pool = db::open_pool(&config.db_path, 8)
+        .expect("Failed to open stats database pool");
+
+    // Forward ingestion (catch up to tip) using a pooled connection
     {
-        tracing::error!("Stats forward ingestion failed: {e}");
+        let conn = pool.get().expect("Failed to get DB connection for ingestion");
+        if let Err(e) = ingest::run(&rpc, &conn, config.initial_ingest_count).await
+        {
+            tracing::error!("Stats forward ingestion failed: {e}");
+        }
     }
 
     let state = Arc::new(StatsState {
-        db: Mutex::new(conn),
+        db: pool,
         rpc,
         price_cache: Mutex::new(None),
         utxo_count: Mutex::new(None),
@@ -87,4 +92,6 @@ pub fn spawn_background_tasks(state: Arc<StatsState>) {
             ingest::backfill_backwards(&state.rpc, &state.db).await;
         });
     }
+
+    tracing::info!("Connection pool: 8 connections (WAL mode enabled)");
 }

@@ -35,6 +35,8 @@ tracing = { version = "0.1", features = ["log"] }
 leptos-use = { version = "0.16", features = ["use_clipboard"] }
 serde_json = "1"
 rusqlite = { version = "0.32", features = ["bundled"], optional = true }
+r2d2 = { version = "0.8", optional = true }
+r2d2_sqlite = { version = "0.25", optional = true }
 reqwest = { version = "0.12", features = ["json"], optional = true }
 futures = { version = "0.3", optional = true }
 thiserror = { version = "2", optional = true }
@@ -45,7 +47,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = tr
 [features]
 default = ["ssr"]
 hydrate = ["leptos/hydrate"]
-ssr = ["dep:axum", "dep:leptos_axum", "dep:tokio", "leptos/ssr", "leptos-use/ssr", "dep:rusqlite", "dep:reqwest", "dep:futures", "dep:thiserror", "dep:tracing-subscriber"]
+ssr = ["dep:axum", "dep:leptos_axum", "dep:tokio", "leptos/ssr", "leptos-use/ssr", "dep:rusqlite", "dep:r2d2", "dep:r2d2_sqlite", "dep:reqwest", "dep:futures", "dep:thiserror", "dep:tracing-subscriber"]
 
 [package.metadata.leptos]
 output-name = "we_hodl_btc"
