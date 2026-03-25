@@ -13,27 +13,46 @@ use axum::extract::Extension;
 
 #[server(prefix = "/api", endpoint = "stats_summary")]
 pub async fn fetch_stats_summary() -> Result<StatsSummary, ServerFnError> {
+    use std::time::Instant;
+
     let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
         leptos_axum::extract().await.map_err(|e| {
             ServerFnError::new(format!("Stats not available: {e}"))
         })?;
+
+    // Return cached result if fresh (< 60 seconds)
+    {
+        let cached = state.stats_summary_cache.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((ref summary, ref ts)) = *cached {
+            if ts.elapsed().as_secs() < 60 {
+                return Ok(summary.clone());
+            }
+        }
+    }
+
     let conn = state.db.get().map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
     let stats = super::db::query_stats(&conn)
         .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
-    match stats {
-        Some(s) => Ok(StatsSummary {
+    let result = match stats {
+        Some(s) => StatsSummary {
             block_count: s.block_count,
             min_height: s.min_height,
             max_height: s.max_height,
             latest_timestamp: s.latest_timestamp,
-        }),
-        None => Ok(StatsSummary {
+        },
+        None => StatsSummary {
             block_count: 0,
             min_height: 0,
             max_height: 0,
             latest_timestamp: 0,
-        }),
-    }
+        },
+    };
+
+    // Cache the result
+    *state.stats_summary_cache.lock().unwrap_or_else(|e| e.into_inner()) =
+        Some((result.clone(), Instant::now()));
+
+    Ok(result)
 }
 
 #[server(prefix = "/api", endpoint = "stats_blocks")]
@@ -617,7 +636,24 @@ pub async fn fetch_block_timestamp(
         leptos_axum::extract().await.map_err(|e| {
             ServerFnError::new(format!("Stats not available: {e}"))
         })?;
+
+    // Block timestamps are immutable — cache forever
+    {
+        let cache = state.block_ts_cache.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(&ts) = cache.get(&height) {
+            return Ok(Some(ts));
+        }
+    }
+
     let conn = state.db.get().map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
-    super::db::query_block_timestamp(&conn, height)
-        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))
+    let result = super::db::query_block_timestamp(&conn, height)
+        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+
+    // Cache if found
+    if let Some(ts) = result {
+        state.block_ts_cache.lock().unwrap_or_else(|e| e.into_inner())
+            .insert(height, ts);
+    }
+
+    Ok(result)
 }
