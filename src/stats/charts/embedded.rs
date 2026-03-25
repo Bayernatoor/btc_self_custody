@@ -1,7 +1,7 @@
 use serde_json::json;
 use super::*;
 
-const INSCRIPTION_COLOR: &str = "#ec4899"; // Pink for inscriptions
+const INSCRIPTION_COLOR: &str = "#06b6d4"; // Cyan for inscriptions
 
 /// OP_RETURN count bar chart (runes vs data carriers).
 pub fn op_return_count_chart(blocks: &[BlockSummary]) -> String {
