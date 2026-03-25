@@ -8,12 +8,13 @@
 //! Background tasks yield the DB lock between batches so API requests aren't starved.
 
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Instant;
 
 use futures::stream::{self, StreamExt};
 use rusqlite::Connection;
 
+use super::db::DbPool;
 use super::rpc::{BitcoinRpc, Block};
 use super::{db, error::StatsError};
 
@@ -45,7 +46,7 @@ pub async fn run(
 }
 
 /// Background: check for new blocks and ingest them. Runs every 60 seconds.
-pub async fn poll_new_blocks(rpc: &BitcoinRpc, db: &Mutex<Connection>) {
+pub async fn poll_new_blocks(rpc: &BitcoinRpc, pool: &DbPool) {
     let tip = match rpc.get_blockchain_info().await {
         Ok(info) => info.blocks,
         Err(e) => {
@@ -54,10 +55,15 @@ pub async fn poll_new_blocks(rpc: &BitcoinRpc, db: &Mutex<Connection>) {
         }
     };
 
-    let db_max = {
-        let conn = db.lock().unwrap_or_else(|e| e.into_inner());
-        db::max_height(&conn).unwrap_or(None).unwrap_or(0)
+    let conn = match pool.get() {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!("Poll: DB pool error: {e}");
+            return;
+        }
     };
+
+    let db_max = db::max_height(&conn).unwrap_or(None).unwrap_or(0);
 
     if db_max >= tip {
         return; // already up to date
@@ -66,6 +72,9 @@ pub async fn poll_new_blocks(rpc: &BitcoinRpc, db: &Mutex<Connection>) {
     let start = db_max + 1;
     let count = tip - start + 1;
     tracing::info!("Poll: ingesting {count} new blocks ({start} -> {tip})");
+
+    // Drop the connection while doing RPC work
+    drop(conn);
 
     let results: Vec<Result<Block, _>> = stream::iter(start..=tip)
         .map(|height| async move { rpc.fetch_block_by_height(height).await })
@@ -82,8 +91,8 @@ pub async fn poll_new_blocks(rpc: &BitcoinRpc, db: &Mutex<Connection>) {
     }
     blocks.sort_by_key(|b| b.height);
 
-    {
-        let conn = db.lock().unwrap_or_else(|e| e.into_inner());
+    // Get a fresh connection for the insert
+    if let Ok(conn) = pool.get() {
         if let Err(e) = db::insert_blocks(&conn, &blocks) {
             tracing::error!("Poll: DB insert error: {e}");
         }
@@ -93,9 +102,12 @@ pub async fn poll_new_blocks(rpc: &BitcoinRpc, db: &Mutex<Connection>) {
 }
 
 /// Background: backfill blocks with backfill_version < BACKFILL_VERSION.
-pub async fn backfill_extras(rpc: &BitcoinRpc, db: &Mutex<Connection>) {
+pub async fn backfill_extras(rpc: &BitcoinRpc, pool: &DbPool) {
     let needs_backfill = {
-        let conn = db.lock().unwrap_or_else(|e| e.into_inner());
+        let conn = match pool.get() {
+            Ok(c) => c,
+            Err(e) => { tracing::warn!("Backfill: DB pool error: {e}"); return; }
+        };
         db::count_needs_backfill(&conn).unwrap_or(0)
     };
 
@@ -117,7 +129,10 @@ pub async fn backfill_extras(rpc: &BitcoinRpc, db: &Mutex<Connection>) {
 
     loop {
         let heights = {
-            let conn = db.lock().unwrap_or_else(|e| e.into_inner());
+            let conn = match pool.get() {
+                Ok(c) => c,
+                Err(e) => { tracing::warn!("Backfill: DB pool error: {e}"); return; }
+            };
             db::heights_needing_backfill(&conn, DB_BATCH_SIZE as u64)
                 .unwrap_or_default()
         };
@@ -146,15 +161,15 @@ pub async fn backfill_extras(rpc: &BitcoinRpc, db: &Mutex<Connection>) {
         }
 
         {
-            let conn = db.lock().unwrap_or_else(|e| e.into_inner());
+            let conn = match pool.get() {
+                Ok(c) => c,
+                Err(e) => { tracing::error!("Backfill: DB pool error: {e}"); return; }
+            };
             if let Err(e) = db::update_block_extras(&conn, &blocks) {
                 tracing::error!("Backfill DB error: {e}");
                 return;
             }
         }
-
-        // Yield so API requests can acquire the lock
-        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
 
         total_done += blocks.len() as u64;
         let elapsed = started.elapsed().as_secs_f64();
@@ -175,12 +190,15 @@ pub async fn backfill_extras(rpc: &BitcoinRpc, db: &Mutex<Connection>) {
 }
 
 /// Background: ingest blocks before current min_height down to genesis.
-pub async fn backfill_backwards(rpc: &BitcoinRpc, db: &Mutex<Connection>) {
+pub async fn backfill_backwards(rpc: &BitcoinRpc, pool: &DbPool) {
     // Wait a bit for forward ingestion and extras backfill to settle
     tokio::time::sleep(std::time::Duration::from_secs(10)).await;
 
     let min_height = {
-        let conn = db.lock().unwrap_or_else(|e| e.into_inner());
+        let conn = match pool.get() {
+            Ok(c) => c,
+            Err(e) => { tracing::warn!("Backward backfill: DB pool error: {e}"); return; }
+        };
         db::min_height(&conn).unwrap_or(Some(0)).unwrap_or(0)
     };
 
@@ -225,15 +243,15 @@ pub async fn backfill_backwards(rpc: &BitcoinRpc, db: &Mutex<Connection>) {
         blocks.sort_by_key(|b| b.height);
 
         {
-            let conn = db.lock().unwrap_or_else(|e| e.into_inner());
+            let conn = match pool.get() {
+                Ok(c) => c,
+                Err(e) => { tracing::error!("Backward backfill: DB pool error: {e}"); return; }
+            };
             if let Err(e) = db::insert_blocks(&conn, &blocks) {
                 tracing::error!("Backward backfill DB error: {e}");
                 return;
             }
         }
-
-        // Yield so API requests can acquire the lock
-        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
 
         let count = fetched_ref
             .fetch_add(blocks.len() as u64, Ordering::Relaxed)
