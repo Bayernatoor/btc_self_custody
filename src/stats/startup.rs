@@ -37,6 +37,7 @@ pub async fn init() -> Option<(Arc<StatsState>, Router)> {
         rpc,
         live_cache: Mutex::new(None),
         price_cache: Mutex::new(None),
+        price_refreshing: std::sync::atomic::AtomicBool::new(false),
         utxo_count: Mutex::new(None),
         price_history_cache: Mutex::new(None),
     });
