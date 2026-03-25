@@ -1007,7 +1007,7 @@ fn StatsContent() -> impl IntoView {
     view! {
         <Title text="The Bitcoin Observatory - WE HODL BTC"/>
 
-        <section class="max-w-[1400px] mx-auto px-4 lg:px-8 pt-10 pb-28 opacity-0 animate-fadeinone">
+        <section class="max-w-[1750px] mx-auto px-4 lg:px-8 pt-10 pb-28 opacity-0 animate-fadeinone">
             // Page header
             <div class="text-center mb-10">
                 <h1 class="text-3xl lg:text-4xl font-title text-white mb-3">"The Bitcoin Observatory"</h1>
