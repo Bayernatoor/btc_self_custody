@@ -1157,7 +1157,7 @@ fn StatsContent() -> impl IntoView {
             </div>
 
             // ===== OVERVIEW TAB =====
-            <div class=move || if tab.get() == "overview" { "block animate-scaleup" } else { "hidden" }>
+            <div class=move || if tab.get() == "overview" { "block" } else { "hidden" }>
 
                 // Live stats panel
                 <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-6 lg:p-8 mb-8">
@@ -1311,7 +1311,7 @@ fn StatsContent() -> impl IntoView {
             </div>
 
             // ===== NETWORK TAB =====
-            <div class=move || if tab.get() == "network" { "block animate-scaleup" } else { "hidden" }>
+            <div class=move || if tab.get() == "network" { "block" } else { "hidden" }>
 
                 // Sub-section pills
                 <div class="flex flex-wrap gap-2 justify-center mb-6">
@@ -1369,7 +1369,7 @@ fn StatsContent() -> impl IntoView {
             </div>
 
             // ===== FEES TAB =====
-            <div class=move || if tab.get() == "fees" { "block animate-scaleup" } else { "hidden" }>
+            <div class=move || if tab.get() == "fees" { "block" } else { "hidden" }>
 
                 {range_selector!()}
 
@@ -1401,7 +1401,7 @@ fn StatsContent() -> impl IntoView {
             </div>
 
             // ===== MINING TAB =====
-            <div class=move || if tab.get() == "mining" { "block animate-scaleup" } else { "hidden" }>
+            <div class=move || if tab.get() == "mining" { "block" } else { "hidden" }>
 
                 // Sub-section pills
                 <div class="flex flex-wrap gap-2 justify-center mb-6">
@@ -1443,7 +1443,7 @@ fn StatsContent() -> impl IntoView {
             </div>
 
             // ===== EMBEDDED DATA TAB =====
-            <div class=move || if tab.get() == "opreturn" { "block animate-scaleup" } else { "hidden" }>
+            <div class=move || if tab.get() == "opreturn" { "block" } else { "hidden" }>
 
                 // Protocol guide link
                 <div class="flex justify-center mb-4">
@@ -1507,7 +1507,7 @@ fn StatsContent() -> impl IntoView {
             </div>
 
             // ===== SIGNALING TAB =====
-            <div class=move || if tab.get() == "signaling" { "block animate-scaleup" } else { "hidden" }>
+            <div class=move || if tab.get() == "signaling" { "block" } else { "hidden" }>
 
                 // BIP selector
                 <div class="flex flex-wrap gap-2 justify-center mb-6">

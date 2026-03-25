@@ -51,12 +51,14 @@
         el._lastOptionJson = optionJson;
         try {
             var opts = JSON.parse(optionJson);
-            // Disable ECharts animation globally — prevents legend flash on
-            // tab/sub-section switches and improves render performance.
-            // The scaleup CSS transition on the tab container provides
-            // sufficient visual feedback.
             opts.animation = false;
-            el._chart.setOption(opts, true);
+            // Hide canvas during setOption to prevent flash of blank/partial chart
+            el.style.visibility = 'hidden';
+            el._chart.setOption(opts, { notMerge: true, lazyUpdate: true });
+            // Show after ECharts finishes layout (next frame)
+            requestAnimationFrame(function() {
+                el.style.visibility = 'visible';
+            });
             // Auto-register click handler for block detail (data format: [ts, value, height])
             if (!el._clickRegistered) {
                 el._clickRegistered = true;
