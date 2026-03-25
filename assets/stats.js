@@ -51,16 +51,11 @@
         el._lastOptionJson = optionJson;
         try {
             var opts = JSON.parse(optionJson);
-            // Disable animation for fullscreen charts (faster render)
-            if (elementId.indexOf('-fullscreen') !== -1) {
-                opts.animation = false;
-            }
-            // Suppress animation on first render to prevent legend flash,
-            // and also when chart was previously hidden (tab switch).
-            if (!el._hasRendered) {
-                opts.animation = false;
-                el._hasRendered = true;
-            }
+            // Disable ECharts animation globally — prevents legend flash on
+            // tab/sub-section switches and improves render performance.
+            // The scaleup CSS transition on the tab container provides
+            // sufficient visual feedback.
+            opts.animation = false;
             el._chart.setOption(opts, true);
             // Auto-register click handler for block detail (data format: [ts, value, height])
             if (!el._clickRegistered) {
