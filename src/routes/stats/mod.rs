@@ -106,6 +106,7 @@ fn StatsComingSoon() -> impl IntoView {
 #[component]
 fn StatsContent() -> impl IntoView {
     let (tab, set_tab) = signal("overview".to_string());
+    let (loading_tab, set_loading_tab) = signal(None::<String>);
     let (range, set_range) = signal("all".to_string());
     let (fee_unit, set_fee_unit) = signal("sats".to_string());
 
@@ -1074,28 +1075,69 @@ fn StatsContent() -> impl IntoView {
                 </p>
             </div>
 
-            // Tab navigation
+            // Tab navigation — with brief loading state on the clicked button
             <nav class="flex justify-center mb-8">
                 <div class="inline-flex bg-[#0a1a2e] rounded-2xl p-1.5 border border-white/10">
                     {tabs.into_iter().map(|(id, label)| {
                         let id = id.to_string();
                         let label = label.to_string();
                         let id_clone = id.clone();
+                        let id_click = id.clone();
+                        let id_loading = id.clone();
                         view! {
                             <button
                                 class=move || {
-                                    if tab.get() == id_clone {
+                                    let current = tab.get();
+                                    let loading = loading_tab.get();
+                                    if loading.as_deref() == Some(id_clone.as_str()) {
+                                        "px-5 py-2 text-sm font-semibold rounded-xl bg-[#f7931a]/60 text-[#0a1a2e] shadow-md shadow-[#f7931a]/10 cursor-wait transition-all duration-200"
+                                    } else if current == id_clone {
                                         "px-5 py-2 text-sm font-semibold rounded-xl bg-[#f7931a] text-[#0a1a2e] shadow-md shadow-[#f7931a]/20 cursor-pointer transition-all duration-200"
                                     } else {
                                         "px-5 py-2 text-sm font-medium rounded-xl text-white/50 hover:text-white/80 hover:bg-white/5 cursor-pointer transition-all duration-200"
                                     }
                                 }
+                                disabled=move || loading_tab.get().is_some()
                                 on:click={
-                                    let id = id.clone();
-                                    move |_| set_tab.set(id.clone())
+                                    move |_| {
+                                        if tab.get_untracked() == id_click || loading_tab.get_untracked().is_some() {
+                                            return;
+                                        }
+                                        set_loading_tab.set(Some(id_click.clone()));
+                                        set_tab.set(id_click.clone());
+                                        // Clear after 600ms
+                                        #[cfg(feature = "hydrate")]
+                                        {
+                                            use wasm_bindgen::prelude::*;
+                                            let cb = Closure::once(move || set_loading_tab.set(None));
+                                            let _ = leptos::web_sys::window()
+                                                .unwrap()
+                                                .set_timeout_with_callback_and_timeout_and_arguments_0(
+                                                    cb.as_ref().unchecked_ref(),
+                                                    600,
+                                                );
+                                            cb.forget();
+                                        }
+                                        #[cfg(not(feature = "hydrate"))]
+                                        set_loading_tab.set(None);
+                                    }
                                 }
                             >
-                                {label}
+                                {move || {
+                                    if loading_tab.get().as_deref() == Some(id_loading.as_str()) {
+                                        view! {
+                                            <span class="inline-flex items-center gap-1.5">
+                                                <svg class="w-3.5 h-3.5 animate-block-pulse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                                    <rect x="3" y="3" width="18" height="18" rx="2"/>
+                                                    <path d="M9 3v18M15 3v18M3 9h18M3 15h18"/>
+                                                </svg>
+                                                {label.clone()}
+                                            </span>
+                                        }.into_any()
+                                    } else {
+                                        view! { <span>{label.clone()}</span> }.into_any()
+                                    }
+                                }}
                             </button>
                         }
                     }).collect::<Vec<_>>()}
