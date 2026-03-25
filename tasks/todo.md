@@ -193,15 +193,39 @@
   - Verify daily aggregation mode produces correct values
   - Test edge cases: empty data, single data point, very large ranges
 
-## TODO: Stats Route Performance Optimization
-- [ ] Noticeable lag when switching tabs and loading/changing chart ranges
-  - Profile where time is spent: data fetching, chart JSON building, overlay application, ECharts rendering
-  - Consider lazy-loading tab content (don't build chart signals until tab is first visited)
-  - Investigate if dashboard_data cloning is a bottleneck (large block/daily vecs)
-  - Review server-side query performance (SQLite indexes, query plans)
-  - Consider caching server responses client-side across range switches
-  - Evaluate ECharts `notMerge` vs merge behavior on option updates
-  - Test with reduced data density (more aggressive sampling for large ranges)
+## Completed: Stats Route Performance Optimization (2026-03-25)
+
+### Server-Side (scalability for 100+ concurrent users)
+- [x] Replace `Mutex<Connection>` with r2d2 SQLite connection pool (8 connections, WAL mode)
+- [x] Cache live stats server-side (10s TTL) — 4 RPC calls shared across all clients
+- [x] Cache signaling periods (60s TTL) — avoids 900k-row full table scan per request
+- [x] Price cache stampede guard — AtomicBool prevents duplicate HTTP fetches on expiry
+- [x] Cache-Control headers on REST API responses (/api/stats, /api/live — 10s)
+
+### Database Query Optimization
+- [x] `query_stats()`: replaced `COUNT(*)` full scan with `MIN/MAX` primary key lookups (600ms → <1ms)
+- [x] `query_signaling_periods_*()`: cached with 60s TTL (full scan only on first request)
+- Audited all 19 query functions — remaining queries use indexes correctly:
+  - `max_height/min_height`: O(1) B-tree lookups
+  - `query_blocks/query_op_returns`: PRIMARY KEY range scans
+  - `query_daily_aggregates`: timestamp index + GROUP BY
+  - `query_block_by_height/query_block_timestamp`: O(log N) point lookups
+  - `query_miner_dominance*`: indexed range scans with grouping
+  - `query_signaling_bit/locktime`: PRIMARY KEY range scans
+  - `insert_blocks/update_block_extras`: batch transactions, prepared statements
+
+### Client-Side (chart rendering performance)
+- [x] Two-stage chart pipeline: base JSON cached separately from overlay application
+- [x] Tab-guarded chart signals: only active tab recomputes on overlay/data change
+- [x] Eliminated redundant `op_data` fetch — Embedded Data tab uses shared `dashboard_data`
+- [x] OP_RETURN + mining chart signals: tab-guarded (no wasted computation)
+- [x] Pre-cached chain_size cumulative data (no recompute on overlay toggle)
+- [x] `overlay_flags.read()` instead of `.get()` — avoids cloning 4000+ price points per chart
+
+### Remaining Ideas
+- [ ] Evaluate ECharts `notMerge` vs merge behavior on option updates
+- [ ] Consider reduced data density (more aggressive sampling for large ranges)
+- [ ] Consider client-side caching of server responses across range switches
 
 ## Completed: Codebase Refactoring (2026-03-24)
 - [x] Split `charts.rs` (3239 lines) into 9 module files:
