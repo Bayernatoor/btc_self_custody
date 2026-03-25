@@ -314,15 +314,12 @@ fn StatsContent() -> impl IntoView {
         }
     });
 
-    let overlay_flags = Signal::derive(move || {
-        let price_data = if overlay_price.get() {
-            cached_price_history.get()
-        } else {
-            Vec::new()
-        };
-
-        let chain_size_data = if overlay_chain_size.get() {
-            dashboard_data
+    // Pre-compute chain size cumulative data — only re-runs when dashboard_data changes,
+    // not on every overlay toggle. Avoids expensive iteration + date parsing in overlay_flags.
+    let cached_chain_size_data = {
+        let (cached, set_cached) = signal::<Vec<(u64, f64)>>(Vec::new());
+        Effect::new(move |_| {
+            let result = dashboard_data
                 .get()
                 .and_then(|r| r.ok())
                 .map(|data| {
@@ -353,7 +350,21 @@ fn StatsContent() -> impl IntoView {
                             .collect(),
                     }
                 })
-                .unwrap_or_default()
+                .unwrap_or_default();
+            set_cached.set(result);
+        });
+        Signal::derive(move || cached.get())
+    };
+
+    let overlay_flags = Signal::derive(move || {
+        let price_data = if overlay_price.get() {
+            cached_price_history.get()
+        } else {
+            Vec::new()
+        };
+
+        let chain_size_data = if overlay_chain_size.get() {
+            cached_chain_size_data.get()
         } else {
             Vec::new()
         };
@@ -393,13 +404,13 @@ fn StatsContent() -> impl IntoView {
                     set_base_json.set(r);
                 }
             });
-            // Stage 2: apply overlays — only re-runs on overlay or base change
+            // Stage 2: apply overlays — .read() avoids cloning OverlayFlags vecs
             let (cached, set_cached) = signal(String::new());
             Effect::new(move |_| {
                 let (ref json, is_daily) = *base_json.read();
-                let flags = $overlays.get();
+                let flags = $overlays.read();
                 if $tab.get() != $tab_id || json.is_empty() { return; }
-                set_cached.set(crate::stats::charts::apply_overlays(json, &flags, is_daily));
+                set_cached.set(crate::stats::charts::apply_overlays(json, &*flags, is_daily));
             });
             Signal::derive(move || cached.get())
         }};
@@ -422,9 +433,9 @@ fn StatsContent() -> impl IntoView {
             let (cached, set_cached) = signal(String::new());
             Effect::new(move |_| {
                 let (ref json, is_daily) = *base_json.read();
-                let flags = $overlays.get();
+                let flags = $overlays.read();
                 if json.is_empty() { return; }
-                set_cached.set(crate::stats::charts::apply_overlays(json, &flags, is_daily));
+                set_cached.set(crate::stats::charts::apply_overlays(json, &*flags, is_daily));
             });
             Signal::derive(move || cached.get())
         }};
@@ -502,7 +513,7 @@ fn StatsContent() -> impl IntoView {
         let (cached, set_cached) = signal(String::new());
         Effect::new(move |_| {
             let (ref json, is_daily) = *base_json.read();
-            let flags = overlay_flags.get();
+            let flags = overlay_flags.read();
             if tab.get() != "fees" || json.is_empty() { return; }
             set_cached.set(crate::stats::charts::apply_overlays(json, &flags, is_daily));
         });
@@ -777,77 +788,51 @@ fn StatsContent() -> impl IntoView {
         }
     });
 
-    let op_count_option = Signal::derive(move || {
-        let flags = overlay_flags.get();
-        op_data
-            .get()
-            .and_then(|r| r.ok())
-            .map(|data| match data {
-                OpData::PerBlock(ref b) => {
-                    let json = crate::stats::charts::op_return_count_chart(b);
-                    crate::stats::charts::apply_overlays(&json, &flags, false)
-                }
-                OpData::Daily(ref d) => {
-                    let json = crate::stats::charts::op_return_count_chart_daily(d);
-                    crate::stats::charts::apply_overlays(&json, &flags, true)
-                }
-            })
-            .unwrap_or_default()
-    });
+    // Helper: two-stage tab-guarded chart from op_data
+    macro_rules! op_chart_signal {
+        ($builder_per_block:expr, $builder_daily:expr) => {{
+            let (base_json, set_base_json) = signal((String::new(), false));
+            Effect::new(move |_| {
+                if tab.get() != "opreturn" { return; }
+                let result = op_data
+                    .get()
+                    .and_then(|r| r.ok())
+                    .map(|data| match data {
+                        OpData::PerBlock(ref b) => ($builder_per_block(b), false),
+                        OpData::Daily(ref d) => ($builder_daily(d), true),
+                    });
+                if let Some(r) = result { set_base_json.set(r); }
+            });
+            let (cached, set_cached) = signal(String::new());
+            Effect::new(move |_| {
+                let (ref json, is_daily) = *base_json.read();
+                let flags = overlay_flags.read();
+                if tab.get() != "opreturn" || json.is_empty() { return; }
+                set_cached.set(crate::stats::charts::apply_overlays(json, &flags, is_daily));
+            });
+            Signal::derive(move || cached.get())
+        }};
+    }
 
-    let op_bytes_option = Signal::derive(move || {
-        let flags = overlay_flags.get();
-        op_data
-            .get()
-            .and_then(|r| r.ok())
-            .map(|data| match data {
-                OpData::PerBlock(ref b) => {
-                    let json = crate::stats::charts::op_return_bytes_chart(b);
-                    crate::stats::charts::apply_overlays(&json, &flags, false)
-                }
-                OpData::Daily(ref d) => {
-                    let json = crate::stats::charts::op_return_bytes_chart_daily(d);
-                    crate::stats::charts::apply_overlays(&json, &flags, true)
-                }
-            })
-            .unwrap_or_default()
-    });
+    let op_count_option = op_chart_signal!(
+        crate::stats::charts::op_return_count_chart,
+        crate::stats::charts::op_return_count_chart_daily
+    );
 
-    let runes_pct_option = Signal::derive(move || {
-        let flags = overlay_flags.get();
-        op_data
-            .get()
-            .and_then(|r| r.ok())
-            .map(|data| match data {
-                OpData::PerBlock(ref b) => {
-                    let json = crate::stats::charts::runes_pct_chart(b);
-                    crate::stats::charts::apply_overlays(&json, &flags, false)
-                }
-                OpData::Daily(ref d) => {
-                    let json = crate::stats::charts::runes_pct_chart_daily(d);
-                    crate::stats::charts::apply_overlays(&json, &flags, true)
-                }
-            })
-            .unwrap_or_default()
-    });
+    let op_bytes_option = op_chart_signal!(
+        crate::stats::charts::op_return_bytes_chart,
+        crate::stats::charts::op_return_bytes_chart_daily
+    );
 
-    let op_block_share_option = Signal::derive(move || {
-        let flags = overlay_flags.get();
-        op_data
-            .get()
-            .and_then(|r| r.ok())
-            .map(|data| match data {
-                OpData::PerBlock(ref b) => {
-                    let json = crate::stats::charts::op_return_block_share_chart(b);
-                    crate::stats::charts::apply_overlays(&json, &flags, false)
-                }
-                OpData::Daily(ref d) => {
-                    let json = crate::stats::charts::op_return_block_share_chart_daily(d);
-                    crate::stats::charts::apply_overlays(&json, &flags, true)
-                }
-            })
-            .unwrap_or_default()
-    });
+    let runes_pct_option = op_chart_signal!(
+        crate::stats::charts::runes_pct_chart,
+        crate::stats::charts::runes_pct_chart_daily
+    );
+
+    let op_block_share_option = op_chart_signal!(
+        crate::stats::charts::op_return_block_share_chart,
+        crate::stats::charts::op_return_block_share_chart_daily
+    );
 
     // ---- Mining tab data ----
     let mining_data = LocalResource::new(move || {
@@ -887,15 +872,21 @@ fn StatsContent() -> impl IntoView {
         }
     });
 
-    let miner_chart_option = Signal::derive(move || {
-        mining_data
-            .get()
-            .and_then(|r| r.ok())
-            .map(|(ref miners, _)| {
-                crate::stats::charts::miner_dominance_chart(miners)
-            })
-            .unwrap_or_default()
-    });
+    let miner_chart_option = {
+        let (cached, set_cached) = signal(String::new());
+        Effect::new(move |_| {
+            if tab.get() != "mining" { return; }
+            let result = mining_data
+                .get()
+                .and_then(|r| r.ok())
+                .map(|(ref miners, _)| {
+                    crate::stats::charts::miner_dominance_chart(miners)
+                })
+                .unwrap_or_default();
+            if !result.is_empty() { set_cached.set(result); }
+        });
+        Signal::derive(move || cached.get())
+    };
 
     let empty_blocks_option = {
         let (base_json, set_base_json) = signal(String::new());
@@ -911,7 +902,7 @@ fn StatsContent() -> impl IntoView {
         let (cached, set_cached) = signal(String::new());
         Effect::new(move |_| {
             let json = base_json.get();
-            let flags = overlay_flags.get();
+            let flags = overlay_flags.read();
             if tab.get() != "mining" || json.is_empty() { return; }
             set_cached.set(crate::stats::charts::apply_overlays(&json, &flags, true));
         });
@@ -958,7 +949,7 @@ fn StatsContent() -> impl IntoView {
         let (cached, set_cached) = signal(String::new());
         Effect::new(move |_| {
             let (ref json, is_daily) = *base_json.read();
-            let flags = overlay_flags.get();
+            let flags = overlay_flags.read();
             if tab.get() != "network" || json.is_empty() { return; }
             set_cached.set(crate::stats::charts::apply_overlays(json, &flags, is_daily));
         });
