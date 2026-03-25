@@ -16,7 +16,7 @@
   --animate-slideinfast: slidein 0.25s ease-out;
   --animate-slideup: slideup 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   --animate-slidedown: slidedown 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  --animate-scaleup: scaleup 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  --animate-scaleup: scaleup 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 
   @keyframes fadein {
     0% { opacity: 0; }
