@@ -757,82 +757,25 @@ fn StatsContent() -> impl IntoView {
         est.format("%b %d, %Y").to_string()
     });
 
-    // ---- OP_RETURN data ----
-    #[derive(Clone)]
-    enum OpData {
-        PerBlock(Vec<OpReturnBlock>),
-        Daily(Vec<DailyAggregate>),
-    }
-
-    let op_data = LocalResource::new(move || {
-        let r = range.get();
-        async move {
-            let stats =
-                fetch_stats_summary().await.map_err(|e| e.to_string())?;
-            let n = range_to_blocks(&r);
-
-            if n > 5_000 {
-                let from_ts = stats.latest_timestamp.saturating_sub(n * 600);
-                let days =
-                    fetch_daily_aggregates(from_ts, stats.latest_timestamp)
-                        .await
-                        .map_err(|e| e.to_string())?;
-                Ok::<_, String>(OpData::Daily(days))
-            } else {
-                let from =
-                    stats.min_height.max(stats.max_height.saturating_sub(n));
-                let blocks = fetch_op_returns(from, stats.max_height)
-                    .await
-                    .map_err(|e| e.to_string())?;
-                Ok::<_, String>(OpData::PerBlock(blocks))
-            }
-        }
-    });
-
-    // Helper: two-stage tab-guarded chart from op_data
-    macro_rules! op_chart_signal {
-        ($builder_per_block:expr, $builder_daily:expr) => {{
-            let (base_json, set_base_json) = signal((String::new(), false));
-            Effect::new(move |_| {
-                if tab.get() != "opreturn" { return; }
-                let result = op_data
-                    .get()
-                    .and_then(|r| r.ok())
-                    .map(|data| match data {
-                        OpData::PerBlock(ref b) => ($builder_per_block(b), false),
-                        OpData::Daily(ref d) => ($builder_daily(d), true),
-                    });
-                if let Some(r) = result { set_base_json.set(r); }
-            });
-            let (cached, set_cached) = signal(String::new());
-            Effect::new(move |_| {
-                let (ref json, is_daily) = *base_json.read();
-                let flags = overlay_flags.read();
-                if tab.get() != "opreturn" || json.is_empty() { return; }
-                set_cached.set(crate::stats::charts::apply_overlays(json, &flags, is_daily));
-            });
-            Signal::derive(move || cached.get())
-        }};
-    }
-
-    let op_count_option = op_chart_signal!(
-        crate::stats::charts::op_return_count_chart,
-        crate::stats::charts::op_return_count_chart_daily
+    // ---- OP_RETURN charts (use dashboard_data — no separate fetch needed) ----
+    let op_count_option = chart_signal!(dashboard_data, range, overlay_flags, tab, "opreturn",
+        |blocks| crate::stats::charts::op_return_count_chart(blocks),
+        |days| crate::stats::charts::op_return_count_chart_daily(days)
     );
 
-    let op_bytes_option = op_chart_signal!(
-        crate::stats::charts::op_return_bytes_chart,
-        crate::stats::charts::op_return_bytes_chart_daily
+    let op_bytes_option = chart_signal!(dashboard_data, range, overlay_flags, tab, "opreturn",
+        |blocks| crate::stats::charts::op_return_bytes_chart(blocks),
+        |days| crate::stats::charts::op_return_bytes_chart_daily(days)
     );
 
-    let runes_pct_option = op_chart_signal!(
-        crate::stats::charts::runes_pct_chart,
-        crate::stats::charts::runes_pct_chart_daily
+    let runes_pct_option = chart_signal!(dashboard_data, range, overlay_flags, tab, "opreturn",
+        |blocks| crate::stats::charts::runes_pct_chart(blocks),
+        |days| crate::stats::charts::runes_pct_chart_daily(days)
     );
 
-    let op_block_share_option = op_chart_signal!(
-        crate::stats::charts::op_return_block_share_chart,
-        crate::stats::charts::op_return_block_share_chart_daily
+    let op_block_share_option = chart_signal!(dashboard_data, range, overlay_flags, tab, "opreturn",
+        |blocks| crate::stats::charts::op_return_block_share_chart(blocks),
+        |days| crate::stats::charts::op_return_block_share_chart_daily(days)
     );
 
     // ---- Mining tab data ----
@@ -1617,9 +1560,6 @@ fn StatsContent() -> impl IntoView {
                     </div>
                 }>
                     {move || {
-                        // Both resources must be tracked: op_data for Protocols/Witness charts,
-                        // dashboard_data for Overview charts (all_embedded_share uses BlockSummary)
-                        let _d = op_data.get();
                         let _dd = dashboard_data.get();
                         view! {
                             // --- Overview sub-section (unified view) ---
