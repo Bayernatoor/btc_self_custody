@@ -4,7 +4,7 @@ use super::*;
 const INSCRIPTION_COLOR: &str = "#ec4899"; // Pink for inscriptions
 
 /// OP_RETURN count bar chart (runes vs data carriers).
-pub fn op_return_count_chart(blocks: &[OpReturnBlock]) -> String {
+pub fn op_return_count_chart(blocks: &[BlockSummary]) -> String {
     if blocks.is_empty() {
         return no_data_chart("Embedded Data Count");
     }
@@ -57,7 +57,7 @@ pub fn op_return_count_chart_daily(days: &[DailyAggregate]) -> String {
 }
 
 /// OP_RETURN bytes bar chart.
-pub fn op_return_bytes_chart(blocks: &[OpReturnBlock]) -> String {
+pub fn op_return_bytes_chart(blocks: &[BlockSummary]) -> String {
     if blocks.is_empty() {
         return no_data_chart("Embedded Data Volume");
     }
@@ -110,7 +110,7 @@ pub fn op_return_bytes_chart_daily(days: &[DailyAggregate]) -> String {
 }
 
 /// Protocol dominance — 100% stacked area showing share of each protocol.
-pub fn runes_pct_chart(blocks: &[OpReturnBlock]) -> String {
+pub fn runes_pct_chart(blocks: &[BlockSummary]) -> String {
     if blocks.is_empty() {
         return no_data_chart("Protocol Dominance");
     }
@@ -191,7 +191,7 @@ pub fn runes_pct_chart_daily(days: &[DailyAggregate]) -> String {
 }
 
 /// OP_RETURN bytes as percentage of total block size (per-block).
-pub fn op_return_block_share_chart(blocks: &[OpReturnBlock]) -> String {
+pub fn op_return_block_share_chart(blocks: &[BlockSummary]) -> String {
     if blocks.is_empty() {
         return no_data_chart("Embedded Data Block Share");
     }
