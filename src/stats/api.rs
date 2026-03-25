@@ -25,6 +25,8 @@ use super::types::PricePoint;
 pub struct StatsState {
     pub db: DbPool,
     pub rpc: BitcoinRpc,
+    /// Cached live stats result, refreshed at most every 10 seconds.
+    pub live_cache: Mutex<Option<(super::types::LiveStats, Instant)>>,
     /// Cached price with timestamp, refreshed at most every 60 seconds.
     pub price_cache: Mutex<Option<(PriceInfo, Instant)>>,
     pub utxo_count: Mutex<Option<u64>>,

@@ -138,6 +138,16 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
             ServerFnError::new(format!("Stats not available: {e}"))
         })?;
 
+    // Return cached result if fresh (< 10 seconds old)
+    {
+        let cached = state.live_cache.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((ref stats, ref ts)) = *cached {
+            if ts.elapsed().as_secs() < 10 {
+                return Ok(stats.clone());
+            }
+        }
+    }
+
     // Parallelize all RPC calls for faster response
     let (blockchain_res, mempool_res, hashrate_res, fee_res) = tokio::join!(
         state.rpc.get_blockchain_info(),
@@ -198,7 +208,7 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
     let chain_size_gb = blockchain.size_on_disk as f64 / 1_000_000_000.0;
     let utxo_count = state.utxo_count.lock().unwrap_or_else(|e| e.into_inner()).unwrap_or(0);
 
-    Ok(LiveStats {
+    let result = LiveStats {
         blockchain: LiveBlockchain {
             blocks: blockchain.blocks,
             chain: blockchain.chain,
@@ -228,7 +238,13 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
             chain_size_gb: (chain_size_gb * 10.0).round() / 10.0,
             hashrate,
         },
-    })
+    };
+
+    // Cache the result
+    *state.live_cache.lock().unwrap_or_else(|e| e.into_inner()) =
+        Some((result.clone(), Instant::now()));
+
+    Ok(result)
 }
 
 #[server(prefix = "/api", endpoint = "stats_op_returns")]
