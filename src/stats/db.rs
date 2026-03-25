@@ -918,20 +918,27 @@ pub fn query_empty_blocks(
 }
 
 pub fn query_stats(conn: &Connection) -> rusqlite::Result<Option<Stats>> {
+    // Use MIN/MAX on primary key (instant B-tree lookup) and derive count.
+    // Avoids COUNT(*) which forces a full table scan on 900k+ rows.
+    // timestamp uses idx_blocks_timestamp index for MAX.
     conn.query_row(
-        "SELECT COUNT(*), COALESCE(MIN(height),0), COALESCE(MAX(height),0), COALESCE(MAX(timestamp),0) FROM blocks",
+        "SELECT COALESCE(MIN(height),0), COALESCE(MAX(height),0),
+                (SELECT timestamp FROM blocks ORDER BY height DESC LIMIT 1)
+         FROM blocks",
         [],
         |row| {
-            let count: u64 = row.get(0)?;
-            if count == 0 {
-                return Ok(None);
+            let min_h: u64 = row.get(0)?;
+            let max_h: u64 = row.get(1)?;
+            let latest_ts: Option<u64> = row.get(2)?;
+            match latest_ts {
+                Some(ts) => Ok(Some(Stats {
+                    block_count: max_h - min_h + 1,
+                    min_height: min_h,
+                    max_height: max_h,
+                    latest_timestamp: ts,
+                })),
+                None => Ok(None),
             }
-            Ok(Some(Stats {
-                block_count: count,
-                min_height: row.get(1)?,
-                max_height: row.get(2)?,
-                latest_timestamp: row.get(3)?,
-            }))
         },
     )
 }
