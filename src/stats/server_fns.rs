@@ -291,14 +291,27 @@ pub async fn fetch_daily_aggregates(
     from_ts: u64,
     to_ts: u64,
 ) -> Result<Vec<DailyAggregate>, ServerFnError> {
+    use std::time::Instant;
+
     let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
         leptos_axum::extract().await.map_err(|e| {
             ServerFnError::new(format!("Stats not available: {e}"))
         })?;
+
+    // Return cached result if same range requested within 30s
+    {
+        let cached = state.daily_cache.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((ref f, ref t, ref data, ref ts)) = *cached {
+            if *f == from_ts && *t == to_ts && ts.elapsed().as_secs() < 30 {
+                return Ok(data.clone());
+            }
+        }
+    }
+
     let conn = state.db.get().map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
     let rows = super::db::query_daily_aggregates(&conn, from_ts, to_ts)
         .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
-    Ok(rows
+    let result: Vec<DailyAggregate> = rows
         .into_iter()
         .map(|r| DailyAggregate {
             date: r.date,
@@ -336,7 +349,13 @@ pub async fn fetch_daily_aggregates(
             avg_inscription_bytes: r.avg_inscription_bytes,
             avg_brc20_count: r.avg_brc20_count,
         })
-        .collect())
+        .collect();
+
+    // Cache the result
+    *state.daily_cache.lock().unwrap_or_else(|e| e.into_inner()) =
+        Some((from_ts, to_ts, result.clone(), Instant::now()));
+
+    Ok(result)
 }
 
 #[server(prefix = "/api", endpoint = "stats_signaling")]
