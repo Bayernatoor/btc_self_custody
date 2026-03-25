@@ -772,7 +772,7 @@ pub fn query_signaling_locktime(
     rows.collect()
 }
 
-#[derive(serde::Serialize)]
+#[derive(Clone, serde::Serialize)]
 pub struct SignalingPeriod {
     pub period: u64,
     pub start_height: u64,

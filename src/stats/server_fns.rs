@@ -408,10 +408,39 @@ pub async fn fetch_signaling_periods(
     bit: u32,
     method: String,
 ) -> Result<Vec<SignalingPeriod>, ServerFnError> {
+    use std::time::Instant;
+
     let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
         leptos_axum::extract().await.map_err(|e| {
             ServerFnError::new(format!("Stats not available: {e}"))
         })?;
+
+    // Cache key: "bit:4" or "locktime"
+    let cache_key = if method == "locktime" {
+        "locktime".to_string()
+    } else {
+        format!("bit:{bit}")
+    };
+
+    // Return cached result if fresh (< 60 seconds)
+    {
+        let cached = state.signaling_periods_cache.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((ref key, ref data, ref ts)) = *cached {
+            if key == &cache_key && ts.elapsed().as_secs() < 60 {
+                return Ok(data
+                    .iter()
+                    .map(|p| SignalingPeriod {
+                        start_height: p.start_height,
+                        end_height: p.end_height,
+                        signaled_count: p.signaled_count,
+                        total_blocks: p.total_blocks,
+                        signaled_pct: p.signaled_pct,
+                    })
+                    .collect());
+            }
+        }
+    }
+
     let conn = state.db.get().map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
     let use_locktime = method == "locktime";
 
@@ -421,6 +450,10 @@ pub async fn fetch_signaling_periods(
         super::db::query_signaling_periods_bit(&conn, bit)
     }
     .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+
+    // Cache the result
+    *state.signaling_periods_cache.lock().unwrap_or_else(|e| e.into_inner()) =
+        Some((cache_key, periods.clone(), Instant::now()));
 
     Ok(periods
         .into_iter()
