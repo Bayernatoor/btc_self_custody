@@ -1075,31 +1075,32 @@ fn StatsContent() -> impl IntoView {
             </div>
 
             // Tab navigation
-            <div class="flex flex-wrap gap-3 justify-center mb-6">
-                {tabs.into_iter().map(|(id, label)| {
-                    let id = id.to_string();
-                    let label = label.to_string();
-                    let id_clone = id.clone();
-                    view! {
-                        <button
-                            class=move || {
-                                if tab.get() == id_clone {
-                                    "px-5 py-2.5 text-base rounded-xl bg-[#f7931a] text-[#1a1a2e] font-semibold cursor-pointer transition-all"
-                                } else {
-                                    "px-5 py-2.5 text-base rounded-xl text-white/50 hover:text-white hover:bg-white/10 border border-transparent hover:border-white/10 transition-all cursor-pointer"
+            <nav class="flex justify-center mb-8">
+                <div class="inline-flex bg-[#0a1a2e] rounded-2xl p-1.5 border border-white/10">
+                    {tabs.into_iter().map(|(id, label)| {
+                        let id = id.to_string();
+                        let label = label.to_string();
+                        let id_clone = id.clone();
+                        view! {
+                            <button
+                                class=move || {
+                                    if tab.get() == id_clone {
+                                        "px-5 py-2 text-sm font-semibold rounded-xl bg-[#f7931a] text-[#0a1a2e] shadow-md shadow-[#f7931a]/20 cursor-pointer transition-all duration-200"
+                                    } else {
+                                        "px-5 py-2 text-sm font-medium rounded-xl text-white/50 hover:text-white/80 hover:bg-white/5 cursor-pointer transition-all duration-200"
+                                    }
                                 }
-                            }
-                            on:click={
-                                let id = id.clone();
-                                move |_| set_tab.set(id.clone())
-                            }
-                        >
-                            {label}
-                        </button>
-                    }
-                }).collect::<Vec<_>>()}
-            </div>
-            <div class="h-px bg-white/10 mb-6"></div>
+                                on:click={
+                                    let id = id.clone();
+                                    move |_| set_tab.set(id.clone())
+                                }
+                            >
+                                {label}
+                            </button>
+                        }
+                    }).collect::<Vec<_>>()}
+                </div>
+            </nav>
 
             // ===== FLOATING OVERLAY PANEL =====
             <div style="z-index: 10000" class="fixed left-4 bottom-4">
@@ -1205,7 +1206,7 @@ fn StatsContent() -> impl IntoView {
             </div>
 
             // ===== OVERVIEW TAB =====
-            <div class=move || if tab.get() == "overview" { "block" } else { "hidden" }>
+            <div class=move || if tab.get() == "overview" { "block animate-scaleup" } else { "hidden" }>
 
                 // Live stats panel
                 <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-6 lg:p-8 mb-8">
@@ -1359,7 +1360,7 @@ fn StatsContent() -> impl IntoView {
             </div>
 
             // ===== NETWORK TAB =====
-            <div class=move || if tab.get() == "network" { "block" } else { "hidden" }>
+            <div class=move || if tab.get() == "network" { "block animate-scaleup" } else { "hidden" }>
 
                 // Sub-section pills
                 <div class="flex flex-wrap gap-2 justify-center mb-6">
@@ -1429,7 +1430,7 @@ fn StatsContent() -> impl IntoView {
             </div>
 
             // ===== FEES TAB =====
-            <div class=move || if tab.get() == "fees" { "block" } else { "hidden" }>
+            <div class=move || if tab.get() == "fees" { "block animate-scaleup" } else { "hidden" }>
 
                 {range_selector!()}
 
@@ -1473,7 +1474,7 @@ fn StatsContent() -> impl IntoView {
             </div>
 
             // ===== MINING TAB =====
-            <div class=move || if tab.get() == "mining" { "block" } else { "hidden" }>
+            <div class=move || if tab.get() == "mining" { "block animate-scaleup" } else { "hidden" }>
 
                 // Sub-section pills
                 <div class="flex flex-wrap gap-2 justify-center mb-6">
@@ -1527,7 +1528,7 @@ fn StatsContent() -> impl IntoView {
             </div>
 
             // ===== EMBEDDED DATA TAB =====
-            <div class=move || if tab.get() == "opreturn" { "block" } else { "hidden" }>
+            <div class=move || if tab.get() == "opreturn" { "block animate-scaleup" } else { "hidden" }>
 
                 // Protocol guide link
                 <div class="flex justify-center mb-4">
@@ -1605,7 +1606,7 @@ fn StatsContent() -> impl IntoView {
             </div>
 
             // ===== SIGNALING TAB =====
-            <div class=move || if tab.get() == "signaling" { "block" } else { "hidden" }>
+            <div class=move || if tab.get() == "signaling" { "block animate-scaleup" } else { "hidden" }>
 
                 // BIP selector
                 <div class="flex flex-wrap gap-2 justify-center mb-6">

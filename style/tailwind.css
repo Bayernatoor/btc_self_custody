@@ -47,6 +47,18 @@
     0% { opacity: 0; transform: scale(0.95); }
     100% { opacity: 1; transform: scale(1); }
   }
+  @keyframes block-pulse {
+    0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.6; }
+    50% { transform: scale(1.08) rotate(3deg); opacity: 1; }
+  }
+  @keyframes block-stack {
+    0% { transform: translateY(8px); opacity: 0; }
+    30% { transform: translateY(0); opacity: 1; }
+    80% { opacity: 1; }
+    100% { opacity: 0.3; }
+  }
+  --animate-block-pulse: block-pulse 1.5s ease-in-out infinite;
+  --animate-block-stack: block-stack 1.8s ease-out infinite;
 }
 
 @layer base {
