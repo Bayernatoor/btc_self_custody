@@ -15,8 +15,22 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use axum::extract::{Path, Query, State};
+use axum::http::header;
 use axum::Json;
 use serde::Deserialize;
+
+/// Helper: wrap a JSON response with Cache-Control header.
+fn cached_json(
+    value: serde_json::Value,
+    max_age: u32,
+) -> ([(header::HeaderName, String); 1], Json<serde_json::Value>) {
+    (
+        [(header::CACHE_CONTROL, format!("public, max-age={max_age}"))],
+        Json(value),
+    )
+}
+
+type CachedResponse = ([(header::HeaderName, String); 1], Json<serde_json::Value>);
 
 use super::db::{self, DbPool};
 use super::error::StatsError;
@@ -106,23 +120,23 @@ pub async fn get_block_detail(
 
 pub async fn get_stats(
     State(state): State<SharedStatsState>,
-) -> Result<Json<serde_json::Value>, StatsError> {
+) -> Result<CachedResponse, StatsError> {
     let conn = state.db.get().map_err(|e| StatsError::Rpc(format!("DB pool: {e}")))?;
     let stats = db::query_stats(&conn)?;
     match stats {
-        Some(s) => Ok(Json(serde_json::to_value(s).map_err(|e| StatsError::Rpc(e.to_string()))?)),
-        None => Ok(Json(serde_json::json!({
+        Some(s) => Ok(cached_json(serde_json::to_value(s).map_err(|e| StatsError::Rpc(e.to_string()))?, 10)),
+        None => Ok(cached_json(serde_json::json!({
             "block_count": 0,
             "min_height": 0,
             "max_height": 0,
             "latest_timestamp": 0
-        }))),
+        }), 10)),
     }
 }
 
 pub async fn get_live(
     State(state): State<SharedStatsState>,
-) -> Result<Json<serde_json::Value>, StatsError> {
+) -> Result<CachedResponse, StatsError> {
     // Parallelize all RPC calls for faster response
     let (blockchain_res, mempool_res, hashrate_res, fee_res) = tokio::join!(
         state.rpc.get_blockchain_info(),
@@ -183,7 +197,7 @@ pub async fn get_live(
 
     let utxo_count = state.utxo_count.lock().unwrap_or_else(|e| e.into_inner()).unwrap_or(0);
 
-    Ok(Json(serde_json::json!({
+    Ok(cached_json(serde_json::json!({
         "blockchain": blockchain,
         "mempool": mempool,
         "next_block_fee": next_block_fee,
@@ -198,7 +212,7 @@ pub async fn get_live(
             "chain_size_gb": (chain_size_gb * 10.0).round() / 10.0,
             "hashrate": hashrate
         }
-    })))
+    }), 10))
 }
 
 pub async fn get_op_returns(
