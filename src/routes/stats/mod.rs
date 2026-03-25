@@ -1340,44 +1340,32 @@ fn StatsContent() -> impl IntoView {
 
                 {range_selector!()}
 
-                <Suspense fallback=move || view! {
-                    <div class="space-y-10">
-                        <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
-                        <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
-                    </div>
-                }>
-                    {move || {
-                        let _d = dashboard_data.get();
-                        view! {
-                            // --- Blocks sub-section ---
-                            <div class=move || if network_section.get() == "blocks" { "space-y-10" } else { "hidden" }>
-                                <ChartCard title="Block Size" description="Raw block size in megabytes over time" chart_id="chart-size" option=size_option/>
-                                <ChartCard title="Weight Utilization" description="Block weight as percentage of the 4 MWU limit" chart_id="chart-weight-util" option=weight_util_option/>
-                                <ChartCard title="Transaction Count" description="Number of transactions per block" chart_id="chart-txcount" option=tx_option/>
-                                <ChartCard title="Avg Transaction Size" description="Average transaction size in bytes (block size / tx count)" chart_id="chart-avg-tx-size" option=avg_tx_size_option/>
-                                <ChartCard title="Block Interval" description="Time between consecutive blocks in minutes" chart_id="chart-interval" option=interval_option/>
-                                <ChartCard title="Chain Size Growth" description="Cumulative blockchain size — visualize growth acceleration after protocol changes" chart_id="chart-chain-size" option=chain_size_option/>
-                            </div>
+                // --- Blocks sub-section ---
+                <div class=move || if network_section.get() == "blocks" { "space-y-10" } else { "hidden" }>
+                    <ChartCard title="Block Size" description="Raw block size in megabytes over time" chart_id="chart-size" option=size_option/>
+                    <ChartCard title="Weight Utilization" description="Block weight as percentage of the 4 MWU limit" chart_id="chart-weight-util" option=weight_util_option/>
+                    <ChartCard title="Transaction Count" description="Number of transactions per block" chart_id="chart-txcount" option=tx_option/>
+                    <ChartCard title="Avg Transaction Size" description="Average transaction size in bytes (block size / tx count)" chart_id="chart-avg-tx-size" option=avg_tx_size_option/>
+                    <ChartCard title="Block Interval" description="Time between consecutive blocks in minutes" chart_id="chart-interval" option=interval_option/>
+                    <ChartCard title="Chain Size Growth" description="Cumulative blockchain size — visualize growth acceleration after protocol changes" chart_id="chart-chain-size" option=chain_size_option/>
+                </div>
 
-                            // --- Adoption sub-section ---
-                            <div class=move || if network_section.get() == "adoption" { "space-y-10" } else { "hidden" }>
-                                <ChartCard title="SegWit Adoption" description="Percentage of transactions using Segregated Witness" chart_id="chart-segwit" option=segwit_option/>
-                                <ChartCard title="Taproot Outputs" description="Number of Taproot (v1 witness) outputs created per block" chart_id="chart-taproot" option=taproot_option/>
-                                <ChartCard title="Witness Version Comparison" description="SegWit v0 vs Taproot v1 witness spends — stacked to show total and relative adoption" chart_id="chart-witness-versions" option=witness_version_option/>
-                                <ChartCard title="Witness Version Share" description="SegWit v0 vs Taproot v1 as percentage of total witness spends" chart_id="chart-witness-pct" option=witness_pct_option/>
-                                <ChartCard title="Output Type Breakdown" description="Legacy vs SegWit v0 vs Taproot v1 as percentage of all outputs" chart_id="chart-witness-tx-pct" option=witness_tx_pct_option/>
-                                <ChartCard title="Address Type Evolution" description="Output script types over time — P2PKH, P2SH, P2WPKH, P2WSH, P2TR, P2PK" chart_id="chart-address-types" option=address_type_option/>
-                                <ChartCard title="Witness Data Share" description="Witness data as percentage of total block size — shows SegWit discount impact" chart_id="chart-witness-share" option=witness_share_option/>
-                            </div>
+                // --- Adoption sub-section ---
+                <div class=move || if network_section.get() == "adoption" { "space-y-10" } else { "hidden" }>
+                    <ChartCard title="SegWit Adoption" description="Percentage of transactions using Segregated Witness" chart_id="chart-segwit" option=segwit_option/>
+                    <ChartCard title="Taproot Outputs" description="Number of Taproot (v1 witness) outputs created per block" chart_id="chart-taproot" option=taproot_option/>
+                    <ChartCard title="Witness Version Comparison" description="SegWit v0 vs Taproot v1 witness spends — stacked to show total and relative adoption" chart_id="chart-witness-versions" option=witness_version_option/>
+                    <ChartCard title="Witness Version Share" description="SegWit v0 vs Taproot v1 as percentage of total witness spends" chart_id="chart-witness-pct" option=witness_pct_option/>
+                    <ChartCard title="Output Type Breakdown" description="Legacy vs SegWit v0 vs Taproot v1 as percentage of all outputs" chart_id="chart-witness-tx-pct" option=witness_tx_pct_option/>
+                    <ChartCard title="Address Type Evolution" description="Output script types over time — P2PKH, P2SH, P2WPKH, P2WSH, P2TR, P2PK" chart_id="chart-address-types" option=address_type_option/>
+                    <ChartCard title="Witness Data Share" description="Witness data as percentage of total block size — shows SegWit discount impact" chart_id="chart-witness-share" option=witness_share_option/>
+                </div>
 
-                            // --- Transaction Metrics sub-section ---
-                            <div class=move || if network_section.get() == "tx-metrics" { "space-y-10" } else { "hidden" }>
-                                <ChartCard title="RBF Adoption" description="Percentage of transactions signaling Replace-By-Fee (nSequence < 0xFFFFFFFE)" chart_id="chart-rbf" option=rbf_option/>
-                                <ChartCard title="UTXO Flow" description="Inputs consumed vs outputs created per block — net UTXO set growth" chart_id="chart-utxo-flow" option=utxo_flow_option/>
-                            </div>
-                        }
-                    }}
-                </Suspense>
+                // --- Transaction Metrics sub-section ---
+                <div class=move || if network_section.get() == "tx-metrics" { "space-y-10" } else { "hidden" }>
+                    <ChartCard title="RBF Adoption" description="Percentage of transactions signaling Replace-By-Fee (nSequence < 0xFFFFFFFE)" chart_id="chart-rbf" option=rbf_option/>
+                    <ChartCard title="UTXO Flow" description="Inputs consumed vs outputs created per block — net UTXO set growth" chart_id="chart-utxo-flow" option=utxo_flow_option/>
+                </div>
             </div>
 
             // ===== FEES TAB =====
@@ -1385,43 +1373,31 @@ fn StatsContent() -> impl IntoView {
 
                 {range_selector!()}
 
-                <Suspense fallback=move || view! {
-                    <div class="space-y-10">
-                        <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
-                        <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
-                    </div>
-                }>
-                    {move || {
-                        let _d = dashboard_data.get();
-                        view! {
-                            <div class="space-y-10">
-                                <ChartCard
-                                    title="Total Fees per Block"
-                                    description="Total fees collected by miners per block"
-                                    chart_id="chart-fees"
-                                    option=fees_option
-                                >
-                                    <button
-                                        class="text-xs text-white/40 hover:text-white/60 px-2 py-1 rounded border border-white/10 cursor-pointer"
-                                        on:click=move |_| {
-                                            set_fee_unit.update(|u| {
-                                                *u = if *u == "sats" { "btc".to_string() } else { "sats".to_string() }
-                                            });
-                                        }
-                                    >
-                                        {move || if fee_unit.get() == "sats" { "Switch to BTC" } else { "Switch to sats" }}
-                                    </button>
-                                </ChartCard>
-                                <ChartCard
-                                    title="Subsidy vs Fees"
-                                    description="Block reward breakdown: subsidy (coinbase) vs transaction fees in BTC"
-                                    chart_id="chart-subsidy-fees"
-                                    option=subsidy_fees_option
-                                />
-                            </div>
-                        }
-                    }}
-                </Suspense>
+                <div class="space-y-10">
+                    <ChartCard
+                        title="Total Fees per Block"
+                        description="Total fees collected by miners per block"
+                        chart_id="chart-fees"
+                        option=fees_option
+                    >
+                        <button
+                            class="text-xs text-white/40 hover:text-white/60 px-2 py-1 rounded border border-white/10 cursor-pointer"
+                            on:click=move |_| {
+                                set_fee_unit.update(|u| {
+                                    *u = if *u == "sats" { "btc".to_string() } else { "sats".to_string() }
+                                });
+                            }
+                        >
+                            {move || if fee_unit.get() == "sats" { "Switch to BTC" } else { "Switch to sats" }}
+                        </button>
+                    </ChartCard>
+                    <ChartCard
+                        title="Subsidy vs Fees"
+                        description="Block reward breakdown: subsidy (coinbase) vs transaction fees in BTC"
+                        chart_id="chart-subsidy-fees"
+                        option=subsidy_fees_option
+                    />
+                </div>
             </div>
 
             // ===== MINING TAB =====
@@ -1454,28 +1430,16 @@ fn StatsContent() -> impl IntoView {
 
                 {range_selector!()}
 
-                <Suspense fallback=move || view! {
-                    <div class="space-y-10">
-                        <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
-                    </div>
-                }>
-                    {move || {
-                        let _d = dashboard_data.get();
-                        let _m = mining_data.get();
-                        view! {
-                            // --- Difficulty sub-section ---
-                            <div class=move || if mining_section.get() == "difficulty" { "space-y-10" } else { "hidden" }>
-                                <ChartCard title="Difficulty" description="Mining difficulty target, adjusts every 2,016 blocks" chart_id="chart-difficulty" option=diff_option/>
-                            </div>
+                // --- Difficulty sub-section ---
+                <div class=move || if mining_section.get() == "difficulty" { "space-y-10" } else { "hidden" }>
+                    <ChartCard title="Difficulty" description="Mining difficulty target, adjusts every 2,016 blocks" chart_id="chart-difficulty" option=diff_option/>
+                </div>
 
-                            // --- Pool Distribution sub-section ---
-                            <div class=move || if mining_section.get() == "pools" { "space-y-10" } else { "hidden" }>
-                                <ChartCard title="Miner Dominance" description="Mining pool market share for the selected period" chart_id="chart-miner-dominance" option=miner_chart_option/>
-                                <ChartCard title="Empty Blocks" description="Blocks containing only the coinbase transaction (no user transactions)" chart_id="chart-empty-blocks" option=empty_blocks_option/>
-                            </div>
-                        }
-                    }}
-                </Suspense>
+                // --- Pool Distribution sub-section ---
+                <div class=move || if mining_section.get() == "pools" { "space-y-10" } else { "hidden" }>
+                    <ChartCard title="Miner Dominance" description="Mining pool market share for the selected period" chart_id="chart-miner-dominance" option=miner_chart_option/>
+                    <ChartCard title="Empty Blocks" description="Blocks containing only the coinbase transaction (no user transactions)" chart_id="chart-empty-blocks" option=empty_blocks_option/>
+                </div>
             </div>
 
             // ===== EMBEDDED DATA TAB =====
@@ -1520,37 +1484,26 @@ fn StatsContent() -> impl IntoView {
 
                 {range_selector!()}
 
-                <Suspense fallback=move || view! {
-                    <div class="space-y-10">
-                        <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
-                    </div>
-                }>
-                    {move || {
-                        let _dd = dashboard_data.get();
-                        view! {
-                            // --- Overview sub-section (unified view) ---
-                            <div class=move || if embedded_section.get() == "overview" { "space-y-10" } else { "hidden" }>
-                                <ChartCard title="All Embedded Data — Block Share" description="OP_RETURN + Ordinals inscription data as percentage of total block size" chart_id="chart-all-embedded-share" option=all_embedded_share_option/>
-                                <ChartCard title="All Embedded Data — Count" description="All embedding protocols: Runes, Omni, Counterparty, Other OP_RETURN, Ordinals, Stamps" chart_id="chart-unified-count" option=unified_count_option/>
-                                <ChartCard title="All Embedded Data — Volume" description="Data volume by protocol across all embedding methods (bytes)" chart_id="chart-unified-volume" option=unified_volume_option/>
-                            </div>
+                // --- Overview sub-section (unified view) ---
+                <div class=move || if embedded_section.get() == "overview" { "space-y-10" } else { "hidden" }>
+                    <ChartCard title="All Embedded Data — Block Share" description="OP_RETURN + Ordinals inscription data as percentage of total block size" chart_id="chart-all-embedded-share" option=all_embedded_share_option/>
+                    <ChartCard title="All Embedded Data — Count" description="All embedding protocols: Runes, Omni, Counterparty, Other OP_RETURN, Ordinals, Stamps" chart_id="chart-unified-count" option=unified_count_option/>
+                    <ChartCard title="All Embedded Data — Volume" description="Data volume by protocol across all embedding methods (bytes)" chart_id="chart-unified-volume" option=unified_volume_option/>
+                </div>
 
-                            // --- OP_RETURN Protocols sub-section ---
-                            <div class=move || if embedded_section.get() == "protocols" { "space-y-10" } else { "hidden" }>
-                                <ChartCard title="Embedded Data Count" description="OP_RETURN outputs by protocol (Runes, Omni, Counterparty, Other)" chart_id="chart-opreturn-count" option=op_count_option/>
-                                <ChartCard title="Embedded Data Volume" description="Data volume in OP_RETURN outputs by protocol (bytes)" chart_id="chart-opreturn-bytes" option=op_bytes_option/>
-                                <ChartCard title="Protocol Dominance" description="Share of OP_RETURN outputs by protocol — Runes, Omni, Counterparty, Other" chart_id="chart-runes-pct" option=runes_pct_option/>
-                                <ChartCard title="OP_RETURN Block Share" description="OP_RETURN data as percentage of total block size" chart_id="chart-op-block-share" option=op_block_share_option/>
-                            </div>
+                // --- OP_RETURN Protocols sub-section ---
+                <div class=move || if embedded_section.get() == "protocols" { "space-y-10" } else { "hidden" }>
+                    <ChartCard title="Embedded Data Count" description="OP_RETURN outputs by protocol (Runes, Omni, Counterparty, Other)" chart_id="chart-opreturn-count" option=op_count_option/>
+                    <ChartCard title="Embedded Data Volume" description="Data volume in OP_RETURN outputs by protocol (bytes)" chart_id="chart-opreturn-bytes" option=op_bytes_option/>
+                    <ChartCard title="Protocol Dominance" description="Share of OP_RETURN outputs by protocol — Runes, Omni, Counterparty, Other" chart_id="chart-runes-pct" option=runes_pct_option/>
+                    <ChartCard title="OP_RETURN Block Share" description="OP_RETURN data as percentage of total block size" chart_id="chart-op-block-share" option=op_block_share_option/>
+                </div>
 
-                            // --- Witness Embedding sub-section ---
-                            <div class=move || if embedded_section.get() == "witness" { "space-y-10" } else { "hidden" }>
-                                <ChartCard title="Ordinals Inscriptions" description="Number of Ordinals inscriptions detected per block (witness envelope pattern)" chart_id="chart-inscriptions" option=inscription_option/>
-                                <ChartCard title="Inscription Block Share" description="Inscription data as percentage of total block size" chart_id="chart-inscription-share" option=inscription_share_option/>
-                            </div>
-                        }
-                    }}
-                </Suspense>
+                // --- Witness Embedding sub-section ---
+                <div class=move || if embedded_section.get() == "witness" { "space-y-10" } else { "hidden" }>
+                    <ChartCard title="Ordinals Inscriptions" description="Number of Ordinals inscriptions detected per block (witness envelope pattern)" chart_id="chart-inscriptions" option=inscription_option/>
+                    <ChartCard title="Inscription Block Share" description="Inscription data as percentage of total block size" chart_id="chart-inscription-share" option=inscription_share_option/>
+                </div>
             </div>
 
             // ===== SIGNALING TAB =====
