@@ -148,10 +148,10 @@ pub fn runes_pct_chart(blocks: &[BlockSummary]) -> String {
         "tooltip": tooltip_axis(),
         "legend": { "show": true },
         "series": [
-            { "name": "Runes", "type": "line", "sampling": "lttb", "data": runes_data, "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": RUNES_COLOR }, "itemStyle": { "color": RUNES_COLOR }, "symbol": "none" },
-            { "name": "Omni", "type": "line", "sampling": "lttb", "data": omni_data, "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": OMNI_COLOR }, "itemStyle": { "color": OMNI_COLOR }, "symbol": "none" },
-            { "name": "Counterparty", "type": "line", "sampling": "lttb", "data": xcp_data, "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": COUNTERPARTY_COLOR }, "itemStyle": { "color": COUNTERPARTY_COLOR }, "symbol": "none" },
-            { "name": "Other", "type": "line", "sampling": "lttb", "data": other_data, "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": CARRIER_COLOR }, "itemStyle": { "color": CARRIER_COLOR }, "symbol": "none" }
+            { "name": "Runes", "type": "line", "data": runes_data, "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": RUNES_COLOR }, "itemStyle": { "color": RUNES_COLOR }, "symbol": "none" },
+            { "name": "Omni", "type": "line", "data": omni_data, "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": OMNI_COLOR }, "itemStyle": { "color": OMNI_COLOR }, "symbol": "none" },
+            { "name": "Counterparty", "type": "line", "data": xcp_data, "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": COUNTERPARTY_COLOR }, "itemStyle": { "color": COUNTERPARTY_COLOR }, "symbol": "none" },
+            { "name": "Other", "type": "line", "data": other_data, "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": CARRIER_COLOR }, "itemStyle": { "color": CARRIER_COLOR }, "symbol": "none" }
         ]
     }))
 }
@@ -182,10 +182,10 @@ pub fn runes_pct_chart_daily(days: &[DailyAggregate]) -> String {
         "tooltip": tooltip_axis(),
         "legend": { "show": true },
         "series": [
-            { "name": "Runes", "type": "line", "sampling": "lttb", "data": runes, "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": RUNES_COLOR }, "itemStyle": { "color": RUNES_COLOR }, "symbol": "none" },
-            { "name": "Omni", "type": "line", "sampling": "lttb", "data": omni, "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": OMNI_COLOR }, "itemStyle": { "color": OMNI_COLOR }, "symbol": "none" },
-            { "name": "Counterparty", "type": "line", "sampling": "lttb", "data": xcp, "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": COUNTERPARTY_COLOR }, "itemStyle": { "color": COUNTERPARTY_COLOR }, "symbol": "none" },
-            { "name": "Other", "type": "line", "sampling": "lttb", "data": other, "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": CARRIER_COLOR }, "itemStyle": { "color": CARRIER_COLOR }, "symbol": "none" }
+            { "name": "Runes", "type": "line", "data": runes, "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": RUNES_COLOR }, "itemStyle": { "color": RUNES_COLOR }, "symbol": "none" },
+            { "name": "Omni", "type": "line", "data": omni, "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": OMNI_COLOR }, "itemStyle": { "color": OMNI_COLOR }, "symbol": "none" },
+            { "name": "Counterparty", "type": "line", "data": xcp, "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": COUNTERPARTY_COLOR }, "itemStyle": { "color": COUNTERPARTY_COLOR }, "symbol": "none" },
+            { "name": "Other", "type": "line", "data": other, "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": CARRIER_COLOR }, "itemStyle": { "color": CARRIER_COLOR }, "symbol": "none" }
         ]
     }))
 }
