@@ -589,8 +589,8 @@ pub fn taproot_spend_type_chart(blocks: &[BlockSummary]) -> String {
         "tooltip": tooltip_axis(),
         "legend": { "show": true },
         "series": [
-            { "name": "Key-path", "type": "line", "sampling": "lttb", "data": keypath, "stack": "tr", "areaStyle": { "opacity": 0.5 }, "lineStyle": { "width": 0, "color": KEYPATH_COLOR }, "itemStyle": { "color": KEYPATH_COLOR }, "symbol": "none" },
-            { "name": "Script-path", "type": "line", "sampling": "lttb", "data": scriptpath, "stack": "tr", "areaStyle": { "opacity": 0.5 }, "lineStyle": { "width": 0, "color": SCRIPTPATH_COLOR }, "itemStyle": { "color": SCRIPTPATH_COLOR }, "symbol": "none" }
+            { "name": "Key-path", "type": "line", "data": keypath, "stack": "tr", "areaStyle": { "opacity": 0.5 }, "lineStyle": { "width": 0, "color": KEYPATH_COLOR }, "itemStyle": { "color": KEYPATH_COLOR }, "symbol": "none" },
+            { "name": "Script-path", "type": "line", "data": scriptpath, "stack": "tr", "areaStyle": { "opacity": 0.5 }, "lineStyle": { "width": 0, "color": SCRIPTPATH_COLOR }, "itemStyle": { "color": SCRIPTPATH_COLOR }, "symbol": "none" }
         ]
     }))
 }
@@ -611,8 +611,8 @@ pub fn taproot_spend_type_chart_daily(days: &[DailyAggregate]) -> String {
         "tooltip": tooltip_axis(),
         "legend": { "show": true },
         "series": [
-            { "name": "Key-path", "type": "line", "sampling": "lttb", "data": keypath, "stack": "tr", "areaStyle": { "opacity": 0.5 }, "lineStyle": { "width": 0, "color": KEYPATH_COLOR }, "itemStyle": { "color": KEYPATH_COLOR }, "symbol": "none" },
-            { "name": "Script-path", "type": "line", "sampling": "lttb", "data": scriptpath, "stack": "tr", "areaStyle": { "opacity": 0.5 }, "lineStyle": { "width": 0, "color": SCRIPTPATH_COLOR }, "itemStyle": { "color": SCRIPTPATH_COLOR }, "symbol": "none" }
+            { "name": "Key-path", "type": "line", "data": keypath, "stack": "tr", "areaStyle": { "opacity": 0.5 }, "lineStyle": { "width": 0, "color": KEYPATH_COLOR }, "itemStyle": { "color": KEYPATH_COLOR }, "symbol": "none" },
+            { "name": "Script-path", "type": "line", "data": scriptpath, "stack": "tr", "areaStyle": { "opacity": 0.5 }, "lineStyle": { "width": 0, "color": SCRIPTPATH_COLOR }, "itemStyle": { "color": SCRIPTPATH_COLOR }, "symbol": "none" }
         ]
     }))
 }
