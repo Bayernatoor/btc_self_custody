@@ -569,3 +569,50 @@ pub fn witness_version_tx_pct_chart_daily(days: &[DailyAggregate]) -> String {
         ]
     }))
 }
+
+const KEYPATH_COLOR: &str = "#22c55e"; // Green — privacy (indistinguishable from any spend)
+const SCRIPTPATH_COLOR: &str = "#f59e0b"; // Amber — programmability (inscriptions, scripts)
+
+/// Taproot key-path vs script-path spends (per-block).
+pub fn taproot_spend_type_chart(blocks: &[BlockSummary]) -> String {
+    if blocks.is_empty() {
+        return no_data_chart("Taproot Spend Types");
+    }
+
+    let keypath: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.taproot_keypath_count])).collect();
+    let scriptpath: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.taproot_scriptpath_count])).collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("Spends"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            { "name": "Key-path", "type": "line", "sampling": "lttb", "data": keypath, "stack": "tr", "areaStyle": { "opacity": 0.5 }, "lineStyle": { "width": 0, "color": KEYPATH_COLOR }, "itemStyle": { "color": KEYPATH_COLOR }, "symbol": "none" },
+            { "name": "Script-path", "type": "line", "sampling": "lttb", "data": scriptpath, "stack": "tr", "areaStyle": { "opacity": 0.5 }, "lineStyle": { "width": 0, "color": SCRIPTPATH_COLOR }, "itemStyle": { "color": SCRIPTPATH_COLOR }, "symbol": "none" }
+        ]
+    }))
+}
+
+/// Taproot key-path vs script-path spends (daily).
+pub fn taproot_spend_type_chart_daily(days: &[DailyAggregate]) -> String {
+    if days.is_empty() {
+        return no_data_chart("Taproot Spend Types");
+    }
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    let keypath: Vec<f64> = days.iter().map(|d| round(d.avg_taproot_keypath_count, 1)).collect();
+    let scriptpath: Vec<f64> = days.iter().map(|d| round(d.avg_taproot_scriptpath_count, 1)).collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": y_axis("Avg/Block"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            { "name": "Key-path", "type": "line", "sampling": "lttb", "data": keypath, "stack": "tr", "areaStyle": { "opacity": 0.5 }, "lineStyle": { "width": 0, "color": KEYPATH_COLOR }, "itemStyle": { "color": KEYPATH_COLOR }, "symbol": "none" },
+            { "name": "Script-path", "type": "line", "sampling": "lttb", "data": scriptpath, "stack": "tr", "areaStyle": { "opacity": 0.5 }, "lineStyle": { "width": 0, "color": SCRIPTPATH_COLOR }, "itemStyle": { "color": SCRIPTPATH_COLOR }, "symbol": "none" }
+        ]
+    }))
+}

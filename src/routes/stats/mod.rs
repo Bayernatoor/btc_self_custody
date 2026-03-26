@@ -927,6 +927,11 @@ fn StatsContent() -> impl IntoView {
         |days| crate::stats::charts::witness_share_chart_daily(days)
     );
 
+    let taproot_spend_type_option = chart_signal!(dashboard_data, range, overlay_flags, tab, "network",
+        |blocks| crate::stats::charts::taproot_spend_type_chart(blocks),
+        |days| crate::stats::charts::taproot_spend_type_chart_daily(days)
+    );
+
     let rbf_option = chart_signal!(dashboard_data, range, overlay_flags, tab, "network",
         |blocks| crate::stats::charts::rbf_chart(blocks),
         |days| crate::stats::charts::rbf_chart_daily(days)
@@ -1369,6 +1374,7 @@ fn StatsContent() -> impl IntoView {
                     <ChartCard title="Output Type Breakdown" description="Legacy vs SegWit v0 vs Taproot v1 as percentage of all outputs" chart_id="chart-witness-tx-pct" option=witness_tx_pct_option/>
                     <ChartCard title="Address Type Evolution" description="Output script types over time — P2PKH, P2SH, P2WPKH, P2WSH, P2TR, P2PK" chart_id="chart-address-types" option=address_type_option/>
                     <ChartCard title="Address Type Share" description="Output script types as percentage of total — shows adoption shift from legacy to SegWit to Taproot" chart_id="chart-address-types-pct" option=address_type_pct_option/>
+                    <ChartCard title="Taproot Spend Types" description="Key-path (private, looks like any spend) vs script-path (inscriptions, complex scripts) — the real Taproot adoption story" chart_id="chart-taproot-spend-types" option=taproot_spend_type_option/>
                     <ChartCard title="Witness Data Share" description="Witness data as percentage of total block size — shows SegWit discount impact" chart_id="chart-witness-share" option=witness_share_option/>
                 </div>
 

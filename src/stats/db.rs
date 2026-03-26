@@ -12,7 +12,7 @@ use super::rpc::Block;
 
 /// Bump this when adding new columns that require re-fetching existing blocks.
 /// The backfill loop processes all blocks with backfill_version < BACKFILL_VERSION.
-pub const BACKFILL_VERSION: u64 = 6;
+pub const BACKFILL_VERSION: u64 = 7;
 
 /// Type alias for the connection pool used throughout the stats module.
 pub type DbPool = r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>;
@@ -211,6 +211,18 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
         )?;
     }
 
+    // Migration: add taproot key-path/script-path spend counts
+    let has_keypath: bool = conn
+        .prepare("SELECT taproot_keypath_count FROM blocks LIMIT 0")
+        .is_ok();
+    if !has_keypath {
+        tracing::info!("Migrating: adding taproot_keypath_count, taproot_scriptpath_count columns");
+        conn.execute_batch(
+            "ALTER TABLE blocks ADD COLUMN taproot_keypath_count INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE blocks ADD COLUMN taproot_scriptpath_count INTEGER NOT NULL DEFAULT 0;",
+        )?;
+    }
+
     // Ensure indexes exist (safe to run every startup)
     conn.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_blocks_backfill ON blocks(backfill_version);",
@@ -251,12 +263,13 @@ pub fn insert_blocks(
               data_carrier_count, data_carrier_bytes, version, total_fees, miner,
               median_fee, median_fee_rate, coinbase_locktime, coinbase_sequence,
               segwit_spend_count, taproot_spend_count,
+              taproot_keypath_count, taproot_scriptpath_count,
               p2pk_count, p2pkh_count, p2sh_count, p2wpkh_count, p2wsh_count,
               p2tr_count, multisig_count, unknown_script_count,
               input_count, output_count, rbf_count, witness_bytes,
               inscription_count, inscription_bytes, brc20_count,
               backfill_version)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36,?37,?38,?39,?40,?41,?42)",
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36,?37,?38,?39,?40,?41,?42,?43,?44)",
         )?;
         for block in blocks {
             stmt.execute(params![
@@ -286,6 +299,8 @@ pub fn insert_blocks(
                 block.coinbase_sequence,
                 block.segwit_spend_count,
                 block.taproot_spend_count,
+                block.taproot_keypath_count,
+                block.taproot_scriptpath_count,
                 block.p2pk_count,
                 block.p2pkh_count,
                 block.p2sh_count,
@@ -339,7 +354,7 @@ pub fn update_block_extras(
     let tx = conn.unchecked_transaction()?;
     {
         let mut stmt = tx.prepare_cached(
-            "UPDATE blocks SET version = ?1, total_fees = ?2, miner = ?3, median_fee = ?4, median_fee_rate = ?5, coinbase_locktime = ?6, coinbase_sequence = ?7, segwit_spend_count = ?8, taproot_spend_count = ?9, omni_count = ?10, omni_bytes = ?11, counterparty_count = ?12, counterparty_bytes = ?13, runes_count = ?14, runes_bytes = ?15, data_carrier_count = ?16, data_carrier_bytes = ?17, p2pk_count = ?18, p2pkh_count = ?19, p2sh_count = ?20, p2wpkh_count = ?21, p2wsh_count = ?22, p2tr_count = ?23, multisig_count = ?24, unknown_script_count = ?25, input_count = ?26, output_count = ?27, rbf_count = ?28, witness_bytes = ?29, inscription_count = ?30, inscription_bytes = ?31, brc20_count = ?32, backfill_version = ?33 WHERE height = ?34",
+            "UPDATE blocks SET version = ?1, total_fees = ?2, miner = ?3, median_fee = ?4, median_fee_rate = ?5, coinbase_locktime = ?6, coinbase_sequence = ?7, segwit_spend_count = ?8, taproot_spend_count = ?9, omni_count = ?10, omni_bytes = ?11, counterparty_count = ?12, counterparty_bytes = ?13, runes_count = ?14, runes_bytes = ?15, data_carrier_count = ?16, data_carrier_bytes = ?17, p2pk_count = ?18, p2pkh_count = ?19, p2sh_count = ?20, p2wpkh_count = ?21, p2wsh_count = ?22, p2tr_count = ?23, multisig_count = ?24, unknown_script_count = ?25, input_count = ?26, output_count = ?27, rbf_count = ?28, witness_bytes = ?29, inscription_count = ?30, inscription_bytes = ?31, brc20_count = ?32, taproot_keypath_count = ?33, taproot_scriptpath_count = ?34, backfill_version = ?35 WHERE height = ?36",
         )?;
         for block in blocks {
             stmt.execute(params![
@@ -375,6 +390,8 @@ pub fn update_block_extras(
                 block.inscription_count,
                 block.inscription_bytes,
                 block.brc20_count,
+                block.taproot_keypath_count,
+                block.taproot_scriptpath_count,
                 BACKFILL_VERSION,
                 block.height
             ])?;
@@ -425,6 +442,8 @@ pub struct BlockRow {
     pub counterparty_bytes: u64,
     pub data_carrier_count: u64,
     pub data_carrier_bytes: u64,
+    pub taproot_keypath_count: u64,
+    pub taproot_scriptpath_count: u64,
 }
 
 pub fn query_blocks(
@@ -443,7 +462,8 @@ pub fn query_blocks(
                 op_return_count, op_return_bytes,
                 runes_count, runes_bytes, omni_count, omni_bytes,
                 counterparty_count, counterparty_bytes,
-                data_carrier_count, data_carrier_bytes
+                data_carrier_count, data_carrier_bytes,
+                taproot_keypath_count, taproot_scriptpath_count
          FROM blocks WHERE height >= ?1 AND height <= ?2 ORDER BY height ASC",
     )?;
     let rows = stmt.query_map(params![from, to], |row| {
@@ -485,6 +505,8 @@ pub fn query_blocks(
             counterparty_bytes: row.get(34)?,
             data_carrier_count: row.get(35)?,
             data_carrier_bytes: row.get(36)?,
+            taproot_keypath_count: row.get(37)?,
+            taproot_scriptpath_count: row.get(38)?,
         })
     })?;
     rows.collect()
@@ -649,6 +671,8 @@ pub struct DailyRow {
     pub avg_inscription_count: f64,
     pub avg_inscription_bytes: f64,
     pub avg_brc20_count: f64,
+    pub avg_taproot_keypath_count: f64,
+    pub avg_taproot_scriptpath_count: f64,
 }
 
 pub fn query_daily_aggregates(
@@ -672,7 +696,8 @@ pub fn query_daily_aggregates(
                 AVG(input_count), AVG(output_count), AVG(rbf_count),
                 AVG(witness_bytes),
                 AVG(inscription_count), AVG(inscription_bytes),
-                AVG(brc20_count)
+                AVG(brc20_count),
+                AVG(taproot_keypath_count), AVG(taproot_scriptpath_count)
          FROM blocks
          WHERE timestamp >= ?1 AND timestamp <= ?2
          GROUP BY day
@@ -714,6 +739,8 @@ pub fn query_daily_aggregates(
             avg_inscription_count: row.get(31)?,
             avg_inscription_bytes: row.get(32)?,
             avg_brc20_count: row.get(33)?,
+            avg_taproot_keypath_count: row.get(34)?,
+            avg_taproot_scriptpath_count: row.get(35)?,
         })
     })?;
     rows.collect()
