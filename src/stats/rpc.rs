@@ -117,7 +117,11 @@ pub struct Block {
 impl BitcoinRpc {
     pub fn new(url: String, user: String, password: String) -> Self {
         Self {
-            client: Client::new(),
+            client: Client::builder()
+                .timeout(std::time::Duration::from_secs(30))
+                .connect_timeout(std::time::Duration::from_secs(10))
+                .build()
+                .expect("Failed to build HTTP client"),
             url,
             user,
             password,
