@@ -197,18 +197,11 @@
 - [x] Tab-guarded chart signals: only active tab recomputes on overlay/data change
 - [x] Chain size chart: disk estimate hidden on short ranges, threshold lowered to 20GB
 
-## TODO: Taproot Key-Path vs Script-Path Tracking
-- [ ] Add parser logic: for P2TR inputs, check witness stack length
-  - Key-path spend: exactly 1 witness element (signature only)
-  - Script-path spend: 2+ witness elements (script + control block)
-- [ ] New DB columns: `taproot_keypath_count`, `taproot_scriptpath_count` per block
-- [ ] ALTER TABLE migration + bump BACKFILL_VERSION (triggers re-parse)
-- [ ] Add to BlockSummary, DailyAggregate types
-- [ ] Chart: stacked area or line showing key-path vs script-path over time
-  - Key-path = privacy (looks like any other spend)
-  - Script-path = programmability (inscriptions, complex scripts)
-  - Ratio tells the real Taproot adoption story
-- [ ] Place in Network > Adoption sub-section
+## Completed: Taproot Key-Path vs Script-Path Tracking (2026-03-26)
+- [x] Parser: key-path = 1 witness element (64-65 byte sig), script-path = last element starts c0/c1
+- [x] DB columns: taproot_keypath_count, taproot_scriptpath_count + BACKFILL_VERSION 7
+- [x] Full pipeline: BlockSummary, DailyAggregate, server functions, query mappings
+- [x] Stacked area chart (green key-path / amber script-path) in Network > Adoption
 
 ## TODO: Chain Size Growth Chart
 - [ ] Investigate chain size growth chart — something still isn't right with the cumulative
@@ -256,8 +249,8 @@
 - [x] `overlay_flags.read()` instead of `.get()` — avoids cloning 4000+ price points per chart
 
 ### Future: Tier 1 Scaling (2-5k concurrent users)
-- [ ] Cache `query_daily_aggregates` results server-side — heaviest query, same result for all
-      users on the same range. Key by (from_ts, to_ts), TTL 30-60s. Biggest single win remaining.
+- [x] Cache `query_daily_aggregates` results server-side (120s TTL, keyed by range)
+- [x] Cache `query_stats_summary` (60s TTL) + `query_block_timestamp` (forever)
 - [ ] Cache `query_blocks` results for common ranges (1D, 1W, 1M) with short TTL
 - [ ] Pre-compute daily aggregates into a materialized table on new block ingestion —
       avoids GROUP BY over 900k rows on every request
@@ -288,11 +281,19 @@
 - [ ] Extract overlay constants (halvings, BIPs, Core releases, events) into a data file
 - [ ] Consider a chart registry pattern to reduce signal boilerplate
 
+## Completed: New Charts (2026-03-26)
+- [x] Transaction Batching — avg outputs/tx and inputs/tx with moving averages (Network > Transactions)
+- [x] Address Type Share — 100% stacked area of output types as % (Network > Adoption)
+- [x] BRC-20 added as distinct series in unified embedded data count charts
+- [x] Taproot Spend Types — key-path vs script-path stacked area (Network > Adoption)
+- [x] Fixed stacked chart tooltips — removed LTTB sampling from 36 stacked series
+- [x] Fees chart defaults to BTC (sats axis was cut off)
+- [x] Inscription color changed from pink to cyan (too similar to Runes coral)
+
 ## Future Ideas
 - [ ] Fee rate distribution charts (percentiles)
 - [ ] Mempool fee histogram
 - [ ] More BIP proposals as they emerge
-- [ ] Connection pooling (r2d2-sqlite or PostgreSQL)
 - [ ] Hourly price data source for 1D price overlay
 
 ## Future Ideas: Main Website
