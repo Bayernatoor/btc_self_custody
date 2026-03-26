@@ -290,6 +290,21 @@
 - [x] Fees chart defaults to BTC (sats axis was cut off)
 - [x] Inscription color changed from pink to cyan (too similar to Runes coral)
 
+## TODO: Production Deployment — Remaining Steps
+- [ ] **Switch main domain DNS** — Update A records for `wehodlbtc.com` and `www` to `165.227.230.64` (Namecheap)
+- [ ] **SSL for main domain** — `certbot --nginx -d wehodlbtc.com -d www.wehodlbtc.com`
+- [ ] **Verify main domain works** — test all pages, Observatory, guides, help desk
+- [ ] **Remove App Platform** — once main domain is confirmed working on Droplet
+- [ ] **Start9 container IP automation** — script to detect bitcoind container IP and update
+      iptables rules automatically. Current rules break when Bitcoin Core restarts on Start9.
+      Script: `podman inspect bitcoind.embassy | grep IPAddress`, update NAT rules, save.
+      Run via cron or systemd timer on Start9.
+- [ ] **Reduce RPC concurrency for tunnel** — 32 concurrent requests overwhelms the WireGuard
+      tunnel during block ingestion. Reduce CONCURRENCY in ingest.rs for production or make
+      it configurable via env var.
+- [ ] **Create deploy script** on Droplet: `git pull && cargo leptos build --release && systemctl restart wehodlbtc`
+- [ ] **GitHub Actions deploy** (optional) — auto-deploy on push to production branch via SSH
+
 ## Future Ideas
 - [ ] Fee rate distribution charts (percentiles)
 - [ ] Mempool fee histogram
