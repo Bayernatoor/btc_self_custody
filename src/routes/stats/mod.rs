@@ -107,7 +107,7 @@ fn StatsComingSoon() -> impl IntoView {
 fn StatsContent() -> impl IntoView {
     let (tab, set_tab) = signal("overview".to_string());
     let (range, set_range) = signal("all".to_string());
-    let (fee_unit, set_fee_unit) = signal("sats".to_string());
+    let (fee_unit, set_fee_unit) = signal("btc".to_string());
 
     // Sub-section navigation within tabs
     let (network_section, set_network_section) = signal("blocks".to_string());
@@ -937,6 +937,16 @@ fn StatsContent() -> impl IntoView {
         |days| crate::stats::charts::utxo_flow_chart_daily(days)
     );
 
+    let batching_option = chart_signal!(dashboard_data, range, overlay_flags, tab, "network",
+        |blocks| crate::stats::charts::batching_chart(blocks),
+        |days| crate::stats::charts::batching_chart_daily(days)
+    );
+
+    let address_type_pct_option = chart_signal!(dashboard_data, range, overlay_flags, tab, "network",
+        |blocks| crate::stats::charts::address_type_pct_chart(blocks),
+        |days| crate::stats::charts::address_type_pct_chart_daily(days)
+    );
+
     let inscription_option = chart_signal!(dashboard_data, range, overlay_flags, emb_witness, "opreturn:witness",
         |blocks| crate::stats::charts::inscription_chart(blocks),
         |days| crate::stats::charts::inscription_chart_daily(days)
@@ -1358,6 +1368,7 @@ fn StatsContent() -> impl IntoView {
                     <ChartCard title="Witness Version Share" description="SegWit v0 vs Taproot v1 as percentage of total witness spends" chart_id="chart-witness-pct" option=witness_pct_option/>
                     <ChartCard title="Output Type Breakdown" description="Legacy vs SegWit v0 vs Taproot v1 as percentage of all outputs" chart_id="chart-witness-tx-pct" option=witness_tx_pct_option/>
                     <ChartCard title="Address Type Evolution" description="Output script types over time — P2PKH, P2SH, P2WPKH, P2WSH, P2TR, P2PK" chart_id="chart-address-types" option=address_type_option/>
+                    <ChartCard title="Address Type Share" description="Output script types as percentage of total — shows adoption shift from legacy to SegWit to Taproot" chart_id="chart-address-types-pct" option=address_type_pct_option/>
                     <ChartCard title="Witness Data Share" description="Witness data as percentage of total block size — shows SegWit discount impact" chart_id="chart-witness-share" option=witness_share_option/>
                 </div>
 
@@ -1365,6 +1376,7 @@ fn StatsContent() -> impl IntoView {
                 <div class=move || if network_section.get() == "tx-metrics" { "space-y-10" } else { "hidden" }>
                     <ChartCard title="RBF Adoption" description="Percentage of transactions signaling Replace-By-Fee (nSequence < 0xFFFFFFFE)" chart_id="chart-rbf" option=rbf_option/>
                     <ChartCard title="UTXO Flow" description="Inputs consumed vs outputs created per block — net UTXO set growth" chart_id="chart-utxo-flow" option=utxo_flow_option/>
+                    <ChartCard title="Transaction Batching" description="Average inputs and outputs per transaction — rising outputs/tx indicates exchange batching adoption" chart_id="chart-batching" option=batching_option/>
                 </div>
             </div>
 

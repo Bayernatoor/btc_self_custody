@@ -117,6 +117,142 @@ pub fn witness_share_chart_daily(days: &[DailyAggregate]) -> String {
     }))
 }
 
+/// Transaction batching — avg outputs and inputs per transaction (per-block).
+pub fn batching_chart(blocks: &[BlockSummary]) -> String {
+    if blocks.is_empty() {
+        return no_data_chart("Transaction Batching");
+    }
+
+    let out_per_tx: Vec<f64> = blocks.iter().map(|b| {
+        if b.tx_count > 0 { round(b.output_count as f64 / b.tx_count as f64, 2) } else { 0.0 }
+    }).collect();
+    let in_per_tx: Vec<f64> = blocks.iter().map(|b| {
+        if b.tx_count > 0 { round(b.input_count as f64 / b.tx_count as f64, 2) } else { 0.0 }
+    }).collect();
+    let out_raw: Vec<serde_json::Value> = blocks.iter().zip(out_per_tx.iter()).map(|(b, v)| json!([ts_ms(b.timestamp), v])).collect();
+    let in_raw: Vec<serde_json::Value> = blocks.iter().zip(in_per_tx.iter()).map(|(b, v)| json!([ts_ms(b.timestamp), v])).collect();
+    let out_ma = moving_average(&out_per_tx, 144);
+    let in_ma = moving_average(&in_per_tx, 144);
+    let out_ma_data: Vec<serde_json::Value> = blocks.iter().zip(out_ma.iter())
+        .filter_map(|(b, m)| m.map(|v| json!([ts_ms(b.timestamp), v]))).collect();
+    let in_ma_data: Vec<serde_json::Value> = blocks.iter().zip(in_ma.iter())
+        .filter_map(|(b, m)| m.map(|v| json!([ts_ms(b.timestamp), v]))).collect();
+    let has_ma = show_ma(blocks.len());
+
+    let mut series = vec![
+        json!({ "name": "Outputs/Tx", "type": "line", "sampling": "lttb", "data": out_raw, "lineStyle": { "width": if has_ma { 1.0 } else { 1.5 }, "color": "#22c55e" }, "itemStyle": { "color": "#22c55e" }, "symbol": "none", "opacity": if has_ma { 0.3 } else { 1.0 } }),
+        json!({ "name": "Inputs/Tx", "type": "line", "sampling": "lttb", "data": in_raw, "lineStyle": { "width": if has_ma { 1.0 } else { 1.5 }, "color": "#ef4444" }, "itemStyle": { "color": "#ef4444" }, "symbol": "none", "opacity": if has_ma { 0.3 } else { 1.0 } }),
+    ];
+    if has_ma {
+        series.push(json!({ "name": "Outputs MA", "type": "line", "sampling": "lttb", "data": out_ma_data, "lineStyle": { "width": 2, "color": "#22c55e" }, "itemStyle": { "color": "#22c55e" }, "symbol": "none" }));
+        series.push(json!({ "name": "Inputs MA", "type": "line", "sampling": "lttb", "data": in_ma_data, "lineStyle": { "width": 2, "color": "#ef4444" }, "itemStyle": { "color": "#ef4444" }, "symbol": "none" }));
+    }
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("Per Tx"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": series
+    }))
+}
+
+/// Transaction batching (daily).
+pub fn batching_chart_daily(days: &[DailyAggregate]) -> String {
+    if days.is_empty() {
+        return no_data_chart("Transaction Batching");
+    }
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    let out_per_tx: Vec<f64> = days.iter().map(|d| {
+        if d.avg_tx_count > 0.0 { round(d.avg_output_count / d.avg_tx_count, 2) } else { 0.0 }
+    }).collect();
+    let in_per_tx: Vec<f64> = days.iter().map(|d| {
+        if d.avg_tx_count > 0.0 { round(d.avg_input_count / d.avg_tx_count, 2) } else { 0.0 }
+    }).collect();
+    let out_ma = moving_average(&out_per_tx, 7);
+    let in_ma = moving_average(&in_per_tx, 7);
+    let out_ma_vals: Vec<serde_json::Value> = out_ma.iter().map(|v| match v { Some(x) => json!(x), None => json!(null) }).collect();
+    let in_ma_vals: Vec<serde_json::Value> = in_ma.iter().map(|v| match v { Some(x) => json!(x), None => json!(null) }).collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": y_axis("Per Tx"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            { "name": "Outputs/Tx", "type": "line", "sampling": "lttb", "data": out_per_tx, "lineStyle": { "width": 1, "color": "#22c55e" }, "itemStyle": { "color": "#22c55e" }, "symbol": "none", "opacity": 0.3 },
+            { "name": "Inputs/Tx", "type": "line", "sampling": "lttb", "data": in_per_tx, "lineStyle": { "width": 1, "color": "#ef4444" }, "itemStyle": { "color": "#ef4444" }, "symbol": "none", "opacity": 0.3 },
+            { "name": "Outputs MA", "type": "line", "sampling": "lttb", "data": out_ma_vals, "lineStyle": { "width": 2, "color": "#22c55e" }, "itemStyle": { "color": "#22c55e" }, "symbol": "none" },
+            { "name": "Inputs MA", "type": "line", "sampling": "lttb", "data": in_ma_vals, "lineStyle": { "width": 2, "color": "#ef4444" }, "itemStyle": { "color": "#ef4444" }, "symbol": "none" }
+        ]
+    }))
+}
+
+/// Address type as % of total outputs (per-block) — 100% stacked area.
+pub fn address_type_pct_chart(blocks: &[BlockSummary]) -> String {
+    if blocks.is_empty() {
+        return no_data_chart("Address Type Share");
+    }
+
+    let pct = |count: u64, total: u64| -> f64 {
+        if total > 0 { round(count as f64 / total as f64 * 100.0, 2) } else { 0.0 }
+    };
+    let make_pct = |f: fn(&BlockSummary) -> u64| -> Vec<serde_json::Value> {
+        blocks.iter().map(|b| {
+            let total = b.p2pkh_count + b.p2sh_count + b.p2wpkh_count + b.p2wsh_count + b.p2tr_count + b.p2pk_count;
+            json!([ts_ms(b.timestamp), pct(f(b), total)])
+        }).collect()
+    };
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": { "type": "value", "name": "%", "max": 100, "nameTextStyle": { "color": "#aaa" }, "axisLabel": { "color": "#aaa" }, "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.05)", "type": "dashed" } } },
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            { "name": "P2PKH", "type": "line", "sampling": "lttb", "data": make_pct(|b| b.p2pkh_count), "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2PKH_COLOR }, "itemStyle": { "color": P2PKH_COLOR }, "symbol": "none" },
+            { "name": "P2SH", "type": "line", "sampling": "lttb", "data": make_pct(|b| b.p2sh_count), "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2SH_COLOR }, "itemStyle": { "color": P2SH_COLOR }, "symbol": "none" },
+            { "name": "P2WPKH", "type": "line", "sampling": "lttb", "data": make_pct(|b| b.p2wpkh_count), "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2WPKH_COLOR }, "itemStyle": { "color": P2WPKH_COLOR }, "symbol": "none" },
+            { "name": "P2WSH", "type": "line", "sampling": "lttb", "data": make_pct(|b| b.p2wsh_count), "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2WSH_COLOR }, "itemStyle": { "color": P2WSH_COLOR }, "symbol": "none" },
+            { "name": "P2TR", "type": "line", "sampling": "lttb", "data": make_pct(|b| b.p2tr_count), "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2TR_COLOR }, "itemStyle": { "color": P2TR_COLOR }, "symbol": "none" },
+            { "name": "P2PK", "type": "line", "sampling": "lttb", "data": make_pct(|b| b.p2pk_count), "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2PK_COLOR }, "itemStyle": { "color": P2PK_COLOR }, "symbol": "none" }
+        ]
+    }))
+}
+
+/// Address type as % of total outputs (daily) — 100% stacked area.
+pub fn address_type_pct_chart_daily(days: &[DailyAggregate]) -> String {
+    if days.is_empty() {
+        return no_data_chart("Address Type Share");
+    }
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    let pct = |count: f64, total: f64| -> f64 {
+        if total > 0.0 { round(count / total * 100.0, 2) } else { 0.0 }
+    };
+    let total_per_day: Vec<f64> = days.iter().map(|d| {
+        d.avg_p2pkh_count + d.avg_p2sh_count + d.avg_p2wpkh_count + d.avg_p2wsh_count + d.avg_p2tr_count + d.avg_p2pk_count
+    }).collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": { "type": "value", "name": "%", "max": 100, "nameTextStyle": { "color": "#aaa" }, "axisLabel": { "color": "#aaa" }, "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.05)", "type": "dashed" } } },
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            { "name": "P2PKH", "type": "line", "sampling": "lttb", "data": days.iter().zip(total_per_day.iter()).map(|(d, t)| pct(d.avg_p2pkh_count, *t)).collect::<Vec<f64>>(), "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2PKH_COLOR }, "itemStyle": { "color": P2PKH_COLOR }, "symbol": "none" },
+            { "name": "P2SH", "type": "line", "sampling": "lttb", "data": days.iter().zip(total_per_day.iter()).map(|(d, t)| pct(d.avg_p2sh_count, *t)).collect::<Vec<f64>>(), "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2SH_COLOR }, "itemStyle": { "color": P2SH_COLOR }, "symbol": "none" },
+            { "name": "P2WPKH", "type": "line", "sampling": "lttb", "data": days.iter().zip(total_per_day.iter()).map(|(d, t)| pct(d.avg_p2wpkh_count, *t)).collect::<Vec<f64>>(), "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2WPKH_COLOR }, "itemStyle": { "color": P2WPKH_COLOR }, "symbol": "none" },
+            { "name": "P2WSH", "type": "line", "sampling": "lttb", "data": days.iter().zip(total_per_day.iter()).map(|(d, t)| pct(d.avg_p2wsh_count, *t)).collect::<Vec<f64>>(), "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2WSH_COLOR }, "itemStyle": { "color": P2WSH_COLOR }, "symbol": "none" },
+            { "name": "P2TR", "type": "line", "sampling": "lttb", "data": days.iter().zip(total_per_day.iter()).map(|(d, t)| pct(d.avg_p2tr_count, *t)).collect::<Vec<f64>>(), "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2TR_COLOR }, "itemStyle": { "color": P2TR_COLOR }, "symbol": "none" },
+            { "name": "P2PK", "type": "line", "sampling": "lttb", "data": days.iter().zip(total_per_day.iter()).map(|(d, t)| pct(d.avg_p2pk_count, *t)).collect::<Vec<f64>>(), "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2PK_COLOR }, "itemStyle": { "color": P2PK_COLOR }, "symbol": "none" }
+        ]
+    }))
+}
+
 /// RBF adoption — % of transactions signaling RBF (per-block).
 pub fn rbf_chart(blocks: &[BlockSummary]) -> String {
     if blocks.is_empty() {

@@ -515,6 +515,7 @@ pub fn all_embedded_share_chart_daily(days: &[DailyAggregate]) -> String {
 }
 
 const STAMPS_COLOR: &str = "#94a3b8"; // Slate gray for Stamps/multisig
+const BRC20_COLOR: &str = "#e879f9"; // Fuchsia for BRC-20 tokens
 
 /// Unified embedded data count — all protocols + inscriptions + stamps (per-block).
 pub fn unified_embedded_count_chart(blocks: &[BlockSummary]) -> String {
@@ -527,6 +528,7 @@ pub fn unified_embedded_count_chart(blocks: &[BlockSummary]) -> String {
     let xcp: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.counterparty_count])).collect();
     let other_op: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.data_carrier_count])).collect();
     let inscriptions: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.inscription_count])).collect();
+    let brc20: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.brc20_count])).collect();
     let stamps: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.multisig_count])).collect();
 
     build_option(json!({
@@ -541,6 +543,7 @@ pub fn unified_embedded_count_chart(blocks: &[BlockSummary]) -> String {
             { "name": "Counterparty", "type": "bar", "stack": "total", "data": xcp, "itemStyle": { "color": COUNTERPARTY_COLOR } },
             { "name": "Other OP_RETURN", "type": "bar", "stack": "total", "data": other_op, "itemStyle": { "color": CARRIER_COLOR } },
             { "name": "Inscriptions", "type": "bar", "stack": "total", "data": inscriptions, "itemStyle": { "color": INSCRIPTION_COLOR } },
+            { "name": "BRC-20", "type": "bar", "stack": "total", "data": brc20, "itemStyle": { "color": BRC20_COLOR } },
             { "name": "Stamps (multisig)", "type": "bar", "stack": "total", "data": stamps, "itemStyle": { "color": STAMPS_COLOR } }
         ]
     }))
@@ -560,6 +563,7 @@ pub fn unified_embedded_count_chart_daily(days: &[DailyAggregate]) -> String {
     let xcp: Vec<f64> = days.iter().map(|d| avg(d.total_counterparty_count, d.block_count)).collect();
     let other_op: Vec<f64> = days.iter().map(|d| avg(d.total_data_carrier_count, d.block_count)).collect();
     let inscriptions: Vec<f64> = days.iter().map(|d| round(d.avg_inscription_count, 1)).collect();
+    let brc20: Vec<f64> = days.iter().map(|d| round(d.avg_brc20_count, 1)).collect();
     let stamps: Vec<f64> = days.iter().map(|d| round(d.avg_multisig_count, 1)).collect();
 
     build_option(json!({
@@ -574,6 +578,7 @@ pub fn unified_embedded_count_chart_daily(days: &[DailyAggregate]) -> String {
             { "name": "Counterparty", "type": "bar", "stack": "total", "data": xcp, "itemStyle": { "color": COUNTERPARTY_COLOR } },
             { "name": "Other OP_RETURN", "type": "bar", "stack": "total", "data": other_op, "itemStyle": { "color": CARRIER_COLOR } },
             { "name": "Inscriptions", "type": "bar", "stack": "total", "data": inscriptions, "itemStyle": { "color": INSCRIPTION_COLOR } },
+            { "name": "BRC-20", "type": "bar", "stack": "total", "data": brc20, "itemStyle": { "color": BRC20_COLOR } },
             { "name": "Stamps (multisig)", "type": "bar", "stack": "total", "data": stamps, "itemStyle": { "color": STAMPS_COLOR } }
         ]
     }))
