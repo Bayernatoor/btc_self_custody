@@ -177,6 +177,19 @@
 - [x] Tab-guarded chart signals: only active tab recomputes on overlay/data change
 - [x] Chain size chart: disk estimate hidden on short ranges, threshold lowered to 20GB
 
+## TODO: Taproot Key-Path vs Script-Path Tracking
+- [ ] Add parser logic: for P2TR inputs, check witness stack length
+  - Key-path spend: exactly 1 witness element (signature only)
+  - Script-path spend: 2+ witness elements (script + control block)
+- [ ] New DB columns: `taproot_keypath_count`, `taproot_scriptpath_count` per block
+- [ ] ALTER TABLE migration + bump BACKFILL_VERSION (triggers re-parse)
+- [ ] Add to BlockSummary, DailyAggregate types
+- [ ] Chart: stacked area or line showing key-path vs script-path over time
+  - Key-path = privacy (looks like any other spend)
+  - Script-path = programmability (inscriptions, complex scripts)
+  - Ratio tells the real Taproot adoption story
+- [ ] Place in Network > Adoption sub-section
+
 ## TODO: Chain Size Growth Chart
 - [ ] Investigate chain size growth chart — something still isn't right with the cumulative
       calculation and/or disk size estimate on various ranges. Needs thorough review.
