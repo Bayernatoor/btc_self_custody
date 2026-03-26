@@ -99,6 +99,9 @@ pub struct Block {
     pub p2tr_count: u64,
     pub multisig_count: u64,
     pub unknown_script_count: u64,
+    // Taproot spend type counts (inputs spending P2TR outputs)
+    pub taproot_keypath_count: u64,
+    pub taproot_scriptpath_count: u64,
     // Transaction-level metrics
     pub input_count: u64,
     pub output_count: u64,
@@ -309,6 +312,8 @@ impl BitcoinRpc {
         let mut output_count = 0u64;
         let mut rbf_count = 0u64;
         let mut witness_bytes = 0u64;
+        let mut taproot_keypath_count = 0u64;
+        let mut taproot_scriptpath_count = 0u64;
 
         if let Some(txs) = result["tx"].as_array() {
             for tx in txs.iter().skip(1) {
@@ -345,6 +350,27 @@ impl BitcoinRpc {
                                         if hex.contains("7b2270223a226272632d3230") {
                                             brc20_count += 1;
                                         }
+                                    }
+                                }
+                            }
+                            // Taproot spend type detection:
+                            // Key-path: exactly 1 witness element (64-65 byte Schnorr sig)
+                            // Script-path: 2+ elements, last element starts with 0xc0 or 0xc1
+                            //              (taproot control block version byte)
+                            let wit_len = wit.len();
+                            if wit_len == 1 {
+                                // Likely key-path: single element should be 64-65 bytes (128-130 hex chars)
+                                if let Some(hex) = wit[0].as_str() {
+                                    let byte_len = hex.len() / 2;
+                                    if byte_len == 64 || byte_len == 65 {
+                                        taproot_keypath_count += 1;
+                                    }
+                                }
+                            } else if wit_len >= 2 {
+                                // Check if last element is a taproot control block (starts with c0 or c1)
+                                if let Some(last) = wit.last().and_then(|v| v.as_str()) {
+                                    if last.starts_with("c0") || last.starts_with("c1") {
+                                        taproot_scriptpath_count += 1;
                                     }
                                 }
                             }
@@ -459,6 +485,8 @@ impl BitcoinRpc {
             miner: miner.to_string(),
             segwit_spend_count,
             taproot_spend_count,
+            taproot_keypath_count,
+            taproot_scriptpath_count,
             p2pk_count,
             p2pkh_count,
             p2sh_count,

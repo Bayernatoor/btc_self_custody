@@ -52,6 +52,8 @@ pub struct BlockSummary {
     pub counterparty_bytes: u64,
     pub data_carrier_count: u64,
     pub data_carrier_bytes: u64,
+    pub taproot_keypath_count: u64,
+    pub taproot_scriptpath_count: u64,
 }
 
 /// Full block detail (from query_block_by_height).
@@ -137,6 +139,8 @@ pub struct DailyAggregate {
     pub avg_inscription_count: f64,
     pub avg_inscription_bytes: f64,
     pub avg_brc20_count: f64,
+    pub avg_taproot_keypath_count: f64,
+    pub avg_taproot_scriptpath_count: f64,
 }
 
 /// Per-block signaling status.
