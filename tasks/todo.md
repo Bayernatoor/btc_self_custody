@@ -151,6 +151,26 @@
 - Address type chart excludes nulldata, multisig, and unknown outputs from stacked area
 - Chain size disk ratio estimate is less accurate for early historical blocks
 
+## Future Ideas: Inscriptions & Runes Deep Dive
+- [ ] **Inscriptions**
+  - [ ] Inscriptions Block Size Share — inscription bytes as % of block size (have this already, verify)
+  - [ ] Inscriptions Fees — total fees paid by inscription transactions
+  - [ ] Inscriptions Fee Share — inscription fees as % of total block fees
+  - [ ] Inscriptions Total Block Size — cumulative inscription data over time
+  - [ ] Inscriptions Total Count — cumulative inscription count over time
+  - [ ] Inscriptions Transaction Count — number of txs containing inscriptions per block
+  - [ ] Inscriptions Transaction Count Share — inscription txs as % of total txs
+- [ ] **Runes**
+  - [ ] Runes Count — runes outputs per block (have this, may need standalone chart)
+  - [ ] Runes Count Share — runes as % of total OP_RETURN outputs
+  - [ ] Runes Total Count — cumulative runes outputs over time
+  - [ ] Runes Fees — fees paid by runes transactions
+  - [ ] Runes Fee Share — runes fees as % of total block fees
+- **Notes:** Fee-per-protocol tracking requires identifying which transactions belong to each
+  protocol during parsing. Currently we count outputs, not transactions. Would need to flag
+  transactions as "contains inscription" or "contains rune" and sum their fees separately.
+  This is a parser-level change + new DB columns.
+
 ## Future Ideas: Niche Chart Ideas
 - [ ] Block fullness distribution — histogram of weight utilization %, shows miner behavior
 - [ ] Fee pressure vs block space — correlate fee rates with weight utilization
