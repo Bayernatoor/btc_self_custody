@@ -302,6 +302,7 @@
 - [ ] **Reduce RPC concurrency for tunnel** — 32 concurrent requests overwhelms the WireGuard
       tunnel during block ingestion. Reduce CONCURRENCY in ingest.rs for production or make
       it configurable via env var.
+- [ ] **Nginx rate limiting** — `limit_req_zone` at 10r/s per IP, burst 20. Prevents API abuse.
 - [ ] **Create deploy script** on Droplet: `git pull && cargo leptos build --release && systemctl restart wehodlbtc`
 - [ ] **GitHub Actions deploy** (optional) — auto-deploy on push to production branch via SSH
 
