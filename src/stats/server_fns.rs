@@ -169,7 +169,17 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
         }
     }
 
-    // Parallelize all RPC calls for faster response
+    // Get block height + difficulty from the DB (always current from 60s poll).
+    // This avoids stale data when getblockchaininfo RPC is slow/fails.
+    let db_stats = {
+        let conn = state.db.get().map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+        super::db::query_stats(&conn)
+            .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?
+    };
+    let db_height = db_stats.as_ref().map(|s| s.max_height).unwrap_or(0);
+    let db_timestamp = db_stats.as_ref().map(|s| s.latest_timestamp).unwrap_or(0);
+
+    // Parallelize RPC calls — all are non-fatal (fall back to defaults)
     let (blockchain_res, mempool_res, hashrate_res, fee_res) = tokio::join!(
         state.rpc.get_blockchain_info(),
         state.rpc.get_mempool_info(),
@@ -177,10 +187,30 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
         state.rpc.estimate_smart_fee(1),
     );
 
-    let blockchain = blockchain_res
-        .map_err(|e| ServerFnError::new(format!("RPC error: {e}")))?;
-    let mempool = mempool_res
-        .map_err(|e| ServerFnError::new(format!("RPC error: {e}")))?;
+    // Use RPC blockchain info if available, but override block height with DB
+    // (DB is always up-to-date from the poll, RPC might be stale/failed)
+    let blockchain = blockchain_res.unwrap_or_else(|e| {
+        tracing::warn!("Failed to fetch blockchain info: {e}");
+        super::rpc::BlockchainInfo {
+            blocks: db_height,
+            chain: "main".to_string(),
+            difficulty: 0.0,
+            verification_progress: 1.0,
+            size_on_disk: 0,
+            bestblockhash: String::new(),
+            time: db_timestamp,
+        }
+    });
+    // Always use DB height — it's the source of truth (updated by poll)
+    let block_height = db_height.max(blockchain.blocks);
+
+    let mempool = mempool_res.unwrap_or_else(|e| {
+        tracing::warn!("Failed to fetch mempool info: {e}");
+        super::rpc::MempoolInfo {
+            size: 0, bytes: 0, usage: 0, total_fee: 0.0,
+            maxmempool: 300_000_000, mempoolminfee: 0.0,
+        }
+    });
     let hashrate = hashrate_res.unwrap_or_else(|e| {
         tracing::warn!("Failed to fetch hashrate: {e}");
         0.0
@@ -223,7 +253,7 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
 
     const MAX_SUPPLY: f64 = 21_000_000.0;
 
-    let total_supply = super::types::calc_supply(blockchain.blocks);
+    let total_supply = super::types::calc_supply(block_height);
 
     let percent_issued = (total_supply / MAX_SUPPLY) * 100.0;
     let sats_per_dollar = if price_usd > 0.0 {
@@ -237,7 +267,7 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
 
     let result = LiveStats {
         blockchain: LiveBlockchain {
-            blocks: blockchain.blocks,
+            blocks: block_height,
             chain: blockchain.chain,
             difficulty: blockchain.difficulty,
             verification_progress: blockchain.verification_progress,
