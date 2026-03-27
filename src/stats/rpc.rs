@@ -525,10 +525,10 @@ impl BitcoinRpc {
 
     /// Fetch UTXO set info with hash_type="none" (faster, skips hash computation).
     pub async fn get_txout_set_info(&self) -> Result<TxoutSetInfo, StatsError> {
-        // gettxoutsetinfo scans the entire UTXO set — can take 60-120s.
-        // Use a dedicated client with longer timeout.
+        // gettxoutsetinfo scans the entire UTXO set (~165M entries).
+        // Takes 60-120s on fast hardware, up to 5-10 min on a Raspberry Pi.
         let long_client = Client::builder()
-            .timeout(std::time::Duration::from_secs(120))
+            .timeout(std::time::Duration::from_secs(300))
             .build()
             .map_err(|e| StatsError::Rpc(e.to_string()))?;
         let body = serde_json::json!({
