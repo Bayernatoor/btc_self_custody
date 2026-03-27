@@ -1030,19 +1030,19 @@ fn StatsContent() -> impl IntoView {
     view! {
         <Title text="The Bitcoin Observatory - WE HODL BTC"/>
 
-        <section class="max-w-[1750px] mx-auto px-2 sm:px-4 lg:px-8 pt-10 pb-28 opacity-0 animate-fadeinone overflow-x-hidden">
+        <section class="max-w-[1750px] mx-auto px-3 sm:px-4 lg:px-8 pt-6 sm:pt-10 pb-28 opacity-0 animate-fadeinone overflow-x-hidden">
             // Page header
-            <div class="text-center mb-10">
-                <h1 class="text-3xl lg:text-4xl font-title text-white mb-3">"The Bitcoin Observatory"</h1>
-                <div class="w-16 h-0.5 bg-[#f7931a] mx-auto mt-3 mb-4"></div>
-                <p class="text-base text-white/50 max-w-xl mx-auto">
+            <div class="text-center mb-6 sm:mb-10">
+                <h1 class="text-2xl sm:text-3xl lg:text-4xl font-title text-white mb-2 sm:mb-3">"The Bitcoin Observatory"</h1>
+                <div class="w-12 sm:w-16 h-0.5 bg-[#f7931a] mx-auto mt-2 sm:mt-3 mb-3 sm:mb-4"></div>
+                <p class="text-sm sm:text-base text-white/50 max-w-xl mx-auto px-2">
                     "Live blockchain metrics, block data, embedded data analysis, and BIP signaling tracker."
                 </p>
             </div>
 
             // Tab navigation
-            <nav class="flex justify-center mb-8 overflow-x-auto px-2">
-                <div class="inline-flex bg-[#0a1a2e] rounded-2xl p-1 sm:p-1.5 border border-white/10">
+            <nav class="flex justify-center mb-6 sm:mb-8 px-1">
+                <div class="flex flex-wrap justify-center gap-1 sm:gap-0 sm:inline-flex bg-[#0a1a2e] rounded-2xl p-1 sm:p-1.5 border border-white/10">
                     {tabs.into_iter().map(|(id, label)| {
                         let id = id.to_string();
                         let label = label.to_string();
