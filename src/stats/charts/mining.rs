@@ -47,17 +47,12 @@ pub fn miner_dominance_chart(miners: &[MinerShare]) -> String {
             "trigger": "item",
             "formatter": "{b}: {c} blocks ({d}%)"
         },
-        "legend": {
-            "orient": "vertical",
-            "right": 10,
-            "top": 50,
-            "textStyle": { "color": "#ccc", "fontSize": 11 }
-        },
+        "legend": { "show": false },
         "series": [{
             "name": "Miners",
             "type": "pie",
-            "radius": ["45%", "70%"],
-            "center": ["40%", "55%"],
+            "radius": ["40%", "70%"],
+            "center": ["50%", "55%"],
             "avoidLabelOverlap": true,
             "itemStyle": {
                 "borderRadius": 4,
