@@ -924,6 +924,15 @@ pub fn apply_overlays(option_json: &str, overlays: &OverlayFlags, is_daily: bool
                 t.insert("right".into(), json!(grid_right + 25));
             }
         }
+        // Constrain legend to avoid overlapping with right-side axis labels
+        if let Some(legend) = obj.get_mut("legend") {
+            if let Some(l) = legend.as_object_mut() {
+                l.insert("right".into(), json!(grid_right + 10));
+                // Show fewer items per page when space is tight
+                l.insert("pageButtonItemGap".into(), json!(2));
+                l.insert("pageIconSize".into(), json!(10));
+            }
+        }
     }
 
     serde_json::to_string(&opt).unwrap_or_default()
