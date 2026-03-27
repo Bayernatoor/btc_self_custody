@@ -60,8 +60,8 @@ pub(crate) fn chart_defaults() -> serde_json::Value {
     json!({
         "backgroundColor": "transparent",
         "textStyle": { "color": "#aaa", "fontFamily": "Inter, system-ui, sans-serif" },
-        "grid": { "left": 55, "right": 20, "top": 35, "bottom": 65 },
-        "legend": { "textStyle": { "color": "#ccc", "fontSize": 11 }, "top": 8, "left": "center" },
+        "grid": { "left": 55, "right": 20, "top": 45, "bottom": 65 },
+        "legend": { "textStyle": { "color": "#ccc", "fontSize": 11 }, "top": 5, "left": 50, "right": 80, "type": "scroll" },
         "toolbox": {
             "feature": {
                 "restore": { "title": "Reset zoom" },
@@ -71,7 +71,7 @@ pub(crate) fn chart_defaults() -> serde_json::Value {
             "iconStyle": { "borderColor": "#aaa" },
             "emphasis": { "iconStyle": { "borderColor": "#f7931a" } },
             "right": 10, "top": 0,
-            "itemSize": 18
+            "itemSize": 14
         },
         "animation": true,
         "animationDuration": 300,
