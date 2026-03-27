@@ -52,9 +52,15 @@
         try {
             var opts = JSON.parse(optionJson);
             opts.animation = false;
-            // Hide toolbox on mobile — not usable on touch screens
-            if (window.innerWidth < 640 && opts.toolbox) {
-                opts.toolbox.show = false;
+            // Mobile adjustments
+            if (window.innerWidth < 640) {
+                // Hide toolbox — not usable on touch screens
+                if (opts.toolbox) opts.toolbox.show = false;
+                // Constrain legend within chart area
+                if (opts.legend) {
+                    opts.legend.left = 55;
+                    opts.legend.right = 40;
+                }
             }
             // Hide canvas during setOption to prevent flash of blank/partial chart
             el.style.visibility = 'hidden';
