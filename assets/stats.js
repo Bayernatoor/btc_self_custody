@@ -61,6 +61,14 @@
                     opts.legend.left = 55;
                     opts.legend.right = 40;
                 }
+                // Shrink pie charts for mobile
+                if (opts.series && Array.isArray(opts.series)) {
+                    opts.series.forEach(function(s) {
+                        if (s.type === 'pie') {
+                            s.radius = ['35%', '65%'];
+                        }
+                    });
+                }
             }
             // Hide canvas during setOption to prevent flash of blank/partial chart
             el.style.visibility = 'hidden';
