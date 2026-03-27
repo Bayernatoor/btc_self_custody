@@ -1242,25 +1242,25 @@ fn StatsContent() -> impl IntoView {
                 // Difficulty adjustment predictor
                 <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 mt-8">
                     <div class="flex items-baseline justify-between mb-3">
-                        <h3 class="text-lg text-white font-semibold">"Next Difficulty Adjustment"</h3>
+                        <h3 class="text-base sm:text-lg text-white font-semibold">"Next Difficulty Adjustment"</h3>
                         <span class="text-xs text-white/40 font-mono">{move || diff_est_date.get()}</span>
                     </div>
                     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
                         <div class="text-center">
-                            <div class="text-[0.7rem] text-[#8899aa] uppercase tracking-widest mb-1">"Period Start"</div>
-                            <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format_number(diff_period_start.get())}</div>
+                            <div class="text-[0.6rem] sm:text-[0.7rem] text-[#8899aa] uppercase tracking-widest mb-1">"Period Start"</div>
+                            <div class="text-sm sm:text-lg text-[#f7931a] font-bold font-mono">{move || format_number(diff_period_start.get())}</div>
                         </div>
                         <div class="text-center">
-                            <div class="text-[0.7rem] text-[#8899aa] uppercase tracking-widest mb-1">"Blocks Into Period"</div>
-                            <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format_number(diff_blocks_into_period.get())}</div>
+                            <div class="text-[0.6rem] sm:text-[0.7rem] text-[#8899aa] uppercase tracking-widest mb-1">"Blocks Into Period"</div>
+                            <div class="text-sm sm:text-lg text-[#f7931a] font-bold font-mono">{move || format_number(diff_blocks_into_period.get())}</div>
                         </div>
                         <div class="text-center">
-                            <div class="text-[0.7rem] text-[#8899aa] uppercase tracking-widest mb-1">"Blocks Remaining"</div>
-                            <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format_number(diff_blocks_remaining.get())}</div>
+                            <div class="text-[0.6rem] sm:text-[0.7rem] text-[#8899aa] uppercase tracking-widest mb-1">"Blocks Remaining"</div>
+                            <div class="text-sm sm:text-lg text-[#f7931a] font-bold font-mono">{move || format_number(diff_blocks_remaining.get())}</div>
                         </div>
                         <div class="text-center">
-                            <div class="text-[0.7rem] text-[#8899aa] uppercase tracking-widest mb-1">"Est. Days Left"</div>
-                            <div class="text-lg text-[#f7931a] font-bold font-mono">{move || diff_est_remaining_days.get()}</div>
+                            <div class="text-[0.6rem] sm:text-[0.7rem] text-[#8899aa] uppercase tracking-widest mb-1">"Est. Days Left"</div>
+                            <div class="text-sm sm:text-lg text-[#f7931a] font-bold font-mono">{move || diff_est_remaining_days.get()}</div>
                         </div>
                     </div>
                     <div class="mt-4 px-1">
@@ -1284,25 +1284,25 @@ fn StatsContent() -> impl IntoView {
                 // Halving countdown
                 <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 mt-8">
                     <div class="flex items-baseline justify-between mb-3">
-                        <h3 class="text-lg text-white font-semibold">"Next Halving"</h3>
+                        <h3 class="text-base sm:text-lg text-white font-semibold">"Next Halving"</h3>
                         <span class="text-xs text-white/40 font-mono">{move || halving_est_date.get()}</span>
                     </div>
                     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
                         <div class="text-center">
-                            <div class="text-[0.7rem] text-[#8899aa] uppercase tracking-widest mb-1">"Target Height"</div>
-                            <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format_number(next_halving_height.get())}</div>
+                            <div class="text-[0.6rem] sm:text-[0.7rem] text-[#8899aa] uppercase tracking-widest mb-1">"Target Height"</div>
+                            <div class="text-sm sm:text-lg text-[#f7931a] font-bold font-mono">{move || format_number(next_halving_height.get())}</div>
                         </div>
                         <div class="text-center">
-                            <div class="text-[0.7rem] text-[#8899aa] uppercase tracking-widest mb-1">"Blocks Remaining"</div>
-                            <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format_number(halving_blocks_remaining.get())}</div>
+                            <div class="text-[0.6rem] sm:text-[0.7rem] text-[#8899aa] uppercase tracking-widest mb-1">"Blocks Remaining"</div>
+                            <div class="text-sm sm:text-lg text-[#f7931a] font-bold font-mono">{move || format_number(halving_blocks_remaining.get())}</div>
                         </div>
                         <div class="text-center">
-                            <div class="text-[0.7rem] text-[#8899aa] uppercase tracking-widest mb-1">"Est. Days"</div>
-                            <div class="text-lg text-[#f7931a] font-bold font-mono">{move || format!("{:.1}", halving_est_days.get())}</div>
+                            <div class="text-[0.6rem] sm:text-[0.7rem] text-[#8899aa] uppercase tracking-widest mb-1">"Est. Days"</div>
+                            <div class="text-sm sm:text-lg text-[#f7931a] font-bold font-mono">{move || format!("{:.1}", halving_est_days.get())}</div>
                         </div>
                         <div class="text-center">
-                            <div class="text-[0.7rem] text-[#8899aa] uppercase tracking-widest mb-1">"Current Subsidy"</div>
-                            <div class="text-lg text-[#f7931a] font-bold font-mono">{move || current_subsidy_btc.get()}</div>
+                            <div class="text-[0.6rem] sm:text-[0.7rem] text-[#8899aa] uppercase tracking-widest mb-1">"Current Subsidy"</div>
+                            <div class="text-sm sm:text-lg text-[#f7931a] font-bold font-mono">{move || current_subsidy_btc.get()}</div>
                         </div>
                     </div>
                     <div class="mt-4 px-1">
