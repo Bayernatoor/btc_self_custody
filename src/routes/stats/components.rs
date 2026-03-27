@@ -124,14 +124,14 @@ pub fn ChartCard(
                 ()
             }
             <div
-                class="fixed inset-0 flex flex-col pt-14 pb-4 px-4 lg:pt-16 lg:pb-6 lg:px-8 overflow-hidden"
-                style="z-index: 9999; background: #0a1929"
+                class="fixed inset-0 flex flex-col pt-14 pb-4 px-2 sm:px-4 lg:pt-16 lg:pb-6 lg:px-8 overflow-hidden"
+                style="z-index: 9999; background: #0a1929; max-width: 100vw;"
             >
                 // Header with close button
-                <div class="flex items-center justify-between mb-3 shrink-0">
-                    <div>
-                        <h3 class="text-lg text-white font-semibold">{title.clone()}</h3>
-                        <p class="text-sm text-white/50 mt-0.5">{description.clone()}</p>
+                <div class="flex items-center justify-between mb-2 sm:mb-3 shrink-0">
+                    <div class="min-w-0 mr-2">
+                        <h3 class="text-sm sm:text-lg text-white font-semibold truncate">{title.clone()}</h3>
+                        <p class="text-xs sm:text-sm text-white/50 mt-0.5 truncate">{description.clone()}</p>
                     </div>
                     <button
                         class="text-white/60 hover:text-white transition-colors cursor-pointer p-2.5 rounded-xl hover:bg-white/10 border border-white/10 hover:border-white/20"
@@ -162,10 +162,10 @@ pub fn LiveCard(
     #[prop(into)] value: Signal<String>,
 ) -> impl IntoView {
     view! {
-        <div class="bg-[#0d2137] border border-white/10 rounded-lg p-3 text-center">
-            <div class="text-[0.7rem] text-[#8899aa] uppercase tracking-widest mb-1">{label}</div>
+        <div class="bg-[#0d2137] border border-white/10 rounded-lg p-2 sm:p-3 text-center">
+            <div class="text-[0.6rem] sm:text-[0.7rem] text-[#8899aa] uppercase tracking-widest mb-1">{label}</div>
             <div
-                class="text-lg lg:text-xl text-[#f7931a] font-bold font-mono truncate"
+                class="text-sm sm:text-lg lg:text-xl text-[#f7931a] font-bold font-mono truncate"
                 title=move || value.get()
             >{move || value.get()}</div>
         </div>
