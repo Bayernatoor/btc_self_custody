@@ -10,7 +10,7 @@ pub fn HomePage() -> impl IntoView {
         // Hero
         <section aria-label="Hero" class="grid gap-2 mx-auto justify-items-center max-w-5xl mt-14 px-6 opacity-0 animate-fadeinone md:grid-cols-1 lg:grid-cols-2 lg:max-w-6xl md:my-24 lg:pb-28 lg:px-8">
             <div class="flex flex-col text-center text-white leading-normal md:text-center lg:text-left md:pt-8 lg:pt-0">
-                <h1 class="text-5xl font-title font-normal tracking-tight md:text-6xl lg:text-[5rem]">
+                <h1 class="text-4xl font-title font-normal tracking-tight sm:text-5xl md:text-6xl lg:text-[5rem]">
                     "Be your" <br/> "own bank"
                 </h1>
                 <div class="lg:hidden flex flex-col justify-center pb-8 pt-5">
@@ -18,7 +18,7 @@ pub fn HomePage() -> impl IntoView {
                         <img src="./../../../bitcoin_logo.png" alt="Bitcoin logo" width="112" height="112"/>
                     </div>
                 </div>
-                <p class="text-base max-w-xl mb-6 md:text-lg lg:text-xl md:my-8 leading-relaxed">
+                <p class="text-sm max-w-xl mb-6 sm:text-base md:text-lg lg:text-xl md:my-8 leading-relaxed">
                     "Opinionated guides that cut through the noise to help you easily self-custody your Bitcoin."
                 </p>
                 <a href="/guides">
@@ -40,7 +40,7 @@ pub fn HomePage() -> impl IntoView {
         // Why Self-Custody
         <section aria-label="Why self-custody" class="max-w-5xl mx-auto px-6 lg:max-w-6xl pt-8 pb-24 lg:pb-28 lg:px-8">
             <div class="text-center mb-10">
-                <h2 class="text-2xl lg:text-3xl font-title text-white mb-2">"Why Self-Custody?"</h2>
+                <h2 class="text-xl sm:text-2xl lg:text-3xl font-title text-white mb-2">"Why Self-Custody?"</h2>
                 <div class="w-12 h-0.5 bg-[#f7931a] mx-auto mt-2"></div>
             </div>
             <div class="grid gap-4 md:grid-cols-3">
@@ -51,7 +51,7 @@ pub fn HomePage() -> impl IntoView {
                         </svg>
                     </div>
                     <h3 class="text-base font-semibold text-white mb-1.5">"Your Keys, Your Coins"</h3>
-                    <p class="text-[0.85rem] text-white/60 leading-relaxed">
+                    <p class="text-sm text-white/60 leading-relaxed">
                         "When you hold your own keys, no exchange, bank, or third party can freeze, seize, or lose your bitcoin. True ownership means true control."
                     </p>
                 </div>
@@ -62,7 +62,7 @@ pub fn HomePage() -> impl IntoView {
                         </svg>
                     </div>
                     <h3 class="text-base font-semibold text-white mb-1.5">"Eliminate Counterparty Risk"</h3>
-                    <p class="text-[0.85rem] text-white/60 leading-relaxed">
+                    <p class="text-sm text-white/60 leading-relaxed">
                         "Exchanges get hacked. Companies go bankrupt. Trusted third parties are security holes. Self-custody removes the middleman entirely."
                     </p>
                 </div>
@@ -73,7 +73,7 @@ pub fn HomePage() -> impl IntoView {
                         </svg>
                     </div>
                     <h3 class="text-base font-semibold text-white mb-1.5">"Financial Sovereignty"</h3>
-                    <p class="text-[0.85rem] text-white/60 leading-relaxed">
+                    <p class="text-sm text-white/60 leading-relaxed">
                         "Send and receive bitcoin anywhere, anytime, without permission. No borders, no business hours, no gatekeepers."
                     </p>
                 </div>
@@ -83,16 +83,16 @@ pub fn HomePage() -> impl IntoView {
         // Guide levels preview
         <section aria-label="Guide levels" class="max-w-5xl mx-auto px-6 lg:max-w-6xl pb-28 lg:pb-32 lg:px-8">
             <div class="text-center mb-10">
-                <h2 class="text-2xl lg:text-3xl font-title text-white mb-2">"A Guide For Every Level"</h2>
+                <h2 class="text-xl sm:text-2xl lg:text-3xl font-title text-white mb-2">"A Guide For Every Level"</h2>
                 <div class="w-12 h-0.5 bg-[#f7931a] mx-auto mt-2 mb-4"></div>
-                <p class="text-[0.9rem] text-white/50 max-w-lg mx-auto">"Whether you're stacking your first sats or securing generational wealth."</p>
+                <p class="text-sm sm:text-[0.9rem] text-white/50 max-w-lg mx-auto">"Whether you're stacking your first sats or securing generational wealth."</p>
             </div>
             <div class="grid gap-4 md:grid-cols-3">
                 <a href="/guides" class="block opacity-0 animate-slideup" style="animation-delay: 100ms">
                     <div class="group bg-white/5 border border-white/10 rounded-xl p-5 hover:bg-white/10 hover:border-white/20 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 h-full">
                         <div class="text-[#f7931a] text-xs font-semibold uppercase tracking-widest mb-2">"Basic"</div>
                         <h3 class="text-base font-semibold text-white mb-1.5 group-hover:text-[#f4a949] transition-colors">"Mobile & Desktop Wallets"</h3>
-                        <p class="text-[0.85rem] text-white/50 leading-relaxed">
+                        <p class="text-sm text-white/50 leading-relaxed">
                             "Get started with Blue Wallet, Green Wallet, or Sparrow. Generate your keys and take possession of your bitcoin in minutes."
                         </p>
                     </div>
@@ -101,7 +101,7 @@ pub fn HomePage() -> impl IntoView {
                     <div class="group bg-white/5 border border-white/10 rounded-xl p-5 hover:bg-white/10 hover:border-white/20 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 h-full">
                         <div class="text-[#f7931a] text-xs font-semibold uppercase tracking-widest mb-2">"Intermediate"</div>
                         <h3 class="text-base font-semibold text-white mb-1.5 group-hover:text-[#f4a949] transition-colors">"Hardware Wallet & Node"</h3>
-                        <p class="text-[0.85rem] text-white/50 leading-relaxed">
+                        <p class="text-sm text-white/50 leading-relaxed">
                             "Level up with a Coldcard hardware wallet and your own Bitcoin node. Standards-based security and real privacy."
                         </p>
                     </div>
@@ -110,7 +110,7 @@ pub fn HomePage() -> impl IntoView {
                     <div class="group bg-white/5 border border-white/10 rounded-xl p-5 hover:bg-white/10 hover:border-white/20 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 h-full">
                         <div class="text-[#f7931a] text-xs font-semibold uppercase tracking-widest mb-2">"Advanced"</div>
                         <h3 class="text-base font-semibold text-white mb-1.5 group-hover:text-[#f4a949] transition-colors">"Multisig Setup"</h3>
-                        <p class="text-[0.85rem] text-white/50 leading-relaxed">
+                        <p class="text-sm text-white/50 leading-relaxed">
                             "2-of-3 multisig with multiple signing devices, steel seed backups, and geographic separation. Protect generational wealth."
                         </p>
                     </div>
