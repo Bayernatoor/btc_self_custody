@@ -1030,7 +1030,7 @@ fn StatsContent() -> impl IntoView {
     view! {
         <Title text="The Bitcoin Observatory - WE HODL BTC"/>
 
-        <section class="max-w-[1750px] mx-auto px-4 lg:px-8 pt-10 pb-28 opacity-0 animate-fadeinone">
+        <section class="max-w-[1750px] mx-auto px-2 sm:px-4 lg:px-8 pt-10 pb-28 opacity-0 animate-fadeinone overflow-x-hidden">
             // Page header
             <div class="text-center mb-10">
                 <h1 class="text-3xl lg:text-4xl font-title text-white mb-3">"The Bitcoin Observatory"</h1>
@@ -1041,8 +1041,8 @@ fn StatsContent() -> impl IntoView {
             </div>
 
             // Tab navigation
-            <nav class="flex justify-center mb-8">
-                <div class="inline-flex bg-[#0a1a2e] rounded-2xl p-1.5 border border-white/10">
+            <nav class="flex justify-center mb-8 overflow-x-auto px-2">
+                <div class="inline-flex bg-[#0a1a2e] rounded-2xl p-1 sm:p-1.5 border border-white/10">
                     {tabs.into_iter().map(|(id, label)| {
                         let id = id.to_string();
                         let label = label.to_string();
@@ -1051,9 +1051,9 @@ fn StatsContent() -> impl IntoView {
                             <button
                                 class=move || {
                                     if tab.get() == id_clone {
-                                        "px-5 py-2 text-sm font-semibold rounded-xl bg-[#f7931a] text-[#0a1a2e] shadow-md shadow-[#f7931a]/20 cursor-pointer transition-all duration-200"
+                                        "px-3 py-1.5 text-xs sm:px-5 sm:py-2 sm:text-sm font-semibold rounded-xl bg-[#f7931a] text-[#0a1a2e] shadow-md shadow-[#f7931a]/20 cursor-pointer transition-all duration-200 whitespace-nowrap"
                                     } else {
-                                        "px-5 py-2 text-sm font-medium rounded-xl text-white/50 hover:text-white/80 hover:bg-white/5 cursor-pointer transition-all duration-200"
+                                        "px-3 py-1.5 text-xs sm:px-5 sm:py-2 sm:text-sm font-medium rounded-xl text-white/50 hover:text-white/80 hover:bg-white/5 cursor-pointer transition-all duration-200 whitespace-nowrap"
                                     }
                                 }
                                 on:click={
@@ -1707,7 +1707,7 @@ fn StatsContent() -> impl IntoView {
             // Block detail modal (hidden by default, shown via JS)
             <div id="block-detail-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
                 <div class="absolute inset-0 bg-black/60" onclick="closeBlockDetail()"></div>
-                <div class="relative bg-[#0e2a47] border border-white/15 rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] overflow-y-auto">
+                <div class="relative bg-[#0e2a47] border border-white/15 rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] overflow-y-auto overflow-x-hidden">
                     <div class="flex items-center justify-between px-5 py-3 border-b border-white/10">
                         <span id="block-detail-title" class="text-white font-medium">"Block"</span>
                         <button
@@ -1726,8 +1726,8 @@ fn StatsContent() -> impl IntoView {
         <style>"
             .bd-row { display: flex; justify-content: space-between; padding: 4px 0; }
             .bd-row span:first-child { color: rgba(255,255,255,0.5); }
-            .bd-row span:last-child { color: rgba(255,255,255,0.85); font-family: monospace; font-size: 12px; }
-            .bd-hash { color: #f7931a !important; }
+            .bd-row span:last-child { color: rgba(255,255,255,0.85); font-family: monospace; font-size: 12px; text-align: right; word-break: break-all; max-width: 60%; }
+            .bd-hash { color: #f7931a !important; word-break: break-all; }
             .bd-divider { border-top: 1px solid rgba(255,255,255,0.08); margin: 8px 0; }
         "</style>
     }
