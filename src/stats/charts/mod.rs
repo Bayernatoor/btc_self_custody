@@ -61,7 +61,7 @@ pub(crate) fn chart_defaults() -> serde_json::Value {
         "backgroundColor": "transparent",
         "textStyle": { "color": "#aaa", "fontFamily": "Inter, system-ui, sans-serif" },
         "grid": { "left": 55, "right": 20, "top": 50, "bottom": 65 },
-        "legend": { "textStyle": { "color": "#ccc", "fontSize": 11 }, "top": 25, "left": "center", "type": "scroll" },
+        "legend": { "textStyle": { "color": "#ccc", "fontSize": 11 }, "top": 25, "left": 55, "right": 55, "type": "scroll" },
         "toolbox": {
             "feature": {
                 "restore": { "title": "Reset zoom" },
