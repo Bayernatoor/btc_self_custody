@@ -52,6 +52,10 @@
         try {
             var opts = JSON.parse(optionJson);
             opts.animation = false;
+            // Hide toolbox on mobile — not usable on touch screens
+            if (window.innerWidth < 640 && opts.toolbox) {
+                opts.toolbox.show = false;
+            }
             // Hide canvas during setOption to prevent flash of blank/partial chart
             el.style.visibility = 'hidden';
             el._chart.setOption(opts, { notMerge: true, lazyUpdate: true });
