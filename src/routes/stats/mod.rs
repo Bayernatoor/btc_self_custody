@@ -454,7 +454,7 @@ fn StatsContent() -> impl IntoView {
         () => {
             view! {
                 <div class="flex justify-end items-center mb-4">
-                    <div class="inline-flex flex-wrap gap-1.5 bg-[#0a1a2e] rounded-xl p-1.5 border border-white/5">
+                    <div class="grid grid-cols-5 gap-1.5 bg-[#0a1a2e] rounded-xl p-1.5 border border-white/5">
                         {["1d", "1w", "1m", "3m", "6m", "1y", "2y", "5y", "10y", "all"].into_iter().map(|r| {
                             let r_str = r.to_string();
                             let r_display = r.to_uppercase();
