@@ -525,8 +525,36 @@ impl BitcoinRpc {
 
     /// Fetch UTXO set info with hash_type="none" (faster, skips hash computation).
     pub async fn get_txout_set_info(&self) -> Result<TxoutSetInfo, StatsError> {
-        let result = self.call("gettxoutsetinfo", &[json!("none")]).await?;
-        serde_json::from_value(result)
+        // gettxoutsetinfo scans the entire UTXO set — can take 60-120s.
+        // Use a dedicated client with longer timeout.
+        let long_client = Client::builder()
+            .timeout(std::time::Duration::from_secs(120))
+            .build()
+            .map_err(|e| StatsError::Rpc(e.to_string()))?;
+        let body = serde_json::json!({
+            "jsonrpc": "1.0",
+            "id": "utxo",
+            "method": "gettxoutsetinfo",
+            "params": [json!("none")]
+        });
+        let resp = long_client
+            .post(&self.url)
+            .basic_auth(&self.user, Some(&self.password))
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| StatsError::Rpc(e.to_string()))?;
+        if !resp.status().is_success() {
+            return Err(StatsError::Rpc(format!(
+                "RPC returned status {}",
+                resp.status()
+            )));
+        }
+        let json: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| StatsError::Rpc(e.to_string()))?;
+        serde_json::from_value(json["result"].clone())
             .map_err(|e| StatsError::Rpc(e.to_string()))
     }
 
