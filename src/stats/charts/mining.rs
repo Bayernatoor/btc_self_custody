@@ -51,7 +51,7 @@ pub fn miner_dominance_chart(miners: &[MinerShare]) -> String {
         "series": [{
             "name": "Miners",
             "type": "pie",
-            "radius": ["30%", "55%"],
+            "radius": ["35%", "65%"],
             "center": ["50%", "50%"],
             "avoidLabelOverlap": true,
             "itemStyle": {
