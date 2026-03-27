@@ -28,27 +28,28 @@ pub fn address_type_chart(blocks: &[BlockSummary]) -> String {
     }))
 }
 
-/// Address type evolution — stacked area (daily).
+/// Address type evolution — stacked area (daily totals).
 pub fn address_type_chart_daily(days: &[DailyAggregate]) -> String {
     if days.is_empty() {
         return no_data_chart("Address Types");
     }
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    let total = |avg: f64, bc: u64| -> f64 { round(avg * bc as f64, 0) };
 
     build_option(json!({
         "xAxis": x_axis_for(true, &cats),
-        "yAxis": y_axis("Avg Outputs"),
+        "yAxis": y_axis("Outputs/Day"),
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
         "legend": { "show": true },
         "series": [
-            { "name": "P2PKH", "type": "line", "data": days.iter().map(|d| round(d.avg_p2pkh_count, 1)).collect::<Vec<f64>>(), "stack": "addr", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2PKH_COLOR }, "itemStyle": { "color": P2PKH_COLOR }, "symbol": "none" },
-            { "name": "P2SH", "type": "line", "data": days.iter().map(|d| round(d.avg_p2sh_count, 1)).collect::<Vec<f64>>(), "stack": "addr", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2SH_COLOR }, "itemStyle": { "color": P2SH_COLOR }, "symbol": "none" },
-            { "name": "P2WPKH", "type": "line", "data": days.iter().map(|d| round(d.avg_p2wpkh_count, 1)).collect::<Vec<f64>>(), "stack": "addr", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2WPKH_COLOR }, "itemStyle": { "color": P2WPKH_COLOR }, "symbol": "none" },
-            { "name": "P2WSH", "type": "line", "data": days.iter().map(|d| round(d.avg_p2wsh_count, 1)).collect::<Vec<f64>>(), "stack": "addr", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2WSH_COLOR }, "itemStyle": { "color": P2WSH_COLOR }, "symbol": "none" },
-            { "name": "P2TR", "type": "line", "data": days.iter().map(|d| round(d.avg_p2tr_count, 1)).collect::<Vec<f64>>(), "stack": "addr", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2TR_COLOR }, "itemStyle": { "color": P2TR_COLOR }, "symbol": "none" },
-            { "name": "P2PK", "type": "line", "data": days.iter().map(|d| round(d.avg_p2pk_count, 1)).collect::<Vec<f64>>(), "stack": "addr", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2PK_COLOR }, "itemStyle": { "color": P2PK_COLOR }, "symbol": "none" }
+            { "name": "P2PKH", "type": "line", "data": days.iter().map(|d| total(d.avg_p2pkh_count, d.block_count)).collect::<Vec<f64>>(), "stack": "addr", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2PKH_COLOR }, "itemStyle": { "color": P2PKH_COLOR }, "symbol": "none" },
+            { "name": "P2SH", "type": "line", "data": days.iter().map(|d| total(d.avg_p2sh_count, d.block_count)).collect::<Vec<f64>>(), "stack": "addr", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2SH_COLOR }, "itemStyle": { "color": P2SH_COLOR }, "symbol": "none" },
+            { "name": "P2WPKH", "type": "line", "data": days.iter().map(|d| total(d.avg_p2wpkh_count, d.block_count)).collect::<Vec<f64>>(), "stack": "addr", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2WPKH_COLOR }, "itemStyle": { "color": P2WPKH_COLOR }, "symbol": "none" },
+            { "name": "P2WSH", "type": "line", "data": days.iter().map(|d| total(d.avg_p2wsh_count, d.block_count)).collect::<Vec<f64>>(), "stack": "addr", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2WSH_COLOR }, "itemStyle": { "color": P2WSH_COLOR }, "symbol": "none" },
+            { "name": "P2TR", "type": "line", "data": days.iter().map(|d| total(d.avg_p2tr_count, d.block_count)).collect::<Vec<f64>>(), "stack": "addr", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2TR_COLOR }, "itemStyle": { "color": P2TR_COLOR }, "symbol": "none" },
+            { "name": "P2PK", "type": "line", "data": days.iter().map(|d| total(d.avg_p2pk_count, d.block_count)).collect::<Vec<f64>>(), "stack": "addr", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2PK_COLOR }, "itemStyle": { "color": P2PK_COLOR }, "symbol": "none" }
         ]
     }))
 }
