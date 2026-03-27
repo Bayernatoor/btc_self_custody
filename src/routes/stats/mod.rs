@@ -478,7 +478,7 @@ fn StatsContent() -> impl IntoView {
                             }
                         }).collect::<Vec<_>>()}
                     </div>
-                    <span class="ml-3 text-xs text-white/30 self-center">
+                    <span class="ml-3 text-xs text-white/60 self-center">
                         {move || {
                             let n = range_to_blocks(&range.get());
                             if n > 5_000 { "daily averages" } else { "per block" }
