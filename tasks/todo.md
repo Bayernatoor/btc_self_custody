@@ -300,7 +300,7 @@
 - [x] **Nginx rate limiting** — 10r/s per IP, burst 20, configured on Droplet
 - [x] **Create deploy script** — `scripts/deploy.sh` (pull + build + restart)
 - [ ] **GitHub Actions deploy** (optional) — auto-deploy on push to master via SSH
-- [ ] **Review PoeticMetric integration** — check if analytics is working on new deployment
+- [x] **Review PoeticMetric integration** — configured for wehodlbtc.com, tracking active
 
 ## Future Ideas: Public API
 - [ ] API documentation page at /stats/api or /api/docs
