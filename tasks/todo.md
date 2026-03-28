@@ -294,10 +294,10 @@
 - [x] **Switch main domain DNS** — A records for wehodlbtc.com and www → 165.227.230.64
 - [x] **SSL for main domain** — certbot done
 - [x] **Verify main domain works** — all pages tested
-- [ ] **Remove App Platform** — once confident Droplet is stable
+- [x] **Remove App Platform** — destroyed, Droplet is sole production host
 - [ ] **Start9 container IP automation** — run `update-btc-forward.sh` script via cron on Start9
 - [x] **Reduce RPC concurrency** — now configurable via `BITCOIN_STATS_RPC_CONCURRENCY` env var (default 8)
-- [ ] **Nginx rate limiting** — `limit_req_zone` at 10r/s per IP, burst 20 (run on Droplet)
+- [x] **Nginx rate limiting** — 10r/s per IP, burst 20, configured on Droplet
 - [x] **Create deploy script** — `scripts/deploy.sh` (pull + build + restart)
 - [ ] **GitHub Actions deploy** (optional) — auto-deploy on push to master via SSH
 - [ ] **Review PoeticMetric integration** — check if analytics is working on new deployment
