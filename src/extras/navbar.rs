@@ -32,6 +32,7 @@ pub fn NavBar() -> impl IntoView {
                 <div class="hidden text-base 2xl:text-lg space-x-7 lg:flex">
                     <a href="/guides" class="text-white/80 hover:text-white transition-colors">"Guides"</a>
                     <a href="/faq" class="text-white/80 hover:text-white transition-colors">"Help Desk"</a>
+                    <a href="/stats" class="text-white/80 hover:text-white transition-colors">"Observatory"</a>
                     <a href="/about" class="text-white/80 hover:text-white transition-colors">"About"</a>
                 </div>
 
@@ -94,6 +95,16 @@ pub fn NavBar() -> impl IntoView {
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                         </svg>
                         "Help Desk"
+                    </a>
+                    <a
+                        href="/stats"
+                        class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white/80 hover:bg-white/10 hover:text-white transition-all duration-150"
+                        on:click=move |_| set_menu_open.set(false)
+                    >
+                        <svg class="w-4 h-4 text-[#f7931a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                        </svg>
+                        "Observatory"
                     </a>
                     <a
                         href="/about"
