@@ -291,21 +291,16 @@
 - [x] Inscription color changed from pink to cyan (too similar to Runes coral)
 
 ## TODO: Production Deployment — Remaining Steps
-- [ ] **Switch main domain DNS** — Update A records for `wehodlbtc.com` and `www` to `165.227.230.64` (Namecheap)
-- [ ] **SSL for main domain** — `certbot --nginx -d wehodlbtc.com -d www.wehodlbtc.com`
-- [ ] **Verify main domain works** — test all pages, Observatory, guides, help desk
-- [ ] **Remove App Platform** — once main domain is confirmed working on Droplet
-- [ ] **Start9 container IP automation** — script to detect bitcoind container IP and update
-      iptables rules automatically. Current rules break when Bitcoin Core restarts on Start9.
-      Script: `podman inspect bitcoind.embassy | grep IPAddress`, update NAT rules, save.
-      Run via cron or systemd timer on Start9.
-- [ ] **Reduce RPC concurrency for tunnel** — 32 concurrent requests overwhelms the WireGuard
-      tunnel during block ingestion. Reduce CONCURRENCY in ingest.rs for production or make
-      it configurable via env var.
-- [ ] **Nginx rate limiting** — `limit_req_zone` at 10r/s per IP, burst 20. Prevents API abuse.
-- [ ] **Create deploy script** on Droplet: `git pull && cargo leptos build --release && systemctl restart wehodlbtc`
-- [ ] **GitHub Actions deploy** (optional) — auto-deploy on push to production branch via SSH
-- [ ] **Review PoeticMetric integration** — check if analytics is working correctly on the new Droplet deployment
+- [x] **Switch main domain DNS** — A records for wehodlbtc.com and www → 165.227.230.64
+- [x] **SSL for main domain** — certbot done
+- [x] **Verify main domain works** — all pages tested
+- [ ] **Remove App Platform** — once confident Droplet is stable
+- [ ] **Start9 container IP automation** — run `update-btc-forward.sh` script via cron on Start9
+- [x] **Reduce RPC concurrency** — now configurable via `BITCOIN_STATS_RPC_CONCURRENCY` env var (default 8)
+- [ ] **Nginx rate limiting** — `limit_req_zone` at 10r/s per IP, burst 20 (run on Droplet)
+- [x] **Create deploy script** — `scripts/deploy.sh` (pull + build + restart)
+- [ ] **GitHub Actions deploy** (optional) — auto-deploy on push to master via SSH
+- [ ] **Review PoeticMetric integration** — check if analytics is working on new deployment
 
 ## Future Ideas
 - [ ] Fee rate distribution charts (percentiles)
