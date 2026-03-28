@@ -299,6 +299,7 @@
 - [x] **Reduce RPC concurrency** — now configurable via `BITCOIN_STATS_RPC_CONCURRENCY` env var (default 8)
 - [x] **Nginx rate limiting** — 10r/s per IP, burst 20, configured on Droplet
 - [x] **Create deploy script** — `scripts/deploy.sh` (pull + build + restart)
+- [ ] **Remove App Platform artifacts** — spec.yaml, Dockerfile, and any other DO App Platform-specific files
 - [ ] **GitHub Actions deploy** (optional) — auto-deploy on push to master via SSH
 - [x] **Review PoeticMetric integration** — configured for wehodlbtc.com, tracking active
 
