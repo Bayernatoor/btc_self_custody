@@ -203,6 +203,13 @@
 - [x] Full pipeline: BlockSummary, DailyAggregate, server functions, query mappings
 - [x] Stacked area chart (green key-path / amber script-path) in Network > Adoption
 
+## TODO: Dashboard & Chart Polish
+- [ ] Add "mining blocks" animation to LiveCard containers when showing "—" on first load
+- [ ] Review all chart titles/descriptions for clarity — ensure a user immediately understands
+      what they're looking at (e.g. fix daily avg vs actual counts confusion like address type chart)
+- [ ] Charts still flash on load — investigate remaining flash issues
+- [ ] Add YTD (year-to-date) range preset to all charts
+
 ## TODO: Chain Size Growth Chart
 - [ ] Investigate chain size growth chart — something still isn't right with the cumulative
       calculation and/or disk size estimate on various ranges. Needs thorough review.
