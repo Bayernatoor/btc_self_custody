@@ -18,7 +18,12 @@ use super::db::DbPool;
 use super::rpc::{BitcoinRpc, Block};
 use super::{db, error::StatsError};
 
-const CONCURRENCY: usize = 32;
+fn concurrency() -> usize {
+    std::env::var("BITCOIN_STATS_RPC_CONCURRENCY")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(8)
+}
 const DB_BATCH_SIZE: usize = 100;
 
 /// Forward ingestion: catch up from max_height+1 to chain tip.
@@ -78,7 +83,7 @@ pub async fn poll_new_blocks(rpc: &BitcoinRpc, pool: &DbPool) {
 
     let results: Vec<Result<Block, _>> = stream::iter(start..=tip)
         .map(|height| async move { rpc.fetch_block_by_height(height).await })
-        .buffer_unordered(CONCURRENCY)
+        .buffer_unordered(concurrency())
         .collect()
         .await;
 
@@ -144,7 +149,7 @@ pub async fn backfill_extras(rpc: &BitcoinRpc, pool: &DbPool) {
         let results: Vec<Result<Block, _>> =
             stream::iter(heights.iter().copied())
                 .map(|h| async move { rpc.fetch_block_by_height(h).await })
-                .buffer_unordered(CONCURRENCY)
+                .buffer_unordered(concurrency())
                 .collect()
                 .await;
 
@@ -225,7 +230,7 @@ pub async fn backfill_backwards(rpc: &BitcoinRpc, pool: &DbPool) {
             chunk.iter().copied(),
         )
         .map(|height| async move { rpc.fetch_block_by_height(height).await })
-        .buffer_unordered(CONCURRENCY)
+        .buffer_unordered(concurrency())
         .collect()
         .await;
 
@@ -283,7 +288,7 @@ async fn ingest_range(
 ) -> Result<(), StatsError> {
     let total = end - start + 1;
     tracing::info!(
-        "{label} {total} blocks ({start} -> {end}) with {CONCURRENCY} concurrent fetches"
+        "{label} {total} blocks ({start} -> {end}) with {} concurrent fetches", concurrency()
     );
 
     let started = Instant::now();
@@ -298,7 +303,7 @@ async fn ingest_range(
             chunk.iter().copied(),
         )
         .map(|height| async move { rpc.fetch_block_by_height(height).await })
-        .buffer_unordered(CONCURRENCY)
+        .buffer_unordered(concurrency())
         .collect()
         .await;
 
