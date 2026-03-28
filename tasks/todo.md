@@ -302,6 +302,14 @@
 - [ ] **GitHub Actions deploy** (optional) — auto-deploy on push to master via SSH
 - [ ] **Review PoeticMetric integration** — check if analytics is working on new deployment
 
+## Future Ideas: Public API
+- [ ] API documentation page at /stats/api or /api/docs
+- [ ] Document REST endpoints: /api/stats/stats, /api/stats/live, /api/stats/blocks,
+      /api/stats/blocks/:height, /api/stats/op-returns, /api/stats/aggregates/daily,
+      /api/stats/signaling, /api/stats/signaling/periods
+- [ ] Add usage examples (curl, Python, JS)
+- [ ] Consider API key system if usage grows (optional)
+
 ## Future Ideas
 - [ ] Fee rate distribution charts (percentiles)
 - [ ] Mempool fee histogram
