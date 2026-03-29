@@ -36,18 +36,18 @@ pub fn Chart(
     #[prop(optional, into)] class: Option<String>,
 ) -> impl IntoView {
     let id_clone = id.clone();
-    let last_json = std::rc::Rc::new(std::cell::RefCell::new(String::new()));
-    // RenderEffect fires on mount (including Outlet navigation), but the DOM
-    // element may not exist yet during render. request_animation_frame delays
-    // the ECharts call to after DOM insertion.
-    let _effect = RenderEffect::new(move |_| {
+    let last_json = std::cell::RefCell::new(String::new());
+    // Effect tracks option signal and re-runs when chart data changes.
+    // Mount trigger ensures it fires on Outlet navigation even when
+    // the option signal already has a value from a previous page visit.
+    let mount = RwSignal::new(0u32);
+    request_animation_frame(move || mount.set(1));
+    Effect::new(move |_| {
+        let _ = mount.get();
         let json = option.get();
         if !json.is_empty() && *last_json.borrow() != json {
             *last_json.borrow_mut() = json.clone();
-            let id = id_clone.clone();
-            request_animation_frame(move || {
-                set_chart_option(&id, &json);
-            });
+            set_chart_option(&id_clone, &json);
         }
     });
 
