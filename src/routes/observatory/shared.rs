@@ -494,40 +494,24 @@ pub fn ObservatoryNav() -> impl IntoView {
     ];
 
     let location = leptos_router::hooks::use_location();
-    // Track which tab was clicked for instant feedback (before route transition completes)
-    let (pending, set_pending) = signal(String::new());
-    // Clear pending state when pathname actually changes
-    Effect::new(move |_| {
-        let _ = location.pathname.get();
-        set_pending.set(String::new());
-    });
 
     view! {
         <nav class="flex justify-center mb-6 sm:mb-8 px-1">
             <div class="flex flex-wrap justify-center gap-1 sm:gap-0 sm:inline-flex bg-[#0a1a2e] rounded-2xl p-1 sm:p-1.5 border border-white/10">
                 {tabs.into_iter().map(|(href, label)| {
                     let href_str = href.to_string();
-                    let href_click = href.to_string();
                     view! {
                         <a
                             href=href
-                            on:click=move |_| set_pending.set(href_click.clone())
                             class=move || {
                                 let path = location.pathname.get();
-                                let pend = pending.get();
                                 let active = if href_str == "/observatory" {
                                     path == "/observatory"
                                 } else {
                                     path.starts_with(&href_str)
                                 };
-                                let is_pending = !pend.is_empty() && pend == href_str;
-                                if active && pend.is_empty() {
+                                if active {
                                     "px-3 py-1.5 text-xs sm:px-5 sm:py-2 sm:text-sm font-semibold rounded-xl bg-[#f7931a] text-[#0a1a2e] shadow-md shadow-[#f7931a]/20 transition-all duration-200 whitespace-nowrap"
-                                } else if is_pending {
-                                    "px-3 py-1.5 text-xs sm:px-5 sm:py-2 sm:text-sm font-semibold rounded-xl bg-[#f7931a]/70 text-[#0a1a2e] shadow-md shadow-[#f7931a]/10 transition-all duration-200 whitespace-nowrap animate-pulse"
-                                } else if active && !pend.is_empty() {
-                                    // Was active but user clicked elsewhere — dim it
-                                    "px-3 py-1.5 text-xs sm:px-5 sm:py-2 sm:text-sm font-medium rounded-xl text-white/50 transition-all duration-200 whitespace-nowrap"
                                 } else {
                                     "px-3 py-1.5 text-xs sm:px-5 sm:py-2 sm:text-sm font-medium rounded-xl text-white/50 hover:text-white/80 hover:bg-white/5 transition-all duration-200 whitespace-nowrap"
                                 }
@@ -569,6 +553,36 @@ pub fn BlockDetailModal() -> impl IntoView {
             .bd-hash { color: #f7931a !important; word-break: break-all; }
             .bd-divider { border-top: 1px solid rgba(255,255,255,0.08); margin: 8px 0; }
         "</style>
+    }
+}
+
+/// Loading skeleton for chart pages (shown while dashboard_data is loading)
+#[component]
+pub fn ChartPageSkeleton(
+    #[prop(default = 3)] count: usize,
+) -> impl IntoView {
+    view! {
+        <div class="space-y-10">
+            {(0..count).map(|_| view! {
+                <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6">
+                    <div class="h-4 w-48 bg-white/5 rounded mb-2"></div>
+                    <div class="h-3 w-72 bg-white/5 rounded mb-4"></div>
+                    <div class="h-[350px] lg:h-[600px] flex items-center justify-center">
+                        <div class="flex flex-col items-center gap-3">
+                            <div class="animate-pulse">
+                                <div class="w-12 h-12 rounded-lg bg-[#f7931a]/10 border border-[#f7931a]/20 flex items-center justify-center">
+                                    <svg class="w-6 h-6 text-[#f7931a]/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                                        <path d="M9 3v18M15 3v18M3 9h18M3 15h18"/>
+                                    </svg>
+                                </div>
+                            </div>
+                            <span class="text-xs text-white/30">"Mining blocks..."</span>
+                        </div>
+                    </div>
+                </div>
+            }).collect::<Vec<_>>()}
+        </div>
     }
 }
 

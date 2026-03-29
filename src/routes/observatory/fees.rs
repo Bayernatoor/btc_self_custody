@@ -77,7 +77,7 @@ pub fn FeeChartsPage() -> impl IntoView {
                             />
                         </div>
                     }.into_any()
-                })
+                }).unwrap_or_else(|| view! { <ChartPageSkeleton count=2/> }.into_any())
             }}
         </ChartPageLayout>
     }

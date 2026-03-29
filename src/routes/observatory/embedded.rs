@@ -128,7 +128,7 @@ pub fn EmbeddedChartsPage() -> impl IntoView {
                             <ChartCard title="Inscription Block Share" description="Inscription data as a percentage of block size. At peak, inscriptions consumed over 50% of block space" chart_id="chart-inscription-share" option=inscription_share_option/>
                         </div>
                     }.into_any()
-                })
+                }).unwrap_or_else(|| view! { <ChartPageSkeleton count=3/> }.into_any())
             }}
         </ChartPageLayout>
     }

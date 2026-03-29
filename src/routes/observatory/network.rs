@@ -191,7 +191,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
                             <ChartCard title="Transaction Batching" description="Average inputs and outputs per transaction. More outputs per tx means exchanges are batching payments" chart_id="chart-batching" option=batching_option/>
                         </div>
                     }.into_any()
-                })
+                }).unwrap_or_else(|| view! { <ChartPageSkeleton count=6/> }.into_any())
             }}
         </ChartPageLayout>
     }
