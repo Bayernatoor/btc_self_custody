@@ -2,17 +2,14 @@
 // Strategy: cache static assets (app shell), network-first for API/pages
 
 var CACHE_NAME = 'wehodlbtc-v1';
-var STATIC_ASSETS = [
-    '/pkg/we_hodl_btc.js',
-    '/pkg/we_hodl_btc_bg.wasm',
+// Small assets to pre-cache on install (large files like WASM cache on first use)
+var PRECACHE_ASSETS = [
     '/pkg/we_hodl_btc.css',
     '/stats.js',
     '/lightbox.js',
     '/sections.js',
     '/jsonld.js',
     '/wasm-fallback.js',
-    '/android-chrome-192x192.png',
-    '/android-chrome-512x512.png',
     '/favicon-32x32.png',
     '/favicon-16x16.png'
 ];
@@ -21,7 +18,7 @@ var STATIC_ASSETS = [
 self.addEventListener('install', function(event) {
     event.waitUntil(
         caches.open(CACHE_NAME).then(function(cache) {
-            return cache.addAll(STATIC_ASSETS).catch(function() {
+            return cache.addAll(PRECACHE_ASSETS).catch(function() {
                 // Non-fatal: some assets may not exist yet during dev
                 console.warn('SW: some assets failed to pre-cache');
             });
@@ -53,9 +50,9 @@ self.addEventListener('fetch', function(event) {
     // Skip API calls and server functions (always need fresh data)
     if (url.pathname.startsWith('/api/')) return;
 
-    // Static assets: cache-first (fast repeat loads)
+    // Static assets: cache-first (fast repeat loads, cached on first use)
     if (url.pathname.startsWith('/pkg/') ||
-        STATIC_ASSETS.indexOf(url.pathname) !== -1) {
+        PRECACHE_ASSETS.indexOf(url.pathname) !== -1) {
         event.respondWith(
             caches.match(event.request).then(function(cached) {
                 return cached || fetch(event.request).then(function(response) {
