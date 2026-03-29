@@ -49,7 +49,7 @@ pub fn Chart(
         class.unwrap_or_else(|| "w-full h-[350px] lg:h-[600px]".to_string());
 
     view! {
-        <div id=id class=css_class></div>
+        <div id=id class=css_class style="visibility:hidden"></div>
     }
 }
 
@@ -161,13 +161,26 @@ pub fn LiveCard(
     #[prop(into)] label: String,
     #[prop(into)] value: Signal<String>,
 ) -> impl IntoView {
+    let is_loading = Signal::derive(move || value.get() == "\u{2014}");
     view! {
         <div class="bg-[#0d2137] border border-white/10 rounded-lg p-2 sm:p-3 text-center">
             <div class="text-[0.6rem] sm:text-[0.7rem] text-[#8899aa] uppercase tracking-widest mb-1">{label}</div>
             <div
-                class="text-sm sm:text-lg lg:text-xl text-[#f7931a] font-bold font-mono truncate"
+                class="text-sm sm:text-lg lg:text-xl font-bold font-mono truncate"
                 title=move || value.get()
-            >{move || value.get()}</div>
+            >
+                {move || if is_loading.get() {
+                    view! {
+                        <span class="inline-flex items-center gap-[3px] text-[#f7931a]/30">
+                            <span class="inline-block w-1.5 h-3 sm:w-2 sm:h-4 rounded-sm bg-[#f7931a]/30 animate-block-stack" style="animation-delay: 0s"></span>
+                            <span class="inline-block w-1.5 h-3 sm:w-2 sm:h-4 rounded-sm bg-[#f7931a]/30 animate-block-stack" style="animation-delay: 0.2s"></span>
+                            <span class="inline-block w-1.5 h-3 sm:w-2 sm:h-4 rounded-sm bg-[#f7931a]/30 animate-block-stack" style="animation-delay: 0.4s"></span>
+                        </span>
+                    }.into_any()
+                } else {
+                    view! { <span class="text-[#f7931a]">{value.get()}</span> }.into_any()
+                }}
+            </div>
         </div>
     }
 }
