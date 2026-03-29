@@ -81,10 +81,14 @@ pub fn ChartCard(
                         on:click={
                             let id = anchor_id.clone();
                             move |_| {
-                                let url = format!("{}#{}", leptos::prelude::window().location().href().unwrap_or_default().split('#').next().unwrap_or(""), id);
-                                let _ = leptos::prelude::window().navigator().clipboard().write_text(&url);
-                                set_copied.set(true);
-                                leptos::prelude::set_timeout(move || set_copied.set(false), std::time::Duration::from_secs(2));
+                                let window = leptos::prelude::window();
+                                if let Ok(href) = window.location().href() {
+                                    let base = href.split('#').next().unwrap_or("");
+                                    let url = format!("{base}#{id}");
+                                    let _ = window.navigator().clipboard().write_text(&url);
+                                    set_copied.set(true);
+                                    leptos::prelude::set_timeout(move || set_copied.set(false), std::time::Duration::from_secs(2));
+                                }
                             }
                         }
                     >

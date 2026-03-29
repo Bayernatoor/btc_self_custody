@@ -135,8 +135,39 @@ pub fn SignalingPage() -> impl IntoView {
 
         <Suspense fallback=move || view! {
             <div class="space-y-10">
-                <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
-                <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 h-[450px] animate-pulse"></div>
+                // Progress bar skeleton
+                <div class="bg-[#0d2137] border border-white/10 rounded-xl p-4">
+                    <div class="h-3 bg-white/5 rounded-full mb-2"></div>
+                    <div class="h-4 w-2/3 mx-auto bg-white/5 rounded mt-2"></div>
+                </div>
+                // Block grid skeleton
+                <div class="bg-[#0d2137] border border-white/10 rounded-xl p-4">
+                    <div class="flex flex-col items-center gap-3">
+                        <div class="animate-pulse">
+                            <div class="w-12 h-12 rounded-lg bg-[#f7931a]/10 border border-[#f7931a]/20 flex items-center justify-center">
+                                <svg class="w-6 h-6 text-[#f7931a]/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <rect x="3" y="3" width="18" height="18" rx="2"/>
+                                    <path d="M9 3v18M15 3v18M3 9h18M3 15h18"/>
+                                </svg>
+                            </div>
+                        </div>
+                        <span class="text-xs text-white/30">"Loading signaling data..."</span>
+                    </div>
+                </div>
+                // History chart skeleton
+                <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 h-[400px] flex items-center justify-center">
+                    <div class="flex flex-col items-center gap-3">
+                        <div class="animate-pulse">
+                            <div class="w-12 h-12 rounded-lg bg-[#f7931a]/10 border border-[#f7931a]/20 flex items-center justify-center">
+                                <svg class="w-6 h-6 text-[#f7931a]/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <rect x="3" y="3" width="18" height="18" rx="2"/>
+                                    <path d="M9 3v18M15 3v18M3 9h18M3 15h18"/>
+                                </svg>
+                            </div>
+                        </div>
+                        <span class="text-xs text-white/30">"Mining blocks..."</span>
+                    </div>
+                </div>
             </div>
         }>
             {move || {

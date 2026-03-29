@@ -178,4 +178,18 @@
             }
         }
     });
+
+    // Scroll to #anchor on page load (for shareable chart links)
+    // Delayed to allow charts to render first
+    if (window.location.hash) {
+        setTimeout(function() {
+            var id = window.location.hash.substring(1);
+            var el = document.getElementById(id);
+            if (el) {
+                var rect = el.getBoundingClientRect();
+                var offset = window.scrollY + rect.top - 80;
+                window.scrollTo({ top: offset, behavior: 'smooth' });
+            }
+        }, 1500);
+    }
 })();

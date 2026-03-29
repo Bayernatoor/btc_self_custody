@@ -147,8 +147,6 @@ pub fn App() -> impl IntoView {
                             <Route path=path!("/signaling") view=SignalingPage/>
                         </ParentRoute>
                         <Route path=path!("/observatory/learn/protocols") view=ProtocolGuidePage/>
-                        // Legacy redirect: /stats -> /observatory
-                        <Route path=path!("/stats") view=StatsRedirect/>
                         // Other routes
                         <Route path=path!("/blog") view=BlogPage/>
                         <Route path=path!("/faq") view=FaqPage/>
@@ -161,13 +159,3 @@ pub fn App() -> impl IntoView {
     }
 }
 
-/// Redirect /stats to /observatory
-#[component]
-fn StatsRedirect() -> impl IntoView {
-    let navigate = leptos_router::hooks::use_navigate();
-    navigate("/observatory", leptos_router::NavigateOptions {
-        replace: true,
-        ..Default::default()
-    });
-    view! {}
-}
