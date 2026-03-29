@@ -291,3 +291,19 @@
 #lightbox-overlay.active #lightbox-img {
   transform: scale(1);
 }
+
+/* ── Observatory nav loading state ────────── */
+.obs-nav-loading {
+  color: rgba(247,147,26,0.7) !important;
+  border-color: rgba(247,147,26,0.4) !important;
+}
+.obs-nav-loading .obs-nav-spin {
+  display: inline-block !important;
+}
+
+/* ── Block detail modal rows ────────── */
+.bd-row { display: flex; justify-content: space-between; padding: 4px 0; }
+.bd-row span:first-child { color: rgba(255,255,255,0.5); }
+.bd-row span:last-child { color: rgba(255,255,255,0.85); font-family: monospace; font-size: 12px; text-align: right; word-break: break-all; max-width: 60%; }
+.bd-hash { color: #f7931a !important; word-break: break-all; }
+.bd-divider { border-top: 1px solid rgba(255,255,255,0.08); margin: 8px 0; }
