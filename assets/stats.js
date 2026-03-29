@@ -184,7 +184,8 @@
     if (window.location.hash) {
         setTimeout(function() {
             var id = window.location.hash.substring(1);
-            var el = document.getElementById(id);
+            // Chart anchors use card-{id} prefix to avoid duplicate IDs with ECharts
+            var el = document.getElementById('card-' + id) || document.getElementById(id);
             if (el) {
                 var rect = el.getBoundingClientRect();
                 var offset = window.scrollY + rect.top - 80;

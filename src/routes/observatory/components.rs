@@ -70,7 +70,7 @@ pub fn ChartCard(
     let (expanded, set_expanded) = signal(false);
     view! {
         // Normal inline card
-        <div id=chart_id.clone() class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6">
+        <div id=format!("card-{}", chart_id) class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6">
             <div class="flex items-start justify-between mb-4">
                 <div>
                     <h3 class="text-lg text-white font-semibold">{title.clone()}</h3>
