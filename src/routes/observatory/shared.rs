@@ -314,20 +314,21 @@ pub struct LiveContext {
 }
 
 // ---------------------------------------------------------------------------
-// Chart signal macro (no tab guards needed — each page only builds its own)
+// Chart memo macro — pure derivation, no timing issues
 // ---------------------------------------------------------------------------
 
-/// Build a chart option signal. Effect fires on creation and whenever
-/// dashboard_data, range, or overlay signals change.
+/// Build a chart option as a derived Signal. The closure runs reactively
+/// whenever dashboard_data, range, or overlay signals change, and returns
+/// the current JSON string. Unlike Effect, this is a pure derivation that
+/// doesn't depend on DOM timing.
 #[macro_export]
-macro_rules! chart_signal {
+macro_rules! chart_memo {
     ($data:expr, $range:expr, $overlays:expr, |$blocks:ident| $per_block:expr, |$days:ident| $daily:expr) => {{
         use $crate::routes::observatory::shared::DashboardData;
-        let (cached, set_cached) = leptos::prelude::signal(String::new());
-        leptos::prelude::Effect::new(move |_| {
+        leptos::prelude::Signal::derive(move || {
             let _r = $range.get();
             let flags = $overlays.get();
-            let result = $data
+            $data
                 .get()
                 .and_then(|r| r.ok())
                 .map(|data| {
@@ -337,12 +338,9 @@ macro_rules! chart_signal {
                     };
                     if json.is_empty() { return String::new(); }
                     crate::stats::charts::apply_overlays(&json, &flags, is_daily)
-                });
-            if let Some(r) = result {
-                set_cached.set(r);
-            }
-        });
-        leptos::prelude::Signal::derive(move || cached.get())
+                })
+                .unwrap_or_default()
+        })
     }};
 }
 

@@ -290,7 +290,9 @@ pub fn ObservatoryOverview() -> impl IntoView {
                         <LiveCard label="Next Block Fee" value=next_fee/>
                     </div>
                     <div class="flex justify-center">
-                        <Chart id="mempool-gauge".to_string() option=gauge_option class="w-[220px] h-[200px]".to_string()/>
+                        <Show when=move || cached_live.get().is_some()>
+                            <Chart id="mempool-gauge".to_string() option=gauge_option class="w-[220px] h-[200px]".to_string()/>
+                        </Show>
                     </div>
                 </div>
 

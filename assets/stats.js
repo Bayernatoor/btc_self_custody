@@ -28,9 +28,15 @@
         new ResizeObserver(function() { if (el._chart) el._chart.resize(); }).observe(el);
     };
 
-    window.setChartOption = function(elementId, optionJson) {
+    window.setChartOption = function(elementId, optionJson, isRetry) {
         var el = document.getElementById(elementId);
-        if (!el) return;
+        if (!el) {
+            // Element doesn't exist yet — one-frame retry for reactive closure timing
+            if (!isRetry) {
+                requestAnimationFrame(function() { window.setChartOption(elementId, optionJson, true); });
+            }
+            return;
+        }
         if (typeof echarts === 'undefined') {
             // ECharts not loaded yet — retry with limit to avoid infinite loop
             if (!el._echartsRetry) el._echartsRetry = 0;
