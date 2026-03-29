@@ -11,7 +11,7 @@ pub fn FeeChartsPage() -> impl IntoView {
     let state = expect_context::<ObservatoryState>();
     let range = state.range;
     let overlay_flags = state.overlay_flags;
-    let dashboard_data = create_dashboard_resource(range);
+    let dashboard_data = state.dashboard_data;
 
     let (fee_unit, set_fee_unit) = signal("btc".to_string());
 

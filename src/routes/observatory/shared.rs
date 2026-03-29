@@ -27,6 +27,7 @@ pub struct ObservatoryState {
     pub range: ReadSignal<String>,
     pub set_range: WriteSignal<String>,
     pub overlay_flags: Signal<OverlayFlags>,
+    pub dashboard_data: LocalResource<Result<DashboardData, String>>,
     pub cached_live: ReadSignal<Option<LiveStats>>,
     // overlay signals (for the panel)
     pub overlay_halvings: ReadSignal<bool>,
@@ -205,10 +206,9 @@ pub fn provide_observatory_state() -> ObservatoryState {
         connected,
     });
 
-    // Note: dashboard_data is NOT shared via context. Each chart page creates
-    // its own LocalResource via `create_dashboard_resource()`. This ensures
-    // the resource fires on mount even during client-side Outlet navigation.
-    // Server-side caching (120s TTL) makes duplicate fetches essentially free.
+    // Shared dashboard data resource — lives in the parent (ObservatoryPage),
+    // stays alive across Outlet navigations. Child pages read it from context
+    // so there's no re-fetch or loading flash when switching pages.
     let dashboard_data = create_dashboard_resource(range);
 
     // Pre-compute chain size cumulative data
@@ -279,6 +279,7 @@ pub fn provide_observatory_state() -> ObservatoryState {
         range,
         set_range,
         overlay_flags,
+        dashboard_data,
         cached_live,
         overlay_halvings,
         set_overlay_halvings,
