@@ -49,7 +49,7 @@ pub fn Chart(
         class.unwrap_or_else(|| "w-full h-[350px] lg:h-[600px]".to_string());
 
     view! {
-        <div id=id class=css_class style="visibility:hidden"></div>
+        <div id=id class=css_class></div>
     }
 }
 
