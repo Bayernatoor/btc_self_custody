@@ -241,15 +241,6 @@ pub fn ObservatoryOverview() -> impl IntoView {
     });
 
     view! {
-        // Page header (only on dashboard)
-        <div class="text-center mb-6 sm:mb-10">
-            <h1 class="text-2xl sm:text-3xl lg:text-4xl font-title text-white mb-2 sm:mb-3">"The Bitcoin Observatory"</h1>
-            <div class="w-12 sm:w-16 h-0.5 bg-[#f7931a] mx-auto mt-2 sm:mt-3 mb-3 sm:mb-4"></div>
-            <p class="text-sm sm:text-base text-white/50 max-w-xl mx-auto px-2">
-                "Live blockchain metrics, block data, embedded data analysis, and BIP signaling tracker."
-            </p>
-        </div>
-
         // Live stats panel
         <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-6 lg:p-8 mb-8">
             <div class="flex items-center gap-2 mb-3 flex-wrap">

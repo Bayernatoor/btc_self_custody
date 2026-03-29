@@ -68,12 +68,31 @@ pub fn ChartCard(
     children: Option<Children>,
 ) -> impl IntoView {
     let (expanded, set_expanded) = signal(false);
+    let anchor_id = chart_id.clone();
+    let (copied, set_copied) = signal(false);
     view! {
         // Normal inline card
-        <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6">
+        <div id=anchor_id.clone() class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6">
             <div class="flex items-start justify-between mb-4">
                 <div>
-                    <h3 class="text-lg text-white font-semibold">{title.clone()}</h3>
+                    <h3
+                        class="text-lg text-white font-semibold cursor-pointer hover:text-[#f7931a] transition-colors group"
+                        title="Click to copy link"
+                        on:click={
+                            let id = anchor_id.clone();
+                            move |_| {
+                                let url = format!("{}#{}", leptos::prelude::window().location().href().unwrap_or_default().split('#').next().unwrap_or(""), id);
+                                let _ = leptos::prelude::window().navigator().clipboard().write_text(&url);
+                                set_copied.set(true);
+                                leptos::prelude::set_timeout(move || set_copied.set(false), std::time::Duration::from_secs(2));
+                            }
+                        }
+                    >
+                        {title.clone()}
+                        <span class="text-white/20 group-hover:text-[#f7931a]/50 text-sm ml-1.5">
+                            {move || if copied.get() { "\u{2713}" } else { "#" }}
+                        </span>
+                    </h3>
                     <p class="text-sm text-white/50 mt-0.5">{description.clone()}</p>
                 </div>
                 <div class="flex items-center gap-2 shrink-0">

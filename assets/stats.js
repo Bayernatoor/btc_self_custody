@@ -52,6 +52,18 @@
         try {
             var opts = JSON.parse(optionJson);
             opts.animation = false;
+            // Round tooltip values to avoid floating point noise (59.86000000000001 → 59.86)
+            if (opts.tooltip && opts.tooltip.trigger === 'axis' && !opts.tooltip.valueFormatter) {
+                opts.tooltip.valueFormatter = function(v) {
+                    if (typeof v !== 'number') return v;
+                    if (Number.isInteger(v)) return v.toLocaleString();
+                    return parseFloat(v.toPrecision(10)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                };
+            }
+            // Set background for PNG downloads (saveAsImage)
+            if (opts.toolbox && opts.toolbox.feature && opts.toolbox.feature.saveAsImage) {
+                opts.toolbox.feature.saveAsImage.backgroundColor = '#0d2137';
+            }
             // Mobile adjustments
             if (window.innerWidth < 640) {
                 // Hide toolbox — not usable on touch screens

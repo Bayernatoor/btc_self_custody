@@ -58,7 +58,7 @@ pub(crate) const TAPROOT_COLOR: &str = "#f7931a";
 
 pub(crate) fn chart_defaults() -> serde_json::Value {
     json!({
-        "backgroundColor": "transparent",
+        "backgroundColor": "#0d2137",
         "textStyle": { "color": "#aaa", "fontFamily": "Inter, system-ui, sans-serif" },
         "grid": { "left": 55, "right": 20, "top": 50, "bottom": 65 },
         "legend": { "textStyle": { "color": "#ccc", "fontSize": 11 }, "top": 25, "left": "center", "type": "scroll" },
