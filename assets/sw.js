@@ -24,7 +24,16 @@ self.addEventListener('install', function(event) {
             });
         })
     );
-    self.skipWaiting();
+    // Don't skipWaiting() here — let the page detect the update
+    // and show a banner. The page sends a 'SKIP_WAITING' message
+    // when the user clicks "Update".
+});
+
+// Listen for skip-waiting message from the page
+self.addEventListener('message', function(event) {
+    if (event.data === 'SKIP_WAITING') {
+        self.skipWaiting();
+    }
 });
 
 // Activate: clean up old caches
