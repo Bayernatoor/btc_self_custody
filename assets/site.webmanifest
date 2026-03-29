@@ -27,17 +27,17 @@
     ],
     "screenshots": [
         {
-            "src": "/metadata_unfurl_image.png",
-            "sizes": "965x527",
+            "src": "/observatory_hero.png",
+            "sizes": "1408x768",
             "type": "image/png",
             "form_factor": "wide",
-            "label": "WE HODL BTC - Bitcoin Self-Custody Guides"
+            "label": "The Bitcoin Observatory - Live Blockchain Analytics"
         },
         {
-            "src": "/metadata_unfurl_image.png",
-            "sizes": "965x527",
+            "src": "/observatory_hero.png",
+            "sizes": "1408x768",
             "type": "image/png",
-            "label": "WE HODL BTC - Bitcoin Self-Custody Guides"
+            "label": "The Bitcoin Observatory - Live Blockchain Analytics"
         }
     ]
 }
