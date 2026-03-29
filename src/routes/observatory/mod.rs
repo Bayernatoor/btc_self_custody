@@ -50,17 +50,16 @@ pub fn ObservatoryPage() -> impl IntoView {
         <section class="max-w-[1750px] mx-auto px-3 sm:px-4 lg:px-8 pt-6 sm:pt-10 pb-28 opacity-0 animate-fadeinone overflow-x-hidden">
             // Hero branding — only on dashboard
             <Show when=move || on_dashboard.get()>
-                <div class="relative rounded-2xl overflow-hidden mb-6 sm:mb-10">
+                <div class="relative rounded-2xl overflow-hidden mb-6 sm:mb-8 max-w-3xl mx-auto">
                     <img
                         src="/observatory_hero.png"
                         alt="The Bitcoin Observatory"
-                        class="w-full h-[180px] sm:h-[240px] lg:h-[300px] object-cover object-center"
+                        class="w-full h-[120px] sm:h-[150px] lg:h-[180px] object-cover object-center"
                     />
-                    <div class="absolute inset-0 bg-gradient-to-t from-[#123c64] via-[#123c64]/60 to-transparent"></div>
-                    <div class="absolute inset-0 flex flex-col items-center justify-end pb-6 sm:pb-8">
-                        <h1 class="text-2xl sm:text-3xl lg:text-4xl font-title text-white mb-1 sm:mb-2 drop-shadow-lg">"The Bitcoin Observatory"</h1>
-                        <div class="w-12 sm:w-16 h-0.5 bg-[#f7931a] mb-2 sm:mb-3"></div>
-                        <p class="text-xs sm:text-sm text-white/70 max-w-xl mx-auto px-4 text-center drop-shadow">
+                    <div class="absolute inset-0 bg-gradient-to-t from-[#123c64] via-[#123c64]/50 to-transparent"></div>
+                    <div class="absolute inset-0 flex flex-col items-center justify-end pb-4 sm:pb-5">
+                        <h1 class="text-xl sm:text-2xl lg:text-3xl font-title text-white mb-1 drop-shadow-lg">"The Bitcoin Observatory"</h1>
+                        <p class="text-xs text-white/60 max-w-md mx-auto px-4 text-center drop-shadow">
                             "Live blockchain metrics, block data, embedded data analysis, and BIP signaling tracker."
                         </p>
                     </div>
