@@ -4,11 +4,18 @@
 //! `App` sets up the Leptos router with all page routes.
 //!
 //! Route structure:
-//!   /                              → HomePage
-//!   /guides                        → GuideSelector (pick level + platform)
-//!   /guides/:level/:segment        → GuideTwoSegment (level intro or step page)
-//!   /guides/:level/:platform/:wallet → GuideWalletPage (wallet stepper)
-//!   /blog, /faq, /about            → Static pages
+//!   /                                        -> HomePage
+//!   /guides                                  -> GuideSelector
+//!   /guides/:level/:segment                  -> GuideTwoSegment
+//!   /guides/:level/:platform/:wallet         -> GuideWalletPage
+//!   /observatory                             -> Dashboard
+//!   /observatory/charts/network              -> Network charts
+//!   /observatory/charts/fees                 -> Fee charts
+//!   /observatory/charts/mining               -> Mining charts
+//!   /observatory/charts/embedded             -> Embedded data charts
+//!   /observatory/signaling                   -> BIP signaling
+//!   /observatory/learn/protocols             -> Protocol guide
+//!   /blog, /faq, /about                      -> Static pages
 
 use crate::extras::footer::Footer;
 use crate::extras::navbar::NavBar;
@@ -18,12 +25,15 @@ use crate::routes::faq::FaqPage;
 use crate::routes::guide::{GuideTwoSegment, GuideWalletPage};
 use crate::routes::guideselector::{GuideLevelSelector, GuideSelector};
 use crate::routes::homepage::HomePage;
-use crate::routes::stats::StatsPage;
-use crate::routes::stats::learn::protocols::ProtocolGuidePage;
+use crate::routes::observatory::{
+    ObservatoryPage, ObservatoryOverview, NetworkChartsPage,
+    FeeChartsPage, MiningChartsPage, EmbeddedChartsPage, SignalingPage,
+};
+use crate::routes::observatory::learn::protocols::ProtocolGuidePage;
 use leptos::prelude::*;
 use leptos_meta::*;
 use leptos_router::{
-    components::{Route, Router, Routes},
+    components::{ParentRoute, Route, Router, Routes},
     path,
 };
 
@@ -125,12 +135,20 @@ pub fn App() -> impl IntoView {
                         <Route path=path!("/") view=HomePage/>
                         <Route path=path!("/guides") view=GuideSelector/>
                         <Route path=path!("/guides/:level") view=GuideLevelSelector/>
-                        // Unified guide routes (2 parameterized routes replace 14 static ones)
                         <Route path=path!("/guides/:level/:segment") view=GuideTwoSegment/>
                         <Route path=path!("/guides/:level/:platform/:wallet") view=GuideWalletPage/>
-                        // Stats dashboard + learn pages
-                        <Route path=path!("/stats") view=StatsPage/>
-                        <Route path=path!("/stats/learn/protocols") view=ProtocolGuidePage/>
+                        // Observatory: parent route wraps all sub-pages with shared shell
+                        <ParentRoute path=path!("/observatory") view=ObservatoryPage>
+                            <Route path=path!("/") view=ObservatoryOverview/>
+                            <Route path=path!("/charts/network") view=NetworkChartsPage/>
+                            <Route path=path!("/charts/fees") view=FeeChartsPage/>
+                            <Route path=path!("/charts/mining") view=MiningChartsPage/>
+                            <Route path=path!("/charts/embedded") view=EmbeddedChartsPage/>
+                            <Route path=path!("/signaling") view=SignalingPage/>
+                        </ParentRoute>
+                        <Route path=path!("/observatory/learn/protocols") view=ProtocolGuidePage/>
+                        // Legacy redirect: /stats -> /observatory
+                        <Route path=path!("/stats") view=StatsRedirect/>
                         // Other routes
                         <Route path=path!("/blog") view=BlogPage/>
                         <Route path=path!("/faq") view=FaqPage/>
@@ -141,4 +159,15 @@ pub fn App() -> impl IntoView {
             </div>
         </Router>
     }
+}
+
+/// Redirect /stats to /observatory
+#[component]
+fn StatsRedirect() -> impl IntoView {
+    let navigate = leptos_router::hooks::use_navigate();
+    navigate("/observatory", leptos_router::NavigateOptions {
+        replace: true,
+        ..Default::default()
+    });
+    view! {}
 }

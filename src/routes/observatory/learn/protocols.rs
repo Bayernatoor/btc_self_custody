@@ -1,5 +1,5 @@
 //! Protocol Guide: educational page about Bitcoin data embedding protocols.
-//! Route: /stats/learn/protocols
+//! Route: /observatory/learn/protocols
 
 use leptos::prelude::*;
 use leptos_meta::*;
@@ -130,7 +130,7 @@ pub fn ProtocolGuidePage() -> impl IntoView {
 
             // Hero
             <div class="text-center mb-14">
-                <a href="/stats" class="text-sm text-white/40 hover:text-white/60 transition-colors">
+                <a href="/observatory" class="text-sm text-white/40 hover:text-white/60 transition-colors">
                     "\u{2190} Back to The Bitcoin Observatory"
                 </a>
                 <h1 class="text-4xl lg:text-5xl font-title text-white mt-4 mb-3">
@@ -319,7 +319,7 @@ pub fn ProtocolGuidePage() -> impl IntoView {
 
             // CTA to charts
             <div class="text-center mt-12">
-                <a href="/stats"
+                <a href="/observatory"
                     class="inline-flex items-center gap-2 px-6 py-3 bg-[#f7931a] text-white text-base font-medium rounded-xl hover:bg-[#f4a949] hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
                 >
                     "Explore The Bitcoin Observatory"
@@ -327,7 +327,7 @@ pub fn ProtocolGuidePage() -> impl IntoView {
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
                     </svg>
                 </a>
-                <p class="text-xs text-white/30 mt-3">"View embedded data charts in the Embedded Data tab"</p>
+                <p class="text-xs text-white/30 mt-3">"View embedded data charts in the Observatory"</p>
             </div>
         </section>
     }
