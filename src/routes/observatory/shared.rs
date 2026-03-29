@@ -516,10 +516,13 @@ fn OverlayCheckbox(
     }
 }
 
-/// Observatory navigation bar with links to sub-pages
+/// Observatory navigation bar with links to sub-pages.
+/// Uses a DOM-level loading class (`obs-nav-loading`) on click that gets
+/// cleared when Leptos re-evaluates the reactive `class` attribute after
+/// navigation completes.
 #[component]
 pub fn ObservatoryNav() -> impl IntoView {
-    let tabs = vec![
+    let tabs: Vec<(&'static str, &'static str)> = vec![
         ("/observatory", "Dashboard"),
         ("/observatory/charts/network", "Network"),
         ("/observatory/charts/fees", "Fees"),
@@ -531,6 +534,10 @@ pub fn ObservatoryNav() -> impl IntoView {
     let location = leptos_router::hooks::use_location();
 
     view! {
+        <style>"
+            .obs-nav-loading { color: rgba(247,147,26,0.7) !important; border-color: rgba(247,147,26,0.4) !important; }
+            .obs-nav-loading .obs-nav-spin { display: inline-block !important; }
+        "</style>
         <nav class="flex justify-center mb-6 sm:mb-8 px-1">
             <div class="flex flex-wrap justify-center gap-4 sm:gap-6">
                 {tabs.into_iter().map(|(href, label)| {
@@ -538,6 +545,16 @@ pub fn ObservatoryNav() -> impl IntoView {
                     view! {
                         <a
                             href=href
+                            on:click=move |ev| {
+                                // Add loading class via DOM — Leptos will overwrite it
+                                // on the next reactive class update (after navigation).
+                                use wasm_bindgen::JsCast;
+                                if let Some(t) = ev.current_target() {
+                                    if let Ok(el) = t.dyn_into::<leptos::web_sys::HtmlElement>() {
+                                        let _ = el.class_list().add_1("obs-nav-loading");
+                                    }
+                                }
+                            }
                             class=move || {
                                 let path = location.pathname.get();
                                 let active = if href_str == "/observatory" {
@@ -546,13 +563,14 @@ pub fn ObservatoryNav() -> impl IntoView {
                                     path.starts_with(&href_str)
                                 };
                                 if active {
-                                    "text-sm sm:text-[15px] font-semibold text-[#f7931a] border-b-2 border-[#f7931a] pb-1 transition-all duration-200 whitespace-nowrap"
+                                    "text-sm sm:text-[15px] font-semibold text-[#f7931a] border-b-2 border-[#f7931a] pb-1 transition-all duration-200 whitespace-nowrap active:scale-95 active:opacity-70 inline-flex items-center gap-1.5"
                                 } else {
-                                    "text-sm sm:text-[15px] font-medium text-white/40 hover:text-white/70 border-b-2 border-transparent pb-1 transition-all duration-200 whitespace-nowrap"
+                                    "text-sm sm:text-[15px] font-medium text-white/40 hover:text-white/70 border-b-2 border-transparent pb-1 transition-all duration-200 whitespace-nowrap active:scale-95 active:opacity-70 inline-flex items-center gap-1.5"
                                 }
                             }
                         >
                             {label}
+                            <span class="hidden w-3 h-3 border-2 border-[#f7931a]/40 border-t-[#f7931a] rounded-full animate-spin obs-nav-spin"/>
                         </a>
                     }
                 }).collect::<Vec<_>>()}
