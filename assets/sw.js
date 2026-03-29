@@ -56,6 +56,9 @@ self.addEventListener('fetch', function(event) {
     // Skip non-GET requests
     if (event.request.method !== 'GET') return;
 
+    // Only handle same-origin requests (skip extensions, analytics, CDNs)
+    if (url.origin !== self.location.origin) return;
+
     // Skip API calls and server functions (always need fresh data)
     if (url.pathname.startsWith('/api/')) return;
 
