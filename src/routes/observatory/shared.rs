@@ -493,26 +493,41 @@ pub fn ObservatoryNav() -> impl IntoView {
         ("/observatory/signaling", "Signaling"),
     ];
 
-    // Get current path to highlight active tab
     let location = leptos_router::hooks::use_location();
+    // Track which tab was clicked for instant feedback (before route transition completes)
+    let (pending, set_pending) = signal(String::new());
+    // Clear pending state when pathname actually changes
+    Effect::new(move |_| {
+        let _ = location.pathname.get();
+        set_pending.set(String::new());
+    });
 
     view! {
         <nav class="flex justify-center mb-6 sm:mb-8 px-1">
             <div class="flex flex-wrap justify-center gap-1 sm:gap-0 sm:inline-flex bg-[#0a1a2e] rounded-2xl p-1 sm:p-1.5 border border-white/10">
                 {tabs.into_iter().map(|(href, label)| {
                     let href_str = href.to_string();
+                    let href_click = href.to_string();
                     view! {
                         <a
                             href=href
+                            on:click=move |_| set_pending.set(href_click.clone())
                             class=move || {
                                 let path = location.pathname.get();
+                                let pend = pending.get();
                                 let active = if href_str == "/observatory" {
                                     path == "/observatory"
                                 } else {
                                     path.starts_with(&href_str)
                                 };
-                                if active {
+                                let is_pending = !pend.is_empty() && pend == href_str;
+                                if active && pend.is_empty() {
                                     "px-3 py-1.5 text-xs sm:px-5 sm:py-2 sm:text-sm font-semibold rounded-xl bg-[#f7931a] text-[#0a1a2e] shadow-md shadow-[#f7931a]/20 transition-all duration-200 whitespace-nowrap"
+                                } else if is_pending {
+                                    "px-3 py-1.5 text-xs sm:px-5 sm:py-2 sm:text-sm font-semibold rounded-xl bg-[#f7931a]/70 text-[#0a1a2e] shadow-md shadow-[#f7931a]/10 transition-all duration-200 whitespace-nowrap animate-pulse"
+                                } else if active && !pend.is_empty() {
+                                    // Was active but user clicked elsewhere — dim it
+                                    "px-3 py-1.5 text-xs sm:px-5 sm:py-2 sm:text-sm font-medium rounded-xl text-white/50 transition-all duration-200 whitespace-nowrap"
                                 } else {
                                     "px-3 py-1.5 text-xs sm:px-5 sm:py-2 sm:text-sm font-medium rounded-xl text-white/50 hover:text-white/80 hover:bg-white/5 transition-all duration-200 whitespace-nowrap"
                                 }
