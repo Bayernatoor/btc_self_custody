@@ -534,10 +534,6 @@ pub fn ObservatoryNav() -> impl IntoView {
     let location = leptos_router::hooks::use_location();
 
     view! {
-        <style>"
-            .obs-nav-loading { color: rgba(247,147,26,0.7) !important; border-color: rgba(247,147,26,0.4) !important; }
-            .obs-nav-loading .obs-nav-spin { display: inline-block !important; }
-        "</style>
         <nav class="flex justify-center mb-6 sm:mb-8 px-1">
             <div class="flex flex-wrap justify-center gap-4 sm:gap-6">
                 {tabs.into_iter().map(|(href, label)| {
@@ -599,13 +595,6 @@ pub fn BlockDetailModal() -> impl IntoView {
             </div>
         </div>
 
-        <style>"
-            .bd-row { display: flex; justify-content: space-between; padding: 4px 0; }
-            .bd-row span:first-child { color: rgba(255,255,255,0.5); }
-            .bd-row span:last-child { color: rgba(255,255,255,0.85); font-family: monospace; font-size: 12px; text-align: right; word-break: break-all; max-width: 60%; }
-            .bd-hash { color: #f7931a !important; word-break: break-all; }
-            .bd-divider { border-top: 1px solid rgba(255,255,255,0.08); margin: 8px 0; }
-        "</style>
     }
 }
 

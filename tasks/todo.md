@@ -214,6 +214,16 @@
 - [ ] Investigate chain size growth chart — something still isn't right with the cumulative
       calculation and/or disk size estimate on various ranges. Needs thorough review.
 
+## TODO: Avg Transaction Size by Type Chart
+- [ ] Chart showing average transaction size broken down by transaction type
+      (Legacy, P2SH, SegWit v0, Taproot). Needs per-tx type classification during
+      parsing or derivation from existing output type data. Could go in Network > Transactions.
+
+## TODO: Node Mempool Config
+- [ ] Set minrelaytxfee=0.00000100 (0.1 sat/vB) in bitcoin.conf to accept all low-fee txs
+- [ ] Increase maxmempool size if needed to hold the full mempool
+- [ ] Verify mempool tx count matches mempool.space after changes
+
 ## TODO: Nav Tab Spinner
 - [ ] Review spinner on Observatory nav tabs — DOM-based `obs-nav-loading` class approach
       doesn't reliably show the spinner on click. Leptos router may update pathname synchronously,
