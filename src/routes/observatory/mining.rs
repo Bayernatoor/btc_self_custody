@@ -98,32 +98,32 @@ pub fn MiningChartsPage() -> impl IntoView {
         <ChartPageLayout
             title="Mining"
             description="Difficulty adjustments and mining pool distribution"
-        >
-            // Sub-section pills
-            <div class="flex flex-wrap gap-2 justify-center mb-6">
-                {[("difficulty", "Difficulty"), ("pools", "Pool Distribution")].into_iter().map(|(id, label)| {
-                    let id_str = id.to_string();
-                    let id_clone = id_str.clone();
-                    view! {
-                        <button
-                            class=move || {
-                                if section.get() == id_clone {
-                                    "px-4 py-1.5 text-xs rounded-lg bg-white/10 text-white font-semibold border border-white/20 cursor-pointer"
-                                } else {
-                                    "px-4 py-1.5 text-xs rounded-lg text-white/40 hover:text-white/70 hover:bg-white/5 transition-all cursor-pointer"
+            header=move || view! {
+                <div class="flex flex-wrap gap-2 justify-center mb-6">
+                    {[("difficulty", "Difficulty"), ("pools", "Pool Distribution")].into_iter().map(|(id, label)| {
+                        let id_str = id.to_string();
+                        let id_clone = id_str.clone();
+                        view! {
+                            <button
+                                class=move || {
+                                    if section.get() == id_clone {
+                                        "px-4 py-1.5 text-xs rounded-lg bg-white/10 text-white font-semibold border border-white/20 cursor-pointer"
+                                    } else {
+                                        "px-4 py-1.5 text-xs rounded-lg text-white/40 hover:text-white/70 hover:bg-white/5 transition-all cursor-pointer"
+                                    }
                                 }
-                            }
-                            on:click={
-                                let id = id_str.clone();
-                                move |_| set_section.set(id.clone())
-                            }
-                        >
-                            {label}
-                        </button>
-                    }
-                }).collect::<Vec<_>>()}
-            </div>
-
+                                on:click={
+                                    let id = id_str.clone();
+                                    move |_| set_section.set(id.clone())
+                                }
+                            >
+                                {label}
+                            </button>
+                        }
+                    }).collect::<Vec<_>>()}
+                </div>
+            }
+        >
             // --- Difficulty sub-section ---
             <div class=move || if section.get() == "difficulty" { "space-y-10" } else { "hidden" }>
                 <ChartCard title="Difficulty" description="Mining difficulty, adjusts every 2,016 blocks (~2 weeks) to maintain 10-minute block targets" chart_id="chart-difficulty" option=diff_option/>
