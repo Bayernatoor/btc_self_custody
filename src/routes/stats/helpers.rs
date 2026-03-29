@@ -1,5 +1,7 @@
 //! Formatting and utility helpers for the stats page.
 
+use chrono::Datelike;
+
 /// Convert a range string (1d, 1w, 1m, etc.) to approximate block count.
 pub fn range_to_blocks(range: &str) -> u64 {
     match range {
@@ -8,6 +10,17 @@ pub fn range_to_blocks(range: &str) -> u64 {
         "1m" => 4_320,
         "3m" => 12_960,
         "6m" => 25_920,
+        "ytd" => {
+            // Days since Jan 1 of current year × 144 blocks/day
+            let now = chrono::Utc::now();
+            let jan1 = chrono::NaiveDate::from_ymd_opt(now.year(), 1, 1)
+                .unwrap()
+                .and_hms_opt(0, 0, 0)
+                .unwrap()
+                .and_utc();
+            let days = (now - jan1).num_days().max(1) as u64;
+            days * 144
+        }
         "1y" => 52_560,
         "2y" => 105_120,
         "5y" => 262_800,

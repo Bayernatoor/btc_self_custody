@@ -1,4 +1,4 @@
-//! Protocol Guide — educational page about Bitcoin data embedding protocols.
+//! Protocol Guide: educational page about Bitcoin data embedding protocols.
 //! Route: /stats/learn/protocols
 
 use leptos::prelude::*;
@@ -49,7 +49,7 @@ const PROTOCOLS: &[Protocol] = &[
 
         description: "Created XCP tokens through a proof-of-burn process in which roughly 2,100 BTC were sent to an unspendable address. Counterparty enabled token issuance, a decentralized exchange, and other financial primitives on Bitcoin.",
         how_it_works: "Counterparty protocol messages were embedded in Bitcoin transactions using methods including OP_RETURN and multisig-style encodings. Messages are identified by the \"CNTRPRTY\" prefix and decoded by Counterparty nodes to execute token operations.",
-        fun_fact: "The BTC burned to create XCP was worth roughly $1.8M at the time \u{2014} at today's prices it would be worth considerably more.",
+        fun_fact: "The BTC burned to create XCP was worth roughly $1.8M at the time. At today's prices it would be worth considerably more.",
         status: "Some activity",
         prunable: true,
         fungible: true,
@@ -77,7 +77,7 @@ const PROTOCOLS: &[Protocol] = &[
         method_detail: "Inscribes data inside a Taproot witness script using an envelope: OP_FALSE OP_IF OP_PUSH \"ord\" [content_type] [data] OP_ENDIF.",
         color: "#ec4899",
 
-        description: "Created by Casey Rodarmor. Introduces \"ordinal theory\" \u{2014} a convention for assigning serial numbers to individual satoshis \u{2014} and enables inscribing arbitrary data (images, text, HTML) into the witness field of transactions. Inscription data benefits from the SegWit witness discount: witness bytes count at one quarter the weight of non-witness bytes.",
+        description: "Created by Casey Rodarmor. Introduces \"ordinal theory,\" a convention for assigning serial numbers to individual satoshis, and enables inscribing arbitrary data (images, text, HTML) into the witness field of transactions. Inscription data benefits from the SegWit witness discount: witness bytes count at one quarter the weight of non-witness bytes.",
         how_it_works: "The inscription is placed inside a Taproot script-path spend. The witness contains an envelope with OP_FALSE OP_IF to create a no-op branch that carries the data. Since it's in the witness, it benefits from the 75% weight discount introduced by SegWit.",
         fun_fact: "The first known inscription (block 774,628) was a pixel art image. Inscription activity grew rapidly, with over a million inscriptions created within the first few months.",
         status: "Active",
@@ -92,9 +92,9 @@ const PROTOCOLS: &[Protocol] = &[
         method_detail: "Ordinals inscriptions, typically with text content containing JSON such as {\"p\":\"brc-20\",\"op\":\"mint\",...}.",
         color: "#f472b6",
 
-        description: "An experimental fungible-token convention built on Ordinals inscriptions. Uses JSON payloads with deploy, mint, and transfer operations. Bitcoin's consensus rules do not validate BRC-20 state \u{2014} off-chain indexers interpret the inscriptions to determine token balances. BRC-20 activity was a major contributor to elevated fees and mempool congestion in mid-2023.",
-        how_it_works: "A BRC-20 operation is an Ordinals inscription, typically with text content containing JSON like {\"p\":\"brc-20\",\"op\":\"mint\",\"tick\":\"ordi\",\"amt\":\"1000\"}. External indexers parse these inscriptions, apply the BRC-20 rules, and compute token balances \u{2014} none of this logic exists in Bitcoin itself.",
-        fun_fact: "BRC-20 is entirely off-protocol \u{2014} if two indexers disagree on how to interpret the JSON rules, users could see different token balances depending on which indexer they trust.",
+        description: "An experimental fungible-token convention built on Ordinals inscriptions. Uses JSON payloads with deploy, mint, and transfer operations. Bitcoin's consensus rules do not validate BRC-20 state; off-chain indexers interpret the inscriptions to determine token balances. BRC-20 activity was a major contributor to elevated fees and mempool congestion in mid-2023.",
+        how_it_works: "A BRC-20 operation is an Ordinals inscription, typically with text content containing JSON like {\"p\":\"brc-20\",\"op\":\"mint\",\"tick\":\"ordi\",\"amt\":\"1000\"}. External indexers parse these inscriptions, apply the BRC-20 rules, and compute token balances. None of this logic exists in Bitcoin itself.",
+        fun_fact: "BRC-20 is entirely off-protocol: if two indexers disagree on how to interpret the JSON rules, users could see different token balances depending on which indexer they trust.",
         status: "Active",
         prunable: true,
         fungible: true,
@@ -125,7 +125,7 @@ pub fn ProtocolGuidePage() -> impl IntoView {
     let (active_protocol, set_active_protocol) = signal(String::new());
 
     view! {
-        <Title text="Embedding Protocols — The Bitcoin Observatory"/>
+        <Title text="Embedding Protocols | The Bitcoin Observatory"/>
         <section class="max-w-6xl mx-auto px-6 pt-12 pb-24 opacity-0 animate-fadeinone">
 
             // Hero
@@ -138,7 +138,7 @@ pub fn ProtocolGuidePage() -> impl IntoView {
                 </h1>
                 <div class="w-16 h-0.5 bg-[#f7931a] mx-auto mb-5"></div>
                 <p class="text-base lg:text-lg text-white/70 max-w-2xl mx-auto leading-relaxed">
-                    "Since 2013, developers have found ways to embed non-financial data into Bitcoin's blockchain. From token protocols to digital art, each approach uses a different part of the transaction structure \u{2014} with different trade-offs for cost, pruning, and chain impact."
+                    "Since 2013, developers have found ways to embed non-financial data into Bitcoin's blockchain. From token protocols to digital art, each approach uses a different part of the transaction structure, with different trade-offs for cost, pruning, and chain impact."
                 </p>
             </div>
 
@@ -267,7 +267,7 @@ pub fn ProtocolGuidePage() -> impl IntoView {
                     <div>
                         <h4 class="text-base text-white/60 font-semibold mb-2">"Historical note: Colored Coins (2012\u{2013}2015)"</h4>
                         <p class="text-sm text-white/50 leading-relaxed">
-                            "Colored Coins was the earliest concept for representing tokens on Bitcoin, predating all protocols listed above. Rather than a single protocol, it was a family of incompatible implementations (Open Assets, EPOBC, ChromaWay) that used various techniques \u{2014} from OP_RETURN markers to transaction output ordering \u{2014} to \"color\" specific satoshis as representing real-world assets. Most implementations relied on external metadata servers, making on-chain detection unreliable. Colored Coins saw limited adoption but were historically significant as the first tokenization experiments on Bitcoin, directly inspiring later protocols like Counterparty and Omni. They are not tracked in the Observatory charts due to their ambiguous on-chain footprint and low volume."
+                            "Colored Coins was the earliest concept for representing tokens on Bitcoin, predating all protocols listed above. Rather than a single protocol, it was a family of incompatible implementations (Open Assets, EPOBC, ChromaWay) that used various techniques, from OP_RETURN markers to transaction output ordering, to \"color\" specific satoshis as representing real-world assets. Most implementations relied on external metadata servers, making on-chain detection unreliable. Colored Coins saw limited adoption but were historically significant as the first tokenization experiments on Bitcoin, directly inspiring later protocols like Counterparty and Omni. They are not tracked in the Observatory charts due to their ambiguous on-chain footprint and low volume."
                         </p>
                     </div>
                 </div>

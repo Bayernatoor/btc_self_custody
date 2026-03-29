@@ -73,9 +73,11 @@
             // Hide canvas during setOption to prevent flash of blank/partial chart
             el.style.visibility = 'hidden';
             el._chart.setOption(opts, { notMerge: true, lazyUpdate: true });
-            // Show after ECharts finishes layout (next frame)
+            // Show after ECharts finishes layout (double rAF for paint completion)
             requestAnimationFrame(function() {
-                el.style.visibility = 'visible';
+                requestAnimationFrame(function() {
+                    el.style.visibility = 'visible';
+                });
             });
             // Auto-register click handler for block detail (data format: [ts, value, height])
             if (!el._clickRegistered) {
