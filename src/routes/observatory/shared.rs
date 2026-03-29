@@ -503,7 +503,7 @@ pub fn ObservatoryNav() -> impl IntoView {
 
     view! {
         <nav class="flex justify-center mb-6 sm:mb-8 px-1">
-            <div class="flex flex-wrap justify-center gap-1 sm:gap-0 sm:inline-flex bg-[#0a1a2e] rounded-2xl p-1 sm:p-1.5 border border-white/10">
+            <div class="flex flex-wrap justify-center gap-4 sm:gap-6">
                 {tabs.into_iter().map(|(href, label)| {
                     let href_str = href.to_string();
                     view! {
@@ -517,9 +517,9 @@ pub fn ObservatoryNav() -> impl IntoView {
                                     path.starts_with(&href_str)
                                 };
                                 if active {
-                                    "px-3 py-1.5 text-xs sm:px-5 sm:py-2 sm:text-sm font-semibold rounded-xl bg-[#f7931a] text-[#0a1a2e] shadow-md shadow-[#f7931a]/20 transition-all duration-200 whitespace-nowrap"
+                                    "text-sm sm:text-[15px] font-semibold text-[#f7931a] border-b-2 border-[#f7931a] pb-1 transition-all duration-200 whitespace-nowrap"
                                 } else {
-                                    "px-3 py-1.5 text-xs sm:px-5 sm:py-2 sm:text-sm font-medium rounded-xl text-white/50 hover:text-white/80 hover:bg-white/5 transition-all duration-200 whitespace-nowrap"
+                                    "text-sm sm:text-[15px] font-medium text-white/40 hover:text-white/70 border-b-2 border-transparent pb-1 transition-all duration-200 whitespace-nowrap"
                                 }
                             }
                         >
