@@ -161,6 +161,12 @@ pub fn provide_observatory_state() -> ObservatoryState {
 
     leptos_use::use_interval_fn(
         move || {
+            // Pause polling when tab is hidden (saves bandwidth)
+            #[cfg(feature = "hydrate")]
+            {
+                let hidden = leptos::prelude::document().hidden();
+                if hidden { return; }
+            }
             set_countdown.update(|c| {
                 if *c == 0 {
                     *c = 30;

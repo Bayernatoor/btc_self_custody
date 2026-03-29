@@ -208,7 +208,7 @@ pub fn ObservatoryOverview() -> impl IntoView {
         if blocks_in < 2 { return "\u{2014}".to_string(); }
         let start_ts = period_start_ts.get().unwrap_or(0);
         if start_ts == 0 { return "\u{2014}".to_string(); }
-        let current_ts = cached_live.get_untracked()
+        let current_ts = cached_live.get()
             .map(|s| s.blockchain.time).unwrap_or(0);
         if current_ts <= start_ts { return "\u{2014}".to_string(); }
         let elapsed_min = (current_ts - start_ts) as f64 / 60.0;
@@ -221,7 +221,7 @@ pub fn ObservatoryOverview() -> impl IntoView {
         if blocks_in < 10 { return "\u{2014}".to_string(); }
         let start_ts = period_start_ts.get().unwrap_or(0);
         if start_ts == 0 { return "\u{2014}".to_string(); }
-        let current_ts = cached_live.get_untracked()
+        let current_ts = cached_live.get()
             .map(|s| s.blockchain.time).unwrap_or(0);
         if current_ts <= start_ts { return "\u{2014}".to_string(); }
         let elapsed = (current_ts - start_ts) as f64;
