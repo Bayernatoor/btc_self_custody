@@ -101,7 +101,14 @@ pub fn SignalingPage() -> impl IntoView {
         // Period navigator
         <div class="flex items-center justify-center gap-4 mb-8">
             <button
-                class="inline-flex items-center gap-2 px-4 py-2 text-sm rounded-xl text-white/70 border border-white/10 hover:text-white hover:border-white/25 hover:bg-white/5 transition-all cursor-pointer"
+                class=move || {
+                    if period_offset.get() >= 11 {
+                        "inline-flex items-center gap-2 px-4 py-2 text-sm rounded-xl text-white/20 border border-white/5 cursor-not-allowed"
+                    } else {
+                        "inline-flex items-center gap-2 px-4 py-2 text-sm rounded-xl text-white/70 border border-white/10 hover:text-white hover:border-white/25 hover:bg-white/5 transition-all cursor-pointer"
+                    }
+                }
+                disabled=move || period_offset.get() >= 11
                 on:click=move |_| set_period_offset.update(|o| *o = (*o + 1).min(11))
             >
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

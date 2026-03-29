@@ -19,8 +19,8 @@ pub async fn init() -> Option<(Arc<StatsState>, Router)> {
     let rpc =
         BitcoinRpc::new(config.rpc_url, config.rpc_user, config.rpc_password);
 
-    // Open connection pool (8 connections: readers + background tasks)
-    let pool = db::open_pool(&config.db_path, 8)
+    // Open connection pool (16 connections: API readers + background ingestion tasks)
+    let pool = db::open_pool(&config.db_path, 16)
         .expect("Failed to open stats database pool");
 
     // Forward ingestion (catch up to tip) using a pooled connection

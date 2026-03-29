@@ -42,6 +42,11 @@
             if (!el._echartsRetry) el._echartsRetry = 0;
             if (el._echartsRetry >= 25) { // ~5 seconds max
                 console.warn('ECharts failed to load for', elementId);
+                el.textContent = '';
+                var msg = document.createElement('div');
+                msg.style.cssText = 'display:flex;align-items:center;justify-content:center;height:100%;color:rgba(255,255,255,0.3);font-size:13px';
+                msg.textContent = 'Charts failed to load. Please refresh the page.';
+                el.appendChild(msg);
                 return;
             }
             el._echartsRetry++;
@@ -132,7 +137,25 @@
         });
     };
 
-    // Block detail modal
+    // Block detail modal — uses textContent (XSS-safe) instead of innerHTML
+    function bdRow(label, value, cls) {
+        var row = document.createElement('div');
+        row.className = 'bd-row';
+        var l = document.createElement('span');
+        l.textContent = label;
+        var v = document.createElement('span');
+        v.textContent = value;
+        if (cls) v.className = cls;
+        row.appendChild(l);
+        row.appendChild(v);
+        return row;
+    }
+    function bdDivider() {
+        var d = document.createElement('div');
+        d.className = 'bd-divider';
+        return d;
+    }
+
     window.showBlockDetail = function(height) {
         fetch('/api/stats/blocks/' + height)
             .then(function(r) { return r.json(); })
@@ -147,29 +170,44 @@
                 var versionHex = '0x' + (b.version >>> 0).toString(16).padStart(8, '0');
 
                 var body = document.getElementById('block-detail-body');
-                body.innerHTML =
-                    '<div class="bd-row"><span>Time</span><span>' + new Date(b.timestamp * 1000).toLocaleString() + '</span></div>' +
-                    '<div class="bd-row"><span>Hash</span><span class="bd-hash" style="cursor:pointer" onclick="navigator.clipboard.writeText(\'' + esc(b.hash) + '\')">' + esc(b.hash.substring(0, 20)) + '...</span></div>' +
-                    '<div class="bd-row"><span>Size</span><span>' + (b.size / 1e6).toFixed(2) + ' MB</span></div>' +
-                    '<div class="bd-row"><span>Weight</span><span>' + b.weight.toLocaleString() + ' WU</span></div>' +
-                    '<div class="bd-row"><span>Tx Count</span><span>' + b.tx_count.toLocaleString() + '</span></div>' +
-                    '<div class="bd-row"><span>Difficulty</span><span>' + (b.difficulty / 1e12).toFixed(2) + 'T</span></div>' +
-                    '<div class="bd-divider"></div>' +
-                    '<div class="bd-row"><span>Total Fees</span><span>' + feesBtc + ' BTC</span></div>' +
-                    '<div class="bd-row"><span>Median Fee</span><span>' + (b.median_fee ? b.median_fee.toLocaleString() + ' sats' : '\u2014') + '</span></div>' +
-                    '<div class="bd-row"><span>Median Fee Rate</span><span>' + (b.median_fee_rate ? b.median_fee_rate.toFixed(1) + ' sat/vB' : '\u2014') + '</span></div>' +
-                    '<div class="bd-row"><span>Miner</span><span>' + esc(b.miner || 'Unknown') + '</span></div>' +
-                    '<div class="bd-divider"></div>' +
-                    '<div class="bd-row"><span>OP_RETURN</span><span>' + b.op_return_count + ' outputs</span></div>' +
-                    '<div class="bd-row"><span>\u00a0\u00a0Runes</span><span>' + b.runes_count + ' (' + b.runes_bytes + ' B)</span></div>' +
-                    '<div class="bd-row"><span>\u00a0\u00a0Data Carrier</span><span>' + b.data_carrier_count + ' (' + b.data_carrier_bytes + ' B)</span></div>' +
-                    '<div class="bd-divider"></div>' +
-                    '<div class="bd-row"><span>Version</span><span class="bd-hash">' + esc(versionHex) + '</span></div>' +
-                    '<div class="bd-row"><span>BIP-110 (bit 4)</span><span class="' + (bit4 ? 'text-green-400' : 'text-red-400') + '">' + (bit4 ? 'YES' : 'NO') + '</span></div>' +
-                    '<div class="bd-row"><span>BIP-54</span><span class="' + (bip54 ? 'text-green-400' : 'text-red-400') + '">' + (bip54 ? 'YES' : 'NO') + '</span></div>' +
-                    '<div class="bd-row"><span>Coinbase Locktime</span><span>' + (b.coinbase_locktime != null ? b.coinbase_locktime.toLocaleString() : '\u2014') + '</span></div>' +
-                    '<div class="bd-row"><span>Coinbase Sequence</span><span>' + (b.coinbase_sequence != null ? '0x' + (b.coinbase_sequence >>> 0).toString(16).padStart(8, '0') : '\u2014') + '</span></div>' +
-                    '<div style="margin-top:12px;text-align:center"><a href="https://mempool.space/block/' + b.height + '" target="_blank" style="color:#f7931a;font-size:13px">View on mempool.space \u2192</a></div>';
+                body.textContent = ''; // clear safely
+
+                body.appendChild(bdRow('Time', new Date(b.timestamp * 1000).toLocaleString()));
+
+                var hashRow = bdRow('Hash', b.hash.substring(0, 20) + '...', 'bd-hash');
+                hashRow.lastChild.style.cursor = 'pointer';
+                hashRow.lastChild.addEventListener('click', function() { navigator.clipboard.writeText(b.hash); });
+                body.appendChild(hashRow);
+
+                body.appendChild(bdRow('Size', (b.size / 1e6).toFixed(2) + ' MB'));
+                body.appendChild(bdRow('Weight', b.weight.toLocaleString() + ' WU'));
+                body.appendChild(bdRow('Tx Count', b.tx_count.toLocaleString()));
+                body.appendChild(bdRow('Difficulty', (b.difficulty / 1e12).toFixed(2) + 'T'));
+                body.appendChild(bdDivider());
+                body.appendChild(bdRow('Total Fees', feesBtc + ' BTC'));
+                body.appendChild(bdRow('Median Fee', b.median_fee ? b.median_fee.toLocaleString() + ' sats' : '\u2014'));
+                body.appendChild(bdRow('Median Fee Rate', b.median_fee_rate ? b.median_fee_rate.toFixed(1) + ' sat/vB' : '\u2014'));
+                body.appendChild(bdRow('Miner', b.miner || 'Unknown'));
+                body.appendChild(bdDivider());
+                body.appendChild(bdRow('OP_RETURN', b.op_return_count + ' outputs'));
+                body.appendChild(bdRow('\u00a0\u00a0Runes', b.runes_count + ' (' + b.runes_bytes + ' B)'));
+                body.appendChild(bdRow('\u00a0\u00a0Data Carrier', b.data_carrier_count + ' (' + b.data_carrier_bytes + ' B)'));
+                body.appendChild(bdDivider());
+                body.appendChild(bdRow('Version', versionHex, 'bd-hash'));
+                body.appendChild(bdRow('BIP-110 (bit 4)', bit4 ? 'YES' : 'NO', bit4 ? 'text-green-400' : 'text-red-400'));
+                body.appendChild(bdRow('BIP-54', bip54 ? 'YES' : 'NO', bip54 ? 'text-green-400' : 'text-red-400'));
+                body.appendChild(bdRow('Coinbase Locktime', b.coinbase_locktime != null ? b.coinbase_locktime.toLocaleString() : '\u2014'));
+                body.appendChild(bdRow('Coinbase Sequence', b.coinbase_sequence != null ? '0x' + (b.coinbase_sequence >>> 0).toString(16).padStart(8, '0') : '\u2014'));
+
+                var link = document.createElement('div');
+                link.style.cssText = 'margin-top:12px;text-align:center';
+                var a = document.createElement('a');
+                a.href = 'https://mempool.space/block/' + b.height;
+                a.target = '_blank';
+                a.style.cssText = 'color:#f7931a;font-size:13px';
+                a.textContent = 'View on mempool.space \u2192';
+                link.appendChild(a);
+                body.appendChild(link);
 
                 document.getElementById('block-detail-title').textContent = 'Block #' + b.height.toLocaleString();
                 modal.classList.remove('hidden');
@@ -191,6 +229,23 @@
                 modal.classList.add('hidden');
             }
         }
+    });
+
+    // Re-apply mobile adjustments on device rotation / resize
+    var _resizeTimer;
+    window.addEventListener('resize', function() {
+        clearTimeout(_resizeTimer);
+        _resizeTimer = setTimeout(function() {
+            var charts = document.querySelectorAll('[id^="chart-"], [id="mempool-gauge"]');
+            charts.forEach(function(el) {
+                if (!el._chart || !el._lastOptionJson) return;
+                el._lastOptionJson = null; // force re-apply on next setOption
+                // Re-trigger with stored option
+                try {
+                    el._chart.resize();
+                } catch(e) { /* ignore */ }
+            });
+        }, 250);
     });
 
     // Scroll to #anchor on page load (for shareable chart links)

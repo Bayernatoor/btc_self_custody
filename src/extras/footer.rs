@@ -72,7 +72,8 @@ pub fn Footer() -> impl IntoView {
                 // Bottom bar
                 <div class="mt-5 pt-4 border-t border-white/5 text-center">
                     <span class="text-xs text-white/30">
-                        "2026 · "
+                        {chrono::Utc::now().format("%Y").to_string()}
+                        " · "
                         <a
                             class="hover:text-[#f7931a] transition-colors"
                             href="https://github.com/Bayernatoor"
