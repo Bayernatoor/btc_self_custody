@@ -44,6 +44,7 @@
         }
         if (!el._chart) {
             el._chart = echarts.init(el, null, { renderer: 'canvas' });
+            el._lastOptionJson = null; // reset dedup on fresh init
             new ResizeObserver(function() { if (el._chart) el._chart.resize(); }).observe(el);
         }
         // Skip if option JSON unchanged (prevents zoom/pan reset)

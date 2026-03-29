@@ -37,14 +37,7 @@ pub fn Chart(
 ) -> impl IntoView {
     let id_clone = id.clone();
     let last_json = std::cell::RefCell::new(String::new());
-    // Effect tracks option signal and re-runs when chart data changes.
-    // Mount trigger ensures it fires on Outlet navigation even when
-    // the option signal already has a value from a previous page visit.
-    let mount = RwSignal::new(0u32);
-    #[cfg(feature = "hydrate")]
-    request_animation_frame(move || mount.set(1));
     Effect::new(move |_| {
-        let _ = mount.get();
         let json = option.get();
         if !json.is_empty() && *last_json.borrow() != json {
             *last_json.borrow_mut() = json.clone();
