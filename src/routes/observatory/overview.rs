@@ -267,16 +267,51 @@ pub fn ObservatoryOverview() -> impl IntoView {
                     <span class="text-xs text-white/20">
                         {move || format!("{}s", live_ctx.countdown.get())}
                     </span>
-                    <button
-                        class="text-xs text-white/40 hover:text-white/70 px-2 py-0.5 rounded border border-white/10 hover:border-white/20 cursor-pointer transition-all"
-                        on:click=move |_| {
-                            live_ctx.set_countdown.set(30);
-                            live_ctx.live.refetch();
-                            live_ctx.set_last_updated.set(format!("updated {}", chrono::Local::now().format("%H:%M:%S")));
+                    {
+                        let (cooldown, set_cooldown) = signal(0u32);
+                        // Tick down the cooldown every second
+                        leptos_use::use_interval_fn(
+                            move || {
+                                set_cooldown.update(|c| if *c > 0 { *c -= 1; });
+                            },
+                            1_000,
+                        );
+                        view! {
+                            <button
+                                class=move || {
+                                    if cooldown.get() > 0 {
+                                        "text-xs text-white/20 px-2 py-0.5 rounded border border-white/5 cursor-not-allowed transition-all inline-flex items-center gap-1.5"
+                                    } else {
+                                        "text-xs text-white/40 hover:text-white/70 px-2 py-0.5 rounded border border-white/10 hover:border-white/20 cursor-pointer transition-all active:scale-95 inline-flex items-center gap-1.5 group"
+                                    }
+                                }
+                                on:click=move |_| {
+                                    if cooldown.get_untracked() > 0 { return; }
+                                    set_cooldown.set(10);
+                                    live_ctx.set_countdown.set(30);
+                                    live_ctx.live.refetch();
+                                    live_ctx.set_last_updated.set(format!("updated {}", chrono::Local::now().format("%H:%M:%S")));
+                                }
+                            >
+                                <svg
+                                    class=move || {
+                                        if cooldown.get() > 0 {
+                                            "w-3 h-3 animate-spin text-[#f7931a]/40"
+                                        } else {
+                                            "w-3 h-3 group-hover:rotate-180 transition-transform duration-300"
+                                        }
+                                    }
+                                    fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"
+                                >
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                </svg>
+                                {move || {
+                                    let c = cooldown.get();
+                                    if c > 0 { format!("{}s", c) } else { "Refresh".to_string() }
+                                }}
+                            </button>
                         }
-                    >
-                        "Refresh"
-                    </button>
+                    }
                 </div>
             </div>
 

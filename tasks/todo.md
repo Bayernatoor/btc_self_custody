@@ -214,6 +214,12 @@
 - [ ] Investigate chain size growth chart — something still isn't right with the cumulative
       calculation and/or disk size estimate on various ranges. Needs thorough review.
 
+## TODO: Nav Tab Spinner
+- [ ] Review spinner on Observatory nav tabs — DOM-based `obs-nav-loading` class approach
+      doesn't reliably show the spinner on click. Leptos router may update pathname synchronously,
+      clearing the class before it's visible. Needs a different approach (JS animation, transition
+      events, or decoupled from pathname reactivity).
+
 ## TODO: Thorough Chart Review
 - [ ] Review every chart across all tabs for correctness, visual consistency, and UX
   - Verify data accuracy on all range presets (1D through ALL)

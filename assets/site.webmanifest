@@ -2,7 +2,7 @@
     "name": "WE HODL BTC",
     "short_name": "HODL BTC",
     "description": "Bitcoin self-custody guides and The Bitcoin Observatory blockchain analytics",
-    "start_url": "/",
+    "start_url": "/observatory",
     "scope": "/",
     "display": "standalone",
     "theme_color": "#123c64",
