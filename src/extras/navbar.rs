@@ -32,7 +32,7 @@ pub fn NavBar() -> impl IntoView {
                 <div class="hidden text-base 2xl:text-lg space-x-7 lg:flex">
                     <a href="/guides" class="text-white/80 hover:text-white transition-colors">"Guides"</a>
                     <a href="/faq" class="text-white/80 hover:text-white transition-colors">"Help Desk"</a>
-                    <a href="/stats" class="text-white/80 hover:text-white transition-colors">"Observatory"</a>
+                    <a href="/observatory" class="text-white/80 hover:text-white transition-colors">"Observatory"</a>
                     <a href="/about" class="text-white/80 hover:text-white transition-colors">"About"</a>
                 </div>
 
@@ -97,7 +97,7 @@ pub fn NavBar() -> impl IntoView {
                         "Help Desk"
                     </a>
                     <a
-                        href="/stats"
+                        href="/observatory"
                         class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white/80 hover:bg-white/10 hover:text-white transition-all duration-150"
                         on:click=move |_| set_menu_open.set(false)
                     >
