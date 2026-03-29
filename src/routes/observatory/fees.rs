@@ -17,7 +17,10 @@ pub fn FeeChartsPage() -> impl IntoView {
 
     let fees_option = {
         let (cached, set_cached) = signal(String::new());
-        let _eff = RenderEffect::new(move |_| {
+        let mount = RwSignal::new(0u32);
+        request_animation_frame(move || mount.set(1));
+        Effect::new(move |_| {
+            let _ = mount.get();
             let _r = range.get();
             let unit = fee_unit.get();
             let flags = overlay_flags.get();

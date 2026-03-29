@@ -316,15 +316,19 @@ pub struct LiveContext {
 // Chart signal macro (no tab guards needed — each page only builds its own)
 // ---------------------------------------------------------------------------
 
-/// Build a chart option signal. Uses RenderEffect (fires on mount, including
-/// Outlet navigation) with a single-stage pipeline: compute chart JSON and
-/// apply overlays in one pass.
+/// Build a chart option signal. Uses Effect::new (auto-stored in reactive graph)
+/// with a mount trigger via request_animation_frame to ensure it fires on
+/// Outlet navigation even when tracked signals already have values.
 #[macro_export]
 macro_rules! chart_signal {
     ($data:expr, $range:expr, $overlays:expr, |$blocks:ident| $per_block:expr, |$days:ident| $daily:expr) => {{
         use $crate::routes::observatory::shared::DashboardData;
         let (cached, set_cached) = leptos::prelude::signal(String::new());
-        let _eff = leptos::prelude::RenderEffect::new(move |_| {
+        // Mount trigger: bumped after DOM insertion to force Effect re-run on Outlet nav
+        let mount = leptos::prelude::RwSignal::new(0u32);
+        leptos::prelude::request_animation_frame(move || mount.set(1));
+        leptos::prelude::Effect::new(move |_| {
+            let _ = mount.get(); // track mount trigger
             let _r = $range.get();
             let flags = $overlays.get();
             let result = $data
