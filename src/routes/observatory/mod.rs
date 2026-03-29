@@ -50,11 +50,11 @@ pub fn ObservatoryPage() -> impl IntoView {
         <section class="max-w-[1750px] mx-auto px-3 sm:px-4 lg:px-8 pt-6 sm:pt-10 pb-28 opacity-0 animate-fadeinone overflow-x-hidden">
             // Hero branding — only on dashboard
             <Show when=move || on_dashboard.get()>
-                <div class="relative rounded-2xl overflow-hidden mb-6 sm:mb-8 max-w-3xl mx-auto">
+                <div class="relative rounded-2xl overflow-hidden mb-6 sm:mb-8">
                     <img
                         src="/observatory_hero.png"
                         alt="The Bitcoin Observatory"
-                        class="w-full h-[120px] sm:h-[150px] lg:h-[180px] object-cover object-center"
+                        class="w-full h-[200px] sm:h-[260px] lg:h-[320px] object-cover object-center"
                     />
                     <div class="absolute inset-0 bg-gradient-to-t from-[#123c64] via-[#123c64]/50 to-transparent"></div>
                     <div class="absolute inset-0 flex flex-col items-center justify-end pb-4 sm:pb-5">
