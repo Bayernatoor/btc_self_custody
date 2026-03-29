@@ -138,32 +138,32 @@ pub fn NetworkChartsPage() -> impl IntoView {
         <ChartPageLayout
             title="Network"
             description="Block size, weight, intervals, adoption trends, and transaction metrics"
-        >
-            // Sub-section pills
-            <div class="flex flex-wrap gap-2 justify-center mb-6">
-                {[("blocks", "Blocks"), ("adoption", "Adoption"), ("tx-metrics", "Transactions")].into_iter().map(|(id, label)| {
-                    let id_str = id.to_string();
-                    let id_clone = id_str.clone();
-                    view! {
-                        <button
-                            class=move || {
-                                if section.get() == id_clone {
-                                    "px-4 py-1.5 text-xs rounded-lg bg-white/10 text-white font-semibold border border-white/20 cursor-pointer"
-                                } else {
-                                    "px-4 py-1.5 text-xs rounded-lg text-white/40 hover:text-white/70 hover:bg-white/5 transition-all cursor-pointer"
+            header=move || view! {
+                <div class="flex flex-wrap gap-2 justify-center mb-6">
+                    {[("blocks", "Blocks"), ("adoption", "Adoption"), ("tx-metrics", "Transactions")].into_iter().map(|(id, label)| {
+                        let id_str = id.to_string();
+                        let id_clone = id_str.clone();
+                        view! {
+                            <button
+                                class=move || {
+                                    if section.get() == id_clone {
+                                        "px-4 py-1.5 text-xs rounded-lg bg-white/10 text-white font-semibold border border-white/20 cursor-pointer"
+                                    } else {
+                                        "px-4 py-1.5 text-xs rounded-lg text-white/40 hover:text-white/70 hover:bg-white/5 transition-all cursor-pointer"
+                                    }
                                 }
-                            }
-                            on:click={
-                                let id = id_str.clone();
-                                move |_| set_section.set(id.clone())
-                            }
-                        >
-                            {label}
-                        </button>
-                    }
-                }).collect::<Vec<_>>()}
-            </div>
-
+                                on:click={
+                                    let id = id_str.clone();
+                                    move |_| set_section.set(id.clone())
+                                }
+                            >
+                                {label}
+                            </button>
+                        }
+                    }).collect::<Vec<_>>()}
+                </div>
+            }
+        >
             // --- Blocks sub-section ---
             <div class=move || if section.get() == "blocks" { "space-y-10" } else { "hidden" }>
                 <ChartCard title="Block Size" description="How large each block is in megabytes" chart_id="chart-size" option=size_option/>

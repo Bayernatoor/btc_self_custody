@@ -422,13 +422,15 @@ pub fn RangeSelector() -> impl IntoView {
     }
 }
 
-/// Floating overlay panel
+/// Floating overlay panel (hidden on dashboard since there are no charts)
 #[component]
 pub fn OverlayPanel() -> impl IntoView {
     let state = expect_context::<ObservatoryState>();
+    let location = leptos_router::hooks::use_location();
+    let on_dashboard = Signal::derive(move || location.pathname.get() == "/observatory");
 
     view! {
-        <div style="z-index: 10000" class="fixed left-4 bottom-4">
+        <div style="z-index: 10000" class="fixed left-4 bottom-4" class:hidden=on_dashboard>
             <Show
                 when=move || state.overlay_panel_open.get()
                 fallback=move || view! {
@@ -586,11 +588,14 @@ pub fn BlockDetailModal() -> impl IntoView {
     }
 }
 
-/// Page wrapper for chart sub-pages (focused header, range selector, overlay panel)
+/// Page wrapper for chart sub-pages.
+/// `header` slot renders above the range selector (sub-section pills, links).
+/// `children` renders below it (the actual charts).
 #[component]
 pub fn ChartPageLayout(
     #[prop(into)] title: &'static str,
     #[prop(into)] description: &'static str,
+    #[prop(optional, into)] header: Option<ViewFn>,
     children: Children,
 ) -> impl IntoView {
     view! {
@@ -598,6 +603,7 @@ pub fn ChartPageLayout(
             <h2 class="text-xl sm:text-2xl font-title text-white mb-1">{title}</h2>
             <p class="text-sm text-white/40 max-w-lg mx-auto">{description}</p>
         </div>
+        {header.map(|h| h.run())}
         <RangeSelector/>
         {children()}
     }
