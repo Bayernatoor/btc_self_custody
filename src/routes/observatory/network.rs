@@ -44,11 +44,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
 
     let chain_size_option = {
         let (cached, set_cached) = signal(String::new());
-        let mount = RwSignal::new(0u32);
-        #[cfg(feature = "hydrate")]
-        request_animation_frame(move || mount.set(1));
         Effect::new(move |_| {
-            let _ = mount.get();
             let _r = range.get();
             let flags = overlay_flags.get();
             let disk_gb = state.cached_live.get_untracked()
