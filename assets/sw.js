@@ -10,8 +10,8 @@ var PRECACHE_ASSETS = [
     '/sections.js',
     '/jsonld.js',
     '/wasm-fallback.js',
-    '/favicon-32x32.png',
-    '/favicon-16x16.png'
+    '/favicon.svg',
+    '/favicon-96x96.png'
 ];
 
 // Install: pre-cache static assets
