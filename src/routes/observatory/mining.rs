@@ -61,7 +61,7 @@ pub fn MiningChartsPage() -> impl IntoView {
 
     let miner_chart_option = {
         let (cached, set_cached) = signal(String::new());
-        Effect::new(move |_| {
+        let _eff = RenderEffect::new(move |_| {
             let result = mining_data
                 .get()
                 .and_then(|r| r.ok())
@@ -75,21 +75,19 @@ pub fn MiningChartsPage() -> impl IntoView {
     };
 
     let empty_blocks_option = {
-        let (base_json, set_base_json) = signal(String::new());
-        Effect::new(move |_| {
+        let (cached, set_cached) = signal(String::new());
+        let _eff = RenderEffect::new(move |_| {
+            let flags = overlay_flags.get();
             let result = mining_data
                 .get()
                 .and_then(|r| r.ok())
-                .map(|(_, ref empty)| crate::stats::charts::empty_blocks_chart(empty))
+                .map(|(_, ref empty)| {
+                    let json = crate::stats::charts::empty_blocks_chart(empty);
+                    if json.is_empty() { return String::new(); }
+                    crate::stats::charts::apply_overlays(&json, &flags, true)
+                })
                 .unwrap_or_default();
-            if !result.is_empty() { set_base_json.set(result); }
-        });
-        let (cached, set_cached) = signal(String::new());
-        Effect::new(move |_| {
-            let json = base_json.get();
-            let flags = overlay_flags.read();
-            if json.is_empty() { return; }
-            set_cached.set(crate::stats::charts::apply_overlays(&json, &flags, true));
+            if !result.is_empty() { set_cached.set(result); }
         });
         Signal::derive(move || cached.get())
     };

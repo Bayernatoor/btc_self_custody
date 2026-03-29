@@ -1,7 +1,7 @@
 //! Shared state, URL query params, and reusable components for the Observatory.
 
 use leptos::prelude::*;
-use leptos_router::hooks::{use_navigate, use_query_map};
+use leptos_router::hooks::use_query_map;
 
 use super::helpers::*;
 use crate::stats::charts::OverlayFlags;
@@ -108,36 +108,9 @@ pub fn provide_observatory_state() -> ObservatoryState {
     let (overlay_events, set_overlay_events) = signal(initial_overlays.iter().any(|s| s == "events"));
     let (overlay_panel_open, set_overlay_panel_open) = signal(false);
 
-    // Sync signals back to URL (replace, don't push history)
-    // Sync range/overlay state to URL query params (without triggering navigation loops)
-    let navigate = use_navigate();
-    let last_query = std::cell::RefCell::new(String::new());
-    Effect::new(move |_| {
-        let r = range.get();
-        let mut overlays = Vec::new();
-        if overlay_halvings.get() { overlays.push("halvings"); }
-        if overlay_bips.get() { overlays.push("bips"); }
-        if overlay_core.get() { overlays.push("core"); }
-        if overlay_events.get() { overlays.push("events"); }
-        if overlay_price.get() { overlays.push("price"); }
-        if overlay_chain_size.get() { overlays.push("chain_size"); }
-
-        let mut params = vec![];
-        if r != "all" { params.push(format!("range={r}")); }
-        if !overlays.is_empty() { params.push(format!("overlays={}", overlays.join(","))); }
-        let query = params.join("&");
-
-        // Only navigate if query params actually changed
-        if *last_query.borrow() == query { return; }
-        *last_query.borrow_mut() = query.clone();
-
-        let path = leptos_router::hooks::use_location().pathname.get_untracked();
-        let url = if query.is_empty() { path } else { format!("{path}?{query}") };
-        navigate(&url, leptos_router::NavigateOptions {
-            replace: true,
-            ..Default::default()
-        });
-    });
+    // URL query params are read on mount (above) but not synced back.
+    // The navigate() call was causing race conditions with Outlet transitions,
+    // interfering with child route mounting and Effect scheduling.
 
     // Price history: fetch once when enabled, cache so toggling overlay is instant
     let price_history_resource = LocalResource::new(move || {
@@ -343,33 +316,31 @@ pub struct LiveContext {
 // Chart signal macro (no tab guards needed — each page only builds its own)
 // ---------------------------------------------------------------------------
 
-/// Build a chart option signal with two-stage pipeline: base chart cached
-/// separately from overlay application. No tab guards needed since each
-/// page only creates signals for its own charts.
+/// Build a chart option signal. Uses RenderEffect (fires on mount, including
+/// Outlet navigation) with a single-stage pipeline: compute chart JSON and
+/// apply overlays in one pass.
 #[macro_export]
 macro_rules! chart_signal {
     ($data:expr, $range:expr, $overlays:expr, |$blocks:ident| $per_block:expr, |$days:ident| $daily:expr) => {{
         use $crate::routes::observatory::shared::DashboardData;
-        let (base_json, set_base_json) = leptos::prelude::signal((String::new(), false));
-        leptos::prelude::Effect::new(move |_| {
+        let (cached, set_cached) = leptos::prelude::signal(String::new());
+        let _eff = leptos::prelude::RenderEffect::new(move |_| {
             let _r = $range.get();
+            let flags = $overlays.get();
             let result = $data
                 .get()
                 .and_then(|r| r.ok())
-                .map(|data| match data {
-                    DashboardData::PerBlock(ref $blocks) => ($per_block, false),
-                    DashboardData::Daily(ref $days) => ($daily, true),
+                .map(|data| {
+                    let (json, is_daily) = match data {
+                        DashboardData::PerBlock(ref $blocks) => ($per_block, false),
+                        DashboardData::Daily(ref $days) => ($daily, true),
+                    };
+                    if json.is_empty() { return String::new(); }
+                    crate::stats::charts::apply_overlays(&json, &flags, is_daily)
                 });
             if let Some(r) = result {
-                set_base_json.set(r);
+                set_cached.set(r);
             }
-        });
-        let (cached, set_cached) = leptos::prelude::signal(String::new());
-        leptos::prelude::Effect::new(move |_| {
-            let (ref json, is_daily) = *base_json.read();
-            let flags = $overlays.read();
-            if json.is_empty() { return; }
-            set_cached.set(crate::stats::charts::apply_overlays(json, &*flags, is_daily));
         });
         leptos::prelude::Signal::derive(move || cached.get())
     }};

@@ -43,31 +43,29 @@ pub fn NetworkChartsPage() -> impl IntoView {
     );
 
     let chain_size_option = {
-        let (base_json, set_base_json) = signal((String::new(), false));
-        Effect::new(move |_| {
+        let (cached, set_cached) = signal(String::new());
+        let _eff = RenderEffect::new(move |_| {
             let _r = range.get();
+            let flags = overlay_flags.get();
             let disk_gb = state.cached_live.get_untracked()
                 .map(|s| s.network.chain_size_gb)
                 .unwrap_or(0.0);
             let result = dashboard_data
                 .get()
                 .and_then(|r| r.ok())
-                .map(|data| match data {
-                    DashboardData::PerBlock(ref blocks) => {
-                        (crate::stats::charts::chain_size_chart(blocks, disk_gb), false)
-                    }
-                    DashboardData::Daily(ref days) => {
-                        (crate::stats::charts::chain_size_chart_daily(days, disk_gb), true)
-                    }
+                .map(|data| {
+                    let (json, is_daily) = match data {
+                        DashboardData::PerBlock(ref blocks) => {
+                            (crate::stats::charts::chain_size_chart(blocks, disk_gb), false)
+                        }
+                        DashboardData::Daily(ref days) => {
+                            (crate::stats::charts::chain_size_chart_daily(days, disk_gb), true)
+                        }
+                    };
+                    if json.is_empty() { return String::new(); }
+                    crate::stats::charts::apply_overlays(&json, &flags, is_daily)
                 });
-            if let Some(r) = result { set_base_json.set(r); }
-        });
-        let (cached, set_cached) = signal(String::new());
-        Effect::new(move |_| {
-            let (ref json, is_daily) = *base_json.read();
-            let flags = overlay_flags.read();
-            if json.is_empty() { return; }
-            set_cached.set(crate::stats::charts::apply_overlays(json, &flags, is_daily));
+            if let Some(r) = result { set_cached.set(r); }
         });
         Signal::derive(move || cached.get())
     };
