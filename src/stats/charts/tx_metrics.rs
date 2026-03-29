@@ -66,7 +66,7 @@ pub fn witness_share_chart(blocks: &[BlockSummary]) -> String {
     let raw: Vec<serde_json::Value> = blocks.iter().zip(vals.iter()).map(|(b, v)| json!([ts_ms(b.timestamp), v])).collect();
     let ma = moving_average(&vals, 144);
     let ma_data: Vec<serde_json::Value> = blocks.iter().zip(ma.iter())
-        .filter_map(|(b, m)| m.map(|v| json!([ts_ms(b.timestamp), v]))).collect();
+        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))])).collect();
     let has_ma = show_ma(blocks.len());
 
     let mut series = vec![json!({
@@ -135,9 +135,9 @@ pub fn batching_chart(blocks: &[BlockSummary]) -> String {
     let out_ma = moving_average(&out_per_tx, 144);
     let in_ma = moving_average(&in_per_tx, 144);
     let out_ma_data: Vec<serde_json::Value> = blocks.iter().zip(out_ma.iter())
-        .filter_map(|(b, m)| m.map(|v| json!([ts_ms(b.timestamp), v]))).collect();
+        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))])).collect();
     let in_ma_data: Vec<serde_json::Value> = blocks.iter().zip(in_ma.iter())
-        .filter_map(|(b, m)| m.map(|v| json!([ts_ms(b.timestamp), v]))).collect();
+        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))])).collect();
     let has_ma = show_ma(blocks.len());
 
     let mut series = vec![
@@ -266,7 +266,7 @@ pub fn rbf_chart(blocks: &[BlockSummary]) -> String {
     let raw: Vec<serde_json::Value> = blocks.iter().zip(vals.iter()).map(|(b, v)| json!([ts_ms(b.timestamp), v])).collect();
     let ma = moving_average(&vals, 144);
     let ma_data: Vec<serde_json::Value> = blocks.iter().zip(ma.iter())
-        .filter_map(|(b, m)| m.map(|v| json!([ts_ms(b.timestamp), v]))).collect();
+        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))])).collect();
     let has_ma = show_ma(blocks.len());
 
     let mut series = vec![json!({

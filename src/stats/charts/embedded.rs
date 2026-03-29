@@ -217,7 +217,7 @@ pub fn op_return_block_share_chart(blocks: &[BlockSummary]) -> String {
     let ma_data: Vec<serde_json::Value> = blocks
         .iter()
         .zip(ma.iter())
-        .filter_map(|(b, m)| m.map(|v| json!([ts_ms(b.timestamp), v])))
+        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))]))
         .collect();
 
     let has_ma = show_ma(blocks.len());
@@ -306,7 +306,7 @@ pub fn inscription_chart(blocks: &[BlockSummary]) -> String {
         .map(|(b, v)| json!([ts_ms(b.timestamp), v])).collect();
     let ma = moving_average(&vals, 144);
     let ma_data: Vec<serde_json::Value> = blocks.iter().zip(ma.iter())
-        .filter_map(|(b, m)| m.map(|v| json!([ts_ms(b.timestamp), v]))).collect();
+        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))])).collect();
     let has_ma = show_ma(blocks.len());
 
     let mut series = vec![json!({
@@ -373,7 +373,7 @@ pub fn inscription_share_chart(blocks: &[BlockSummary]) -> String {
         .map(|(b, v)| json!([ts_ms(b.timestamp), v])).collect();
     let ma = moving_average(&vals, 144);
     let ma_data: Vec<serde_json::Value> = blocks.iter().zip(ma.iter())
-        .filter_map(|(b, m)| m.map(|v| json!([ts_ms(b.timestamp), v]))).collect();
+        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))])).collect();
     let has_ma = show_ma(blocks.len());
 
     let mut series = vec![json!({

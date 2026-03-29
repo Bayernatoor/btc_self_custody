@@ -17,7 +17,7 @@ pub fn block_size_chart(blocks: &[BlockSummary]) -> String {
     let ma_data: Vec<serde_json::Value> = blocks
         .iter()
         .zip(ma.iter())
-        .filter_map(|(b, m)| m.map(|v| json!([ts_ms(b.timestamp), v])))
+        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))]))
         .collect();
 
     let x_axis = x_axis_for(false, &[]);
@@ -100,7 +100,7 @@ pub fn tx_count_chart(blocks: &[BlockSummary]) -> String {
     let ma_series: Vec<serde_json::Value> = blocks
         .iter()
         .zip(ma.iter())
-        .filter_map(|(b, m)| m.map(|v| json!([ts_ms(b.timestamp), v])))
+        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))]))
         .collect();
 
     let has_ma = show_ma(blocks.len());
@@ -243,7 +243,7 @@ pub fn block_interval_chart(blocks: &[BlockSummary]) -> String {
     let ma_series: Vec<serde_json::Value> = blocks[1..]
         .iter()
         .zip(ma.iter())
-        .filter_map(|(b, m)| m.map(|v| json!([ts_ms(b.timestamp), v])))
+        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))]))
         .collect();
 
     let has_ma = show_ma(interval_vals.len());
@@ -353,7 +353,7 @@ pub fn weight_utilization_chart(blocks: &[BlockSummary]) -> String {
     let ma_series: Vec<serde_json::Value> = blocks
         .iter()
         .zip(ma.iter())
-        .filter_map(|(b, m)| m.map(|v| json!([ts_ms(b.timestamp), v])))
+        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))]))
         .collect();
 
     let has_ma = show_ma(blocks.len());
@@ -449,7 +449,7 @@ pub fn avg_tx_size_chart(blocks: &[BlockSummary]) -> String {
     let ma_series: Vec<serde_json::Value> = blocks
         .iter()
         .zip(ma.iter())
-        .filter_map(|(b, m)| m.map(|v| json!([ts_ms(b.timestamp), v])))
+        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))]))
         .collect();
 
     let has_ma = show_ma(blocks.len());

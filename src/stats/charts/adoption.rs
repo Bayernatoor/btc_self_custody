@@ -33,7 +33,7 @@ pub fn segwit_adoption_chart(blocks: &[BlockSummary]) -> String {
     let ma_series: Vec<serde_json::Value> = blocks
         .iter()
         .zip(ma.iter())
-        .filter_map(|(b, m)| m.map(|v| json!([ts_ms(b.timestamp), v])))
+        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))]))
         .collect();
 
     let has_ma = show_ma(blocks.len());
@@ -131,7 +131,7 @@ pub fn taproot_chart(blocks: &[BlockSummary]) -> String {
     let ma_series: Vec<serde_json::Value> = blocks
         .iter()
         .zip(ma.iter())
-        .filter_map(|(b, m)| m.map(|v| json!([ts_ms(b.timestamp), v])))
+        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))]))
         .collect();
 
     let has_ma = show_ma(blocks.len());
