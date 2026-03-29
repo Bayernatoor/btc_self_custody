@@ -70,7 +70,7 @@ pub fn witness_share_chart(blocks: &[BlockSummary]) -> String {
     let has_ma = show_ma(blocks.len());
 
     let mut series = vec![json!({
-        "name": "Witness %", "type": "line", "sampling": "lttb", "data": raw,
+        "name": "Witness %", "type": "line", "data": raw,
         "areaStyle": { "color": P2WPKH_COLOR, "opacity": 0.15 },
         "lineStyle": { "width": if has_ma { 1.0 } else { 1.5 }, "color": P2WPKH_COLOR },
         "itemStyle": { "color": P2WPKH_COLOR }, "symbol": "none",
@@ -78,7 +78,7 @@ pub fn witness_share_chart(blocks: &[BlockSummary]) -> String {
     })];
     if has_ma {
         series.push(json!({
-            "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_data,
+            "name": "144-block MA", "type": "line", "data": ma_data,
             "lineStyle": { "width": 2, "color": MA_COLOR },
             "itemStyle": { "color": MA_COLOR }, "symbol": "none"
         }));
@@ -112,8 +112,8 @@ pub fn witness_share_chart_daily(days: &[DailyAggregate]) -> String {
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
         "series": [
-            { "name": "Witness %", "type": "line", "sampling": "lttb", "data": vals, "areaStyle": { "color": P2WPKH_COLOR, "opacity": 0.15 }, "lineStyle": { "width": 1, "color": P2WPKH_COLOR }, "itemStyle": { "color": P2WPKH_COLOR }, "symbol": "none", "opacity": 0.4 },
-            { "name": "7-day MA", "type": "line", "sampling": "lttb", "data": ma_vals, "lineStyle": { "width": 2, "color": MA_COLOR }, "itemStyle": { "color": MA_COLOR }, "symbol": "none" }
+            { "name": "Witness %", "type": "line", "data": vals, "areaStyle": { "color": P2WPKH_COLOR, "opacity": 0.15 }, "lineStyle": { "width": 1, "color": P2WPKH_COLOR }, "itemStyle": { "color": P2WPKH_COLOR }, "symbol": "none", "opacity": 0.4 },
+            { "name": "7-day MA", "type": "line", "data": ma_vals, "lineStyle": { "width": 2, "color": MA_COLOR }, "itemStyle": { "color": MA_COLOR }, "symbol": "none" }
         ]
     }))
 }
@@ -141,12 +141,12 @@ pub fn batching_chart(blocks: &[BlockSummary]) -> String {
     let has_ma = show_ma(blocks.len());
 
     let mut series = vec![
-        json!({ "name": "Outputs/Tx", "type": "line", "sampling": "lttb", "data": out_raw, "lineStyle": { "width": if has_ma { 1.0 } else { 1.5 }, "color": "#22c55e" }, "itemStyle": { "color": "#22c55e" }, "symbol": "none", "opacity": if has_ma { 0.3 } else { 1.0 } }),
-        json!({ "name": "Inputs/Tx", "type": "line", "sampling": "lttb", "data": in_raw, "lineStyle": { "width": if has_ma { 1.0 } else { 1.5 }, "color": "#ef4444" }, "itemStyle": { "color": "#ef4444" }, "symbol": "none", "opacity": if has_ma { 0.3 } else { 1.0 } }),
+        json!({ "name": "Outputs/Tx", "type": "line", "data": out_raw, "lineStyle": { "width": if has_ma { 1.0 } else { 1.5 }, "color": "#22c55e" }, "itemStyle": { "color": "#22c55e" }, "symbol": "none", "opacity": if has_ma { 0.3 } else { 1.0 } }),
+        json!({ "name": "Inputs/Tx", "type": "line", "data": in_raw, "lineStyle": { "width": if has_ma { 1.0 } else { 1.5 }, "color": "#ef4444" }, "itemStyle": { "color": "#ef4444" }, "symbol": "none", "opacity": if has_ma { 0.3 } else { 1.0 } }),
     ];
     if has_ma {
-        series.push(json!({ "name": "Outputs MA", "type": "line", "sampling": "lttb", "data": out_ma_data, "lineStyle": { "width": 2, "color": "#22c55e" }, "itemStyle": { "color": "#22c55e" }, "symbol": "none" }));
-        series.push(json!({ "name": "Inputs MA", "type": "line", "sampling": "lttb", "data": in_ma_data, "lineStyle": { "width": 2, "color": "#ef4444" }, "itemStyle": { "color": "#ef4444" }, "symbol": "none" }));
+        series.push(json!({ "name": "Outputs MA", "type": "line", "data": out_ma_data, "lineStyle": { "width": 2, "color": "#22c55e" }, "itemStyle": { "color": "#22c55e" }, "symbol": "none" }));
+        series.push(json!({ "name": "Inputs MA", "type": "line", "data": in_ma_data, "lineStyle": { "width": 2, "color": "#ef4444" }, "itemStyle": { "color": "#ef4444" }, "symbol": "none" }));
     }
 
     build_option(json!({
@@ -183,10 +183,10 @@ pub fn batching_chart_daily(days: &[DailyAggregate]) -> String {
         "tooltip": tooltip_axis(),
         "legend": { "show": true },
         "series": [
-            { "name": "Outputs/Tx", "type": "line", "sampling": "lttb", "data": out_per_tx, "lineStyle": { "width": 1, "color": "#22c55e" }, "itemStyle": { "color": "#22c55e" }, "symbol": "none", "opacity": 0.3 },
-            { "name": "Inputs/Tx", "type": "line", "sampling": "lttb", "data": in_per_tx, "lineStyle": { "width": 1, "color": "#ef4444" }, "itemStyle": { "color": "#ef4444" }, "symbol": "none", "opacity": 0.3 },
-            { "name": "Outputs MA", "type": "line", "sampling": "lttb", "data": out_ma_vals, "lineStyle": { "width": 2, "color": "#22c55e" }, "itemStyle": { "color": "#22c55e" }, "symbol": "none" },
-            { "name": "Inputs MA", "type": "line", "sampling": "lttb", "data": in_ma_vals, "lineStyle": { "width": 2, "color": "#ef4444" }, "itemStyle": { "color": "#ef4444" }, "symbol": "none" }
+            { "name": "Outputs/Tx", "type": "line", "data": out_per_tx, "lineStyle": { "width": 1, "color": "#22c55e" }, "itemStyle": { "color": "#22c55e" }, "symbol": "none", "opacity": 0.3 },
+            { "name": "Inputs/Tx", "type": "line", "data": in_per_tx, "lineStyle": { "width": 1, "color": "#ef4444" }, "itemStyle": { "color": "#ef4444" }, "symbol": "none", "opacity": 0.3 },
+            { "name": "Outputs MA", "type": "line", "data": out_ma_vals, "lineStyle": { "width": 2, "color": "#22c55e" }, "itemStyle": { "color": "#22c55e" }, "symbol": "none" },
+            { "name": "Inputs MA", "type": "line", "data": in_ma_vals, "lineStyle": { "width": 2, "color": "#ef4444" }, "itemStyle": { "color": "#ef4444" }, "symbol": "none" }
         ]
     }))
 }
@@ -270,14 +270,14 @@ pub fn rbf_chart(blocks: &[BlockSummary]) -> String {
     let has_ma = show_ma(blocks.len());
 
     let mut series = vec![json!({
-        "name": "RBF %", "type": "line", "sampling": "lttb", "data": raw,
+        "name": "RBF %", "type": "line", "data": raw,
         "lineStyle": { "width": if has_ma { 1.0 } else { 1.5 }, "color": RBF_COLOR },
         "itemStyle": { "color": RBF_COLOR }, "symbol": "none",
         "opacity": if has_ma { 0.4 } else { 1.0 }
     })];
     if has_ma {
         series.push(json!({
-            "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_data,
+            "name": "144-block MA", "type": "line", "data": ma_data,
             "lineStyle": { "width": 2, "color": MA_COLOR },
             "itemStyle": { "color": MA_COLOR }, "symbol": "none"
         }));
@@ -311,8 +311,8 @@ pub fn rbf_chart_daily(days: &[DailyAggregate]) -> String {
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
         "series": [
-            { "name": "RBF %", "type": "line", "sampling": "lttb", "data": vals, "lineStyle": { "width": 1, "color": RBF_COLOR }, "itemStyle": { "color": RBF_COLOR }, "symbol": "none", "opacity": 0.4 },
-            { "name": "7-day MA", "type": "line", "sampling": "lttb", "data": ma_vals, "lineStyle": { "width": 2, "color": MA_COLOR }, "itemStyle": { "color": MA_COLOR }, "symbol": "none" }
+            { "name": "RBF %", "type": "line", "data": vals, "lineStyle": { "width": 1, "color": RBF_COLOR }, "itemStyle": { "color": RBF_COLOR }, "symbol": "none", "opacity": 0.4 },
+            { "name": "7-day MA", "type": "line", "data": ma_vals, "lineStyle": { "width": 2, "color": MA_COLOR }, "itemStyle": { "color": MA_COLOR }, "symbol": "none" }
         ]
     }))
 }
@@ -333,8 +333,8 @@ pub fn utxo_flow_chart(blocks: &[BlockSummary]) -> String {
         "tooltip": tooltip_axis(),
         "legend": { "show": true },
         "series": [
-            { "name": "Inputs (consumed)", "type": "line", "sampling": "lttb", "data": inputs, "lineStyle": { "width": 1, "color": "#ef4444" }, "itemStyle": { "color": "#ef4444" }, "symbol": "none", "opacity": 0.5 },
-            { "name": "Outputs (created)", "type": "line", "sampling": "lttb", "data": outputs, "lineStyle": { "width": 1, "color": "#22c55e" }, "itemStyle": { "color": "#22c55e" }, "symbol": "none", "opacity": 0.5 }
+            { "name": "Inputs (consumed)", "type": "line", "data": inputs, "lineStyle": { "width": 1, "color": "#ef4444" }, "itemStyle": { "color": "#ef4444" }, "symbol": "none", "opacity": 0.5 },
+            { "name": "Outputs (created)", "type": "line", "data": outputs, "lineStyle": { "width": 1, "color": "#22c55e" }, "itemStyle": { "color": "#22c55e" }, "symbol": "none", "opacity": 0.5 }
         ]
     }))
 }
@@ -355,8 +355,8 @@ pub fn utxo_flow_chart_daily(days: &[DailyAggregate]) -> String {
         "tooltip": tooltip_axis(),
         "legend": { "show": true },
         "series": [
-            { "name": "Inputs (consumed)", "type": "line", "sampling": "lttb", "data": inputs, "lineStyle": { "width": 1, "color": "#ef4444" }, "itemStyle": { "color": "#ef4444" }, "symbol": "none", "opacity": 0.5 },
-            { "name": "Outputs (created)", "type": "line", "sampling": "lttb", "data": outputs, "lineStyle": { "width": 1, "color": "#22c55e" }, "itemStyle": { "color": "#22c55e" }, "symbol": "none", "opacity": 0.5 }
+            { "name": "Inputs (consumed)", "type": "line", "data": inputs, "lineStyle": { "width": 1, "color": "#ef4444" }, "itemStyle": { "color": "#ef4444" }, "symbol": "none", "opacity": 0.5 },
+            { "name": "Outputs (created)", "type": "line", "data": outputs, "lineStyle": { "width": 1, "color": "#22c55e" }, "itemStyle": { "color": "#22c55e" }, "symbol": "none", "opacity": 0.5 }
         ]
     }))
 }

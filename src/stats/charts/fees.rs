@@ -25,7 +25,7 @@ pub fn fees_chart(blocks: &[BlockSummary]) -> String {
         "tooltip": tooltip_axis(),
         "series": [
             {
-                "name": "Fees", "type": "line", "sampling": "lttb", "data": raw,
+                "name": "Fees", "type": "line", "data": raw,
                 "lineStyle": { "width": 1.5, "color": DATA_COLOR },
                 "itemStyle": { "color": DATA_COLOR }, "symbol": "none",
                 "areaStyle": { "color": DATA_COLOR_FADED }
@@ -59,7 +59,7 @@ pub fn fees_chart_daily(days: &[DailyAggregate]) -> String {
         "tooltip": tooltip_axis(),
         "series": [
             {
-                "name": "Avg Fees", "type": "line", "sampling": "lttb", "data": vals,
+                "name": "Avg Fees", "type": "line", "data": vals,
                 "lineStyle": { "width": 1.5, "color": DATA_COLOR },
                 "itemStyle": { "color": DATA_COLOR }, "symbol": "none",
                 "areaStyle": { "color": DATA_COLOR_FADED }
@@ -97,7 +97,7 @@ pub fn fees_chart_unit(blocks: &[BlockSummary], unit: &str) -> String {
         "tooltip": tooltip_axis(),
         "series": [
             {
-                "name": "Fees", "type": "line", "sampling": "lttb", "data": raw,
+                "name": "Fees", "type": "line", "data": raw,
                 "lineStyle": { "width": 1.5, "color": DATA_COLOR },
                 "itemStyle": { "color": DATA_COLOR }, "symbol": "none",
                 "areaStyle": { "color": DATA_COLOR_FADED }
@@ -136,7 +136,7 @@ pub fn fees_chart_daily_unit(days: &[DailyAggregate], unit: &str) -> String {
         "tooltip": tooltip_axis(),
         "series": [
             {
-                "name": "Avg Fees", "type": "line", "sampling": "lttb", "data": vals,
+                "name": "Avg Fees", "type": "line", "data": vals,
                 "lineStyle": { "width": 1.5, "color": DATA_COLOR },
                 "itemStyle": { "color": DATA_COLOR }, "symbol": "none",
                 "areaStyle": { "color": DATA_COLOR_FADED }

@@ -223,7 +223,7 @@ pub fn op_return_block_share_chart(blocks: &[BlockSummary]) -> String {
     let has_ma = show_ma(blocks.len());
 
     let mut series = vec![json!({
-        "name": "OP_RETURN %", "type": "line", "sampling": "lttb", "data": raw,
+        "name": "OP_RETURN %", "type": "line", "data": raw,
         "areaStyle": { "color": RUNES_COLOR, "opacity": 0.15 },
         "lineStyle": { "width": if has_ma { 1.0 } else { 1.5 }, "color": RUNES_COLOR },
         "itemStyle": { "color": RUNES_COLOR }, "symbol": "none",
@@ -231,7 +231,7 @@ pub fn op_return_block_share_chart(blocks: &[BlockSummary]) -> String {
     })];
     if has_ma {
         series.push(json!({
-            "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_data,
+            "name": "144-block MA", "type": "line", "data": ma_data,
             "lineStyle": { "width": 2, "color": MA_COLOR },
             "itemStyle": { "color": MA_COLOR }, "symbol": "none"
         }));
@@ -281,13 +281,13 @@ pub fn op_return_block_share_chart_daily(days: &[DailyAggregate]) -> String {
         "tooltip": tooltip_axis(),
         "series": [
             {
-                "name": "OP_RETURN %", "type": "line", "sampling": "lttb", "data": vals,
+                "name": "OP_RETURN %", "type": "line", "data": vals,
                 "areaStyle": { "color": RUNES_COLOR, "opacity": 0.15 },
                 "lineStyle": { "width": 1, "color": RUNES_COLOR },
                 "itemStyle": { "color": RUNES_COLOR }, "symbol": "none", "opacity": 0.4
             },
             {
-                "name": "7-day MA", "type": "line", "sampling": "lttb", "data": ma_vals,
+                "name": "7-day MA", "type": "line", "data": ma_vals,
                 "lineStyle": { "width": 2, "color": MA_COLOR },
                 "itemStyle": { "color": MA_COLOR }, "symbol": "none"
             }
@@ -310,14 +310,14 @@ pub fn inscription_chart(blocks: &[BlockSummary]) -> String {
     let has_ma = show_ma(blocks.len());
 
     let mut series = vec![json!({
-        "name": "Inscriptions", "type": "line", "sampling": "lttb", "data": raw,
+        "name": "Inscriptions", "type": "line", "data": raw,
         "lineStyle": { "width": if has_ma { 1.0 } else { 1.5 }, "color": INSCRIPTION_COLOR },
         "itemStyle": { "color": INSCRIPTION_COLOR }, "symbol": "none",
         "opacity": if has_ma { 0.4 } else { 1.0 }
     })];
     if has_ma {
         series.push(json!({
-            "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_data,
+            "name": "144-block MA", "type": "line", "data": ma_data,
             "lineStyle": { "width": 2, "color": MA_COLOR },
             "itemStyle": { "color": MA_COLOR }, "symbol": "none"
         }));
@@ -350,10 +350,10 @@ pub fn inscription_chart_daily(days: &[DailyAggregate]) -> String {
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
         "series": [
-            { "name": "Inscriptions", "type": "line", "sampling": "lttb", "data": vals,
+            { "name": "Inscriptions", "type": "line", "data": vals,
               "lineStyle": { "width": 1, "color": INSCRIPTION_COLOR },
               "itemStyle": { "color": INSCRIPTION_COLOR }, "symbol": "none", "opacity": 0.4 },
-            { "name": "7-day MA", "type": "line", "sampling": "lttb", "data": ma_vals,
+            { "name": "7-day MA", "type": "line", "data": ma_vals,
               "lineStyle": { "width": 2, "color": MA_COLOR },
               "itemStyle": { "color": MA_COLOR }, "symbol": "none" }
         ]
@@ -377,7 +377,7 @@ pub fn inscription_share_chart(blocks: &[BlockSummary]) -> String {
     let has_ma = show_ma(blocks.len());
 
     let mut series = vec![json!({
-        "name": "Inscriptions %", "type": "line", "sampling": "lttb", "data": raw,
+        "name": "Inscriptions %", "type": "line", "data": raw,
         "areaStyle": { "color": INSCRIPTION_COLOR, "opacity": 0.15 },
         "lineStyle": { "width": if has_ma { 1.0 } else { 1.5 }, "color": INSCRIPTION_COLOR },
         "itemStyle": { "color": INSCRIPTION_COLOR }, "symbol": "none",
@@ -385,7 +385,7 @@ pub fn inscription_share_chart(blocks: &[BlockSummary]) -> String {
     })];
     if has_ma {
         series.push(json!({
-            "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_data,
+            "name": "144-block MA", "type": "line", "data": ma_data,
             "lineStyle": { "width": 2, "color": MA_COLOR },
             "itemStyle": { "color": MA_COLOR }, "symbol": "none"
         }));
@@ -420,11 +420,11 @@ pub fn inscription_share_chart_daily(days: &[DailyAggregate]) -> String {
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
         "series": [
-            { "name": "Inscriptions %", "type": "line", "sampling": "lttb", "data": vals,
+            { "name": "Inscriptions %", "type": "line", "data": vals,
               "areaStyle": { "color": INSCRIPTION_COLOR, "opacity": 0.15 },
               "lineStyle": { "width": 1, "color": INSCRIPTION_COLOR },
               "itemStyle": { "color": INSCRIPTION_COLOR }, "symbol": "none", "opacity": 0.4 },
-            { "name": "7-day MA", "type": "line", "sampling": "lttb", "data": ma_vals,
+            { "name": "7-day MA", "type": "line", "data": ma_vals,
               "lineStyle": { "width": 2, "color": MA_COLOR },
               "itemStyle": { "color": MA_COLOR }, "symbol": "none" }
         ]
@@ -460,13 +460,13 @@ pub fn all_embedded_share_chart(blocks: &[BlockSummary]) -> String {
         "legend": { "show": true },
         "series": [
             {
-                "name": "OP_RETURN", "type": "line", "sampling": "lttb", "data": op_data,
+                "name": "OP_RETURN", "type": "line", "data": op_data,
                 "stack": "embed", "areaStyle": { "opacity": 0.5 },
                 "lineStyle": { "width": 0.5, "color": OPRETURN_COLOR },
                 "itemStyle": { "color": OPRETURN_COLOR }, "symbol": "none"
             },
             {
-                "name": "Inscriptions", "type": "line", "sampling": "lttb", "data": insc_data,
+                "name": "Inscriptions", "type": "line", "data": insc_data,
                 "stack": "embed", "areaStyle": { "opacity": 0.5 },
                 "lineStyle": { "width": 0.5, "color": INSCRIPTION_COLOR },
                 "itemStyle": { "color": INSCRIPTION_COLOR }, "symbol": "none"
@@ -499,13 +499,13 @@ pub fn all_embedded_share_chart_daily(days: &[DailyAggregate]) -> String {
         "legend": { "show": true },
         "series": [
             {
-                "name": "OP_RETURN", "type": "line", "sampling": "lttb", "data": op_vals,
+                "name": "OP_RETURN", "type": "line", "data": op_vals,
                 "stack": "embed", "areaStyle": { "opacity": 0.5 },
                 "lineStyle": { "width": 0.5, "color": OPRETURN_COLOR },
                 "itemStyle": { "color": OPRETURN_COLOR }, "symbol": "none"
             },
             {
-                "name": "Inscriptions", "type": "line", "sampling": "lttb", "data": insc_vals,
+                "name": "Inscriptions", "type": "line", "data": insc_vals,
                 "stack": "embed", "areaStyle": { "opacity": 0.5 },
                 "lineStyle": { "width": 0.5, "color": INSCRIPTION_COLOR },
                 "itemStyle": { "color": INSCRIPTION_COLOR }, "symbol": "none"

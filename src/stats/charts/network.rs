@@ -24,14 +24,14 @@ pub fn block_size_chart(blocks: &[BlockSummary]) -> String {
     let has_ma = show_ma(blocks.len());
 
     let mut series = vec![json!({
-        "name": "Size", "type": "line", "sampling": "lttb", "data": raw_data,
+        "name": "Size", "type": "line", "data": raw_data,
         "lineStyle": { "width": if has_ma { 1.0 } else { 1.5 }, "color": DATA_COLOR },
         "itemStyle": { "color": DATA_COLOR }, "symbol": "none",
         "opacity": if has_ma { 0.4 } else { 1.0 }
     })];
     if has_ma {
         series.push(json!({
-            "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_data,
+            "name": "144-block MA", "type": "line", "data": ma_data,
             "lineStyle": { "width": 2, "color": MA_COLOR },
             "itemStyle": { "color": MA_COLOR }, "symbol": "none"
         }));
@@ -72,12 +72,12 @@ pub fn block_size_chart_daily(days: &[DailyAggregate]) -> String {
         "tooltip": tooltip_axis(),
         "series": [
             {
-                "name": "Avg Size", "type": "line", "sampling": "lttb", "data": sizes,
+                "name": "Avg Size", "type": "line", "data": sizes,
                 "lineStyle": { "width": 1, "color": DATA_COLOR },
                 "itemStyle": { "color": DATA_COLOR }, "symbol": "none", "opacity": 0.4
             },
             {
-                "name": "7-day MA", "type": "line", "sampling": "lttb", "data": ma_vals,
+                "name": "7-day MA", "type": "line", "data": ma_vals,
                 "lineStyle": { "width": 2, "color": MA_COLOR },
                 "itemStyle": { "color": MA_COLOR }, "symbol": "none"
             }
@@ -106,14 +106,14 @@ pub fn tx_count_chart(blocks: &[BlockSummary]) -> String {
     let has_ma = show_ma(blocks.len());
 
     let mut series = vec![json!({
-        "name": "Tx Count", "type": "line", "sampling": "lttb", "data": raw,
+        "name": "Tx Count", "type": "line", "data": raw,
         "lineStyle": { "width": if has_ma { 1.0 } else { 1.5 }, "color": DATA_COLOR },
         "itemStyle": { "color": DATA_COLOR }, "symbol": "none",
         "opacity": if has_ma { 0.4 } else { 1.0 }
     })];
     if has_ma {
         series.push(json!({
-            "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_series,
+            "name": "144-block MA", "type": "line", "data": ma_series,
             "lineStyle": { "width": 2, "color": MA_COLOR },
             "itemStyle": { "color": MA_COLOR }, "symbol": "none"
         }));
@@ -153,12 +153,12 @@ pub fn tx_count_chart_daily(days: &[DailyAggregate]) -> String {
         "tooltip": tooltip_axis(),
         "series": [
             {
-                "name": "Avg Tx Count", "type": "line", "sampling": "lttb", "data": vals,
+                "name": "Avg Tx Count", "type": "line", "data": vals,
                 "lineStyle": { "width": 1, "color": DATA_COLOR },
                 "itemStyle": { "color": DATA_COLOR }, "symbol": "none", "opacity": 0.4
             },
             {
-                "name": "7-day MA", "type": "line", "sampling": "lttb", "data": ma_vals,
+                "name": "7-day MA", "type": "line", "data": ma_vals,
                 "lineStyle": { "width": 2, "color": MA_COLOR },
                 "itemStyle": { "color": MA_COLOR }, "symbol": "none"
             }
@@ -184,7 +184,7 @@ pub fn difficulty_chart(blocks: &[BlockSummary]) -> String {
         "tooltip": tooltip_axis(),
         "series": [
             {
-                "name": "Difficulty", "type": "line", "sampling": "lttb", "data": raw,
+                "name": "Difficulty", "type": "line", "data": raw,
                 "lineStyle": { "width": 2, "color": DATA_COLOR },
                 "itemStyle": { "color": DATA_COLOR }, "symbol": "none",
                 "areaStyle": { "color": DATA_COLOR_FADED }
@@ -209,7 +209,7 @@ pub fn difficulty_chart_daily(days: &[DailyAggregate]) -> String {
         "tooltip": tooltip_axis(),
         "series": [
             {
-                "name": "Difficulty", "type": "line", "sampling": "lttb", "data": vals,
+                "name": "Difficulty", "type": "line", "data": vals,
                 "lineStyle": { "width": 2, "color": DATA_COLOR },
                 "itemStyle": { "color": DATA_COLOR }, "symbol": "none",
                 "areaStyle": { "color": DATA_COLOR_FADED }
@@ -257,7 +257,7 @@ pub fn block_interval_chart(blocks: &[BlockSummary]) -> String {
     })];
     if has_ma {
         series.push(json!({
-            "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_series,
+            "name": "144-block MA", "type": "line", "data": ma_series,
             "lineStyle": { "width": 2, "color": MA_COLOR },
             "itemStyle": { "color": MA_COLOR }, "symbol": "none"
         }));
@@ -308,12 +308,12 @@ pub fn block_interval_chart_daily(days: &[DailyAggregate]) -> String {
         "tooltip": tooltip_axis(),
         "series": [
             {
-                "name": "Avg Interval", "type": "line", "sampling": "lttb", "data": vals,
+                "name": "Avg Interval", "type": "line", "data": vals,
                 "lineStyle": { "width": 1, "color": DATA_COLOR },
                 "itemStyle": { "color": DATA_COLOR }, "symbol": "none", "opacity": 0.4
             },
             {
-                "name": "7-day MA", "type": "line", "sampling": "lttb", "data": ma,
+                "name": "7-day MA", "type": "line", "data": ma,
                 "lineStyle": { "width": 2, "color": MA_COLOR },
                 "itemStyle": { "color": MA_COLOR }, "symbol": "none"
             },
@@ -359,14 +359,14 @@ pub fn weight_utilization_chart(blocks: &[BlockSummary]) -> String {
     let has_ma = show_ma(blocks.len());
 
     let mut series = vec![json!({
-        "name": "Utilization %", "type": "line", "sampling": "lttb", "data": raw,
+        "name": "Utilization %", "type": "line", "data": raw,
         "lineStyle": { "width": if has_ma { 1.0 } else { 1.5 }, "color": DATA_COLOR },
         "itemStyle": { "color": DATA_COLOR }, "symbol": "none",
         "opacity": if has_ma { 0.4 } else { 1.0 }
     })];
     if has_ma {
         series.push(json!({
-            "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_series,
+            "name": "144-block MA", "type": "line", "data": ma_series,
             "lineStyle": { "width": 2, "color": MA_COLOR },
             "itemStyle": { "color": MA_COLOR }, "symbol": "none"
         }));
@@ -409,12 +409,12 @@ pub fn weight_utilization_chart_daily(days: &[DailyAggregate]) -> String {
         "tooltip": tooltip_axis(),
         "series": [
             {
-                "name": "Utilization %", "type": "line", "sampling": "lttb", "data": vals,
+                "name": "Utilization %", "type": "line", "data": vals,
                 "lineStyle": { "width": 1, "color": DATA_COLOR },
                 "itemStyle": { "color": DATA_COLOR }, "symbol": "none", "opacity": 0.4
             },
             {
-                "name": "7-day MA", "type": "line", "sampling": "lttb", "data": ma_vals,
+                "name": "7-day MA", "type": "line", "data": ma_vals,
                 "lineStyle": { "width": 2, "color": MA_COLOR },
                 "itemStyle": { "color": MA_COLOR }, "symbol": "none"
             }
@@ -455,14 +455,14 @@ pub fn avg_tx_size_chart(blocks: &[BlockSummary]) -> String {
     let has_ma = show_ma(blocks.len());
 
     let mut series = vec![json!({
-        "name": "Avg Tx Size", "type": "line", "sampling": "lttb", "data": raw,
+        "name": "Avg Tx Size", "type": "line", "data": raw,
         "lineStyle": { "width": if has_ma { 1.0 } else { 1.5 }, "color": DATA_COLOR },
         "itemStyle": { "color": DATA_COLOR }, "symbol": "none",
         "opacity": if has_ma { 0.4 } else { 1.0 }
     })];
     if has_ma {
         series.push(json!({
-            "name": "144-block MA", "type": "line", "sampling": "lttb", "data": ma_series,
+            "name": "144-block MA", "type": "line", "data": ma_series,
             "lineStyle": { "width": 2, "color": MA_COLOR },
             "itemStyle": { "color": MA_COLOR }, "symbol": "none"
         }));
@@ -511,12 +511,12 @@ pub fn avg_tx_size_chart_daily(days: &[DailyAggregate]) -> String {
         "tooltip": tooltip_axis(),
         "series": [
             {
-                "name": "Avg Tx Size", "type": "line", "sampling": "lttb", "data": vals,
+                "name": "Avg Tx Size", "type": "line", "data": vals,
                 "lineStyle": { "width": 1, "color": DATA_COLOR },
                 "itemStyle": { "color": DATA_COLOR }, "symbol": "none", "opacity": 0.4
             },
             {
-                "name": "7-day MA", "type": "line", "sampling": "lttb", "data": ma_vals,
+                "name": "7-day MA", "type": "line", "data": ma_vals,
                 "lineStyle": { "width": 2, "color": MA_COLOR },
                 "itemStyle": { "color": MA_COLOR }, "symbol": "none"
             }
@@ -547,7 +547,7 @@ pub fn chain_size_chart(blocks: &[BlockSummary], disk_size_gb: f64) -> String {
     let show_disk = block_total >= 20.0 && disk_size_gb > 0.0;
 
     let mut series = vec![json!({
-        "name": "Block Data", "type": "line", "sampling": "lttb", "data": block_data,
+        "name": "Block Data", "type": "line", "data": block_data,
         "areaStyle": { "color": DATA_COLOR, "opacity": 0.1 },
         "lineStyle": { "width": 2, "color": DATA_COLOR },
         "itemStyle": { "color": DATA_COLOR }, "symbol": "none"
@@ -565,7 +565,7 @@ pub fn chain_size_chart(blocks: &[BlockSummary], disk_size_gb: f64) -> String {
             })
             .collect();
         series.push(json!({
-            "name": "Disk Size (est.)", "type": "line", "sampling": "lttb", "data": disk_data,
+            "name": "Disk Size (est.)", "type": "line", "data": disk_data,
             "lineStyle": { "width": 1.5, "color": DISK_COLOR, "type": "dashed" },
             "itemStyle": { "color": DISK_COLOR }, "symbol": "none"
         }));
@@ -603,7 +603,7 @@ pub fn chain_size_chart_daily(days: &[DailyAggregate], disk_size_gb: f64) -> Str
     let show_disk = block_total >= 20.0 && disk_size_gb > 0.0;
 
     let mut series = vec![json!({
-        "name": "Block Data", "type": "line", "sampling": "lttb", "data": block_data,
+        "name": "Block Data", "type": "line", "data": block_data,
         "areaStyle": { "color": DATA_COLOR, "opacity": 0.1 },
         "lineStyle": { "width": 2, "color": DATA_COLOR },
         "itemStyle": { "color": DATA_COLOR }, "symbol": "none"
@@ -621,7 +621,7 @@ pub fn chain_size_chart_daily(days: &[DailyAggregate], disk_size_gb: f64) -> Str
             })
             .collect();
         series.push(json!({
-            "name": "Disk Size (est.)", "type": "line", "sampling": "lttb", "data": disk_data,
+            "name": "Disk Size (est.)", "type": "line", "data": disk_data,
             "lineStyle": { "width": 1.5, "color": DISK_COLOR, "type": "dashed" },
             "itemStyle": { "color": DISK_COLOR }, "symbol": "none"
         }));
