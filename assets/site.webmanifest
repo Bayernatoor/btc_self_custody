@@ -24,5 +24,20 @@
             "type": "image/png",
             "purpose": "maskable"
         }
+    ],
+    "screenshots": [
+        {
+            "src": "/metadata_unfurl_image.png",
+            "sizes": "965x527",
+            "type": "image/png",
+            "form_factor": "wide",
+            "label": "WE HODL BTC - Bitcoin Self-Custody Guides"
+        },
+        {
+            "src": "/metadata_unfurl_image.png",
+            "sizes": "965x527",
+            "type": "image/png",
+            "label": "WE HODL BTC - Bitcoin Self-Custody Guides"
+        }
     ]
 }
