@@ -85,61 +85,52 @@ pub fn MiningChartsPage() -> impl IntoView {
                 </div>
             }
         >
-            {move || {
-                // Gate on dashboard_data for the difficulty chart
-                let has_dashboard = dashboard_data.get().and_then(|r| r.ok()).is_some();
-                // Gate on mining_data for pool charts
-                let has_mining = mining_data.get().and_then(|r| r.ok()).is_some();
+            // --- Difficulty sub-section ---
+            <Show when=move || section.get() == "difficulty" fallback=|| ()>
+                {move || {
+                    dashboard_data.get().and_then(|r| r.ok()).map(|_| {
+                        let diff_option = chart_memo!(dashboard_data, range, overlay_flags,
+                            |blocks| crate::stats::charts::difficulty_chart(blocks),
+                            |days| crate::stats::charts::difficulty_chart_daily(days)
+                        );
+                        view! {
+                            <div class="space-y-10">
+                                <ChartCard title="Difficulty" description="Mining difficulty, adjusts every 2,016 blocks (~2 weeks) to maintain 10-minute block targets" chart_id="chart-difficulty" option=diff_option/>
+                            </div>
+                        }.into_any()
+                    }).unwrap_or_else(|| view! { <ChartPageSkeleton count=1/> }.into_any())
+                }}
+            </Show>
 
-                if !has_dashboard && !has_mining {
-                    return Some(view! { <ChartPageSkeleton count=3/> }.into_any());
-                }
+            // --- Pool Distribution sub-section ---
+            <Show when=move || section.get() == "pools" fallback=|| ()>
+                {move || {
+                    mining_data.get().and_then(|r| r.ok()).map(|_| {
+                        let miner_chart_option = Signal::derive(move || {
+                            mining_data.get().and_then(|r| r.ok())
+                                .map(|(ref miners, _)| crate::stats::charts::miner_dominance_chart(miners))
+                                .unwrap_or_default()
+                        });
+                        let empty_blocks_option = Signal::derive(move || {
+                            let flags = overlay_flags.get();
+                            mining_data.get().and_then(|r| r.ok())
+                                .map(|(_, ref empty)| {
+                                    let json = crate::stats::charts::empty_blocks_chart(empty);
+                                    if json.is_empty() { return String::new(); }
+                                    crate::stats::charts::apply_overlays(&json, &flags, true)
+                                })
+                                .unwrap_or_default()
+                        });
 
-                let diff_option = if has_dashboard {
-                    chart_memo!(dashboard_data, range, overlay_flags,
-                        |blocks| crate::stats::charts::difficulty_chart(blocks),
-                        |days| crate::stats::charts::difficulty_chart_daily(days)
-                    )
-                } else {
-                    Signal::derive(|| String::new())
-                };
-
-                let miner_chart_option = Signal::derive(move || {
-                    mining_data
-                        .get()
-                        .and_then(|r| r.ok())
-                        .map(|(ref miners, _)| {
-                            crate::stats::charts::miner_dominance_chart(miners)
-                        })
-                        .unwrap_or_default()
-                });
-
-                let empty_blocks_option = Signal::derive(move || {
-                    let flags = overlay_flags.get();
-                    mining_data
-                        .get()
-                        .and_then(|r| r.ok())
-                        .map(|(_, ref empty)| {
-                            let json = crate::stats::charts::empty_blocks_chart(empty);
-                            if json.is_empty() { return String::new(); }
-                            crate::stats::charts::apply_overlays(&json, &flags, true)
-                        })
-                        .unwrap_or_default()
-                });
-
-                Some(view! {
-                    // --- Difficulty sub-section ---
-                    <div class=move || if section.get() == "difficulty" { "space-y-10" } else { "hidden" }>
-                        <ChartCard title="Difficulty" description="Mining difficulty, adjusts every 2,016 blocks (~2 weeks) to maintain 10-minute block targets" chart_id="chart-difficulty" option=diff_option/>
-                    </div>
-
-                    // --- Pool Distribution sub-section ---
-                    <div class=move || if section.get() == "pools" { "space-y-10" } else { "hidden" }>
-                        <ChartCard title="Mining Pool Share" description="Which mining pools are finding the most blocks. More distributed is healthier for the network" chart_id="chart-miner-dominance" option=miner_chart_option/>
-                        <ChartCard title="Empty Blocks" description="Blocks with no user transactions, usually mined before the pool has received the previous block's transactions" chart_id="chart-empty-blocks" option=empty_blocks_option/>
-                    </div>
-                }.into_any())
-            }}
+                        view! {
+                            <div class="space-y-10">
+                                <ChartCard title="Mining Pool Share" description="Which mining pools are finding the most blocks. More distributed is healthier for the network" chart_id="chart-miner-dominance" option=miner_chart_option/>
+                                <ChartCard title="Empty Blocks" description="Blocks with no user transactions, usually mined before the pool has received the previous block's transactions" chart_id="chart-empty-blocks" option=empty_blocks_option/>
+                            </div>
+                        }.into_any()
+                    }).unwrap_or_else(|| view! { <ChartPageSkeleton count=2/> }.into_any())
+                }}
+            </Show>
         </ChartPageLayout>
     }
 }
