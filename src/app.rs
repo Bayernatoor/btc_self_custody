@@ -95,8 +95,33 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 // Collapsible sections within step content
                 <script defer src="/sections.js"></script>
 
-                // Service Worker registration (PWA)
-                <script>"if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js'); }"</script>
+                // Service Worker registration (PWA) with update detection
+                <script>"
+                    if ('serviceWorker' in navigator) {
+                        navigator.serviceWorker.register('/sw.js').then(function(reg) {
+                            reg.addEventListener('updatefound', function() {
+                                var newSW = reg.installing;
+                                if (!newSW) return;
+                                newSW.addEventListener('statechange', function() {
+                                    if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+                                        var banner = document.createElement('div');
+                                        banner.id = 'sw-update-banner';
+                                        banner.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:99999;background:#0d2137;border:1px solid rgba(247,147,26,0.4);border-radius:12px;padding:12px 18px;display:flex;align-items:center;gap:12px;box-shadow:0 8px 32px rgba(0,0,0,0.4);font-family:Inter,system-ui,sans-serif';
+                                        banner.innerHTML = '<span style=\"color:rgba(255,255,255,0.7);font-size:13px\">Update available</span><button style=\"background:#f7931a;color:#0a1a2e;border:none;padding:6px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer\">Refresh</button>';
+                                        banner.querySelector('button').addEventListener('click', function() {
+                                            newSW.postMessage('SKIP_WAITING');
+                                            banner.remove();
+                                        });
+                                        document.body.appendChild(banner);
+                                    }
+                                });
+                            });
+                        });
+                        navigator.serviceWorker.addEventListener('controllerchange', function() {
+                            window.location.reload();
+                        });
+                    }
+                "</script>
 
                 // Analytics
                 <script async src="https://www.poeticmetric.com/pm.js"></script>
