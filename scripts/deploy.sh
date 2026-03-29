@@ -9,6 +9,10 @@ cd /opt/wehodlbtc/app
 echo "==> Pulling latest code..."
 git pull origin master
 
+echo "==> Updating service worker cache version..."
+DEPLOY_TS=$(date +%s)
+sed -i "s/var CACHE_NAME = 'wehodlbtc-[^']*'/var CACHE_NAME = 'wehodlbtc-${DEPLOY_TS}'/" assets/sw.js
+
 echo "==> Building release..."
 cargo leptos build --release
 
