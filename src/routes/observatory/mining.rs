@@ -92,7 +92,7 @@ pub fn MiningChartsPage() -> impl IntoView {
                 let has_mining = mining_data.get().and_then(|r| r.ok()).is_some();
 
                 if !has_dashboard && !has_mining {
-                    return None;
+                    return Some(view! { <ChartPageSkeleton count=3/> }.into_any());
                 }
 
                 let diff_option = if has_dashboard {
