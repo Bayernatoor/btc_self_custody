@@ -21,39 +21,32 @@ pub fn EmbeddedChartsPage() -> impl IntoView {
             title="Embedded Data"
             description="OP_RETURN protocols, Ordinals inscriptions, and on-chain data usage"
             header=move || view! {
-                <div class="flex justify-center mb-4">
-                    <a href="/observatory/learn/protocols"
-                        class="text-xs text-white/30 hover:text-[#f7931a] transition-colors flex items-center gap-1.5"
-                    >
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/>
-                        </svg>
-                        "Learn about embedding protocols \u{2192}"
-                    </a>
-                </div>
-                <div class="flex flex-wrap gap-2 justify-center mb-6">
-                    {[("overview", "Overview"), ("protocols", "Protocols"), ("witness", "Inscriptions")].into_iter().map(|(id, label)| {
-                        let id_str = id.to_string();
-                        let id_clone = id_str.clone();
-                        view! {
-                            <button
-                                class=move || {
-                                    if section.get() == id_clone {
-                                        "px-4 py-1.5 text-xs rounded-lg bg-white/10 text-white font-semibold border border-white/20 cursor-pointer"
-                                    } else {
-                                        "px-4 py-1.5 text-xs rounded-lg text-white/40 hover:text-white/70 hover:bg-white/5 transition-all cursor-pointer"
-                                    }
+                <div class="relative inline-block">
+                    <select
+                        class="appearance-none bg-[#0a1a2e] text-white/80 text-sm border border-white/10 rounded-xl pl-3 pr-8 py-2 cursor-pointer focus:outline-none focus:border-[#f7931a]/40 transition-colors"
+                        prop:value=move || section.get()
+                        on:change=move |ev| {
+                            use wasm_bindgen::JsCast;
+                            if let Some(t) = ev.target() {
+                                if let Ok(s) = t.dyn_into::<leptos::web_sys::HtmlSelectElement>() {
+                                    set_section.set(s.value());
                                 }
-                                on:click={
-                                    let id = id_str.clone();
-                                    move |_| set_section.set(id.clone())
-                                }
-                            >
-                                {label}
-                            </button>
+                            }
                         }
-                    }).collect::<Vec<_>>()}
+                    >
+                        <option value="overview">"Overview"</option>
+                        <option value="protocols">"Protocols"</option>
+                        <option value="witness">"Inscriptions"</option>
+                    </select>
+                    <svg class="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none w-3.5 h-3.5 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
                 </div>
+                <a href="/observatory/learn/protocols"
+                    class="text-xs text-white/30 hover:text-[#f7931a] transition-colors flex items-center gap-1.5"
+                >
+                    "Protocol guide \u{2192}"
+                </a>
             }
         >
             // --- Overview sub-section ---

@@ -45,33 +45,43 @@ pub fn SignalingPage() -> impl IntoView {
     });
 
     view! {
-        <div class="text-center mb-6">
-            <h2 class="text-xl sm:text-2xl font-title text-white mb-1">"Signaling"</h2>
-            <p class="text-sm text-white/40 max-w-lg mx-auto">"BIP version bit signaling and coinbase locktime compliance tracking"</p>
+        // Slim hero banner
+        <div class="relative rounded-2xl overflow-hidden mb-5">
+            <img
+                src="/observatory_hero.png"
+                alt="BIP Signaling Tracker"
+                class="w-full h-[100px] sm:h-[120px] lg:h-[140px] object-cover object-center"
+            />
+            <div class="absolute inset-0 bg-gradient-to-t from-[#123c64] via-[#123c64]/60 to-[#123c64]/30"></div>
+            <div class="absolute inset-0 flex flex-col items-center justify-end pb-3 sm:pb-4">
+                <h2 class="text-lg sm:text-xl lg:text-2xl font-title text-white mb-0.5 drop-shadow-lg">"Signaling"</h2>
+                <p class="text-[11px] sm:text-xs text-white/50 max-w-lg mx-auto px-4 text-center drop-shadow">"BIP version bit signaling and coinbase locktime compliance tracking"</p>
+            </div>
         </div>
 
         // BIP selector
-        <div class="flex flex-wrap gap-2 justify-center mb-6">
-            <button
-                class=move || if bip_method.get() == "bit" {
-                    "px-5 py-2.5 text-base rounded-xl bg-[#f7931a] text-[#1a1a2e] font-semibold cursor-pointer transition-all"
-                } else {
-                    "px-5 py-2.5 text-base rounded-xl text-white/50 hover:text-white hover:bg-white/10 border border-transparent hover:border-white/10 transition-all cursor-pointer"
-                }
-                on:click=move |_| set_bip_method.set("bit".to_string())
-            >
-                "BIP-110: OP_RETURN Limits (Bit 4)"
-            </button>
-            <button
-                class=move || if bip_method.get() == "locktime" {
-                    "px-5 py-2.5 text-base rounded-xl bg-[#f7931a] text-[#1a1a2e] font-semibold cursor-pointer transition-all"
-                } else {
-                    "px-5 py-2.5 text-base rounded-xl text-white/50 hover:text-white hover:bg-white/10 border border-transparent hover:border-white/10 transition-all cursor-pointer"
-                }
-                on:click=move |_| set_bip_method.set("locktime".to_string())
-            >
-                "BIP-54: Consensus Cleanup (Locktime)"
-            </button>
+        <div class="flex items-center gap-3 mb-6">
+            <div class="relative inline-block">
+                <select
+                    class="appearance-none bg-[#0a1a2e] text-white/80 text-sm border border-white/10 rounded-xl pl-3 pr-8 py-2 cursor-pointer focus:outline-none focus:border-[#f7931a]/40 transition-colors"
+                    prop:value=move || bip_method.get()
+                    on:change=move |ev| {
+                        use wasm_bindgen::JsCast;
+                        if let Some(t) = ev.target() {
+                            if let Ok(s) = t.dyn_into::<leptos::web_sys::HtmlSelectElement>() {
+                                set_bip_method.set(s.value());
+                                set_period_offset.set(0);
+                            }
+                        }
+                    }
+                >
+                    <option value="bit">"BIP-110: OP_RETURN Limits (Bit 4)"</option>
+                    <option value="locktime">"BIP-54: Consensus Cleanup (Locktime)"</option>
+                </select>
+                <svg class="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none w-3.5 h-3.5 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </div>
         </div>
 
         // BIP info card

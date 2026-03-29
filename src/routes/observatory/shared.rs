@@ -361,9 +361,42 @@ pub fn RangeSelector() -> impl IntoView {
     let range = state.range;
     let set_range = state.set_range;
 
+    let range_label = move || {
+        let n = range_to_blocks(&range.get());
+        if n > 5_000 { "daily averages" } else { "per block" }
+    };
+
     view! {
-        <div class="flex justify-end items-center mb-4">
-            <div class="grid grid-cols-5 sm:flex gap-1.5 bg-[#0a1a2e] rounded-xl p-1.5 border border-white/5">
+        // Mobile: dropdown + label
+        <div class="flex sm:hidden items-center gap-2">
+            <div class="relative inline-block">
+                <select
+                    class="appearance-none bg-[#0a1a2e] text-white/80 text-sm border border-white/10 rounded-xl pl-3 pr-8 py-2 cursor-pointer focus:outline-none focus:border-[#f7931a]/40 transition-colors"
+                    prop:value=move || range.get()
+                    on:change=move |ev| {
+                        use wasm_bindgen::JsCast;
+                        if let Some(t) = ev.target() {
+                            if let Ok(s) = t.dyn_into::<leptos::web_sys::HtmlSelectElement>() {
+                                set_range.set(s.value());
+                            }
+                        }
+                    }
+                >
+                    {["1d", "1w", "1m", "3m", "6m", "ytd", "1y", "2y", "5y", "10y", "all"].into_iter().map(|r| {
+                        let val = r.to_string();
+                        let label = r.to_uppercase();
+                        view! { <option value=val>{label}</option> }
+                    }).collect::<Vec<_>>()}
+                </select>
+                <svg class="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none w-3.5 h-3.5 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </div>
+            <span class="text-xs text-white/40">{range_label}</span>
+        </div>
+        // Desktop: button grid + label
+        <div class="hidden sm:flex items-center">
+            <div class="flex gap-1.5 bg-[#0a1a2e] rounded-xl p-1.5 border border-white/5">
                 {["1d", "1w", "1m", "3m", "6m", "ytd", "1y", "2y", "5y", "10y", "all"].into_iter().map(|r| {
                     let r_str = r.to_string();
                     let r_display = r.to_uppercase();
@@ -387,12 +420,7 @@ pub fn RangeSelector() -> impl IntoView {
                     }
                 }).collect::<Vec<_>>()}
             </div>
-            <span class="ml-3 text-xs text-white/60 self-center">
-                {move || {
-                    let n = range_to_blocks(&range.get());
-                    if n > 5_000 { "daily averages" } else { "per block" }
-                }}
-            </span>
+            <span class="ml-3 text-xs text-white/60 self-center">{range_label}</span>
         </div>
     }
 }
@@ -410,13 +438,14 @@ pub fn OverlayPanel() -> impl IntoView {
                 when=move || state.overlay_panel_open.get()
                 fallback=move || view! {
                     <button
-                        class="bg-[#0d2137] border border-white/10 hover:border-[#f7931a]/50 text-white/60 hover:text-white rounded-xl p-3.5 shadow-lg cursor-pointer transition-all"
+                        class="group bg-[#0d2137] border border-[#f7931a]/30 hover:border-[#f7931a]/60 text-[#f7931a]/70 hover:text-[#f7931a] rounded-2xl p-4 shadow-lg shadow-black/30 cursor-pointer transition-all hover:scale-105 animate-fadeinone"
                         title="Chart Overlays"
                         on:click=move |_| state.set_overlay_panel_open.set(true)
                     >
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+                        <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M6 13.5V3.75m0 9.75a1.5 1.5 0 0 1 0 3m0-3a1.5 1.5 0 0 0 0 3m0 3.75V16.5m12-3V3.75m0 9.75a1.5 1.5 0 0 1 0 3m0-3a1.5 1.5 0 0 0 0 3m0 3.75V16.5m-6-9V3.75m0 3.75a1.5 1.5 0 0 1 0 3m0-3a1.5 1.5 0 0 0 0 3m0 9.75V10.5"/>
                         </svg>
+                        <span class="absolute left-full ml-2 top-1/2 -translate-y-1/2 bg-[#0d2137] border border-white/10 text-white/60 text-xs px-2.5 py-1 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">"Overlays"</span>
                     </button>
                 }
             >
@@ -593,8 +622,9 @@ pub fn ChartPageSkeleton(
 }
 
 /// Page wrapper for chart sub-pages.
-/// `header` slot renders above the range selector (sub-section pills, links).
-/// `children` renders below it (the actual charts).
+/// Renders a slim hero banner with title/description, then a compact toolbar
+/// with optional header content (section dropdown) on the left and the range
+/// selector on the right.
 #[component]
 pub fn ChartPageLayout(
     #[prop(into)] title: &'static str,
@@ -603,12 +633,26 @@ pub fn ChartPageLayout(
     children: Children,
 ) -> impl IntoView {
     view! {
-        <div class="text-center mb-6">
-            <h2 class="text-xl sm:text-2xl font-title text-white mb-1">{title}</h2>
-            <p class="text-sm text-white/40 max-w-lg mx-auto">{description}</p>
+        // Slim hero banner
+        <div class="relative rounded-2xl overflow-hidden mb-5">
+            <img
+                src="/observatory_hero.png"
+                alt=title
+                class="w-full h-[100px] sm:h-[120px] lg:h-[140px] object-cover object-center"
+            />
+            <div class="absolute inset-0 bg-gradient-to-t from-[#123c64] via-[#123c64]/60 to-[#123c64]/30"></div>
+            <div class="absolute inset-0 flex flex-col items-center justify-end pb-3 sm:pb-4">
+                <h2 class="text-lg sm:text-xl lg:text-2xl font-title text-white mb-0.5 drop-shadow-lg">{title}</h2>
+                <p class="text-[11px] sm:text-xs text-white/50 max-w-lg mx-auto px-4 text-center drop-shadow">{description}</p>
+            </div>
         </div>
-        {header.map(|h| h.run())}
-        <RangeSelector/>
+        // Compact toolbar: section selector (left) + range (right)
+        <div class="flex flex-col sm:flex-row sm:items-start gap-3 mb-6">
+            {header.map(|h| view! { <div class="flex items-center gap-3 flex-shrink-0">{h.run()}</div> })}
+            <div class="sm:ml-auto">
+                <RangeSelector/>
+            </div>
+        </div>
         {children()}
     }
 }
