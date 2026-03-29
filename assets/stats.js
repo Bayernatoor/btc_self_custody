@@ -52,10 +52,17 @@
         try {
             var opts = JSON.parse(optionJson);
             opts.animation = false;
-            // Round tooltip values to avoid floating point noise (59.86000000000001 → 59.86)
+            // Round tooltip values and add % suffix for percentage charts
             if (opts.tooltip && opts.tooltip.trigger === 'axis' && !opts.tooltip.valueFormatter) {
+                var yName = '';
+                if (opts.yAxis) {
+                    var ya = Array.isArray(opts.yAxis) ? opts.yAxis[0] : opts.yAxis;
+                    yName = (ya && ya.name) || '';
+                }
+                var isPct = yName.indexOf('%') !== -1;
                 opts.tooltip.valueFormatter = function(v) {
                     if (typeof v !== 'number') return v;
+                    if (isPct) return parseFloat(v.toPrecision(10)).toFixed(2) + '%';
                     if (Number.isInteger(v)) return v.toLocaleString();
                     return parseFloat(v.toPrecision(10)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                 };
