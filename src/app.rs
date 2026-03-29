@@ -95,6 +95,9 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 // Collapsible sections within step content
                 <script defer src="/sections.js"></script>
 
+                // Service Worker registration (PWA)
+                <script>"if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js'); }"</script>
+
                 // Analytics
                 <script async src="https://www.poeticmetric.com/pm.js"></script>
 
