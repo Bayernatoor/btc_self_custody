@@ -7,6 +7,7 @@ set -e
 
 cd /opt/wehodlbtc/app
 echo "==> Pulling latest code..."
+git checkout -- assets/sw.js 2>/dev/null  # reset SW cache stamp from previous deploy
 git pull origin master
 
 echo "==> Updating service worker cache version..."
