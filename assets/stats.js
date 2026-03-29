@@ -60,9 +60,9 @@
                     return parseFloat(v.toPrecision(10)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                 };
             }
-            // Set background for PNG downloads (saveAsImage)
+            // Dark background for PNG downloads only (chart renders transparent)
             if (opts.toolbox && opts.toolbox.feature && opts.toolbox.feature.saveAsImage) {
-                opts.toolbox.feature.saveAsImage.backgroundColor = '#0d2137';
+                opts.toolbox.feature.saveAsImage.connectedBackgroundColor = '#0d2137';
             }
             // Mobile adjustments
             if (window.innerWidth < 640) {
