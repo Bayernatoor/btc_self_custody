@@ -62,6 +62,7 @@ pub fn MiningChartsPage() -> impl IntoView {
     let miner_chart_option = {
         let (cached, set_cached) = signal(String::new());
         let mount = RwSignal::new(0u32);
+        #[cfg(feature = "hydrate")]
         request_animation_frame(move || mount.set(1));
         Effect::new(move |_| {
             let _ = mount.get();
@@ -80,6 +81,7 @@ pub fn MiningChartsPage() -> impl IntoView {
     let empty_blocks_option = {
         let (cached, set_cached) = signal(String::new());
         let mount2 = RwSignal::new(0u32);
+        #[cfg(feature = "hydrate")]
         request_animation_frame(move || mount2.set(1));
         Effect::new(move |_| {
             let _ = mount2.get();

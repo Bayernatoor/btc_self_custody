@@ -41,6 +41,7 @@ pub fn Chart(
     // Mount trigger ensures it fires on Outlet navigation even when
     // the option signal already has a value from a previous page visit.
     let mount = RwSignal::new(0u32);
+    #[cfg(feature = "hydrate")]
     request_animation_frame(move || mount.set(1));
     Effect::new(move |_| {
         let _ = mount.get();

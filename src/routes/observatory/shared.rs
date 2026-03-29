@@ -326,6 +326,7 @@ macro_rules! chart_signal {
         let (cached, set_cached) = leptos::prelude::signal(String::new());
         // Mount trigger: bumped after DOM insertion to force Effect re-run on Outlet nav
         let mount = leptos::prelude::RwSignal::new(0u32);
+        #[cfg(feature = "hydrate")]
         leptos::prelude::request_animation_frame(move || mount.set(1));
         leptos::prelude::Effect::new(move |_| {
             let _ = mount.get(); // track mount trigger
