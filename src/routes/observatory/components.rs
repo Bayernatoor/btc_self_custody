@@ -37,7 +37,9 @@ pub fn Chart(
 ) -> impl IntoView {
     let id_clone = id.clone();
     let last_json = std::cell::RefCell::new(String::new());
-    Effect::new(move |_| {
+    // RenderEffect fires synchronously on mount (unlike Effect which is deferred
+    // and may not fire on Outlet navigation when signals already have values)
+    let _effect = RenderEffect::new(move |_| {
         let json = option.get();
         if !json.is_empty() && *last_json.borrow() != json {
             *last_json.borrow_mut() = json.clone();
