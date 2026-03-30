@@ -1,5 +1,5 @@
-use serde_json::json;
 use super::*;
+use serde_json::json;
 
 /// Address type evolution — stacked area (per-block).
 pub fn address_type_chart(blocks: &[BlockSummary]) -> String {
@@ -60,13 +60,33 @@ pub fn witness_share_chart(blocks: &[BlockSummary]) -> String {
         return no_data_chart("Witness Data Share");
     }
 
-    let vals: Vec<f64> = blocks.iter().map(|b| {
-        if b.size > 0 { (b.witness_bytes as f64 / b.size as f64 * 100.0 * 100.0).round() / 100.0 } else { 0.0 }
-    }).collect();
-    let raw: Vec<serde_json::Value> = blocks.iter().zip(vals.iter()).map(|(b, v)| dp(b, v)).collect();
+    let vals: Vec<f64> = blocks
+        .iter()
+        .map(|b| {
+            if b.size > 0 {
+                (b.witness_bytes as f64 / b.size as f64 * 100.0 * 100.0).round()
+                    / 100.0
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    let raw: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(vals.iter())
+        .map(|(b, v)| dp(b, v))
+        .collect();
     let ma = moving_average(&vals, 144);
-    let ma_data: Vec<serde_json::Value> = blocks.iter().zip(ma.iter())
-        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))])).collect();
+    let ma_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(ma.iter())
+        .map(|(b, m)| {
+            json!([
+                ts_ms(b.timestamp),
+                m.map(|v| json!(v)).unwrap_or(json!(null))
+            ])
+        })
+        .collect();
     let has_ma = show_ma(blocks.len());
 
     let mut series = vec![json!({
@@ -100,11 +120,25 @@ pub fn witness_share_chart_daily(days: &[DailyAggregate]) -> String {
         return no_data_chart("Witness Data Share");
     }
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let vals: Vec<f64> = days.iter().map(|d| {
-        if d.avg_size > 0.0 { (d.avg_witness_bytes / d.avg_size * 100.0 * 100.0).round() / 100.0 } else { 0.0 }
-    }).collect();
+    let vals: Vec<f64> = days
+        .iter()
+        .map(|d| {
+            if d.avg_size > 0.0 {
+                (d.avg_witness_bytes / d.avg_size * 100.0 * 100.0).round()
+                    / 100.0
+            } else {
+                0.0
+            }
+        })
+        .collect();
     let ma = moving_average(&vals, 7);
-    let ma_vals: Vec<serde_json::Value> = ma.iter().map(|v| match v { Some(x) => json!(x), None => json!(null) }).collect();
+    let ma_vals: Vec<serde_json::Value> = ma
+        .iter()
+        .map(|v| match v {
+            Some(x) => json!(x),
+            None => json!(null),
+        })
+        .collect();
 
     build_option(json!({
         "xAxis": x_axis_for(true, &cats),
@@ -124,20 +158,58 @@ pub fn batching_chart(blocks: &[BlockSummary]) -> String {
         return no_data_chart("Transaction Batching");
     }
 
-    let out_per_tx: Vec<f64> = blocks.iter().map(|b| {
-        if b.tx_count > 0 { round(b.output_count as f64 / b.tx_count as f64, 2) } else { 0.0 }
-    }).collect();
-    let in_per_tx: Vec<f64> = blocks.iter().map(|b| {
-        if b.tx_count > 0 { round(b.input_count as f64 / b.tx_count as f64, 2) } else { 0.0 }
-    }).collect();
-    let out_raw: Vec<serde_json::Value> = blocks.iter().zip(out_per_tx.iter()).map(|(b, v)| dp(b, v)).collect();
-    let in_raw: Vec<serde_json::Value> = blocks.iter().zip(in_per_tx.iter()).map(|(b, v)| dp(b, v)).collect();
+    let out_per_tx: Vec<f64> = blocks
+        .iter()
+        .map(|b| {
+            if b.tx_count > 0 {
+                round(b.output_count as f64 / b.tx_count as f64, 2)
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    let in_per_tx: Vec<f64> = blocks
+        .iter()
+        .map(|b| {
+            if b.tx_count > 0 {
+                round(b.input_count as f64 / b.tx_count as f64, 2)
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    let out_raw: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(out_per_tx.iter())
+        .map(|(b, v)| dp(b, v))
+        .collect();
+    let in_raw: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(in_per_tx.iter())
+        .map(|(b, v)| dp(b, v))
+        .collect();
     let out_ma = moving_average(&out_per_tx, 144);
     let in_ma = moving_average(&in_per_tx, 144);
-    let out_ma_data: Vec<serde_json::Value> = blocks.iter().zip(out_ma.iter())
-        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))])).collect();
-    let in_ma_data: Vec<serde_json::Value> = blocks.iter().zip(in_ma.iter())
-        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))])).collect();
+    let out_ma_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(out_ma.iter())
+        .map(|(b, m)| {
+            json!([
+                ts_ms(b.timestamp),
+                m.map(|v| json!(v)).unwrap_or(json!(null))
+            ])
+        })
+        .collect();
+    let in_ma_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(in_ma.iter())
+        .map(|(b, m)| {
+            json!([
+                ts_ms(b.timestamp),
+                m.map(|v| json!(v)).unwrap_or(json!(null))
+            ])
+        })
+        .collect();
     let has_ma = show_ma(blocks.len());
 
     let mut series = vec![
@@ -165,16 +237,42 @@ pub fn batching_chart_daily(days: &[DailyAggregate]) -> String {
         return no_data_chart("Transaction Batching");
     }
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let out_per_tx: Vec<f64> = days.iter().map(|d| {
-        if d.avg_tx_count > 0.0 { round(d.avg_output_count / d.avg_tx_count, 2) } else { 0.0 }
-    }).collect();
-    let in_per_tx: Vec<f64> = days.iter().map(|d| {
-        if d.avg_tx_count > 0.0 { round(d.avg_input_count / d.avg_tx_count, 2) } else { 0.0 }
-    }).collect();
+    let out_per_tx: Vec<f64> = days
+        .iter()
+        .map(|d| {
+            if d.avg_tx_count > 0.0 {
+                round(d.avg_output_count / d.avg_tx_count, 2)
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    let in_per_tx: Vec<f64> = days
+        .iter()
+        .map(|d| {
+            if d.avg_tx_count > 0.0 {
+                round(d.avg_input_count / d.avg_tx_count, 2)
+            } else {
+                0.0
+            }
+        })
+        .collect();
     let out_ma = moving_average(&out_per_tx, 7);
     let in_ma = moving_average(&in_per_tx, 7);
-    let out_ma_vals: Vec<serde_json::Value> = out_ma.iter().map(|v| match v { Some(x) => json!(x), None => json!(null) }).collect();
-    let in_ma_vals: Vec<serde_json::Value> = in_ma.iter().map(|v| match v { Some(x) => json!(x), None => json!(null) }).collect();
+    let out_ma_vals: Vec<serde_json::Value> = out_ma
+        .iter()
+        .map(|v| match v {
+            Some(x) => json!(x),
+            None => json!(null),
+        })
+        .collect();
+    let in_ma_vals: Vec<serde_json::Value> = in_ma
+        .iter()
+        .map(|v| match v {
+            Some(x) => json!(x),
+            None => json!(null),
+        })
+        .collect();
 
     build_option(json!({
         "xAxis": x_axis_for(true, &cats),
@@ -198,13 +296,25 @@ pub fn address_type_pct_chart(blocks: &[BlockSummary]) -> String {
     }
 
     let pct = |count: u64, total: u64| -> f64 {
-        if total > 0 { round(count as f64 / total as f64 * 100.0, 2) } else { 0.0 }
+        if total > 0 {
+            round(count as f64 / total as f64 * 100.0, 2)
+        } else {
+            0.0
+        }
     };
     let make_pct = |f: fn(&BlockSummary) -> u64| -> Vec<serde_json::Value> {
-        blocks.iter().map(|b| {
-            let total = b.p2pkh_count + b.p2sh_count + b.p2wpkh_count + b.p2wsh_count + b.p2tr_count + b.p2pk_count;
-            dp(b, pct(f(b), total))
-        }).collect()
+        blocks
+            .iter()
+            .map(|b| {
+                let total = b.p2pkh_count
+                    + b.p2sh_count
+                    + b.p2wpkh_count
+                    + b.p2wsh_count
+                    + b.p2tr_count
+                    + b.p2pk_count;
+                dp(b, pct(f(b), total))
+            })
+            .collect()
     };
 
     build_option(json!({
@@ -231,11 +341,23 @@ pub fn address_type_pct_chart_daily(days: &[DailyAggregate]) -> String {
     }
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
     let pct = |count: f64, total: f64| -> f64 {
-        if total > 0.0 { round(count / total * 100.0, 2) } else { 0.0 }
+        if total > 0.0 {
+            round(count / total * 100.0, 2)
+        } else {
+            0.0
+        }
     };
-    let total_per_day: Vec<f64> = days.iter().map(|d| {
-        d.avg_p2pkh_count + d.avg_p2sh_count + d.avg_p2wpkh_count + d.avg_p2wsh_count + d.avg_p2tr_count + d.avg_p2pk_count
-    }).collect();
+    let total_per_day: Vec<f64> = days
+        .iter()
+        .map(|d| {
+            d.avg_p2pkh_count
+                + d.avg_p2sh_count
+                + d.avg_p2wpkh_count
+                + d.avg_p2wsh_count
+                + d.avg_p2tr_count
+                + d.avg_p2pk_count
+        })
+        .collect();
 
     build_option(json!({
         "xAxis": x_axis_for(true, &cats),
@@ -260,16 +382,33 @@ pub fn rbf_chart(blocks: &[BlockSummary]) -> String {
         return no_data_chart("RBF Adoption");
     }
 
-    let vals: Vec<f64> = blocks.iter().map(|b| {
-        if b.tx_count > 1 {
-            let pct = b.rbf_count as f64 / (b.tx_count - 1) as f64 * 100.0;
-            (pct.min(100.0) * 100.0).round() / 100.0
-        } else { 0.0 }
-    }).collect();
-    let raw: Vec<serde_json::Value> = blocks.iter().zip(vals.iter()).map(|(b, v)| dp(b, v)).collect();
+    let vals: Vec<f64> = blocks
+        .iter()
+        .map(|b| {
+            if b.tx_count > 1 {
+                let pct = b.rbf_count as f64 / (b.tx_count - 1) as f64 * 100.0;
+                (pct.min(100.0) * 100.0).round() / 100.0
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    let raw: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(vals.iter())
+        .map(|(b, v)| dp(b, v))
+        .collect();
     let ma = moving_average(&vals, 144);
-    let ma_data: Vec<serde_json::Value> = blocks.iter().zip(ma.iter())
-        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))])).collect();
+    let ma_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(ma.iter())
+        .map(|(b, m)| {
+            json!([
+                ts_ms(b.timestamp),
+                m.map(|v| json!(v)).unwrap_or(json!(null))
+            ])
+        })
+        .collect();
     let has_ma = show_ma(blocks.len());
 
     let mut series = vec![json!({
@@ -302,14 +441,25 @@ pub fn rbf_chart_daily(days: &[DailyAggregate]) -> String {
         return no_data_chart("RBF Adoption");
     }
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let vals: Vec<f64> = days.iter().map(|d| {
-        if d.avg_tx_count > 1.0 {
-            let pct = d.avg_rbf_count / (d.avg_tx_count - 1.0) * 100.0;
-            (pct.min(100.0) * 100.0).round() / 100.0
-        } else { 0.0 }
-    }).collect();
+    let vals: Vec<f64> = days
+        .iter()
+        .map(|d| {
+            if d.avg_tx_count > 1.0 {
+                let pct = d.avg_rbf_count / (d.avg_tx_count - 1.0) * 100.0;
+                (pct.min(100.0) * 100.0).round() / 100.0
+            } else {
+                0.0
+            }
+        })
+        .collect();
     let ma = moving_average(&vals, 7);
-    let ma_vals: Vec<serde_json::Value> = ma.iter().map(|v| match v { Some(x) => json!(x), None => json!(null) }).collect();
+    let ma_vals: Vec<serde_json::Value> = ma
+        .iter()
+        .map(|v| match v {
+            Some(x) => json!(x),
+            None => json!(null),
+        })
+        .collect();
 
     build_option(json!({
         "xAxis": x_axis_for(true, &cats),
@@ -329,8 +479,10 @@ pub fn utxo_flow_chart(blocks: &[BlockSummary]) -> String {
         return no_data_chart("UTXO Flow");
     }
 
-    let inputs: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.input_count)).collect();
-    let outputs: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.output_count)).collect();
+    let inputs: Vec<serde_json::Value> =
+        blocks.iter().map(|b| dp(b, b.input_count)).collect();
+    let outputs: Vec<serde_json::Value> =
+        blocks.iter().map(|b| dp(b, b.output_count)).collect();
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
@@ -351,8 +503,10 @@ pub fn utxo_flow_chart_daily(days: &[DailyAggregate]) -> String {
         return no_data_chart("UTXO Flow");
     }
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let inputs: Vec<f64> = days.iter().map(|d| round(d.avg_input_count, 1)).collect();
-    let outputs: Vec<f64> = days.iter().map(|d| round(d.avg_output_count, 1)).collect();
+    let inputs: Vec<f64> =
+        days.iter().map(|d| round(d.avg_input_count, 1)).collect();
+    let outputs: Vec<f64> =
+        days.iter().map(|d| round(d.avg_output_count, 1)).collect();
 
     build_option(json!({
         "xAxis": x_axis_for(true, &cats),

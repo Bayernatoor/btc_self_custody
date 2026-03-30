@@ -1,5 +1,5 @@
-use serde_json::json;
 use super::*;
+use serde_json::json;
 
 const PIE_COLORS: [&str; 11] = [
     "#4ecdc4", "#f7931a", "#ff6b6b", "#bb8fff", "#2ecc71", "#e74c3c",

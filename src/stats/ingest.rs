@@ -111,7 +111,10 @@ pub async fn backfill_extras(rpc: &BitcoinRpc, pool: &DbPool) {
     let needs_backfill = {
         let conn = match pool.get() {
             Ok(c) => c,
-            Err(e) => { tracing::warn!("Backfill: DB pool error: {e}"); return; }
+            Err(e) => {
+                tracing::warn!("Backfill: DB pool error: {e}");
+                return;
+            }
         };
         db::count_needs_backfill(&conn).unwrap_or(0)
     };
@@ -136,7 +139,10 @@ pub async fn backfill_extras(rpc: &BitcoinRpc, pool: &DbPool) {
         let heights = {
             let conn = match pool.get() {
                 Ok(c) => c,
-                Err(e) => { tracing::warn!("Backfill: DB pool error: {e}"); return; }
+                Err(e) => {
+                    tracing::warn!("Backfill: DB pool error: {e}");
+                    return;
+                }
             };
             db::heights_needing_backfill(&conn, DB_BATCH_SIZE as u64)
                 .unwrap_or_default()
@@ -168,7 +174,10 @@ pub async fn backfill_extras(rpc: &BitcoinRpc, pool: &DbPool) {
         {
             let conn = match pool.get() {
                 Ok(c) => c,
-                Err(e) => { tracing::error!("Backfill: DB pool error: {e}"); return; }
+                Err(e) => {
+                    tracing::error!("Backfill: DB pool error: {e}");
+                    return;
+                }
             };
             if let Err(e) = db::update_block_extras(&conn, &blocks) {
                 tracing::error!("Backfill DB error: {e}");
@@ -202,7 +211,10 @@ pub async fn backfill_backwards(rpc: &BitcoinRpc, pool: &DbPool) {
     let min_height = {
         let conn = match pool.get() {
             Ok(c) => c,
-            Err(e) => { tracing::warn!("Backward backfill: DB pool error: {e}"); return; }
+            Err(e) => {
+                tracing::warn!("Backward backfill: DB pool error: {e}");
+                return;
+            }
         };
         db::min_height(&conn).unwrap_or(Some(0)).unwrap_or(0)
     };
@@ -250,7 +262,10 @@ pub async fn backfill_backwards(rpc: &BitcoinRpc, pool: &DbPool) {
         {
             let conn = match pool.get() {
                 Ok(c) => c,
-                Err(e) => { tracing::error!("Backward backfill: DB pool error: {e}"); return; }
+                Err(e) => {
+                    tracing::error!("Backward backfill: DB pool error: {e}");
+                    return;
+                }
             };
             if let Err(e) = db::insert_blocks(&conn, &blocks) {
                 tracing::error!("Backward backfill DB error: {e}");
@@ -288,7 +303,8 @@ async fn ingest_range(
 ) -> Result<(), StatsError> {
     let total = end - start + 1;
     tracing::info!(
-        "{label} {total} blocks ({start} -> {end}) with {} concurrent fetches", concurrency()
+        "{label} {total} blocks ({start} -> {end}) with {} concurrent fetches",
+        concurrency()
     );
 
     let started = Instant::now();

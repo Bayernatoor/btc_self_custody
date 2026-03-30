@@ -2,10 +2,10 @@
 
 use leptos::prelude::*;
 
-use crate::chart_memo;
 use super::components::*;
 use super::helpers::chart_desc;
 use super::shared::*;
+use crate::chart_memo;
 
 #[component]
 pub fn EmbeddedChartsPage() -> impl IntoView {

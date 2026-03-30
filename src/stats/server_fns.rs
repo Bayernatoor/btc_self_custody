@@ -22,7 +22,10 @@ pub async fn fetch_stats_summary() -> Result<StatsSummary, ServerFnError> {
 
     // Return cached result if fresh (< 60 seconds)
     {
-        let cached = state.stats_summary_cache.lock().unwrap_or_else(|e| e.into_inner());
+        let cached = state
+            .stats_summary_cache
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         if let Some((ref summary, ref ts)) = *cached {
             if ts.elapsed().as_secs() < 60 {
                 return Ok(summary.clone());
@@ -30,7 +33,10 @@ pub async fn fetch_stats_summary() -> Result<StatsSummary, ServerFnError> {
         }
     }
 
-    let conn = state.db.get().map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+    let conn = state
+        .db
+        .get()
+        .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
     let stats = super::db::query_stats(&conn)
         .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
     let result = match stats {
@@ -49,7 +55,10 @@ pub async fn fetch_stats_summary() -> Result<StatsSummary, ServerFnError> {
     };
 
     // Cache the result
-    *state.stats_summary_cache.lock().unwrap_or_else(|e| e.into_inner()) =
+    *state
+        .stats_summary_cache
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) =
         Some((result.clone(), Instant::now()));
 
     Ok(result)
@@ -64,7 +73,10 @@ pub async fn fetch_blocks(
         leptos_axum::extract().await.map_err(|e| {
             ServerFnError::new(format!("Stats not available: {e}"))
         })?;
-    let conn = state.db.get().map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+    let conn = state
+        .db
+        .get()
+        .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
     let rows = super::db::query_blocks(&conn, from, to)
         .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
     Ok(rows
@@ -121,7 +133,10 @@ pub async fn fetch_block_detail(
         leptos_axum::extract().await.map_err(|e| {
             ServerFnError::new(format!("Stats not available: {e}"))
         })?;
-    let conn = state.db.get().map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+    let conn = state
+        .db
+        .get()
+        .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
     let row = super::db::query_block_by_height(&conn, height)
         .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
     Ok(row.map(|r| BlockDetail {
@@ -172,12 +187,16 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
     // Get block height + difficulty from the DB (always current from 60s poll).
     // This avoids stale data when getblockchaininfo RPC is slow/fails.
     let db_stats = {
-        let conn = state.db.get().map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+        let conn = state
+            .db
+            .get()
+            .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
         super::db::query_stats(&conn)
             .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?
     };
     let db_height = db_stats.as_ref().map(|s| s.max_height).unwrap_or(0);
-    let db_timestamp = db_stats.as_ref().map(|s| s.latest_timestamp).unwrap_or(0);
+    let db_timestamp =
+        db_stats.as_ref().map(|s| s.latest_timestamp).unwrap_or(0);
 
     // Parallelize RPC calls — all are non-fatal (fall back to defaults)
     let (blockchain_res, mempool_res, hashrate_res, fee_res) = tokio::join!(
@@ -207,8 +226,12 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
     let mempool = mempool_res.unwrap_or_else(|e| {
         tracing::warn!("Failed to fetch mempool info: {e}");
         super::rpc::MempoolInfo {
-            size: 0, bytes: 0, usage: 0, total_fee: 0.0,
-            maxmempool: 300_000_000, mempoolminfee: 0.0,
+            size: 0,
+            bytes: 0,
+            usage: 0,
+            total_fee: 0.0,
+            maxmempool: 300_000_000,
+            mempoolminfee: 0.0,
         }
     });
     let hashrate = hashrate_res.unwrap_or_else(|e| {
@@ -224,17 +247,25 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
     // Atomic guard prevents multiple concurrent HTTP requests on cache miss.
     let price_usd = {
         use std::sync::atomic::Ordering;
-        let cached = state.price_cache.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let cached = state
+            .price_cache
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
         let need_refresh = match &cached {
             Some((_, ts)) => ts.elapsed().as_secs() > 60,
             None => true,
         };
-        if need_refresh && !state.price_refreshing.swap(true, Ordering::AcqRel) {
+        if need_refresh && !state.price_refreshing.swap(true, Ordering::AcqRel)
+        {
             // We won the refresh race — fetch and update cache
             let result = match state.rpc.fetch_price().await {
                 Ok(p) => {
                     let usd = p.usd;
-                    *state.price_cache.lock().unwrap_or_else(|e| e.into_inner()) =
+                    *state
+                        .price_cache
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner()) =
                         Some((p, Instant::now()));
                     usd
                 }
@@ -263,7 +294,11 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
     };
     let market_cap = price_usd * total_supply;
     let chain_size_gb = blockchain.size_on_disk as f64 / 1_000_000_000.0;
-    let utxo_count = state.utxo_count.lock().unwrap_or_else(|e| e.into_inner()).unwrap_or(0);
+    let utxo_count = state
+        .utxo_count
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .unwrap_or(0);
 
     let result = LiveStats {
         blockchain: LiveBlockchain {
@@ -313,7 +348,10 @@ pub async fn fetch_op_returns(
         leptos_axum::extract().await.map_err(|e| {
             ServerFnError::new(format!("Stats not available: {e}"))
         })?;
-    let conn = state.db.get().map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+    let conn = state
+        .db
+        .get()
+        .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
     let rows = super::db::query_op_returns(&conn, from, to)
         .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
     Ok(rows
@@ -351,7 +389,8 @@ pub async fn fetch_daily_aggregates(
 
     // Return cached result if same range requested within 30s
     {
-        let cached = state.daily_cache.lock().unwrap_or_else(|e| e.into_inner());
+        let cached =
+            state.daily_cache.lock().unwrap_or_else(|e| e.into_inner());
         if let Some((ref f, ref t, ref data, ref ts)) = *cached {
             if *f == from_ts && *t == to_ts && ts.elapsed().as_secs() < 120 {
                 return Ok(data.clone());
@@ -359,7 +398,10 @@ pub async fn fetch_daily_aggregates(
         }
     }
 
-    let conn = state.db.get().map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+    let conn = state
+        .db
+        .get()
+        .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
     let rows = super::db::query_daily_aggregates(&conn, from_ts, to_ts)
         .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
     let result: Vec<DailyAggregate> = rows
@@ -422,7 +464,10 @@ pub async fn fetch_signaling(
         leptos_axum::extract().await.map_err(|e| {
             ServerFnError::new(format!("Stats not available: {e}"))
         })?;
-    let conn = state.db.get().map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+    let conn = state
+        .db
+        .get()
+        .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
     let use_locktime = method == "locktime";
 
     let blocks = if use_locktime {
@@ -496,7 +541,10 @@ pub async fn fetch_signaling_periods(
 
     // Return cached result if fresh (< 60 seconds)
     {
-        let cached = state.signaling_periods_cache.lock().unwrap_or_else(|e| e.into_inner());
+        let cached = state
+            .signaling_periods_cache
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         if let Some((ref key, ref data, ref ts)) = *cached {
             if key == &cache_key && ts.elapsed().as_secs() < 60 {
                 return Ok(data
@@ -513,7 +561,10 @@ pub async fn fetch_signaling_periods(
         }
     }
 
-    let conn = state.db.get().map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+    let conn = state
+        .db
+        .get()
+        .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
     let use_locktime = method == "locktime";
 
     let periods = if use_locktime {
@@ -524,7 +575,10 @@ pub async fn fetch_signaling_periods(
     .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
 
     // Cache the result
-    *state.signaling_periods_cache.lock().unwrap_or_else(|e| e.into_inner()) =
+    *state
+        .signaling_periods_cache
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) =
         Some((cache_key, periods.clone(), Instant::now()));
 
     Ok(periods
@@ -548,7 +602,10 @@ pub async fn fetch_miner_dominance(
         leptos_axum::extract().await.map_err(|e| {
             ServerFnError::new(format!("Stats not available: {e}"))
         })?;
-    let conn = state.db.get().map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+    let conn = state
+        .db
+        .get()
+        .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
     let rows = super::db::query_miner_dominance(&conn, from, to)
         .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
     let total: u64 = rows.iter().map(|r| r.count).sum();
@@ -575,7 +632,10 @@ pub async fn fetch_miner_dominance_daily(
         leptos_axum::extract().await.map_err(|e| {
             ServerFnError::new(format!("Stats not available: {e}"))
         })?;
-    let conn = state.db.get().map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+    let conn = state
+        .db
+        .get()
+        .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
     let rows = super::db::query_miner_dominance_daily(&conn, from_ts, to_ts)
         .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
     let total: u64 = rows.iter().map(|r| r.count).sum();
@@ -602,7 +662,10 @@ pub async fn fetch_empty_blocks(
         leptos_axum::extract().await.map_err(|e| {
             ServerFnError::new(format!("Stats not available: {e}"))
         })?;
-    let conn = state.db.get().map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+    let conn = state
+        .db
+        .get()
+        .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
     let rows = super::db::query_empty_blocks(&conn, from, to)
         .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
     Ok(rows
@@ -632,7 +695,10 @@ pub async fn fetch_price_history(
 
     // Return cached full dataset if fresh (< 1 hour old)
     {
-        let cached = state.price_history_cache.lock().unwrap_or_else(|e| e.into_inner());
+        let cached = state
+            .price_history_cache
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         if let Some((_, _, ref data, ref ts)) = *cached {
             if ts.elapsed().as_secs() < 3600 {
                 return Ok(data.clone());
@@ -641,11 +707,10 @@ pub async fn fetch_price_history(
     }
 
     // Fetch full history from blockchain.info (daily granularity, all time)
-    let prices = state
-        .rpc
-        .fetch_price_history_all()
-        .await
-        .map_err(|e| ServerFnError::new(format!("Price history error: {e}")))?;
+    let prices =
+        state.rpc.fetch_price_history_all().await.map_err(|e| {
+            ServerFnError::new(format!("Price history error: {e}"))
+        })?;
 
     let all_points: Vec<PricePoint> = prices
         .into_iter()
@@ -656,7 +721,10 @@ pub async fn fetch_price_history(
         .collect();
 
     // Cache full dataset
-    *state.price_history_cache.lock().unwrap_or_else(|e| e.into_inner()) =
+    *state
+        .price_history_cache
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) =
         Some((0, u64::MAX, all_points.clone(), Instant::now()));
 
     Ok(all_points)
@@ -673,19 +741,28 @@ pub async fn fetch_block_timestamp(
 
     // Block timestamps are immutable — cache forever
     {
-        let cache = state.block_ts_cache.lock().unwrap_or_else(|e| e.into_inner());
+        let cache = state
+            .block_ts_cache
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         if let Some(&ts) = cache.get(&height) {
             return Ok(Some(ts));
         }
     }
 
-    let conn = state.db.get().map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+    let conn = state
+        .db
+        .get()
+        .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
     let result = super::db::query_block_timestamp(&conn, height)
         .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
 
     // Cache if found
     if let Some(ts) = result {
-        state.block_ts_cache.lock().unwrap_or_else(|e| e.into_inner())
+        state
+            .block_ts_cache
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
             .insert(height, ts);
     }
 

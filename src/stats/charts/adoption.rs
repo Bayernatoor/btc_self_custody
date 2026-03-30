@@ -1,5 +1,5 @@
-use serde_json::json;
 use super::*;
+use serde_json::json;
 
 const SEGWIT_V0_COLOR: &str = "#3b82f6"; // Blue for SegWit v0
 const SEGWIT_V1_COLOR: &str = "#22c55e"; // Green for Taproot v1
@@ -33,7 +33,12 @@ pub fn segwit_adoption_chart(blocks: &[BlockSummary]) -> String {
     let ma_series: Vec<serde_json::Value> = blocks
         .iter()
         .zip(ma.iter())
-        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))]))
+        .map(|(b, m)| {
+            json!([
+                ts_ms(b.timestamp),
+                m.map(|v| json!(v)).unwrap_or(json!(null))
+            ])
+        })
         .collect();
 
     let has_ma = show_ma(blocks.len());
@@ -131,7 +136,12 @@ pub fn taproot_chart(blocks: &[BlockSummary]) -> String {
     let ma_series: Vec<serde_json::Value> = blocks
         .iter()
         .zip(ma.iter())
-        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))]))
+        .map(|(b, m)| {
+            json!([
+                ts_ms(b.timestamp),
+                m.map(|v| json!(v)).unwrap_or(json!(null))
+            ])
+        })
         .collect();
 
     let has_ma = show_ma(blocks.len());
@@ -167,8 +177,10 @@ pub fn taproot_chart_daily(days: &[DailyAggregate]) -> String {
     }
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let vals: Vec<f64> =
-        days.iter().map(|d| round(d.avg_taproot_spend_count, 1)).collect();
+    let vals: Vec<f64> = days
+        .iter()
+        .map(|d| round(d.avg_taproot_spend_count, 1))
+        .collect();
     let ma = moving_average(&vals, 7);
     let ma_vals: Vec<serde_json::Value> = ma
         .iter()
@@ -209,10 +221,8 @@ pub fn witness_version_chart(blocks: &[BlockSummary]) -> String {
         .iter()
         .map(|b| (b.p2wpkh_count + b.p2wsh_count) as f64)
         .collect();
-    let v1_vals: Vec<f64> = blocks
-        .iter()
-        .map(|b| b.p2tr_count as f64)
-        .collect();
+    let v1_vals: Vec<f64> =
+        blocks.iter().map(|b| b.p2tr_count as f64).collect();
 
     let v0_data: Vec<serde_json::Value> = blocks
         .iter()
@@ -259,10 +269,8 @@ pub fn witness_version_chart_daily(days: &[DailyAggregate]) -> String {
         .iter()
         .map(|d| round(d.avg_p2wpkh_count + d.avg_p2wsh_count, 1))
         .collect();
-    let v1_vals: Vec<f64> = days
-        .iter()
-        .map(|d| round(d.avg_p2tr_count, 1))
-        .collect();
+    let v1_vals: Vec<f64> =
+        days.iter().map(|d| round(d.avg_p2tr_count, 1)).collect();
 
     build_option(json!({
         "xAxis": x_axis_for(true, &cats),
@@ -311,7 +319,8 @@ pub fn witness_version_pct_chart(blocks: &[BlockSummary]) -> String {
             let v0 = b.p2wpkh_count + b.p2wsh_count;
             let total = v0 + b.p2tr_count;
             if total > 0 {
-                (b.p2tr_count as f64 / total as f64 * 100.0 * 100.0).round() / 100.0
+                (b.p2tr_count as f64 / total as f64 * 100.0 * 100.0).round()
+                    / 100.0
             } else {
                 0.0
             }
@@ -428,7 +437,8 @@ pub fn witness_version_tx_pct_chart(blocks: &[BlockSummary]) -> String {
         .map(|b| {
             if b.output_count > 0 {
                 let v0 = b.p2wpkh_count + b.p2wsh_count;
-                (v0 as f64 / b.output_count as f64 * 100.0 * 100.0).round() / 100.0
+                (v0 as f64 / b.output_count as f64 * 100.0 * 100.0).round()
+                    / 100.0
             } else {
                 0.0
             }
@@ -438,7 +448,8 @@ pub fn witness_version_tx_pct_chart(blocks: &[BlockSummary]) -> String {
         .iter()
         .map(|b| {
             if b.output_count > 0 {
-                (b.p2tr_count as f64 / b.output_count as f64 * 100.0 * 100.0).round()
+                (b.p2tr_count as f64 / b.output_count as f64 * 100.0 * 100.0)
+                    .round()
                     / 100.0
             } else {
                 0.0
@@ -579,8 +590,14 @@ pub fn taproot_spend_type_chart(blocks: &[BlockSummary]) -> String {
         return no_data_chart("Taproot Spend Types");
     }
 
-    let keypath: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.taproot_keypath_count)).collect();
-    let scriptpath: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.taproot_scriptpath_count)).collect();
+    let keypath: Vec<serde_json::Value> = blocks
+        .iter()
+        .map(|b| dp(b, b.taproot_keypath_count))
+        .collect();
+    let scriptpath: Vec<serde_json::Value> = blocks
+        .iter()
+        .map(|b| dp(b, b.taproot_scriptpath_count))
+        .collect();
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
@@ -601,8 +618,14 @@ pub fn taproot_spend_type_chart_daily(days: &[DailyAggregate]) -> String {
         return no_data_chart("Taproot Spend Types");
     }
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let keypath: Vec<f64> = days.iter().map(|d| round(d.avg_taproot_keypath_count, 1)).collect();
-    let scriptpath: Vec<f64> = days.iter().map(|d| round(d.avg_taproot_scriptpath_count, 1)).collect();
+    let keypath: Vec<f64> = days
+        .iter()
+        .map(|d| round(d.avg_taproot_keypath_count, 1))
+        .collect();
+    let scriptpath: Vec<f64> = days
+        .iter()
+        .map(|d| round(d.avg_taproot_scriptpath_count, 1))
+        .collect();
 
     build_option(json!({
         "xAxis": x_axis_for(true, &cats),

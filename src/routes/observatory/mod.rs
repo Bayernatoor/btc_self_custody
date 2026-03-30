@@ -14,18 +14,18 @@ pub mod helpers;
 pub mod learn;
 pub mod shared;
 
-mod overview;
-mod network;
+mod embedded;
 mod fees;
 mod mining;
-mod embedded;
+mod network;
+mod overview;
 mod signaling;
 
-pub use overview::ObservatoryOverview;
-pub use network::NetworkChartsPage;
+pub use embedded::EmbeddedChartsPage;
 pub use fees::FeeChartsPage;
 pub use mining::MiningChartsPage;
-pub use embedded::EmbeddedChartsPage;
+pub use network::NetworkChartsPage;
+pub use overview::ObservatoryOverview;
 pub use signaling::SignalingPage;
 
 use leptos::prelude::*;
@@ -43,7 +43,8 @@ pub fn ObservatoryPage() -> impl IntoView {
     let _state = provide_observatory_state();
 
     let location = leptos_router::hooks::use_location();
-    let on_dashboard = Signal::derive(move || location.pathname.get() == "/observatory");
+    let on_dashboard =
+        Signal::derive(move || location.pathname.get() == "/observatory");
 
     view! {
         <Title text="The Bitcoin Observatory - WE HODL BTC"/>

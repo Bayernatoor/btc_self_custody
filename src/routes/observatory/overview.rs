@@ -13,11 +13,13 @@ pub fn ObservatoryOverview() -> impl IntoView {
     let live_ctx = expect_context::<LiveContext>();
     let cached_live = state.cached_live;
 
-    let live_field = move |f: fn(&crate::stats::types::LiveStats) -> String| -> String {
-        cached_live.get()
-            .map(|s| f(&s))
-            .unwrap_or_else(|| "\u{2014}".to_string())
-    };
+    let live_field =
+        move |f: fn(&crate::stats::types::LiveStats) -> String| -> String {
+            cached_live
+                .get()
+                .map(|s| f(&s))
+                .unwrap_or_else(|| "\u{2014}".to_string())
+        };
 
     let block_height = Signal::derive(move || {
         live_field(|s| format_number(s.blockchain.blocks))
@@ -84,7 +86,8 @@ pub fn ObservatoryOverview() -> impl IntoView {
     });
 
     let gauge_option = Signal::derive(move || {
-        cached_live.get()
+        cached_live
+            .get()
             .map(|s| {
                 crate::stats::charts::mempool_gauge(
                     s.mempool.usage,
@@ -101,14 +104,18 @@ pub fn ObservatoryOverview() -> impl IntoView {
 
     let next_halving_height = Signal::derive(move || {
         let h = raw_block_height.get();
-        if h == 0 { return 0u64; }
+        if h == 0 {
+            return 0u64;
+        }
         ((h / 210_000) + 1) * 210_000
     });
 
     let halving_blocks_remaining = Signal::derive(move || {
         let nh = next_halving_height.get();
         let h = raw_block_height.get();
-        if nh == 0 { return 0u64; }
+        if nh == 0 {
+            return 0u64;
+        }
         nh.saturating_sub(h)
     });
 
@@ -120,18 +127,26 @@ pub fn ObservatoryOverview() -> impl IntoView {
 
     let current_subsidy_btc = Signal::derive(move || {
         let h = raw_block_height.get();
-        if h == 0 { return "---".to_string(); }
+        if h == 0 {
+            return "---".to_string();
+        }
         let halvings = h / 210_000;
-        if halvings >= 64 { return "0".to_string(); }
+        if halvings >= 64 {
+            return "0".to_string();
+        }
         let sats = 5_000_000_000u64 >> halvings;
         format!("{:.4} BTC", sats as f64 / 100_000_000.0)
     });
 
     let next_subsidy_btc = Signal::derive(move || {
         let h = raw_block_height.get();
-        if h == 0 { return "---".to_string(); }
+        if h == 0 {
+            return "---".to_string();
+        }
         let next_halvings = (h / 210_000) + 1;
-        if next_halvings >= 64 { return "0 BTC".to_string(); }
+        if next_halvings >= 64 {
+            return "0 BTC".to_string();
+        }
         let sats = 5_000_000_000u64 >> next_halvings;
         format!("{:.4} BTC", sats as f64 / 100_000_000.0)
     });
@@ -139,12 +154,16 @@ pub fn ObservatoryOverview() -> impl IntoView {
     // Difficulty adjustment predictor
     let diff_period_start = Signal::derive(move || {
         let h = raw_block_height.get();
-        if h == 0 { return 0u64; }
+        if h == 0 {
+            return 0u64;
+        }
         (h / 2016) * 2016
     });
 
     let diff_blocks_into_period = Signal::derive(move || {
-        raw_block_height.get().saturating_sub(diff_period_start.get())
+        raw_block_height
+            .get()
+            .saturating_sub(diff_period_start.get())
     });
 
     let diff_blocks_remaining = Signal::derive(move || {
@@ -164,7 +183,9 @@ pub fn ObservatoryOverview() -> impl IntoView {
     let period_start_ts = LocalResource::new(move || {
         let ps = diff_period_start.get();
         async move {
-            if ps == 0 { return 0u64; }
+            if ps == 0 {
+                return 0u64;
+            }
             fetch_block_timestamp(ps).await.ok().flatten().unwrap_or(0)
         }
     });
@@ -172,32 +193,52 @@ pub fn ObservatoryOverview() -> impl IntoView {
     let prev_period_start_ts = LocalResource::new(move || {
         let ps = diff_period_start.get();
         async move {
-            if ps < 2016 { return 0u64; }
-            fetch_block_timestamp(ps - 2016).await.ok().flatten().unwrap_or(0)
+            if ps < 2016 {
+                return 0u64;
+            }
+            fetch_block_timestamp(ps - 2016)
+                .await
+                .ok()
+                .flatten()
+                .unwrap_or(0)
         }
     });
 
     let prev_diff_change = Signal::derive(move || {
         let ps = diff_period_start.get();
-        if ps < 2016 { return "\u{2014}".to_string(); }
+        if ps < 2016 {
+            return "\u{2014}".to_string();
+        }
         let prev_ts = prev_period_start_ts.get().unwrap_or(0);
         let curr_ts = period_start_ts.get().unwrap_or(0);
-        if prev_ts == 0 || curr_ts == 0 || curr_ts <= prev_ts { return "\u{2014}".to_string(); }
+        if prev_ts == 0 || curr_ts == 0 || curr_ts <= prev_ts {
+            return "\u{2014}".to_string();
+        }
         let actual_time = (curr_ts - prev_ts) as f64;
         let target_time = 2016.0 * 600.0;
         let change = (target_time / actual_time - 1.0) * 100.0;
         let rounded = (change * 100.0).round() / 100.0;
-        if rounded >= 0.0 { format!("+{:.2}%", rounded) } else { format!("{:.2}%", rounded) }
+        if rounded >= 0.0 {
+            format!("+{:.2}%", rounded)
+        } else {
+            format!("{:.2}%", rounded)
+        }
     });
 
     let avg_block_time = Signal::derive(move || {
         let blocks_in = diff_blocks_into_period.get();
-        if blocks_in < 2 { return "\u{2014}".to_string(); }
+        if blocks_in < 2 {
+            return "\u{2014}".to_string();
+        }
         let start_ts = period_start_ts.get().unwrap_or(0);
-        if start_ts == 0 { return "\u{2014}".to_string(); }
-        let current_ts = cached_live.get()
-            .map(|s| s.blockchain.time).unwrap_or(0);
-        if current_ts <= start_ts { return "\u{2014}".to_string(); }
+        if start_ts == 0 {
+            return "\u{2014}".to_string();
+        }
+        let current_ts =
+            cached_live.get().map(|s| s.blockchain.time).unwrap_or(0);
+        if current_ts <= start_ts {
+            return "\u{2014}".to_string();
+        }
         let elapsed_min = (current_ts - start_ts) as f64 / 60.0;
         let avg = elapsed_min / blocks_in as f64;
         format!("{:.1} min", avg)
@@ -207,21 +248,30 @@ pub fn ObservatoryOverview() -> impl IntoView {
     // falls back to 10.0 if not enough data yet. Used for halving estimation.
     let measured_block_min = Signal::derive(move || {
         let blocks_in = diff_blocks_into_period.get();
-        if blocks_in < 10 { return 10.0f64; }
+        if blocks_in < 10 {
+            return 10.0f64;
+        }
         let start_ts = period_start_ts.get().unwrap_or(0);
-        if start_ts == 0 { return 10.0; }
-        let current_ts = cached_live.get()
-            .map(|s| s.blockchain.time).unwrap_or(0);
-        if current_ts <= start_ts { return 10.0; }
+        if start_ts == 0 {
+            return 10.0;
+        }
+        let current_ts =
+            cached_live.get().map(|s| s.blockchain.time).unwrap_or(0);
+        if current_ts <= start_ts {
+            return 10.0;
+        }
         (current_ts - start_ts) as f64 / 60.0 / blocks_in as f64
     });
 
     let halving_est_date = Signal::derive(move || {
         let remaining = halving_blocks_remaining.get();
-        if remaining == 0 { return "\u{2014}".to_string(); }
+        if remaining == 0 {
+            return "\u{2014}".to_string();
+        }
         let avg_min = measured_block_min.get();
         let days = remaining as f64 * avg_min / 1440.0;
-        let est = chrono::Utc::now() + chrono::Duration::seconds((days * 86400.0) as i64);
+        let est = chrono::Utc::now()
+            + chrono::Duration::seconds((days * 86400.0) as i64);
         est.format("%b %d, %Y").to_string()
     });
 
@@ -233,25 +283,38 @@ pub fn ObservatoryOverview() -> impl IntoView {
 
     let diff_expected_change = Signal::derive(move || {
         let blocks_in = diff_blocks_into_period.get();
-        if blocks_in < 10 { return "\u{2014}".to_string(); }
+        if blocks_in < 10 {
+            return "\u{2014}".to_string();
+        }
         let start_ts = period_start_ts.get().unwrap_or(0);
-        if start_ts == 0 { return "\u{2014}".to_string(); }
-        let current_ts = cached_live.get()
-            .map(|s| s.blockchain.time).unwrap_or(0);
-        if current_ts <= start_ts { return "\u{2014}".to_string(); }
+        if start_ts == 0 {
+            return "\u{2014}".to_string();
+        }
+        let current_ts =
+            cached_live.get().map(|s| s.blockchain.time).unwrap_or(0);
+        if current_ts <= start_ts {
+            return "\u{2014}".to_string();
+        }
         let elapsed = (current_ts - start_ts) as f64;
         let projected = elapsed * 2016.0 / blocks_in as f64;
         let target = 2016.0 * 600.0;
         let change = (target / projected - 1.0) * 100.0;
         let rounded = (change * 10.0).round() / 10.0;
-        if rounded >= 0.0 { format!("+{:.1}%", rounded) } else { format!("{:.1}%", rounded) }
+        if rounded >= 0.0 {
+            format!("+{:.1}%", rounded)
+        } else {
+            format!("{:.1}%", rounded)
+        }
     });
 
     let diff_est_date = Signal::derive(move || {
         let remaining = diff_blocks_remaining.get();
-        if remaining == 0 { return "\u{2014}".to_string(); }
+        if remaining == 0 {
+            return "\u{2014}".to_string();
+        }
         let days = remaining as f64 * 10.0 / 1440.0;
-        let est = chrono::Utc::now() + chrono::Duration::seconds((days * 86400.0) as i64);
+        let est = chrono::Utc::now()
+            + chrono::Duration::seconds((days * 86400.0) as i64);
         est.format("%b %d, %Y").to_string()
     });
 

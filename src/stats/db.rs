@@ -18,21 +18,22 @@ pub const BACKFILL_VERSION: u64 = 7;
 pub type DbPool = r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>;
 
 /// Create a connection pool with WAL mode and proper initialization.
-pub fn open_pool(path: &Path, pool_size: u32) -> Result<DbPool, Box<dyn std::error::Error>> {
-    let manager = r2d2_sqlite::SqliteConnectionManager::file(path)
-        .with_init(|conn| {
+pub fn open_pool(
+    path: &Path,
+    pool_size: u32,
+) -> Result<DbPool, Box<dyn std::error::Error>> {
+    let manager =
+        r2d2_sqlite::SqliteConnectionManager::file(path).with_init(|conn| {
             conn.execute_batch(
                 "PRAGMA journal_mode = WAL;
                  PRAGMA synchronous = NORMAL;
                  PRAGMA busy_timeout = 5000;
-                 PRAGMA foreign_keys = ON;"
+                 PRAGMA foreign_keys = ON;",
             )?;
             Ok(())
         });
 
-    let pool = r2d2::Pool::builder()
-        .max_size(pool_size)
-        .build(manager)?;
+    let pool = r2d2::Pool::builder().max_size(pool_size).build(manager)?;
 
     // Run schema migrations on one connection
     {
@@ -180,7 +181,9 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
         .prepare("SELECT inscription_count FROM blocks LIMIT 0")
         .is_ok();
     if !has_inscriptions {
-        tracing::info!("Migrating: adding inscription_count, inscription_bytes columns");
+        tracing::info!(
+            "Migrating: adding inscription_count, inscription_bytes columns"
+        );
         conn.execute_batch(
             "ALTER TABLE blocks ADD COLUMN inscription_count INTEGER NOT NULL DEFAULT 0;
              ALTER TABLE blocks ADD COLUMN inscription_bytes INTEGER NOT NULL DEFAULT 0;",

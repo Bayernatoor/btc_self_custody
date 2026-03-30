@@ -30,8 +30,16 @@ async fn main() {
 
     let mut app = Router::new()
         // Legacy /stats redirect (301 for SEO)
-        .route("/stats", get(|| async { Redirect::permanent("/observatory") }))
-        .route("/stats/learn/protocols", get(|| async { Redirect::permanent("/observatory/learn/protocols") }))
+        .route(
+            "/stats",
+            get(|| async { Redirect::permanent("/observatory") }),
+        )
+        .route(
+            "/stats/learn/protocols",
+            get(|| async {
+                Redirect::permanent("/observatory/learn/protocols")
+            }),
+        )
         .leptos_routes(&leptos_options, routes, {
             let leptos_options = leptos_options.clone();
             move || shell(leptos_options.clone())

@@ -1,5 +1,5 @@
-use serde_json::json;
 use super::*;
+use serde_json::json;
 
 /// Fees line chart (per-block: total fees in sats).
 pub fn fees_chart(blocks: &[BlockSummary]) -> String {

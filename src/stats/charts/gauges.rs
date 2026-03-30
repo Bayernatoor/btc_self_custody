@@ -1,6 +1,6 @@
-use serde_json::json;
 #[allow(unused_imports)]
 use super::*;
+use serde_json::json;
 
 /// Mempool usage gauge chart.
 pub fn mempool_gauge(usage: u64, max: u64) -> String {

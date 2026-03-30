@@ -87,12 +87,14 @@ pub fn provide_observatory_state() -> ObservatoryState {
     let query = use_query_map();
 
     // Read initial values from URL
-    let initial_range = query.read_untracked()
+    let initial_range = query
+        .read_untracked()
         .get("range")
         .filter(|r| !r.is_empty())
         .unwrap_or_else(|| "all".to_string());
 
-    let initial_overlays: Vec<String> = query.read_untracked()
+    let initial_overlays: Vec<String> = query
+        .read_untracked()
         .get("overlays")
         .filter(|s| !s.is_empty())
         .map(|s| s.split(',').map(|s| s.to_string()).collect())
@@ -101,12 +103,18 @@ pub fn provide_observatory_state() -> ObservatoryState {
     let (range, set_range) = signal(initial_range);
 
     // Overlay toggles — initialized from URL
-    let (overlay_halvings, set_overlay_halvings) = signal(initial_overlays.iter().any(|s| s == "halvings"));
-    let (overlay_bips, set_overlay_bips) = signal(initial_overlays.iter().any(|s| s == "bips"));
-    let (overlay_core, set_overlay_core) = signal(initial_overlays.iter().any(|s| s == "core"));
-    let (overlay_price, set_overlay_price) = signal(initial_overlays.iter().any(|s| s == "price"));
-    let (overlay_chain_size, set_overlay_chain_size) = signal(initial_overlays.iter().any(|s| s == "chain_size"));
-    let (overlay_events, set_overlay_events) = signal(initial_overlays.iter().any(|s| s == "events"));
+    let (overlay_halvings, set_overlay_halvings) =
+        signal(initial_overlays.iter().any(|s| s == "halvings"));
+    let (overlay_bips, set_overlay_bips) =
+        signal(initial_overlays.iter().any(|s| s == "bips"));
+    let (overlay_core, set_overlay_core) =
+        signal(initial_overlays.iter().any(|s| s == "core"));
+    let (overlay_price, set_overlay_price) =
+        signal(initial_overlays.iter().any(|s| s == "price"));
+    let (overlay_chain_size, set_overlay_chain_size) =
+        signal(initial_overlays.iter().any(|s| s == "chain_size"));
+    let (overlay_events, set_overlay_events) =
+        signal(initial_overlays.iter().any(|s| s == "events"));
     let (overlay_panel_open, set_overlay_panel_open) = signal(false);
 
     // URL query params are read on mount (above) but not synced back.
@@ -120,13 +128,19 @@ pub fn provide_observatory_state() -> ObservatoryState {
             if !enabled {
                 return Vec::new();
             }
-            let mut data: Vec<(u64, f64)> = match fetch_price_history(0, 4_000_000_000).await {
-                Ok(pts) => pts.into_iter().map(|p| (p.timestamp_ms, p.price_usd)).collect(),
-                Err(e) => {
-                    leptos::logging::warn!("Price history fetch failed: {e}");
-                    Vec::new()
-                }
-            };
+            let mut data: Vec<(u64, f64)> =
+                match fetch_price_history(0, 4_000_000_000).await {
+                    Ok(pts) => pts
+                        .into_iter()
+                        .map(|p| (p.timestamp_ms, p.price_usd))
+                        .collect(),
+                    Err(e) => {
+                        leptos::logging::warn!(
+                            "Price history fetch failed: {e}"
+                        );
+                        Vec::new()
+                    }
+                };
             if let Ok(live_stats) = fetch_live_stats().await {
                 let now_ms = chrono::Utc::now().timestamp() as u64 * 1000;
                 if live_stats.network.price_usd > 0.0 {
@@ -140,7 +154,8 @@ pub fn provide_observatory_state() -> ObservatoryState {
         }
     });
 
-    let (cached_price_history, set_cached_price_history) = signal::<Vec<(u64, f64)>>(Vec::new());
+    let (cached_price_history, set_cached_price_history) =
+        signal::<Vec<(u64, f64)>>(Vec::new());
     let price_loading = Signal::derive(move || {
         overlay_price.get() && cached_price_history.get().is_empty()
     });
@@ -165,7 +180,9 @@ pub fn provide_observatory_state() -> ObservatoryState {
             #[cfg(feature = "hydrate")]
             {
                 let hidden = leptos::prelude::document().hidden();
-                if hidden { return; }
+                if hidden {
+                    return;
+                }
             }
             set_countdown.update(|c| {
                 if *c == 0 {
@@ -231,23 +248,33 @@ pub fn provide_observatory_state() -> ObservatoryState {
                             .iter()
                             .map(|b| {
                                 cumulative += b.size as f64 / 1_000_000_000.0;
-                                (b.timestamp * 1000, (cumulative * 1000.0).round() / 1000.0)
+                                (
+                                    b.timestamp * 1000,
+                                    (cumulative * 1000.0).round() / 1000.0,
+                                )
                             })
                             .collect(),
                         DashboardData::Daily(ref days) => days
                             .iter()
                             .filter_map(|d| {
-                                cumulative += d.avg_size * d.block_count as f64 / 1_000_000_000.0;
-                                let ts = chrono::NaiveDate::parse_from_str(&d.date, "%Y-%m-%d")
-                                    .map(|dt| {
-                                        dt.and_hms_opt(12, 0, 0)
-                                            .unwrap()
-                                            .and_utc()
-                                            .timestamp() as u64
-                                            * 1000
-                                    })
-                                    .ok()?;
-                                Some((ts, (cumulative * 1000.0).round() / 1000.0))
+                                cumulative += d.avg_size * d.block_count as f64
+                                    / 1_000_000_000.0;
+                                let ts = chrono::NaiveDate::parse_from_str(
+                                    &d.date, "%Y-%m-%d",
+                                )
+                                .map(|dt| {
+                                    dt.and_hms_opt(12, 0, 0)
+                                        .unwrap()
+                                        .and_utc()
+                                        .timestamp()
+                                        as u64
+                                        * 1000
+                                })
+                                .ok()?;
+                                Some((
+                                    ts,
+                                    (cumulative * 1000.0).round() / 1000.0,
+                                ))
                             })
                             .collect(),
                     }
@@ -339,11 +366,17 @@ macro_rules! chart_memo {
                 .and_then(|r| r.ok())
                 .map(|data| {
                     let (json, is_daily) = match data {
-                        DashboardData::PerBlock(ref $blocks) => ($per_block, false),
+                        DashboardData::PerBlock(ref $blocks) => {
+                            ($per_block, false)
+                        }
                         DashboardData::Daily(ref $days) => ($daily, true),
                     };
-                    if json.is_empty() { return String::new(); }
-                    crate::stats::charts::apply_overlays(&json, &flags, is_daily)
+                    if json.is_empty() {
+                        return String::new();
+                    }
+                    crate::stats::charts::apply_overlays(
+                        &json, &flags, is_daily,
+                    )
                 })
                 .unwrap_or_default()
         })
@@ -363,7 +396,11 @@ pub fn RangeSelector() -> impl IntoView {
 
     let range_label = move || {
         let n = range_to_blocks(&range.get());
-        if n > 5_000 { "daily averages" } else { "per block" }
+        if n > 5_000 {
+            "daily averages"
+        } else {
+            "per block"
+        }
     };
 
     view! {
@@ -431,7 +468,8 @@ pub fn RangeSelector() -> impl IntoView {
 pub fn OverlayPanel() -> impl IntoView {
     let state = expect_context::<ObservatoryState>();
     let location = leptos_router::hooks::use_location();
-    let on_dashboard = Signal::derive(move || location.pathname.get() == "/observatory");
+    let on_dashboard =
+        Signal::derive(move || location.pathname.get() == "/observatory");
 
     view! {
         <div style="z-index: 10000" class="fixed left-4 bottom-4" class:hidden=on_dashboard>
@@ -620,9 +658,7 @@ pub fn BlockDetailModal() -> impl IntoView {
 
 /// Loading skeleton for chart pages (shown while dashboard_data is loading)
 #[component]
-pub fn ChartPageSkeleton(
-    #[prop(default = 3)] count: usize,
-) -> impl IntoView {
+pub fn ChartPageSkeleton(#[prop(default = 3)] count: usize) -> impl IntoView {
     view! {
         <div class="space-y-10">
             {(0..count).map(|_| view! {
