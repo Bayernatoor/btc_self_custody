@@ -10,6 +10,9 @@ use wasm_bindgen::prelude::*;
 extern "C" {
     #[wasm_bindgen(js_name = setChartOption)]
     fn set_chart_option(id: &str, option_json: &str);
+
+    #[wasm_bindgen(js_name = setChartOptionLazy)]
+    fn set_chart_option_lazy(id: &str, option_json: &str);
 }
 
 #[cfg(feature = "hydrate")]
@@ -20,7 +23,11 @@ extern "C" {
 }
 
 #[cfg(not(feature = "hydrate"))]
+#[allow(dead_code)]
 fn set_chart_option(_id: &str, _json: &str) {}
+
+#[cfg(not(feature = "hydrate"))]
+fn set_chart_option_lazy(_id: &str, _json: &str) {}
 
 #[cfg(not(feature = "hydrate"))]
 pub fn show_block_detail(_height: u64) {}
@@ -41,7 +48,7 @@ pub fn Chart(
         let json = option.get();
         if !json.is_empty() && *last_json.borrow() != json {
             *last_json.borrow_mut() = json.clone();
-            set_chart_option(&id_clone, &json);
+            set_chart_option_lazy(&id_clone, &json);
         }
     });
 
