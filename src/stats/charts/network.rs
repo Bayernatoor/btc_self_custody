@@ -557,12 +557,17 @@ pub fn avg_tx_size_chart_daily(days: &[DailyAggregate]) -> String {
 
 /// Cumulative chain size over time (per-block).
 /// `disk_size_gb` is the current size_on_disk from getblockchaininfo.
-pub fn chain_size_chart(blocks: &[BlockSummary], disk_size_gb: f64) -> String {
+/// `offset_bytes` is the total block data before the first block in this window.
+pub fn chain_size_chart(
+    blocks: &[BlockSummary],
+    disk_size_gb: f64,
+    offset_bytes: u64,
+) -> String {
     if blocks.is_empty() {
         return no_data_chart("Chain Size");
     }
 
-    let mut cumulative: f64 = 0.0;
+    let mut cumulative: f64 = offset_bytes as f64 / 1_000_000_000.0;
     let block_data: Vec<serde_json::Value> = blocks
         .iter()
         .map(|b| {
@@ -571,9 +576,7 @@ pub fn chain_size_chart(blocks: &[BlockSummary], disk_size_gb: f64) -> String {
         })
         .collect();
 
-    // Only show disk size estimate when we have enough history for the ratio to be meaningful.
-    // On short ranges the cumulative starts at 0 (not the true chain total), making the ratio
-    // wildly wrong.  Heuristic: need at least 100 GB of block data in the window.
+    // The final cumulative is the total block data size
     let block_total = cumulative;
     let show_disk = block_total >= 20.0 && disk_size_gb > 0.0;
 
@@ -586,13 +589,13 @@ pub fn chain_size_chart(blocks: &[BlockSummary], disk_size_gb: f64) -> String {
 
     if show_disk {
         let ratio = disk_size_gb / block_total;
-        let mut cumulative2: f64 = 0.0;
+        let offset_disk = offset_bytes as f64 / 1_000_000_000.0 * ratio;
+        let mut cumulative2 = offset_disk;
         let disk_data: Vec<serde_json::Value> = blocks
             .iter()
             .map(|b| {
-                cumulative2 += b.size as f64 / 1_000_000_000.0;
-                let estimated = cumulative2 * ratio;
-                dp(b, (estimated * 1000.0).round() / 1000.0)
+                cumulative2 += b.size as f64 / 1_000_000_000.0 * ratio;
+                dp(b, (cumulative2 * 1000.0).round() / 1000.0)
             })
             .collect();
         series.push(json!({
@@ -616,13 +619,14 @@ pub fn chain_size_chart(blocks: &[BlockSummary], disk_size_gb: f64) -> String {
 pub fn chain_size_chart_daily(
     days: &[DailyAggregate],
     disk_size_gb: f64,
+    offset_bytes: u64,
 ) -> String {
     if days.is_empty() {
         return no_data_chart("Chain Size");
     }
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let mut cumulative: f64 = 0.0;
+    let mut cumulative: f64 = offset_bytes as f64 / 1_000_000_000.0;
     let block_data: Vec<f64> = days
         .iter()
         .map(|d| {
@@ -631,8 +635,6 @@ pub fn chain_size_chart_daily(
         })
         .collect();
 
-    // Same heuristic as per-block: only show disk size when the window covers enough
-    // of the chain for the ratio to be meaningful.
     let block_total = cumulative;
     let show_disk = block_total >= 20.0 && disk_size_gb > 0.0;
 
@@ -645,14 +647,14 @@ pub fn chain_size_chart_daily(
 
     if show_disk {
         let ratio = disk_size_gb / block_total;
-        let mut cumulative2: f64 = 0.0;
+        let offset_disk = offset_bytes as f64 / 1_000_000_000.0 * ratio;
+        let mut cumulative2 = offset_disk;
         let disk_data: Vec<f64> = days
             .iter()
             .map(|d| {
                 cumulative2 +=
-                    d.avg_size * d.block_count as f64 / 1_000_000_000.0;
-                let estimated = cumulative2 * ratio;
-                (estimated * 1000.0).round() / 1000.0
+                    d.avg_size * d.block_count as f64 / 1_000_000_000.0 * ratio;
+                (cumulative2 * 1000.0).round() / 1000.0
             })
             .collect();
         series.push(json!({

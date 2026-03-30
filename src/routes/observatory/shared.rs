@@ -91,7 +91,7 @@ pub fn provide_observatory_state() -> ObservatoryState {
         .read_untracked()
         .get("range")
         .filter(|r| !r.is_empty())
-        .unwrap_or_else(|| "all".to_string());
+        .unwrap_or_else(|| "1y".to_string());
 
     let initial_overlays: Vec<String> = query
         .read_untracked()

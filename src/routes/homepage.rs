@@ -117,5 +117,79 @@ pub fn HomePage() -> impl IntoView {
                 </a>
             </div>
         </section>
+
+        // Observatory callout
+        <section aria-label="The Bitcoin Observatory" class="max-w-5xl mx-auto px-6 lg:max-w-6xl pb-28 lg:pb-32 lg:px-8">
+            <div class="text-center mb-10">
+                <h2 class="text-xl sm:text-2xl lg:text-3xl font-title text-white mb-2">"Explore the Blockchain"</h2>
+                <div class="w-12 h-0.5 bg-[#f7931a] mx-auto mt-2 mb-4"></div>
+                <p class="text-sm sm:text-[0.9rem] text-white/50 max-w-lg mx-auto">"Live data from my full Bitcoin node."</p>
+            </div>
+
+            // Hero banner
+            <a href="/observatory" class="block opacity-0 animate-slideup" style="animation-delay: 100ms">
+                <div class="group relative rounded-2xl overflow-hidden mb-6 hover:scale-[1.01] active:scale-[0.99] transition-transform duration-200">
+                    <img
+                        src="/observatory_hero.png"
+                        alt="The Bitcoin Observatory"
+                        class="w-full h-[140px] sm:h-[180px] lg:h-[220px] object-cover object-center"
+                        loading="lazy"
+                    />
+                    <div class="absolute inset-0 bg-gradient-to-t from-[#123c64] via-[#123c64]/50 to-transparent"></div>
+                    <div class="absolute inset-0 flex flex-col items-center justify-end pb-4 sm:pb-6">
+                        <h3 class="text-lg sm:text-xl lg:text-2xl font-title text-white mb-1 drop-shadow-lg group-hover:text-[#f4a949] transition-colors">"The Bitcoin Observatory"</h3>
+                        <p class="text-xs sm:text-sm text-white/50 drop-shadow">"Live blockchain analytics, charts, and BIP signaling tracker"</p>
+                    </div>
+                </div>
+            </a>
+
+            // Feature cards
+            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <a href="/observatory" class="block opacity-0 animate-slideup" style="animation-delay: 200ms">
+                    <div class="group bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-white/10 hover:border-white/20 transition-all duration-200 h-full">
+                        <div class="w-8 h-8 rounded-lg bg-[#f7931a]/10 flex items-center justify-center mb-2.5">
+                            <svg class="w-4 h-4 text-[#f7931a]" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                            </svg>
+                        </div>
+                        <h4 class="text-sm font-semibold text-white mb-1 group-hover:text-[#f4a949] transition-colors">"Live Dashboard"</h4>
+                        <p class="text-xs text-white/40 leading-relaxed">"Real-time mempool, mining stats, difficulty, from my own node."</p>
+                    </div>
+                </a>
+                <a href="/observatory/charts/network" class="block opacity-0 animate-slideup" style="animation-delay: 300ms">
+                    <div class="group bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-white/10 hover:border-white/20 transition-all duration-200 h-full">
+                        <div class="w-8 h-8 rounded-lg bg-[#f7931a]/10 flex items-center justify-center mb-2.5">
+                            <svg class="w-4 h-4 text-[#f7931a]" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"/>
+                            </svg>
+                        </div>
+                        <h4 class="text-sm font-semibold text-white mb-1 group-hover:text-[#f4a949] transition-colors">"30+ Charts"</h4>
+                        <p class="text-xs text-white/40 leading-relaxed">"Block size, fees, SegWit and Taproot adoption, mining pools, and transaction metrics."</p>
+                    </div>
+                </a>
+                <a href="/observatory/charts/embedded" class="block opacity-0 animate-slideup" style="animation-delay: 400ms">
+                    <div class="group bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-white/10 hover:border-white/20 transition-all duration-200 h-full">
+                        <div class="w-8 h-8 rounded-lg bg-[#f7931a]/10 flex items-center justify-center mb-2.5">
+                            <svg class="w-4 h-4 text-[#f7931a]" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/>
+                            </svg>
+                        </div>
+                        <h4 class="text-sm font-semibold text-white mb-1 group-hover:text-[#f4a949] transition-colors">"Embedded Data"</h4>
+                        <p class="text-xs text-white/40 leading-relaxed">"Track Runes, Ordinals, BRC-20, and OP_RETURN protocols across every block."</p>
+                    </div>
+                </a>
+                <a href="/observatory/signaling" class="block opacity-0 animate-slideup" style="animation-delay: 500ms">
+                    <div class="group bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-white/10 hover:border-white/20 transition-all duration-200 h-full">
+                        <div class="w-8 h-8 rounded-lg bg-[#f7931a]/10 flex items-center justify-center mb-2.5">
+                            <svg class="w-4 h-4 text-[#f7931a]" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                        </div>
+                        <h4 class="text-sm font-semibold text-white mb-1 group-hover:text-[#f4a949] transition-colors">"BIP Signaling"</h4>
+                        <p class="text-xs text-white/40 leading-relaxed">"Monitor miner signaling for active Bitcoin Improvement Proposals in real time."</p>
+                    </div>
+                </a>
+            </div>
+        </section>
     }
 }
