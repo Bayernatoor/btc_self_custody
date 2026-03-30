@@ -166,12 +166,11 @@ pub fn ProtocolGuidePage() -> impl IntoView {
                                         });
                                         // Smooth scroll to the protocol card via JS
                                         let target = format!("protocol-{}", scroll_id);
-                                        leptos::prelude::document()
+                                        if let Some(el) = leptos::prelude::document()
                                             .get_element_by_id(&target)
-                                            .map(|el| {
-                                                // Use basic scroll_into_view (smooth via CSS scroll-behavior)
-                                                el.scroll_into_view();
-                                            });
+                                        {
+                                            el.scroll_into_view();
+                                        }
                                     }
                                 }
                             >
