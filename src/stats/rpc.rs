@@ -15,6 +15,19 @@ use serde_json::{json, Value};
 use super::classifier::{self, OpReturnType};
 use super::error::StatsError;
 
+/// Bitcoin varint size in bytes for a given value.
+fn varint_size(n: u64) -> u64 {
+    if n < 0xFD {
+        1
+    } else if n <= 0xFFFF {
+        3
+    } else if n <= 0xFFFF_FFFF {
+        5
+    } else {
+        9
+    }
+}
+
 pub struct BitcoinRpc {
     client: Client,
     url: String,
@@ -341,16 +354,42 @@ impl BitcoinRpc {
                         // Witness detection + byte counting + inscription detection
                         if let Some(wit) = vin["txinwitness"].as_array() {
                             has_witness = true;
+                            // Witness overhead: item count varint per input
+                            let wit_items = wit.len() as u64;
+                            witness_bytes += varint_size(wit_items);
                             for item in wit {
                                 if let Some(hex) = item.as_str() {
                                     let item_bytes = (hex.len() as u64) / 2;
+                                    // Each item is prefixed by a length varint
+                                    witness_bytes += varint_size(item_bytes);
                                     witness_bytes += item_bytes;
                                     // Ordinals inscription envelope:
                                     // OP_FALSE(00) OP_IF(63) OP_PUSH3(03) "ord"(6f7264)
                                     if hex.contains("0063036f7264") {
                                         inscription_count += 1;
+                                        // Calculate actual envelope overhead instead of fixed estimate.
+                                        // Envelope: OP_FALSE(1) OP_IF(1) OP_PUSH3(1) "ord"(3) = 6 bytes header
+                                        // + content-type marker OP_PUSH1(1) + type length(1) + type bytes(variable)
+                                        // + separator OP_0(1) + content-length push(1-3) + OP_ENDIF(1)
+                                        // Approximate: find envelope start, subtract from total
+                                        let overhead =
+                                            if let Some(env_pos) = hex.find("0063036f7264") {
+                                                // Bytes before envelope + envelope header (6 bytes = 12 hex chars)
+                                                // + content-type section (scan for 00 separator after header)
+                                                let after_header = env_pos + 12; // past "0063036f7264"
+                                                // Find OP_0 separator (00) after content-type
+                                                let separator_pos = hex[after_header..]
+                                                    .find("00")
+                                                    .map(|p| after_header + p)
+                                                    .unwrap_or(after_header);
+                                                // overhead = header(6) + content-type section + separator(1) + OP_ENDIF(1)
+                                                let ct_bytes = (separator_pos - after_header) / 2;
+                                                (6 + ct_bytes + 2) as u64
+                                            } else {
+                                                10 // fallback
+                                            };
                                         inscription_bytes +=
-                                            item_bytes.saturating_sub(10);
+                                            item_bytes.saturating_sub(overhead);
                                         // BRC-20: inscription containing {"p":"brc-20"
                                         if hex.contains(
                                             "7b2270223a226272632d3230",
@@ -386,16 +425,30 @@ impl BitcoinRpc {
                                 }
                             }
                         }
-                        // RBF: nSequence < 0xFFFFFFFE signals replaceability
+                        // RBF: nSequence < 0xFFFFFFFE signals replaceability,
+                        // BUT exclude inputs spending CSV timelocks (BIP 68) —
+                        // those use low nSequence for relative lock-time, not RBF.
                         if let Some(seq) = vin["sequence"].as_u64() {
                             if seq < 0xFFFF_FFFE {
-                                is_rbf = true;
+                                let is_csv = vin
+                                    .get("prevout")
+                                    .and_then(|p| p.get("scriptPubKey"))
+                                    .and_then(|s| s.get("asm"))
+                                    .and_then(|a| a.as_str())
+                                    .is_some_and(|asm| {
+                                        asm.contains("OP_CHECKSEQUENCEVERIFY")
+                                    });
+                                if !is_csv {
+                                    is_rbf = true;
+                                }
                             }
                         }
                     }
                 }
                 if has_witness {
                     segwit_spend_count += 1;
+                    // BIP 141 witness marker (0x00) + flag (0x01) = 2 bytes per witness tx
+                    witness_bytes += 2;
                 }
                 if is_rbf {
                     rbf_count += 1;
@@ -422,7 +475,7 @@ impl BitcoinRpc {
                                 {
                                     let bytes = (hex.len() as u64) / 2;
                                     let classification =
-                                        classifier::classify(hex);
+                                        classifier::classify(hex, height);
                                     match classification {
                                         OpReturnType::SegwitCommit => continue,
                                         OpReturnType::Runes => {

@@ -704,8 +704,11 @@ pub fn unified_embedded_count_chart(blocks: &[BlockSummary]) -> serde_json::Valu
         .collect();
     let brc20: Vec<serde_json::Value> =
         blocks.iter().map(|b| dp(b, b.brc20_count)).collect();
-    let stamps: Vec<serde_json::Value> =
-        blocks.iter().map(|b| dp(b, b.multisig_count)).collect();
+    // Stamps launched ~block 783,000 (March 2023). Before that, multisig was legitimate multi-sig.
+    let stamps: Vec<serde_json::Value> = blocks
+        .iter()
+        .map(|b| dp(b, if b.height >= 783_000 { b.multisig_count } else { 0 }))
+        .collect();
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
@@ -761,9 +764,16 @@ pub fn unified_embedded_count_chart_daily(days: &[DailyAggregate]) -> serde_json
         .collect();
     let brc20: Vec<f64> =
         days.iter().map(|d| round(d.avg_brc20_count, 1)).collect();
+    // Stamps launched March 2023. Before that, multisig was legitimate multi-sig.
     let stamps: Vec<f64> = days
         .iter()
-        .map(|d| round(d.avg_multisig_count, 1))
+        .map(|d| {
+            if d.date.as_str() >= "2023-03-01" {
+                round(d.avg_multisig_count, 1)
+            } else {
+                0.0
+            }
+        })
         .collect();
 
     build_option(json!({
