@@ -57,6 +57,8 @@ pub struct ObservatoryState {
     pub set_overlay_panel_open: WriteSignal<bool>,
     // chart JSON cache — persists across Outlet navigations
     pub chart_cache: ChartCache,
+    // true briefly when range changes (before new data arrives)
+    pub data_loading: ReadSignal<bool>,
 }
 
 /// Create a dashboard data resource. Each chart page calls this to get its own
@@ -112,6 +114,21 @@ pub fn provide_observatory_state() -> ObservatoryState {
         .unwrap_or_default();
 
     let (range, set_range) = signal(initial_range);
+
+    // Loading signal: true when range changes, false when data arrives
+    let (data_loading, set_data_loading) = signal(false);
+    {
+        // Set loading=true whenever range changes (skip initial)
+        let mut first = true;
+        Effect::new(move |_| {
+            let _r = range.get();
+            if first {
+                first = false;
+            } else {
+                set_data_loading.set(true);
+            }
+        });
+    }
 
     // Overlay toggles — initialized from URL
     let (overlay_halvings, set_overlay_halvings) =
@@ -245,6 +262,13 @@ pub fn provide_observatory_state() -> ObservatoryState {
     // so there's no re-fetch or loading flash when switching pages.
     let dashboard_data = create_dashboard_resource(range);
 
+    // Clear loading when new data arrives
+    Effect::new(move |_| {
+        if dashboard_data.get().is_some() {
+            set_data_loading.set(false);
+        }
+    });
+
     // Pre-compute chain size cumulative data
     let cached_chain_size_data = {
         let (cached, set_cached) = signal::<Vec<(u64, f64)>>(Vec::new());
@@ -344,6 +368,7 @@ pub fn provide_observatory_state() -> ObservatoryState {
         overlay_panel_open,
         set_overlay_panel_open,
         chart_cache,
+        data_loading,
     };
 
     provide_context(state.clone());
