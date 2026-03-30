@@ -106,16 +106,20 @@ pub fn MiningChartsPage() -> impl IntoView {
                     mining_data.get().and_then(|r| r.ok()).map(|_| {
                         let miner_chart_option = Signal::derive(move || {
                             mining_data.get().and_then(|r| r.ok())
-                                .map(|(ref miners, _)| crate::stats::charts::miner_dominance_chart(miners))
+                                .map(|(ref miners, _)| {
+                                    let value = crate::stats::charts::miner_dominance_chart(miners);
+                                    serde_json::to_string(&value).unwrap_or_default()
+                                })
                                 .unwrap_or_default()
                         });
                         let empty_blocks_option = Signal::derive(move || {
                             let flags = overlay_flags.get();
                             mining_data.get().and_then(|r| r.ok())
                                 .map(|(_, ref empty)| {
-                                    let json = crate::stats::charts::empty_blocks_chart(empty);
-                                    if json.is_empty() { return String::new(); }
-                                    crate::stats::charts::apply_overlays(&json, &flags, true)
+                                    let mut value = crate::stats::charts::empty_blocks_chart(empty);
+                                    if value.is_null() { return String::new(); }
+                                    crate::stats::charts::apply_overlays(&mut value, &flags, true);
+                                    serde_json::to_string(&value).unwrap_or_default()
                                 })
                                 .unwrap_or_default()
                         });

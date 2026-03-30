@@ -397,18 +397,19 @@ macro_rules! chart_memo {
             }
             let result = data_opt
                 .map(|data| {
-                    let (json, is_daily) = match data {
+                    let (mut value, is_daily) = match data {
                         DashboardData::PerBlock(ref $blocks) => {
                             ($per_block, false)
                         }
                         DashboardData::Daily(ref $days) => ($daily, true),
                     };
-                    if json.is_empty() {
+                    if value.is_null() {
                         return String::new();
                     }
                     $crate::stats::charts::apply_overlays(
-                        &json, &flags, is_daily,
-                    )
+                        &mut value, &flags, is_daily,
+                    );
+                    serde_json::to_string(&value).unwrap_or_default()
                 })
                 .unwrap_or_default();
             if !result.is_empty() {

@@ -2,7 +2,7 @@ use super::*;
 use serde_json::json;
 
 /// Block size line chart with moving average.
-pub fn block_size_chart(blocks: &[BlockSummary]) -> String {
+pub fn block_size_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Block Size");
     }
@@ -55,7 +55,7 @@ pub fn block_size_chart(blocks: &[BlockSummary]) -> String {
 }
 
 /// Block size chart from daily aggregates.
-pub fn block_size_chart_daily(days: &[DailyAggregate]) -> String {
+pub fn block_size_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Block Size");
     }
@@ -95,7 +95,7 @@ pub fn block_size_chart_daily(days: &[DailyAggregate]) -> String {
 }
 
 /// Transaction count line chart with moving average.
-pub fn tx_count_chart(blocks: &[BlockSummary]) -> String {
+pub fn tx_count_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Transaction Count");
     }
@@ -142,7 +142,7 @@ pub fn tx_count_chart(blocks: &[BlockSummary]) -> String {
 }
 
 /// Transaction count from daily aggregates.
-pub fn tx_count_chart_daily(days: &[DailyAggregate]) -> String {
+pub fn tx_count_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Transaction Count");
     }
@@ -180,7 +180,7 @@ pub fn tx_count_chart_daily(days: &[DailyAggregate]) -> String {
 }
 
 /// Difficulty line chart.
-pub fn difficulty_chart(blocks: &[BlockSummary]) -> String {
+pub fn difficulty_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Difficulty");
     }
@@ -205,7 +205,7 @@ pub fn difficulty_chart(blocks: &[BlockSummary]) -> String {
 }
 
 /// Difficulty from daily aggregates.
-pub fn difficulty_chart_daily(days: &[DailyAggregate]) -> String {
+pub fn difficulty_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Difficulty");
     }
@@ -231,7 +231,7 @@ pub fn difficulty_chart_daily(days: &[DailyAggregate]) -> String {
 
 /// Block interval dot plot (per-block only, not daily).
 /// Data format: [timestamp_ms, interval_minutes, block_height] — third value enables click-to-detail.
-pub fn block_interval_chart(blocks: &[BlockSummary]) -> String {
+pub fn block_interval_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.len() < 2 {
         return no_data_chart("Block Interval");
     }
@@ -304,7 +304,7 @@ pub fn block_interval_chart(blocks: &[BlockSummary]) -> String {
 }
 
 /// Block interval from daily aggregates (avg minutes per block = 1440 / blocks_per_day).
-pub fn block_interval_chart_daily(days: &[DailyAggregate]) -> String {
+pub fn block_interval_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Block Interval (daily)");
     }
@@ -352,7 +352,7 @@ pub fn block_interval_chart_daily(days: &[DailyAggregate]) -> String {
 }
 
 /// Block weight utilization as % of max (4,000,000 WU).
-pub fn weight_utilization_chart(blocks: &[BlockSummary]) -> String {
+pub fn weight_utilization_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Weight Utilization");
     }
@@ -409,7 +409,7 @@ pub fn weight_utilization_chart(blocks: &[BlockSummary]) -> String {
 }
 
 /// Block weight utilization from daily aggregates.
-pub fn weight_utilization_chart_daily(days: &[DailyAggregate]) -> String {
+pub fn weight_utilization_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Weight Utilization");
     }
@@ -449,7 +449,7 @@ pub fn weight_utilization_chart_daily(days: &[DailyAggregate]) -> String {
 }
 
 /// Average transaction size in bytes.
-pub fn avg_tx_size_chart(blocks: &[BlockSummary]) -> String {
+pub fn avg_tx_size_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Avg Transaction Size");
     }
@@ -510,7 +510,7 @@ pub fn avg_tx_size_chart(blocks: &[BlockSummary]) -> String {
 }
 
 /// Avg transaction size from daily aggregates.
-pub fn avg_tx_size_chart_daily(days: &[DailyAggregate]) -> String {
+pub fn avg_tx_size_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Avg Transaction Size");
     }
@@ -562,7 +562,7 @@ pub fn chain_size_chart(
     blocks: &[BlockSummary],
     disk_size_gb: f64,
     offset_bytes: u64,
-) -> String {
+) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Chain Size");
     }
@@ -620,7 +620,7 @@ pub fn chain_size_chart_daily(
     days: &[DailyAggregate],
     disk_size_gb: f64,
     offset_bytes: u64,
-) -> String {
+) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Chain Size");
     }

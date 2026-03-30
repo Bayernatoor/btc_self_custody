@@ -32,7 +32,7 @@ pub fn FeeChartsPage() -> impl IntoView {
                             .get()
                             .and_then(|r| r.ok())
                             .map(|data| {
-                                let (json, is_daily) = match data {
+                                let (mut value, is_daily) = match data {
                                     DashboardData::PerBlock(ref blocks) => {
                                         (crate::stats::charts::fees_chart_unit(blocks, &unit), false)
                                     }
@@ -40,8 +40,9 @@ pub fn FeeChartsPage() -> impl IntoView {
                                         (crate::stats::charts::fees_chart_daily_unit(days, &unit), true)
                                     }
                                 };
-                                if json.is_empty() { return String::new(); }
-                                crate::stats::charts::apply_overlays(&json, &flags, is_daily)
+                                if value.is_null() { return String::new(); }
+                                crate::stats::charts::apply_overlays(&mut value, &flags, is_daily);
+                                serde_json::to_string(&value).unwrap_or_default()
                             })
                             .unwrap_or_default()
                     });

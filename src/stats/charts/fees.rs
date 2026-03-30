@@ -2,7 +2,7 @@ use super::*;
 use serde_json::json;
 
 /// Fees line chart (per-block: total fees in sats).
-pub fn fees_chart(blocks: &[BlockSummary]) -> String {
+pub fn fees_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Fees");
     }
@@ -35,7 +35,7 @@ pub fn fees_chart(blocks: &[BlockSummary]) -> String {
 }
 
 /// Fees from daily aggregates.
-pub fn fees_chart_daily(days: &[DailyAggregate]) -> String {
+pub fn fees_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Fees");
     }
@@ -69,7 +69,7 @@ pub fn fees_chart_daily(days: &[DailyAggregate]) -> String {
 }
 
 /// Fees line chart with unit toggle (sats or BTC).
-pub fn fees_chart_unit(blocks: &[BlockSummary], unit: &str) -> String {
+pub fn fees_chart_unit(blocks: &[BlockSummary], unit: &str) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Fees");
     }
@@ -107,7 +107,7 @@ pub fn fees_chart_unit(blocks: &[BlockSummary], unit: &str) -> String {
 }
 
 /// Fees from daily aggregates with unit toggle.
-pub fn fees_chart_daily_unit(days: &[DailyAggregate], unit: &str) -> String {
+pub fn fees_chart_daily_unit(days: &[DailyAggregate], unit: &str) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Fees");
     }
@@ -146,7 +146,7 @@ pub fn fees_chart_daily_unit(days: &[DailyAggregate], unit: &str) -> String {
 }
 
 /// Block subsidy vs fee revenue ratio (stacked area).
-pub fn subsidy_vs_fees_chart(blocks: &[BlockSummary]) -> String {
+pub fn subsidy_vs_fees_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Subsidy vs Fees");
     }
@@ -192,7 +192,7 @@ pub fn subsidy_vs_fees_chart(blocks: &[BlockSummary]) -> String {
 }
 
 /// Subsidy vs fees from daily aggregates.
-pub fn subsidy_vs_fees_chart_daily(days: &[DailyAggregate]) -> String {
+pub fn subsidy_vs_fees_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Subsidy vs Fees");
     }

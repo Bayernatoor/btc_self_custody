@@ -4,7 +4,7 @@ use serde_json::json;
 const INSCRIPTION_COLOR: &str = "#06b6d4"; // Cyan for inscriptions
 
 /// OP_RETURN count bar chart (runes vs data carriers).
-pub fn op_return_count_chart(blocks: &[BlockSummary]) -> String {
+pub fn op_return_count_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Embedded Data Count");
     }
@@ -33,7 +33,7 @@ pub fn op_return_count_chart(blocks: &[BlockSummary]) -> String {
 }
 
 /// OP_RETURN count chart from daily aggregates.
-pub fn op_return_count_chart_daily(days: &[DailyAggregate]) -> String {
+pub fn op_return_count_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Embedded Data Count (daily)");
     }
@@ -77,7 +77,7 @@ pub fn op_return_count_chart_daily(days: &[DailyAggregate]) -> String {
 }
 
 /// OP_RETURN bytes bar chart.
-pub fn op_return_bytes_chart(blocks: &[BlockSummary]) -> String {
+pub fn op_return_bytes_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Embedded Data Volume");
     }
@@ -106,7 +106,7 @@ pub fn op_return_bytes_chart(blocks: &[BlockSummary]) -> String {
 }
 
 /// OP_RETURN bytes chart from daily aggregates.
-pub fn op_return_bytes_chart_daily(days: &[DailyAggregate]) -> String {
+pub fn op_return_bytes_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Embedded Data Volume (daily)");
     }
@@ -150,7 +150,7 @@ pub fn op_return_bytes_chart_daily(days: &[DailyAggregate]) -> String {
 }
 
 /// Protocol dominance — 100% stacked area showing share of each protocol.
-pub fn runes_pct_chart(blocks: &[BlockSummary]) -> String {
+pub fn runes_pct_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Protocol Dominance");
     }
@@ -213,7 +213,7 @@ pub fn runes_pct_chart(blocks: &[BlockSummary]) -> String {
 }
 
 /// Protocol dominance % from daily aggregates — 100% stacked area.
-pub fn runes_pct_chart_daily(days: &[DailyAggregate]) -> String {
+pub fn runes_pct_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Protocol Dominance (daily)");
     }
@@ -263,7 +263,7 @@ pub fn runes_pct_chart_daily(days: &[DailyAggregate]) -> String {
 }
 
 /// OP_RETURN bytes as percentage of total block size (per-block).
-pub fn op_return_block_share_chart(blocks: &[BlockSummary]) -> String {
+pub fn op_return_block_share_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Embedded Data Block Share");
     }
@@ -327,7 +327,7 @@ pub fn op_return_block_share_chart(blocks: &[BlockSummary]) -> String {
 }
 
 /// OP_RETURN bytes as percentage of total block size (daily).
-pub fn op_return_block_share_chart_daily(days: &[DailyAggregate]) -> String {
+pub fn op_return_block_share_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Embedded Data Block Share");
     }
@@ -377,7 +377,7 @@ pub fn op_return_block_share_chart_daily(days: &[DailyAggregate]) -> String {
 }
 
 /// Ordinals inscription count per block.
-pub fn inscription_chart(blocks: &[BlockSummary]) -> String {
+pub fn inscription_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Inscriptions");
     }
@@ -427,7 +427,7 @@ pub fn inscription_chart(blocks: &[BlockSummary]) -> String {
 }
 
 /// Ordinals inscription count (daily).
-pub fn inscription_chart_daily(days: &[DailyAggregate]) -> String {
+pub fn inscription_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Inscriptions");
     }
@@ -462,7 +462,7 @@ pub fn inscription_chart_daily(days: &[DailyAggregate]) -> String {
 }
 
 /// Inscription data as % of block size (per-block).
-pub fn inscription_share_chart(blocks: &[BlockSummary]) -> String {
+pub fn inscription_share_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Inscription Block Share");
     }
@@ -523,7 +523,7 @@ pub fn inscription_share_chart(blocks: &[BlockSummary]) -> String {
 }
 
 /// Inscription data as % of block size (daily).
-pub fn inscription_share_chart_daily(days: &[DailyAggregate]) -> String {
+pub fn inscription_share_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Inscription Block Share");
     }
@@ -572,7 +572,7 @@ pub fn inscription_share_chart_daily(days: &[DailyAggregate]) -> String {
 const OPRETURN_COLOR: &str = "#f59e0b"; // Amber for OP_RETURN aggregate
 
 /// All embedded data as % of block size — OP_RETURN + inscriptions stacked (per-block).
-pub fn all_embedded_share_chart(blocks: &[BlockSummary]) -> String {
+pub fn all_embedded_share_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("All Embedded Data Share");
     }
@@ -624,7 +624,7 @@ pub fn all_embedded_share_chart(blocks: &[BlockSummary]) -> String {
 }
 
 /// All embedded data as % of block size — stacked (daily).
-pub fn all_embedded_share_chart_daily(days: &[DailyAggregate]) -> String {
+pub fn all_embedded_share_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("All Embedded Data Share");
     }
@@ -684,7 +684,7 @@ const STAMPS_COLOR: &str = "#94a3b8"; // Slate gray for Stamps/multisig
 const BRC20_COLOR: &str = "#e879f9"; // Fuchsia for BRC-20 tokens
 
 /// Unified embedded data count — all protocols + inscriptions + stamps (per-block).
-pub fn unified_embedded_count_chart(blocks: &[BlockSummary]) -> String {
+pub fn unified_embedded_count_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("All Embedded Data Count");
     }
@@ -723,7 +723,7 @@ pub fn unified_embedded_count_chart(blocks: &[BlockSummary]) -> String {
 }
 
 /// Unified embedded data count (daily).
-pub fn unified_embedded_count_chart_daily(days: &[DailyAggregate]) -> String {
+pub fn unified_embedded_count_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("All Embedded Data Count");
     }
@@ -781,7 +781,7 @@ pub fn unified_embedded_count_chart_daily(days: &[DailyAggregate]) -> String {
 }
 
 /// Unified embedded data volume — all protocols by bytes (per-block).
-pub fn unified_embedded_volume_chart(blocks: &[BlockSummary]) -> String {
+pub fn unified_embedded_volume_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("All Embedded Data Volume");
     }
@@ -814,7 +814,7 @@ pub fn unified_embedded_volume_chart(blocks: &[BlockSummary]) -> String {
 }
 
 /// Unified embedded data volume (daily).
-pub fn unified_embedded_volume_chart_daily(days: &[DailyAggregate]) -> String {
+pub fn unified_embedded_volume_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("All Embedded Data Volume");
     }

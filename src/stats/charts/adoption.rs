@@ -5,7 +5,7 @@ const SEGWIT_V0_COLOR: &str = "#3b82f6"; // Blue for SegWit v0
 const SEGWIT_V1_COLOR: &str = "#22c55e"; // Green for Taproot v1
 
 /// SegWit adoption % chart (per-block).
-pub fn segwit_adoption_chart(blocks: &[BlockSummary]) -> String {
+pub fn segwit_adoption_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("SegWit Adoption %");
     }
@@ -68,7 +68,7 @@ pub fn segwit_adoption_chart(blocks: &[BlockSummary]) -> String {
 }
 
 /// SegWit adoption % from daily aggregates.
-pub fn segwit_adoption_chart_daily(days: &[DailyAggregate]) -> String {
+pub fn segwit_adoption_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("SegWit Adoption %");
     }
@@ -116,7 +116,7 @@ pub fn segwit_adoption_chart_daily(days: &[DailyAggregate]) -> String {
 }
 
 /// Taproot outputs per block chart.
-pub fn taproot_chart(blocks: &[BlockSummary]) -> String {
+pub fn taproot_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Taproot Outputs");
     }
@@ -171,7 +171,7 @@ pub fn taproot_chart(blocks: &[BlockSummary]) -> String {
 }
 
 /// Taproot outputs from daily aggregates.
-pub fn taproot_chart_daily(days: &[DailyAggregate]) -> String {
+pub fn taproot_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Taproot Outputs");
     }
@@ -211,7 +211,7 @@ pub fn taproot_chart_daily(days: &[DailyAggregate]) -> String {
 }
 
 /// SegWit v0 vs Taproot v1 stacked area chart (per-block).
-pub fn witness_version_chart(blocks: &[BlockSummary]) -> String {
+pub fn witness_version_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Witness Versions");
     }
@@ -259,7 +259,7 @@ pub fn witness_version_chart(blocks: &[BlockSummary]) -> String {
 }
 
 /// SegWit v0 vs Taproot v1 stacked area chart (daily).
-pub fn witness_version_chart_daily(days: &[DailyAggregate]) -> String {
+pub fn witness_version_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Witness Versions");
     }
@@ -296,7 +296,7 @@ pub fn witness_version_chart_daily(days: &[DailyAggregate]) -> String {
 }
 
 /// Witness version percentage share — v0% vs v1% of total witness spends (per-block).
-pub fn witness_version_pct_chart(blocks: &[BlockSummary]) -> String {
+pub fn witness_version_pct_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Witness Version Share");
     }
@@ -367,7 +367,7 @@ pub fn witness_version_pct_chart(blocks: &[BlockSummary]) -> String {
 }
 
 /// Witness version percentage share (daily).
-pub fn witness_version_pct_chart_daily(days: &[DailyAggregate]) -> String {
+pub fn witness_version_pct_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Witness Version Share");
     }
@@ -427,7 +427,7 @@ pub fn witness_version_pct_chart_daily(days: &[DailyAggregate]) -> String {
 }
 
 /// Witness version as percentage of all transactions (per-block).
-pub fn witness_version_tx_pct_chart(blocks: &[BlockSummary]) -> String {
+pub fn witness_version_tx_pct_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Witness Tx Share");
     }
@@ -513,7 +513,7 @@ pub fn witness_version_tx_pct_chart(blocks: &[BlockSummary]) -> String {
 }
 
 /// Witness version as percentage of all transactions (daily).
-pub fn witness_version_tx_pct_chart_daily(days: &[DailyAggregate]) -> String {
+pub fn witness_version_tx_pct_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Witness Tx Share");
     }
@@ -585,7 +585,7 @@ const KEYPATH_COLOR: &str = "#22c55e"; // Green — privacy (indistinguishable f
 const SCRIPTPATH_COLOR: &str = "#f59e0b"; // Amber — programmability (inscriptions, scripts)
 
 /// Taproot key-path vs script-path spends (per-block).
-pub fn taproot_spend_type_chart(blocks: &[BlockSummary]) -> String {
+pub fn taproot_spend_type_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Taproot Spend Types");
     }
@@ -613,7 +613,7 @@ pub fn taproot_spend_type_chart(blocks: &[BlockSummary]) -> String {
 }
 
 /// Taproot key-path vs script-path spends (daily).
-pub fn taproot_spend_type_chart_daily(days: &[DailyAggregate]) -> String {
+pub fn taproot_spend_type_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Taproot Spend Types");
     }
