@@ -45,7 +45,10 @@ pub fn miner_dominance_chart(miners: &[MinerShare]) -> String {
         "color": colors,
         "tooltip": {
             "trigger": "item",
-            "formatter": "{b}: {c} blocks ({d}%)"
+            "formatter": "{b}: {c} blocks ({d}%)",
+            "backgroundColor": "rgba(13,33,55,0.95)",
+            "borderColor": "rgba(255,255,255,0.1)",
+            "textStyle": { "color": "rgba(255,255,255,0.85)", "fontSize": 12 }
         },
         "legend": { "show": false },
         "series": [{
@@ -107,7 +110,7 @@ pub fn empty_blocks_chart(blocks: &[EmptyBlock]) -> String {
         },
         "yAxis": y_axis("Count"),
         "dataZoom": data_zoom(),
-        "tooltip": { "trigger": "axis" },
+        "tooltip": tooltip_axis(),
         "legend": { "show": false },
         "grid": { "left": 45, "right": 20, "top": 25, "bottom": 80 },
         "series": [{

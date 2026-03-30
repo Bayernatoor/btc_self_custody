@@ -92,7 +92,12 @@ pub(crate) fn data_zoom() -> serde_json::Value {
 }
 
 pub(crate) fn tooltip_axis() -> serde_json::Value {
-    json!({ "trigger": "axis" })
+    json!({
+        "trigger": "axis",
+        "backgroundColor": "rgba(13,33,55,0.95)",
+        "borderColor": "rgba(255,255,255,0.1)",
+        "textStyle": { "color": "rgba(255,255,255,0.85)", "fontSize": 12 }
+    })
 }
 
 pub(crate) fn x_axis_for(is_daily: bool, categories: &[String]) -> serde_json::Value {
@@ -154,6 +159,11 @@ pub(crate) fn moving_average(data: &[f64], window: usize) -> Vec<Option<f64>> {
 
 pub(crate) fn ts_ms(unix_secs: u64) -> u64 {
     unix_secs * 1000
+}
+
+/// Data point with block height for click-to-detail: [timestamp_ms, value, height]
+pub(crate) fn dp(b: &BlockSummary, value: impl serde::Serialize) -> serde_json::Value {
+    json!([ts_ms(b.timestamp), value, b.height])
 }
 
 /// Round to N decimal places.

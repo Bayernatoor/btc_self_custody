@@ -9,10 +9,10 @@ pub fn op_return_count_chart(blocks: &[BlockSummary]) -> String {
         return no_data_chart("Embedded Data Count");
     }
 
-    let runes: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.runes_count])).collect();
-    let omni: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.omni_count])).collect();
-    let xcp: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.counterparty_count])).collect();
-    let other: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.data_carrier_count])).collect();
+    let runes: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.runes_count)).collect();
+    let omni: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.omni_count)).collect();
+    let xcp: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.counterparty_count)).collect();
+    let other: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.data_carrier_count)).collect();
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
@@ -62,10 +62,10 @@ pub fn op_return_bytes_chart(blocks: &[BlockSummary]) -> String {
         return no_data_chart("Embedded Data Volume");
     }
 
-    let runes: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.runes_bytes])).collect();
-    let omni: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.omni_bytes])).collect();
-    let xcp: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.counterparty_bytes])).collect();
-    let other: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.data_carrier_bytes])).collect();
+    let runes: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.runes_bytes)).collect();
+    let omni: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.omni_bytes)).collect();
+    let xcp: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.counterparty_bytes)).collect();
+    let other: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.data_carrier_bytes)).collect();
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
@@ -121,19 +121,19 @@ pub fn runes_pct_chart(blocks: &[BlockSummary]) -> String {
 
     let runes_data: Vec<serde_json::Value> = blocks.iter().map(|b| {
         let total = b.op_return_count;
-        json!([ts_ms(b.timestamp), pct(b.runes_count, total)])
+        dp(b, pct(b.runes_count, total))
     }).collect();
     let omni_data: Vec<serde_json::Value> = blocks.iter().map(|b| {
         let total = b.op_return_count;
-        json!([ts_ms(b.timestamp), pct(b.omni_count, total)])
+        dp(b, pct(b.omni_count, total))
     }).collect();
     let xcp_data: Vec<serde_json::Value> = blocks.iter().map(|b| {
         let total = b.op_return_count;
-        json!([ts_ms(b.timestamp), pct(b.counterparty_count, total)])
+        dp(b, pct(b.counterparty_count, total))
     }).collect();
     let other_data: Vec<serde_json::Value> = blocks.iter().map(|b| {
         let total = b.op_return_count;
-        json!([ts_ms(b.timestamp), pct(b.data_carrier_count, total)])
+        dp(b, pct(b.data_carrier_count, total))
     }).collect();
 
     build_option(json!({
@@ -210,7 +210,7 @@ pub fn op_return_block_share_chart(blocks: &[BlockSummary]) -> String {
     let raw: Vec<serde_json::Value> = blocks
         .iter()
         .zip(vals.iter())
-        .map(|(b, v)| json!([ts_ms(b.timestamp), v]))
+        .map(|(b, v)| dp(b, v))
         .collect();
 
     let ma = moving_average(&vals, 144);
@@ -303,7 +303,7 @@ pub fn inscription_chart(blocks: &[BlockSummary]) -> String {
 
     let vals: Vec<f64> = blocks.iter().map(|b| b.inscription_count as f64).collect();
     let raw: Vec<serde_json::Value> = blocks.iter().zip(vals.iter())
-        .map(|(b, v)| json!([ts_ms(b.timestamp), v])).collect();
+        .map(|(b, v)| dp(b, v)).collect();
     let ma = moving_average(&vals, 144);
     let ma_data: Vec<serde_json::Value> = blocks.iter().zip(ma.iter())
         .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))])).collect();
@@ -370,7 +370,7 @@ pub fn inscription_share_chart(blocks: &[BlockSummary]) -> String {
         if b.size > 0 { (b.inscription_bytes as f64 / b.size as f64 * 100.0 * 100.0).round() / 100.0 } else { 0.0 }
     }).collect();
     let raw: Vec<serde_json::Value> = blocks.iter().zip(vals.iter())
-        .map(|(b, v)| json!([ts_ms(b.timestamp), v])).collect();
+        .map(|(b, v)| dp(b, v)).collect();
     let ma = moving_average(&vals, 144);
     let ma_data: Vec<serde_json::Value> = blocks.iter().zip(ma.iter())
         .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))])).collect();
@@ -445,11 +445,11 @@ pub fn all_embedded_share_chart(blocks: &[BlockSummary]) -> String {
 
     let op_data: Vec<serde_json::Value> = blocks.iter().map(|b| {
         let v = if b.size > 0 { round(b.op_return_bytes as f64 / b.size as f64 * 100.0, 2) } else { 0.0 };
-        json!([ts_ms(b.timestamp), v])
+        dp(b, v)
     }).collect();
     let insc_data: Vec<serde_json::Value> = blocks.iter().map(|b| {
         let v = if b.size > 0 { round(b.inscription_bytes as f64 / b.size as f64 * 100.0, 2) } else { 0.0 };
-        json!([ts_ms(b.timestamp), v])
+        dp(b, v)
     }).collect();
 
     build_option(json!({
@@ -523,13 +523,13 @@ pub fn unified_embedded_count_chart(blocks: &[BlockSummary]) -> String {
         return no_data_chart("All Embedded Data Count");
     }
 
-    let runes: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.runes_count])).collect();
-    let omni: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.omni_count])).collect();
-    let xcp: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.counterparty_count])).collect();
-    let other_op: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.data_carrier_count])).collect();
-    let inscriptions: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.inscription_count])).collect();
-    let brc20: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.brc20_count])).collect();
-    let stamps: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.multisig_count])).collect();
+    let runes: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.runes_count)).collect();
+    let omni: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.omni_count)).collect();
+    let xcp: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.counterparty_count)).collect();
+    let other_op: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.data_carrier_count)).collect();
+    let inscriptions: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.inscription_count)).collect();
+    let brc20: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.brc20_count)).collect();
+    let stamps: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.multisig_count)).collect();
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
@@ -590,11 +590,11 @@ pub fn unified_embedded_volume_chart(blocks: &[BlockSummary]) -> String {
         return no_data_chart("All Embedded Data Volume");
     }
 
-    let runes: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.runes_bytes])).collect();
-    let omni: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.omni_bytes])).collect();
-    let xcp: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.counterparty_bytes])).collect();
-    let other_op: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.data_carrier_bytes])).collect();
-    let inscriptions: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.inscription_bytes])).collect();
+    let runes: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.runes_bytes)).collect();
+    let omni: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.omni_bytes)).collect();
+    let xcp: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.counterparty_bytes)).collect();
+    let other_op: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.data_carrier_bytes)).collect();
+    let inscriptions: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.inscription_bytes)).collect();
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),

@@ -9,7 +9,7 @@ pub fn block_size_chart(blocks: &[BlockSummary]) -> String {
 
     let raw_data: Vec<serde_json::Value> = blocks
         .iter()
-        .map(|b| json!([ts_ms(b.timestamp), round(b.size as f64 / 1_000_000.0, 3)]))
+        .map(|b| dp(b, round(b.size as f64 / 1_000_000.0, 3)))
         .collect();
     let vals: Vec<f64> =
         blocks.iter().map(|b| round(b.size as f64 / 1_000_000.0, 3)).collect();
@@ -93,7 +93,7 @@ pub fn tx_count_chart(blocks: &[BlockSummary]) -> String {
 
     let raw: Vec<serde_json::Value> = blocks
         .iter()
-        .map(|b| json!([ts_ms(b.timestamp), b.tx_count]))
+        .map(|b| dp(b, b.tx_count))
         .collect();
     let vals: Vec<f64> = blocks.iter().map(|b| b.tx_count as f64).collect();
     let ma = moving_average(&vals, 144);
@@ -174,7 +174,7 @@ pub fn difficulty_chart(blocks: &[BlockSummary]) -> String {
 
     let raw: Vec<serde_json::Value> = blocks
         .iter()
-        .map(|b| json!([ts_ms(b.timestamp), b.difficulty / 1e12]))
+        .map(|b| dp(b, b.difficulty / 1e12))
         .collect();
 
     build_option(json!({
@@ -276,7 +276,12 @@ pub fn block_interval_chart(blocks: &[BlockSummary]) -> String {
         "xAxis": x_axis_for(false, &[]),
         "yAxis": y_axis("min"),
         "dataZoom": data_zoom(),
-        "tooltip": { "trigger": "item" },
+        "tooltip": {
+            "trigger": "item",
+            "backgroundColor": "rgba(13,33,55,0.95)",
+            "borderColor": "rgba(255,255,255,0.1)",
+            "textStyle": { "color": "rgba(255,255,255,0.85)", "fontSize": 12 }
+        },
         "legend": { "show": has_ma },
         "series": series
     }))
@@ -346,7 +351,7 @@ pub fn weight_utilization_chart(blocks: &[BlockSummary]) -> String {
     let raw: Vec<serde_json::Value> = blocks
         .iter()
         .zip(vals.iter())
-        .map(|(b, v)| json!([ts_ms(b.timestamp), v]))
+        .map(|(b, v)| dp(b, v))
         .collect();
 
     let ma = moving_average(&vals, 144);
@@ -442,7 +447,7 @@ pub fn avg_tx_size_chart(blocks: &[BlockSummary]) -> String {
     let raw: Vec<serde_json::Value> = blocks
         .iter()
         .zip(vals.iter())
-        .map(|(b, v)| json!([ts_ms(b.timestamp), v]))
+        .map(|(b, v)| dp(b, v))
         .collect();
 
     let ma = moving_average(&vals, 144);
@@ -536,7 +541,7 @@ pub fn chain_size_chart(blocks: &[BlockSummary], disk_size_gb: f64) -> String {
         .iter()
         .map(|b| {
             cumulative += b.size as f64 / 1_000_000_000.0;
-            json!([ts_ms(b.timestamp), (cumulative * 1000.0).round() / 1000.0])
+            dp(b, (cumulative * 1000.0).round() / 1000.0)
         })
         .collect();
 
@@ -561,7 +566,7 @@ pub fn chain_size_chart(blocks: &[BlockSummary], disk_size_gb: f64) -> String {
             .map(|b| {
                 cumulative2 += b.size as f64 / 1_000_000_000.0;
                 let estimated = cumulative2 * ratio;
-                json!([ts_ms(b.timestamp), (estimated * 1000.0).round() / 1000.0])
+                dp(b, (estimated * 1000.0).round() / 1000.0)
             })
             .collect();
         series.push(json!({

@@ -82,7 +82,10 @@ pub fn signaling_periods_chart(
         "dataZoom": data_zoom(),
         "tooltip": {
             "trigger": "axis",
-            "formatter": "{b}<br/>Signaled: {c}%"
+            "formatter": "{b}<br/>Signaled: {c}%",
+            "backgroundColor": "rgba(13,33,55,0.95)",
+            "borderColor": "rgba(255,255,255,0.1)",
+            "textStyle": { "color": "rgba(255,255,255,0.85)", "fontSize": 12 }
         },
         "series": [
             {

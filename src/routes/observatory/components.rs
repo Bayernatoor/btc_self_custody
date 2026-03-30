@@ -60,7 +60,7 @@ pub fn Chart(
 #[component]
 pub fn ChartCard(
     #[prop(into)] title: String,
-    #[prop(into)] description: String,
+    #[prop(into)] description: Signal<String>,
     #[prop(into)] chart_id: String,
     #[prop(into)] option: Signal<String>,
     /// Optional content to render in the header right area (e.g. toggle button)
@@ -96,7 +96,7 @@ pub fn ChartCard(
                         " "
                         <span class="text-white/20 text-xs font-normal">{move || if copied.get() { "\u{2713} copied" } else { "#" }}</span>
                     </h3>
-                    <p class="text-sm text-white/50 mt-0.5">{description.clone()}</p>
+                    <p class="text-sm text-white/50 mt-0.5">{move || description.get()}</p>
                 </div>
                 <div class="flex items-center gap-2 shrink-0">
                     {children.map(|c| c())}
@@ -153,7 +153,7 @@ pub fn ChartCard(
                 <div class="flex items-center justify-between mb-2 sm:mb-3 shrink-0">
                     <div class="min-w-0 mr-2">
                         <h3 class="text-sm sm:text-lg text-white font-semibold truncate">{title.clone()}</h3>
-                        <p class="text-xs sm:text-sm text-white/50 mt-0.5 truncate">{description.clone()}</p>
+                        <p class="text-xs sm:text-sm text-white/50 mt-0.5 truncate">{move || description.get()}</p>
                     </div>
                     <button
                         class="text-white/60 hover:text-white transition-colors cursor-pointer p-2.5 rounded-xl hover:bg-white/10 border border-white/10 hover:border-white/20"

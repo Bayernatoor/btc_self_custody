@@ -4,7 +4,7 @@ use leptos::prelude::*;
 
 use crate::chart_memo;
 use super::components::*;
-use super::helpers::*;
+use super::helpers::{self, *};
 use super::shared::*;
 use crate::stats::server_fns::*;
 
@@ -62,6 +62,7 @@ pub fn MiningChartsPage() -> impl IntoView {
             header=move || view! {
                 <div class="relative inline-block">
                     <select
+                        aria-label="Chart section"
                         class="appearance-none bg-[#0a1a2e] text-white/80 text-sm border border-white/10 rounded-xl pl-3 pr-8 py-2 cursor-pointer focus:outline-none focus:border-[#f7931a]/40 transition-colors"
                         prop:value=move || section.get()
                         on:change=move |ev| {
@@ -92,7 +93,7 @@ pub fn MiningChartsPage() -> impl IntoView {
                         );
                         view! {
                             <div class="space-y-10">
-                                <ChartCard title="Difficulty" description="Mining difficulty, adjusts every 2,016 blocks (~2 weeks) to maintain 10-minute block targets" chart_id="chart-difficulty" option=diff_option/>
+                                <ChartCard title="Difficulty" description=chart_desc(range, "Mining difficulty per block, adjusts every 2,016 blocks (~2 weeks)", "Daily mining difficulty, adjusts every 2,016 blocks (~2 weeks)") chart_id="chart-difficulty" option=diff_option/>
                             </div>
                         }.into_any()
                     }).unwrap_or_else(|| view! { <ChartPageSkeleton count=1/> }.into_any())

@@ -118,19 +118,6 @@ pub fn ObservatoryOverview() -> impl IntoView {
         (elapsed as f64 / 210_000.0 * 100.0 * 10.0).round() / 10.0
     });
 
-    let halving_est_date = Signal::derive(move || {
-        let remaining = halving_blocks_remaining.get();
-        if remaining == 0 { return "\u{2014}".to_string(); }
-        let days = remaining as f64 * 10.0 / 1440.0;
-        let est = chrono::Utc::now() + chrono::Duration::seconds((days * 86400.0) as i64);
-        est.format("%b %d, %Y").to_string()
-    });
-
-    let halving_est_days = Signal::derive(move || {
-        let remaining = halving_blocks_remaining.get();
-        (remaining as f64 * 10.0 / 1440.0 * 10.0).round() / 10.0
-    });
-
     let current_subsidy_btc = Signal::derive(move || {
         let h = raw_block_height.get();
         if h == 0 { return "---".to_string(); }
@@ -216,6 +203,34 @@ pub fn ObservatoryOverview() -> impl IntoView {
         format!("{:.1} min", avg)
     });
 
+    // Measured avg block time in minutes (from current difficulty period),
+    // falls back to 10.0 if not enough data yet. Used for halving estimation.
+    let measured_block_min = Signal::derive(move || {
+        let blocks_in = diff_blocks_into_period.get();
+        if blocks_in < 10 { return 10.0f64; }
+        let start_ts = period_start_ts.get().unwrap_or(0);
+        if start_ts == 0 { return 10.0; }
+        let current_ts = cached_live.get()
+            .map(|s| s.blockchain.time).unwrap_or(0);
+        if current_ts <= start_ts { return 10.0; }
+        (current_ts - start_ts) as f64 / 60.0 / blocks_in as f64
+    });
+
+    let halving_est_date = Signal::derive(move || {
+        let remaining = halving_blocks_remaining.get();
+        if remaining == 0 { return "\u{2014}".to_string(); }
+        let avg_min = measured_block_min.get();
+        let days = remaining as f64 * avg_min / 1440.0;
+        let est = chrono::Utc::now() + chrono::Duration::seconds((days * 86400.0) as i64);
+        est.format("%b %d, %Y").to_string()
+    });
+
+    let halving_est_days = Signal::derive(move || {
+        let remaining = halving_blocks_remaining.get();
+        let avg_min = measured_block_min.get();
+        (remaining as f64 * avg_min / 1440.0 * 10.0).round() / 10.0
+    });
+
     let diff_expected_change = Signal::derive(move || {
         let blocks_in = diff_blocks_into_period.get();
         if blocks_in < 10 { return "\u{2014}".to_string(); }
@@ -243,26 +258,27 @@ pub fn ObservatoryOverview() -> impl IntoView {
     view! {
         // Live stats panel
         <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-6 lg:p-8 mb-8">
-            <div class="flex items-center gap-2 mb-3 flex-wrap">
-                <div
-                    class=move || if live_ctx.connected.get() {
-                        "w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"
-                    } else if cached_live.get().is_some() {
-                        // Had data before but lost connection
-                        "w-2.5 h-2.5 rounded-full bg-yellow-500 animate-pulse"
+            <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 mb-3">
+                <div class="flex items-center gap-2">
+                    <div
+                        class=move || if live_ctx.connected.get() {
+                            "w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"
+                        } else if cached_live.get().is_some() {
+                            "w-2.5 h-2.5 rounded-full bg-yellow-500 animate-pulse"
+                        } else {
+                            "w-2.5 h-2.5 rounded-full bg-red-500/60"
+                        }
+                    ></div>
+                    <span class="text-lg text-white font-bold">"Live Node Stats"</span>
+                    {move || if !live_ctx.connected.get() && cached_live.get().is_some() {
+                        view! { <span class="text-xs text-yellow-500/80">"(reconnecting...)"</span> }.into_any()
+                    } else if !live_ctx.connected.get() && cached_live.get().is_none() {
+                        view! { <span class="text-xs text-red-400/80">"(disconnected)"</span> }.into_any()
                     } else {
-                        "w-2.5 h-2.5 rounded-full bg-red-500/60"
-                    }
-                ></div>
-                <span class="text-lg text-white font-bold">"Live Node Stats"</span>
-                {move || if !live_ctx.connected.get() && cached_live.get().is_some() {
-                    view! { <span class="text-xs text-yellow-500/80">"(reconnecting...)"</span> }.into_any()
-                } else if !live_ctx.connected.get() && cached_live.get().is_none() {
-                    view! { <span class="text-xs text-red-400/80">"(disconnected)"</span> }.into_any()
-                } else {
-                    view! { <span></span> }.into_any()
-                }}
-                <div class="flex items-center gap-2 ml-auto">
+                        view! { <span></span> }.into_any()
+                    }}
+                </div>
+                <div class="flex items-center gap-2 sm:ml-auto">
                     <span class="text-xs text-white/30">{move || live_ctx.last_updated.get()}</span>
                     <span class="text-xs text-white/20">
                         {move || format!("{}s", live_ctx.countdown.get())}
