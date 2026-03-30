@@ -38,6 +38,9 @@ use super::error::StatsError;
 use super::rpc::{BitcoinRpc, PriceInfo};
 use super::types::PricePoint;
 
+/// Cached range query: (from, to, results, fetched_at).
+type RangeCache<T> = Mutex<Option<(u64, u64, Vec<T>, Instant)>>;
+
 pub struct StatsState {
     pub db: DbPool,
     pub rpc: BitcoinRpc,
@@ -52,16 +55,14 @@ pub struct StatsState {
     pub stats_summary_cache:
         Mutex<Option<(super::types::StatsSummary, Instant)>>,
     /// Cached daily aggregates: (from_ts, to_ts, results, fetched_at). 120s TTL.
-    pub daily_cache:
-        Mutex<Option<(u64, u64, Vec<super::types::DailyAggregate>, Instant)>>,
+    pub daily_cache: RangeCache<super::types::DailyAggregate>,
     /// Cached block timestamps: height → timestamp. Immutable data, never expires.
     pub block_ts_cache: Mutex<std::collections::HashMap<u64, u64>>,
     /// Cached signaling periods: (cache_key, results, fetched_at). 60s TTL.
     pub signaling_periods_cache:
         Mutex<Option<(String, Vec<super::db::SignalingPeriod>, Instant)>>,
     /// Cached price history: (from_ts, to_ts, data, fetched_at).
-    pub price_history_cache:
-        Mutex<Option<(u64, u64, Vec<PricePoint>, Instant)>>,
+    pub price_history_cache: RangeCache<PricePoint>,
 }
 
 pub type SharedStatsState = Arc<StatsState>;

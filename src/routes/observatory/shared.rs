@@ -374,7 +374,7 @@ macro_rules! chart_memo {
                     if json.is_empty() {
                         return String::new();
                     }
-                    crate::stats::charts::apply_overlays(
+                    $crate::stats::charts::apply_overlays(
                         &json, &flags, is_daily,
                     )
                 })

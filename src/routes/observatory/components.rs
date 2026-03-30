@@ -143,7 +143,6 @@ pub fn ChartCard(
                     }
                 });
                 leptos::prelude::on_cleanup(move || handle.remove());
-                ()
             }
             <div
                 class="fixed inset-0 flex flex-col pt-14 pb-4 px-2 sm:px-4 lg:pt-16 lg:pb-6 lg:px-8 overflow-hidden"
