@@ -77,6 +77,7 @@ pub fn ChartCard(
     let (expanded, set_expanded) = signal(false);
     let anchor = chart_id.clone();
     let (copied, set_copied) = signal(false);
+    let loading = expect_context::<super::shared::ObservatoryState>().data_loading;
     view! {
         // Normal inline card
         <div id=format!("card-{}", chart_id) class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6">
@@ -120,8 +121,8 @@ pub fn ChartCard(
             </div>
             <div class="h-[350px] lg:h-[600px] relative">
                 <Chart id=chart_id.clone() option=option class="w-full h-full".to_string()/>
-                // Show loading skeleton whenever chart data is empty
-                <Show when=move || option.get().is_empty()>
+                // Show loading skeleton when chart data is empty or range is transitioning
+                <Show when=move || option.get().is_empty() || loading.get()>
                     <div class="absolute inset-0 flex items-center justify-center bg-[#0d2137] rounded-2xl">
                         <div class="flex flex-col items-center gap-3">
                             <div class="animate-pulse">
