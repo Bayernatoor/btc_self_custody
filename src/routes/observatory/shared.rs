@@ -321,16 +321,6 @@ pub fn provide_observatory_state() -> ObservatoryState {
 
     // Chart JSON cache — invalidate when range or overlay flags change
     let chart_cache: ChartCache = Arc::new(Mutex::new(HashMap::new()));
-    {
-        let cache = chart_cache.clone();
-        Effect::new(move |_| {
-            let _r = range.get();
-            let _f = overlay_flags.get();
-            if let Ok(mut c) = cache.lock() {
-                c.clear();
-            }
-        });
-    }
 
     let state = ObservatoryState {
         range,
@@ -388,11 +378,13 @@ macro_rules! chart_memo {
         let state = leptos::prelude::expect_context::<$crate::routes::observatory::shared::ObservatoryState>();
         let cache = state.chart_cache.clone();
         leptos::prelude::Signal::derive(move || {
-            let _r = $range.get();
+            let r = $range.get();
             let flags = $overlays.get();
+            // Cache key includes range + overlay state so stale entries are never returned
+            let full_key = format!("{}:{}:{:?}", cache_key, r, flags.cache_key());
             // Check cache first
             if let Ok(c) = cache.lock() {
-                if let Some(cached) = c.get(&cache_key) {
+                if let Some(cached) = c.get(&full_key) {
                     return cached.clone();
                 }
             }
@@ -417,7 +409,7 @@ macro_rules! chart_memo {
             // Store in cache (only if non-empty — don't cache loading states)
             if !result.is_empty() {
                 if let Ok(mut c) = cache.lock() {
-                    c.insert(cache_key.clone(), result.clone());
+                    c.insert(full_key, result.clone());
                 }
             }
             result
