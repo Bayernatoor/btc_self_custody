@@ -318,10 +318,10 @@ pub fn ProtocolGuidePage() -> impl IntoView {
 
             // CTA to charts
             <div class="text-center mt-12">
-                <a href="/observatory"
+                <a href="/observatory/charts/embedded"
                     class="inline-flex items-center gap-2 px-6 py-3 bg-[#f7931a] text-white text-base font-medium rounded-xl hover:bg-[#f4a949] hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
                 >
-                    "Explore The Bitcoin Observatory"
+                    "View Embedded Data Charts"
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
                     </svg>
