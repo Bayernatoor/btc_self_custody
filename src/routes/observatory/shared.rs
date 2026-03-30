@@ -118,14 +118,19 @@ pub fn provide_observatory_state() -> ObservatoryState {
     // Loading signal: true when range changes, false when data arrives
     let (data_loading, set_data_loading) = signal(false);
     {
-        // Set loading=true whenever range changes (skip initial)
+        // Set loading=true for heavy ranges (2Y+) so the user sees
+        // immediate feedback. Lighter ranges compute fast enough.
         let mut first = true;
         Effect::new(move |_| {
-            let _r = range.get();
+            let r = range.get();
             if first {
                 first = false;
             } else {
-                set_data_loading.set(true);
+                let n = range_to_blocks(&r);
+                if n >= 105_120 {
+                    // 2Y+ (105,120 blocks)
+                    set_data_loading.set(true);
+                }
             }
         });
     }

@@ -214,6 +214,33 @@
 - [ ] Investigate chain size growth chart — something still isn't right with the cumulative
       calculation and/or disk size estimate on various ranges. Needs thorough review.
 
+## TODO: Chart Performance — Future Optimizations
+
+### Phase 4: Direct String Serialization (replace json!() macro)
+- [ ] Replace `serde_json::json!()` per-data-point calls with direct `String` buffer writes
+- [ ] Create helper: `write_data_points(buf, blocks, value_fn)` that writes `[[ts,val,height],...]` directly
+- [ ] Eliminates tens of thousands of heap allocations per chart (json!() creates a Value per point)
+- [ ] Estimated 2-4x speedup on chart JSON construction
+- [ ] Biggest impact on embedded data charts (7 series × 5800 days = 40k allocations currently)
+
+### Phase 5: Pre-Computed Chart Data Snapshots (per-block ALL range)
+- [ ] Enable full per-block resolution on ALL range (940k+ clickable data points, zoom from 2009 to today)
+- [ ] Store pre-computed `BlockSummary` data as compact binary (bincode/MessagePack) in a `chart_snapshots` table
+- [ ] Snapshot covers all blocks except the most recent ~1008 (1 week), which are immutable/finalized
+- [ ] On request: read snapshot blob + compute fresh tip (~1008 blocks) + merge
+- [ ] Re-snapshot weekly via cron or manual trigger
+- [ ] Schema: `chart_snapshots(snapshot_id TEXT, max_height INTEGER, data BLOB, created_at INTEGER)`
+- [ ] ~22 MB per snapshot (24 bytes × 940k blocks), single blob read vs 940k SQLite row reads
+- [ ] ECharts handles 940k+ points with progressive rendering (`progressive: 500` already configured)
+- [ ] This unlocks "zoom into any individual block on a 16-year chart"
+
+### Phase 6: Lazy Chart Computation (IntersectionObserver for Signal)
+- [ ] Current Phase 3 defers JS rendering but Rust Signal still computes all charts
+- [ ] Gate chart_memo! Signal computation on visibility (only compute when scrolled into view)
+- [ ] Requires passing a visibility signal from ChartCard to the chart_memo! caller
+- [ ] First chart computes in ~30-80ms, rest compute as user scrolls
+- [ ] Most impactful on pages with 6+ charts (Network > Blocks, Embedded > Overview)
+
 ## TODO: RBF Data Backfill
 - [ ] Re-parse blocks with corrupted rbf_count (e.g. block 941882 shows 470%).
       Likely caused by older parser version counting RBF per-input instead of per-transaction.

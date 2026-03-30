@@ -102,5 +102,5 @@ pub fn spawn_background_tasks(state: Arc<StatsState>) {
         });
     }
 
-    tracing::info!("Connection pool: 8 connections (WAL mode enabled)");
+    tracing::info!("Connection pool: 16 connections (WAL mode enabled)");
 }
