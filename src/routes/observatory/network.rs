@@ -74,18 +74,35 @@ pub fn NetworkChartsPage() -> impl IntoView {
                             |blocks| crate::stats::charts::block_interval_chart(blocks),
                             |days| crate::stats::charts::block_interval_chart_daily(days)
                         );
+                        // Fetch cumulative block data size before the start of
+                        // this range so the chain size chart starts at the right offset.
+                        let chain_offset = LocalResource::new(move || {
+                            let r = range.get();
+                            async move {
+                                let n = crate::routes::observatory::helpers::range_to_blocks(&r);
+                                let stats = crate::stats::server_fns::fetch_stats_summary().await.ok();
+                                let from_height = stats.map(|s| s.min_height.max(s.max_height.saturating_sub(n))).unwrap_or(0);
+                                if from_height > 0 {
+                                    crate::stats::server_fns::fetch_cumulative_size(from_height).await.unwrap_or(0)
+                                } else {
+                                    0u64
+                                }
+                            }
+                        });
+
                         let chain_size_option = Signal::derive(move || {
                             let _r = range.get();
                             let flags = overlay_flags.get();
                             let disk_gb = state.cached_live.get_untracked()
                                 .map(|s| s.network.chain_size_gb)
                                 .unwrap_or(0.0);
+                            let offset = chain_offset.get().unwrap_or(0);
                             dashboard_data.get().and_then(|r| r.ok()).map(|data| {
                                 let (json, is_daily) = match data {
                                     DashboardData::PerBlock(ref blocks) =>
-                                        (crate::stats::charts::chain_size_chart(blocks, disk_gb), false),
+                                        (crate::stats::charts::chain_size_chart(blocks, disk_gb, offset), false),
                                     DashboardData::Daily(ref days) =>
-                                        (crate::stats::charts::chain_size_chart_daily(days, disk_gb), true),
+                                        (crate::stats::charts::chain_size_chart_daily(days, disk_gb, offset), true),
                                 };
                                 if json.is_empty() { return String::new(); }
                                 crate::stats::charts::apply_overlays(&json, &flags, is_daily)

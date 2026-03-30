@@ -591,6 +591,18 @@ pub fn query_block_by_height(
     })
 }
 
+/// Total block data size (in bytes) for all blocks below a given height.
+pub fn query_cumulative_size(
+    conn: &Connection,
+    below_height: u64,
+) -> rusqlite::Result<u64> {
+    conn.query_row(
+        "SELECT COALESCE(SUM(size), 0) FROM blocks WHERE height < ?1",
+        params![below_height],
+        |row| row.get(0),
+    )
+}
+
 #[derive(serde::Serialize)]
 pub struct OpReturnRow {
     pub height: u64,

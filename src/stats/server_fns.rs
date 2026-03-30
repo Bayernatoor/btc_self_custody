@@ -167,6 +167,25 @@ pub async fn fetch_block_detail(
     }))
 }
 
+/// Total block data size (bytes) for all blocks below a given height.
+/// Used by the chain size chart to calculate the cumulative offset.
+#[server(prefix = "/api", endpoint = "stats_cumulative_size")]
+pub async fn fetch_cumulative_size(
+    below_height: u64,
+) -> Result<u64, ServerFnError> {
+    let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
+        leptos_axum::extract().await.map_err(|e| {
+            ServerFnError::new(format!("Stats not available: {e}"))
+        })?;
+    let conn = state
+        .db
+        .get()
+        .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+    let size = super::db::query_cumulative_size(&conn, below_height)
+        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+    Ok(size)
+}
+
 #[server(prefix = "/api", endpoint = "stats_live")]
 pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
     use std::time::Instant;
