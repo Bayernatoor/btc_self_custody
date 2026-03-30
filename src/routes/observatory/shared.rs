@@ -626,9 +626,6 @@ fn OverlayCheckbox(
 }
 
 /// Observatory navigation bar with links to sub-pages.
-/// On click, adds `obs-nav-loading` CSS class (shows ::after spinner),
-/// prevents default, then navigates after one animation frame so the
-/// browser paints the loading state before Leptos starts the transition.
 #[component]
 pub fn ObservatoryNav() -> impl IntoView {
     let tabs: Vec<(&'static str, &'static str)> = vec![
@@ -641,44 +638,15 @@ pub fn ObservatoryNav() -> impl IntoView {
     ];
 
     let location = leptos_router::hooks::use_location();
-    let navigate = leptos_router::hooks::use_navigate();
 
     view! {
         <nav class="flex justify-center mb-6 sm:mb-8 px-1">
             <div class="flex flex-wrap justify-center gap-x-3 gap-y-1.5 sm:gap-x-6 sm:gap-y-0">
                 {tabs.into_iter().map(|(href, label)| {
                     let href_str = href.to_string();
-                    let href_nav = href_str.clone();
-                    let nav = navigate.clone();
                     view! {
                         <a
                             href=href
-                            on:click=move |ev: leptos::ev::MouseEvent| {
-                                // Don't intercept modified clicks (new tab, etc.)
-                                if ev.meta_key() || ev.ctrl_key() || ev.shift_key() { return; }
-                                ev.prevent_default();
-                                // Add loading class — ::after pseudo-element shows spinner
-                                use wasm_bindgen::JsCast;
-                                if let Some(t) = ev.current_target() {
-                                    if let Ok(el) = t.dyn_into::<leptos::web_sys::HtmlElement>() {
-                                        let _ = el.class_list().add_1("obs-nav-loading");
-                                    }
-                                }
-                                // Navigate after one frame so browser paints the spinner
-                                let href = href_nav.clone();
-                                let n = nav.clone();
-                                #[cfg(feature = "hydrate")]
-                                {
-                                    use wasm_bindgen::prelude::*;
-                                    let cb = Closure::once(move || {
-                                        n(&href, leptos_router::NavigateOptions::default());
-                                    });
-                                    if let Some(w) = leptos::web_sys::window() {
-                                        let _ = w.request_animation_frame(cb.as_ref().unchecked_ref());
-                                    }
-                                    cb.forget();
-                                }
-                            }
                             class=move || {
                                 let path = location.pathname.get();
                                 let active = if href_str == "/observatory" {
