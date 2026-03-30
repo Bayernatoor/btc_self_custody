@@ -98,14 +98,15 @@ pub fn NetworkChartsPage() -> impl IntoView {
                                 .unwrap_or(0.0);
                             let offset = chain_offset.get().unwrap_or(0);
                             dashboard_data.get().and_then(|r| r.ok()).map(|data| {
-                                let (json, is_daily) = match data {
+                                let (mut value, is_daily) = match data {
                                     DashboardData::PerBlock(ref blocks) =>
                                         (crate::stats::charts::chain_size_chart(blocks, disk_gb, offset), false),
                                     DashboardData::Daily(ref days) =>
                                         (crate::stats::charts::chain_size_chart_daily(days, disk_gb, offset), true),
                                 };
-                                if json.is_empty() { return String::new(); }
-                                crate::stats::charts::apply_overlays(&json, &flags, is_daily)
+                                if value.is_null() { return String::new(); }
+                                crate::stats::charts::apply_overlays(&mut value, &flags, is_daily);
+                                serde_json::to_string(&value).unwrap_or_default()
                             }).unwrap_or_default()
                         });
 

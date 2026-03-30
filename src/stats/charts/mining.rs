@@ -7,7 +7,7 @@ const PIE_COLORS: [&str; 11] = [
 ];
 
 /// Miner dominance donut chart.
-pub fn miner_dominance_chart(miners: &[MinerShare]) -> String {
+pub fn miner_dominance_chart(miners: &[MinerShare]) -> serde_json::Value {
     if miners.is_empty() {
         return no_data_chart("Miner Dominance");
     }
@@ -40,7 +40,7 @@ pub fn miner_dominance_chart(miners: &[MinerShare]) -> String {
     let colors: Vec<&str> =
         PIE_COLORS.iter().copied().take(pie_data.len()).collect();
 
-    serde_json::to_string(&json!({
+    json!({
         "backgroundColor": "transparent",
         "color": colors,
         "tooltip": {
@@ -77,12 +77,11 @@ pub fn miner_dominance_chart(miners: &[MinerShare]) -> String {
             },
             "data": pie_data
         }]
-    }))
-    .unwrap_or_default()
+    })
 }
 
 /// Empty blocks scatter chart.
-pub fn empty_blocks_chart(blocks: &[EmptyBlock]) -> String {
+pub fn empty_blocks_chart(blocks: &[EmptyBlock]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("No empty blocks in this range");
     }

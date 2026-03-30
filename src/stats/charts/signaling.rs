@@ -2,7 +2,7 @@ use super::*;
 use serde_json::json;
 
 /// Per-block signaling scatter/bar chart.
-pub fn signaling_chart(blocks: &[SignalingBlock]) -> String {
+pub fn signaling_chart(blocks: &[SignalingBlock]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("BIP Signaling");
     }
@@ -40,7 +40,7 @@ pub fn signaling_chart(blocks: &[SignalingBlock]) -> String {
 pub fn signaling_periods_chart(
     periods: &[SignalingPeriod],
     threshold: f64,
-) -> String {
+) -> serde_json::Value {
     if periods.is_empty() {
         return no_data_chart("Signaling Periods");
     }

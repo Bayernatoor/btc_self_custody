@@ -247,7 +247,7 @@ pub fn SignalingPage() -> impl IntoView {
                                 .filter(|p| p.end_height >= start_height)
                                 .cloned()
                                 .collect();
-                            let periods_chart = crate::stats::charts::signaling_periods_chart(&filtered, threshold);
+                            let periods_chart = serde_json::to_string(&crate::stats::charts::signaling_periods_chart(&filtered, threshold)).unwrap_or_default();
 
                             view! {
                                 <div class="space-y-10">

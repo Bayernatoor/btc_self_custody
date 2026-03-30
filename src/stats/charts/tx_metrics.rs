@@ -2,7 +2,7 @@ use super::*;
 use serde_json::json;
 
 /// Address type evolution — stacked area (per-block).
-pub fn address_type_chart(blocks: &[BlockSummary]) -> String {
+pub fn address_type_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Address Types");
     }
@@ -29,7 +29,7 @@ pub fn address_type_chart(blocks: &[BlockSummary]) -> String {
 }
 
 /// Address type evolution — stacked area (daily totals).
-pub fn address_type_chart_daily(days: &[DailyAggregate]) -> String {
+pub fn address_type_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Address Types");
     }
@@ -55,7 +55,7 @@ pub fn address_type_chart_daily(days: &[DailyAggregate]) -> String {
 }
 
 /// Witness data as % of block size (per-block).
-pub fn witness_share_chart(blocks: &[BlockSummary]) -> String {
+pub fn witness_share_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Witness Data Share");
     }
@@ -115,7 +115,7 @@ pub fn witness_share_chart(blocks: &[BlockSummary]) -> String {
 }
 
 /// Witness data as % of block size (daily).
-pub fn witness_share_chart_daily(days: &[DailyAggregate]) -> String {
+pub fn witness_share_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Witness Data Share");
     }
@@ -153,7 +153,7 @@ pub fn witness_share_chart_daily(days: &[DailyAggregate]) -> String {
 }
 
 /// Transaction batching — avg outputs and inputs per transaction (per-block).
-pub fn batching_chart(blocks: &[BlockSummary]) -> String {
+pub fn batching_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Transaction Batching");
     }
@@ -232,7 +232,7 @@ pub fn batching_chart(blocks: &[BlockSummary]) -> String {
 }
 
 /// Transaction batching (daily).
-pub fn batching_chart_daily(days: &[DailyAggregate]) -> String {
+pub fn batching_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Transaction Batching");
     }
@@ -290,7 +290,7 @@ pub fn batching_chart_daily(days: &[DailyAggregate]) -> String {
 }
 
 /// Address type as % of total outputs (per-block) — 100% stacked area.
-pub fn address_type_pct_chart(blocks: &[BlockSummary]) -> String {
+pub fn address_type_pct_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Address Type Share");
     }
@@ -335,7 +335,7 @@ pub fn address_type_pct_chart(blocks: &[BlockSummary]) -> String {
 }
 
 /// Address type as % of total outputs (daily) — 100% stacked area.
-pub fn address_type_pct_chart_daily(days: &[DailyAggregate]) -> String {
+pub fn address_type_pct_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Address Type Share");
     }
@@ -377,7 +377,7 @@ pub fn address_type_pct_chart_daily(days: &[DailyAggregate]) -> String {
 }
 
 /// RBF adoption — % of transactions signaling RBF (per-block).
-pub fn rbf_chart(blocks: &[BlockSummary]) -> String {
+pub fn rbf_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("RBF Adoption");
     }
@@ -436,7 +436,7 @@ pub fn rbf_chart(blocks: &[BlockSummary]) -> String {
 }
 
 /// RBF adoption (daily).
-pub fn rbf_chart_daily(days: &[DailyAggregate]) -> String {
+pub fn rbf_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("RBF Adoption");
     }
@@ -474,7 +474,7 @@ pub fn rbf_chart_daily(days: &[DailyAggregate]) -> String {
 }
 
 /// UTXO flow — inputs (consumed) vs outputs (created) per block.
-pub fn utxo_flow_chart(blocks: &[BlockSummary]) -> String {
+pub fn utxo_flow_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("UTXO Flow");
     }
@@ -498,7 +498,7 @@ pub fn utxo_flow_chart(blocks: &[BlockSummary]) -> String {
 }
 
 /// UTXO flow (daily).
-pub fn utxo_flow_chart_daily(days: &[DailyAggregate]) -> String {
+pub fn utxo_flow_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("UTXO Flow");
     }

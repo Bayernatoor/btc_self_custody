@@ -131,7 +131,7 @@ pub(crate) fn y_axis(name: &str) -> serde_json::Value {
     })
 }
 
-pub(crate) fn no_data_chart(title: &str) -> String {
+pub(crate) fn no_data_chart(title: &str) -> serde_json::Value {
     let mut opt = chart_defaults();
     let m = opt.as_object_mut().unwrap();
     m.insert(
@@ -142,7 +142,7 @@ pub(crate) fn no_data_chart(title: &str) -> String {
             "left": "center", "top": "middle"
         }),
     );
-    serde_json::to_string(&opt).unwrap_or_default()
+    opt
 }
 
 pub(crate) fn moving_average(data: &[f64], window: usize) -> Vec<Option<f64>> {
@@ -184,7 +184,7 @@ pub(crate) fn show_ma(data_len: usize) -> bool {
 }
 
 /// Merge chart_defaults with additional fields.
-pub(crate) fn build_option(extra: serde_json::Value) -> String {
+pub(crate) fn build_option(extra: serde_json::Value) -> serde_json::Value {
     let mut base = chart_defaults();
     if let (Some(base_obj), Some(extra_obj)) =
         (base.as_object_mut(), extra.as_object())
@@ -205,7 +205,7 @@ pub(crate) fn build_option(extra: serde_json::Value) -> String {
             base_obj.insert(k.clone(), v.clone());
         }
     }
-    serde_json::to_string(&base).unwrap_or_default()
+    base
 }
 
 pub(crate) fn format_num(n: u64) -> String {
@@ -380,13 +380,13 @@ impl OverlayFlags {
     }
 }
 
-/// Merge overlay markLines and series into an already-built chart option JSON string.
+/// Merge overlay markLines and series into an already-parsed chart option Value.
 /// Works for both time-axis (per-block) and category-axis (daily) charts.
 pub fn apply_overlays(
-    option_json: &str,
+    opt: &mut serde_json::Value,
     overlays: &OverlayFlags,
     is_daily: bool,
-) -> String {
+) {
     let has_any = overlays.halvings
         || overlays.bip_activations
         || overlays.core_releases
@@ -395,17 +395,12 @@ pub fn apply_overlays(
         || !overlays.chain_size_data.is_empty();
 
     if !has_any {
-        return option_json.to_string();
+        return;
     }
-
-    let mut opt: serde_json::Value = match serde_json::from_str(option_json) {
-        Ok(v) => v,
-        Err(_) => return option_json.to_string(),
-    };
 
     let obj = match opt.as_object_mut() {
         Some(o) => o,
-        None => return option_json.to_string(),
+        None => return,
     };
 
     // Widen grid.right when we have price axis or markLine labels
@@ -637,7 +632,7 @@ pub fn apply_overlays(
 
         // Only add overlay if we have price data in range
         if filtered_prices.is_empty() {
-            return serde_json::to_string(&opt).unwrap_or_default();
+            return;
         }
 
         // Convert existing yAxis to array if it's a single object
@@ -1009,5 +1004,4 @@ pub fn apply_overlays(
         }
     }
 
-    serde_json::to_string(&opt).unwrap_or_default()
 }
