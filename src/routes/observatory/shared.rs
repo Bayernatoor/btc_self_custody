@@ -637,7 +637,7 @@ pub fn ObservatoryNav() -> impl IntoView {
 #[component]
 pub fn BlockDetailModal() -> impl IntoView {
     view! {
-        <div id="block-detail-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div id="block-detail-modal" class="hidden fixed inset-0 flex items-center justify-center p-4" style="z-index: 10001">
             <div class="absolute inset-0 bg-black/60" onclick="closeBlockDetail()"></div>
             <div class="relative bg-[#0e2a47] border border-white/15 rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] overflow-y-auto overflow-x-hidden">
                 <div class="flex items-center justify-between px-5 py-3 border-b border-white/10">

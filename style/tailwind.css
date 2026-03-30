@@ -310,9 +310,15 @@
   vertical-align: middle;
 }
 
-/* ── Block detail modal rows ────────── */
-.bd-row { display: flex; justify-content: space-between; padding: 4px 0; }
-.bd-row span:first-child { color: rgba(255,255,255,0.5); }
-.bd-row span:last-child { color: rgba(255,255,255,0.85); font-family: monospace; font-size: 12px; text-align: right; word-break: break-all; max-width: 60%; }
+/* ── Block detail modal ────────── */
+.bd-row { display: flex; justify-content: space-between; align-items: baseline; padding: 5px 0; gap: 12px; }
+.bd-row span:first-child { color: rgba(255,255,255,0.4); font-size: 12px; flex-shrink: 0; }
+.bd-row span:last-child { color: rgba(255,255,255,0.85); font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; text-align: right; word-break: break-all; }
 .bd-hash { color: #f7931a !important; word-break: break-all; }
-.bd-divider { border-top: 1px solid rgba(255,255,255,0.08); margin: 8px 0; }
+.bd-divider { border-top: 1px solid rgba(255,255,255,0.06); margin: 10px 0; }
+.bd-section { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255,255,255,0.25); margin-bottom: 4px; margin-top: 2px; }
+.bd-copy { cursor: pointer; transition: color 0.15s; position: relative; }
+.bd-copy:hover { color: #f7931a !important; }
+.bd-copied { color: #22c55e !important; }
+.bd-copy::after { content: ''; position: absolute; right: -14px; top: 50%; transform: translateY(-50%); width: 10px; height: 10px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='rgba(255,255,255,0.2)' stroke-width='2'%3E%3Crect x='9' y='9' width='13' height='13' rx='2'/%3E%3Cpath d='M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1'/%3E%3C/svg%3E") no-repeat center; }
+.bd-copy:hover::after { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23f7931a' stroke-width='2'%3E%3Crect x='9' y='9' width='13' height='13' rx='2'/%3E%3Cpath d='M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1'/%3E%3C/svg%3E"); }

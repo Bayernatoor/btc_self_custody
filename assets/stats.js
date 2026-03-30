@@ -222,6 +222,28 @@
         row.appendChild(v);
         return row;
     }
+    function bdCopyRow(label, displayValue, copyValue) {
+        var row = bdRow(label, displayValue, 'bd-hash bd-copy');
+        var val = row.lastChild;
+        val.title = 'Click to copy';
+        val.addEventListener('click', function() {
+            navigator.clipboard.writeText(copyValue);
+            var orig = val.textContent;
+            val.textContent = 'Copied!';
+            val.classList.add('bd-copied');
+            setTimeout(function() {
+                val.textContent = orig;
+                val.classList.remove('bd-copied');
+            }, 1500);
+        });
+        return row;
+    }
+    function bdSection(title) {
+        var s = document.createElement('div');
+        s.className = 'bd-section';
+        s.textContent = title;
+        return s;
+    }
     function bdDivider() {
         var d = document.createElement('div');
         d.className = 'bd-divider';
@@ -236,54 +258,93 @@
                 var modal = document.getElementById('block-detail-modal');
                 if (!modal) return;
 
-                var feesBtc = b.total_fees != null ? (b.total_fees / 1e8).toFixed(6) : '\u2014';
+                var satsToBtc = function(sats) {
+                    return (sats / 1e8).toFixed(8) + ' BTC';
+                };
+                var halvings = Math.floor(b.height / 210000);
+                var subsidySats = halvings >= 64 ? 0 : Math.floor(5000000000 / Math.pow(2, halvings));
+                var feesBtc = b.total_fees != null ? satsToBtc(b.total_fees) : '\u2014';
+                var subsidyBtc = satsToBtc(subsidySats);
+                var rewardBtc = b.total_fees != null ? satsToBtc(subsidySats + b.total_fees) : '\u2014';
                 var bit4 = (b.version & (1 << 4)) !== 0;
                 var bip54 = b.coinbase_locktime === b.height - 1 && b.coinbase_sequence !== 4294967295;
                 var versionHex = '0x' + (b.version >>> 0).toString(16).padStart(8, '0');
+                var hashVal = b.hash || 'N/A';
 
                 var body = document.getElementById('block-detail-body');
-                body.textContent = ''; // clear safely
+                body.textContent = '';
 
+                // -- Block --
+                body.appendChild(bdSection('Block'));
                 body.appendChild(bdRow('Time', b.timestamp ? new Date(b.timestamp * 1000).toLocaleString() : '\u2014'));
-
-                var hashVal = b.hash || 'N/A';
-                var hashRow = bdRow('Hash', hashVal.substring(0, 20) + '...', 'bd-hash');
-                hashRow.lastChild.style.cursor = 'pointer';
-                hashRow.lastChild.addEventListener('click', function() { navigator.clipboard.writeText(hashVal); });
-                body.appendChild(hashRow);
-
+                body.appendChild(bdCopyRow('Hash', hashVal.substring(0, 16) + '\u2026' + hashVal.slice(-8), hashVal));
+                body.appendChild(bdRow('Miner', b.miner || 'Unknown'));
                 body.appendChild(bdRow('Size', b.size != null ? (b.size / 1e6).toFixed(2) + ' MB' : '\u2014'));
                 body.appendChild(bdRow('Weight', b.weight != null ? b.weight.toLocaleString() + ' WU' : '\u2014'));
-                body.appendChild(bdRow('Tx Count', b.tx_count != null ? b.tx_count.toLocaleString() : '\u2014'));
-                body.appendChild(bdRow('Difficulty', b.difficulty != null ? (b.difficulty / 1e12).toFixed(2) + 'T' : '\u2014'));
-                body.appendChild(bdDivider());
-                body.appendChild(bdRow('Total Fees', typeof feesBtc === 'string' && feesBtc !== '\u2014' ? feesBtc + ' BTC' : feesBtc));
-                body.appendChild(bdRow('Median Fee', b.median_fee ? b.median_fee.toLocaleString() + ' sats' : '\u2014'));
-                body.appendChild(bdRow('Median Fee Rate', b.median_fee_rate ? b.median_fee_rate.toFixed(1) + ' sat/vB' : '\u2014'));
-                body.appendChild(bdRow('Miner', b.miner || 'Unknown'));
-                body.appendChild(bdDivider());
-                body.appendChild(bdRow('OP_RETURN', (b.op_return_count != null ? b.op_return_count : 0) + ' outputs'));
-                body.appendChild(bdRow('\u00a0\u00a0Runes', (b.runes_count || 0) + ' (' + (b.runes_bytes || 0) + ' B)'));
-                body.appendChild(bdRow('\u00a0\u00a0Data Carrier', (b.data_carrier_count || 0) + ' (' + (b.data_carrier_bytes || 0) + ' B)'));
-                body.appendChild(bdDivider());
-                body.appendChild(bdRow('Version', versionHex, 'bd-hash'));
-                body.appendChild(bdRow('BIP-110 (bit 4)', bit4 ? 'YES' : 'NO', bit4 ? 'text-green-400' : 'text-red-400'));
-                body.appendChild(bdRow('BIP-54', bip54 ? 'YES' : 'NO', bip54 ? 'text-green-400' : 'text-red-400'));
-                body.appendChild(bdRow('Coinbase Locktime', b.coinbase_locktime != null ? b.coinbase_locktime.toLocaleString() : '\u2014'));
-                body.appendChild(bdRow('Coinbase Sequence', b.coinbase_sequence != null ? '0x' + (b.coinbase_sequence >>> 0).toString(16).padStart(8, '0') : '\u2014'));
+                body.appendChild(bdRow('Transactions', b.tx_count != null ? b.tx_count.toLocaleString() : '\u2014'));
 
+                // -- Reward & Fees --
+                body.appendChild(bdDivider());
+                body.appendChild(bdSection('Reward & Fees'));
+                body.appendChild(bdRow('Block Reward', rewardBtc));
+                body.appendChild(bdRow('  Subsidy', subsidyBtc));
+                body.appendChild(bdRow('  Fees', feesBtc));
+                body.appendChild(bdRow('Median Fee', b.median_fee ? b.median_fee.toLocaleString() + ' sats' : '\u2014'));
+                body.appendChild(bdRow('Fee Rate', b.median_fee_rate ? b.median_fee_rate.toFixed(1) + ' sat/vB' : '\u2014'));
+                body.appendChild(bdRow('Difficulty', b.difficulty != null ? (b.difficulty / 1e12).toFixed(2) + ' T' : '\u2014'));
+
+                // -- Embedded Data --
+                var hasEmbedded = (b.op_return_count || 0) > 0 || (b.inscription_count || 0) > 0;
+                if (hasEmbedded) {
+                    body.appendChild(bdDivider());
+                    body.appendChild(bdSection('Embedded Data'));
+                    if (b.op_return_count > 0) {
+                        body.appendChild(bdRow('OP_RETURN', (b.op_return_count).toLocaleString() + ' outputs'));
+                        if (b.runes_count > 0)
+                            body.appendChild(bdRow('  Runes', b.runes_count.toLocaleString() + ' (' + (b.runes_bytes || 0).toLocaleString() + ' B)'));
+                        if (b.data_carrier_count > 0)
+                            body.appendChild(bdRow('  Data Carrier', b.data_carrier_count.toLocaleString() + ' (' + (b.data_carrier_bytes || 0).toLocaleString() + ' B)'));
+                    }
+                    if (b.inscription_count > 0)
+                        body.appendChild(bdRow('Inscriptions', b.inscription_count.toLocaleString() + ' (' + (b.inscription_bytes || 0).toLocaleString() + ' B)'));
+                }
+
+                // — Signaling —
+                body.appendChild(bdDivider());
+                body.appendChild(bdSection('Consensus'));
+                body.appendChild(bdCopyRow('Version', versionHex, versionHex));
+                body.appendChild(bdRow('BIP-110 (bit 4)', bit4 ? '\u2713 Signaled' : '\u2717 No', bit4 ? '' : ''));
+                body.appendChild(bdRow('BIP-54', bip54 ? '\u2713 Compliant' : '\u2717 No', bip54 ? '' : ''));
+
+                // — External link —
+                body.appendChild(bdDivider());
                 var link = document.createElement('div');
-                link.style.cssText = 'margin-top:12px;text-align:center';
+                link.style.cssText = 'text-align:center;padding-top:4px';
                 var a = document.createElement('a');
-                a.href = 'https://mempool.space/block/' + b.height;
+                a.href = 'https://mempool.space/block/' + b.hash;
                 a.target = '_blank';
                 a.rel = 'noopener noreferrer';
-                a.style.cssText = 'color:#f7931a;font-size:13px';
+                a.style.cssText = 'color:#f7931a;font-size:12px;opacity:0.7;transition:opacity 0.15s';
                 a.textContent = 'View on mempool.space \u2192';
+                a.addEventListener('mouseenter', function() { a.style.opacity = '1'; });
+                a.addEventListener('mouseleave', function() { a.style.opacity = '0.7'; });
                 link.appendChild(a);
                 body.appendChild(link);
 
-                document.getElementById('block-detail-title').textContent = 'Block #' + b.height.toLocaleString();
+                var titleEl = document.getElementById('block-detail-title');
+                titleEl.textContent = 'Block #' + b.height.toLocaleString();
+                titleEl.className = 'text-white font-medium cursor-pointer hover:text-[#f7931a] transition-colors';
+                titleEl.title = 'Click to copy height';
+                titleEl.onclick = function() {
+                    navigator.clipboard.writeText(String(b.height));
+                    var orig = titleEl.textContent;
+                    titleEl.textContent = 'Copied!';
+                    titleEl.style.color = '#22c55e';
+                    setTimeout(function() {
+                        titleEl.textContent = orig;
+                        titleEl.style.color = '';
+                    }, 1500);
+                };
                 modal.classList.remove('hidden');
             })
             .catch(function(e) { console.error('Block detail error:', e); });
