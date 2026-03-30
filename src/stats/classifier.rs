@@ -17,21 +17,23 @@ pub enum OpReturnType {
 }
 
 /// Classify a nulldata output by its scriptPubKey hex string.
-pub fn classify(hex: &str) -> OpReturnType {
+/// `height` is used for protocol-aware cutoffs (e.g. Runes only exists after block 840,000).
+pub fn classify(hex: &str, height: u64) -> OpReturnType {
     // SegWit commitment: OP_RETURN OP_PUSHBYTES_36 0xaa21a9ed (always 38 bytes)
     if hex.starts_with("6a24aa21a9ed") {
         return OpReturnType::SegwitCommit;
     }
 
     // Runes protocol: OP_RETURN OP_13 (0x5d)
-    if hex.starts_with("6a5d") {
+    // Runes launched at block 840,000 (4th halving). Before that, 6a5d is just data.
+    if hex.starts_with("6a5d") && height >= 840_000 {
         return OpReturnType::Runes;
     }
 
     // Very tiny outputs (≤6 bytes) are typically Runes markers (e.g. 6a023a29)
-    // Outputs 7-10 bytes without 6a5d prefix are more likely small data carriers
+    // Only classify as Runes after launch; before 840k these are small data carriers
     let byte_len = hex.len() / 2;
-    if byte_len <= 6 {
+    if byte_len <= 6 && height >= 840_000 {
         return OpReturnType::Runes;
     }
 
@@ -246,53 +248,58 @@ mod tests {
 
     #[test]
     fn classify_segwit_commit() {
-        // Real SegWit commitment: OP_RETURN OP_PUSHBYTES_36 0xaa21a9ed...
         let hex = "6a24aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf9";
-        assert_eq!(classify(hex), OpReturnType::SegwitCommit);
+        assert_eq!(classify(hex, 900_000), OpReturnType::SegwitCommit);
     }
 
     #[test]
-    fn classify_runes_prefix() {
-        // Runes: OP_RETURN OP_13 (6a5d) + payload
-        assert_eq!(classify("6a5d0014"), OpReturnType::Runes);
-        assert_eq!(classify("6a5d"), OpReturnType::Runes);
+    fn classify_runes_prefix_after_launch() {
+        // Runes: OP_RETURN OP_13 (6a5d) + payload — after block 840k
+        assert_eq!(classify("6a5d0014", 840_000), OpReturnType::Runes);
+        assert_eq!(classify("6a5d", 840_001), OpReturnType::Runes);
     }
 
     #[test]
-    fn classify_runes_tiny() {
-        // ≤6 bytes without 6a5d prefix → Runes heuristic
-        assert_eq!(classify("6a023a29"), OpReturnType::Runes); // 4 bytes
-        assert_eq!(classify("6a0400000000"), OpReturnType::Runes); // 6 bytes
+    fn classify_runes_prefix_before_launch() {
+        // Same hex before block 840k → DataCarrier, not Runes
+        assert_eq!(classify("6a5d0014", 839_999), OpReturnType::DataCarrier);
+    }
+
+    #[test]
+    fn classify_runes_tiny_after_launch() {
+        // ≤6 bytes after 840k → Runes heuristic
+        assert_eq!(classify("6a023a29", 840_000), OpReturnType::Runes);
+        assert_eq!(classify("6a0400000000", 850_000), OpReturnType::Runes);
+    }
+
+    #[test]
+    fn classify_runes_tiny_before_launch() {
+        // ≤6 bytes before 840k → DataCarrier (not Runes)
+        assert_eq!(classify("6a023a29", 500_000), OpReturnType::DataCarrier);
     }
 
     #[test]
     fn classify_omni() {
-        // Omni Layer: OP_RETURN OP_PUSHBYTES_20 "omni"...
-        // 6a + 14 (push 20 bytes) + 6f6d6e69 ("omni") + rest
         let hex = "6a146f6d6e6900000000000000010000000005f5e100";
-        assert_eq!(classify(hex), OpReturnType::Omni);
+        assert_eq!(classify(hex, 300_000), OpReturnType::Omni);
     }
 
     #[test]
     fn classify_counterparty() {
-        // Counterparty: OP_RETURN OP_PUSHBYTES_40 "CNTRPRTY"...
-        // 6a + 28 (push 40 bytes) + 434e545250525459 + rest
         let hex = "6a28434e5452505254590000000000000000000000000000000000000000000000000000000000000000";
-        assert_eq!(classify(hex), OpReturnType::Counterparty);
+        assert_eq!(classify(hex, 300_000), OpReturnType::Counterparty);
     }
 
     #[test]
     fn classify_data_carrier() {
-        // Generic data carrier: OP_RETURN + arbitrary data > 6 bytes
         let hex = "6a0f48656c6c6f2c20776f726c6421"; // "Hello, world!"
-        assert_eq!(classify(hex), OpReturnType::DataCarrier);
+        assert_eq!(classify(hex, 500_000), OpReturnType::DataCarrier);
     }
 
     #[test]
     fn classify_omni_pushdata1() {
-        // Omni with OP_PUSHDATA1 (0x4c): 6a + 4c + len + 6f6d6e69...
         let hex = "6a4c146f6d6e6900000000000000010000000005f5e100";
-        assert_eq!(classify(hex), OpReturnType::Omni);
+        assert_eq!(classify(hex, 300_000), OpReturnType::Omni);
     }
 
     // -----------------------------------------------------------------------
