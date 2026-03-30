@@ -22,6 +22,45 @@
         new ResizeObserver(function() { if (el._chart) el._chart.resize(); }).observe(el);
     };
 
+    // Lazy chart rendering: only call setChartOption when the element is
+    // visible (or within 200px of viewport). Stores pending JSON until then.
+    var _lazyObserver = typeof IntersectionObserver !== 'undefined' ? new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+            if (entry.isIntersecting) {
+                var el = entry.target;
+                _lazyObserver.unobserve(el);
+                el._lazyVisible = true;
+                // Render any pending chart
+                if (el._pendingJson) {
+                    window.setChartOption(el.id, el._pendingJson);
+                    el._pendingJson = null;
+                }
+            }
+        });
+    }, { rootMargin: '200px' }) : null;
+
+    window.setChartOptionLazy = function(elementId, optionJson) {
+        var el = document.getElementById(elementId);
+        if (!el) {
+            // Element doesn't exist yet — retry next frame
+            requestAnimationFrame(function() { window.setChartOptionLazy(elementId, optionJson); });
+            return;
+        }
+        if (el._lazyVisible) {
+            // Already visible — render immediately
+            window.setChartOption(elementId, optionJson);
+        } else {
+            // Store pending JSON and start observing
+            el._pendingJson = optionJson;
+            if (_lazyObserver) {
+                _lazyObserver.observe(el);
+            } else {
+                // Fallback: no IntersectionObserver support — render immediately
+                window.setChartOption(elementId, optionJson);
+            }
+        }
+    };
+
     // Apply mobile-specific option tweaks (called on init and resize)
     function applyMobileAdjustments(opts) {
         if (window.innerWidth >= 640) return;
