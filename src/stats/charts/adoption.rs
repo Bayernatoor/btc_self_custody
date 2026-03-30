@@ -243,13 +243,13 @@ pub fn witness_version_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         "legend": { "show": true },
         "series": [
             {
-                "name": "SegWit v0", "type": "line", "data": v0_data,
+                "name": "SegWit", "type": "line", "data": v0_data,
                 "stack": "witness", "areaStyle": { "opacity": 0.5 },
                 "lineStyle": { "width": 0.5, "color": SEGWIT_V0_COLOR },
                 "itemStyle": { "color": SEGWIT_V0_COLOR }, "symbol": "none"
             },
             {
-                "name": "Taproot v1", "type": "line", "data": v1_data,
+                "name": "Taproot", "type": "line", "data": v1_data,
                 "stack": "witness", "areaStyle": { "opacity": 0.5 },
                 "lineStyle": { "width": 0.5, "color": SEGWIT_V1_COLOR },
                 "itemStyle": { "color": SEGWIT_V1_COLOR }, "symbol": "none"
@@ -280,13 +280,13 @@ pub fn witness_version_chart_daily(days: &[DailyAggregate]) -> serde_json::Value
         "legend": { "show": true },
         "series": [
             {
-                "name": "SegWit v0", "type": "line", "data": v0_vals,
+                "name": "SegWit", "type": "line", "data": v0_vals,
                 "stack": "witness", "areaStyle": { "opacity": 0.5 },
                 "lineStyle": { "width": 0.5, "color": SEGWIT_V0_COLOR },
                 "itemStyle": { "color": SEGWIT_V0_COLOR }, "symbol": "none"
             },
             {
-                "name": "Taproot v1", "type": "line", "data": v1_vals,
+                "name": "Taproot", "type": "line", "data": v1_vals,
                 "stack": "witness", "areaStyle": { "opacity": 0.5 },
                 "lineStyle": { "width": 0.5, "color": SEGWIT_V1_COLOR },
                 "itemStyle": { "color": SEGWIT_V1_COLOR }, "symbol": "none"
@@ -351,13 +351,13 @@ pub fn witness_version_pct_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         "legend": { "show": true },
         "series": [
             {
-                "name": "SegWit v0", "type": "line", "data": v0_data,
+                "name": "SegWit", "type": "line", "data": v0_data,
                 "stack": "pct", "areaStyle": { "opacity": 0.6 },
                 "lineStyle": { "width": 0, "color": SEGWIT_V0_COLOR },
                 "itemStyle": { "color": SEGWIT_V0_COLOR }, "symbol": "none"
             },
             {
-                "name": "Taproot v1", "type": "line", "data": v1_data,
+                "name": "Taproot", "type": "line", "data": v1_data,
                 "stack": "pct", "areaStyle": { "opacity": 0.6 },
                 "lineStyle": { "width": 0, "color": SEGWIT_V1_COLOR },
                 "itemStyle": { "color": SEGWIT_V1_COLOR }, "symbol": "none"
@@ -411,13 +411,13 @@ pub fn witness_version_pct_chart_daily(days: &[DailyAggregate]) -> serde_json::V
         "legend": { "show": true },
         "series": [
             {
-                "name": "SegWit v0", "type": "line", "data": v0_pct,
+                "name": "SegWit", "type": "line", "data": v0_pct,
                 "stack": "pct", "areaStyle": { "opacity": 0.6 },
                 "lineStyle": { "width": 0, "color": SEGWIT_V0_COLOR },
                 "itemStyle": { "color": SEGWIT_V0_COLOR }, "symbol": "none"
             },
             {
-                "name": "Taproot v1", "type": "line", "data": v1_pct,
+                "name": "Taproot", "type": "line", "data": v1_pct,
                 "stack": "pct", "areaStyle": { "opacity": 0.6 },
                 "lineStyle": { "width": 0, "color": SEGWIT_V1_COLOR },
                 "itemStyle": { "color": SEGWIT_V1_COLOR }, "symbol": "none"
@@ -497,13 +497,13 @@ pub fn witness_version_tx_pct_chart(blocks: &[BlockSummary]) -> serde_json::Valu
                 "itemStyle": { "color": "#888" }, "symbol": "none"
             },
             {
-                "name": "SegWit v0", "type": "line", "data": v0_data,
+                "name": "SegWit", "type": "line", "data": v0_data,
                 "stack": "txpct", "areaStyle": { "opacity": 0.6 },
                 "lineStyle": { "width": 0, "color": SEGWIT_V0_COLOR },
                 "itemStyle": { "color": SEGWIT_V0_COLOR }, "symbol": "none"
             },
             {
-                "name": "Taproot v1", "type": "line", "data": v1_data,
+                "name": "Taproot", "type": "line", "data": v1_data,
                 "stack": "txpct", "areaStyle": { "opacity": 0.6 },
                 "lineStyle": { "width": 0, "color": SEGWIT_V1_COLOR },
                 "itemStyle": { "color": SEGWIT_V1_COLOR }, "symbol": "none"
@@ -566,13 +566,13 @@ pub fn witness_version_tx_pct_chart_daily(days: &[DailyAggregate]) -> serde_json
                 "itemStyle": { "color": "#888" }, "symbol": "none"
             },
             {
-                "name": "SegWit v0", "type": "line", "data": v0_pct,
+                "name": "SegWit", "type": "line", "data": v0_pct,
                 "stack": "txpct", "areaStyle": { "opacity": 0.6 },
                 "lineStyle": { "width": 0, "color": SEGWIT_V0_COLOR },
                 "itemStyle": { "color": SEGWIT_V0_COLOR }, "symbol": "none"
             },
             {
-                "name": "Taproot v1", "type": "line", "data": v1_pct,
+                "name": "Taproot", "type": "line", "data": v1_pct,
                 "stack": "txpct", "areaStyle": { "opacity": 0.6 },
                 "lineStyle": { "width": 0, "color": SEGWIT_V1_COLOR },
                 "itemStyle": { "color": SEGWIT_V1_COLOR }, "symbol": "none"
