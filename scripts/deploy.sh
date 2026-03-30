@@ -16,6 +16,7 @@ sed -i "s/var CACHE_NAME = 'wehodlbtc-[^']*'/var CACHE_NAME = 'wehodlbtc-${DEPLO
 
 echo "==> Running tests..."
 cargo test || { echo "==> TESTS FAILED — aborting deploy"; exit 1; }
+echo "==> All tests passed..."
 
 echo "==> Building release..."
 cargo leptos build --release
