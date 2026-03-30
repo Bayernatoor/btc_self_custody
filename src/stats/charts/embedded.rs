@@ -1,5 +1,5 @@
-use serde_json::json;
 use super::*;
+use serde_json::json;
 
 const INSCRIPTION_COLOR: &str = "#06b6d4"; // Cyan for inscriptions
 
@@ -9,10 +9,14 @@ pub fn op_return_count_chart(blocks: &[BlockSummary]) -> String {
         return no_data_chart("Embedded Data Count");
     }
 
-    let runes: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.runes_count)).collect();
-    let omni: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.omni_count)).collect();
-    let xcp: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.counterparty_count)).collect();
-    let other: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.data_carrier_count)).collect();
+    let runes: Vec<serde_json::Value> =
+        blocks.iter().map(|b| dp(b, b.runes_count)).collect();
+    let omni: Vec<serde_json::Value> =
+        blocks.iter().map(|b| dp(b, b.omni_count)).collect();
+    let xcp: Vec<serde_json::Value> =
+        blocks.iter().map(|b| dp(b, b.counterparty_count)).collect();
+    let other: Vec<serde_json::Value> =
+        blocks.iter().map(|b| dp(b, b.data_carrier_count)).collect();
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
@@ -35,12 +39,28 @@ pub fn op_return_count_chart_daily(days: &[DailyAggregate]) -> String {
     }
     let dates: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
     let avg = |total: u64, bc: u64| -> f64 {
-        if bc > 0 { (total as f64 / bc as f64 * 1000.0).round() / 1000.0 } else { 0.0 }
+        if bc > 0 {
+            (total as f64 / bc as f64 * 1000.0).round() / 1000.0
+        } else {
+            0.0
+        }
     };
-    let runes: Vec<f64> = days.iter().map(|d| avg(d.total_runes_count, d.block_count)).collect();
-    let omni: Vec<f64> = days.iter().map(|d| avg(d.total_omni_count, d.block_count)).collect();
-    let xcp: Vec<f64> = days.iter().map(|d| avg(d.total_counterparty_count, d.block_count)).collect();
-    let other: Vec<f64> = days.iter().map(|d| avg(d.total_data_carrier_count, d.block_count)).collect();
+    let runes: Vec<f64> = days
+        .iter()
+        .map(|d| avg(d.total_runes_count, d.block_count))
+        .collect();
+    let omni: Vec<f64> = days
+        .iter()
+        .map(|d| avg(d.total_omni_count, d.block_count))
+        .collect();
+    let xcp: Vec<f64> = days
+        .iter()
+        .map(|d| avg(d.total_counterparty_count, d.block_count))
+        .collect();
+    let other: Vec<f64> = days
+        .iter()
+        .map(|d| avg(d.total_data_carrier_count, d.block_count))
+        .collect();
 
     build_option(json!({
         "xAxis": x_axis_for(true, &dates),
@@ -62,10 +82,14 @@ pub fn op_return_bytes_chart(blocks: &[BlockSummary]) -> String {
         return no_data_chart("Embedded Data Volume");
     }
 
-    let runes: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.runes_bytes)).collect();
-    let omni: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.omni_bytes)).collect();
-    let xcp: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.counterparty_bytes)).collect();
-    let other: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.data_carrier_bytes)).collect();
+    let runes: Vec<serde_json::Value> =
+        blocks.iter().map(|b| dp(b, b.runes_bytes)).collect();
+    let omni: Vec<serde_json::Value> =
+        blocks.iter().map(|b| dp(b, b.omni_bytes)).collect();
+    let xcp: Vec<serde_json::Value> =
+        blocks.iter().map(|b| dp(b, b.counterparty_bytes)).collect();
+    let other: Vec<serde_json::Value> =
+        blocks.iter().map(|b| dp(b, b.data_carrier_bytes)).collect();
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
@@ -88,12 +112,28 @@ pub fn op_return_bytes_chart_daily(days: &[DailyAggregate]) -> String {
     }
     let dates: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
     let avg_kb = |total: u64, bc: u64| -> f64 {
-        if bc > 0 { ((total as f64 / bc as f64 / 1000.0) * 10.0).round() / 10.0 } else { 0.0 }
+        if bc > 0 {
+            ((total as f64 / bc as f64 / 1000.0) * 10.0).round() / 10.0
+        } else {
+            0.0
+        }
     };
-    let runes: Vec<f64> = days.iter().map(|d| avg_kb(d.total_runes_bytes, d.block_count)).collect();
-    let omni: Vec<f64> = days.iter().map(|d| avg_kb(d.total_omni_bytes, d.block_count)).collect();
-    let xcp: Vec<f64> = days.iter().map(|d| avg_kb(d.total_counterparty_bytes, d.block_count)).collect();
-    let other: Vec<f64> = days.iter().map(|d| avg_kb(d.total_data_carrier_bytes, d.block_count)).collect();
+    let runes: Vec<f64> = days
+        .iter()
+        .map(|d| avg_kb(d.total_runes_bytes, d.block_count))
+        .collect();
+    let omni: Vec<f64> = days
+        .iter()
+        .map(|d| avg_kb(d.total_omni_bytes, d.block_count))
+        .collect();
+    let xcp: Vec<f64> = days
+        .iter()
+        .map(|d| avg_kb(d.total_counterparty_bytes, d.block_count))
+        .collect();
+    let other: Vec<f64> = days
+        .iter()
+        .map(|d| avg_kb(d.total_data_carrier_bytes, d.block_count))
+        .collect();
 
     build_option(json!({
         "xAxis": x_axis_for(true, &dates),
@@ -116,25 +156,41 @@ pub fn runes_pct_chart(blocks: &[BlockSummary]) -> String {
     }
 
     let pct = |count: u64, total: u64| -> f64 {
-        if total > 0 { (count as f64 / total as f64 * 100.0 * 100.0).round() / 100.0 } else { 0.0 }
+        if total > 0 {
+            (count as f64 / total as f64 * 100.0 * 100.0).round() / 100.0
+        } else {
+            0.0
+        }
     };
 
-    let runes_data: Vec<serde_json::Value> = blocks.iter().map(|b| {
-        let total = b.op_return_count;
-        dp(b, pct(b.runes_count, total))
-    }).collect();
-    let omni_data: Vec<serde_json::Value> = blocks.iter().map(|b| {
-        let total = b.op_return_count;
-        dp(b, pct(b.omni_count, total))
-    }).collect();
-    let xcp_data: Vec<serde_json::Value> = blocks.iter().map(|b| {
-        let total = b.op_return_count;
-        dp(b, pct(b.counterparty_count, total))
-    }).collect();
-    let other_data: Vec<serde_json::Value> = blocks.iter().map(|b| {
-        let total = b.op_return_count;
-        dp(b, pct(b.data_carrier_count, total))
-    }).collect();
+    let runes_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .map(|b| {
+            let total = b.op_return_count;
+            dp(b, pct(b.runes_count, total))
+        })
+        .collect();
+    let omni_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .map(|b| {
+            let total = b.op_return_count;
+            dp(b, pct(b.omni_count, total))
+        })
+        .collect();
+    let xcp_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .map(|b| {
+            let total = b.op_return_count;
+            dp(b, pct(b.counterparty_count, total))
+        })
+        .collect();
+    let other_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .map(|b| {
+            let total = b.op_return_count;
+            dp(b, pct(b.data_carrier_count, total))
+        })
+        .collect();
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
@@ -163,12 +219,28 @@ pub fn runes_pct_chart_daily(days: &[DailyAggregate]) -> String {
     }
     let dates: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
     let pct = |count: u64, total: u64| -> f64 {
-        if total > 0 { (count as f64 / total as f64 * 100.0 * 100.0).round() / 100.0 } else { 0.0 }
+        if total > 0 {
+            (count as f64 / total as f64 * 100.0 * 100.0).round() / 100.0
+        } else {
+            0.0
+        }
     };
-    let runes: Vec<f64> = days.iter().map(|d| pct(d.total_runes_count, d.total_op_return_count)).collect();
-    let omni: Vec<f64> = days.iter().map(|d| pct(d.total_omni_count, d.total_op_return_count)).collect();
-    let xcp: Vec<f64> = days.iter().map(|d| pct(d.total_counterparty_count, d.total_op_return_count)).collect();
-    let other: Vec<f64> = days.iter().map(|d| pct(d.total_data_carrier_count, d.total_op_return_count)).collect();
+    let runes: Vec<f64> = days
+        .iter()
+        .map(|d| pct(d.total_runes_count, d.total_op_return_count))
+        .collect();
+    let omni: Vec<f64> = days
+        .iter()
+        .map(|d| pct(d.total_omni_count, d.total_op_return_count))
+        .collect();
+    let xcp: Vec<f64> = days
+        .iter()
+        .map(|d| pct(d.total_counterparty_count, d.total_op_return_count))
+        .collect();
+    let other: Vec<f64> = days
+        .iter()
+        .map(|d| pct(d.total_data_carrier_count, d.total_op_return_count))
+        .collect();
 
     build_option(json!({
         "xAxis": x_axis_for(true, &dates),
@@ -200,7 +272,9 @@ pub fn op_return_block_share_chart(blocks: &[BlockSummary]) -> String {
         .iter()
         .map(|b| {
             if b.size > 0 {
-                (b.op_return_bytes as f64 / b.size as f64 * 100.0 * 100.0).round() / 100.0
+                (b.op_return_bytes as f64 / b.size as f64 * 100.0 * 100.0)
+                    .round()
+                    / 100.0
             } else {
                 0.0
             }
@@ -217,7 +291,12 @@ pub fn op_return_block_share_chart(blocks: &[BlockSummary]) -> String {
     let ma_data: Vec<serde_json::Value> = blocks
         .iter()
         .zip(ma.iter())
-        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))]))
+        .map(|(b, m)| {
+            json!([
+                ts_ms(b.timestamp),
+                m.map(|v| json!(v)).unwrap_or(json!(null))
+            ])
+        })
         .collect();
 
     let has_ma = show_ma(blocks.len());
@@ -259,7 +338,9 @@ pub fn op_return_block_share_chart_daily(days: &[DailyAggregate]) -> String {
         .map(|d| {
             let total_size = d.avg_size * d.block_count as f64;
             if total_size > 0.0 {
-                (d.total_op_return_bytes as f64 / total_size * 100.0 * 100.0).round() / 100.0
+                (d.total_op_return_bytes as f64 / total_size * 100.0 * 100.0)
+                    .round()
+                    / 100.0
             } else {
                 0.0
             }
@@ -301,12 +382,24 @@ pub fn inscription_chart(blocks: &[BlockSummary]) -> String {
         return no_data_chart("Inscriptions");
     }
 
-    let vals: Vec<f64> = blocks.iter().map(|b| b.inscription_count as f64).collect();
-    let raw: Vec<serde_json::Value> = blocks.iter().zip(vals.iter())
-        .map(|(b, v)| dp(b, v)).collect();
+    let vals: Vec<f64> =
+        blocks.iter().map(|b| b.inscription_count as f64).collect();
+    let raw: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(vals.iter())
+        .map(|(b, v)| dp(b, v))
+        .collect();
     let ma = moving_average(&vals, 144);
-    let ma_data: Vec<serde_json::Value> = blocks.iter().zip(ma.iter())
-        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))])).collect();
+    let ma_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(ma.iter())
+        .map(|(b, m)| {
+            json!([
+                ts_ms(b.timestamp),
+                m.map(|v| json!(v)).unwrap_or(json!(null))
+            ])
+        })
+        .collect();
     let has_ma = show_ma(blocks.len());
 
     let mut series = vec![json!({
@@ -339,10 +432,18 @@ pub fn inscription_chart_daily(days: &[DailyAggregate]) -> String {
         return no_data_chart("Inscriptions");
     }
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let vals: Vec<f64> = days.iter().map(|d| round(d.avg_inscription_count, 1)).collect();
+    let vals: Vec<f64> = days
+        .iter()
+        .map(|d| round(d.avg_inscription_count, 1))
+        .collect();
     let ma = moving_average(&vals, 7);
-    let ma_vals: Vec<serde_json::Value> = ma.iter()
-        .map(|v| match v { Some(x) => json!(x), None => json!(null) }).collect();
+    let ma_vals: Vec<serde_json::Value> = ma
+        .iter()
+        .map(|v| match v {
+            Some(x) => json!(x),
+            None => json!(null),
+        })
+        .collect();
 
     build_option(json!({
         "xAxis": x_axis_for(true, &cats),
@@ -366,14 +467,34 @@ pub fn inscription_share_chart(blocks: &[BlockSummary]) -> String {
         return no_data_chart("Inscription Block Share");
     }
 
-    let vals: Vec<f64> = blocks.iter().map(|b| {
-        if b.size > 0 { (b.inscription_bytes as f64 / b.size as f64 * 100.0 * 100.0).round() / 100.0 } else { 0.0 }
-    }).collect();
-    let raw: Vec<serde_json::Value> = blocks.iter().zip(vals.iter())
-        .map(|(b, v)| dp(b, v)).collect();
+    let vals: Vec<f64> = blocks
+        .iter()
+        .map(|b| {
+            if b.size > 0 {
+                (b.inscription_bytes as f64 / b.size as f64 * 100.0 * 100.0)
+                    .round()
+                    / 100.0
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    let raw: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(vals.iter())
+        .map(|(b, v)| dp(b, v))
+        .collect();
     let ma = moving_average(&vals, 144);
-    let ma_data: Vec<serde_json::Value> = blocks.iter().zip(ma.iter())
-        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))])).collect();
+    let ma_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(ma.iter())
+        .map(|(b, m)| {
+            json!([
+                ts_ms(b.timestamp),
+                m.map(|v| json!(v)).unwrap_or(json!(null))
+            ])
+        })
+        .collect();
     let has_ma = show_ma(blocks.len());
 
     let mut series = vec![json!({
@@ -407,12 +528,25 @@ pub fn inscription_share_chart_daily(days: &[DailyAggregate]) -> String {
         return no_data_chart("Inscription Block Share");
     }
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let vals: Vec<f64> = days.iter().map(|d| {
-        if d.avg_size > 0.0 { (d.avg_inscription_bytes / d.avg_size * 100.0 * 100.0).round() / 100.0 } else { 0.0 }
-    }).collect();
+    let vals: Vec<f64> = days
+        .iter()
+        .map(|d| {
+            if d.avg_size > 0.0 {
+                (d.avg_inscription_bytes / d.avg_size * 100.0 * 100.0).round()
+                    / 100.0
+            } else {
+                0.0
+            }
+        })
+        .collect();
     let ma = moving_average(&vals, 7);
-    let ma_vals: Vec<serde_json::Value> = ma.iter()
-        .map(|v| match v { Some(x) => json!(x), None => json!(null) }).collect();
+    let ma_vals: Vec<serde_json::Value> = ma
+        .iter()
+        .map(|v| match v {
+            Some(x) => json!(x),
+            None => json!(null),
+        })
+        .collect();
 
     build_option(json!({
         "xAxis": x_axis_for(true, &cats),
@@ -443,14 +577,28 @@ pub fn all_embedded_share_chart(blocks: &[BlockSummary]) -> String {
         return no_data_chart("All Embedded Data Share");
     }
 
-    let op_data: Vec<serde_json::Value> = blocks.iter().map(|b| {
-        let v = if b.size > 0 { round(b.op_return_bytes as f64 / b.size as f64 * 100.0, 2) } else { 0.0 };
-        dp(b, v)
-    }).collect();
-    let insc_data: Vec<serde_json::Value> = blocks.iter().map(|b| {
-        let v = if b.size > 0 { round(b.inscription_bytes as f64 / b.size as f64 * 100.0, 2) } else { 0.0 };
-        dp(b, v)
-    }).collect();
+    let op_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .map(|b| {
+            let v = if b.size > 0 {
+                round(b.op_return_bytes as f64 / b.size as f64 * 100.0, 2)
+            } else {
+                0.0
+            };
+            dp(b, v)
+        })
+        .collect();
+    let insc_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .map(|b| {
+            let v = if b.size > 0 {
+                round(b.inscription_bytes as f64 / b.size as f64 * 100.0, 2)
+            } else {
+                0.0
+            };
+            dp(b, v)
+        })
+        .collect();
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
@@ -482,14 +630,32 @@ pub fn all_embedded_share_chart_daily(days: &[DailyAggregate]) -> String {
     }
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let op_vals: Vec<f64> = days.iter().map(|d| {
-        let total_size = d.avg_size * d.block_count as f64;
-        if total_size > 0.0 { round(d.total_op_return_bytes as f64 / total_size * 100.0, 2) } else { 0.0 }
-    }).collect();
-    let insc_vals: Vec<f64> = days.iter().map(|d| {
-        let total_size = d.avg_size * d.block_count as f64;
-        if total_size > 0.0 { round(d.avg_inscription_bytes * d.block_count as f64 / total_size * 100.0, 2) } else { 0.0 }
-    }).collect();
+    let op_vals: Vec<f64> = days
+        .iter()
+        .map(|d| {
+            let total_size = d.avg_size * d.block_count as f64;
+            if total_size > 0.0 {
+                round(d.total_op_return_bytes as f64 / total_size * 100.0, 2)
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    let insc_vals: Vec<f64> = days
+        .iter()
+        .map(|d| {
+            let total_size = d.avg_size * d.block_count as f64;
+            if total_size > 0.0 {
+                round(
+                    d.avg_inscription_bytes * d.block_count as f64 / total_size
+                        * 100.0,
+                    2,
+                )
+            } else {
+                0.0
+            }
+        })
+        .collect();
 
     build_option(json!({
         "xAxis": x_axis_for(true, &cats),
@@ -523,13 +689,20 @@ pub fn unified_embedded_count_chart(blocks: &[BlockSummary]) -> String {
         return no_data_chart("All Embedded Data Count");
     }
 
-    let runes: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.runes_count)).collect();
-    let omni: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.omni_count)).collect();
-    let xcp: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.counterparty_count)).collect();
-    let other_op: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.data_carrier_count)).collect();
-    let inscriptions: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.inscription_count)).collect();
-    let brc20: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.brc20_count)).collect();
-    let stamps: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.multisig_count)).collect();
+    let runes: Vec<serde_json::Value> =
+        blocks.iter().map(|b| dp(b, b.runes_count)).collect();
+    let omni: Vec<serde_json::Value> =
+        blocks.iter().map(|b| dp(b, b.omni_count)).collect();
+    let xcp: Vec<serde_json::Value> =
+        blocks.iter().map(|b| dp(b, b.counterparty_count)).collect();
+    let other_op: Vec<serde_json::Value> =
+        blocks.iter().map(|b| dp(b, b.data_carrier_count)).collect();
+    let inscriptions: Vec<serde_json::Value> =
+        blocks.iter().map(|b| dp(b, b.inscription_count)).collect();
+    let brc20: Vec<serde_json::Value> =
+        blocks.iter().map(|b| dp(b, b.brc20_count)).collect();
+    let stamps: Vec<serde_json::Value> =
+        blocks.iter().map(|b| dp(b, b.multisig_count)).collect();
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
@@ -556,15 +729,38 @@ pub fn unified_embedded_count_chart_daily(days: &[DailyAggregate]) -> String {
     }
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
     let avg = |total: u64, bc: u64| -> f64 {
-        if bc > 0 { round(total as f64 / bc as f64, 1) } else { 0.0 }
+        if bc > 0 {
+            round(total as f64 / bc as f64, 1)
+        } else {
+            0.0
+        }
     };
-    let runes: Vec<f64> = days.iter().map(|d| avg(d.total_runes_count, d.block_count)).collect();
-    let omni: Vec<f64> = days.iter().map(|d| avg(d.total_omni_count, d.block_count)).collect();
-    let xcp: Vec<f64> = days.iter().map(|d| avg(d.total_counterparty_count, d.block_count)).collect();
-    let other_op: Vec<f64> = days.iter().map(|d| avg(d.total_data_carrier_count, d.block_count)).collect();
-    let inscriptions: Vec<f64> = days.iter().map(|d| round(d.avg_inscription_count, 1)).collect();
-    let brc20: Vec<f64> = days.iter().map(|d| round(d.avg_brc20_count, 1)).collect();
-    let stamps: Vec<f64> = days.iter().map(|d| round(d.avg_multisig_count, 1)).collect();
+    let runes: Vec<f64> = days
+        .iter()
+        .map(|d| avg(d.total_runes_count, d.block_count))
+        .collect();
+    let omni: Vec<f64> = days
+        .iter()
+        .map(|d| avg(d.total_omni_count, d.block_count))
+        .collect();
+    let xcp: Vec<f64> = days
+        .iter()
+        .map(|d| avg(d.total_counterparty_count, d.block_count))
+        .collect();
+    let other_op: Vec<f64> = days
+        .iter()
+        .map(|d| avg(d.total_data_carrier_count, d.block_count))
+        .collect();
+    let inscriptions: Vec<f64> = days
+        .iter()
+        .map(|d| round(d.avg_inscription_count, 1))
+        .collect();
+    let brc20: Vec<f64> =
+        days.iter().map(|d| round(d.avg_brc20_count, 1)).collect();
+    let stamps: Vec<f64> = days
+        .iter()
+        .map(|d| round(d.avg_multisig_count, 1))
+        .collect();
 
     build_option(json!({
         "xAxis": x_axis_for(true, &cats),
@@ -590,11 +786,16 @@ pub fn unified_embedded_volume_chart(blocks: &[BlockSummary]) -> String {
         return no_data_chart("All Embedded Data Volume");
     }
 
-    let runes: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.runes_bytes)).collect();
-    let omni: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.omni_bytes)).collect();
-    let xcp: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.counterparty_bytes)).collect();
-    let other_op: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.data_carrier_bytes)).collect();
-    let inscriptions: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.inscription_bytes)).collect();
+    let runes: Vec<serde_json::Value> =
+        blocks.iter().map(|b| dp(b, b.runes_bytes)).collect();
+    let omni: Vec<serde_json::Value> =
+        blocks.iter().map(|b| dp(b, b.omni_bytes)).collect();
+    let xcp: Vec<serde_json::Value> =
+        blocks.iter().map(|b| dp(b, b.counterparty_bytes)).collect();
+    let other_op: Vec<serde_json::Value> =
+        blocks.iter().map(|b| dp(b, b.data_carrier_bytes)).collect();
+    let inscriptions: Vec<serde_json::Value> =
+        blocks.iter().map(|b| dp(b, b.inscription_bytes)).collect();
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
@@ -619,13 +820,32 @@ pub fn unified_embedded_volume_chart_daily(days: &[DailyAggregate]) -> String {
     }
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
     let avg_kb = |total: u64, bc: u64| -> f64 {
-        if bc > 0 { round(total as f64 / bc as f64 / 1000.0, 1) } else { 0.0 }
+        if bc > 0 {
+            round(total as f64 / bc as f64 / 1000.0, 1)
+        } else {
+            0.0
+        }
     };
-    let runes: Vec<f64> = days.iter().map(|d| avg_kb(d.total_runes_bytes, d.block_count)).collect();
-    let omni: Vec<f64> = days.iter().map(|d| avg_kb(d.total_omni_bytes, d.block_count)).collect();
-    let xcp: Vec<f64> = days.iter().map(|d| avg_kb(d.total_counterparty_bytes, d.block_count)).collect();
-    let other_op: Vec<f64> = days.iter().map(|d| avg_kb(d.total_data_carrier_bytes, d.block_count)).collect();
-    let inscriptions: Vec<f64> = days.iter().map(|d| round(d.avg_inscription_bytes / 1000.0, 1)).collect();
+    let runes: Vec<f64> = days
+        .iter()
+        .map(|d| avg_kb(d.total_runes_bytes, d.block_count))
+        .collect();
+    let omni: Vec<f64> = days
+        .iter()
+        .map(|d| avg_kb(d.total_omni_bytes, d.block_count))
+        .collect();
+    let xcp: Vec<f64> = days
+        .iter()
+        .map(|d| avg_kb(d.total_counterparty_bytes, d.block_count))
+        .collect();
+    let other_op: Vec<f64> = days
+        .iter()
+        .map(|d| avg_kb(d.total_data_carrier_bytes, d.block_count))
+        .collect();
+    let inscriptions: Vec<f64> = days
+        .iter()
+        .map(|d| round(d.avg_inscription_bytes / 1000.0, 1))
+        .collect();
 
     build_option(json!({
         "xAxis": x_axis_for(true, &cats),

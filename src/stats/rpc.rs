@@ -178,9 +178,9 @@ impl BitcoinRpc {
     /// Estimated network hash rate (hashes per second).
     pub async fn get_network_hashps(&self) -> Result<f64, StatsError> {
         let result = self.call("getnetworkhashps", &[]).await?;
-        result
-            .as_f64()
-            .ok_or_else(|| StatsError::Rpc("Expected number for hashps".to_string()))
+        result.as_f64().ok_or_else(|| {
+            StatsError::Rpc("Expected number for hashps".to_string())
+        })
     }
 
     /// Estimate fee rate (sat/vB) to confirm within `target` blocks.
@@ -349,9 +349,12 @@ impl BitcoinRpc {
                                     // OP_FALSE(00) OP_IF(63) OP_PUSH3(03) "ord"(6f7264)
                                     if hex.contains("0063036f7264") {
                                         inscription_count += 1;
-                                        inscription_bytes += item_bytes.saturating_sub(10);
+                                        inscription_bytes +=
+                                            item_bytes.saturating_sub(10);
                                         // BRC-20: inscription containing {"p":"brc-20"
-                                        if hex.contains("7b2270223a226272632d3230") {
+                                        if hex.contains(
+                                            "7b2270223a226272632d3230",
+                                        ) {
                                             brc20_count += 1;
                                         }
                                     }
@@ -372,8 +375,12 @@ impl BitcoinRpc {
                                 }
                             } else if wit_len >= 2 {
                                 // Check if last element is a taproot control block (starts with c0 or c1)
-                                if let Some(last) = wit.last().and_then(|v| v.as_str()) {
-                                    if last.starts_with("c0") || last.starts_with("c1") {
+                                if let Some(last) =
+                                    wit.last().and_then(|v| v.as_str())
+                                {
+                                    if last.starts_with("c0")
+                                        || last.starts_with("c1")
+                                    {
                                         taproot_scriptpath_count += 1;
                                     }
                                 }
@@ -410,9 +417,12 @@ impl BitcoinRpc {
                             }
                             Some("nulldata") => {
                                 // OP_RETURN classification
-                                if let Some(hex) = vout["scriptPubKey"]["hex"].as_str() {
+                                if let Some(hex) =
+                                    vout["scriptPubKey"]["hex"].as_str()
+                                {
                                     let bytes = (hex.len() as u64) / 2;
-                                    let classification = classifier::classify(hex);
+                                    let classification =
+                                        classifier::classify(hex);
                                     match classification {
                                         OpReturnType::SegwitCommit => continue,
                                         OpReturnType::Runes => {
@@ -576,11 +586,7 @@ impl BitcoinRpc {
     ) -> Result<Vec<(u64, f64)>, StatsError> {
         let url =
             "https://api.blockchain.info/charts/market-price?timespan=all&format=json";
-        let resp = self
-            .client
-            .get(url)
-            .send()
-            .await?;
+        let resp = self.client.get(url).send().await?;
 
         if !resp.status().is_success() {
             return Err(StatsError::Rpc(format!(
@@ -590,9 +596,11 @@ impl BitcoinRpc {
         }
 
         let body: serde_json::Value = resp.json().await?;
-        let values = body["values"]
-            .as_array()
-            .ok_or_else(|| StatsError::Rpc("No values array in blockchain.info response".into()))?;
+        let values = body["values"].as_array().ok_or_else(|| {
+            StatsError::Rpc(
+                "No values array in blockchain.info response".into(),
+            )
+        })?;
 
         let result: Vec<(u64, f64)> = values
             .iter()

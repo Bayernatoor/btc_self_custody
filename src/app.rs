@@ -25,11 +25,11 @@ use crate::routes::faq::FaqPage;
 use crate::routes::guide::{GuideTwoSegment, GuideWalletPage};
 use crate::routes::guideselector::{GuideLevelSelector, GuideSelector};
 use crate::routes::homepage::HomePage;
-use crate::routes::observatory::{
-    ObservatoryPage, ObservatoryOverview, NetworkChartsPage,
-    FeeChartsPage, MiningChartsPage, EmbeddedChartsPage, SignalingPage,
-};
 use crate::routes::observatory::learn::protocols::ProtocolGuidePage;
+use crate::routes::observatory::{
+    EmbeddedChartsPage, FeeChartsPage, MiningChartsPage, NetworkChartsPage,
+    ObservatoryOverview, ObservatoryPage, SignalingPage,
+};
 use leptos::prelude::*;
 use leptos_meta::*;
 use leptos_router::{
@@ -186,4 +186,3 @@ pub fn App() -> impl IntoView {
         </Router>
     }
 }
-

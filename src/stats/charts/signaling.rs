@@ -1,5 +1,5 @@
-use serde_json::json;
 use super::*;
+use serde_json::json;
 
 /// Per-block signaling scatter/bar chart.
 pub fn signaling_chart(blocks: &[SignalingBlock]) -> String {

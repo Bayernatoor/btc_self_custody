@@ -6,23 +6,23 @@ use serde_json::json;
 
 use crate::stats::types::*;
 
-pub mod network;
-pub mod fees;
 pub mod adoption;
 pub mod embedded;
+pub mod fees;
+pub mod gauges;
 pub mod mining;
+pub mod network;
 pub mod signaling;
 pub mod tx_metrics;
-pub mod gauges;
 
-pub use network::*;
-pub use fees::*;
 pub use adoption::*;
 pub use embedded::*;
+pub use fees::*;
+pub use gauges::*;
 pub use mining::*;
+pub use network::*;
 pub use signaling::*;
 pub use tx_metrics::*;
-pub use gauges::*;
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -40,13 +40,13 @@ pub(crate) const CARRIER_COLOR: &str = "#bb8fff"; // Data carriers / other (purp
 pub(crate) const SIGNAL_YES: &str = "#2ecc71"; // Signaled (green)
 
 // Address type colors
-pub(crate) const P2PK_COLOR: &str = "#94a3b8";  // Slate gray (ancient/rare)
+pub(crate) const P2PK_COLOR: &str = "#94a3b8"; // Slate gray (ancient/rare)
 pub(crate) const P2PKH_COLOR: &str = "#ef4444"; // Red (legacy dominant)
-pub(crate) const P2SH_COLOR: &str = "#f59e0b";  // Amber (multisig era)
+pub(crate) const P2SH_COLOR: &str = "#f59e0b"; // Amber (multisig era)
 pub(crate) const P2WPKH_COLOR: &str = "#3b82f6"; // Blue (SegWit v0)
-pub(crate) const P2WSH_COLOR: &str = "#8b5cf6";  // Purple (SegWit v0 multisig)
-pub(crate) const P2TR_COLOR: &str = "#22c55e";   // Green (Taproot)
-pub(crate) const RBF_COLOR: &str = "#06b6d4";    // Cyan
+pub(crate) const P2WSH_COLOR: &str = "#8b5cf6"; // Purple (SegWit v0 multisig)
+pub(crate) const P2TR_COLOR: &str = "#22c55e"; // Green (Taproot)
+pub(crate) const RBF_COLOR: &str = "#06b6d4"; // Cyan
 
 pub(crate) const SUBSIDY_COLOR: &str = "#9b59b6";
 pub(crate) const DISK_COLOR: &str = "#e74c3c"; // Red for disk size
@@ -100,7 +100,10 @@ pub(crate) fn tooltip_axis() -> serde_json::Value {
     })
 }
 
-pub(crate) fn x_axis_for(is_daily: bool, categories: &[String]) -> serde_json::Value {
+pub(crate) fn x_axis_for(
+    is_daily: bool,
+    categories: &[String],
+) -> serde_json::Value {
     if is_daily {
         json!({
             "type": "category",
@@ -162,7 +165,10 @@ pub(crate) fn ts_ms(unix_secs: u64) -> u64 {
 }
 
 /// Data point with block height for click-to-detail: [timestamp_ms, value, height]
-pub(crate) fn dp(b: &BlockSummary, value: impl serde::Serialize) -> serde_json::Value {
+pub(crate) fn dp(
+    b: &BlockSummary,
+    value: impl serde::Serialize,
+) -> serde_json::Value {
     json!([ts_ms(b.timestamp), value, b.height])
 }
 
@@ -235,12 +241,8 @@ const HALVINGS: &[(u64, u64, &str)] = &[
 ];
 
 /// Halving dates for daily-mode charts (YYYY-MM-DD).
-const HALVING_DATES: &[&str] = &[
-    "2012-11-28",
-    "2016-07-09",
-    "2020-05-11",
-    "2024-04-20",
-];
+const HALVING_DATES: &[&str] =
+    &["2012-11-28", "2016-07-09", "2020-05-11", "2024-04-20"];
 
 /// Notable BIP activation block heights and timestamps.
 const BIP_ACTIVATIONS: &[(u64, u64, &str)] = &[
@@ -365,7 +367,11 @@ pub struct OverlayFlags {
 
 /// Merge overlay markLines and series into an already-built chart option JSON string.
 /// Works for both time-axis (per-block) and category-axis (daily) charts.
-pub fn apply_overlays(option_json: &str, overlays: &OverlayFlags, is_daily: bool) -> String {
+pub fn apply_overlays(
+    option_json: &str,
+    overlays: &OverlayFlags,
+    is_daily: bool,
+) -> String {
     let has_any = overlays.halvings
         || overlays.bip_activations
         || overlays.core_releases
@@ -396,14 +402,19 @@ pub fn apply_overlays(option_json: &str, overlays: &OverlayFlags, is_daily: bool
     if need_right_space {
         if let Some(grid) = obj.get_mut("grid") {
             if let Some(g) = grid.as_object_mut() {
-                let right = if !overlays.price_data.is_empty() { 70 } else { 60 };
+                let right = if !overlays.price_data.is_empty() {
+                    70
+                } else {
+                    60
+                };
                 g.insert("right".into(), json!(right));
             }
         }
     }
 
     // Track whether any right-side axes will be added (for toolbox repositioning later)
-    let has_right_axis = !overlays.price_data.is_empty() || !overlays.chain_size_data.is_empty();
+    let has_right_axis =
+        !overlays.price_data.is_empty() || !overlays.chain_size_data.is_empty();
 
     // --- Mark lines (halvings, BIP activations) ---
     let mut mark_lines: Vec<serde_json::Value> = Vec::new();
@@ -571,13 +582,18 @@ pub fn apply_overlays(option_json: &str, overlays: &OverlayFlags, is_daily: bool
             let mut min_ts = u64::MAX;
             let mut max_ts = 0u64;
             if let Some(series) = obj.get("series") {
-                if let Some(first_s) = series.as_array().and_then(|a| a.first()) {
-                    if let Some(data) = first_s.get("data").and_then(|d| d.as_array()) {
+                if let Some(first_s) = series.as_array().and_then(|a| a.first())
+                {
+                    if let Some(data) =
+                        first_s.get("data").and_then(|d| d.as_array())
+                    {
                         for pt in data {
                             if let Some(arr) = pt.as_array() {
                                 // Handle both u64 and f64 number representations
                                 let ts = arr.first().and_then(|v| {
-                                    v.as_u64().or_else(|| v.as_f64().map(|f| f as u64))
+                                    v.as_u64().or_else(|| {
+                                        v.as_f64().map(|f| f as u64)
+                                    })
                                 });
                                 if let Some(ts) = ts {
                                     min_ts = min_ts.min(ts);
@@ -588,7 +604,9 @@ pub fn apply_overlays(option_json: &str, overlays: &OverlayFlags, is_daily: bool
                     }
                 }
             }
-            if min_ts == u64::MAX { min_ts = 0; }
+            if min_ts == u64::MAX {
+                min_ts = 0;
+            }
             (min_ts, max_ts)
         };
 
@@ -657,22 +675,26 @@ pub fn apply_overlays(option_json: &str, overlays: &OverlayFlags, is_daily: bool
                 .iter()
                 .map(|cat| {
                     let date_str = cat.as_str().unwrap_or_default();
-                    let cat_ms = chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
-                        .map(|d| {
-                            d.and_hms_opt(12, 0, 0) // noon UTC for better matching
-                                .unwrap()
-                                .and_utc()
-                                .timestamp() as u64
-                                * 1000
-                        })
-                        .unwrap_or(0);
+                    let cat_ms =
+                        chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
+                            .map(|d| {
+                                d.and_hms_opt(12, 0, 0) // noon UTC for better matching
+                                    .unwrap()
+                                    .and_utc()
+                                    .timestamp()
+                                    as u64
+                                    * 1000
+                            })
+                            .unwrap_or(0);
 
                     if cat_ms == 0 {
                         return json!(null);
                     }
 
                     // Binary search for surrounding price points and interpolate
-                    match filtered_prices.binary_search_by_key(&cat_ms, |&(ts, _)| ts) {
+                    match filtered_prices
+                        .binary_search_by_key(&cat_ms, |&(ts, _)| ts)
+                    {
                         Ok(idx) => json!(filtered_prices[idx].1),
                         Err(idx) => {
                             if idx == 0 {
@@ -688,9 +710,12 @@ pub fn apply_overlays(option_json: &str, overlays: &OverlayFlags, is_daily: bool
                                 if t1 == t0 {
                                     json!(p0)
                                 } else {
-                                    let frac = (cat_ms - t0) as f64 / (t1 - t0) as f64;
+                                    let frac =
+                                        (cat_ms - t0) as f64 / (t1 - t0) as f64;
                                     let interpolated = p0 + frac * (p1 - p0);
-                                    json!((interpolated * 100.0).round() / 100.0)
+                                    json!(
+                                        (interpolated * 100.0).round() / 100.0
+                                    )
                                 }
                             }
                         }
@@ -731,7 +756,6 @@ pub fn apply_overlays(option_json: &str, overlays: &OverlayFlags, is_daily: bool
                 l.insert("show".into(), json!(true));
             }
         }
-
     }
 
     // --- Chain size overlay (secondary Y-axis + line series) ---
@@ -764,12 +788,17 @@ pub fn apply_overlays(option_json: &str, overlays: &OverlayFlags, is_daily: bool
             let mut min_ts = u64::MAX;
             let mut max_ts = 0u64;
             if let Some(series) = obj.get("series") {
-                if let Some(first_s) = series.as_array().and_then(|a| a.first()) {
-                    if let Some(data) = first_s.get("data").and_then(|d| d.as_array()) {
+                if let Some(first_s) = series.as_array().and_then(|a| a.first())
+                {
+                    if let Some(data) =
+                        first_s.get("data").and_then(|d| d.as_array())
+                    {
                         for pt in data {
                             if let Some(arr) = pt.as_array() {
                                 let ts = arr.first().and_then(|v| {
-                                    v.as_u64().or_else(|| v.as_f64().map(|f| f as u64))
+                                    v.as_u64().or_else(|| {
+                                        v.as_f64().map(|f| f as u64)
+                                    })
                                 });
                                 if let Some(ts) = ts {
                                     min_ts = min_ts.min(ts);
@@ -780,7 +809,9 @@ pub fn apply_overlays(option_json: &str, overlays: &OverlayFlags, is_daily: bool
                     }
                 }
             }
-            if min_ts == u64::MAX { min_ts = 0; }
+            if min_ts == u64::MAX {
+                min_ts = 0;
+            }
             (min_ts, max_ts)
         };
 
@@ -789,7 +820,9 @@ pub fn apply_overlays(option_json: &str, overlays: &OverlayFlags, is_daily: bool
         let filtered_cs: Vec<(u64, f64)> = overlays
             .chain_size_data
             .iter()
-            .filter(|&&(ts_ms, _)| ts_ms >= cs_range_min && ts_ms <= cs_range_max)
+            .filter(|&&(ts_ms, _)| {
+                ts_ms >= cs_range_min && ts_ms <= cs_range_max
+            })
             .copied()
             .collect();
 
@@ -830,8 +863,15 @@ pub fn apply_overlays(option_json: &str, overlays: &OverlayFlags, is_daily: bool
             // Widen grid for the extra axis
             if let Some(grid) = obj.get_mut("grid") {
                 if let Some(g) = grid.as_object_mut() {
-                    let current = g.get("right").and_then(|v| v.as_u64()).unwrap_or(20);
-                    g.insert("right".into(), json!(current.max(70) + if cs_axis_idx > 1 { 60 } else { 0 }));
+                    let current =
+                        g.get("right").and_then(|v| v.as_u64()).unwrap_or(20);
+                    g.insert(
+                        "right".into(),
+                        json!(
+                            current.max(70)
+                                + if cs_axis_idx > 1 { 60 } else { 0 }
+                        ),
+                    );
                 }
             }
 
@@ -847,21 +887,25 @@ pub fn apply_overlays(option_json: &str, overlays: &OverlayFlags, is_daily: bool
                     .iter()
                     .map(|cat| {
                         let date_str = cat.as_str().unwrap_or_default();
-                        let cat_ms = chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
-                            .map(|d| {
-                                d.and_hms_opt(12, 0, 0)
-                                    .unwrap()
-                                    .and_utc()
-                                    .timestamp() as u64
-                                    * 1000
-                            })
-                            .unwrap_or(0);
+                        let cat_ms = chrono::NaiveDate::parse_from_str(
+                            date_str, "%Y-%m-%d",
+                        )
+                        .map(|d| {
+                            d.and_hms_opt(12, 0, 0)
+                                .unwrap()
+                                .and_utc()
+                                .timestamp() as u64
+                                * 1000
+                        })
+                        .unwrap_or(0);
 
                         if cat_ms == 0 {
                             return json!(null);
                         }
 
-                        match filtered_cs.binary_search_by_key(&cat_ms, |&(ts, _)| ts) {
+                        match filtered_cs
+                            .binary_search_by_key(&cat_ms, |&(ts, _)| ts)
+                        {
                             Ok(idx) => json!(filtered_cs[idx].1),
                             Err(idx) => {
                                 if idx == 0 {
@@ -874,8 +918,13 @@ pub fn apply_overlays(option_json: &str, overlays: &OverlayFlags, is_daily: bool
                                     if t1 == t0 {
                                         json!(v0)
                                     } else {
-                                        let frac = (cat_ms - t0) as f64 / (t1 - t0) as f64;
-                                        json!((( v0 + frac * (v1 - v0)) * 100.0).round() / 100.0)
+                                        let frac = (cat_ms - t0) as f64
+                                            / (t1 - t0) as f64;
+                                        json!(
+                                            ((v0 + frac * (v1 - v0)) * 100.0)
+                                                .round()
+                                                / 100.0
+                                        )
                                     }
                                 }
                             }

@@ -25,8 +25,11 @@ pub async fn init() -> Option<(Arc<StatsState>, Router)> {
 
     // Forward ingestion (catch up to tip) using a pooled connection
     {
-        let conn = pool.get().expect("Failed to get DB connection for ingestion");
-        if let Err(e) = ingest::run(&rpc, &conn, config.initial_ingest_count).await
+        let conn = pool
+            .get()
+            .expect("Failed to get DB connection for ingestion");
+        if let Err(e) =
+            ingest::run(&rpc, &conn, config.initial_ingest_count).await
         {
             tracing::error!("Stats forward ingestion failed: {e}");
         }
