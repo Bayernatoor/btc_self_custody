@@ -8,7 +8,7 @@ pub fn address_type_chart(blocks: &[BlockSummary]) -> String {
     }
 
     let make_data = |f: fn(&BlockSummary) -> u64| -> Vec<serde_json::Value> {
-        blocks.iter().map(|b| json!([ts_ms(b.timestamp), f(b)])).collect()
+        blocks.iter().map(|b| dp(b, f(b))).collect()
     };
 
     build_option(json!({
@@ -63,7 +63,7 @@ pub fn witness_share_chart(blocks: &[BlockSummary]) -> String {
     let vals: Vec<f64> = blocks.iter().map(|b| {
         if b.size > 0 { (b.witness_bytes as f64 / b.size as f64 * 100.0 * 100.0).round() / 100.0 } else { 0.0 }
     }).collect();
-    let raw: Vec<serde_json::Value> = blocks.iter().zip(vals.iter()).map(|(b, v)| json!([ts_ms(b.timestamp), v])).collect();
+    let raw: Vec<serde_json::Value> = blocks.iter().zip(vals.iter()).map(|(b, v)| dp(b, v)).collect();
     let ma = moving_average(&vals, 144);
     let ma_data: Vec<serde_json::Value> = blocks.iter().zip(ma.iter())
         .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))])).collect();
@@ -130,8 +130,8 @@ pub fn batching_chart(blocks: &[BlockSummary]) -> String {
     let in_per_tx: Vec<f64> = blocks.iter().map(|b| {
         if b.tx_count > 0 { round(b.input_count as f64 / b.tx_count as f64, 2) } else { 0.0 }
     }).collect();
-    let out_raw: Vec<serde_json::Value> = blocks.iter().zip(out_per_tx.iter()).map(|(b, v)| json!([ts_ms(b.timestamp), v])).collect();
-    let in_raw: Vec<serde_json::Value> = blocks.iter().zip(in_per_tx.iter()).map(|(b, v)| json!([ts_ms(b.timestamp), v])).collect();
+    let out_raw: Vec<serde_json::Value> = blocks.iter().zip(out_per_tx.iter()).map(|(b, v)| dp(b, v)).collect();
+    let in_raw: Vec<serde_json::Value> = blocks.iter().zip(in_per_tx.iter()).map(|(b, v)| dp(b, v)).collect();
     let out_ma = moving_average(&out_per_tx, 144);
     let in_ma = moving_average(&in_per_tx, 144);
     let out_ma_data: Vec<serde_json::Value> = blocks.iter().zip(out_ma.iter())
@@ -203,7 +203,7 @@ pub fn address_type_pct_chart(blocks: &[BlockSummary]) -> String {
     let make_pct = |f: fn(&BlockSummary) -> u64| -> Vec<serde_json::Value> {
         blocks.iter().map(|b| {
             let total = b.p2pkh_count + b.p2sh_count + b.p2wpkh_count + b.p2wsh_count + b.p2tr_count + b.p2pk_count;
-            json!([ts_ms(b.timestamp), pct(f(b), total)])
+            dp(b, pct(f(b), total))
         }).collect()
     };
 
@@ -261,9 +261,12 @@ pub fn rbf_chart(blocks: &[BlockSummary]) -> String {
     }
 
     let vals: Vec<f64> = blocks.iter().map(|b| {
-        if b.tx_count > 1 { (b.rbf_count as f64 / (b.tx_count - 1) as f64 * 100.0 * 100.0).round() / 100.0 } else { 0.0 }
+        if b.tx_count > 1 {
+            let pct = b.rbf_count as f64 / (b.tx_count - 1) as f64 * 100.0;
+            (pct.min(100.0) * 100.0).round() / 100.0
+        } else { 0.0 }
     }).collect();
-    let raw: Vec<serde_json::Value> = blocks.iter().zip(vals.iter()).map(|(b, v)| json!([ts_ms(b.timestamp), v])).collect();
+    let raw: Vec<serde_json::Value> = blocks.iter().zip(vals.iter()).map(|(b, v)| dp(b, v)).collect();
     let ma = moving_average(&vals, 144);
     let ma_data: Vec<serde_json::Value> = blocks.iter().zip(ma.iter())
         .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))])).collect();
@@ -300,7 +303,10 @@ pub fn rbf_chart_daily(days: &[DailyAggregate]) -> String {
     }
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
     let vals: Vec<f64> = days.iter().map(|d| {
-        if d.avg_tx_count > 1.0 { (d.avg_rbf_count / (d.avg_tx_count - 1.0) * 100.0 * 100.0).round() / 100.0 } else { 0.0 }
+        if d.avg_tx_count > 1.0 {
+            let pct = d.avg_rbf_count / (d.avg_tx_count - 1.0) * 100.0;
+            (pct.min(100.0) * 100.0).round() / 100.0
+        } else { 0.0 }
     }).collect();
     let ma = moving_average(&vals, 7);
     let ma_vals: Vec<serde_json::Value> = ma.iter().map(|v| match v { Some(x) => json!(x), None => json!(null) }).collect();
@@ -323,8 +329,8 @@ pub fn utxo_flow_chart(blocks: &[BlockSummary]) -> String {
         return no_data_chart("UTXO Flow");
     }
 
-    let inputs: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.input_count])).collect();
-    let outputs: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.output_count])).collect();
+    let inputs: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.input_count)).collect();
+    let outputs: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.output_count)).collect();
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),

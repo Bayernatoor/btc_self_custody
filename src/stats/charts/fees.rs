@@ -11,7 +11,7 @@ pub fn fees_chart(blocks: &[BlockSummary]) -> String {
         .iter()
         .map(|b| {
             if b.total_fees > 0 {
-                json!([ts_ms(b.timestamp), b.total_fees])
+                dp(b, b.total_fees)
             } else {
                 json!([ts_ms(b.timestamp), null])
             }
@@ -83,7 +83,7 @@ pub fn fees_chart_unit(blocks: &[BlockSummary], unit: &str) -> String {
             if b.total_fees > 0 {
                 let v = b.total_fees as f64 / divisor;
                 let rounded = (v * 1000.0).round() / 1000.0;
-                json!([ts_ms(b.timestamp), rounded])
+                dp(b, rounded)
             } else {
                 json!([ts_ms(b.timestamp), null])
             }
@@ -156,7 +156,7 @@ pub fn subsidy_vs_fees_chart(blocks: &[BlockSummary]) -> String {
         .map(|b| {
             let sub = block_subsidy(b.height) as f64 / 100_000_000.0;
             let rounded = (sub * 1000.0).round() / 1000.0;
-            json!([ts_ms(b.timestamp), rounded])
+            dp(b, rounded)
         })
         .collect();
 
@@ -165,7 +165,7 @@ pub fn subsidy_vs_fees_chart(blocks: &[BlockSummary]) -> String {
         .map(|b| {
             let fee = b.total_fees as f64 / 100_000_000.0;
             let rounded = (fee * 1000.0).round() / 1000.0;
-            json!([ts_ms(b.timestamp), rounded])
+            dp(b, rounded)
         })
         .collect();
 

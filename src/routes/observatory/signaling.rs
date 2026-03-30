@@ -63,6 +63,7 @@ pub fn SignalingPage() -> impl IntoView {
         <div class="flex items-center gap-3 mb-6">
             <div class="relative inline-block">
                 <select
+                    aria-label="BIP proposal"
                     class="appearance-none bg-[#0a1a2e] text-white/80 text-sm border border-white/10 rounded-xl pl-3 pr-8 py-2 cursor-pointer focus:outline-none focus:border-[#f7931a]/40 transition-colors"
                     prop:value=move || bip_method.get()
                     on:change=move |ev| {
@@ -217,15 +218,27 @@ pub fn SignalingPage() -> impl IntoView {
                             };
 
                             let grid_cells = blocks.iter().map(|b| {
-                                let color = if b.signaled { "bg-green-500/70" } else { "bg-red-500/30" };
-                                let title = format!("#{} | {}{}", b.height, b.miner, if b.signaled { " \u{2713}" } else { "" });
+                                let signaled = b.signaled;
+                                let color = if signaled { "bg-green-500/70" } else { "bg-red-500/30" };
+                                let marker = if signaled { "\u{2713}" } else { "\u{2717}" };
+                                let label = format!("Block {} by {}, {}", b.height, b.miner, if signaled { "signaled" } else { "not signaled" });
+                                let title = format!("#{} | {}{}", b.height, b.miner, if signaled { " \u{2713}" } else { "" });
                                 let h = b.height;
                                 view! {
                                     <div
-                                        class=format!("w-3.5 h-3.5 lg:w-4 lg:h-4 rounded-sm cursor-pointer hover:ring-1 hover:ring-white/50 {color}")
+                                        role="button"
+                                        tabindex="0"
+                                        aria-label=label
+                                        class=format!("w-3.5 h-3.5 lg:w-4 lg:h-4 rounded-sm cursor-pointer hover:ring-1 hover:ring-white/50 flex items-center justify-center text-[6px] lg:text-[7px] text-white/40 {color}")
                                         title=title
                                         on:click=move |_| { show_block_detail(h); }
-                                    ></div>
+                                        on:keydown=move |ev: leptos::ev::KeyboardEvent| {
+                                            if ev.key() == "Enter" || ev.key() == " " {
+                                                ev.prevent_default();
+                                                show_block_detail(h);
+                                            }
+                                        }
+                                    >{marker}</div>
                                 }
                             }).collect::<Vec<_>>();
 

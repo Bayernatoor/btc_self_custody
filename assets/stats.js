@@ -1,12 +1,6 @@
 // ECharts helpers for the stats page.
 // Called from WASM via wasm_bindgen extern functions.
 (function() {
-    function esc(s) {
-        var d = document.createElement('div');
-        d.textContent = s;
-        return d.innerHTML;
-    }
-
     window.scrollChartIntoView = function(elementId) {
         var el = document.getElementById(elementId);
         if (!el) return;
@@ -27,6 +21,26 @@
         el._chart = echarts.init(el, null, { renderer: 'canvas' });
         new ResizeObserver(function() { if (el._chart) el._chart.resize(); }).observe(el);
     };
+
+    // Apply mobile-specific option tweaks (called on init and resize)
+    function applyMobileAdjustments(opts) {
+        if (window.innerWidth >= 640) return;
+        // Hide toolbox — not usable on touch screens
+        if (opts.toolbox) opts.toolbox.show = false;
+        // Constrain legend within chart area
+        if (opts.legend) {
+            opts.legend.left = 55;
+            opts.legend.right = 40;
+        }
+        // Shrink pie charts for mobile
+        if (opts.series && Array.isArray(opts.series)) {
+            opts.series.forEach(function(s) {
+                if (s.type === 'pie') {
+                    s.radius = ['35%', '65%'];
+                }
+            });
+        }
+    }
 
     window.setChartOption = function(elementId, optionJson, isRetry) {
         var el = document.getElementById(elementId);
@@ -53,7 +67,10 @@
             setTimeout(function() { window.setChartOption(elementId, optionJson); }, 200);
             return;
         }
+        // ECharts is loaded — reset retry counter and clear any error message
+        el._echartsRetry = 0;
         if (!el._chart) {
+            el.textContent = ''; // clear error message if one was shown
             el._chart = echarts.init(el, null, { renderer: 'canvas' });
             el._lastOptionJson = null; // reset dedup on fresh init
             new ResizeObserver(function() { if (el._chart) el._chart.resize(); }).observe(el);
@@ -61,55 +78,110 @@
         // Skip if option JSON unchanged (prevents zoom/pan reset)
         if (el._lastOptionJson === optionJson) return;
         el._lastOptionJson = optionJson;
+        el._storedOptionJson = optionJson; // keep a copy for resize re-apply
         try {
             var opts = JSON.parse(optionJson);
             opts.animation = false;
-            // Round tooltip values and add % suffix for percentage charts
-            if (opts.tooltip && opts.tooltip.trigger === 'axis' && !opts.tooltip.valueFormatter) {
+            // Custom tooltip: show block height in per-block mode, format values
+            if (opts.tooltip && opts.tooltip.trigger === 'axis' && !opts.tooltip.formatter) {
                 var yName = '';
                 if (opts.yAxis) {
                     var ya = Array.isArray(opts.yAxis) ? opts.yAxis[0] : opts.yAxis;
                     yName = (ya && ya.name) || '';
                 }
                 var isPct = yName.indexOf('%') !== -1;
-                opts.tooltip.valueFormatter = function(v) {
-                    if (typeof v !== 'number') return v;
-                    if (isPct) return parseFloat(v.toPrecision(10)).toFixed(2) + '%';
-                    if (Number.isInteger(v)) return v.toLocaleString();
-                    return parseFloat(v.toPrecision(10)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                opts.tooltip.formatter = function(params) {
+                    if (!params || !params.length) return '';
+                    // Header: use ECharts axis label for category axes, parse timestamp for time axes
+                    var first = params[0];
+                    var header;
+                    if (first.axisType === 'xAxis.category') {
+                        header = first.axisValueLabel || first.name || '';
+                    } else {
+                        var ts = first.data && Array.isArray(first.data) ? first.data[0] : first.value;
+                        header = new Date(ts).toLocaleString();
+                    }
+                    var height = first.data && Array.isArray(first.data) && first.data.length >= 3 && typeof first.data[2] === 'number' ? first.data[2] : null;
+                    if (height !== null) {
+                        header += '&nbsp;&nbsp;<span style="color:#f7931a;font-size:11px">Block #' + height.toLocaleString() + '</span>';
+                    }
+                    var lines = '<div style="font-size:12px;color:rgba(255,255,255,0.5);margin-bottom:4px">' + header + '</div>';
+                    // Series values
+                    for (var i = 0; i < params.length; i++) {
+                        var p = params[i];
+                        var val = p.data && Array.isArray(p.data) ? p.data[1] : p.value;
+                        var formatted;
+                        if (typeof val !== 'number') {
+                            formatted = val;
+                        } else if (isPct) {
+                            formatted = parseFloat(val.toPrecision(10)).toFixed(2) + '%';
+                        } else if (Number.isInteger(val)) {
+                            formatted = val.toLocaleString();
+                        } else {
+                            formatted = parseFloat(val.toPrecision(10)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        }
+                        lines += '<div style="display:flex;align-items:center;gap:6px;font-size:12px">';
+                        lines += p.marker || '';
+                        lines += '<span style="flex:1;color:rgba(255,255,255,0.7)">' + (p.seriesName || '') + '</span>';
+                        lines += '<span style="font-weight:600;color:rgba(255,255,255,0.9)">' + formatted + '</span>';
+                        lines += '</div>';
+                    }
+                    return lines;
+                };
+            }
+            // Item tooltips (scatter/pie): show block height + value
+            if (opts.tooltip && opts.tooltip.trigger === 'item' && !opts.tooltip.formatter) {
+                opts.tooltip.formatter = function(p) {
+                    if (!p.data || !Array.isArray(p.data)) return p.name || '';
+                    var d = p.data;
+                    var height = d.length >= 3 && typeof d[2] === 'number' ? 'Block #' + d[2].toLocaleString() : '';
+                    var time = new Date(d[0]).toLocaleString();
+                    var val = typeof d[1] === 'number' ? d[1].toFixed(2) : d[1];
+                    var header = '<div style="color:rgba(255,255,255,0.5);font-size:12px;margin-bottom:4px">' + time;
+                    if (height) header += '&nbsp;&nbsp;<span style="color:#f7931a;font-size:11px">' + height + '</span>';
+                    header += '</div>';
+                    return header + (p.marker || '') + ' ' + val;
                 };
             }
             // Dark background for PNG downloads only (chart renders transparent)
             if (opts.toolbox && opts.toolbox.feature && opts.toolbox.feature.saveAsImage) {
                 opts.toolbox.feature.saveAsImage.connectedBackgroundColor = '#0d2137';
             }
-            // Mobile adjustments
-            if (window.innerWidth < 640) {
-                // Hide toolbox — not usable on touch screens
-                if (opts.toolbox) opts.toolbox.show = false;
-                // Constrain legend within chart area
-                if (opts.legend) {
-                    opts.legend.left = 55;
-                    opts.legend.right = 40;
-                }
-                // Shrink pie charts for mobile
-                if (opts.series && Array.isArray(opts.series)) {
-                    opts.series.forEach(function(s) {
-                        if (s.type === 'pie') {
-                            s.radius = ['35%', '65%'];
+            applyMobileAdjustments(opts);
+            el._chart.setOption(opts, { notMerge: true, lazyUpdate: true });
+            // Click-to-detail: for axis-trigger charts (lines), use zrender click
+            // to find the nearest data point under the cursor. For item-trigger
+            // charts (scatter/pie), use ECharts native click.
+            if (!el._clickRegistered) {
+                el._clickRegistered = true;
+                if (opts.tooltip && opts.tooltip.trigger === 'axis') {
+                    el._chart.getZr().on('click', function(zrParams) {
+                        var pointInPixel = [zrParams.offsetX, zrParams.offsetY];
+                        if (!el._chart.containPixel('grid', pointInPixel)) return;
+                        // Find closest series data point at this x position
+                        var xVal = el._chart.convertFromPixel({ seriesIndex: 0 }, pointInPixel)[0];
+                        var model = el._chart.getOption();
+                        if (!model.series || !model.series.length) return;
+                        var data = model.series[0].data;
+                        if (!data || !data.length || !Array.isArray(data[0]) || data[0].length < 3) return;
+                        // Binary search for nearest timestamp
+                        var lo = 0, hi = data.length - 1, best = 0;
+                        while (lo <= hi) {
+                            var mid = (lo + hi) >> 1;
+                            if (data[mid][0] <= xVal) { best = mid; lo = mid + 1; }
+                            else { hi = mid - 1; }
+                        }
+                        if (best < data.length - 1 && Math.abs(data[best+1][0] - xVal) < Math.abs(data[best][0] - xVal)) best++;
+                        var height = data[best][2];
+                        if (typeof height === 'number') window.showBlockDetail(height);
+                    });
+                } else {
+                    el._chart.on('click', function(params) {
+                        if (params.data && Array.isArray(params.data) && params.data.length >= 3 && typeof params.data[2] === 'number') {
+                            window.showBlockDetail(params.data[2]);
                         }
                     });
                 }
-            }
-            el._chart.setOption(opts, { notMerge: true, lazyUpdate: true });
-            // Auto-register click handler for block detail (data format: [ts, value, height])
-            if (!el._clickRegistered) {
-                el._clickRegistered = true;
-                el._chart.on('click', function(params) {
-                    if (params.data && Array.isArray(params.data) && params.data.length >= 3 && typeof params.data[2] === 'number') {
-                        window.showBlockDetail(params.data[2]);
-                    }
-                });
             }
         } catch(e) { console.error('Chart error:', e); }
     };
@@ -144,7 +216,7 @@
         var l = document.createElement('span');
         l.textContent = label;
         var v = document.createElement('span');
-        v.textContent = value;
+        v.textContent = value != null ? String(value) : '\u2014';
         if (cls) v.className = cls;
         row.appendChild(l);
         row.appendChild(v);
@@ -160,11 +232,11 @@
         fetch('/api/stats/blocks/' + height)
             .then(function(r) { return r.json(); })
             .then(function(b) {
-                if (b.error) return;
+                if (!b || b.error) return;
                 var modal = document.getElementById('block-detail-modal');
                 if (!modal) return;
 
-                var feesBtc = (b.total_fees / 1e8).toFixed(6);
+                var feesBtc = b.total_fees != null ? (b.total_fees / 1e8).toFixed(6) : '\u2014';
                 var bit4 = (b.version & (1 << 4)) !== 0;
                 var bip54 = b.coinbase_locktime === b.height - 1 && b.coinbase_sequence !== 4294967295;
                 var versionHex = '0x' + (b.version >>> 0).toString(16).padStart(8, '0');
@@ -172,26 +244,27 @@
                 var body = document.getElementById('block-detail-body');
                 body.textContent = ''; // clear safely
 
-                body.appendChild(bdRow('Time', new Date(b.timestamp * 1000).toLocaleString()));
+                body.appendChild(bdRow('Time', b.timestamp ? new Date(b.timestamp * 1000).toLocaleString() : '\u2014'));
 
-                var hashRow = bdRow('Hash', b.hash.substring(0, 20) + '...', 'bd-hash');
+                var hashVal = b.hash || 'N/A';
+                var hashRow = bdRow('Hash', hashVal.substring(0, 20) + '...', 'bd-hash');
                 hashRow.lastChild.style.cursor = 'pointer';
-                hashRow.lastChild.addEventListener('click', function() { navigator.clipboard.writeText(b.hash); });
+                hashRow.lastChild.addEventListener('click', function() { navigator.clipboard.writeText(hashVal); });
                 body.appendChild(hashRow);
 
-                body.appendChild(bdRow('Size', (b.size / 1e6).toFixed(2) + ' MB'));
-                body.appendChild(bdRow('Weight', b.weight.toLocaleString() + ' WU'));
-                body.appendChild(bdRow('Tx Count', b.tx_count.toLocaleString()));
-                body.appendChild(bdRow('Difficulty', (b.difficulty / 1e12).toFixed(2) + 'T'));
+                body.appendChild(bdRow('Size', b.size != null ? (b.size / 1e6).toFixed(2) + ' MB' : '\u2014'));
+                body.appendChild(bdRow('Weight', b.weight != null ? b.weight.toLocaleString() + ' WU' : '\u2014'));
+                body.appendChild(bdRow('Tx Count', b.tx_count != null ? b.tx_count.toLocaleString() : '\u2014'));
+                body.appendChild(bdRow('Difficulty', b.difficulty != null ? (b.difficulty / 1e12).toFixed(2) + 'T' : '\u2014'));
                 body.appendChild(bdDivider());
-                body.appendChild(bdRow('Total Fees', feesBtc + ' BTC'));
+                body.appendChild(bdRow('Total Fees', typeof feesBtc === 'string' && feesBtc !== '\u2014' ? feesBtc + ' BTC' : feesBtc));
                 body.appendChild(bdRow('Median Fee', b.median_fee ? b.median_fee.toLocaleString() + ' sats' : '\u2014'));
                 body.appendChild(bdRow('Median Fee Rate', b.median_fee_rate ? b.median_fee_rate.toFixed(1) + ' sat/vB' : '\u2014'));
                 body.appendChild(bdRow('Miner', b.miner || 'Unknown'));
                 body.appendChild(bdDivider());
-                body.appendChild(bdRow('OP_RETURN', b.op_return_count + ' outputs'));
-                body.appendChild(bdRow('\u00a0\u00a0Runes', b.runes_count + ' (' + b.runes_bytes + ' B)'));
-                body.appendChild(bdRow('\u00a0\u00a0Data Carrier', b.data_carrier_count + ' (' + b.data_carrier_bytes + ' B)'));
+                body.appendChild(bdRow('OP_RETURN', (b.op_return_count != null ? b.op_return_count : 0) + ' outputs'));
+                body.appendChild(bdRow('\u00a0\u00a0Runes', (b.runes_count || 0) + ' (' + (b.runes_bytes || 0) + ' B)'));
+                body.appendChild(bdRow('\u00a0\u00a0Data Carrier', (b.data_carrier_count || 0) + ' (' + (b.data_carrier_bytes || 0) + ' B)'));
                 body.appendChild(bdDivider());
                 body.appendChild(bdRow('Version', versionHex, 'bd-hash'));
                 body.appendChild(bdRow('BIP-110 (bit 4)', bit4 ? 'YES' : 'NO', bit4 ? 'text-green-400' : 'text-red-400'));
@@ -204,6 +277,7 @@
                 var a = document.createElement('a');
                 a.href = 'https://mempool.space/block/' + b.height;
                 a.target = '_blank';
+                a.rel = 'noopener noreferrer';
                 a.style.cssText = 'color:#f7931a;font-size:13px';
                 a.textContent = 'View on mempool.space \u2192';
                 link.appendChild(a);
@@ -238,12 +312,13 @@
         _resizeTimer = setTimeout(function() {
             var charts = document.querySelectorAll('[id^="chart-"], [id="mempool-gauge"]');
             charts.forEach(function(el) {
-                if (!el._chart || !el._lastOptionJson) return;
-                el._lastOptionJson = null; // force re-apply on next setOption
-                // Re-trigger with stored option
-                try {
-                    el._chart.resize();
-                } catch(e) { /* ignore */ }
+                if (!el._chart) return;
+                el._chart.resize();
+                // Re-apply full option with mobile adjustments if we have stored JSON
+                if (el._storedOptionJson) {
+                    el._lastOptionJson = null; // force re-apply
+                    window.setChartOption(el.id, el._storedOptionJson);
+                }
             });
         }, 250);
     });

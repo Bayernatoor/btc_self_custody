@@ -214,6 +214,11 @@
 - [ ] Investigate chain size growth chart — something still isn't right with the cumulative
       calculation and/or disk size estimate on various ranges. Needs thorough review.
 
+## TODO: RBF Data Backfill
+- [ ] Re-parse blocks with corrupted rbf_count (e.g. block 941882 shows 470%).
+      Likely caused by older parser version counting RBF per-input instead of per-transaction.
+      Bump BACKFILL_VERSION or manually re-ingest affected blocks to fix stored data.
+
 ## TODO: Avg Transaction Size by Type Chart
 - [ ] Chart showing average transaction size broken down by transaction type
       (Legacy, P2SH, SegWit v0, Taproot). Needs per-tx type classification during

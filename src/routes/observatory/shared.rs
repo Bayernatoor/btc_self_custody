@@ -371,6 +371,7 @@ pub fn RangeSelector() -> impl IntoView {
         <div class="flex sm:hidden items-center gap-2">
             <div class="relative inline-block">
                 <select
+                    aria-label="Time range"
                     class="appearance-none bg-[#0a1a2e] text-white/80 text-sm border border-white/10 rounded-xl pl-3 pr-8 py-2 cursor-pointer focus:outline-none focus:border-[#f7931a]/40 transition-colors"
                     prop:value=move || range.get()
                     on:change=move |ev| {
@@ -440,6 +441,7 @@ pub fn OverlayPanel() -> impl IntoView {
                     <button
                         class="group bg-[#0d2137] border border-[#f7931a]/30 hover:border-[#f7931a]/60 text-[#f7931a]/70 hover:text-[#f7931a] rounded-2xl p-4 shadow-lg shadow-black/30 cursor-pointer transition-all hover:scale-105 animate-fadeinone"
                         title="Chart Overlays"
+                        aria-label="Toggle chart overlays"
                         on:click=move |_| state.set_overlay_panel_open.set(true)
                     >
                         <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
@@ -517,9 +519,9 @@ fn OverlayCheckbox(
 }
 
 /// Observatory navigation bar with links to sub-pages.
-/// Uses a DOM-level loading class (`obs-nav-loading`) on click that gets
-/// cleared when Leptos re-evaluates the reactive `class` attribute after
-/// navigation completes.
+/// On click, adds `obs-nav-loading` CSS class (shows ::after spinner),
+/// prevents default, then navigates after one animation frame so the
+/// browser paints the loading state before Leptos starts the transition.
 #[component]
 pub fn ObservatoryNav() -> impl IntoView {
     let tabs: Vec<(&'static str, &'static str)> = vec![
@@ -527,28 +529,47 @@ pub fn ObservatoryNav() -> impl IntoView {
         ("/observatory/charts/network", "Network"),
         ("/observatory/charts/fees", "Fees"),
         ("/observatory/charts/mining", "Mining"),
-        ("/observatory/charts/embedded", "Embedded Data"),
+        ("/observatory/charts/embedded", "Embedded"),
         ("/observatory/signaling", "Signaling"),
     ];
 
     let location = leptos_router::hooks::use_location();
+    let navigate = leptos_router::hooks::use_navigate();
 
     view! {
         <nav class="flex justify-center mb-6 sm:mb-8 px-1">
-            <div class="flex flex-wrap justify-center gap-4 sm:gap-6">
+            <div class="flex flex-wrap justify-center gap-x-3 gap-y-1.5 sm:gap-x-6 sm:gap-y-0">
                 {tabs.into_iter().map(|(href, label)| {
                     let href_str = href.to_string();
+                    let href_nav = href_str.clone();
+                    let nav = navigate.clone();
                     view! {
                         <a
                             href=href
-                            on:click=move |ev| {
-                                // Add loading class via DOM — Leptos will overwrite it
-                                // on the next reactive class update (after navigation).
+                            on:click=move |ev: leptos::ev::MouseEvent| {
+                                // Don't intercept modified clicks (new tab, etc.)
+                                if ev.meta_key() || ev.ctrl_key() || ev.shift_key() { return; }
+                                ev.prevent_default();
+                                // Add loading class — ::after pseudo-element shows spinner
                                 use wasm_bindgen::JsCast;
                                 if let Some(t) = ev.current_target() {
                                     if let Ok(el) = t.dyn_into::<leptos::web_sys::HtmlElement>() {
                                         let _ = el.class_list().add_1("obs-nav-loading");
                                     }
+                                }
+                                // Navigate after one frame so browser paints the spinner
+                                let href = href_nav.clone();
+                                let n = nav.clone();
+                                #[cfg(feature = "hydrate")]
+                                {
+                                    use wasm_bindgen::prelude::*;
+                                    let cb = Closure::once(move || {
+                                        n(&href, leptos_router::NavigateOptions::default());
+                                    });
+                                    if let Some(w) = leptos::web_sys::window() {
+                                        let _ = w.request_animation_frame(cb.as_ref().unchecked_ref());
+                                    }
+                                    cb.forget();
                                 }
                             }
                             class=move || {
@@ -559,14 +580,13 @@ pub fn ObservatoryNav() -> impl IntoView {
                                     path.starts_with(&href_str)
                                 };
                                 if active {
-                                    "text-sm sm:text-[15px] font-semibold text-[#f7931a] border-b-2 border-[#f7931a] pb-1 transition-all duration-200 whitespace-nowrap active:scale-95 active:opacity-70 inline-flex items-center gap-1.5"
+                                    "text-xs sm:text-[15px] font-semibold text-[#f7931a] border-b-2 border-[#f7931a] pb-1 transition-all duration-200 whitespace-nowrap active:scale-95 active:opacity-70"
                                 } else {
-                                    "text-sm sm:text-[15px] font-medium text-white/40 hover:text-white/70 border-b-2 border-transparent pb-1 transition-all duration-200 whitespace-nowrap active:scale-95 active:opacity-70 inline-flex items-center gap-1.5"
+                                    "text-xs sm:text-[15px] font-medium text-white/40 hover:text-white/70 border-b-2 border-transparent pb-1 transition-all duration-200 whitespace-nowrap active:scale-95 active:opacity-70"
                                 }
                             }
                         >
                             {label}
-                            <span class="hidden w-3 h-3 border-2 border-[#f7931a]/40 border-t-[#f7931a] rounded-full animate-spin obs-nav-spin"/>
                         </a>
                     }
                 }).collect::<Vec<_>>()}

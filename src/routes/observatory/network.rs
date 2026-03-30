@@ -4,6 +4,7 @@ use leptos::prelude::*;
 
 use crate::chart_memo;
 use super::components::*;
+use super::helpers::chart_desc;
 use super::shared::*;
 
 #[component]
@@ -23,6 +24,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
             header=move || view! {
                 <div class="relative inline-block">
                     <select
+                        aria-label="Chart section"
                         class="appearance-none bg-[#0a1a2e] text-white/80 text-sm border border-white/10 rounded-xl pl-3 pr-8 py-2 cursor-pointer focus:outline-none focus:border-[#f7931a]/40 transition-colors"
                         prop:value=move || section.get()
                         on:change=move |ev| {
@@ -92,11 +94,11 @@ pub fn NetworkChartsPage() -> impl IntoView {
 
                         view! {
                             <div class="space-y-10">
-                                <ChartCard title="Block Size" description="How large each block is in megabytes" chart_id="chart-size" option=size_option/>
-                                <ChartCard title="Weight Utilization" description="How full each block is, as a percentage of the 4 MWU limit" chart_id="chart-weight-util" option=weight_util_option/>
-                                <ChartCard title="Transaction Count" description="Number of transactions included in each block" chart_id="chart-txcount" option=tx_option/>
-                                <ChartCard title="Avg Transaction Size" description="Average size of a transaction in bytes. Smaller means more efficient use of block space" chart_id="chart-avg-tx-size" option=avg_tx_size_option/>
-                                <ChartCard title="Block Interval" description="Minutes between consecutive blocks. Target is 10 minutes" chart_id="chart-interval" option=interval_option/>
+                                <ChartCard title="Block Size" description=chart_desc(range, "How large each block is in megabytes", "Average block size per day in megabytes") chart_id="chart-size" option=size_option/>
+                                <ChartCard title="Weight Utilization" description=chart_desc(range, "How full each block is, as a percentage of the 4 MWU limit", "Average daily weight utilization as a percentage of the 4 MWU limit") chart_id="chart-weight-util" option=weight_util_option/>
+                                <ChartCard title="Transaction Count" description=chart_desc(range, "Number of transactions included in each block", "Average number of transactions per block each day") chart_id="chart-txcount" option=tx_option/>
+                                <ChartCard title="Avg Transaction Size" description=chart_desc(range, "Average size of a transaction in bytes. Smaller means more efficient use of block space", "Daily average transaction size in bytes. Smaller means more efficient use of block space") chart_id="chart-avg-tx-size" option=avg_tx_size_option/>
+                                <ChartCard title="Block Interval" description=chart_desc(range, "Minutes between consecutive blocks. Target is 10 minutes", "Average daily block interval in minutes. Target is 10 minutes") chart_id="chart-interval" option=interval_option/>
                                 <ChartCard title="Chain Size Growth" description="Total blockchain size over time, showing how fast the chain is growing" chart_id="chart-chain-size" option=chain_size_option/>
                             </div>
                         }.into_any()
@@ -147,14 +149,14 @@ pub fn NetworkChartsPage() -> impl IntoView {
 
                         view! {
                             <div class="space-y-10">
-                                <ChartCard title="SegWit Adoption" description="Percentage of transactions using Segregated Witness" chart_id="chart-segwit" option=segwit_option/>
-                                <ChartCard title="Taproot Outputs" description="New Taproot (P2TR) outputs created per block" chart_id="chart-taproot" option=taproot_option/>
-                                <ChartCard title="Witness Version Comparison" description="SegWit v0 vs Taproot v1 spend counts. How quickly is Taproot catching up?" chart_id="chart-witness-versions" option=witness_version_option/>
+                                <ChartCard title="SegWit Adoption" description=chart_desc(range, "Percentage of transactions using Segregated Witness", "Daily average SegWit adoption percentage") chart_id="chart-segwit" option=segwit_option/>
+                                <ChartCard title="Taproot Outputs" description=chart_desc(range, "New Taproot (P2TR) outputs created per block", "Average Taproot (P2TR) outputs created per block each day") chart_id="chart-taproot" option=taproot_option/>
+                                <ChartCard title="Witness Version Comparison" description=chart_desc(range, "SegWit v0 vs Taproot v1 spend counts per block", "Daily average SegWit v0 vs Taproot v1 spend counts") chart_id="chart-witness-versions" option=witness_version_option/>
                                 <ChartCard title="Witness Version Share" description="SegWit v0 vs Taproot v1 as a percentage of all witness spends" chart_id="chart-witness-pct" option=witness_pct_option/>
                                 <ChartCard title="Output Type Breakdown" description="Legacy vs SegWit vs Taproot as a percentage of all outputs" chart_id="chart-witness-tx-pct" option=witness_tx_pct_option/>
-                                <ChartCard title="Address Type Evolution" description="Output types over time. Watch P2PKH (legacy) shrink as P2WPKH (SegWit) and P2TR (Taproot) grow" chart_id="chart-address-types" option=address_type_option/>
+                                <ChartCard title="Address Type Evolution" description=chart_desc(range, "Output types per block. Watch P2PKH (legacy) shrink as P2WPKH (SegWit) and P2TR (Taproot) grow", "Daily average output types. Watch P2PKH (legacy) shrink as P2WPKH (SegWit) and P2TR (Taproot) grow") chart_id="chart-address-types" option=address_type_option/>
                                 <ChartCard title="Address Type Share" description="Each output type as a percentage of total, showing the shift from legacy to SegWit to Taproot" chart_id="chart-address-types-pct" option=address_type_pct_option/>
-                                <ChartCard title="Taproot Spend Types" description="Key-path (private, efficient) vs script-path (complex scripts, inscriptions). How Taproot is actually being used" chart_id="chart-taproot-spend-types" option=taproot_spend_type_option/>
+                                <ChartCard title="Taproot Spend Types" description=chart_desc(range, "Key-path vs script-path spends per block. How Taproot is actually being used", "Daily average key-path vs script-path spends. How Taproot is actually being used") chart_id="chart-taproot-spend-types" option=taproot_spend_type_option/>
                                 <ChartCard title="Witness Data Share" description="Witness data as percentage of block size. Higher means more SegWit discount savings" chart_id="chart-witness-share" option=witness_share_option/>
                             </div>
                         }.into_any()
@@ -181,9 +183,9 @@ pub fn NetworkChartsPage() -> impl IntoView {
 
                         view! {
                             <div class="space-y-10">
-                                <ChartCard title="RBF Adoption" description="Percentage of transactions opting into Replace-By-Fee, which allows fee bumping stuck transactions" chart_id="chart-rbf" option=rbf_option/>
-                                <ChartCard title="UTXO Flow" description="Inputs spent vs outputs created per block. When outputs exceed inputs, the UTXO set grows" chart_id="chart-utxo-flow" option=utxo_flow_option/>
-                                <ChartCard title="Transaction Batching" description="Average inputs and outputs per transaction. More outputs per tx means exchanges are batching payments" chart_id="chart-batching" option=batching_option/>
+                                <ChartCard title="RBF Adoption" description=chart_desc(range, "Percentage of transactions opting into Replace-By-Fee per block", "Daily average RBF adoption percentage") chart_id="chart-rbf" option=rbf_option/>
+                                <ChartCard title="UTXO Flow" description=chart_desc(range, "Inputs spent vs outputs created per block. When outputs exceed inputs, the UTXO set grows", "Daily average inputs spent vs outputs created. When outputs exceed inputs, the UTXO set grows") chart_id="chart-utxo-flow" option=utxo_flow_option/>
+                                <ChartCard title="Transaction Batching" description=chart_desc(range, "Average inputs and outputs per transaction in each block", "Daily average inputs and outputs per transaction") chart_id="chart-batching" option=batching_option/>
                             </div>
                         }.into_any()
                     }).unwrap_or_else(|| view! { <ChartPageSkeleton count=3/> }.into_any())

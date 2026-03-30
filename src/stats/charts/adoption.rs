@@ -26,7 +26,7 @@ pub fn segwit_adoption_chart(blocks: &[BlockSummary]) -> String {
     let raw: Vec<serde_json::Value> = blocks
         .iter()
         .zip(vals.iter())
-        .map(|(b, v)| json!([ts_ms(b.timestamp), v]))
+        .map(|(b, v)| dp(b, v))
         .collect();
 
     let ma = moving_average(&vals, 144);
@@ -124,7 +124,7 @@ pub fn taproot_chart(blocks: &[BlockSummary]) -> String {
     let raw: Vec<serde_json::Value> = blocks
         .iter()
         .zip(vals.iter())
-        .map(|(b, v)| json!([ts_ms(b.timestamp), v]))
+        .map(|(b, v)| dp(b, v))
         .collect();
 
     let ma = moving_average(&vals, 144);
@@ -217,12 +217,12 @@ pub fn witness_version_chart(blocks: &[BlockSummary]) -> String {
     let v0_data: Vec<serde_json::Value> = blocks
         .iter()
         .zip(v0_vals.iter())
-        .map(|(b, v)| json!([ts_ms(b.timestamp), v]))
+        .map(|(b, v)| dp(b, v))
         .collect();
     let v1_data: Vec<serde_json::Value> = blocks
         .iter()
         .zip(v1_vals.iter())
-        .map(|(b, v)| json!([ts_ms(b.timestamp), v]))
+        .map(|(b, v)| dp(b, v))
         .collect();
 
     build_option(json!({
@@ -321,12 +321,12 @@ pub fn witness_version_pct_chart(blocks: &[BlockSummary]) -> String {
     let v0_data: Vec<serde_json::Value> = blocks
         .iter()
         .zip(v0_pct.iter())
-        .map(|(b, v)| json!([ts_ms(b.timestamp), v]))
+        .map(|(b, v)| dp(b, v))
         .collect();
     let v1_data: Vec<serde_json::Value> = blocks
         .iter()
         .zip(v1_pct.iter())
-        .map(|(b, v)| json!([ts_ms(b.timestamp), v]))
+        .map(|(b, v)| dp(b, v))
         .collect();
 
     build_option(json!({
@@ -454,17 +454,17 @@ pub fn witness_version_tx_pct_chart(blocks: &[BlockSummary]) -> String {
     let v0_data: Vec<serde_json::Value> = blocks
         .iter()
         .zip(v0_pct.iter())
-        .map(|(b, v)| json!([ts_ms(b.timestamp), v]))
+        .map(|(b, v)| dp(b, v))
         .collect();
     let v1_data: Vec<serde_json::Value> = blocks
         .iter()
         .zip(v1_pct.iter())
-        .map(|(b, v)| json!([ts_ms(b.timestamp), v]))
+        .map(|(b, v)| dp(b, v))
         .collect();
     let legacy_data: Vec<serde_json::Value> = blocks
         .iter()
         .zip(legacy_pct.iter())
-        .map(|(b, v)| json!([ts_ms(b.timestamp), v]))
+        .map(|(b, v)| dp(b, v))
         .collect();
 
     build_option(json!({
@@ -579,8 +579,8 @@ pub fn taproot_spend_type_chart(blocks: &[BlockSummary]) -> String {
         return no_data_chart("Taproot Spend Types");
     }
 
-    let keypath: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.taproot_keypath_count])).collect();
-    let scriptpath: Vec<serde_json::Value> = blocks.iter().map(|b| json!([ts_ms(b.timestamp), b.taproot_scriptpath_count])).collect();
+    let keypath: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.taproot_keypath_count)).collect();
+    let scriptpath: Vec<serde_json::Value> = blocks.iter().map(|b| dp(b, b.taproot_scriptpath_count)).collect();
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),

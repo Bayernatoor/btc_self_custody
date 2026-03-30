@@ -4,6 +4,7 @@ use leptos::prelude::*;
 
 use crate::chart_memo;
 use super::components::*;
+use super::helpers::chart_desc;
 use super::shared::*;
 
 #[component]
@@ -23,6 +24,7 @@ pub fn EmbeddedChartsPage() -> impl IntoView {
             header=move || view! {
                 <div class="relative inline-block">
                     <select
+                        aria-label="Chart section"
                         class="appearance-none bg-[#0a1a2e] text-white/80 text-sm border border-white/10 rounded-xl pl-3 pr-8 py-2 cursor-pointer focus:outline-none focus:border-[#f7931a]/40 transition-colors"
                         prop:value=move || section.get()
                         on:change=move |ev| {
@@ -68,9 +70,9 @@ pub fn EmbeddedChartsPage() -> impl IntoView {
 
                         view! {
                             <div class="space-y-10">
-                                <ChartCard title="All Embedded Data — Block Share" description="How much of each block is non-financial data (OP_RETURN outputs plus witness inscriptions)" chart_id="chart-all-embedded-share" option=all_embedded_share_option/>
-                                <ChartCard title="All Embedded Data — Count" description="Outputs per block by protocol: Runes, Omni, Counterparty, Ordinals, BRC-20, Stamps, and other data" chart_id="chart-unified-count" option=unified_count_option/>
-                                <ChartCard title="All Embedded Data — Volume" description="Bytes of data embedded per block by protocol. Who is using the most block space?" chart_id="chart-unified-volume" option=unified_volume_option/>
+                                <ChartCard title="All Embedded Data — Block Share" description=chart_desc(range, "How much of each block is non-financial data (OP_RETURN outputs plus witness inscriptions)", "Daily average non-financial data share per block") chart_id="chart-all-embedded-share" option=all_embedded_share_option/>
+                                <ChartCard title="All Embedded Data — Count" description=chart_desc(range, "Outputs per block by protocol: Runes, Omni, Counterparty, Ordinals, BRC-20, Stamps, and other data", "Daily average embedded outputs per block by protocol") chart_id="chart-unified-count" option=unified_count_option/>
+                                <ChartCard title="All Embedded Data — Volume" description=chart_desc(range, "Bytes of data embedded per block by protocol", "Daily average bytes of data embedded per block by protocol") chart_id="chart-unified-volume" option=unified_volume_option/>
                             </div>
                         }.into_any()
                     }).unwrap_or_else(|| view! { <ChartPageSkeleton count=3/> }.into_any())
@@ -100,10 +102,10 @@ pub fn EmbeddedChartsPage() -> impl IntoView {
 
                         view! {
                             <div class="space-y-10">
-                                <ChartCard title="OP_RETURN Count" description="Number of OP_RETURN outputs per block, broken down by protocol (Runes, Omni, Counterparty, Other)" chart_id="chart-opreturn-count" option=op_count_option/>
-                                <ChartCard title="OP_RETURN Volume" description="Bytes of data stored in OP_RETURN outputs per block by protocol" chart_id="chart-opreturn-bytes" option=op_bytes_option/>
+                                <ChartCard title="OP_RETURN Count" description=chart_desc(range, "Number of OP_RETURN outputs per block by protocol", "Daily average OP_RETURN outputs per block by protocol") chart_id="chart-opreturn-count" option=op_count_option/>
+                                <ChartCard title="OP_RETURN Volume" description=chart_desc(range, "Bytes of data stored in OP_RETURN outputs per block by protocol", "Daily average OP_RETURN bytes per block by protocol") chart_id="chart-opreturn-bytes" option=op_bytes_option/>
                                 <ChartCard title="OP_RETURN Protocol Share" description="Which protocols are using the most OP_RETURN outputs. Runes dominate since their 2024 launch" chart_id="chart-runes-pct" option=runes_pct_option/>
-                                <ChartCard title="OP_RETURN Block Share" description="OP_RETURN data as a percentage of total block size" chart_id="chart-op-block-share" option=op_block_share_option/>
+                                <ChartCard title="OP_RETURN Block Share" description=chart_desc(range, "OP_RETURN data as a percentage of each block's size", "Daily average OP_RETURN data as a percentage of block size") chart_id="chart-op-block-share" option=op_block_share_option/>
                             </div>
                         }.into_any()
                     }).unwrap_or_else(|| view! { <ChartPageSkeleton count=4/> }.into_any())
@@ -125,8 +127,8 @@ pub fn EmbeddedChartsPage() -> impl IntoView {
 
                         view! {
                             <div class="space-y-10">
-                                <ChartCard title="Ordinals Inscriptions" description="Inscriptions per block: images, text, and other data stored in witness data since 2023" chart_id="chart-inscriptions" option=inscription_option/>
-                                <ChartCard title="Inscription Block Share" description="Inscription data as a percentage of block size. At peak, inscriptions consumed over 50% of block space" chart_id="chart-inscription-share" option=inscription_share_option/>
+                                <ChartCard title="Ordinals Inscriptions" description=chart_desc(range, "Inscriptions per block: images, text, and other data stored in witness data", "Daily average inscriptions per block") chart_id="chart-inscriptions" option=inscription_option/>
+                                <ChartCard title="Inscription Block Share" description=chart_desc(range, "Inscription data as a percentage of each block's size", "Daily average inscription data as a percentage of block size") chart_id="chart-inscription-share" option=inscription_share_option/>
                             </div>
                         }.into_any()
                     }).unwrap_or_else(|| view! { <ChartPageSkeleton count=2/> }.into_any())

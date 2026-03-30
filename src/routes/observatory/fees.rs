@@ -4,6 +4,7 @@ use leptos::prelude::*;
 
 use crate::chart_memo;
 use super::components::*;
+use super::helpers::chart_desc;
 use super::shared::*;
 
 #[component]
@@ -54,7 +55,7 @@ pub fn FeeChartsPage() -> impl IntoView {
                         <div class="space-y-10">
                             <ChartCard
                                 title="Total Fees per Block"
-                                description="Total transaction fees earned by miners in each block"
+                                description=chart_desc(range, "Total transaction fees earned by miners in each block", "Average daily transaction fees earned by miners per block")
                                 chart_id="chart-fees"
                                 option=fees_option
                             >
@@ -71,7 +72,7 @@ pub fn FeeChartsPage() -> impl IntoView {
                             </ChartCard>
                             <ChartCard
                                 title="Subsidy vs Fees"
-                                description="Block reward breakdown. The subsidy halves every 4 years while fees must eventually replace it"
+                                description=chart_desc(range, "Block reward breakdown per block. The subsidy halves every 4 years while fees must eventually replace it", "Daily average block reward breakdown. The subsidy halves every 4 years while fees must eventually replace it")
                                 chart_id="chart-subsidy-fees"
                                 option=subsidy_fees_option
                             />

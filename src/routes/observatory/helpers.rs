@@ -1,6 +1,23 @@
 //! Formatting and utility helpers for the stats page.
 
 use chrono::Datelike;
+use leptos::prelude::*;
+
+/// Create a reactive chart description that changes based on whether
+/// the current range shows per-block or daily-averaged data.
+pub fn chart_desc(
+    range: ReadSignal<String>,
+    per_block: &'static str,
+    daily: &'static str,
+) -> Signal<String> {
+    Signal::derive(move || {
+        if range_to_blocks(&range.get()) > 5_000 {
+            daily.to_string()
+        } else {
+            per_block.to_string()
+        }
+    })
+}
 
 /// Convert a range string (1d, 1w, 1m, etc.) to approximate block count.
 pub fn range_to_blocks(range: &str) -> u64 {
@@ -14,9 +31,9 @@ pub fn range_to_blocks(range: &str) -> u64 {
             // Days since Jan 1 of current year × 144 blocks/day
             let now = chrono::Utc::now();
             let jan1 = chrono::NaiveDate::from_ymd_opt(now.year(), 1, 1)
-                .unwrap()
+                .expect("Jan 1 is always valid")
                 .and_hms_opt(0, 0, 0)
-                .unwrap()
+                .expect("00:00:00 is always valid")
                 .and_utc();
             let days = (now - jan1).num_days().max(1) as u64;
             days * 144
@@ -37,7 +54,7 @@ pub fn format_number(n: u64) -> String {
     bytes
         .rchunks(3)
         .rev()
-        .map(|c| std::str::from_utf8(c).unwrap())
+        .map(|c| std::str::from_utf8(c).expect("digit chars are valid UTF-8"))
         .collect::<Vec<_>>()
         .join(",")
 }
@@ -52,7 +69,7 @@ pub fn format_number_f64(n: f64, decimals: usize) -> String {
     let formatted = bytes
         .rchunks(3)
         .rev()
-        .map(|c| std::str::from_utf8(c).unwrap())
+        .map(|c| std::str::from_utf8(c).expect("digit chars are valid UTF-8"))
         .collect::<Vec<_>>()
         .join(",");
     if parts.len() > 1 {
