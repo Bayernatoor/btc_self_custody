@@ -380,17 +380,22 @@ macro_rules! chart_memo {
         leptos::prelude::Signal::derive(move || {
             let r = $range.get();
             let flags = $overlays.get();
-            // Cache key includes range + overlay state so stale entries are never returned
-            let full_key = format!("{}:{}:{:?}", cache_key, r, flags.cache_key());
-            // Check cache first
+            // MUST read data to track it as reactive dependency — otherwise
+            // the derive won't re-run when new data arrives after range change.
+            let data_opt = $data.get().and_then(|r| r.ok());
+            // Include data fingerprint in cache key so stale data never matches
+            let data_fp = data_opt.as_ref().map(|d| match d {
+                DashboardData::PerBlock(ref b) => b.len(),
+                DashboardData::Daily(ref d) => d.len(),
+            }).unwrap_or(0);
+            let full_key = format!("{}:{}:{}:{}", cache_key, r, data_fp, flags.cache_key());
+            // Check cache
             if let Ok(c) = cache.lock() {
                 if let Some(cached) = c.get(&full_key) {
                     return cached.clone();
                 }
             }
-            let result = $data
-                .get()
-                .and_then(|r| r.ok())
+            let result = data_opt
                 .map(|data| {
                     let (json, is_daily) = match data {
                         DashboardData::PerBlock(ref $blocks) => {
@@ -406,7 +411,6 @@ macro_rules! chart_memo {
                     )
                 })
                 .unwrap_or_default();
-            // Store in cache (only if non-empty — don't cache loading states)
             if !result.is_empty() {
                 if let Ok(mut c) = cache.lock() {
                     c.insert(full_key, result.clone());
