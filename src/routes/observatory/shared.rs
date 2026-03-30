@@ -1,5 +1,8 @@
 //! Shared state, URL query params, and reusable components for the Observatory.
 
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+
 use leptos::prelude::*;
 use leptos_router::hooks::use_query_map;
 
@@ -7,6 +10,12 @@ use super::helpers::*;
 use crate::stats::charts::OverlayFlags;
 use crate::stats::server_fns::*;
 use crate::stats::types::*;
+
+/// Client-side chart JSON cache. Persists at the parent level across
+/// Outlet navigations so switching tabs doesn't recompute charts.
+/// Keyed by chart_id; invalidated when range or overlay flags change.
+/// Uses Arc<Mutex> for Send+Sync compatibility with SSR.
+pub type ChartCache = Arc<Mutex<HashMap<String, String>>>;
 
 // ---------------------------------------------------------------------------
 // Data enum for dashboard
@@ -46,6 +55,8 @@ pub struct ObservatoryState {
     // overlay panel open state
     pub overlay_panel_open: ReadSignal<bool>,
     pub set_overlay_panel_open: WriteSignal<bool>,
+    // chart JSON cache — persists across Outlet navigations
+    pub chart_cache: ChartCache,
 }
 
 /// Create a dashboard data resource. Each chart page calls this to get its own
@@ -308,6 +319,19 @@ pub fn provide_observatory_state() -> ObservatoryState {
         }
     });
 
+    // Chart JSON cache — invalidate when range or overlay flags change
+    let chart_cache: ChartCache = Arc::new(Mutex::new(HashMap::new()));
+    {
+        let cache = chart_cache.clone();
+        Effect::new(move |_| {
+            let _r = range.get();
+            let _f = overlay_flags.get();
+            if let Ok(mut c) = cache.lock() {
+                c.clear();
+            }
+        });
+    }
+
     let state = ObservatoryState {
         range,
         set_range,
@@ -329,6 +353,7 @@ pub fn provide_observatory_state() -> ObservatoryState {
         price_loading,
         overlay_panel_open,
         set_overlay_panel_open,
+        chart_cache,
     };
 
     provide_context(state.clone());
@@ -350,18 +375,28 @@ pub struct LiveContext {
 // Chart memo macro — pure derivation, no timing issues
 // ---------------------------------------------------------------------------
 
-/// Build a chart option as a derived Signal. The closure runs reactively
-/// whenever dashboard_data, range, or overlay signals change, and returns
-/// the current JSON string. Unlike Effect, this is a pure derivation that
-/// doesn't depend on DOM timing.
+/// Build a chart option as a derived Signal with parent-level caching.
+/// On first compute, stores the result in ObservatoryState::chart_cache.
+/// On subsequent evaluations (e.g. returning to a tab), returns the cached
+/// value instantly. Cache is cleared by an Effect when range or overlays change.
 #[macro_export]
 macro_rules! chart_memo {
     ($data:expr, $range:expr, $overlays:expr, |$blocks:ident| $per_block:expr, |$days:ident| $daily:expr) => {{
         use $crate::routes::observatory::shared::DashboardData;
+        // Generate a unique cache key from the macro call site
+        let cache_key = concat!(file!(), ":", line!(), ":", column!()).to_string();
+        let state = leptos::prelude::expect_context::<$crate::routes::observatory::shared::ObservatoryState>();
+        let cache = state.chart_cache.clone();
         leptos::prelude::Signal::derive(move || {
             let _r = $range.get();
             let flags = $overlays.get();
-            $data
+            // Check cache first
+            if let Ok(c) = cache.lock() {
+                if let Some(cached) = c.get(&cache_key) {
+                    return cached.clone();
+                }
+            }
+            let result = $data
                 .get()
                 .and_then(|r| r.ok())
                 .map(|data| {
@@ -378,7 +413,14 @@ macro_rules! chart_memo {
                         &json, &flags, is_daily,
                     )
                 })
-                .unwrap_or_default()
+                .unwrap_or_default();
+            // Store in cache (only if non-empty — don't cache loading states)
+            if !result.is_empty() {
+                if let Ok(mut c) = cache.lock() {
+                    c.insert(cache_key.clone(), result.clone());
+                }
+            }
+            result
         })
     }};
 }
