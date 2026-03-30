@@ -68,7 +68,7 @@ pub fn FaqPage() -> impl IntoView {
                     </div>
                     <img
                         class="mt-5 w-28 h-28 rounded-lg"
-                        src="./../../../simplexqr.png"
+                        src="/img/simplexqr.png"
                         alt="Simplex Chat QR code"
                     />
                 </div>

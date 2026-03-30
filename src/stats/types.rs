@@ -269,3 +269,55 @@ pub fn calc_supply(height: u64) -> f64 {
 
     supply
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn supply_genesis() {
+        // Block 0: 1 block × 50 BTC = 50
+        assert_eq!(calc_supply(0), 50.0);
+    }
+
+    #[test]
+    fn supply_first_halving_boundary() {
+        // Blocks 0-209,999: 210,000 × 50 = 10,500,000
+        assert_eq!(calc_supply(209_999), 10_500_000.0);
+    }
+
+    #[test]
+    fn supply_at_first_halving() {
+        // Block 210,000: era 0 (210,000 × 50) + era 1 (1 × 25) = 10,500,025
+        assert_eq!(calc_supply(210_000), 10_500_025.0);
+    }
+
+    #[test]
+    fn supply_second_halving_boundary() {
+        // Blocks 0-419,999:
+        // Era 0: 210,000 × 50 = 10,500,000
+        // Era 1: 210,000 × 25 = 5,250,000
+        // Total: 15,750,000
+        assert_eq!(calc_supply(419_999), 15_750_000.0);
+    }
+
+    #[test]
+    fn supply_at_fourth_halving() {
+        // Block 840,000:
+        // Era 0: 210,000 × 50     = 10,500,000
+        // Era 1: 210,000 × 25     = 5,250,000
+        // Era 2: 210,000 × 12.5   = 2,625,000
+        // Era 3: 210,000 × 6.25   = 1,312,500
+        // Era 4: 1 × 3.125        = 3.125
+        // Total: 19,687,503.125
+        assert_eq!(calc_supply(840_000), 19_687_503.125);
+    }
+
+    #[test]
+    fn supply_max_approaches_21m() {
+        // At a very high block, supply should approach but not exceed 21M
+        let supply = calc_supply(10_000_000);
+        assert!(supply > 20_999_000.0);
+        assert!(supply <= 21_000_000.0);
+    }
+}

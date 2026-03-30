@@ -975,7 +975,7 @@ pub fn apply_overlays(
         }
     }
 
-    // After all overlays applied: reposition toolbox clear of any right-side axes
+    // After all overlays applied: reposition toolbox clear of any right-side axes.
     if has_right_axis {
         let grid_right = obj
             .get("grid")
@@ -1004,4 +1004,224 @@ pub fn apply_overlays(
         }
     }
 
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -----------------------------------------------------------------------
+    // moving_average
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn ma_empty() {
+        let result = moving_average(&[], 3);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn ma_shorter_than_window() {
+        let result = moving_average(&[1.0, 2.0], 3);
+        assert_eq!(result, vec![None, None]);
+    }
+
+    #[test]
+    fn ma_exact_window() {
+        let result = moving_average(&[1.0, 2.0, 3.0], 3);
+        assert_eq!(result, vec![None, None, Some(2.0)]);
+    }
+
+    #[test]
+    fn ma_longer_than_window() {
+        let result = moving_average(&[1.0, 2.0, 3.0, 4.0, 5.0], 3);
+        assert_eq!(
+            result,
+            vec![None, None, Some(2.0), Some(3.0), Some(4.0)]
+        );
+    }
+
+    #[test]
+    fn ma_window_1() {
+        let data = vec![10.0, 20.0, 30.0];
+        let result = moving_average(&data, 1);
+        assert_eq!(result, vec![Some(10.0), Some(20.0), Some(30.0)]);
+    }
+
+    #[test]
+    fn ma_rounds_to_3_decimals() {
+        // 1/3 = 0.33333... should round to 0.333
+        let result = moving_average(&[0.0, 0.0, 1.0], 3);
+        assert_eq!(result[2], Some(0.333));
+    }
+
+    // -----------------------------------------------------------------------
+    // round
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn round_zero_decimals() {
+        assert_eq!(round(3.7, 0), 4.0);
+        assert_eq!(round(3.4, 0), 3.0);
+    }
+
+    #[test]
+    fn round_two_decimals() {
+        assert_eq!(round(3.456, 2), 3.46);
+        assert_eq!(round(3.454, 2), 3.45);
+    }
+
+    #[test]
+    fn round_negative() {
+        assert_eq!(round(-1.555, 2), -1.56);
+    }
+
+    #[test]
+    fn round_zero() {
+        assert_eq!(round(0.0, 5), 0.0);
+    }
+
+    // -----------------------------------------------------------------------
+    // ts_ms
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn ts_ms_conversion() {
+        assert_eq!(ts_ms(0), 0);
+        assert_eq!(ts_ms(1), 1000);
+        assert_eq!(ts_ms(1_700_000_000), 1_700_000_000_000);
+    }
+
+    // -----------------------------------------------------------------------
+    // block_subsidy (charts/mod.rs version)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn chart_block_subsidy() {
+        assert_eq!(block_subsidy(0), 5_000_000_000);
+        assert_eq!(block_subsidy(210_000), 2_500_000_000);
+        assert_eq!(block_subsidy(840_000), 312_500_000);
+        assert_eq!(block_subsidy(13_440_000), 0);
+    }
+
+    // -----------------------------------------------------------------------
+    // show_ma
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn show_ma_threshold() {
+        assert!(!show_ma(0));
+        assert!(!show_ma(144));
+        assert!(!show_ma(199));
+        assert!(show_ma(200));
+        assert!(show_ma(1000));
+    }
+
+    // -----------------------------------------------------------------------
+    // format_num
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn format_num_thousands() {
+        assert_eq!(format_num(0), "0");
+        assert_eq!(format_num(999), "999");
+        assert_eq!(format_num(1000), "1,000");
+        assert_eq!(format_num(1_000_000), "1,000,000");
+        assert_eq!(format_num(840_000), "840,000");
+    }
+
+    // -----------------------------------------------------------------------
+    // dp (data point helper)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn dp_creates_triple() {
+        let block = BlockSummary {
+            height: 100,
+            hash: String::new(),
+            timestamp: 1_700_000,
+            tx_count: 0,
+            size: 0,
+            weight: 0,
+            difficulty: 0.0,
+            total_fees: 0,
+            median_fee: 0,
+            median_fee_rate: 0.0,
+            segwit_spend_count: 0,
+            taproot_spend_count: 0,
+            p2pk_count: 0,
+            p2pkh_count: 0,
+            p2sh_count: 0,
+            p2wpkh_count: 0,
+            p2wsh_count: 0,
+            p2tr_count: 0,
+            multisig_count: 0,
+            unknown_script_count: 0,
+            input_count: 0,
+            output_count: 0,
+            rbf_count: 0,
+            witness_bytes: 0,
+            inscription_count: 0,
+            inscription_bytes: 0,
+            brc20_count: 0,
+            op_return_count: 0,
+            op_return_bytes: 0,
+            runes_count: 0,
+            runes_bytes: 0,
+            omni_count: 0,
+            omni_bytes: 0,
+            counterparty_count: 0,
+            counterparty_bytes: 0,
+            data_carrier_count: 0,
+            data_carrier_bytes: 0,
+            taproot_keypath_count: 0,
+            taproot_scriptpath_count: 0,
+        };
+        let result = dp(&block, 42.5);
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr[0], 1_700_000_000u64); // ts_ms
+        assert_eq!(arr[1], 42.5);
+        assert_eq!(arr[2], 100); // height
+    }
+
+    // -----------------------------------------------------------------------
+    // no_data_chart
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn no_data_chart_has_title() {
+        let opt = no_data_chart("Test Chart");
+        let title = opt.get("title").unwrap();
+        let text = title.get("text").unwrap().as_str().unwrap();
+        assert!(text.contains("Test Chart"));
+        assert!(text.contains("No data"));
+    }
+
+    // -----------------------------------------------------------------------
+    // build_option merges correctly
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn build_option_preserves_defaults() {
+        let opt = build_option(json!({
+            "xAxis": { "type": "time" }
+        }));
+        // Should have chart_defaults fields
+        assert!(opt.get("toolbox").is_some());
+        assert!(opt.get("animation").is_some());
+        // Should have our override
+        assert_eq!(opt["xAxis"]["type"], "time");
+    }
+
+    #[test]
+    fn build_option_deep_merges_legend() {
+        let opt = build_option(json!({
+            "legend": { "show": false }
+        }));
+        let legend = opt.get("legend").unwrap();
+        // Should have "show: false" from our override
+        assert_eq!(legend["show"], false);
+        // Should still have default textStyle from chart_defaults
+        assert!(legend.get("textStyle").is_some());
+    }
 }

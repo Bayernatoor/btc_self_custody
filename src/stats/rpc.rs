@@ -223,7 +223,7 @@ impl BitcoinRpc {
         let mut total_fees = 0u64;
         let mut coinbase_locktime = 0u64;
         let mut coinbase_sequence = 0xFFFF_FFFFu64;
-        let mut miner: &str = "Unknown";
+        let mut miner = String::from("Unknown");
         if let Some(txs) = result["tx"].as_array() {
             if let Some(coinbase_tx) = txs.first() {
                 // BIP-54 signaling: coinbase nLockTime == height - 1 AND nSequence != 0xffffffff
@@ -273,7 +273,7 @@ impl BitcoinRpc {
                                 {
                                     let found = classifier::identify_miner(hex);
                                     if found != "Unknown" {
-                                        miner = found;
+                                        miner = found.to_string();
                                         break;
                                     }
                                 }
@@ -496,7 +496,7 @@ impl BitcoinRpc {
             median_fee_rate,
             coinbase_locktime,
             coinbase_sequence,
-            miner: miner.to_string(),
+            miner,
             segwit_spend_count,
             taproot_spend_count,
             taproot_keypath_count,

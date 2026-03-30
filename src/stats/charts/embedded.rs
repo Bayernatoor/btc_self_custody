@@ -697,8 +697,11 @@ pub fn unified_embedded_count_chart(blocks: &[BlockSummary]) -> serde_json::Valu
         blocks.iter().map(|b| dp(b, b.counterparty_count)).collect();
     let other_op: Vec<serde_json::Value> =
         blocks.iter().map(|b| dp(b, b.data_carrier_count)).collect();
-    let inscriptions: Vec<serde_json::Value> =
-        blocks.iter().map(|b| dp(b, b.inscription_count)).collect();
+    // BRC-20 is a subset of inscriptions — split them to avoid double-counting
+    let inscriptions: Vec<serde_json::Value> = blocks
+        .iter()
+        .map(|b| dp(b, b.inscription_count.saturating_sub(b.brc20_count)))
+        .collect();
     let brc20: Vec<serde_json::Value> =
         blocks.iter().map(|b| dp(b, b.brc20_count)).collect();
     let stamps: Vec<serde_json::Value> =
@@ -751,9 +754,10 @@ pub fn unified_embedded_count_chart_daily(days: &[DailyAggregate]) -> serde_json
         .iter()
         .map(|d| avg(d.total_data_carrier_count, d.block_count))
         .collect();
+    // BRC-20 is a subset of inscriptions — split them to avoid double-counting
     let inscriptions: Vec<f64> = days
         .iter()
-        .map(|d| round(d.avg_inscription_count, 1))
+        .map(|d| round((d.avg_inscription_count - d.avg_brc20_count).max(0.0), 1))
         .collect();
     let brc20: Vec<f64> =
         days.iter().map(|d| round(d.avg_brc20_count, 1)).collect();

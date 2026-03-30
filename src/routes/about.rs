@@ -33,7 +33,7 @@ pub fn AboutPage() -> impl IntoView {
                     <div class="flex flex-col gap-1.5 mt-4 text-[0.85rem]">
                         <a
                             class="inline-flex items-center gap-1.5 text-blue-400 hover:text-blue-300 transition-colors"
-                            href="./../../../public_key.asc"
+                            href="/docs/public_key.asc"
                             target="_blank"
                             rel="noopener noreferrer"
                         >
@@ -104,7 +104,7 @@ pub fn AboutPage() -> impl IntoView {
                             </a>
                             <img
                                 class="h-auto w-28 mt-2 rounded"
-                                src="./../../../bitcoin_donation_address_qr.png"
+                                src="/img/bitcoin_donation_address_qr.png"
                                 alt="On-chain bitcoin donation QR code"
                             />
                         </div>

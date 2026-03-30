@@ -729,6 +729,7 @@ pub fn ChartPageSkeleton(#[prop(default = 3)] count: usize) -> impl IntoView {
 pub fn ChartPageLayout(
     #[prop(into)] title: &'static str,
     #[prop(into)] description: &'static str,
+    #[prop(optional, into)] seo_text: Option<&'static str>,
     #[prop(optional, into)] header: Option<ViewFn>,
     children: Children,
 ) -> impl IntoView {
@@ -736,16 +737,20 @@ pub fn ChartPageLayout(
         // Slim hero banner
         <div class="relative rounded-2xl overflow-hidden mb-5">
             <img
-                src="/observatory_hero.png"
+                src="/img/observatory_hero.png"
                 alt=title
                 class="w-full h-[100px] sm:h-[120px] lg:h-[140px] object-cover object-center"
             />
             <div class="absolute inset-0 bg-gradient-to-t from-[#123c64] via-[#123c64]/60 to-[#123c64]/30"></div>
             <div class="absolute inset-0 flex flex-col items-center justify-end pb-3 sm:pb-4">
-                <h2 class="text-lg sm:text-xl lg:text-2xl font-title text-white mb-0.5 drop-shadow-lg">{title}</h2>
+                <h1 class="text-lg sm:text-xl lg:text-2xl font-title text-white mb-0.5 drop-shadow-lg">{title}</h1>
                 <p class="text-[11px] sm:text-xs text-white/50 max-w-lg mx-auto px-4 text-center drop-shadow">{description}</p>
             </div>
         </div>
+        // SEO: crawlable description text (visible but subtle)
+        {seo_text.map(|text| view! {
+            <p class="text-xs text-white/30 leading-relaxed max-w-4xl mb-4">{text}</p>
+        })}
         // Compact toolbar: section selector (left) + range (right)
         <div class="flex flex-col sm:flex-row sm:items-start gap-3 mb-6">
             {header.map(|h| view! { <div class="flex items-center gap-3 flex-shrink-0">{h.run()}</div> })}

@@ -1,0 +1,63 @@
+# WE HODL BTC
+
+> Free Bitcoin self-custody guides and The Bitcoin Observatory — live blockchain analytics powered by a full Bitcoin Core node.
+
+## About
+
+WE HODL BTC is a Bitcoin education and analytics platform. It provides:
+- Step-by-step self-custody guides (beginner to advanced: mobile wallets, hardware wallets, multisig)
+- The Bitcoin Observatory: a live blockchain analytics dashboard with 30+ charts
+
+## The Bitcoin Observatory
+
+Real-time Bitcoin blockchain analytics at https://www.wehodlbtc.com/observatory
+
+### Live Dashboard
+Block height, mining difficulty, network hashrate, mempool stats, BTC price, circulating supply, UTXO count, halving countdown with measured block time estimate, and difficulty adjustment predictor.
+
+### Network Charts
+Block size (MB), transaction count, block intervals vs 10-min target, weight utilization (% of 4 MWU limit), average transaction size, cumulative chain size growth, difficulty history. SegWit adoption percentage, Taproot (P2TR) output count, witness version comparison (v0 vs v1), address type evolution (P2PK, P2PKH, P2SH, P2WPKH, P2WSH, P2TR), Taproot key-path vs script-path spend breakdown, RBF adoption rate, UTXO flow (inputs vs outputs), and transaction batching trends.
+
+### Fee Charts
+Total fees per block in BTC and satoshis, daily averages, and block reward breakdown showing subsidy versus fee revenue across all four halving eras.
+
+### Mining Charts
+Difficulty adjustment history, mining pool dominance distribution (Foundry, AntPool, ViaBTC, F2Pool, MARA, OCEAN with template miner identification, and 25+ others), empty block tracking by month.
+
+### Embedded Data Charts
+OP_RETURN protocol tracking: Runes, Omni Layer, Counterparty, and other data carriers by count and bytes. Ordinals inscription count and block share. BRC-20 token activity. Stamps (bare multisig). Protocol dominance percentage. All embedded data as percentage of block size.
+
+### BIP Signaling Tracker
+Per-block miner signaling for active Bitcoin Improvement Proposals:
+- BIP-110: Relaxed OP_RETURN data limits (version bit 4, 55% activation threshold)
+- BIP-54: Great Consensus Cleanup (coinbase locktime == height-1, 95% threshold)
+Block grid visualization, historical period chart, progress tracking per 2,016-block retarget period.
+
+### Protocol Guide
+Technical comparison of Bitcoin data embedding protocols: Omni Layer (2013), Counterparty (2014), Stamps (2023), Ordinals/Inscriptions (2023), BRC-20 (2023), and Runes (2024). Includes chronological timeline, how each works, pruning characteristics, and trade-offs.
+
+## Self-Custody Guides
+
+### Basic Guide
+Set up a mobile or desktop Bitcoin wallet. Covers Blue Wallet, Green Wallet, and Sparrow Wallet with step-by-step instructions.
+
+### Intermediate Guide
+Set up a Coldcard hardware wallet connected to your own Bitcoin node (Start9, MyNode, or RaspiBlitz) for enhanced security and privacy.
+
+### Advanced Guide
+Create a 2-of-3 multisig wallet with multiple signing devices, steel seed backups, and geographic separation for maximum security.
+
+## Data Source
+All blockchain data is sourced directly from a full Bitcoin Core node with transaction index enabled (txindex=1). Data covers the full chain from the genesis block (January 3, 2009) to the present, updated every 60 seconds.
+
+## Links
+- Homepage: https://www.wehodlbtc.com
+- Observatory Dashboard: https://www.wehodlbtc.com/observatory
+- Network Charts: https://www.wehodlbtc.com/observatory/charts/network
+- Fee Charts: https://www.wehodlbtc.com/observatory/charts/fees
+- Mining Charts: https://www.wehodlbtc.com/observatory/charts/mining
+- Embedded Data: https://www.wehodlbtc.com/observatory/charts/embedded
+- BIP Signaling: https://www.wehodlbtc.com/observatory/signaling
+- Protocol Guide: https://www.wehodlbtc.com/observatory/learn/protocols
+- Self-Custody Guides: https://www.wehodlbtc.com/guides
+- FAQ: https://www.wehodlbtc.com/faq

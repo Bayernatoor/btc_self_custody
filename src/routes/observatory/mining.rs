@@ -1,6 +1,7 @@
 //! Mining charts: difficulty, pool distribution, empty blocks.
 
 use leptos::prelude::*;
+use leptos_meta::*;
 
 use super::components::*;
 use super::helpers::*;
@@ -56,9 +57,13 @@ pub fn MiningChartsPage() -> impl IntoView {
     });
 
     view! {
+        <Title text="Bitcoin Mining Charts: Difficulty & Pool Distribution | WE HODL BTC"/>
+        <Meta name="description" content="Bitcoin mining analytics with difficulty adjustment history, mining pool dominance distribution including OCEAN template miners, and empty block tracking across the network."/>
+        <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/charts/mining"/>
         <ChartPageLayout
             title="Mining"
             description="Difficulty adjustments and mining pool distribution"
+            seo_text="Monitor Bitcoin's mining landscape. The difficulty chart tracks the network's computational security as it adjusts every 2,016 blocks. Pool distribution shows which mining pools are producing blocks, with OCEAN template miners identified individually. Empty blocks are tracked historically, while common in Bitcoin's early years, they are rare today and typically indicate intentional miner behavior."
             header=move || view! {
                 <div class="relative inline-block">
                     <select

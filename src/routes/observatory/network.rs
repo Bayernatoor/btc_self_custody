@@ -1,6 +1,7 @@
 //! Network charts: blocks, adoption, transaction metrics.
 
 use leptos::prelude::*;
+use leptos_meta::*;
 
 use super::components::*;
 use super::helpers::chart_desc;
@@ -18,9 +19,13 @@ pub fn NetworkChartsPage() -> impl IntoView {
     let (section, set_section) = signal("blocks".to_string());
 
     view! {
+        <Title text="Bitcoin Network Charts: Blocks, Adoption & Transactions | WE HODL BTC"/>
+        <Meta name="description" content="Bitcoin network analytics with block size, weight utilization, transaction count, block intervals, chain size growth, SegWit adoption, Taproot usage, witness versions, address types, and RBF trends."/>
+        <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/charts/network"/>
         <ChartPageLayout
             title="Network"
             description="Block size, weight, intervals, adoption trends, and transaction metrics"
+            seo_text="Explore Bitcoin's network fundamentals from the genesis block to the latest tip. Block size and weight utilization show how full blocks are relative to the 4 MWU consensus limit. Transaction counts and block intervals reveal network throughput and how closely miners track the 10-minute target. Chain size growth charts the cumulative blockchain footprint over 16 years. Adoption charts track the shift from legacy P2PKH to SegWit and Taproot, including key-path versus script-path spend breakdowns that show how Taproot's privacy and programmability features are actually being used."
             header=move || view! {
                 <div class="relative inline-block">
                     <select

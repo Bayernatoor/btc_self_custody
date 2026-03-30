@@ -1,6 +1,7 @@
 //! BIP signaling tracker: version bit and locktime compliance monitoring.
 
 use leptos::prelude::*;
+use leptos_meta::*;
 
 use super::components::*;
 use super::helpers::*;
@@ -45,19 +46,28 @@ pub fn SignalingPage() -> impl IntoView {
     });
 
     view! {
+        <Title text="BIP Signaling Tracker: BIP-110 & BIP-54 Activation | WE HODL BTC"/>
+        <Meta name="description" content="Track Bitcoin Improvement Proposal signaling in real time. Monitor BIP-110 (OP_RETURN limits, version bit 4) and BIP-54 (consensus cleanup, coinbase locktime) miner readiness per 2,016-block retarget period."/>
+        <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/signaling"/>
+
         // Slim hero banner
         <div class="relative rounded-2xl overflow-hidden mb-5">
             <img
-                src="/observatory_hero.png"
+                src="/img/observatory_hero.png"
                 alt="BIP Signaling Tracker"
                 class="w-full h-[100px] sm:h-[120px] lg:h-[140px] object-cover object-center"
             />
             <div class="absolute inset-0 bg-gradient-to-t from-[#123c64] via-[#123c64]/60 to-[#123c64]/30"></div>
             <div class="absolute inset-0 flex flex-col items-center justify-end pb-3 sm:pb-4">
-                <h2 class="text-lg sm:text-xl lg:text-2xl font-title text-white mb-0.5 drop-shadow-lg">"Signaling"</h2>
+                <h1 class="text-lg sm:text-xl lg:text-2xl font-title text-white mb-0.5 drop-shadow-lg">"Signaling"</h1>
                 <p class="text-[11px] sm:text-xs text-white/50 max-w-lg mx-auto px-4 text-center drop-shadow">"BIP version bit signaling and coinbase locktime compliance tracking"</p>
             </div>
         </div>
+
+        // SEO: crawlable description text
+        <p class="text-xs text-white/30 leading-relaxed max-w-4xl mb-4">
+            "Track miner readiness for proposed Bitcoin protocol upgrades. BIP-110 proposes relaxing the OP_RETURN data size limit and requires 55% miner signaling via version bit 4. BIP-54 (Great Consensus Cleanup) fixes legacy vulnerabilities and requires 95% signaling via coinbase locktime. The block grid shows per-block signaling, while the period chart tracks progress across 2,016-block retarget windows."
+        </p>
 
         // BIP selector
         <div class="flex items-center gap-3 mb-6">

@@ -27,14 +27,14 @@
     ],
     "screenshots": [
         {
-            "src": "/observatory_hero.png",
+            "src": "/img/observatory_hero.png",
             "sizes": "1408x768",
             "type": "image/png",
             "form_factor": "wide",
             "label": "The Bitcoin Observatory - Live Blockchain Analytics"
         },
         {
-            "src": "/observatory_hero.png",
+            "src": "/img/observatory_hero.png",
             "sizes": "1408x768",
             "type": "image/png",
             "label": "The Bitcoin Observatory - Live Blockchain Analytics"

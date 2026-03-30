@@ -241,6 +241,29 @@
 - [ ] First chart computes in ~30-80ms, rest compute as user scrolls
 - [ ] Most impactful on pages with 6+ charts (Network > Blocks, Embedded > Overview)
 
+## Completed: SEO & LLM Search Optimization (2026-03-30)
+- [x] Per-page `<Title>` for all 7 observatory pages (dashboard, network, fees, mining, embedded, signaling, protocols)
+- [x] Per-page `<Meta name="description">` with unique, keyword-rich descriptions
+- [x] Per-page `<Link rel="canonical">` URLs
+- [x] Moved global description/keywords from hardcoded shell() to leptos_meta (overridable per page)
+- [x] Updated OG/Twitter meta to cover both guides and observatory
+- [x] robots.txt with sitemap reference and API disallow
+- [x] sitemap.xml with all 12 pages, hourly changefreq for observatory
+- [x] Expanded JSON-LD structured data: WebSite + WebApplication + 3 Datasets + Article + ItemList
+- [x] Dataset schema with variableMeasured for LLM discoverability (block height, difficulty, hashrate, SegWit, Taproot, fees, mempool, supply, weight utilization, RBF)
+- [x] WebApplication featureList enumerating all observatory capabilities for search/LLM matching
+- [x] llms.txt at root — structured plain text for AI search crawlers (Perplexity, ChatGPT, Claude)
+- [x] SSR-visible descriptive text on all chart pages (crawlable body content for search indexing)
+- [x] BreadcrumbList schema for structured navigation in search results
+- [x] FAQPage schema with 9 Q&A pairs for rich snippet eligibility
+- [x] Heading hierarchy fix: ChartPageLayout h2→h1, signaling page h2→h1 (one h1 per page)
+
+## TODO: OCEAN Template Miner Backfill
+- [ ] Bump BACKFILL_VERSION to re-parse blocks and pick up OCEAN sub-miner names
+      (e.g. "OCEAN / 234 Alberta", "OCEAN / Barefoot Mining" instead of just "OCEAN")
+- [ ] Existing blocks with miner="OCEAN" will be updated with the sub-miner name
+- [ ] Can be combined with RBF re-parse below if doing a full backfill
+
 ## TODO: RBF Data Backfill
 - [ ] Re-parse blocks with corrupted rbf_count (e.g. block 941882 shows 470%).
       Likely caused by older parser version counting RBF per-input instead of per-transaction.
@@ -262,17 +285,39 @@
       clearing the class before it's visible. Needs a different approach (JS animation, transition
       events, or decoupled from pathname reactivity).
 
-## TODO: Thorough Chart Review
-- [ ] Review every chart across all tabs for correctness, visual consistency, and UX
-  - Verify data accuracy on all range presets (1D through ALL)
-  - Check tooltip formatting and values
-  - Verify overlay interactions (price, chain size, halvings, BIPs, etc.)
-  - Check mobile responsiveness of charts
-  - Verify fullscreen mode works correctly for each chart
-  - Review axis labels, legends, and color consistency
-  - Check moving averages are computed correctly
-  - Verify daily aggregation mode produces correct values
-  - Test edge cases: empty data, single data point, very large ranges
+## Completed: Chart Data Audit (2026-03-30)
+- [x] Read every chart function, block parser, classifier, and type definition
+- [x] Cross-referenced data flow: RPC → Block struct → DB → BlockSummary/DailyAggregate → chart functions
+- [x] FIXED: BRC-20 double-counting in unified embedded count charts (BRC-20 is subset of inscriptions)
+- [x] FIXED: Witness version chart Y-axis mislabeled "Spends" → "Outputs"
+- [x] Verified all 50+ chart functions' math is correct
+- [x] Verified: block subsidy, fee calc, BTC→sats, difficulty scaling, interval calc, weight util
+- [x] Verified: SegWit adoption excludes coinbase, RBF excludes coinbase, address type % sums correctly
+- [x] Verified: moving averages (144-block, 7-day), daily aggregation math, overlay timestamps
+- [x] Verified: OP_RETURN classifier (SegWit commit exclusion, Runes/Omni/XCP prefix matching)
+- [x] Verified: Taproot key-path (1 elem 64-65 bytes) and script-path (last elem c0/c1) detection
+- [x] Median fee uses lower-median (index (len-1)/2), consistent with Bitcoin Core convention
+
+### Known Limitations (audit-confirmed, not bugs)
+- Inscription bytes: fixed 10-byte overhead deduction (actual varies 11-35 bytes)
+- RBF counts BIP 68 CSV as RBF (protocol ambiguity, not fixable without prevout data)
+- Stamps proxy uses all multisig outputs (overstates pre-2023, bare multisig was rare)
+- Runes ≤6 byte heuristic misclassifies pre-840k tiny data carriers
+- Witness bytes undercount: missing overhead bytes (marker, flag, item count prefixes)
+- segwit_spend_count counts transactions with witness, not individual SegWit inputs
+- taproot_spend_count is P2TR output count (historical naming, charts label correctly)
+- Avg tx size includes coinbase (negligible effect at typical tx counts)
+- Daily subsidy on halving day: mix of old/new subsidy (affects 4 data points ever)
+
+## Completed: Chart Unit Tests (2026-03-30)
+- [x] `block_subsidy()` — eras 0-4, last nonzero era, zero after 64 halvings (classifier + charts/mod)
+- [x] `classify()` — SegWit commit, Runes prefix, Runes tiny, Omni, Omni PUSHDATA1, Counterparty, DataCarrier
+- [x] `identify_miner()` — Foundry, AntPool, F2Pool, OCEAN, Unknown, empty, case-insensitive
+- [x] `moving_average()` — empty, shorter than window, exact window, longer, window=1, rounding
+- [x] `calc_supply()` — genesis, halving boundaries (209999, 210000, 419999, 840000), max ~21M
+- [x] `round()` — zero decimals, two decimals, negative values, zero
+- [x] `ts_ms()`, `show_ma()`, `format_num()`, `dp()`, `no_data_chart()`, `build_option()` merge behavior
+- 45 tests total, all passing
 
 ## Completed: Stats Route Performance Optimization (2026-03-25)
 
