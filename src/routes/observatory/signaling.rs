@@ -64,8 +64,8 @@ pub fn SignalingPage() -> impl IntoView {
             </div>
         </div>
 
-        // SEO: crawlable description text
-        <p class="text-xs text-white/30 leading-relaxed max-w-4xl mb-4">
+        // SEO: crawlable description for search engines (visually hidden, accessible)
+        <p class="sr-only">
             "Track miner readiness for proposed Bitcoin protocol upgrades. BIP-110 proposes relaxing the OP_RETURN data size limit and requires 55% miner signaling via version bit 4. BIP-54 (Great Consensus Cleanup) fixes legacy vulnerabilities and requires 95% signaling via coinbase locktime. The block grid shows per-block signaling, while the period chart tracks progress across 2,016-block retarget windows."
         </p>
 

@@ -14,6 +14,9 @@ echo "==> Updating service worker cache version..."
 DEPLOY_TS=$(date +%s)
 sed -i "s/var CACHE_NAME = 'wehodlbtc-[^']*'/var CACHE_NAME = 'wehodlbtc-${DEPLOY_TS}'/" assets/sw.js
 
+echo "==> Running tests..."
+cargo test || { echo "==> TESTS FAILED — aborting deploy"; exit 1; }
+
 echo "==> Building release..."
 cargo leptos build --release
 
