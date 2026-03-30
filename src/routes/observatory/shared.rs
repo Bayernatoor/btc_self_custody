@@ -747,9 +747,9 @@ pub fn ChartPageLayout(
                 <p class="text-[11px] sm:text-xs text-white/50 max-w-lg mx-auto px-4 text-center drop-shadow">{description}</p>
             </div>
         </div>
-        // SEO: crawlable description text (visible but subtle)
+        // SEO: crawlable description for search engines (visually hidden, accessible)
         {seo_text.map(|text| view! {
-            <p class="text-xs text-white/30 leading-relaxed max-w-4xl mb-4">{text}</p>
+            <p class="sr-only">{text}</p>
         })}
         // Compact toolbar: section selector (left) + range (right)
         <div class="flex flex-col sm:flex-row sm:items-start gap-3 mb-6">
