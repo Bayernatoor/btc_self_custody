@@ -12,7 +12,9 @@ use super::rpc::Block;
 
 /// Bump this when adding new columns that require re-fetching existing blocks.
 /// The backfill loop processes all blocks with backfill_version < BACKFILL_VERSION.
-pub const BACKFILL_VERSION: u64 = 7;
+/// v8: OCEAN sub-miners, RBF excludes CSV, witness byte overhead, inscription byte
+///     overhead, Runes height-gated to 840k+
+pub const BACKFILL_VERSION: u64 = 8;
 
 /// Type alias for the connection pool used throughout the stats module.
 pub type DbPool = r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>;
