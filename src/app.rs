@@ -125,6 +125,7 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 <script async src="https://www.poeticmetric.com/pm.js"></script>
 
                 <HydrationScripts options/>
+                <MetaTags/>
                 <link rel="stylesheet" id="leptos" href="/pkg/we_hodl_btc.css"/>
             </head>
             <body class="bg-[#123c64]">
