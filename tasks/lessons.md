@@ -126,6 +126,14 @@ _Updated as corrections and patterns are captured._
 - **Mistake:** Custom tooltip formatter used `new Date(first.data[0])` for the header timestamp. Works for time-axis charts (per-block) but breaks on category-axis charts (daily aggregates) where `data[0]` is an index, producing "1/1/1970".
 - **Rule:** Check `first.axisType === 'xAxis.category'` and use `first.axisValueLabel` (the formatted label ECharts already computed) for category axes. Only parse timestamps for time axes.
 
+## 2026-03-30: BRC-20 is a subset of inscriptions — don't stack both
+- **Mistake:** Unified embedded data count charts stacked "Inscriptions" and "BRC-20" as separate series. Since BRC-20 inscriptions are already counted in `inscription_count`, every BRC-20 was double-counted in the total.
+- **Rule:** When showing protocol breakdowns in stacked charts, subtract sub-categories from their parent: `inscription_count - brc20_count` for "Other Inscriptions", `brc20_count` for "BRC-20". Same principle applies to any future sub-protocol breakdowns.
+
+## 2026-03-30: Chart axis labels must match the data unit
+- **Mistake:** Witness version comparison chart Y-axis said "Spends" but the data was output counts (P2WPKH+P2WSH, P2TR outputs created, not inputs spent).
+- **Rule:** When naming axes, always trace back to the source field. `p2tr_count` comes from output classification → label as "Outputs". `segwit_spend_count` comes from tx-level witness detection → label as "Transactions". A chart audit should verify every axis label matches the data derivation.
+
 ## 2026-03-30: Double serialization is a major WASM performance bottleneck
 - **Mistake:** Chart functions serialized JSON via `build_option()→to_string()`, then `apply_overlays()` parsed it back with `from_str()`, mutated, and serialized again with `to_string()`. Two full serialize + one parse per chart.
 - **Rule:** Pass `serde_json::Value` through the pipeline. Serialize to String only once at the very end. Changed `build_option` and all 68 chart functions to return `Value`, and `apply_overlays` to take `&mut Value`. Single serialize per chart.

@@ -7,7 +7,7 @@ var CACHE_NAME = 'wehodlbtc-v1';
 // (stats.js, lightbox.js) are cached on first use instead.
 var PRECACHE_ASSETS = [
     '/pkg/we_hodl_btc.css',
-    '/wasm-fallback.js',
+    '/js/wasm-fallback.js',
     '/favicon.svg',
     '/favicon-96x96.png'
 ];

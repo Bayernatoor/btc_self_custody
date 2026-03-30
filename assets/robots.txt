@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+
+# API endpoints - not for indexing
+Disallow: /api/
+
+Sitemap: https://www.wehodlbtc.com/sitemap.xml

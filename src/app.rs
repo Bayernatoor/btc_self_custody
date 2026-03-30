@@ -50,23 +50,21 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous"/>
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 
-                <meta name="description" content="Free, opinionated Bitcoin self-custody guides. Learn to secure your Bitcoin with mobile & desktop wallets, hardware wallets, and multisig setups. From beginner to advanced."/>
-                <meta name="keywords" content="Bitcoin, self-custody, hardware wallet, Coldcard, Sparrow Wallet, multisig, Bitcoin security, Bitcoin guide, self sovereign, Bitcoin node"/>
-
+                // description and keywords are set via leptos_meta in App() so pages can override
                 // Open Graph
-                <meta property="og:title" content="WE HODL BTC — Bitcoin Self-Custody Guides"/>
+                <meta property="og:title" content="WE HODL BTC — Bitcoin Self-Custody & Blockchain Analytics"/>
                 <meta property="og:type" content="website"/>
                 <meta property="og:url" content="https://www.wehodlbtc.com/"/>
-                <meta property="og:image" content="https://www.wehodlbtc.com/metadata_unfurl_image.png"/>
-                <meta property="og:description" content="Free, opinionated Bitcoin self-custody guides. Learn to secure your Bitcoin with mobile wallets, hardware wallets, and multisig setups. From beginner to advanced."/>
+                <meta property="og:image" content="https://www.wehodlbtc.com/img/metadata_unfurl_image.png"/>
+                <meta property="og:description" content="Free Bitcoin self-custody guides and The Bitcoin Observatory — live blockchain analytics with real-time network stats, fee charts, mining data, and BIP signaling tracker."/>
                 <meta property="og:site_name" content="WE HODL BTC"/>
 
                 // Twitter
                 <meta name="twitter:card" content="summary_large_image"/>
-                <meta name="twitter:title" content="WE HODL BTC — Bitcoin Self-Custody Guides"/>
-                <meta name="twitter:description" content="Free, opinionated Bitcoin self-custody guides. Learn to secure your Bitcoin with mobile wallets, hardware wallets, and multisig setups. From beginner to advanced."/>
+                <meta name="twitter:title" content="WE HODL BTC — Bitcoin Self-Custody & Blockchain Analytics"/>
+                <meta name="twitter:description" content="Free Bitcoin self-custody guides and The Bitcoin Observatory — live blockchain analytics with real-time network stats, fee charts, mining data, and BIP signaling tracker."/>
                 <meta name="twitter:url" content="https://www.wehodlbtc.com/"/>
-                <meta name="twitter:image" content="https://www.wehodlbtc.com/metadata_unfurl_image.png"/>
+                <meta name="twitter:image" content="https://www.wehodlbtc.com/img/metadata_unfurl_image.png"/>
                 <meta name="twitter:site" content="@bayernatoor"/>
                 <meta name="twitter:creator" content="@bayernatoor"/>
 
@@ -81,19 +79,19 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
 
                 // ECharts for stats dashboard
                 <script defer src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
-                <script defer src="/stats.js"></script>
+                <script defer src="/js/stats.js"></script>
 
                 // Fallback for browsers without WebAssembly (e.g. Vanadium)
-                <script defer src="/wasm-fallback.js"></script>
+                <script defer src="/js/wasm-fallback.js"></script>
 
                 // Schema.org JSON-LD for search engines and LLMs
-                <script defer src="/jsonld.js"></script>
+                <script defer src="/js/jsonld.js"></script>
 
                 // Image lightbox for guide steps
-                <script defer src="/lightbox.js"></script>
+                <script defer src="/js/lightbox.js"></script>
 
                 // Collapsible sections within step content
-                <script defer src="/sections.js"></script>
+                <script defer src="/js/sections.js"></script>
 
                 // Service Worker registration (PWA) with update detection
                 <script>"
@@ -141,7 +139,9 @@ pub fn App() -> impl IntoView {
     provide_meta_context();
 
     view! {
-        <Title text="We Hodl BTC"/>
+        <Title text="WE HODL BTC - Bitcoin Self-Custody Guides & Blockchain Analytics"/>
+        <Meta name="description" content="Free, opinionated Bitcoin self-custody guides and The Bitcoin Observatory — live blockchain analytics with real-time network stats, fee charts, mining data, and BIP signaling tracker."/>
+        <Meta name="keywords" content="Bitcoin, self-custody, hardware wallet, Coldcard, Sparrow Wallet, multisig, Bitcoin security, blockchain analytics, Bitcoin charts, mining difficulty, SegWit, Taproot, BIP signaling, mempool, Bitcoin node"/>
 
         <Router>
             <div class="flex flex-col justify-between h-screen">

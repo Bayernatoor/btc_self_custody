@@ -237,7 +237,7 @@ pub fn witness_version_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
-        "yAxis": y_axis("Spends"),
+        "yAxis": y_axis("Outputs"),
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
         "legend": { "show": true },
@@ -274,7 +274,7 @@ pub fn witness_version_chart_daily(days: &[DailyAggregate]) -> serde_json::Value
 
     build_option(json!({
         "xAxis": x_axis_for(true, &cats),
-        "yAxis": y_axis("Avg Spends"),
+        "yAxis": y_axis("Avg Outputs"),
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
         "legend": { "show": true },

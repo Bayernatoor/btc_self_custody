@@ -15,7 +15,7 @@ pub fn HomePage() -> impl IntoView {
                 </h1>
                 <div class="lg:hidden flex flex-col justify-center pb-8 pt-5">
                     <div class="h-auto w-24 md:w-28 mx-auto">
-                        <img src="./../../../bitcoin_logo.png" alt="Bitcoin logo" width="112" height="112"/>
+                        <img src="/img/bitcoin_logo.png" alt="Bitcoin logo" width="112" height="112"/>
                     </div>
                 </div>
                 <p class="text-sm max-w-xl mb-6 sm:text-base md:text-lg lg:text-xl md:my-8 leading-relaxed">
@@ -32,7 +32,7 @@ pub fn HomePage() -> impl IntoView {
             </div>
             <div class="invisible flex flex-col justify-center lg:visible">
                 <div class="h-auto w-28 md:w-40 lg:w-60 mx-auto">
-                    <img src="./../../../bitcoin_logo.png" alt="Bitcoin logo" width="208" height="208"/>
+                    <img src="/img/bitcoin_logo.png" alt="Bitcoin logo" width="208" height="208"/>
                 </div>
             </div>
         </section>
@@ -130,7 +130,7 @@ pub fn HomePage() -> impl IntoView {
             <a href="/observatory" class="block opacity-0 animate-slideup" style="animation-delay: 100ms">
                 <div class="group relative rounded-2xl overflow-hidden mb-6 hover:scale-[1.01] active:scale-[0.99] transition-transform duration-200">
                     <img
-                        src="/observatory_hero.png"
+                        src="/img/observatory_hero.png"
                         alt="The Bitcoin Observatory"
                         class="w-full h-[140px] sm:h-[180px] lg:h-[220px] object-cover object-center"
                         loading="lazy"

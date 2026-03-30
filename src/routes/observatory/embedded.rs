@@ -1,6 +1,7 @@
 //! Embedded Data charts: OP_RETURN protocols, inscriptions.
 
 use leptos::prelude::*;
+use leptos_meta::*;
 
 use super::components::*;
 use super::helpers::chart_desc;
@@ -18,9 +19,13 @@ pub fn EmbeddedChartsPage() -> impl IntoView {
     let (section, set_section) = signal("overview".to_string());
 
     view! {
+        <Title text="Bitcoin Embedded Data: OP_RETURN, Inscriptions & Runes | WE HODL BTC"/>
+        <Meta name="description" content="Track non-financial data embedded in Bitcoin blocks: OP_RETURN protocols (Runes, Omni, Counterparty), Ordinals inscriptions, BRC-20 tokens, and Stamps usage with counts, volumes, and block share over time."/>
+        <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/charts/embedded"/>
         <ChartPageLayout
             title="Embedded Data"
             description="OP_RETURN protocols, Ordinals inscriptions, and on-chain data usage"
+            seo_text="Analyze non-financial data embedded in Bitcoin transactions. OP_RETURN protocols like Runes, Omni Layer, and Counterparty use dedicated outputs for on-chain data. Ordinals inscriptions and BRC-20 tokens store data in witness fields. Stamps use bare multisig encoding. These charts track the count, volume, and block share of each protocol over time."
             header=move || view! {
                 <div class="relative inline-block">
                     <select

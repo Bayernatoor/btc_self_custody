@@ -1,6 +1,7 @@
 //! Observatory Dashboard: live node stats, difficulty adjustment, halving countdown.
 
 use leptos::prelude::*;
+use leptos_meta::*;
 
 use super::components::*;
 use super::helpers::*;
@@ -319,6 +320,10 @@ pub fn ObservatoryOverview() -> impl IntoView {
     });
 
     view! {
+        <Title text="Bitcoin Observatory: Live Blockchain Dashboard | WE HODL BTC"/>
+        <Meta name="description" content="Live Bitcoin network dashboard with real-time block height, difficulty, hashrate, mempool stats, price, supply, UTXO count, halving countdown, and difficulty adjustment predictions."/>
+        <Link rel="canonical" href="https://www.wehodlbtc.com/observatory"/>
+
         // Live stats panel
         <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-6 lg:p-8 mb-8">
             <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 mb-3">
