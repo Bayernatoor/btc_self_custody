@@ -72,6 +72,8 @@ pub struct BlockDetail {
     pub runes_bytes: u64,
     pub data_carrier_count: u64,
     pub data_carrier_bytes: u64,
+    pub inscription_count: u64,
+    pub inscription_bytes: u64,
     pub version: u32,
     pub total_fees: u64,
     pub median_fee: u64,

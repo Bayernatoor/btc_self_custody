@@ -153,6 +153,8 @@ pub async fn fetch_block_detail(
         runes_bytes: r.runes_bytes,
         data_carrier_count: r.data_carrier_count,
         data_carrier_bytes: r.data_carrier_bytes,
+        inscription_count: r.inscription_count,
+        inscription_bytes: r.inscription_bytes,
         version: r.version,
         total_fees: r.total_fees,
         median_fee: r.median_fee,
