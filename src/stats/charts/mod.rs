@@ -365,6 +365,21 @@ pub struct OverlayFlags {
     pub chain_size_data: Vec<(u64, f64)>,
 }
 
+impl OverlayFlags {
+    /// Compact string key for cache differentiation.
+    pub fn cache_key(&self) -> String {
+        format!(
+            "h{}b{}c{}e{}p{}s{}",
+            self.halvings as u8,
+            self.bip_activations as u8,
+            self.core_releases as u8,
+            self.events as u8,
+            self.price_data.len(),
+            self.chain_size_data.len(),
+        )
+    }
+}
+
 /// Merge overlay markLines and series into an already-built chart option JSON string.
 /// Works for both time-axis (per-block) and category-axis (daily) charts.
 pub fn apply_overlays(
