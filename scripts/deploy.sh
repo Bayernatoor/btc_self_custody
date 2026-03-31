@@ -1,7 +1,7 @@
 #!/bin/bash
 # Deploy to production Droplet
-# Usage: ssh root@165.227.230.64 'bash -s' < scripts/deploy.sh
-#    or: run directly on the Droplet
+# Triggered automatically by GitHub Actions on push to master
+# Can also be run manually: ssh wehodlbtc@165.227.230.64 'bash /opt/wehodlbtc/app/scripts/deploy.sh'
 
 set -e
 
@@ -22,8 +22,8 @@ echo "==> Building release..."
 cargo leptos build --release
 
 echo "==> Restarting service..."
-systemctl restart wehodlbtc
+sudo systemctl restart wehodlbtc
 
 echo "==> Verifying..."
 sleep 2
-systemctl is-active wehodlbtc && echo "==> Deploy successful!" || echo "==> FAILED — check logs: journalctl -u wehodlbtc -n 30"
+sudo systemctl is-active wehodlbtc && echo "==> Deploy successful!" || echo "==> FAILED — check logs: journalctl -u wehodlbtc -n 30"
