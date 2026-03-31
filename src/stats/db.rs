@@ -818,15 +818,17 @@ pub fn query_range_summary(
                 0.0
             };
             let total_tx: u64 = row.get(1)?;
+            let total_fees: u64 = row.get(4)?;
+            let user_tx = total_tx.saturating_sub(block_count);
             Ok(super::types::RangeSummary {
                 block_count,
                 total_tx,
                 total_size: row.get(2)?,
                 total_weight: row.get(3)?,
-                total_fees: row.get(4)?,
+                total_fees,
                 avg_fee_rate: row.get::<_, Option<f64>>(5)?.unwrap_or(0.0),
-                avg_fee_per_tx: if total_tx > 0 {
-                    row.get::<_, Option<u64>>(4)?.unwrap_or(0) as f64 / total_tx as f64
+                avg_fee_per_tx: if user_tx > 0 {
+                    total_fees as f64 / user_tx as f64
                 } else {
                     0.0
                 },
