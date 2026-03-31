@@ -404,9 +404,9 @@ pub fn ObservatoryOverview() -> impl IntoView {
                 <div class="bg-[#0a1a2e] border border-white/10 rounded-xl p-5 overflow-hidden">
                     <h3 class="text-sm font-bold text-[#f7931a] uppercase tracking-widest mb-4">"Mempool"</h3>
                     <div class="grid grid-cols-2 gap-3 mb-3">
-                        <LiveCard label="Transactions" value=mempool_size/>
-                        <LiveCard label="Size" value=mempool_bytes/>
-                        <LiveCard label="Next Block Fee" value=next_fee/>
+                        <LiveCard label="Transactions" value=mempool_size tooltip="Unconfirmed transactions waiting in the mempool"/>
+                        <LiveCard label="Size" value=mempool_bytes tooltip="Total size of all unconfirmed transactions in megabytes"/>
+                        <LiveCard label="Next Block Fee" value=next_fee tooltip="Estimated minimum fee rate to be included in the next block"/>
                     </div>
                     <div class="flex justify-center">
                         <Show when=move || cached_live.get().is_some()>
@@ -419,12 +419,12 @@ pub fn ObservatoryOverview() -> impl IntoView {
                 <div class="bg-[#0a1a2e] border border-white/10 rounded-xl p-5">
                     <h3 class="text-sm font-bold text-[#f7931a] uppercase tracking-widest mb-4">"Mining"</h3>
                     <div class="grid grid-cols-2 gap-3 mb-2">
-                        <LiveCard label="Block Height" value=block_height/>
-                        <LiveCard label="Difficulty" value=difficulty/>
-                        <LiveCard label="Hashrate" value=hashrate/>
-                        <LiveCard label="Chain Size" value=chain_size/>
-                        <LiveCard label="Avg Block Time" value=avg_block_time/>
-                        <LiveCard label="Last Retarget" value=prev_diff_change/>
+                        <LiveCard label="Block Height" value=block_height tooltip="The latest confirmed block number in the blockchain"/>
+                        <LiveCard label="Difficulty" value=difficulty tooltip="Current mining difficulty in trillions. Adjusts every 2,016 blocks (~2 weeks) to target 10-minute block times"/>
+                        <LiveCard label="Hashrate" value=hashrate tooltip="Estimated total network hash power based on current difficulty and block times"/>
+                        <LiveCard label="Chain Size" value=chain_size tooltip="Total size of all block data plus undo files and indexes on disk"/>
+                        <LiveCard label="Avg Block Time" value=avg_block_time tooltip="Average time between blocks over the current difficulty period (target: 10 minutes)"/>
+                        <LiveCard label="Last Retarget" value=prev_diff_change tooltip="Percentage difficulty change at the most recent retarget (every 2,016 blocks)"/>
                     </div>
                 </div>
 
@@ -432,12 +432,12 @@ pub fn ObservatoryOverview() -> impl IntoView {
                 <div class="bg-[#0a1a2e] border border-white/10 rounded-xl p-5">
                     <h3 class="text-sm font-bold text-[#f7931a] uppercase tracking-widest mb-4">"Economic"</h3>
                     <div class="grid grid-cols-2 gap-3">
-                        <LiveCard label="Price (USD)" value=price_usd/>
-                        <LiveCard label="Sats/Dollar" value=sats_per_dollar/>
-                        <LiveCard label="Market Cap" value=market_cap/>
-                        <LiveCard label="Total Supply" value=total_supply/>
-                        <LiveCard label="% Issued" value=supply_pct/>
-                        <LiveCard label="UTXO Count" value=utxo_count/>
+                        <LiveCard label="Price (USD)" value=price_usd tooltip="Current BTC/USD spot price"/>
+                        <LiveCard label="Sats/Dollar" value=sats_per_dollar tooltip="How many satoshis (0.00000001 BTC) one US dollar buys"/>
+                        <LiveCard label="Market Cap" value=market_cap tooltip="Total supply multiplied by current price. Circulating market capitalization"/>
+                        <LiveCard label="Total Supply" value=total_supply tooltip="Total BTC mined so far. Maximum supply is 21,000,000 BTC"/>
+                        <LiveCard label="% Issued" value=supply_pct tooltip="Percentage of the 21M hard cap that has been mined"/>
+                        <LiveCard label="UTXO Count" value=utxo_count tooltip="Total unspent transaction outputs in the UTXO set. Each represents a spendable coin"/>
                     </div>
                 </div>
             </div>

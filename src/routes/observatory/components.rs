@@ -245,10 +245,18 @@ pub fn ChartCard(
 pub fn LiveCard(
     #[prop(into)] label: String,
     #[prop(into)] value: Signal<String>,
+    #[prop(optional, into)] tooltip: Option<&'static str>,
 ) -> impl IntoView {
     let is_loading = Signal::derive(move || value.get() == "\u{2014}");
     view! {
-        <div class="bg-[#0d2137] border border-white/10 rounded-lg p-2 sm:p-3 text-center">
+        <div
+            class=if tooltip.is_some() {
+                "bg-[#0d2137] border border-white/10 rounded-lg p-2 sm:p-3 text-center cursor-help"
+            } else {
+                "bg-[#0d2137] border border-white/10 rounded-lg p-2 sm:p-3 text-center"
+            }
+            title=tooltip.unwrap_or("")
+        >
             <div class="text-[0.6rem] sm:text-[0.7rem] text-[#8899aa] uppercase tracking-widest mb-1">{label}</div>
             <div
                 class="text-sm sm:text-lg lg:text-xl font-bold font-mono truncate"
