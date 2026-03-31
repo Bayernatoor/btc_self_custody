@@ -91,3 +91,76 @@ pub fn format_number_f64(n: f64, decimals: usize) -> String {
         formatted
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn format_number_zero() {
+        assert_eq!(format_number(0), "0");
+    }
+
+    #[test]
+    fn format_number_small() {
+        assert_eq!(format_number(999), "999");
+    }
+
+    #[test]
+    fn format_number_thousands() {
+        assert_eq!(format_number(1_000), "1,000");
+        assert_eq!(format_number(52_416), "52,416");
+    }
+
+    #[test]
+    fn format_number_millions() {
+        assert_eq!(format_number(182_300_000), "182,300,000");
+    }
+
+    #[test]
+    fn format_compact_small() {
+        assert_eq!(format_compact(0), "0");
+        assert_eq!(format_compact(999), "999");
+        assert_eq!(format_compact(9_999), "9,999");
+    }
+
+    #[test]
+    fn format_compact_thousands() {
+        assert_eq!(format_compact(10_000), "10.0K");
+        assert_eq!(format_compact(84_200), "84.2K");
+        assert_eq!(format_compact(999_999), "1000.0K");
+    }
+
+    #[test]
+    fn format_compact_millions() {
+        assert_eq!(format_compact(1_000_000), "1.00M");
+        assert_eq!(format_compact(1_240_000), "1.24M");
+        assert_eq!(format_compact(182_300_000), "182.30M");
+    }
+
+    #[test]
+    fn format_compact_billions() {
+        assert_eq!(format_compact(1_000_000_000), "1.00B");
+        assert_eq!(format_compact(48_200_000_000), "48.20B");
+    }
+
+    #[test]
+    fn format_f64_with_commas() {
+        assert_eq!(format_number_f64(3241.5, 2), "3,241.50");
+        assert_eq!(format_number_f64(0.12, 2), "0.12");
+        assert_eq!(format_number_f64(1_000_000.0, 0), "1,000,000");
+    }
+
+    #[test]
+    fn range_to_blocks_presets() {
+        assert_eq!(range_to_blocks("1d"), 144);
+        assert_eq!(range_to_blocks("1w"), 1_008);
+        assert_eq!(range_to_blocks("1y"), 52_560);
+        assert_eq!(range_to_blocks("all"), 999_999);
+    }
+
+    #[test]
+    fn range_to_blocks_unknown_defaults() {
+        assert_eq!(range_to_blocks("invalid"), 12_960);
+    }
+}
