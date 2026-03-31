@@ -15,8 +15,14 @@ pub fn EmbeddedChartsPage() -> impl IntoView {
     let overlay_flags = state.overlay_flags;
     let dashboard_data = state.dashboard_data;
 
-    // Sub-section navigation — created OUTSIDE the reactive closure
-    let (section, set_section) = signal("overview".to_string());
+    // Sub-section navigation — initialized from URL, created OUTSIDE the reactive closure
+    let query = leptos_router::hooks::use_query_map();
+    let initial_section = query
+        .read_untracked()
+        .get("section")
+        .filter(|s| ["overview", "protocols", "witness"].contains(&s.as_str()))
+        .unwrap_or_else(|| "overview".to_string());
+    let (section, set_section) = signal(initial_section);
 
     view! {
         <Title text="Bitcoin Embedded Data: OP_RETURN, Inscriptions & Runes | WE HODL BTC"/>
@@ -36,7 +42,12 @@ pub fn EmbeddedChartsPage() -> impl IntoView {
                             use wasm_bindgen::JsCast;
                             if let Some(t) = ev.target() {
                                 if let Ok(s) = t.dyn_into::<leptos::web_sys::HtmlSelectElement>() {
-                                    set_section.set(s.value());
+                                    let val = s.value();
+                                    set_section.set(val.clone());
+                                    #[cfg(feature = "hydrate")]
+                                    super::shared::update_section_in_url(
+                                        if val == "overview" { None } else { Some(&val) }
+                                    );
                                 }
                             }
                         }
