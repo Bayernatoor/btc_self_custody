@@ -125,6 +125,8 @@ pub struct Block {
     pub inscription_count: u64,
     pub inscription_bytes: u64,
     pub brc20_count: u64,
+    // Total value of non-coinbase outputs (satoshis)
+    pub total_output_value: u64,
 }
 
 impl BitcoinRpc {
@@ -331,6 +333,7 @@ impl BitcoinRpc {
         let mut witness_bytes = 0u64;
         let mut taproot_keypath_count = 0u64;
         let mut taproot_scriptpath_count = 0u64;
+        let mut total_output_value = 0u64;
 
         if let Some(txs) = result["tx"].as_array() {
             for tx in txs.iter().skip(1) {
@@ -458,6 +461,11 @@ impl BitcoinRpc {
                 if let Some(vouts) = tx["vout"].as_array() {
                     output_count += vouts.len() as u64;
                     for vout in vouts {
+                        // Sum output values (excludes coinbase — measures actual transfers)
+                        if let Some(val) = vout["value"].as_f64() {
+                            total_output_value +=
+                                (val * 100_000_000.0).round() as u64;
+                        }
                         match vout["scriptPubKey"]["type"].as_str() {
                             Some("pubkey") => p2pk_count += 1,
                             Some("pubkeyhash") => p2pkh_count += 1,
@@ -569,6 +577,7 @@ impl BitcoinRpc {
             inscription_count,
             inscription_bytes,
             brc20_count,
+            total_output_value,
         })
     }
 

@@ -121,6 +121,7 @@ pub async fn fetch_blocks(
             data_carrier_bytes: r.data_carrier_bytes,
             taproot_keypath_count: r.taproot_keypath_count,
             taproot_scriptpath_count: r.taproot_scriptpath_count,
+            total_output_value: 0, // not stored in BlockRow query (only used in range summary)
         })
         .collect())
 }

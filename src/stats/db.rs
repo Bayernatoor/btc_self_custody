@@ -228,6 +228,16 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
         )?;
     }
 
+    let has_output_value: bool = conn
+        .prepare("SELECT total_output_value FROM blocks LIMIT 0")
+        .is_ok();
+    if !has_output_value {
+        tracing::info!("Migrating: adding total_output_value column");
+        conn.execute_batch(
+            "ALTER TABLE blocks ADD COLUMN total_output_value INTEGER NOT NULL DEFAULT 0;",
+        )?;
+    }
+
     // Ensure indexes exist (safe to run every startup)
     conn.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_blocks_backfill ON blocks(backfill_version);",
@@ -273,8 +283,8 @@ pub fn insert_blocks(
               p2tr_count, multisig_count, unknown_script_count,
               input_count, output_count, rbf_count, witness_bytes,
               inscription_count, inscription_bytes, brc20_count,
-              backfill_version)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36,?37,?38,?39,?40,?41,?42,?43,?44)",
+              total_output_value, backfill_version)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36,?37,?38,?39,?40,?41,?42,?43,?44,?45)",
         )?;
         for block in blocks {
             stmt.execute(params![
@@ -321,6 +331,7 @@ pub fn insert_blocks(
                 block.inscription_count,
                 block.inscription_bytes,
                 block.brc20_count,
+                block.total_output_value,
                 BACKFILL_VERSION,
             ])?;
         }
@@ -359,7 +370,7 @@ pub fn update_block_extras(
     let tx = conn.unchecked_transaction()?;
     {
         let mut stmt = tx.prepare_cached(
-            "UPDATE blocks SET version = ?1, total_fees = ?2, miner = ?3, median_fee = ?4, median_fee_rate = ?5, coinbase_locktime = ?6, coinbase_sequence = ?7, segwit_spend_count = ?8, taproot_spend_count = ?9, omni_count = ?10, omni_bytes = ?11, counterparty_count = ?12, counterparty_bytes = ?13, runes_count = ?14, runes_bytes = ?15, data_carrier_count = ?16, data_carrier_bytes = ?17, p2pk_count = ?18, p2pkh_count = ?19, p2sh_count = ?20, p2wpkh_count = ?21, p2wsh_count = ?22, p2tr_count = ?23, multisig_count = ?24, unknown_script_count = ?25, input_count = ?26, output_count = ?27, rbf_count = ?28, witness_bytes = ?29, inscription_count = ?30, inscription_bytes = ?31, brc20_count = ?32, taproot_keypath_count = ?33, taproot_scriptpath_count = ?34, backfill_version = ?35 WHERE height = ?36",
+            "UPDATE blocks SET version = ?1, total_fees = ?2, miner = ?3, median_fee = ?4, median_fee_rate = ?5, coinbase_locktime = ?6, coinbase_sequence = ?7, segwit_spend_count = ?8, taproot_spend_count = ?9, omni_count = ?10, omni_bytes = ?11, counterparty_count = ?12, counterparty_bytes = ?13, runes_count = ?14, runes_bytes = ?15, data_carrier_count = ?16, data_carrier_bytes = ?17, p2pk_count = ?18, p2pkh_count = ?19, p2sh_count = ?20, p2wpkh_count = ?21, p2wsh_count = ?22, p2tr_count = ?23, multisig_count = ?24, unknown_script_count = ?25, input_count = ?26, output_count = ?27, rbf_count = ?28, witness_bytes = ?29, inscription_count = ?30, inscription_bytes = ?31, brc20_count = ?32, taproot_keypath_count = ?33, taproot_scriptpath_count = ?34, total_output_value = ?35, backfill_version = ?36 WHERE height = ?37",
         )?;
         for block in blocks {
             stmt.execute(params![
@@ -397,6 +408,7 @@ pub fn update_block_extras(
                 block.brc20_count,
                 block.taproot_keypath_count,
                 block.taproot_scriptpath_count,
+                block.total_output_value,
                 BACKFILL_VERSION,
                 block.height
             ])?;
@@ -788,7 +800,11 @@ pub fn query_range_summary(
                 SUM(inscription_count), SUM(inscription_bytes), SUM(brc20_count),
                 SUM(op_return_count), SUM(op_return_bytes),
                 SUM(runes_count), SUM(runes_bytes),
-                SUM(omni_count), SUM(counterparty_count), SUM(data_carrier_count)
+                SUM(omni_count), SUM(counterparty_count), SUM(data_carrier_count),
+                SUM(total_output_value),
+                MAX(size), MAX(total_fees),
+                SUM(CASE WHEN tx_count <= 1 THEN 1 ELSE 0 END),
+                AVG(median_fee)
          FROM blocks
          WHERE timestamp >= ?1 AND timestamp <= ?2",
         params![from_ts, to_ts],
@@ -801,13 +817,20 @@ pub fn query_range_summary(
             } else {
                 0.0
             };
+            let total_tx: u64 = row.get(1)?;
             Ok(super::types::RangeSummary {
                 block_count,
-                total_tx: row.get(1)?,
+                total_tx,
                 total_size: row.get(2)?,
                 total_weight: row.get(3)?,
                 total_fees: row.get(4)?,
                 avg_fee_rate: row.get::<_, Option<f64>>(5)?.unwrap_or(0.0),
+                avg_fee_per_tx: if total_tx > 0 {
+                    row.get::<_, Option<u64>>(4)?.unwrap_or(0) as f64 / total_tx as f64
+                } else {
+                    0.0
+                },
+                avg_median_fee: row.get::<_, Option<f64>>(35)?.unwrap_or(0.0),
                 avg_block_time,
                 min_timestamp: min_ts,
                 max_timestamp: max_ts,
@@ -834,6 +857,17 @@ pub fn query_range_summary(
                 total_omni: row.get(28)?,
                 total_counterparty: row.get(29)?,
                 total_data_carrier: row.get(30)?,
+                total_output_value: row.get::<_, Option<u64>>(31)?.unwrap_or(0),
+                max_block_size: row.get::<_, Option<u64>>(32)?.unwrap_or(0),
+                max_block_fees: row.get::<_, Option<u64>>(33)?.unwrap_or(0),
+                empty_block_count: row.get::<_, Option<u64>>(34)?.unwrap_or(0),
+                witness_pct: if row.get::<_, Option<u64>>(2)?.unwrap_or(0) > 0 {
+                    row.get::<_, Option<u64>>(20)?.unwrap_or(0) as f64
+                        / row.get::<_, Option<u64>>(2)?.unwrap_or(1) as f64
+                        * 100.0
+                } else {
+                    0.0
+                },
             })
         },
     )
