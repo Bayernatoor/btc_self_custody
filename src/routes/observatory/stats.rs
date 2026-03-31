@@ -6,7 +6,7 @@ use leptos_meta::*;
 use super::helpers::*;
 use super::shared::ObservatoryState;
 use crate::stats::server_fns::*;
-use crate::stats::types::RangeSummary;
+use crate::stats::types::{MiningPriceSummary, RangeSummary};
 
 // ---------------------------------------------------------------------------
 // Stat card component
@@ -68,9 +68,20 @@ pub fn StatsSummaryPage() -> impl IntoView {
 
     let data = Signal::derive(move || summary.get().flatten());
 
+    // Fetch mining + price context
+    let mining_price = LocalResource::new(move || {
+        let (from, to) = ts_range.get();
+        async move { fetch_mining_price_summary(from, to).await.ok() }
+    });
+    let mp_data = Signal::derive(move || mining_price.get().flatten());
+
     // Format helper — creates a Signal<String> from a RangeSummary field
     let stat = move |f: fn(&RangeSummary) -> String| -> Signal<String> {
         let d = data;
+        Signal::derive(move || d.get().map(|s| f(&s)).unwrap_or_else(|| "\u{2014}".to_string()))
+    };
+    let mp_stat = move |f: fn(&MiningPriceSummary) -> String| -> Signal<String> {
+        let d = mp_data;
         Signal::derive(move || d.get().map(|s| f(&s)).unwrap_or_else(|| "\u{2014}".to_string()))
     };
 
@@ -162,6 +173,27 @@ pub fn StatsSummaryPage() -> impl IntoView {
         }
     });
 
+    // === Mining ===
+    let top_pool = mp_stat(|s| s.top_pool_name.clone());
+    let top_pool_sub = mp_stat(|s| format!("{} blocks ({:.1}%)", format_number(s.top_pool_blocks), s.top_pool_pct));
+    let pool_count = mp_stat(|s| format_number(s.pool_count));
+
+    // === Price ===
+    let price_start = mp_stat(|s| {
+        if s.price_start > 0.0 { format!("${}", format_number_f64(s.price_start, 0)) }
+        else { "\u{2014}".to_string() }
+    });
+    let price_end = mp_stat(|s| {
+        if s.price_end > 0.0 { format!("${}", format_number_f64(s.price_end, 0)) }
+        else { "\u{2014}".to_string() }
+    });
+    let price_change = mp_stat(|s| {
+        if s.price_start > 0.0 {
+            let sign = if s.price_change_pct >= 0.0 { "+" } else { "" };
+            format!("{sign}{:.1}%", s.price_change_pct)
+        } else { "\u{2014}".to_string() }
+    });
+
     view! {
         <Title text="Bitcoin Stats Summary: At-a-Glance Network Counters | WE HODL BTC"/>
         <Meta name="description" content="Bitcoin network summary statistics for any time range. Total transactions, fees, inscriptions, Runes, SegWit adoption, Taproot usage, and embedded data counters."/>
@@ -230,10 +262,19 @@ pub fn StatsSummaryPage() -> impl IntoView {
             <StatCard label="Omni Layer" value=omni/>
             <StatCard label="Counterparty" value=counterparty/>
 
+            <SectionHeader title="Mining"/>
+            <StatCard label="Top Pool" value=top_pool sub=top_pool_sub/>
+            <StatCard label="Unique Pools" value=pool_count/>
+            <StatCard label="Empty Blocks" value=empty_blocks sub=empty_sub/>
+
+            <SectionHeader title="Price"/>
+            <StatCard label="Start Price" value=price_start/>
+            <StatCard label="End Price" value=price_end/>
+            <StatCard label="Change" value=price_change/>
+
             <SectionHeader title="Extremes"/>
             <StatCard label="Largest Block" value=max_block_size/>
             <StatCard label="Highest Fee Block" value=max_block_fees/>
-            <StatCard label="Empty Blocks" value=empty_blocks sub=empty_sub/>
         </div>
     }
 }

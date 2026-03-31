@@ -791,6 +791,71 @@ pub async fn fetch_block_timestamp(
     Ok(result)
 }
 
+#[server(prefix = "/api", endpoint = "mining_price_summary")]
+pub async fn fetch_mining_price_summary(
+    from_ts: u64,
+    to_ts: u64,
+) -> Result<MiningPriceSummary, ServerFnError> {
+    let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
+        leptos_axum::extract().await.map_err(|e| {
+            ServerFnError::new(format!("Stats not available: {e}"))
+        })?;
+    let conn = state
+        .db
+        .get()
+        .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+
+    // Mining dominance
+    let miners = super::db::query_miner_dominance_daily(&conn, from_ts, to_ts)
+        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+    let total_mined: u64 = miners.iter().map(|m| m.count).sum();
+    let (top_name, top_blocks) = miners
+        .first()
+        .map(|m| (m.miner.clone(), m.count))
+        .unwrap_or_else(|| ("Unknown".to_string(), 0));
+    let top_pct = if total_mined > 0 {
+        top_blocks as f64 / total_mined as f64 * 100.0
+    } else {
+        0.0
+    };
+    let pool_count = miners.len() as u64;
+
+    // Price context — use cached price history
+    let prices = fetch_price_history(0, 4_000_000_000).await.unwrap_or_default();
+    let from_ms = from_ts * 1000;
+    let to_ms = to_ts * 1000;
+
+    // Find closest price points to range boundaries
+    let price_start = prices
+        .iter()
+        .filter(|p| p.timestamp_ms >= from_ms)
+        .map(|p| p.price_usd)
+        .next()
+        .unwrap_or(0.0);
+    let price_end = prices
+        .iter()
+        .rev()
+        .filter(|p| p.timestamp_ms <= to_ms)
+        .map(|p| p.price_usd)
+        .next()
+        .unwrap_or(0.0);
+    let price_change_pct = if price_start > 0.0 {
+        (price_end - price_start) / price_start * 100.0
+    } else {
+        0.0
+    };
+
+    Ok(MiningPriceSummary {
+        top_pool_name: top_name,
+        top_pool_blocks: top_blocks,
+        top_pool_pct: top_pct,
+        pool_count,
+        price_start,
+        price_end,
+        price_change_pct,
+    })
+}
+
 #[server(prefix = "/api", endpoint = "range_summary")]
 pub async fn fetch_range_summary(
     from_ts: u64,
