@@ -304,7 +304,7 @@ pub fn StatsSummaryPage() -> impl IntoView {
             <StatCard label="Total Fees" value=total_fees_btc sub=total_fees_sub
                 tooltip="Sum of all transaction fees paid to miners in this range"/>
             <StatCard label="Avg Fee Rate" value=avg_fee_rate
-                tooltip="Average of per-block median fee rates (sat/vB). Reflects typical transaction cost"/>
+                tooltip="Average of per-block median fee rates in satoshis per virtual byte. Multiply by transaction vsize to estimate the actual fee paid"/>
             <StatCard label="Avg Fee/Tx" value=avg_fee_per_tx
                 tooltip="Total fees divided by non-coinbase transaction count"/>
             <StatCard label="Avg Median Fee" value=avg_median_fee
