@@ -251,9 +251,9 @@ pub fn LiveCard(
     view! {
         <div
             class=if tooltip.is_some() {
-                "bg-[#0d2137] border border-white/10 rounded-lg p-2 sm:p-3 text-center cursor-help"
+                "bg-[#0d2137] border border-white/10 rounded-lg p-2 sm:p-3 text-center cursor-help overflow-hidden min-w-0"
             } else {
-                "bg-[#0d2137] border border-white/10 rounded-lg p-2 sm:p-3 text-center"
+                "bg-[#0d2137] border border-white/10 rounded-lg p-2 sm:p-3 text-center overflow-hidden min-w-0"
             }
             title=tooltip.unwrap_or("")
         >
