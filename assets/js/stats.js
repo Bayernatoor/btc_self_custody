@@ -437,4 +437,70 @@
             }
         }, 1500);
     }
+    // CSV export: extract data from an ECharts instance and trigger download.
+    window.downloadChartCSV = function(chartId, title, range) {
+        var el = document.getElementById(chartId);
+        if (!el || !el._chart) return;
+
+        var option = el._chart.getOption();
+        if (!option || !option.series || !option.xAxis) return;
+
+        // Filter out overlay series (price, chain size use yAxisIndex >= 1)
+        var series = option.series.filter(function(s) {
+            return !s.yAxisIndex || s.yAxisIndex === 0;
+        });
+        if (series.length === 0) return;
+
+        var isCategory = option.xAxis[0] && option.xAxis[0].type === 'category';
+        var rows = [];
+
+        if (isCategory) {
+            // Daily mode: dates from xAxis.data, values from series.data
+            var dates = option.xAxis[0].data || [];
+            var header = ['date'].concat(series.map(function(s) { return s.name || ''; }));
+            rows.push(header.join(','));
+            for (var i = 0; i < dates.length; i++) {
+                var row = [dates[i]];
+                for (var j = 0; j < series.length; j++) {
+                    var val = series[j].data ? series[j].data[i] : null;
+                    row.push(val != null ? val : '');
+                }
+                rows.push(row.join(','));
+            }
+        } else {
+            // Per-block mode: data points are [timestamp_ms, value, height]
+            var header = ['timestamp', 'height'].concat(series.map(function(s) { return s.name || ''; }));
+            rows.push(header.join(','));
+
+            // Use first series for timestamp/height reference
+            var ref = series[0].data || [];
+            for (var i = 0; i < ref.length; i++) {
+                var point = ref[i];
+                if (!point || !Array.isArray(point)) continue;
+                var ts = new Date(point[0]).toISOString();
+                var height = point.length >= 3 ? point[2] : '';
+                var row = [ts, height];
+                for (var j = 0; j < series.length; j++) {
+                    var sp = series[j].data ? series[j].data[i] : null;
+                    if (sp != null && Array.isArray(sp) && sp.length >= 2) {
+                        row.push(sp[1] != null ? sp[1] : '');
+                    } else {
+                        row.push('');
+                    }
+                }
+                rows.push(row.join(','));
+            }
+        }
+
+        var csv = rows.join('\n');
+        var blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = title.replace(/[^a-zA-Z0-9]/g, '_') + '_' + range.toUpperCase() + '.csv';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
 })();

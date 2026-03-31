@@ -20,6 +20,9 @@ extern "C" {
 extern "C" {
     #[wasm_bindgen(js_name = showBlockDetail)]
     pub fn show_block_detail(height: u64);
+
+    #[wasm_bindgen(js_name = downloadChartCSV)]
+    fn download_chart_csv(chart_id: &str, title: &str, range: &str);
 }
 
 #[cfg(not(feature = "hydrate"))]
@@ -31,6 +34,9 @@ fn set_chart_option_lazy(_id: &str, _json: &str) {}
 
 #[cfg(not(feature = "hydrate"))]
 pub fn show_block_detail(_height: u64) {}
+
+#[cfg(not(feature = "hydrate"))]
+fn download_chart_csv(_id: &str, _title: &str, _range: &str) {}
 
 // ---------------------------------------------------------------------------
 // Chart component
@@ -78,8 +84,12 @@ pub fn ChartCard(
     let (expanded, set_expanded) = signal(false);
     let anchor = chart_id.clone();
     let share_id = chart_id.clone();
+    let download_id = chart_id.clone();
+    let download_title = title.clone();
     let (copied, set_copied) = signal(false);
-    let loading = expect_context::<super::shared::ObservatoryState>().data_loading;
+    let state = expect_context::<super::shared::ObservatoryState>();
+    let loading = state.data_loading;
+    let range = state.range;
     view! {
         // Normal inline card
         <div id=format!("card-{}", chart_id) class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6">
@@ -109,6 +119,21 @@ pub fn ChartCard(
                 </div>
                 <div class="flex items-center gap-1 shrink-0">
                     {children.map(|c| c())}
+                    <button
+                        class="text-white/50 hover:text-[#f7931a] transition-colors cursor-pointer p-1.5 rounded-lg hover:bg-white/5"
+                        title="Download CSV"
+                        on:click={
+                            let id = download_id.clone();
+                            let t = download_title.clone();
+                            move |_| {
+                                download_chart_csv(&id, &t, &range.get_untracked());
+                            }
+                        }
+                    >
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"/>
+                        </svg>
+                    </button>
                     <button
                         class="text-white/50 hover:text-[#f7931a] transition-colors cursor-pointer p-1.5 rounded-lg hover:bg-white/5"
                         title="Copy link to chart"
