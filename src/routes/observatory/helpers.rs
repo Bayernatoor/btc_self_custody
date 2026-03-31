@@ -72,6 +72,16 @@ pub fn format_compact(n: u64) -> String {
     }
 }
 
+/// Format bytes as human-readable size (MB or GB).
+pub fn format_data_size(bytes: u64) -> String {
+    let gb = bytes as f64 / 1_000_000_000.0;
+    if gb >= 1.0 {
+        format!("{:.2} GB", gb)
+    } else {
+        format!("{:.1} MB", bytes as f64 / 1_000_000.0)
+    }
+}
+
 /// Format a f64 with comma separators and fixed decimal places.
 pub fn format_number_f64(n: f64, decimals: usize) -> String {
     let rounded = format!("{:.prec$}", n, prec = decimals);
