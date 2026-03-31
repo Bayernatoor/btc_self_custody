@@ -145,6 +145,226 @@ pub fn fees_chart_daily_unit(days: &[DailyAggregate], unit: &str) -> serde_json:
     }))
 }
 
+/// Average fee per transaction (per-block: total_fees / user_tx_count).
+pub fn avg_fee_per_tx_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+    if blocks.is_empty() {
+        return no_data_chart("Avg Fee per Tx");
+    }
+
+    let vals: Vec<f64> = blocks
+        .iter()
+        .map(|b| {
+            let user_tx = b.tx_count.saturating_sub(1); // exclude coinbase
+            if user_tx > 0 {
+                b.total_fees as f64 / user_tx as f64
+            } else {
+                0.0
+            }
+        })
+        .collect();
+
+    let raw: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(vals.iter())
+        .map(|(b, v)| dp(b, *v))
+        .collect();
+
+    let ma = moving_average(&vals, 144);
+    let ma_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(ma.iter())
+        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))]))
+        .collect();
+
+    let has_ma = show_ma(blocks.len());
+
+    let mut series = vec![json!({
+        "name": "Fee/Tx", "type": "line", "data": raw,
+        "lineStyle": { "width": if has_ma { 1.0 } else { 1.5 }, "color": DATA_COLOR },
+        "itemStyle": { "color": DATA_COLOR }, "symbol": "none",
+        "opacity": if has_ma { 0.4 } else { 1.0 }
+    })];
+    if has_ma {
+        series.push(json!({
+            "name": "144-block MA", "type": "line", "data": ma_data,
+            "lineStyle": { "width": 2, "color": MA_COLOR },
+            "itemStyle": { "color": MA_COLOR }, "symbol": "none"
+        }));
+    }
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("sats"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": has_ma },
+        "series": series
+    }))
+}
+
+/// Average fee per transaction (daily).
+pub fn avg_fee_per_tx_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+    if days.is_empty() {
+        return no_data_chart("Avg Fee per Tx");
+    }
+
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    let vals: Vec<f64> = days
+        .iter()
+        .map(|d| {
+            let user_tx = (d.avg_tx_count * d.block_count as f64) - d.block_count as f64;
+            if user_tx > 0.0 && d.total_fees > 0 {
+                d.total_fees as f64 / user_tx
+            } else {
+                0.0
+            }
+        })
+        .collect();
+
+    let ma = moving_average(&vals, 7);
+    let ma_vals: Vec<serde_json::Value> = ma
+        .iter()
+        .map(|v| match v { Some(x) => json!(x), None => json!(null) })
+        .collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": y_axis("sats"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "series": [
+            { "name": "Fee/Tx", "type": "line", "data": vals,
+              "lineStyle": { "width": 1, "color": DATA_COLOR },
+              "itemStyle": { "color": DATA_COLOR }, "symbol": "none", "opacity": 0.4 },
+            { "name": "7-day MA", "type": "line", "data": ma_vals,
+              "lineStyle": { "width": 2, "color": MA_COLOR },
+              "itemStyle": { "color": MA_COLOR }, "symbol": "none" }
+        ]
+    }))
+}
+
+/// Median fee rate over time (per-block).
+pub fn median_fee_rate_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+    if blocks.is_empty() {
+        return no_data_chart("Median Fee Rate");
+    }
+
+    let vals: Vec<f64> = blocks.iter().map(|b| (b.median_fee_rate * 100.0).round() / 100.0).collect();
+    let raw: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(vals.iter())
+        .map(|(b, v)| dp(b, *v))
+        .collect();
+
+    let ma = moving_average(&vals, 144);
+    let ma_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(ma.iter())
+        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))]))
+        .collect();
+
+    let has_ma = show_ma(blocks.len());
+
+    let mut series = vec![json!({
+        "name": "Median Rate", "type": "line", "data": raw,
+        "lineStyle": { "width": if has_ma { 1.0 } else { 1.5 }, "color": DATA_COLOR },
+        "itemStyle": { "color": DATA_COLOR }, "symbol": "none",
+        "opacity": if has_ma { 0.4 } else { 1.0 }
+    })];
+    if has_ma {
+        series.push(json!({
+            "name": "144-block MA", "type": "line", "data": ma_data,
+            "lineStyle": { "width": 2, "color": MA_COLOR },
+            "itemStyle": { "color": MA_COLOR }, "symbol": "none"
+        }));
+    }
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("sat/vB"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": has_ma },
+        "series": series
+    }))
+}
+
+/// Median fee rate over time (daily).
+pub fn median_fee_rate_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+    if days.is_empty() {
+        return no_data_chart("Median Fee Rate");
+    }
+
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    // avg_median_fee_rate is not in DailyAggregate, use total_fees / tx / avg_size as proxy
+    // Actually median_fee_rate is AVG'd in the daily query — but it's not stored.
+    // Use avg_fee_rate approximation: we don't have per-day median_fee_rate in DailyAggregate.
+    // For now, show a note. Actually let me check what fields are available...
+    // DailyAggregate doesn't have median_fee_rate. Skip daily for this chart.
+    no_data_chart("Median Fee Rate (per-block ranges only)")
+}
+
+/// Fee rate percentile band (per-block: p10, median, p90).
+/// Requires backfill v9 for p10/p90 data.
+pub fn fee_rate_band_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+    if blocks.is_empty() {
+        return no_data_chart("Fee Rate Band");
+    }
+
+    // Check if p10/p90 data is available (non-zero)
+    let has_percentiles = blocks.iter().any(|b| b.fee_rate_p10 > 0.0 || b.fee_rate_p90 > 0.0);
+    if !has_percentiles {
+        return no_data_chart("Fee Rate Band (backfill required for percentile data)");
+    }
+
+    let p10_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .map(|b| dp(b, (b.fee_rate_p10 * 100.0).round() / 100.0))
+        .collect();
+
+    let median_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .map(|b| dp(b, (b.median_fee_rate * 100.0).round() / 100.0))
+        .collect();
+
+    let p90_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .map(|b| dp(b, (b.fee_rate_p90 * 100.0).round() / 100.0))
+        .collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("sat/vB"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            {
+                "name": "90th Percentile", "type": "line", "data": p90_data,
+                "lineStyle": { "width": 1, "color": TARGET_COLOR, "opacity": 0.6 },
+                "itemStyle": { "color": TARGET_COLOR }, "symbol": "none",
+                "areaStyle": { "color": "rgba(231,76,60,0.08)" }
+            },
+            {
+                "name": "Median", "type": "line", "data": median_data,
+                "lineStyle": { "width": 2, "color": DATA_COLOR },
+                "itemStyle": { "color": DATA_COLOR }, "symbol": "none"
+            },
+            {
+                "name": "10th Percentile", "type": "line", "data": p10_data,
+                "lineStyle": { "width": 1, "color": SIGNAL_YES, "opacity": 0.6 },
+                "itemStyle": { "color": SIGNAL_YES }, "symbol": "none",
+                "areaStyle": { "color": "rgba(46,204,113,0.08)" }
+            }
+        ]
+    }))
+}
+
+/// Fee rate percentile band (daily) — placeholder until daily aggregates include percentiles.
+pub fn fee_rate_band_chart_daily(_days: &[DailyAggregate]) -> serde_json::Value {
+    no_data_chart("Fee Rate Band (per-block ranges only)")
+}
+
 /// Block subsidy vs fee revenue ratio (stacked area).
 pub fn subsidy_vs_fees_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {

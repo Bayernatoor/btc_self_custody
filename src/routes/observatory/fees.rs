@@ -57,6 +57,21 @@ pub fn FeeChartsPage() -> impl IntoView {
                         |days| crate::stats::charts::subsidy_vs_fees_chart_daily(days)
                     );
 
+                    let avg_fee_tx_option = chart_memo!(dashboard_data, range, overlay_flags,
+                        |blocks| crate::stats::charts::avg_fee_per_tx_chart(blocks),
+                        |days| crate::stats::charts::avg_fee_per_tx_chart_daily(days)
+                    );
+
+                    let median_rate_option = chart_memo!(dashboard_data, range, overlay_flags,
+                        |blocks| crate::stats::charts::median_fee_rate_chart(blocks),
+                        |days| crate::stats::charts::median_fee_rate_chart_daily(days)
+                    );
+
+                    let fee_band_option = chart_memo!(dashboard_data, range, overlay_flags,
+                        |blocks| crate::stats::charts::fee_rate_band_chart(blocks),
+                        |days| crate::stats::charts::fee_rate_band_chart_daily(days)
+                    );
+
                     view! {
                         <div class="space-y-10">
                             <ChartCard
@@ -76,6 +91,24 @@ pub fn FeeChartsPage() -> impl IntoView {
                                     {move || if fee_unit.get() == "sats" { "Switch to BTC" } else { "Switch to sats" }}
                                 </button>
                             </ChartCard>
+                            <ChartCard
+                                title="Avg Fee per Transaction"
+                                description=chart_desc(range, "Average fee paid per transaction in satoshis (excludes coinbase)", "Daily average fee per transaction in satoshis")
+                                chart_id="chart-avg-fee-tx"
+                                option=avg_fee_tx_option
+                            />
+                            <ChartCard
+                                title="Median Fee Rate"
+                                description=chart_desc(range, "Median fee rate across all transactions in each block", "Median fee rate (per-block ranges only for daily)")
+                                chart_id="chart-median-rate"
+                                option=median_rate_option
+                            />
+                            <ChartCard
+                                title="Fee Rate Band"
+                                description=chart_desc(range, "Fee rate spread: 10th percentile (cheapest), median, and 90th percentile (most urgent)", "Fee rate percentile band (per-block ranges only)")
+                                chart_id="chart-fee-band"
+                                option=fee_band_option
+                            />
                             <ChartCard
                                 title="Subsidy vs Fees"
                                 description=chart_desc(range, "Block reward breakdown per block. The subsidy halves every 4 years while fees must eventually replace it", "Daily average block reward breakdown. The subsidy halves every 4 years while fees must eventually replace it")
