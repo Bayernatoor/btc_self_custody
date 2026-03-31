@@ -64,6 +64,7 @@ pub fn Chart(
 // Chart card with expand toggle
 // ---------------------------------------------------------------------------
 
+#[allow(unused_variables)] // share button vars only used in hydrate feature
 #[component]
 pub fn ChartCard(
     #[prop(into)] title: String,
