@@ -214,12 +214,17 @@ pub fn NetworkChartsPage() -> impl IntoView {
                             |blocks| crate::stats::charts::batching_chart(blocks),
                             |days| crate::stats::charts::batching_chart_daily(days)
                         );
+                        let largest_tx_option = chart_memo!(dashboard_data, range, overlay_flags,
+                            |blocks| crate::stats::charts::largest_tx_chart(blocks),
+                            |days| crate::stats::charts::largest_tx_chart_daily(days)
+                        );
 
                         view! {
                             <div class="space-y-10">
                                 <ChartCard title="RBF Adoption" description=chart_desc(range, "Percentage of transactions opting into Replace-By-Fee per block", "Daily average RBF adoption percentage") chart_id="chart-rbf" option=rbf_option/>
                                 <ChartCard title="UTXO Flow" description=chart_desc(range, "Inputs spent vs outputs created per block. When outputs exceed inputs, the UTXO set grows", "Daily average inputs spent vs outputs created. When outputs exceed inputs, the UTXO set grows") chart_id="chart-utxo-flow" option=utxo_flow_option/>
                                 <ChartCard title="Transaction Batching" description=chart_desc(range, "Average inputs and outputs per transaction in each block", "Daily average inputs and outputs per transaction") chart_id="chart-batching" option=batching_option/>
+                                <ChartCard title="Largest Transaction" description=chart_desc(range, "Size of the largest transaction in each block. Large transactions may indicate consolidations or complex scripts", "Largest transaction (per-block ranges only)") chart_id="chart-largest-tx" option=largest_tx_option/>
                             </div>
                         }.into_any()
                     }).unwrap_or_else(|| view! { <ChartPageSkeleton count=3/> }.into_any())
