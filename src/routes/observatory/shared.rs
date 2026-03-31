@@ -886,11 +886,13 @@ pub fn RangeSelector() -> impl IntoView {
 pub fn OverlayPanel() -> impl IntoView {
     let state = expect_context::<ObservatoryState>();
     let location = leptos_router::hooks::use_location();
-    let on_dashboard =
-        Signal::derive(move || location.pathname.get() == "/observatory");
+    let hide_overlays = Signal::derive(move || {
+        let path = location.pathname.get();
+        path == "/observatory" || path == "/observatory/stats"
+    });
 
     view! {
-        <div style="z-index: 10000" class="fixed left-4 bottom-4" class:hidden=on_dashboard>
+        <div style="z-index: 10000" class="fixed left-4 bottom-4" class:hidden=hide_overlays>
             <Show
                 when=move || state.overlay_panel_open.get()
                 fallback=move || view! {
