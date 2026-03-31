@@ -189,19 +189,6 @@ pub fn App() -> impl IntoView {
                         <Route path=path!("/blog") view=BlogPage/>
                         <Route path=path!("/faq") view=FaqPage/>
                         <Route path=path!("/about") view=AboutPage/>
-                        <Route path=path!("/*any") view=|| view! {
-                            <div class="flex flex-col items-center justify-center min-h-[60vh] px-6 opacity-0 animate-fadeinone">
-                                <div class="text-[4rem] lg:text-[5rem] font-title text-white/10 font-bold mb-4">"404"</div>
-                                <h1 class="text-xl lg:text-2xl text-white font-semibold mb-2">"Page not found"</h1>
-                                <p class="text-sm text-white/50 mb-8 text-center max-w-sm">"The page you\u{2019}re looking for doesn\u{2019}t exist or has been moved."</p>
-                                <a href="/" class="inline-flex items-center gap-2 px-5 py-2.5 bg-[#f7931a] text-white text-sm font-medium rounded-xl hover:bg-[#f4a949] hover:scale-[1.02] active:scale-[0.98] transition-all duration-200">
-                                    "Go Home"
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-                                    </svg>
-                                </a>
-                            </div>
-                        }/>
                     </Routes>
                 </main>
                 <Footer/>
