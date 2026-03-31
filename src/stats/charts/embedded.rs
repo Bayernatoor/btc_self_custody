@@ -272,9 +272,10 @@ pub fn op_return_block_share_chart(blocks: &[BlockSummary]) -> serde_json::Value
         .iter()
         .map(|b| {
             if b.size > 0 {
-                (b.op_return_bytes as f64 / b.size as f64 * 100.0 * 100.0)
+                ((b.op_return_bytes as f64 / b.size as f64 * 100.0 * 100.0)
                     .round()
-                    / 100.0
+                    / 100.0)
+                    .min(100.0)
             } else {
                 0.0
             }
@@ -338,9 +339,10 @@ pub fn op_return_block_share_chart_daily(days: &[DailyAggregate]) -> serde_json:
         .map(|d| {
             let total_size = d.avg_size * d.block_count as f64;
             if total_size > 0.0 {
-                (d.total_op_return_bytes as f64 / total_size * 100.0 * 100.0)
+                ((d.total_op_return_bytes as f64 / total_size * 100.0 * 100.0)
                     .round()
-                    / 100.0
+                    / 100.0)
+                    .min(100.0)
             } else {
                 0.0
             }
@@ -471,9 +473,10 @@ pub fn inscription_share_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         .iter()
         .map(|b| {
             if b.size > 0 {
-                (b.inscription_bytes as f64 / b.size as f64 * 100.0 * 100.0)
+                ((b.inscription_bytes as f64 / b.size as f64 * 100.0 * 100.0)
                     .round()
-                    / 100.0
+                    / 100.0)
+                    .min(100.0)
             } else {
                 0.0
             }
@@ -532,8 +535,9 @@ pub fn inscription_share_chart_daily(days: &[DailyAggregate]) -> serde_json::Val
         .iter()
         .map(|d| {
             if d.avg_size > 0.0 {
-                (d.avg_inscription_bytes / d.avg_size * 100.0 * 100.0).round()
-                    / 100.0
+                ((d.avg_inscription_bytes / d.avg_size * 100.0 * 100.0).round()
+                    / 100.0)
+                    .min(100.0)
             } else {
                 0.0
             }
