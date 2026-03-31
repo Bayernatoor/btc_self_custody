@@ -15,5 +15,6 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: wehodlbtc
           key: ${{ secrets.DEPLOY_SSH_KEY }}
+          command_timeout: 30m
           script_stop: true
           script: bash /opt/wehodlbtc/app/scripts/deploy.sh
