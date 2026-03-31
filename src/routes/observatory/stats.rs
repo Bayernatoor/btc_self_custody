@@ -87,7 +87,12 @@ pub fn StatsSummaryPage() -> impl IntoView {
             "—".to_string()
         }
     });
-    let avg_block_time = stat(|s| format!("{:.1} min", s.avg_block_time));
+    let avg_block_time = stat(|s| {
+        let total_secs = (s.avg_block_time * 60.0).round() as u64;
+        let mins = total_secs / 60;
+        let secs = total_secs % 60;
+        format!("{}:{:02}", mins, secs)
+    });
     let weight_util = stat(|s| {
         if s.block_count > 0 {
             format!("{:.1}%", s.total_weight as f64 / s.block_count as f64 / 4_000_000.0 * 100.0)
@@ -98,7 +103,7 @@ pub fn StatsSummaryPage() -> impl IntoView {
     let chain_growth = stat(|s| format!("{:.1} GB", s.total_size as f64 / 1_000_000_000.0));
 
     // Fee stats
-    let total_fees_btc = stat(|s| format!("{:.2} BTC", s.total_fees as f64 / 100_000_000.0));
+    let total_fees_btc = stat(|s| format!("{} BTC", format_number_f64(s.total_fees as f64 / 100_000_000.0, 2)));
     let total_fees_sub = stat(|s| format!("{} sats", format_number(s.total_fees)));
     let avg_fee_rate = stat(|s| format!("{:.1} sat/vB", s.avg_fee_rate));
 
