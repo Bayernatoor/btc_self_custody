@@ -142,8 +142,8 @@ pub fn identify_miner(coinbase_hex: &str) -> String {
 
     // OCEAN template miners: coinbase contains "ocean.xyz" or "ocean" followed
     // by the miner's own tag. Extract printable ASCII after ">" as the sub-miner.
-    if let Some(ocean_pos) = ascii.find("ocean.xyz").or_else(|| ascii.find("ocean")) {
-        if let Some(sub_miner) = extract_ocean_subminer(&bytes, ocean_pos) {
+    if ascii.contains("ocean.xyz") || ascii.contains("ocean") {
+        if let Some(sub_miner) = extract_ocean_subminer(&bytes) {
             return format!("OCEAN / {sub_miner}");
         }
         return "OCEAN".to_string();
@@ -154,11 +154,10 @@ pub fn identify_miner(coinbase_hex: &str) -> String {
 
 /// Extract the sub-miner name from an OCEAN coinbase.
 /// Looks for printable ASCII (2+ chars) after the ">" that closes the OCEAN tag.
-fn extract_ocean_subminer(bytes: &[u8], ocean_pos: usize) -> Option<String> {
-    // Find ">" after the OCEAN tag
-    let search_start = ocean_pos;
-    let gt_pos = bytes[search_start..].iter().position(|&b| b == b'>')?;
-    let after_gt = search_start + gt_pos + 1;
+fn extract_ocean_subminer(bytes: &[u8]) -> Option<String> {
+    // Find ">" in the raw bytes (OCEAN tag format: "< OCEAN.XYZ >")
+    let gt_pos = bytes.iter().position(|&b| b == b'>')?;
+    let after_gt = gt_pos + 1;
 
     // Collect printable ASCII chars after ">", skipping leading control chars
     let name: String = bytes[after_gt..]
