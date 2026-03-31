@@ -1176,6 +1176,7 @@ mod tests {
             data_carrier_bytes: 0,
             taproot_keypath_count: 0,
             taproot_scriptpath_count: 0,
+            total_output_value: 0,
         };
         let result = dp(&block, 42.5);
         let arr = result.as_array().unwrap();

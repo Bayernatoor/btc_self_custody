@@ -54,6 +54,7 @@ pub struct BlockSummary {
     pub data_carrier_bytes: u64,
     pub taproot_keypath_count: u64,
     pub taproot_scriptpath_count: u64,
+    pub total_output_value: u64,
 }
 
 /// Full block detail (from query_block_by_height).
@@ -154,6 +155,8 @@ pub struct RangeSummary {
     pub total_weight: u64,
     pub total_fees: u64,
     pub avg_fee_rate: f64,
+    pub avg_fee_per_tx: f64,
+    pub avg_median_fee: f64,
     pub avg_block_time: f64,
     pub total_segwit_txs: u64,
     pub total_taproot_outputs: u64,
@@ -178,8 +181,15 @@ pub struct RangeSummary {
     pub total_omni: u64,
     pub total_counterparty: u64,
     pub total_data_carrier: u64,
+    pub total_output_value: u64,
     pub min_timestamp: u64,
     pub max_timestamp: u64,
+    // Extremes
+    pub max_block_size: u64,
+    pub max_block_fees: u64,
+    pub empty_block_count: u64,
+    // Derived percentages
+    pub witness_pct: f64,
 }
 
 /// Per-block signaling status.

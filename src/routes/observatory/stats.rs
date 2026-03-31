@@ -55,7 +55,7 @@ pub fn StatsSummaryPage() -> impl IntoView {
         let r = range.get();
         let now = chrono::Utc::now().timestamp() as u64;
         let n = range_to_blocks(&r);
-        let seconds = n * 600; // approximate
+        let seconds = n * 600;
         let from = if n >= 999_999 { 0 } else { now.saturating_sub(seconds) };
         (from, now)
     });
@@ -63,57 +63,54 @@ pub fn StatsSummaryPage() -> impl IntoView {
     // Fetch summary data
     let summary = LocalResource::new(move || {
         let (from, to) = ts_range.get();
-        async move {
-            fetch_range_summary(from, to).await.ok()
-        }
+        async move { fetch_range_summary(from, to).await.ok() }
     });
 
     let data = Signal::derive(move || summary.get().flatten());
 
-    // Format helpers — each returns a Signal<String>
+    // Format helper — creates a Signal<String> from a RangeSummary field
     let stat = move |f: fn(&RangeSummary) -> String| -> Signal<String> {
         let d = data;
-        Signal::derive(move || d.get().map(|s| f(&s)).unwrap_or_else(|| "—".to_string()))
+        Signal::derive(move || d.get().map(|s| f(&s)).unwrap_or_else(|| "\u{2014}".to_string()))
     };
 
-    // Network stats
+    // === Network ===
     let blocks = stat(|s| format_number(s.block_count));
     let txs = stat(|s| format_compact(s.total_tx));
     let txs_sub = stat(|s| format!("{} total", format_number(s.total_tx)));
     let avg_size = stat(|s| {
         if s.block_count > 0 {
             format!("{:.2} MB", s.total_size as f64 / s.block_count as f64 / 1_000_000.0)
-        } else {
-            "—".to_string()
-        }
+        } else { "\u{2014}".to_string() }
     });
     let avg_block_time = stat(|s| {
         let total_secs = (s.avg_block_time * 60.0).round() as u64;
-        let mins = total_secs / 60;
-        let secs = total_secs % 60;
-        format!("{}:{:02}", mins, secs)
+        format!("{}:{:02}", total_secs / 60, total_secs % 60)
+    });
+    let avg_tx_per_block = stat(|s| {
+        if s.block_count > 0 {
+            format_number_f64(s.total_tx as f64 / s.block_count as f64, 1)
+        } else { "\u{2014}".to_string() }
     });
     let weight_util = stat(|s| {
         if s.block_count > 0 {
             format!("{:.1}%", s.total_weight as f64 / s.block_count as f64 / 4_000_000.0 * 100.0)
-        } else {
-            "—".to_string()
-        }
+        } else { "\u{2014}".to_string() }
     });
     let chain_growth = stat(|s| format!("{:.1} GB", s.total_size as f64 / 1_000_000_000.0));
 
-    // Fee stats
+    // === Fees ===
     let total_fees_btc = stat(|s| format!("{} BTC", format_number_f64(s.total_fees as f64 / 100_000_000.0, 2)));
     let total_fees_sub = stat(|s| format!("{} sats", format_number(s.total_fees)));
     let avg_fee_rate = stat(|s| format!("{:.1} sat/vB", s.avg_fee_rate));
+    let avg_fee_per_tx = stat(|s| format!("{} sats", format_number(s.avg_fee_per_tx.round() as u64)));
+    let avg_median_fee = stat(|s| format!("{} sats", format_number(s.avg_median_fee.round() as u64)));
 
-    // Adoption stats
+    // === Adoption ===
     let segwit_pct = stat(|s| {
         if s.total_tx > 0 {
             format!("{:.1}%", s.total_segwit_txs as f64 / s.total_tx as f64 * 100.0)
-        } else {
-            "—".to_string()
-        }
+        } else { "\u{2014}".to_string() }
     });
     let taproot_outputs = stat(|s| format_compact(s.total_taproot_outputs));
     let taproot_sub = stat(|s| {
@@ -121,26 +118,23 @@ pub fn StatsSummaryPage() -> impl IntoView {
             format_compact(s.total_taproot_keypath),
             format_compact(s.total_taproot_scriptpath))
     });
+    let witness_pct = stat(|s| format!("{:.1}%", s.witness_pct));
     let total_inputs = stat(|s| format_compact(s.total_inputs));
     let total_outputs = stat(|s| format_compact(s.total_outputs));
     let rbf_pct = stat(|s| {
         if s.total_tx > 0 {
             format!("{:.1}%", s.total_rbf as f64 / s.total_tx as f64 * 100.0)
-        } else {
-            "—".to_string()
-        }
+        } else { "\u{2014}".to_string() }
     });
 
-    // Embedded data stats
+    // === Embedded Data ===
     let inscriptions = stat(|s| format_compact(s.total_inscriptions));
     let inscriptions_sub = stat(|s| format!("{:.2} GB data", s.total_inscription_bytes as f64 / 1_000_000_000.0));
     let brc20 = stat(|s| format_compact(s.total_brc20));
     let brc20_sub = stat(|s| {
         if s.total_inscriptions > 0 {
             format!("{:.1}% of inscriptions", s.total_brc20 as f64 / s.total_inscriptions as f64 * 100.0)
-        } else {
-            String::new()
-        }
+        } else { String::new() }
     });
     let runes = stat(|s| format_compact(s.total_runes));
     let runes_sub = stat(|s| format!("{:.2} GB data", s.total_runes_bytes as f64 / 1_000_000_000.0));
@@ -148,6 +142,25 @@ pub fn StatsSummaryPage() -> impl IntoView {
     let op_return_sub = stat(|s| format!("{:.2} GB data", s.total_op_return_bytes as f64 / 1_000_000_000.0));
     let omni = stat(|s| format_compact(s.total_omni));
     let counterparty = stat(|s| format_compact(s.total_counterparty));
+
+    // === Extremes ===
+    let max_block_size = stat(|s| format!("{:.2} MB", s.max_block_size as f64 / 1_000_000.0));
+    let max_block_fees = stat(|s| format!("{} BTC", format_number_f64(s.max_block_fees as f64 / 100_000_000.0, 4)));
+    let empty_blocks = stat(|s| format_number(s.empty_block_count));
+    let empty_sub = stat(|s| {
+        if s.block_count > 0 {
+            format!("{:.2}% of blocks", s.empty_block_count as f64 / s.block_count as f64 * 100.0)
+        } else { String::new() }
+    });
+
+    // === Volume ===
+    let total_btc_transferred = stat(|s| {
+        if s.total_output_value > 0 {
+            format!("{} BTC", format_number_f64(s.total_output_value as f64 / 100_000_000.0, 2))
+        } else {
+            "backfill required".to_string()
+        }
+    });
 
     view! {
         <Title text="Bitcoin Stats Summary: At-a-Glance Network Counters | WE HODL BTC"/>
@@ -178,16 +191,21 @@ pub fn StatsSummaryPage() -> impl IntoView {
             <StatCard label="Transactions" value=txs sub=txs_sub/>
             <StatCard label="Avg Block Size" value=avg_size/>
             <StatCard label="Avg Block Time" value=avg_block_time/>
+            <StatCard label="Avg Txs/Block" value=avg_tx_per_block/>
             <StatCard label="Weight Utilization" value=weight_util/>
             <StatCard label="Chain Growth" value=chain_growth/>
+            <StatCard label="BTC Transferred" value=total_btc_transferred/>
 
             <SectionHeader title="Fees"/>
             <StatCard label="Total Fees" value=total_fees_btc sub=total_fees_sub/>
             <StatCard label="Avg Fee Rate" value=avg_fee_rate/>
+            <StatCard label="Avg Fee/Tx" value=avg_fee_per_tx/>
+            <StatCard label="Avg Median Fee" value=avg_median_fee/>
 
             <SectionHeader title="Adoption"/>
             <StatCard label="SegWit Transactions" value=segwit_pct/>
             <StatCard label="Taproot Outputs" value=taproot_outputs sub=taproot_sub/>
+            <StatCard label="Witness Data" value=witness_pct sub=Signal::derive(|| "of total block data".to_string())/>
             <StatCard label="Total Inputs" value=total_inputs/>
             <StatCard label="Total Outputs" value=total_outputs/>
             <StatCard label="RBF Usage" value=rbf_pct/>
@@ -199,6 +217,11 @@ pub fn StatsSummaryPage() -> impl IntoView {
             <StatCard label="OP_RETURN Outputs" value=op_return sub=op_return_sub/>
             <StatCard label="Omni Layer" value=omni/>
             <StatCard label="Counterparty" value=counterparty/>
+
+            <SectionHeader title="Extremes"/>
+            <StatCard label="Largest Block" value=max_block_size/>
+            <StatCard label="Highest Fee Block" value=max_block_fees/>
+            <StatCard label="Empty Blocks" value=empty_blocks sub=empty_sub/>
         </div>
     }
 }
