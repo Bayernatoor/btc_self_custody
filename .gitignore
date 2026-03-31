@@ -30,6 +30,9 @@ notes.md
 todo.md
 ARCHITECTURE.md
 *.db
+*.db-shm
+*.db-wal
+*.db-journal
 tasks/*
 MIGRATION_PLAN.md
 wallet_research_2026_03.md
