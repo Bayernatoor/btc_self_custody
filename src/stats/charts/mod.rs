@@ -66,7 +66,7 @@ pub(crate) fn chart_defaults() -> serde_json::Value {
             "feature": {
                 "restore": { "title": "Reset zoom" },
                 "dataZoom": { "title": { "zoom": "Zoom", "back": "Undo zoom" } },
-                "saveAsImage": { "title": "Save", "backgroundColor": "#0d2137" }
+                "saveAsImage": { "title": "Save image", "backgroundColor": "#0d2137" }
             },
             "iconStyle": { "borderColor": "#aaa" },
             "emphasis": { "iconStyle": { "borderColor": "#f7931a" } },
