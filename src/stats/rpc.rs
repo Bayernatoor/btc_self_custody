@@ -127,6 +127,15 @@ pub struct Block {
     pub brc20_count: u64,
     // Total value of non-coinbase outputs (satoshis)
     pub total_output_value: u64,
+    // Total value of non-coinbase inputs (satoshis)
+    pub total_input_value: u64,
+    // Fee rate percentiles (sat/vB)
+    pub fee_rate_p10: f64,
+    pub fee_rate_p90: f64,
+    // Stamps protocol (bare multisig encoding with specific pattern)
+    pub stamps_count: u64,
+    // Largest transaction in the block (bytes)
+    pub largest_tx_size: u64,
 }
 
 impl BitcoinRpc {
@@ -334,6 +343,9 @@ impl BitcoinRpc {
         let mut taproot_keypath_count = 0u64;
         let mut taproot_scriptpath_count = 0u64;
         let mut total_output_value = 0u64;
+        let mut total_input_value = 0u64;
+        let mut stamps_count = 0u64;
+        let mut largest_tx_size = 0u64;
 
         if let Some(txs) = result["tx"].as_array() {
             for tx in txs.iter().skip(1) {
@@ -349,11 +361,26 @@ impl BitcoinRpc {
                 }
 
                 // --- Inputs: counting, SegWit detection, RBF, witness bytes ---
+                // Track largest tx
+                if let Some(sz) = tx["size"].as_u64() {
+                    if sz > largest_tx_size {
+                        largest_tx_size = sz;
+                    }
+                }
+
                 let mut has_witness = false;
                 let mut is_rbf = false;
                 if let Some(vins) = tx["vin"].as_array() {
                     input_count += vins.len() as u64;
                     for vin in vins {
+                        // Sum input values from prevout
+                        if let Some(val) = vin.get("prevout")
+                            .and_then(|p| p.get("value"))
+                            .and_then(|v| v.as_f64())
+                        {
+                            total_input_value +=
+                                (val * 100_000_000.0).round() as u64;
+                        }
                         // Witness detection + byte counting + inscription detection
                         if let Some(wit) = vin["txinwitness"].as_array() {
                             has_witness = true;
@@ -507,7 +534,29 @@ impl BitcoinRpc {
                                     op_return_bytes += bytes;
                                 }
                             }
-                            Some("multisig") => multisig_count += 1,
+                            Some("multisig") => {
+                                multisig_count += 1;
+                                // Stamps: bare multisig with fake pubkeys (data encoding).
+                                // Real compressed pubkeys start with 02 or 03. If the hex
+                                // contains keys that don't, it's likely a Stamps output.
+                                if let Some(hex) = vout["scriptPubKey"]["hex"].as_str() {
+                                    // Stamps multisig pattern: 1-of-N where N keys contain data.
+                                    // The asm starts with "1 <key1> <key2> ... N OP_CHECKMULTISIG"
+                                    // Check if any 33-byte "key" doesn't start with 02/03.
+                                    if let Some(asm) = vout["scriptPubKey"]["asm"].as_str() {
+                                        let parts: Vec<&str> = asm.split_whitespace().collect();
+                                        // Valid multisig: M key1 key2 ... N OP_CHECKMULTISIG
+                                        if parts.len() >= 4 {
+                                            let has_fake_key = parts[1..parts.len() - 2].iter().any(|k| {
+                                                k.len() == 66 && !k.starts_with("02") && !k.starts_with("03")
+                                            });
+                                            if has_fake_key {
+                                                stamps_count += 1;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                             Some("nonstandard") => {
                                 unknown_script_count += 1;
                             }
@@ -531,6 +580,16 @@ impl BitcoinRpc {
             0.0
         } else {
             tx_fee_rates[(tx_fee_rates.len() - 1) / 2]
+        };
+        let fee_rate_p10 = if tx_fee_rates.len() >= 10 {
+            tx_fee_rates[tx_fee_rates.len() / 10]
+        } else {
+            0.0
+        };
+        let fee_rate_p90 = if tx_fee_rates.len() >= 10 {
+            tx_fee_rates[tx_fee_rates.len() * 9 / 10]
+        } else {
+            0.0
         };
 
         Ok(Block {
@@ -578,6 +637,11 @@ impl BitcoinRpc {
             inscription_bytes,
             brc20_count,
             total_output_value,
+            total_input_value,
+            fee_rate_p10,
+            fee_rate_p90,
+            stamps_count,
+            largest_tx_size,
         })
     }
 

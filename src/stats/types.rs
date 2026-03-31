@@ -55,6 +55,11 @@ pub struct BlockSummary {
     pub taproot_keypath_count: u64,
     pub taproot_scriptpath_count: u64,
     pub total_output_value: u64,
+    pub total_input_value: u64,
+    pub fee_rate_p10: f64,
+    pub fee_rate_p90: f64,
+    pub stamps_count: u64,
+    pub largest_tx_size: u64,
 }
 
 /// Full block detail (from query_block_by_height).
