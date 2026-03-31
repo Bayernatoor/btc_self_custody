@@ -11,6 +11,125 @@ use crate::stats::charts::OverlayFlags;
 use crate::stats::server_fns::*;
 use crate::stats::types::*;
 
+// ---------------------------------------------------------------------------
+// URL sync helpers (client-only)
+// ---------------------------------------------------------------------------
+
+/// Extract a query param value from a raw search string (e.g. "?range=3m&overlays=halvings").
+#[cfg(feature = "hydrate")]
+fn get_query_param(search: &str, key: &str) -> Option<String> {
+    let qs = search.strip_prefix('?').unwrap_or(search);
+    qs.split('&')
+        .filter_map(|pair| pair.split_once('='))
+        .find(|(k, _)| *k == key)
+        .map(|(_, v)| v.to_string())
+}
+
+/// Build a query string from key-value pairs, omitting empty values.
+#[cfg(feature = "hydrate")]
+fn build_query_string(params: &[(&str, Option<String>)]) -> String {
+    let parts: Vec<String> = params
+        .iter()
+        .filter_map(|(k, v)| v.as_ref().map(|val| format!("{k}={val}")))
+        .collect();
+    if parts.is_empty() {
+        String::new()
+    } else {
+        format!("?{}", parts.join("&"))
+    }
+}
+
+/// Update the browser URL bar to reflect current Observatory state
+/// without triggering a Leptos router navigation (uses history.replaceState).
+#[cfg(feature = "hydrate")]
+fn sync_url_to_state(
+    pathname: &str,
+    range: &str,
+    overlays: &[(&str, bool)],
+    section: Option<&str>,
+) {
+    let range_param = if range != "1y" {
+        Some(range.to_string())
+    } else {
+        None
+    };
+    let active: Vec<&str> = overlays
+        .iter()
+        .filter(|(_, on)| *on)
+        .map(|(name, _)| *name)
+        .collect();
+    let overlays_param = if active.is_empty() {
+        None
+    } else {
+        Some(active.join(","))
+    };
+    let section_param = section.map(|s| s.to_string());
+
+    let qs = build_query_string(&[
+        ("range", range_param),
+        ("overlays", overlays_param),
+        ("section", section_param),
+    ]);
+    let hash = leptos::prelude::window()
+        .location()
+        .hash()
+        .unwrap_or_default();
+    let url = format!("{pathname}{qs}{hash}");
+    let _ = leptos::prelude::window()
+        .history()
+        .expect("history")
+        .replace_state_with_url(
+            &wasm_bindgen::JsValue::NULL,
+            "",
+            Some(&url),
+        );
+}
+
+/// Update just the `section` query param in the current URL.
+/// Pass `None` to remove it (default section).
+#[cfg(feature = "hydrate")]
+pub fn update_section_in_url(section: Option<&str>) {
+    let window = leptos::prelude::window();
+    let pathname = window.location().pathname().unwrap_or_default();
+    let search = window.location().search().unwrap_or_default();
+    let hash = window.location().hash().unwrap_or_default();
+    let qs = search.strip_prefix('?').unwrap_or(&search);
+
+    // Rebuild params, replacing section
+    let mut parts: Vec<String> = qs
+        .split('&')
+        .filter(|p| !p.is_empty() && !p.starts_with("section="))
+        .map(|p| p.to_string())
+        .collect();
+    if let Some(s) = section {
+        parts.push(format!("section={s}"));
+    }
+    let new_qs = if parts.is_empty() {
+        String::new()
+    } else {
+        format!("?{}", parts.join("&"))
+    };
+    let url = format!("{pathname}{new_qs}{hash}");
+    let _ = window
+        .history()
+        .expect("history")
+        .replace_state_with_url(
+            &wasm_bindgen::JsValue::NULL,
+            "",
+            Some(&url),
+        );
+}
+
+/// Build the full shareable URL for a specific chart, including current state.
+#[cfg(feature = "hydrate")]
+pub fn build_share_url(chart_id: &str) -> String {
+    let window = leptos::prelude::window();
+    let origin = window.location().origin().unwrap_or_default();
+    let pathname = window.location().pathname().unwrap_or_default();
+    let search = window.location().search().unwrap_or_default();
+    format!("{origin}{pathname}{search}#{chart_id}")
+}
+
 /// Client-side chart JSON cache. Persists at the parent level across
 /// Outlet navigations so switching tabs doesn't recompute charts.
 /// Keyed by chart_id; invalidated when range or overlay flags change.
@@ -150,9 +269,9 @@ pub fn provide_observatory_state() -> ObservatoryState {
         signal(initial_overlays.iter().any(|s| s == "events"));
     let (overlay_panel_open, set_overlay_panel_open) = signal(false);
 
-    // URL query params are read on mount (above) but not synced back.
-    // The navigate() call was causing race conditions with Outlet transitions,
-    // interfering with child route mounting and Effect scheduling.
+    // URL query params are read on mount (above) and synced back via
+    // history.replaceState (see Effect at end of function). Direct replaceState
+    // avoids the race conditions that navigate() caused with Outlet transitions.
 
     // Price history: fetch once when enabled, cache so toggling overlay is instant
     let price_history_resource = LocalResource::new(move || {
@@ -274,15 +393,39 @@ pub fn provide_observatory_state() -> ObservatoryState {
         }
     });
 
-    // Pre-compute chain size cumulative data
+    // Fetch cumulative size offset (total bytes before visible window)
+    let chain_size_offset = LocalResource::new(move || {
+        let r = range.get();
+        async move {
+            let n = range_to_blocks(&r);
+            if n >= 999_999 {
+                return 0u64; // ALL range starts from genesis
+            }
+            let stats = fetch_stats_summary().await.ok();
+            let from_height = stats
+                .map(|s| s.min_height.max(s.max_height.saturating_sub(n)))
+                .unwrap_or(0);
+            if from_height > 0 {
+                fetch_cumulative_size(from_height).await.unwrap_or(0)
+            } else {
+                0u64
+            }
+        }
+    });
+
+    // Pre-compute chain size cumulative data (with offset for absolute values)
     let cached_chain_size_data = {
         let (cached, set_cached) = signal::<Vec<(u64, f64)>>(Vec::new());
         Effect::new(move |_| {
+            let offset_bytes = chain_size_offset
+                .get()
+                .unwrap_or(0);
             let result = dashboard_data
                 .get()
                 .and_then(|r| r.ok())
                 .map(|data| {
-                    let mut cumulative: f64 = 0.0;
+                    let mut cumulative: f64 =
+                        offset_bytes as f64 / 1_000_000_000.0;
                     match data {
                         DashboardData::PerBlock(ref blocks) => blocks
                             .iter()
@@ -375,6 +518,41 @@ pub fn provide_observatory_state() -> ObservatoryState {
         chart_cache,
         data_loading,
     };
+
+    // Sync state changes back to URL via history.replaceState (bypasses router)
+    #[cfg(feature = "hydrate")]
+    {
+        let location = leptos_router::hooks::use_location();
+        let mut first = true;
+        Effect::new(move |_| {
+            let r = range.get();
+            let overlays = [
+                ("halvings", overlay_halvings.get()),
+                ("bips", overlay_bips.get()),
+                ("core", overlay_core.get()),
+                ("price", overlay_price.get()),
+                ("chain_size", overlay_chain_size.get()),
+                ("events", overlay_events.get()),
+            ];
+            if first {
+                first = false;
+                return;
+            }
+            let pathname = location.pathname.get();
+            // Preserve section param (managed by child pages)
+            let search = leptos::prelude::window()
+                .location()
+                .search()
+                .unwrap_or_default();
+            let current_section = get_query_param(&search, "section");
+            sync_url_to_state(
+                &pathname,
+                &r,
+                &overlays,
+                current_section.as_deref(),
+            );
+        });
+    }
 
     provide_context(state.clone());
     state

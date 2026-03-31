@@ -76,6 +76,7 @@ pub fn ChartCard(
 ) -> impl IntoView {
     let (expanded, set_expanded) = signal(false);
     let anchor = chart_id.clone();
+    let share_id = chart_id.clone();
     let (copied, set_copied) = signal(false);
     let loading = expect_context::<super::shared::ObservatoryState>().data_loading;
     view! {
@@ -89,11 +90,10 @@ pub fn ChartCard(
                         on:click={
                             let id = anchor.clone();
                             move |_| {
-                                let window = leptos::prelude::window();
-                                if let Ok(href) = window.location().href() {
-                                    let base = href.split('#').next().unwrap_or("");
-                                    let url = format!("{base}#{id}");
-                                    let _ = window.navigator().clipboard().write_text(&url);
+                                #[cfg(feature = "hydrate")]
+                                {
+                                    let url = super::shared::build_share_url(&id);
+                                    let _ = leptos::prelude::window().navigator().clipboard().write_text(&url);
                                     set_copied.set(true);
                                     leptos::prelude::set_timeout(move || set_copied.set(false), std::time::Duration::from_secs(2));
                                 }
@@ -106,14 +106,44 @@ pub fn ChartCard(
                     </h3>
                     <p class="text-sm text-white/50 mt-0.5">{move || description.get()}</p>
                 </div>
-                <div class="flex items-center gap-2 shrink-0">
+                <div class="flex items-center gap-1 shrink-0">
                     {children.map(|c| c())}
                     <button
-                        class="text-white/30 hover:text-white/60 transition-colors cursor-pointer p-1"
+                        class="text-white/50 hover:text-[#f7931a] transition-colors cursor-pointer p-1.5 rounded-lg hover:bg-white/5"
+                        title="Copy link to chart"
+                        on:click={
+                            let _id = share_id.clone();
+                            move |_| {
+                                #[cfg(feature = "hydrate")]
+                                {
+                                    let url = super::shared::build_share_url(&_id);
+                                    let _ = leptos::prelude::window().navigator().clipboard().write_text(&url);
+                                    set_copied.set(true);
+                                    leptos::prelude::set_timeout(move || set_copied.set(false), std::time::Duration::from_secs(2));
+                                }
+                            }
+                        }
+                    >
+                        {move || if copied.get() {
+                            view! {
+                                <svg class="w-5 h-5 text-[#f7931a]" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
+                                </svg>
+                            }.into_any()
+                        } else {
+                            view! {
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m9.364-9.364a4.5 4.5 0 0 1 6.364 6.364l-1.757 1.757m-7.07 7.07 4.243-4.243"/>
+                                </svg>
+                            }.into_any()
+                        }}
+                    </button>
+                    <button
+                        class="text-white/50 hover:text-[#f7931a] transition-colors cursor-pointer p-1.5 rounded-lg hover:bg-white/5"
                         title="Expand"
                         on:click=move |_| set_expanded.set(true)
                     >
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15"/>
                         </svg>
                     </button>
