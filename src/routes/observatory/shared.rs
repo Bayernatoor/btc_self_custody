@@ -221,10 +221,29 @@ pub fn create_dashboard_resource(
                     let to_ts = date_to_ts(&to_str)
                         .map(|t| t + 86_399) // end of day
                         .unwrap_or(stats.latest_timestamp);
-                    let days = fetch_daily_aggregates(from_ts, to_ts)
-                        .await
-                        .map_err(|e| e.to_string())?;
-                    return Ok::<_, String>(DashboardData::Daily(days));
+                    // Estimate block count: (seconds / 600)
+                    let approx_blocks = (to_ts.saturating_sub(from_ts)) / 600;
+                    if approx_blocks > 5_000 {
+                        let days = fetch_daily_aggregates(from_ts, to_ts)
+                            .await
+                            .map_err(|e| e.to_string())?;
+                        return Ok::<_, String>(DashboardData::Daily(days));
+                    } else {
+                        // Short custom range: use per-block data
+                        let from = stats.min_height.max(
+                            stats.max_height.saturating_sub(
+                                (stats.latest_timestamp.saturating_sub(from_ts)) / 600
+                            )
+                        );
+                        let to = std::cmp::min(
+                            stats.max_height,
+                            from + approx_blocks
+                        );
+                        let blocks = fetch_blocks(from, to)
+                            .await
+                            .map_err(|e| e.to_string())?;
+                        return Ok(DashboardData::PerBlock(blocks));
+                    }
                 }
             }
 
@@ -444,15 +463,36 @@ pub fn provide_observatory_state() -> ObservatoryState {
     // Fetch cumulative size offset (total bytes before visible window)
     let chain_size_offset = LocalResource::new(move || {
         let r = range.get();
+        let cf = custom_from.get();
         async move {
             let n = range_to_blocks(&r);
-            if n >= 999_999 {
-                return 0u64; // ALL range starts from genesis
+            // ALL range starts from genesis — no offset needed
+            if n >= 999_999 && r != "custom" {
+                return 0u64;
             }
             let stats = fetch_stats_summary().await.ok();
-            let from_height = stats
-                .map(|s| s.min_height.max(s.max_height.saturating_sub(n)))
-                .unwrap_or(0);
+            let from_height = if r == "custom" {
+                // Custom range: estimate from_height using timestamp
+                if let Some(from_str) = cf {
+                    let from_ts = date_to_ts(&from_str).unwrap_or(0);
+                    if from_ts == 0 {
+                        return 0u64;
+                    }
+                    // Estimate: (latest_ts - from_ts) / 600 blocks back from tip
+                    stats
+                        .map(|s| {
+                            let blocks_back = (s.latest_timestamp.saturating_sub(from_ts)) / 600;
+                            s.min_height.max(s.max_height.saturating_sub(blocks_back))
+                        })
+                        .unwrap_or(0)
+                } else {
+                    return 0u64;
+                }
+            } else {
+                stats
+                    .map(|s| s.min_height.max(s.max_height.saturating_sub(n)))
+                    .unwrap_or(0)
+            };
             if from_height > 0 {
                 fetch_cumulative_size(from_height).await.unwrap_or(0)
             } else {
@@ -812,7 +852,8 @@ pub fn RangeSelector() -> impl IntoView {
                 <div class="flex items-center gap-2 bg-[#0a1a2e] rounded-xl p-2 border border-white/10">
                     <input
                         type="date"
-                        class="bg-[#0d2137] text-white/80 text-xs border border-white/10 rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#f7931a]/40"
+                        class="bg-[#0d2137] text-white text-xs border border-white/10 rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#f7931a]/40"
+                        style="color-scheme: dark"
                         prop:value=move || local_from.get()
                         on:input=move |ev| {
                                 set_local_from.set(event_target_value(&ev));
@@ -821,7 +862,8 @@ pub fn RangeSelector() -> impl IntoView {
                     <span class="text-white/30 text-xs">"to"</span>
                     <input
                         type="date"
-                        class="bg-[#0d2137] text-white/80 text-xs border border-white/10 rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#f7931a]/40"
+                        class="bg-[#0d2137] text-white text-xs border border-white/10 rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#f7931a]/40"
+                        style="color-scheme: dark"
                         prop:value=move || local_to.get()
                         on:input=move |ev| {
                                 set_local_to.set(event_target_value(&ev));
