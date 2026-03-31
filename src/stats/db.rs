@@ -643,6 +643,18 @@ pub fn query_cumulative_size(
     )
 }
 
+/// Cumulative block size before a given timestamp (for custom date ranges).
+pub fn query_cumulative_size_before_ts(
+    conn: &Connection,
+    before_ts: u64,
+) -> rusqlite::Result<u64> {
+    conn.query_row(
+        "SELECT COALESCE(SUM(size), 0) FROM blocks WHERE timestamp < ?1",
+        params![before_ts],
+        |row| row.get(0),
+    )
+}
+
 #[derive(serde::Serialize)]
 pub struct OpReturnRow {
     pub height: u64,
