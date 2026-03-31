@@ -14,7 +14,7 @@ use super::rpc::Block;
 /// The backfill loop processes all blocks with backfill_version < BACKFILL_VERSION.
 /// v8: OCEAN sub-miners, RBF excludes CSV, witness byte overhead, inscription byte
 ///     overhead, Runes height-gated to 840k+
-pub const BACKFILL_VERSION: u64 = 8;
+pub const BACKFILL_VERSION: u64 = 9;
 
 /// Type alias for the connection pool used throughout the stats module.
 pub type DbPool = r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>;
@@ -238,6 +238,20 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
         )?;
     }
 
+    let has_input_value: bool = conn
+        .prepare("SELECT total_input_value FROM blocks LIMIT 0")
+        .is_ok();
+    if !has_input_value {
+        tracing::info!("Migrating: adding total_input_value, fee percentiles, stamps_count, largest_tx_size");
+        conn.execute_batch(
+            "ALTER TABLE blocks ADD COLUMN total_input_value INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE blocks ADD COLUMN fee_rate_p10 REAL NOT NULL DEFAULT 0.0;
+             ALTER TABLE blocks ADD COLUMN fee_rate_p90 REAL NOT NULL DEFAULT 0.0;
+             ALTER TABLE blocks ADD COLUMN stamps_count INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE blocks ADD COLUMN largest_tx_size INTEGER NOT NULL DEFAULT 0;",
+        )?;
+    }
+
     // Ensure indexes exist (safe to run every startup)
     conn.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_blocks_backfill ON blocks(backfill_version);",
@@ -283,8 +297,10 @@ pub fn insert_blocks(
               p2tr_count, multisig_count, unknown_script_count,
               input_count, output_count, rbf_count, witness_bytes,
               inscription_count, inscription_bytes, brc20_count,
-              total_output_value, backfill_version)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36,?37,?38,?39,?40,?41,?42,?43,?44,?45)",
+              total_output_value, total_input_value,
+              fee_rate_p10, fee_rate_p90, stamps_count, largest_tx_size,
+              backfill_version)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36,?37,?38,?39,?40,?41,?42,?43,?44,?45,?46,?47,?48,?49,?50)",
         )?;
         for block in blocks {
             stmt.execute(params![
@@ -332,6 +348,11 @@ pub fn insert_blocks(
                 block.inscription_bytes,
                 block.brc20_count,
                 block.total_output_value,
+                block.total_input_value,
+                block.fee_rate_p10,
+                block.fee_rate_p90,
+                block.stamps_count,
+                block.largest_tx_size,
                 BACKFILL_VERSION,
             ])?;
         }
@@ -370,7 +391,7 @@ pub fn update_block_extras(
     let tx = conn.unchecked_transaction()?;
     {
         let mut stmt = tx.prepare_cached(
-            "UPDATE blocks SET version = ?1, total_fees = ?2, miner = ?3, median_fee = ?4, median_fee_rate = ?5, coinbase_locktime = ?6, coinbase_sequence = ?7, segwit_spend_count = ?8, taproot_spend_count = ?9, omni_count = ?10, omni_bytes = ?11, counterparty_count = ?12, counterparty_bytes = ?13, runes_count = ?14, runes_bytes = ?15, data_carrier_count = ?16, data_carrier_bytes = ?17, p2pk_count = ?18, p2pkh_count = ?19, p2sh_count = ?20, p2wpkh_count = ?21, p2wsh_count = ?22, p2tr_count = ?23, multisig_count = ?24, unknown_script_count = ?25, input_count = ?26, output_count = ?27, rbf_count = ?28, witness_bytes = ?29, inscription_count = ?30, inscription_bytes = ?31, brc20_count = ?32, taproot_keypath_count = ?33, taproot_scriptpath_count = ?34, total_output_value = ?35, backfill_version = ?36 WHERE height = ?37",
+            "UPDATE blocks SET version = ?1, total_fees = ?2, miner = ?3, median_fee = ?4, median_fee_rate = ?5, coinbase_locktime = ?6, coinbase_sequence = ?7, segwit_spend_count = ?8, taproot_spend_count = ?9, omni_count = ?10, omni_bytes = ?11, counterparty_count = ?12, counterparty_bytes = ?13, runes_count = ?14, runes_bytes = ?15, data_carrier_count = ?16, data_carrier_bytes = ?17, p2pk_count = ?18, p2pkh_count = ?19, p2sh_count = ?20, p2wpkh_count = ?21, p2wsh_count = ?22, p2tr_count = ?23, multisig_count = ?24, unknown_script_count = ?25, input_count = ?26, output_count = ?27, rbf_count = ?28, witness_bytes = ?29, inscription_count = ?30, inscription_bytes = ?31, brc20_count = ?32, taproot_keypath_count = ?33, taproot_scriptpath_count = ?34, total_output_value = ?35, total_input_value = ?36, fee_rate_p10 = ?37, fee_rate_p90 = ?38, stamps_count = ?39, largest_tx_size = ?40, backfill_version = ?41 WHERE height = ?42",
         )?;
         for block in blocks {
             stmt.execute(params![
@@ -409,6 +430,11 @@ pub fn update_block_extras(
                 block.taproot_keypath_count,
                 block.taproot_scriptpath_count,
                 block.total_output_value,
+                block.total_input_value,
+                block.fee_rate_p10,
+                block.fee_rate_p90,
+                block.stamps_count,
+                block.largest_tx_size,
                 BACKFILL_VERSION,
                 block.height
             ])?;

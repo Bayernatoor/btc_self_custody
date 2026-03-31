@@ -1177,6 +1177,11 @@ mod tests {
             taproot_keypath_count: 0,
             taproot_scriptpath_count: 0,
             total_output_value: 0,
+            total_input_value: 0,
+            fee_rate_p10: 0.0,
+            fee_rate_p90: 0.0,
+            stamps_count: 0,
+            largest_tx_size: 0,
         };
         let result = dp(&block, 42.5);
         let arr = result.as_array().unwrap();
