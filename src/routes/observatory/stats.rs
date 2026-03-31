@@ -97,7 +97,7 @@ pub fn StatsSummaryPage() -> impl IntoView {
             format!("{:.1}%", s.total_weight as f64 / s.block_count as f64 / 4_000_000.0 * 100.0)
         } else { "\u{2014}".to_string() }
     });
-    let chain_growth = stat(|s| format!("{:.1} GB", s.total_size as f64 / 1_000_000_000.0));
+    let chain_growth = stat(|s| format_data_size(s.total_size));
 
     // === Fees ===
     let total_fees_btc = stat(|s| format!("{} BTC", format_number_f64(s.total_fees as f64 / 100_000_000.0, 2)));
@@ -129,7 +129,7 @@ pub fn StatsSummaryPage() -> impl IntoView {
 
     // === Embedded Data ===
     let inscriptions = stat(|s| format_compact(s.total_inscriptions));
-    let inscriptions_sub = stat(|s| format!("{:.2} GB data", s.total_inscription_bytes as f64 / 1_000_000_000.0));
+    let inscriptions_sub = stat(|s| format!("{} data", format_data_size(s.total_inscription_bytes)));
     let brc20 = stat(|s| format_compact(s.total_brc20));
     let brc20_sub = stat(|s| {
         if s.total_inscriptions > 0 {
@@ -137,9 +137,9 @@ pub fn StatsSummaryPage() -> impl IntoView {
         } else { String::new() }
     });
     let runes = stat(|s| format_compact(s.total_runes));
-    let runes_sub = stat(|s| format!("{:.2} GB data", s.total_runes_bytes as f64 / 1_000_000_000.0));
+    let runes_sub = stat(|s| format!("{} data", format_data_size(s.total_runes_bytes)));
     let op_return = stat(|s| format_compact(s.total_op_return_count));
-    let op_return_sub = stat(|s| format!("{:.2} GB data", s.total_op_return_bytes as f64 / 1_000_000_000.0));
+    let op_return_sub = stat(|s| format!("{} data", format_data_size(s.total_op_return_bytes)));
     let omni = stat(|s| format_compact(s.total_omni));
     let counterparty = stat(|s| format_compact(s.total_counterparty));
 
@@ -180,7 +180,19 @@ pub fn StatsSummaryPage() -> impl IntoView {
                 <p class="text-[11px] sm:text-xs text-white/50 max-w-lg mx-auto px-4 text-center drop-shadow">"At-a-glance Bitcoin network counters for any time range"</p>
             </div>
         </div>
-        <div class="flex justify-end mb-6">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-6">
+            <p class="text-xs sm:text-sm text-white/40 font-mono">
+                {move || {
+                    data.get().map(|s| {
+                        let fmt = |ts: u64| {
+                            chrono::DateTime::from_timestamp(ts as i64, 0)
+                                .map(|dt| dt.format("%Y-%m-%d %H:%M UTC").to_string())
+                                .unwrap_or_default()
+                        };
+                        format!("{} \u{2192} {}", fmt(s.min_timestamp), fmt(s.max_timestamp))
+                    }).unwrap_or_default()
+                }}
+            </p>
             <super::shared::RangeSelector/>
         </div>
 
