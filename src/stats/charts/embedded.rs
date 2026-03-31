@@ -890,3 +890,61 @@ pub fn unified_embedded_volume_chart_daily(days: &[DailyAggregate]) -> serde_jso
         ]
     }))
 }
+
+/// Stamps output count over time (per-block).
+/// Requires backfill v9 for historical data.
+pub fn stamps_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+    if blocks.is_empty() {
+        return no_data_chart("Stamps");
+    }
+
+    let has_data = blocks.iter().any(|b| b.stamps_count > 0);
+    if !has_data {
+        return no_data_chart("Stamps (backfill required)");
+    }
+
+    let vals: Vec<f64> = blocks.iter().map(|b| b.stamps_count as f64).collect();
+    let raw: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(vals.iter())
+        .map(|(b, v)| dp(b, *v))
+        .collect();
+
+    let ma = moving_average(&vals, 144);
+    let ma_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(ma.iter())
+        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))]))
+        .collect();
+
+    let has_ma = show_ma(blocks.len());
+
+    let mut series = vec![json!({
+        "name": "Stamps", "type": "line", "data": raw,
+        "areaStyle": { "color": STAMPS_COLOR, "opacity": 0.15 },
+        "lineStyle": { "width": if has_ma { 1.0 } else { 1.5 }, "color": STAMPS_COLOR },
+        "itemStyle": { "color": STAMPS_COLOR }, "symbol": "none",
+        "opacity": if has_ma { 0.4 } else { 1.0 }
+    })];
+    if has_ma {
+        series.push(json!({
+            "name": "144-block MA", "type": "line", "data": ma_data,
+            "lineStyle": { "width": 2, "color": MA_COLOR },
+            "itemStyle": { "color": MA_COLOR }, "symbol": "none"
+        }));
+    }
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("Count"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": has_ma },
+        "series": series
+    }))
+}
+
+/// Stamps count (daily — not available in daily aggregates yet).
+pub fn stamps_chart_daily(_days: &[DailyAggregate]) -> serde_json::Value {
+    no_data_chart("Stamps (per-block ranges only)")
+}
