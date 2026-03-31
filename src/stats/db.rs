@@ -768,6 +768,77 @@ pub fn query_daily_aggregates(
     rows.collect()
 }
 
+/// Single-row aggregate summary for an arbitrary timestamp range.
+pub fn query_range_summary(
+    conn: &Connection,
+    from_ts: u64,
+    to_ts: u64,
+) -> rusqlite::Result<super::types::RangeSummary> {
+    conn.query_row(
+        "SELECT COUNT(*),
+                SUM(tx_count), SUM(size), SUM(weight),
+                SUM(total_fees), AVG(median_fee_rate),
+                MIN(timestamp), MAX(timestamp),
+                SUM(segwit_spend_count), SUM(taproot_spend_count),
+                SUM(taproot_keypath_count), SUM(taproot_scriptpath_count),
+                SUM(p2pkh_count), SUM(p2sh_count),
+                SUM(p2wpkh_count), SUM(p2wsh_count), SUM(p2tr_count),
+                SUM(input_count), SUM(output_count), SUM(rbf_count),
+                SUM(witness_bytes),
+                SUM(inscription_count), SUM(inscription_bytes), SUM(brc20_count),
+                SUM(op_return_count), SUM(op_return_bytes),
+                SUM(runes_count), SUM(runes_bytes),
+                SUM(omni_count), SUM(counterparty_count), SUM(data_carrier_count)
+         FROM blocks
+         WHERE timestamp >= ?1 AND timestamp <= ?2",
+        params![from_ts, to_ts],
+        |row| {
+            let block_count: u64 = row.get(0)?;
+            let min_ts: u64 = row.get::<_, Option<u64>>(6)?.unwrap_or(0);
+            let max_ts: u64 = row.get::<_, Option<u64>>(7)?.unwrap_or(0);
+            let avg_block_time = if block_count > 1 {
+                (max_ts - min_ts) as f64 / (block_count - 1) as f64 / 60.0
+            } else {
+                0.0
+            };
+            Ok(super::types::RangeSummary {
+                block_count,
+                total_tx: row.get(1)?,
+                total_size: row.get(2)?,
+                total_weight: row.get(3)?,
+                total_fees: row.get(4)?,
+                avg_fee_rate: row.get::<_, Option<f64>>(5)?.unwrap_or(0.0),
+                avg_block_time,
+                min_timestamp: min_ts,
+                max_timestamp: max_ts,
+                total_segwit_txs: row.get(8)?,
+                total_taproot_outputs: row.get(9)?,
+                total_taproot_keypath: row.get(10)?,
+                total_taproot_scriptpath: row.get(11)?,
+                total_p2pkh: row.get(12)?,
+                total_p2sh: row.get(13)?,
+                total_p2wpkh: row.get(14)?,
+                total_p2wsh: row.get(15)?,
+                total_p2tr: row.get(16)?,
+                total_inputs: row.get(17)?,
+                total_outputs: row.get(18)?,
+                total_rbf: row.get(19)?,
+                total_witness_bytes: row.get(20)?,
+                total_inscriptions: row.get(21)?,
+                total_inscription_bytes: row.get(22)?,
+                total_brc20: row.get(23)?,
+                total_op_return_count: row.get(24)?,
+                total_op_return_bytes: row.get(25)?,
+                total_runes: row.get(26)?,
+                total_runes_bytes: row.get(27)?,
+                total_omni: row.get(28)?,
+                total_counterparty: row.get(29)?,
+                total_data_carrier: row.get(30)?,
+            })
+        },
+    )
+}
+
 #[derive(serde::Serialize)]
 pub struct SignalingBlock {
     pub height: u64,

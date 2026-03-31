@@ -59,6 +59,19 @@ pub fn format_number(n: u64) -> String {
         .join(",")
 }
 
+/// Format a large number in compact human-readable form (1.24M, 84.2K, etc.).
+pub fn format_compact(n: u64) -> String {
+    if n >= 1_000_000_000 {
+        format!("{:.2}B", n as f64 / 1_000_000_000.0)
+    } else if n >= 1_000_000 {
+        format!("{:.2}M", n as f64 / 1_000_000.0)
+    } else if n >= 10_000 {
+        format!("{:.1}K", n as f64 / 1_000.0)
+    } else {
+        format_number(n)
+    }
+}
+
 /// Format a f64 with comma separators and fixed decimal places.
 pub fn format_number_f64(n: f64, decimals: usize) -> String {
     let rounded = format!("{:.prec$}", n, prec = decimals);

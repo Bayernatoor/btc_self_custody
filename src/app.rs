@@ -28,7 +28,7 @@ use crate::routes::homepage::HomePage;
 use crate::routes::observatory::learn::protocols::ProtocolGuidePage;
 use crate::routes::observatory::{
     EmbeddedChartsPage, FeeChartsPage, MiningChartsPage, NetworkChartsPage,
-    ObservatoryOverview, ObservatoryPage, SignalingPage,
+    ObservatoryOverview, ObservatoryPage, SignalingPage, StatsSummaryPage,
 };
 use leptos::prelude::*;
 use leptos_meta::*;
@@ -174,6 +174,7 @@ pub fn App() -> impl IntoView {
                             <Route path=path!("/charts/mining") view=MiningChartsPage/>
                             <Route path=path!("/charts/embedded") view=EmbeddedChartsPage/>
                             <Route path=path!("/signaling") view=SignalingPage/>
+                            <Route path=path!("/stats") view=StatsSummaryPage/>
                         </ParentRoute>
                         <Route path=path!("/observatory/learn/protocols") view=ProtocolGuidePage/>
                         // Other routes

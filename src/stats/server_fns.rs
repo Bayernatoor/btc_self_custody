@@ -789,3 +789,20 @@ pub async fn fetch_block_timestamp(
 
     Ok(result)
 }
+
+#[server(prefix = "/api", endpoint = "range_summary")]
+pub async fn fetch_range_summary(
+    from_ts: u64,
+    to_ts: u64,
+) -> Result<RangeSummary, ServerFnError> {
+    let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
+        leptos_axum::extract().await.map_err(|e| {
+            ServerFnError::new(format!("Stats not available: {e}"))
+        })?;
+    let conn = state
+        .db
+        .get()
+        .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+    super::db::query_range_summary(&conn, from_ts, to_ts)
+        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))
+}

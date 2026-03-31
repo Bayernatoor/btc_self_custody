@@ -808,6 +808,7 @@ fn OverlayCheckbox(
 pub fn ObservatoryNav() -> impl IntoView {
     let tabs: Vec<(&'static str, &'static str)> = vec![
         ("/observatory", "Dashboard"),
+        ("/observatory/stats", "Stats"),
         ("/observatory/charts/network", "Network"),
         ("/observatory/charts/fees", "Fees"),
         ("/observatory/charts/mining", "Mining"),
