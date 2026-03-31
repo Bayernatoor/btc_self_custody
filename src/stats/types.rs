@@ -192,6 +192,18 @@ pub struct RangeSummary {
     pub witness_pct: f64,
 }
 
+/// Mining pool + price context for a time range (Stats Dashboard).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MiningPriceSummary {
+    pub top_pool_name: String,
+    pub top_pool_blocks: u64,
+    pub top_pool_pct: f64,
+    pub pool_count: u64,
+    pub price_start: f64,
+    pub price_end: f64,
+    pub price_change_pct: f64,
+}
+
 /// Per-block signaling status.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SignalingBlock {
