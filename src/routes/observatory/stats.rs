@@ -50,10 +50,23 @@ pub fn StatsSummaryPage() -> impl IntoView {
     let state = expect_context::<ObservatoryState>();
     let range = state.range;
 
-    // Compute timestamp range from the selected preset
+    let custom_from = state.custom_from;
+    let custom_to = state.custom_to;
+
+    // Compute timestamp range from the selected preset or custom dates
     let ts_range = Signal::derive(move || {
         let r = range.get();
         let now = chrono::Utc::now().timestamp() as u64;
+        if r == "custom" {
+            let from = custom_from.get()
+                .and_then(|s| super::shared::date_to_ts(&s))
+                .unwrap_or(0);
+            let to = custom_to.get()
+                .and_then(|s| super::shared::date_to_ts(&s))
+                .map(|t| t + 86_399)
+                .unwrap_or(now);
+            return (from, to);
+        }
         let n = range_to_blocks(&r);
         let seconds = n * 600;
         let from = if n >= 999_999 { 0 } else { now.saturating_sub(seconds) };

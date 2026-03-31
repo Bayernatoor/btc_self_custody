@@ -43,6 +43,7 @@ pub fn range_to_blocks(range: &str) -> u64 {
         "5y" => 262_800,
         "10y" => 525_600,
         "all" => 999_999,
+        "custom" => 999_999, // custom ranges always use daily aggregates
         _ => 12_960,
     }
 }
