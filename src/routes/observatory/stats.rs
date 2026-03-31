@@ -21,7 +21,11 @@ fn StatCard(
 ) -> impl IntoView {
     view! {
         <div
-            class="bg-[#0d2137] border border-white/10 rounded-xl p-3 sm:p-4"
+            class=if tooltip.is_some() {
+                "bg-[#0d2137] border border-white/10 rounded-xl p-3 sm:p-4 cursor-help"
+            } else {
+                "bg-[#0d2137] border border-white/10 rounded-xl p-3 sm:p-4"
+            }
             title=tooltip.unwrap_or("")
         >
             <p class="text-[10px] sm:text-xs text-white/40 uppercase tracking-wider mb-1">{label}</p>
