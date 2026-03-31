@@ -673,3 +673,64 @@ pub fn chain_size_chart_daily(
         "series": series
     }))
 }
+
+/// Largest transaction size per block (per-block).
+/// Requires backfill v9 for historical data.
+pub fn largest_tx_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+    if blocks.is_empty() {
+        return no_data_chart("Largest Transaction");
+    }
+
+    let has_data = blocks.iter().any(|b| b.largest_tx_size > 0);
+    if !has_data {
+        return no_data_chart("Largest Transaction (backfill required)");
+    }
+
+    let vals: Vec<f64> = blocks
+        .iter()
+        .map(|b| b.largest_tx_size as f64 / 1_000.0) // KB
+        .collect();
+
+    let raw: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(vals.iter())
+        .map(|(b, v)| dp(b, *v))
+        .collect();
+
+    let ma = moving_average(&vals, 144);
+    let ma_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(ma.iter())
+        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))]))
+        .collect();
+
+    let has_ma = show_ma(blocks.len());
+
+    let mut series = vec![json!({
+        "name": "Largest Tx", "type": "line", "data": raw,
+        "lineStyle": { "width": if has_ma { 1.0 } else { 1.5 }, "color": DATA_COLOR },
+        "itemStyle": { "color": DATA_COLOR }, "symbol": "none",
+        "opacity": if has_ma { 0.4 } else { 1.0 }
+    })];
+    if has_ma {
+        series.push(json!({
+            "name": "144-block MA", "type": "line", "data": ma_data,
+            "lineStyle": { "width": 2, "color": MA_COLOR },
+            "itemStyle": { "color": MA_COLOR }, "symbol": "none"
+        }));
+    }
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("KB"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": has_ma },
+        "series": series
+    }))
+}
+
+/// Largest transaction size per block (daily — not available).
+pub fn largest_tx_chart_daily(_days: &[DailyAggregate]) -> serde_json::Value {
+    no_data_chart("Largest Transaction (per-block ranges only)")
+}
