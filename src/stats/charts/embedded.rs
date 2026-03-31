@@ -610,13 +610,13 @@ pub fn all_embedded_share_chart(blocks: &[BlockSummary]) -> serde_json::Value {
             {
                 "name": "OP_RETURN", "type": "line", "data": op_data,
                 "stack": "embed", "areaStyle": { "opacity": 0.5 },
-                "lineStyle": { "width": 0.5, "color": OPRETURN_COLOR },
+                "lineStyle": { "width": 0, "color": OPRETURN_COLOR },
                 "itemStyle": { "color": OPRETURN_COLOR }, "symbol": "none"
             },
             {
                 "name": "Inscriptions", "type": "line", "data": insc_data,
                 "stack": "embed", "areaStyle": { "opacity": 0.5 },
-                "lineStyle": { "width": 0.5, "color": INSCRIPTION_COLOR },
+                "lineStyle": { "width": 0, "color": INSCRIPTION_COLOR },
                 "itemStyle": { "color": INSCRIPTION_COLOR }, "symbol": "none"
             }
         ]
@@ -667,13 +667,13 @@ pub fn all_embedded_share_chart_daily(days: &[DailyAggregate]) -> serde_json::Va
             {
                 "name": "OP_RETURN", "type": "line", "data": op_vals,
                 "stack": "embed", "areaStyle": { "opacity": 0.5 },
-                "lineStyle": { "width": 0.5, "color": OPRETURN_COLOR },
+                "lineStyle": { "width": 0, "color": OPRETURN_COLOR },
                 "itemStyle": { "color": OPRETURN_COLOR }, "symbol": "none"
             },
             {
                 "name": "Inscriptions", "type": "line", "data": insc_vals,
                 "stack": "embed", "areaStyle": { "opacity": 0.5 },
-                "lineStyle": { "width": 0.5, "color": INSCRIPTION_COLOR },
+                "lineStyle": { "width": 0, "color": INSCRIPTION_COLOR },
                 "itemStyle": { "color": INSCRIPTION_COLOR }, "symbol": "none"
             }
         ]
