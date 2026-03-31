@@ -269,12 +269,10 @@ pub fn StatsSummaryPage() -> impl IntoView {
                     }}
                 </p>
                 <span
-                    class="text-white/30 hover:text-white/60 cursor-help transition-colors"
+                    class="inline-flex items-center justify-center w-4 h-4 rounded-full border border-white/20 text-[9px] font-bold text-white/30 hover:text-[#f7931a] hover:border-[#f7931a]/40 cursor-help transition-colors"
                     title="Timestamps reflect the actual first and last block mined in this range, not the query boundaries. Bitcoin blocks are mined at irregular intervals so times won\u{2019}t align exactly with midnight."
                 >
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z"/>
-                    </svg>
+                    "\u{20bf}"
                 </span>
             </div>
             <super::shared::RangeSelector/>
