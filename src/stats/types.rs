@@ -145,6 +145,43 @@ pub struct DailyAggregate {
     pub avg_taproot_scriptpath_count: f64,
 }
 
+/// Aggregated summary for an arbitrary time range (Stats Dashboard).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RangeSummary {
+    pub block_count: u64,
+    pub total_tx: u64,
+    pub total_size: u64,
+    pub total_weight: u64,
+    pub total_fees: u64,
+    pub avg_fee_rate: f64,
+    pub avg_block_time: f64,
+    pub total_segwit_txs: u64,
+    pub total_taproot_outputs: u64,
+    pub total_taproot_keypath: u64,
+    pub total_taproot_scriptpath: u64,
+    pub total_p2pkh: u64,
+    pub total_p2sh: u64,
+    pub total_p2wpkh: u64,
+    pub total_p2wsh: u64,
+    pub total_p2tr: u64,
+    pub total_inputs: u64,
+    pub total_outputs: u64,
+    pub total_rbf: u64,
+    pub total_witness_bytes: u64,
+    pub total_inscriptions: u64,
+    pub total_inscription_bytes: u64,
+    pub total_brc20: u64,
+    pub total_op_return_count: u64,
+    pub total_op_return_bytes: u64,
+    pub total_runes: u64,
+    pub total_runes_bytes: u64,
+    pub total_omni: u64,
+    pub total_counterparty: u64,
+    pub total_data_carrier: u64,
+    pub min_timestamp: u64,
+    pub max_timestamp: u64,
+}
+
 /// Per-block signaling status.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SignalingBlock {
