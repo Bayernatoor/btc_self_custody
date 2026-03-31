@@ -555,6 +555,73 @@ pub fn query_blocks(
     rows.collect()
 }
 
+/// Query blocks by timestamp range (for custom date ranges).
+pub fn query_blocks_by_ts(
+    conn: &Connection,
+    from_ts: u64,
+    to_ts: u64,
+) -> rusqlite::Result<Vec<BlockRow>> {
+    let mut stmt = conn.prepare(
+        "SELECT height, hash, timestamp, tx_count, size, weight, difficulty,
+                total_fees, median_fee, median_fee_rate,
+                segwit_spend_count, taproot_spend_count,
+                p2pk_count, p2pkh_count, p2sh_count, p2wpkh_count, p2wsh_count,
+                p2tr_count, multisig_count, unknown_script_count,
+                input_count, output_count, rbf_count, witness_bytes,
+                inscription_count, inscription_bytes, brc20_count,
+                op_return_count, op_return_bytes,
+                runes_count, runes_bytes, omni_count, omni_bytes,
+                counterparty_count, counterparty_bytes,
+                data_carrier_count, data_carrier_bytes,
+                taproot_keypath_count, taproot_scriptpath_count
+         FROM blocks WHERE timestamp >= ?1 AND timestamp <= ?2 ORDER BY height ASC",
+    )?;
+    let rows = stmt.query_map(params![from_ts, to_ts], |row| {
+        Ok(BlockRow {
+            height: row.get(0)?,
+            hash: row.get(1)?,
+            timestamp: row.get(2)?,
+            tx_count: row.get(3)?,
+            size: row.get(4)?,
+            weight: row.get(5)?,
+            difficulty: row.get(6)?,
+            total_fees: row.get(7)?,
+            median_fee: row.get(8)?,
+            median_fee_rate: row.get(9)?,
+            segwit_spend_count: row.get(10)?,
+            taproot_spend_count: row.get(11)?,
+            p2pk_count: row.get(12)?,
+            p2pkh_count: row.get(13)?,
+            p2sh_count: row.get(14)?,
+            p2wpkh_count: row.get(15)?,
+            p2wsh_count: row.get(16)?,
+            p2tr_count: row.get(17)?,
+            multisig_count: row.get(18)?,
+            unknown_script_count: row.get(19)?,
+            input_count: row.get(20)?,
+            output_count: row.get(21)?,
+            rbf_count: row.get(22)?,
+            witness_bytes: row.get(23)?,
+            inscription_count: row.get(24)?,
+            inscription_bytes: row.get(25)?,
+            brc20_count: row.get(26)?,
+            op_return_count: row.get(27)?,
+            op_return_bytes: row.get(28)?,
+            runes_count: row.get(29)?,
+            runes_bytes: row.get(30)?,
+            omni_count: row.get(31)?,
+            omni_bytes: row.get(32)?,
+            counterparty_count: row.get(33)?,
+            counterparty_bytes: row.get(34)?,
+            data_carrier_count: row.get(35)?,
+            data_carrier_bytes: row.get(36)?,
+            taproot_keypath_count: row.get(37)?,
+            taproot_scriptpath_count: row.get(38)?,
+        })
+    })?;
+    rows.collect()
+}
+
 #[derive(serde::Serialize)]
 pub struct FullBlockRow {
     pub height: u64,

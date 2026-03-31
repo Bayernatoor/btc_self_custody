@@ -214,18 +214,25 @@ pub fn create_dashboard_resource(
             let stats =
                 fetch_stats_summary().await.map_err(|e| e.to_string())?;
 
-            // Custom date range — always use daily aggregates (timestamp-based,
-            // avoids unreliable height estimation from timestamps)
+            // Custom date range — use timestamp-based queries directly
             if r == "custom" {
                 if let (Some(from_str), Some(to_str)) = (cf, ct) {
                     let from_ts = date_to_ts(&from_str).unwrap_or(0);
                     let to_ts = date_to_ts(&to_str)
                         .map(|t| t + 86_399) // end of day
                         .unwrap_or(stats.latest_timestamp);
-                    let days = fetch_daily_aggregates(from_ts, to_ts)
-                        .await
-                        .map_err(|e| e.to_string())?;
-                    return Ok::<_, String>(DashboardData::Daily(days));
+                    let approx_blocks = to_ts.saturating_sub(from_ts) / 600;
+                    if approx_blocks > 5_000 {
+                        let days = fetch_daily_aggregates(from_ts, to_ts)
+                            .await
+                            .map_err(|e| e.to_string())?;
+                        return Ok::<_, String>(DashboardData::Daily(days));
+                    } else {
+                        let blocks = fetch_blocks_by_ts(from_ts, to_ts)
+                            .await
+                            .map_err(|e| e.to_string())?;
+                        return Ok(DashboardData::PerBlock(blocks));
+                    }
                 }
             }
 
