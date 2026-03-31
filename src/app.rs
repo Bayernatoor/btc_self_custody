@@ -175,6 +175,14 @@ pub fn App() -> impl IntoView {
                             <Route path=path!("/charts/embedded") view=EmbeddedChartsPage/>
                             <Route path=path!("/signaling") view=SignalingPage/>
                             <Route path=path!("/stats") view=StatsSummaryPage/>
+                            <Route path=path!("/*any") view=|| view! {
+                                <div class="flex flex-col items-center justify-center min-h-[40vh] px-6">
+                                    <div class="text-[4rem] font-title text-white/10 font-bold mb-4">"404"</div>
+                                    <h1 class="text-xl text-white font-semibold mb-2">"Page not found"</h1>
+                                    <p class="text-sm text-white/50 mb-8">"This observatory page doesn\u{2019}t exist."</p>
+                                    <a href="/observatory" class="px-5 py-2.5 bg-[#f7931a] text-white text-sm font-medium rounded-xl hover:bg-[#f4a949] transition-all">"Back to Dashboard"</a>
+                                </div>
+                            }/>
                         </ParentRoute>
                         <Route path=path!("/observatory/learn/protocols") view=ProtocolGuidePage/>
                         // Other routes
