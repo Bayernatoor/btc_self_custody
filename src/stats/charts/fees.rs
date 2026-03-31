@@ -290,18 +290,53 @@ pub fn median_fee_rate_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 }
 
 /// Median fee rate over time (daily).
+/// DailyAggregate doesn't store median_fee_rate directly, so we approximate
+/// using total_fees / total_tx / avg_vsize. This is the average fee rate,
+/// not the true median, but it's a reasonable proxy for daily granularity.
 pub fn median_fee_rate_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     if days.is_empty() {
-        return no_data_chart("Median Fee Rate");
+        return no_data_chart("Avg Fee Rate");
     }
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    // avg_median_fee_rate is not in DailyAggregate, use total_fees / tx / avg_size as proxy
-    // Actually median_fee_rate is AVG'd in the daily query — but it's not stored.
-    // Use avg_fee_rate approximation: we don't have per-day median_fee_rate in DailyAggregate.
-    // For now, show a note. Actually let me check what fields are available...
-    // DailyAggregate doesn't have median_fee_rate. Skip daily for this chart.
-    no_data_chart("Median Fee Rate (per-block ranges only)")
+    // Approximate: total_fees / (total_tx * avg_vsize_per_tx)
+    // avg_vsize ≈ avg_size * 0.75 (SegWit discount estimate)
+    let vals: Vec<f64> = days
+        .iter()
+        .map(|d| {
+            let total_tx = d.avg_tx_count * d.block_count as f64;
+            let avg_vsize = d.avg_size * 0.75; // approximate vsize from size
+            if total_tx > 1.0 && avg_vsize > 0.0 {
+                let avg_fee_per_tx = d.total_fees as f64 / total_tx;
+                let avg_tx_vsize = avg_vsize / d.avg_tx_count;
+                let rate = avg_fee_per_tx / avg_tx_vsize;
+                (rate * 100.0).round() / 100.0
+            } else {
+                0.0
+            }
+        })
+        .collect();
+
+    let ma = moving_average(&vals, 7);
+    let ma_vals: Vec<serde_json::Value> = ma
+        .iter()
+        .map(|v| match v { Some(x) => json!(x), None => json!(null) })
+        .collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": y_axis("sat/vB (approx)"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "series": [
+            { "name": "Avg Fee Rate", "type": "line", "data": vals,
+              "lineStyle": { "width": 1, "color": DATA_COLOR },
+              "itemStyle": { "color": DATA_COLOR }, "symbol": "none", "opacity": 0.4 },
+            { "name": "7-day MA", "type": "line", "data": ma_vals,
+              "lineStyle": { "width": 2, "color": MA_COLOR },
+              "itemStyle": { "color": MA_COLOR }, "symbol": "none" }
+        ]
+    }))
 }
 
 /// Fee rate percentile band (per-block: p10, median, p90).

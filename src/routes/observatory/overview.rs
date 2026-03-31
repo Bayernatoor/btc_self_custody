@@ -240,9 +240,9 @@ pub fn ObservatoryOverview() -> impl IntoView {
         if current_ts <= start_ts {
             return "\u{2014}".to_string();
         }
-        let elapsed_min = (current_ts - start_ts) as f64 / 60.0;
-        let avg = elapsed_min / blocks_in as f64;
-        format!("{:.1} min", avg)
+        let elapsed_secs = (current_ts - start_ts) as f64;
+        let avg_secs = (elapsed_secs / blocks_in as f64).round() as u64;
+        format!("{}:{:02}", avg_secs / 60, avg_secs % 60)
     });
 
     // Measured avg block time in minutes (from current difficulty period),
@@ -435,7 +435,7 @@ pub fn ObservatoryOverview() -> impl IntoView {
                         <LiveCard label="Price (USD)" value=price_usd tooltip="Current BTC/USD spot price"/>
                         <LiveCard label="Sats/Dollar" value=sats_per_dollar tooltip="How many satoshis (0.00000001 BTC) one US dollar buys"/>
                         <LiveCard label="Market Cap" value=market_cap tooltip="Total supply multiplied by current price. Circulating market capitalization"/>
-                        <LiveCard label="Total Supply" value=total_supply tooltip="Total BTC mined so far. Maximum supply is 21,000,000 BTC"/>
+                        <LiveCard label="Total Supply" value=total_supply tooltip="Total BTC mined so far. The theoretical max is 20,999,999.9769 BTC due to rounding of halving rewards. Additionally ~100+ BTC are permanently lost from unclaimed rewards and the unspendable genesis coinbase"/>
                         <LiveCard label="% Issued" value=supply_pct tooltip="Percentage of the 21M hard cap that has been mined"/>
                         <LiveCard label="UTXO Count" value=utxo_count tooltip="Total unspent transaction outputs in the UTXO set. Each represents a spendable coin"/>
                     </div>
