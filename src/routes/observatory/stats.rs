@@ -135,6 +135,13 @@ pub fn StatsSummaryPage() -> impl IntoView {
     let inscriptions = stat(|s| format_compact(s.total_inscriptions));
     let inscriptions_sub = stat(|s| format!("{:.2} GB data", s.total_inscription_bytes as f64 / 1_000_000_000.0));
     let brc20 = stat(|s| format_compact(s.total_brc20));
+    let brc20_sub = stat(|s| {
+        if s.total_inscriptions > 0 {
+            format!("{:.1}% of inscriptions", s.total_brc20 as f64 / s.total_inscriptions as f64 * 100.0)
+        } else {
+            String::new()
+        }
+    });
     let runes = stat(|s| format_compact(s.total_runes));
     let runes_sub = stat(|s| format!("{:.2} GB data", s.total_runes_bytes as f64 / 1_000_000_000.0));
     let op_return = stat(|s| format_compact(s.total_op_return_count));
@@ -187,7 +194,7 @@ pub fn StatsSummaryPage() -> impl IntoView {
 
             <SectionHeader title="Embedded Data"/>
             <StatCard label="Inscriptions" value=inscriptions sub=inscriptions_sub/>
-            <StatCard label="BRC-20" value=brc20/>
+            <StatCard label="BRC-20" value=brc20 sub=brc20_sub/>
             <StatCard label="Runes" value=runes sub=runes_sub/>
             <StatCard label="OP_RETURN Outputs" value=op_return sub=op_return_sub/>
             <StatCard label="Omni Layer" value=omni/>
