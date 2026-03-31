@@ -47,6 +47,8 @@ fn sync_url_to_state(
     range: &str,
     overlays: &[(&str, bool)],
     section: Option<&str>,
+    custom_from: Option<&str>,
+    custom_to: Option<&str>,
 ) {
     let range_param = if range != "1y" {
         Some(range.to_string())
@@ -64,11 +66,15 @@ fn sync_url_to_state(
         Some(active.join(","))
     };
     let section_param = section.map(|s| s.to_string());
+    let from_param = custom_from.map(|s| s.to_string());
+    let to_param = custom_to.map(|s| s.to_string());
 
     let qs = build_query_string(&[
         ("range", range_param),
         ("overlays", overlays_param),
         ("section", section_param),
+        ("from", from_param),
+        ("to", to_param),
     ]);
     let hash = leptos::prelude::window()
         .location()
@@ -178,18 +184,49 @@ pub struct ObservatoryState {
     pub chart_cache: ChartCache,
     // true briefly when range changes (before new data arrives)
     pub data_loading: ReadSignal<bool>,
+    // Custom date range (set when range == "custom")
+    pub custom_from: ReadSignal<Option<String>>,
+    pub set_custom_from: WriteSignal<Option<String>>,
+    pub custom_to: ReadSignal<Option<String>>,
+    pub set_custom_to: WriteSignal<Option<String>>,
 }
 
 /// Create a dashboard data resource. Each chart page calls this to get its own
 /// resource that fires on mount (avoids stale Effect issues with Outlet navigation).
+/// Parse a "YYYY-MM-DD" date string to a Unix timestamp (midnight UTC).
+pub fn date_to_ts(date: &str) -> Option<u64> {
+    chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d")
+        .ok()
+        .and_then(|d| d.and_hms_opt(0, 0, 0))
+        .map(|dt| dt.and_utc().timestamp() as u64)
+}
+
 pub fn create_dashboard_resource(
     range: ReadSignal<String>,
+    custom_from: ReadSignal<Option<String>>,
+    custom_to: ReadSignal<Option<String>>,
 ) -> LocalResource<Result<DashboardData, String>> {
     LocalResource::new(move || {
         let r = range.get();
+        let cf = custom_from.get();
+        let ct = custom_to.get();
         async move {
             let stats =
                 fetch_stats_summary().await.map_err(|e| e.to_string())?;
+
+            // Custom date range
+            if r == "custom" {
+                if let (Some(from_str), Some(to_str)) = (cf, ct) {
+                    let from_ts = date_to_ts(&from_str).unwrap_or(0);
+                    let to_ts = date_to_ts(&to_str)
+                        .map(|t| t + 86_399) // end of day
+                        .unwrap_or(stats.latest_timestamp);
+                    let days = fetch_daily_aggregates(from_ts, to_ts)
+                        .await
+                        .map_err(|e| e.to_string())?;
+                    return Ok::<_, String>(DashboardData::Daily(days));
+                }
+            }
 
             let n = range_to_blocks(&r);
             let is_daily = n > 5_000;
@@ -232,7 +269,18 @@ pub fn provide_observatory_state() -> ObservatoryState {
         .map(|s| s.split(',').map(|s| s.to_string()).collect())
         .unwrap_or_default();
 
+    let initial_custom_from = query
+        .read_untracked()
+        .get("from")
+        .filter(|s| !s.is_empty());
+    let initial_custom_to = query
+        .read_untracked()
+        .get("to")
+        .filter(|s| !s.is_empty());
+
     let (range, set_range) = signal(initial_range);
+    let (custom_from, set_custom_from) = signal(initial_custom_from);
+    let (custom_to, set_custom_to) = signal(initial_custom_to);
 
     // Loading signal: true when range changes, false when data arrives
     let (data_loading, set_data_loading) = signal(false);
@@ -384,7 +432,7 @@ pub fn provide_observatory_state() -> ObservatoryState {
     // Shared dashboard data resource — lives in the parent (ObservatoryPage),
     // stays alive across Outlet navigations. Child pages read it from context
     // so there's no re-fetch or loading flash when switching pages.
-    let dashboard_data = create_dashboard_resource(range);
+    let dashboard_data = create_dashboard_resource(range, custom_from, custom_to);
 
     // Clear loading when new data arrives
     Effect::new(move |_| {
@@ -517,6 +565,10 @@ pub fn provide_observatory_state() -> ObservatoryState {
         set_overlay_panel_open,
         chart_cache,
         data_loading,
+        custom_from,
+        set_custom_from,
+        custom_to,
+        set_custom_to,
     };
 
     // Sync state changes back to URL via history.replaceState (bypasses router)
@@ -526,6 +578,8 @@ pub fn provide_observatory_state() -> ObservatoryState {
         let mut first = true;
         Effect::new(move |_| {
             let r = range.get();
+            let cf = custom_from.get();
+            let ct = custom_to.get();
             let overlays = [
                 ("halvings", overlay_halvings.get()),
                 ("bips", overlay_bips.get()),
@@ -539,7 +593,6 @@ pub fn provide_observatory_state() -> ObservatoryState {
                 return;
             }
             let pathname = location.pathname.get();
-            // Preserve section param (managed by child pages)
             let search = leptos::prelude::window()
                 .location()
                 .search()
@@ -550,6 +603,8 @@ pub fn provide_observatory_state() -> ObservatoryState {
                 &r,
                 &overlays,
                 current_section.as_deref(),
+                cf.as_deref(),
+                ct.as_deref(),
             );
         });
     }
@@ -640,72 +695,146 @@ pub fn RangeSelector() -> impl IntoView {
     let state = expect_context::<ObservatoryState>();
     let range = state.range;
     let set_range = state.set_range;
+    let set_custom_from = state.set_custom_from;
+    let set_custom_to = state.set_custom_to;
+
+    let (picker_open, set_picker_open) = signal(false);
+    let (local_from, set_local_from) = signal(String::new());
+    let (local_to, set_local_to) = signal(String::new());
 
     let range_label = move || {
-        let n = range_to_blocks(&range.get());
-        if n > 5_000 {
-            "daily averages"
+        let r = range.get();
+        if r == "custom" {
+            "custom range"
         } else {
-            "per block"
+            let n = range_to_blocks(&r);
+            if n > 5_000 { "daily averages" } else { "per block" }
         }
     };
 
+    let apply_custom = move |_| {
+        let f = local_from.get();
+        let t = local_to.get();
+        if !f.is_empty() && !t.is_empty() {
+            set_custom_from.set(Some(f));
+            set_custom_to.set(Some(t));
+            set_range.set("custom".to_string());
+            set_picker_open.set(false);
+        }
+    };
+
+    let select_preset = move |r: String| {
+        set_custom_from.set(None);
+        set_custom_to.set(None);
+        set_picker_open.set(false);
+        set_range.set(r);
+    };
+
+    let presets = ["1d", "1w", "1m", "3m", "6m", "ytd", "1y", "2y", "5y", "10y", "all"];
+
     view! {
-        // Mobile: dropdown + label
-        <div class="flex sm:hidden items-center gap-2">
-            <div class="relative inline-block">
-                <select
-                    aria-label="Time range"
-                    class="appearance-none bg-[#0a1a2e] text-white/80 text-sm border border-white/10 rounded-xl pl-3 pr-8 py-2 cursor-pointer focus:outline-none focus:border-[#f7931a]/40 transition-colors"
-                    prop:value=move || range.get()
-                    on:change=move |ev| {
-                        use wasm_bindgen::JsCast;
-                        if let Some(t) = ev.target() {
-                            if let Ok(s) = t.dyn_into::<leptos::web_sys::HtmlSelectElement>() {
-                                set_range.set(s.value());
-                            }
-                        }
-                    }
-                >
-                    {["1d", "1w", "1m", "3m", "6m", "ytd", "1y", "2y", "5y", "10y", "all"].into_iter().map(|r| {
-                        let val = r.to_string();
-                        let label = r.to_uppercase();
-                        view! { <option value=val>{label}</option> }
-                    }).collect::<Vec<_>>()}
-                </select>
-                <svg class="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none w-3.5 h-3.5 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-                </svg>
-            </div>
-            <span class="text-xs text-white/40">{range_label}</span>
-        </div>
-        // Desktop: button grid + label
-        <div class="hidden sm:flex items-center">
-            <div class="flex gap-1.5 bg-[#0a1a2e] rounded-xl p-1.5 border border-white/5">
-                {["1d", "1w", "1m", "3m", "6m", "ytd", "1y", "2y", "5y", "10y", "all"].into_iter().map(|r| {
-                    let r_str = r.to_string();
-                    let r_display = r.to_uppercase();
-                    let r_clone = r_str.clone();
-                    view! {
-                        <button
-                            class=move || {
-                                if range.get() == r_clone {
-                                    "px-3 py-1 text-xs rounded-lg bg-[#f7931a] text-[#1a1a2e] font-semibold cursor-pointer"
-                                } else {
-                                    "px-3 py-1 text-xs rounded-lg text-white/40 hover:text-white/70 hover:bg-white/5 transition-all cursor-pointer"
+        <div class="flex flex-col gap-2">
+            // Mobile: dropdown + label
+            <div class="flex sm:hidden items-center gap-2">
+                <div class="relative inline-block">
+                    <select
+                        aria-label="Time range"
+                        class="appearance-none bg-[#0a1a2e] text-white/80 text-sm border border-white/10 rounded-xl pl-3 pr-8 py-2 cursor-pointer focus:outline-none focus:border-[#f7931a]/40 transition-colors"
+                        prop:value=move || range.get()
+                        on:change=move |ev| {
+                            use wasm_bindgen::JsCast;
+                            if let Some(t) = ev.target() {
+                                if let Ok(s) = t.dyn_into::<leptos::web_sys::HtmlSelectElement>() {
+                                    if s.value() == "custom" {
+                                        set_picker_open.set(true);
+                                    } else {
+                                        select_preset(s.value());
+                                    }
                                 }
                             }
-                            on:click={
-                                let r = r_str.clone();
-                                move |_| set_range.set(r.clone())
-                            }
-                        >
-                            {r_display}
-                        </button>
-                    }
-                }).collect::<Vec<_>>()}
+                        }
+                    >
+                        {presets.into_iter().map(|r| {
+                            let val = r.to_string();
+                            let label = r.to_uppercase();
+                            view! { <option value=val>{label}</option> }
+                        }).collect::<Vec<_>>()}
+                        <option value="custom">"Custom"</option>
+                    </select>
+                    <svg class="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none w-3.5 h-3.5 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </div>
+                <span class="text-xs text-white/40">{range_label}</span>
             </div>
-            <span class="ml-3 text-xs text-white/60 self-center">{range_label}</span>
+            // Desktop: button grid + label
+            <div class="hidden sm:flex items-center">
+                <div class="flex gap-1.5 bg-[#0a1a2e] rounded-xl p-1.5 border border-white/5">
+                    {presets.into_iter().map(|r| {
+                        let r_str = r.to_string();
+                        let r_display = r.to_uppercase();
+                        let r_clone = r_str.clone();
+                        view! {
+                            <button
+                                class=move || {
+                                    if range.get() == r_clone {
+                                        "px-3 py-1 text-xs rounded-lg bg-[#f7931a] text-[#1a1a2e] font-semibold cursor-pointer"
+                                    } else {
+                                        "px-3 py-1 text-xs rounded-lg text-white/40 hover:text-white/70 hover:bg-white/5 transition-all cursor-pointer"
+                                    }
+                                }
+                                on:click={
+                                    let r = r_str.clone();
+                                    move |_| select_preset(r.clone())
+                                }
+                            >
+                                {r_display}
+                            </button>
+                        }
+                    }).collect::<Vec<_>>()}
+                    <button
+                        class=move || {
+                            if range.get() == "custom" {
+                                "px-3 py-1 text-xs rounded-lg bg-[#f7931a] text-[#1a1a2e] font-semibold cursor-pointer"
+                            } else {
+                                "px-3 py-1 text-xs rounded-lg text-white/40 hover:text-white/70 hover:bg-white/5 transition-all cursor-pointer"
+                            }
+                        }
+                        on:click=move |_| set_picker_open.update(|v| *v = !*v)
+                    >
+                        "Custom"
+                    </button>
+                </div>
+                <span class="ml-3 text-xs text-white/60 self-center">{range_label}</span>
+            </div>
+            // Date picker (shown when Custom is active/clicked)
+            <Show when=move || picker_open.get()>
+                <div class="flex items-center gap-2 bg-[#0a1a2e] rounded-xl p-2 border border-white/10">
+                    <input
+                        type="date"
+                        class="bg-[#0d2137] text-white/80 text-xs border border-white/10 rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#f7931a]/40"
+                        prop:value=move || local_from.get()
+                        on:input=move |ev| {
+                                set_local_from.set(event_target_value(&ev));
+                        }
+                    />
+                    <span class="text-white/30 text-xs">"to"</span>
+                    <input
+                        type="date"
+                        class="bg-[#0d2137] text-white/80 text-xs border border-white/10 rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#f7931a]/40"
+                        prop:value=move || local_to.get()
+                        on:input=move |ev| {
+                                set_local_to.set(event_target_value(&ev));
+                        }
+                    />
+                    <button
+                        class="px-3 py-1.5 text-xs bg-[#f7931a] text-[#1a1a2e] font-semibold rounded-lg cursor-pointer hover:bg-[#f4a949] transition-colors"
+                        on:click=apply_custom
+                    >
+                        "Go"
+                    </button>
+                </div>
+            </Show>
         </div>
     }
 }
