@@ -588,15 +588,18 @@ pub fn all_embedded_share_chart(blocks: &[BlockSummary]) -> serde_json::Value {
             dp(b, v)
         })
         .collect();
+    // Inscriptions launched ~block 774,000 (Jan 2023). Emit null before that to avoid
+    // ECharts rendering a ghost area fill at the zero baseline across years of no data.
     let insc_data: Vec<serde_json::Value> = blocks
         .iter()
         .map(|b| {
-            let v = if b.size > 0 {
-                round(b.inscription_bytes as f64 / b.size as f64 * 100.0, 2)
+            if b.height < 774_000 {
+                json!([ts_ms(b.timestamp), null, b.height])
+            } else if b.size > 0 {
+                dp(b, round(b.inscription_bytes as f64 / b.size as f64 * 100.0, 2))
             } else {
-                0.0
-            };
-            dp(b, v)
+                dp(b, 0.0)
+            }
         })
         .collect();
 
@@ -617,7 +620,8 @@ pub fn all_embedded_share_chart(blocks: &[BlockSummary]) -> serde_json::Value {
                 "name": "Inscriptions", "type": "line", "data": insc_data,
                 "stack": "embed", "areaStyle": { "opacity": 0.5 },
                 "lineStyle": { "width": 0, "color": INSCRIPTION_COLOR },
-                "itemStyle": { "color": INSCRIPTION_COLOR }, "symbol": "none"
+                "itemStyle": { "color": INSCRIPTION_COLOR }, "symbol": "none",
+                "connectNulls": false
             }
         ]
     }))
@@ -641,18 +645,23 @@ pub fn all_embedded_share_chart_daily(days: &[DailyAggregate]) -> serde_json::Va
             }
         })
         .collect();
-    let insc_vals: Vec<f64> = days
+    // Emit null for inscription values before Jan 2023 to avoid ghost area fill
+    let insc_vals: Vec<serde_json::Value> = days
         .iter()
         .map(|d| {
-            let total_size = d.avg_size * d.block_count as f64;
-            if total_size > 0.0 {
-                round(
-                    d.avg_inscription_bytes * d.block_count as f64 / total_size
-                        * 100.0,
-                    2,
-                )
+            if d.date.as_str() < "2023-01-01" {
+                json!(null)
             } else {
-                0.0
+                let total_size = d.avg_size * d.block_count as f64;
+                if total_size > 0.0 {
+                    json!(round(
+                        d.avg_inscription_bytes * d.block_count as f64 / total_size
+                            * 100.0,
+                        2,
+                    ))
+                } else {
+                    json!(0.0)
+                }
             }
         })
         .collect();
@@ -674,7 +683,8 @@ pub fn all_embedded_share_chart_daily(days: &[DailyAggregate]) -> serde_json::Va
                 "name": "Inscriptions", "type": "line", "data": insc_vals,
                 "stack": "embed", "areaStyle": { "opacity": 0.5 },
                 "lineStyle": { "width": 0, "color": INSCRIPTION_COLOR },
-                "itemStyle": { "color": INSCRIPTION_COLOR }, "symbol": "none"
+                "itemStyle": { "color": INSCRIPTION_COLOR }, "symbol": "none",
+                "connectNulls": false
             }
         ]
     }))
