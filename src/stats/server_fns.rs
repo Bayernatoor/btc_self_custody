@@ -1015,7 +1015,7 @@ pub async fn fetch_on_this_day(
             "<a href='https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki' target='_blank' class='text-[#f7931a] hover:underline'>BIP-141</a> activated at block 481,824. Segregated Witness fixed transaction malleability and enabled the Lightning Network",
             Some(481_824)),
         (2017, "11-08", "SegWit2x cancelled",
-            "The NYA plan to double the block size was abandoned due to lack of consensus. A pivotal moment for Bitcoin's governance",
+            "The New York Agreement plan to double the block size was abandoned due to lack of consensus. A pivotal moment for Bitcoin's governance",
             None),
         (2017, "12-17", "BTC reaches $20,000",
             "The peak of the 2017 bull run. FOMO was so intense that Coinbase repeatedly crashed under traffic",
