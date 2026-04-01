@@ -372,7 +372,7 @@ pub fn OnThisDayPage() -> impl IntoView {
                                                     let offset = leptos::prelude::window().scroll_y().unwrap_or(0.0) + rect.top() - 80.0;
                                                     let _ = leptos::prelude::window().scroll_to_with_x_and_y(0.0, offset);
                                                 }
-                                            }, std::time::Duration::from_millis(1500));
+                                            }, std::time::Duration::from_millis(500));
                                         }
                                     }
                                     // Keep selection visible (don't reset to placeholder)
