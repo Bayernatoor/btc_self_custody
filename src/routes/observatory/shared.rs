@@ -958,13 +958,18 @@ fn OverlayCheckbox(
     }
 }
 
-/// Observatory navigation bar with links to sub-pages.
+/// Observatory navigation bar with two-tier layout.
+/// Row 1: Experience pages (Dashboard, Overview, On This Day)
+/// Row 2: Data explorer charts (Network, Fees, Mining, Embedded, Signaling)
 #[component]
 pub fn ObservatoryNav() -> impl IntoView {
-    let tabs: Vec<(&'static str, &'static str)> = vec![
+    let pages: Vec<(&'static str, &'static str)> = vec![
         ("/observatory", "Dashboard"),
-        ("/observatory/stats", "Stats"),
+        ("/observatory/stats", "Overview"),
         ("/observatory/on-this-day", "On This Day"),
+    ];
+
+    let charts: Vec<(&'static str, &'static str)> = vec![
         ("/observatory/charts/network", "Network"),
         ("/observatory/charts/fees", "Fees"),
         ("/observatory/charts/mining", "Mining"),
@@ -974,10 +979,20 @@ pub fn ObservatoryNav() -> impl IntoView {
 
     let location = leptos_router::hooks::use_location();
 
+    // Check if any chart tab is active (to highlight the charts row)
+    let on_charts = Signal::derive({
+        let chart_prefixes: Vec<String> = charts.iter().map(|(h, _)| h.to_string()).collect();
+        move || {
+            let path = location.pathname.get();
+            chart_prefixes.iter().any(|p| path.starts_with(p))
+        }
+    });
+
     view! {
-        <nav class="flex justify-center mb-6 sm:mb-8 px-1">
-            <div class="flex flex-wrap justify-center gap-x-3 gap-y-1.5 sm:gap-x-6 sm:gap-y-0">
-                {tabs.into_iter().map(|(href, label)| {
+        <nav class="flex flex-col items-center mb-6 sm:mb-8 px-1 gap-2 sm:gap-3">
+            // Row 1: Pages
+            <div class="flex justify-center gap-x-4 sm:gap-x-8">
+                {pages.into_iter().map(|(href, label)| {
                     let href_str = href.to_string();
                     view! {
                         <a
@@ -990,9 +1005,38 @@ pub fn ObservatoryNav() -> impl IntoView {
                                     path.starts_with(&href_str)
                                 };
                                 if active {
-                                    "text-xs sm:text-[15px] font-semibold text-[#f7931a] border-b-2 border-[#f7931a] pb-1 transition-all duration-200 whitespace-nowrap active:scale-95 active:opacity-70"
+                                    "text-sm sm:text-base font-semibold text-[#f7931a] border-b-2 border-[#f7931a] pb-1 transition-all duration-200 whitespace-nowrap active:scale-95 active:opacity-70"
                                 } else {
-                                    "text-xs sm:text-[15px] font-medium text-white/40 hover:text-white/70 border-b-2 border-transparent pb-1 transition-all duration-200 whitespace-nowrap active:scale-95 active:opacity-70"
+                                    "text-sm sm:text-base font-medium text-white/40 hover:text-white/70 border-b-2 border-transparent pb-1 transition-all duration-200 whitespace-nowrap active:scale-95 active:opacity-70"
+                                }
+                            }
+                        >
+                            {label}
+                        </a>
+                    }
+                }).collect::<Vec<_>>()}
+            </div>
+            // Row 2: Chart explorer tabs (slightly smaller, subtle separator)
+            <div class=move || {
+                if on_charts.get() {
+                    "flex items-center justify-center gap-x-3 sm:gap-x-6 px-3 sm:px-5 py-1.5 rounded-full bg-white/[0.03] border border-white/[0.06]"
+                } else {
+                    "flex items-center justify-center gap-x-3 sm:gap-x-6 px-3 sm:px-5 py-1.5 rounded-full"
+                }
+            }>
+                <span class="text-[10px] sm:text-[11px] uppercase tracking-widest text-white/20 mr-1 sm:mr-2">"Charts"</span>
+                {charts.into_iter().map(|(href, label)| {
+                    let href_str = href.to_string();
+                    view! {
+                        <a
+                            href=href
+                            class=move || {
+                                let path = location.pathname.get();
+                                let active = path.starts_with(&href_str);
+                                if active {
+                                    "text-xs sm:text-[13px] font-semibold text-[#f7931a] border-b border-[#f7931a]/50 pb-0.5 transition-all duration-200 whitespace-nowrap active:scale-95 active:opacity-70"
+                                } else {
+                                    "text-xs sm:text-[13px] font-medium text-white/30 hover:text-white/60 border-b border-transparent pb-0.5 transition-all duration-200 whitespace-nowrap active:scale-95 active:opacity-70"
                                 }
                             }
                         >
