@@ -197,6 +197,13 @@ pub struct RangeSummary {
     pub witness_pct: f64,
 }
 
+/// A notable event with title and context.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct NotableEvent {
+    pub title: String,
+    pub context: String,
+}
+
 /// A single year's data for the "On This Day" feature.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OnThisDayYear {
@@ -211,7 +218,7 @@ pub struct OnThisDayYear {
     pub segwit_pct: f64,
     pub taproot_outputs: u64,
     pub price_usd: f64,
-    pub events: Vec<String>,
+    pub events: Vec<NotableEvent>,
     pub first_block: u64,
     pub last_block: u64,
 }

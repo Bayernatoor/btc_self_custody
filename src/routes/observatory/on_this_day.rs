@@ -77,19 +77,22 @@ fn YearCard(year: OnThisDayYear) -> impl IntoView {
                     </span>
                 </div>
 
-                // Event badges
+                // Event badges with context
                 {if has_events {
-                    let badges = year.events.iter().map(|e| {
+                    let events = year.events.iter().map(|e| {
                         view! {
-                            <span class="inline-flex items-center gap-1 text-xs bg-[#f7931a]/20 text-[#f7931a] rounded-full px-2.5 py-1 font-medium">
-                                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-11.25a.75.75 0 0 0-1.5 0v2.5h-2.5a.75.75 0 0 0 0 1.5h2.5v2.5a.75.75 0 0 0 1.5 0v-2.5h2.5a.75.75 0 0 0 0-1.5h-2.5v-2.5Z" clip-rule="evenodd"/>
-                                </svg>
-                                {e.clone()}
-                            </span>
+                            <div class="bg-[#f7931a]/10 border border-[#f7931a]/20 rounded-xl p-3 sm:p-4">
+                                <div class="flex items-center gap-2 mb-1.5">
+                                    <svg class="w-4 h-4 text-[#f7931a] shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-11.25a.75.75 0 0 0-1.5 0v2.5h-2.5a.75.75 0 0 0 0 1.5h2.5v2.5a.75.75 0 0 0 1.5 0v-2.5h2.5a.75.75 0 0 0 0-1.5h-2.5v-2.5Z" clip-rule="evenodd"/>
+                                    </svg>
+                                    <span class="text-sm font-semibold text-[#f7931a]">{e.title.clone()}</span>
+                                </div>
+                                <p class="text-xs text-white/60 leading-relaxed pl-6">{e.context.clone()}</p>
+                            </div>
                         }
                     }).collect::<Vec<_>>();
-                    view! { <div class="flex flex-wrap gap-1.5 mb-3">{badges}</div> }.into_any()
+                    view! { <div class="space-y-2 mb-3">{events}</div> }.into_any()
                 } else {
                     view! { <div></div> }.into_any()
                 }}
