@@ -291,12 +291,51 @@ pub fn OnThisDayPage() -> impl IntoView {
                     <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
                 </svg>
             </button>
-            <button
-                class="text-xs text-white/50 hover:text-white/70 px-3 py-1.5 rounded-lg border border-white/10 hover:border-white/20 cursor-pointer transition-colors"
-                on:click=nav_today
-            >
-                "Today"
-            </button>
+            {move || {
+                let now = chrono::Utc::now();
+                let today = format!("{:02}-{:02}", now.month(), now.day());
+                let is_today = selected_date.get() == today;
+                let year = now.year();
+                if is_today {
+                    // Already on today — show date picker to jump to any day
+                    view! {
+                        <input
+                            type="date"
+                            class="bg-[#0a1a2e] text-white text-xs border border-white/10 rounded-lg px-2 py-1 cursor-pointer focus:outline-none focus:border-[#f7931a]/40"
+                            style="color-scheme: dark"
+                            min=format!("{year}-01-01")
+                            max=format!("{year}-12-31")
+                            on:change=move |ev| {
+                                let val = event_target_value(&ev);
+                                // Extract MM-DD from YYYY-MM-DD
+                                if val.len() >= 10 {
+                                    let md = val[5..10].to_string();
+                                    set_selected_date.set(md.clone());
+                                    #[cfg(feature = "hydrate")]
+                                    {
+                                        let window = leptos::prelude::window();
+                                        let pathname = window.location().pathname().unwrap_or_default();
+                                        let url = format!("{pathname}?date={md}");
+                                        let _ = window.history().expect("history").replace_state_with_url(
+                                            &wasm_bindgen::JsValue::NULL, "", Some(&url),
+                                        );
+                                    }
+                                }
+                            }
+                        />
+                    }.into_any()
+                } else {
+                    // Not on today — show Today button
+                    view! {
+                        <button
+                            class="text-xs text-white/50 hover:text-white/70 px-3 py-1.5 rounded-lg border border-white/10 hover:border-white/20 cursor-pointer transition-colors"
+                            on:click=nav_today
+                        >
+                            "Today"
+                        </button>
+                    }.into_any()
+                }
+            }}
             <div class="relative inline-block">
                 <select
                     aria-label="Notable dates"
