@@ -152,6 +152,7 @@ pub struct DailyAggregate {
     pub avg_fee_rate_p10: f64,
     pub avg_fee_rate_p90: f64,
     pub avg_stamps_count: f64,
+    pub avg_median_fee_rate: f64,
 }
 
 /// Aggregated summary for an arbitrary time range (Stats Dashboard).

@@ -407,6 +407,7 @@ pub fn fee_rate_band_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
     let p10: Vec<f64> = days.iter().map(|d| (d.avg_fee_rate_p10 * 100.0).round() / 100.0).collect();
+    let median: Vec<f64> = days.iter().map(|d| (d.avg_median_fee_rate * 100.0).round() / 100.0).collect();
     let p90: Vec<f64> = days.iter().map(|d| (d.avg_fee_rate_p90 * 100.0).round() / 100.0).collect();
 
     build_option(json!({
@@ -420,6 +421,9 @@ pub fn fee_rate_band_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
               "lineStyle": { "width": 1, "color": TARGET_COLOR, "opacity": 0.6 },
               "itemStyle": { "color": TARGET_COLOR }, "symbol": "none",
               "areaStyle": { "color": "rgba(231,76,60,0.08)" } },
+            { "name": "Median", "type": "line", "data": median,
+              "lineStyle": { "width": 2, "color": DATA_COLOR },
+              "itemStyle": { "color": DATA_COLOR }, "symbol": "none" },
             { "name": "10th Percentile", "type": "line", "data": p10,
               "lineStyle": { "width": 1, "color": SIGNAL_YES, "opacity": 0.6 },
               "itemStyle": { "color": SIGNAL_YES }, "symbol": "none",
