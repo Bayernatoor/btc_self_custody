@@ -102,16 +102,15 @@ self.addEventListener('fetch', function(event) {
         var timer = setTimeout(function() { reject(new Error('timeout')); }, 4000);
         fetch(event.request).then(function(response) {
             clearTimeout(timer);
+            // Cache successful responses for offline use
             if (response.ok) {
                 var clone = response.clone();
                 caches.open(CACHE_NAME).then(function(cache) {
                     cache.put(event.request, clone);
                 });
-                resolve(response);
-            } else {
-                // Server error (5xx, 4xx) — fall back to cache
-                reject(new Error('HTTP ' + response.status));
             }
+            // Always pass through server responses (including 404s with styled pages)
+            resolve(response);
         }).catch(function(err) {
             clearTimeout(timer);
             reject(err);
@@ -119,7 +118,9 @@ self.addEventListener('fetch', function(event) {
     });
     event.respondWith(
         networkWithTimeout.catch(function() {
-            return caches.match(event.request);
+            return caches.match(event.request).then(function(cached) {
+                return cached || new Response('Offline', { status: 503, headers: { 'Content-Type': 'text/plain' } });
+            });
         })
     );
 });
