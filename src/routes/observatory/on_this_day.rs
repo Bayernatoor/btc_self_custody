@@ -6,6 +6,7 @@ use leptos_router::hooks::use_query_map;
 
 use super::helpers::*;
 use crate::stats::server_fns::*;
+use crate::stats::types::calc_supply;
 use crate::stats::types::OnThisDayYear;
 
 /// Color temperature based on fee density (fees per block in BTC).
@@ -56,6 +57,8 @@ fn YearCard(year: OnThisDayYear) -> impl IntoView {
     } else {
         "\u{2014}".to_string()
     };
+    let supply = calc_supply(year.last_block);
+    let supply_str = format!("{} BTC", format_number_f64(supply, 0));
 
     let has_events = !year.events.is_empty();
 
@@ -128,11 +131,9 @@ fn YearCard(year: OnThisDayYear) -> impl IntoView {
                         <p class="text-[11px] text-white/50 uppercase tracking-wider">"Price"</p>
                         <p class="text-white font-mono">{price_str}</p>
                     </div>
-                    <div class="cursor-help" title="% of non-coinbase transactions using SegWit">
-                        <p class="text-[11px] text-white/50 uppercase tracking-wider">"SegWit"</p>
-                        <p class="text-white font-mono">
-                            {if year.segwit_pct > 0.0 { format!("{:.0}%", year.segwit_pct) } else { "\u{2014}".to_string() }}
-                        </p>
+                    <div class="cursor-help" title="Total BTC mined as of this date">
+                        <p class="text-[11px] text-white/50 uppercase tracking-wider">"Supply"</p>
+                        <p class="text-white font-mono">{supply_str}</p>
                     </div>
                     <div class="cursor-help" title="Average block weight as % of 4 MWU limit">
                         <p class="text-[11px] text-white/50 uppercase tracking-wider">"Block Fullness"</p>
