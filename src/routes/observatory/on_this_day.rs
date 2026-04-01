@@ -391,7 +391,7 @@ pub fn OnThisDayPage() -> impl IntoView {
                     <option value="11-10:2021">"Nov 10 \u{2013} BTC ATH $69K (2021)"</option>
                     <option value="01-10:2024">"Jan 10 \u{2013} Spot ETFs Approved (2024)"</option>
                     <option value="04-20:2024">"Apr 20 \u{2013} Fourth Halving + Runes (2024)"</option>
-                    <option value="01-20:2025">"Jan 20 \u{2013} BTC $109K (2025)"</option>
+                    <option value="12-05:2024">"Dec 5 \u{2013} BTC $100K (2024)"</option>
                     <option value="10-06:2025">"Oct 6 \u{2013} BTC ATH $126K (2025)"</option>
                 </select>
                 <svg class="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none w-3 h-3 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
