@@ -121,12 +121,12 @@ pub async fn fetch_blocks(
             data_carrier_bytes: r.data_carrier_bytes,
             taproot_keypath_count: r.taproot_keypath_count,
             taproot_scriptpath_count: r.taproot_scriptpath_count,
-            total_output_value: 0,
-            total_input_value: 0,
-            fee_rate_p10: 0.0,
-            fee_rate_p90: 0.0,
-            stamps_count: 0,
-            largest_tx_size: 0,
+            total_output_value: r.total_output_value,
+            total_input_value: r.total_input_value,
+            fee_rate_p10: r.fee_rate_p10,
+            fee_rate_p90: r.fee_rate_p90,
+            stamps_count: r.stamps_count,
+            largest_tx_size: r.largest_tx_size,
         })
         .collect())
 }
@@ -189,12 +189,12 @@ pub async fn fetch_blocks_by_ts(
             data_carrier_bytes: r.data_carrier_bytes,
             taproot_keypath_count: r.taproot_keypath_count,
             taproot_scriptpath_count: r.taproot_scriptpath_count,
-            total_output_value: 0,
-            total_input_value: 0,
-            fee_rate_p10: 0.0,
-            fee_rate_p90: 0.0,
-            stamps_count: 0,
-            largest_tx_size: 0,
+            total_output_value: r.total_output_value,
+            total_input_value: r.total_input_value,
+            fee_rate_p10: r.fee_rate_p10,
+            fee_rate_p90: r.fee_rate_p90,
+            stamps_count: r.stamps_count,
+            largest_tx_size: r.largest_tx_size,
         })
         .collect())
 }

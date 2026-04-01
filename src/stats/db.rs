@@ -488,6 +488,12 @@ pub struct BlockRow {
     pub data_carrier_bytes: u64,
     pub taproot_keypath_count: u64,
     pub taproot_scriptpath_count: u64,
+    pub total_output_value: u64,
+    pub total_input_value: u64,
+    pub fee_rate_p10: f64,
+    pub fee_rate_p90: f64,
+    pub stamps_count: u64,
+    pub largest_tx_size: u64,
 }
 
 pub fn query_blocks(
@@ -507,7 +513,9 @@ pub fn query_blocks(
                 runes_count, runes_bytes, omni_count, omni_bytes,
                 counterparty_count, counterparty_bytes,
                 data_carrier_count, data_carrier_bytes,
-                taproot_keypath_count, taproot_scriptpath_count
+                taproot_keypath_count, taproot_scriptpath_count,
+                total_output_value, total_input_value,
+                fee_rate_p10, fee_rate_p90, stamps_count, largest_tx_size
          FROM blocks WHERE height >= ?1 AND height <= ?2 ORDER BY height ASC",
     )?;
     let rows = stmt.query_map(params![from, to], |row| {
@@ -551,6 +559,12 @@ pub fn query_blocks(
             data_carrier_bytes: row.get(36)?,
             taproot_keypath_count: row.get(37)?,
             taproot_scriptpath_count: row.get(38)?,
+            total_output_value: row.get(39)?,
+            total_input_value: row.get(40)?,
+            fee_rate_p10: row.get(41)?,
+            fee_rate_p90: row.get(42)?,
+            stamps_count: row.get(43)?,
+            largest_tx_size: row.get(44)?,
         })
     })?;
     rows.collect()
@@ -574,7 +588,9 @@ pub fn query_blocks_by_ts(
                 runes_count, runes_bytes, omni_count, omni_bytes,
                 counterparty_count, counterparty_bytes,
                 data_carrier_count, data_carrier_bytes,
-                taproot_keypath_count, taproot_scriptpath_count
+                taproot_keypath_count, taproot_scriptpath_count,
+                total_output_value, total_input_value,
+                fee_rate_p10, fee_rate_p90, stamps_count, largest_tx_size
          FROM blocks WHERE timestamp >= ?1 AND timestamp <= ?2 ORDER BY height ASC",
     )?;
     let rows = stmt.query_map(params![from_ts, to_ts], |row| {
@@ -618,6 +634,12 @@ pub fn query_blocks_by_ts(
             data_carrier_bytes: row.get(36)?,
             taproot_keypath_count: row.get(37)?,
             taproot_scriptpath_count: row.get(38)?,
+            total_output_value: row.get(39)?,
+            total_input_value: row.get(40)?,
+            fee_rate_p10: row.get(41)?,
+            fee_rate_p90: row.get(42)?,
+            stamps_count: row.get(43)?,
+            largest_tx_size: row.get(44)?,
         })
     })?;
     rows.collect()
