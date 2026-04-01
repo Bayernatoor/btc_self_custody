@@ -345,7 +345,7 @@ pub fn OnThisDayPage() -> impl IntoView {
                 </button>
             </div>
             // Row 2: today/picker + notable dates
-            <div class="flex items-center gap-2 flex-wrap justify-center">
+            <div class="flex flex-col sm:flex-row items-center gap-2 justify-center">
             {move || {
                 let now = chrono::Utc::now();
                 let today = format!("{:02}-{:02}", now.month(), now.day());

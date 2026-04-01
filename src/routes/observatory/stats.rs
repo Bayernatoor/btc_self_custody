@@ -262,13 +262,26 @@ pub fn StatsSummaryPage() -> impl IntoView {
             />
             <div class="absolute inset-0 bg-gradient-to-t from-[#123c64] via-[#123c64]/60 to-[#123c64]/30"></div>
             <div class="absolute inset-0 flex flex-col items-center justify-end pb-3 sm:pb-4">
-                <h1 class="text-lg sm:text-xl lg:text-2xl font-title text-white mb-0.5 drop-shadow-lg">"Stats Summary"</h1>
+                <h1 class="text-lg sm:text-xl lg:text-2xl font-title text-white mb-0.5 drop-shadow-lg">"Stats Overview"</h1>
                 <p class="text-[11px] sm:text-xs text-white/50 max-w-lg mx-auto px-4 text-center drop-shadow">"At-a-glance Bitcoin network counters for any time range"</p>
             </div>
         </div>
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-6">
             <div class="flex items-center gap-1.5">
-                <p class="text-xs sm:text-sm text-white/40 font-mono">
+                // Short dates on mobile, full timestamps on desktop
+                <p class="text-xs text-white/40 font-mono sm:hidden">
+                    {move || {
+                        data.get().map(|s| {
+                            let fmt = |ts: u64| {
+                                chrono::DateTime::from_timestamp(ts as i64, 0)
+                                    .map(|dt| dt.format("%b %d, %Y").to_string())
+                                    .unwrap_or_default()
+                            };
+                            format!("{} \u{2192} {}", fmt(s.min_timestamp), fmt(s.max_timestamp))
+                        }).unwrap_or_default()
+                    }}
+                </p>
+                <p class="hidden sm:block text-sm text-white/40 font-mono">
                     {move || {
                         data.get().map(|s| {
                             let fmt = |ts: u64| {
@@ -281,7 +294,7 @@ pub fn StatsSummaryPage() -> impl IntoView {
                     }}
                 </p>
                 <span
-                    class="inline-flex items-center justify-center w-4 h-4 rounded-full border border-white/20 text-[9px] font-bold text-white/30 hover:text-[#f7931a] hover:border-[#f7931a]/40 transition-colors"
+                    class="hidden sm:inline-flex items-center justify-center w-4 h-4 rounded-full border border-white/20 text-[9px] font-bold text-white/30 hover:text-[#f7931a] hover:border-[#f7931a]/40 transition-colors"
                     data-tip="Timestamps reflect the actual first and last block mined in this range, not the query boundaries. Bitcoin blocks are mined at irregular intervals so times won\u{2019}t align exactly with midnight."
                     tabindex="0"
                 >
