@@ -1041,7 +1041,7 @@ pub async fn fetch_on_this_day(
         (2021, "11-10", "BTC ATH ~$69,000",
             "The peak of the 2021 cycle. Bitcoin's market cap briefly exceeded $1.2 trillion",
             None),
-        (2021, "11-13", "Taproot activates",
+        (2021, "11-14", "Taproot activates",
             "BIP-341 activated at block 709,632. The largest Bitcoin upgrade since SegWit, enabling more private and efficient smart contracts",
             Some(709_632)),
         (2022, "11-11", "FTX files for bankruptcy",
