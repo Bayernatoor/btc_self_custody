@@ -254,7 +254,8 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
 
     // Ensure indexes exist (safe to run every startup)
     conn.execute_batch(
-        "CREATE INDEX IF NOT EXISTS idx_blocks_backfill ON blocks(backfill_version);",
+        "CREATE INDEX IF NOT EXISTS idx_blocks_backfill ON blocks(backfill_version);
+         CREATE INDEX IF NOT EXISTS idx_blocks_month_day ON blocks(strftime('%m-%d', datetime(timestamp, 'unixepoch')));",
     )?;
 
     Ok(())
