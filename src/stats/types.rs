@@ -202,6 +202,7 @@ pub struct RangeSummary {
 pub struct NotableEvent {
     pub title: String,
     pub context: String,
+    pub block: Option<u64>,
 }
 
 /// A single year's data for the "On This Day" feature.
