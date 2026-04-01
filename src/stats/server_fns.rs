@@ -1000,16 +1000,24 @@ pub async fn fetch_on_this_day(
         .map(|(year, block_count, total_tx, total_fees, avg_size, avg_weight,
                inscriptions, runes, segwit_txs, taproot_outputs, _total_tx2,
                first_block, last_block)| {
-            // Find price for this year's date
-            let target_date = format!("{}-{}", year, month_day);
-            let price_usd = prices
-                .iter()
-                .find(|p| {
-                    let dt = chrono::DateTime::from_timestamp((p.timestamp_ms / 1000) as i64, 0);
-                    dt.map(|d| d.format("%Y-%m-%d").to_string() == target_date)
-                        .unwrap_or(false)
+            // Find closest price for this year's date (within +/- 2 days)
+            let price_usd = chrono::NaiveDate::from_ymd_opt(year as i32, month, day)
+                .and_then(|d| d.and_hms_opt(12, 0, 0))
+                .map(|dt| {
+                    let target_ms = dt.and_utc().timestamp() as u64 * 1000;
+                    let two_days_ms = 2 * 86_400 * 1000;
+                    prices
+                        .iter()
+                        .filter(|p| {
+                            p.timestamp_ms >= target_ms.saturating_sub(two_days_ms)
+                                && p.timestamp_ms <= target_ms + two_days_ms
+                        })
+                        .min_by_key(|p| {
+                            (p.timestamp_ms as i64 - target_ms as i64).unsigned_abs()
+                        })
+                        .map(|p| p.price_usd)
+                        .unwrap_or(0.0)
                 })
-                .map(|p| p.price_usd)
                 .unwrap_or(0.0);
 
             // Collect events for this date
