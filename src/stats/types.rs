@@ -197,6 +197,7 @@ pub struct RangeSummary {
     pub max_block_size: u64,
     pub max_block_fees: u64,
     pub empty_block_count: u64,
+    pub max_fee_rate: f64,
     // Derived percentages
     pub witness_pct: f64,
 }

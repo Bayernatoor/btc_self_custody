@@ -979,7 +979,8 @@ pub fn query_range_summary(
                 SUM(total_output_value),
                 MAX(size), MAX(total_fees),
                 SUM(CASE WHEN tx_count <= 1 THEN 1 ELSE 0 END),
-                AVG(median_fee)
+                AVG(median_fee),
+                MAX(median_fee_rate)
          FROM blocks
          WHERE timestamp >= ?1 AND timestamp <= ?2",
         params![from_ts, to_ts],
@@ -1038,6 +1039,7 @@ pub fn query_range_summary(
                 max_block_size: row.get::<_, Option<u64>>(32)?.unwrap_or(0),
                 max_block_fees: row.get::<_, Option<u64>>(33)?.unwrap_or(0),
                 empty_block_count: row.get::<_, Option<u64>>(34)?.unwrap_or(0),
+                max_fee_rate: row.get::<_, Option<f64>>(36)?.unwrap_or(0.0),
                 witness_pct: if row.get::<_, Option<u64>>(2)?.unwrap_or(0) > 0 {
                     row.get::<_, Option<u64>>(20)?.unwrap_or(0) as f64
                         / row.get::<_, Option<u64>>(2)?.unwrap_or(1) as f64

@@ -206,6 +206,7 @@ pub fn StatsSummaryPage() -> impl IntoView {
     // === Extremes ===
     let max_block_size = stat(|s| format!("{:.2} MB", s.max_block_size as f64 / 1_000_000.0));
     let max_block_fees = stat(|s| format!("{} BTC", format_number_f64(s.max_block_fees as f64 / 100_000_000.0, 4)));
+    let max_fee_rate = stat(|s| format!("{:.1} sat/vB", s.max_fee_rate));
 
     // === Volume ===
     let total_btc_transferred = stat(|s| {
@@ -373,6 +374,8 @@ pub fn StatsSummaryPage() -> impl IntoView {
                 tooltip="Largest single block by raw size (bytes) in this range"/>
             <StatCard label="Highest Fee Block" value=max_block_fees
                 tooltip="Block with the highest total transaction fees in this range"/>
+            <StatCard label="Peak Fee Rate" value=max_fee_rate
+                tooltip="Highest median fee rate in any single block. Indicates the most expensive block to transact in during this range"/>
         </div>
     }
 }
