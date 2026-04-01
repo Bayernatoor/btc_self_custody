@@ -560,6 +560,7 @@ pub async fn fetch_daily_aggregates(
             avg_fee_rate_p10: r.avg_fee_rate_p10,
             avg_fee_rate_p90: r.avg_fee_rate_p90,
             avg_stamps_count: r.avg_stamps_count,
+            avg_median_fee_rate: r.avg_median_fee_rate,
         })
         .collect();
 
