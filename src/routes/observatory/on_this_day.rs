@@ -91,7 +91,7 @@ fn YearCard(year: OnThisDayYear) -> impl IntoView {
                         <span class="text-2xl sm:text-3xl font-title text-white font-bold">{year.year}</span>
                         <span class="text-xs text-white/50 bg-white/5 rounded-full px-2.5 py-0.5">{age_label}</span>
                     </div>
-                    <span class="text-xs text-white/50 font-mono">
+                    <span class="text-xs text-white/60 font-mono">
                         {format!("#{}\u{2013}#{}", format_number(year.first_block), format_number(year.last_block))}
                     </span>
                 </div>
@@ -111,14 +111,14 @@ fn YearCard(year: OnThisDayYear) -> impl IntoView {
                                             href=format!("https://mempool.space/block/{height}")
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            class="text-[10px] text-white/30 hover:text-[#f7931a] transition-colors ml-auto"
+                                            class="text-[10px] text-white/50 hover:text-[#f7931a] transition-colors ml-auto"
                                         >
                                             {format!("Block #{}", super::helpers::format_number(height))}
                                             " \u{2192}"
                                         </a>
                                     })}
                                 </div>
-                                <p class="text-xs text-white/60 leading-relaxed pl-6">{e.context.clone()}</p>
+                                <p class="text-xs text-white/60 leading-relaxed pl-6" inner_html=e.context.clone()></p>
                             </div>
                         }
                     }).collect::<Vec<_>>();
