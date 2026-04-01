@@ -253,7 +253,7 @@ const BIP_ACTIVATIONS: &[(u64, u64, &str)] = &[
     (419_328, 1_467_331_589, "BIP-68/112/113 (CSV)"),
     (477_120, 1_500_584_608, "BIP-91 (SegWit Signaling)"),
     (481_824, 1_503_539_857, "BIP-141 (SegWit)"),
-    (709_632, 1_636_839_505, "BIP-341/342 (Taproot + Tapscript)"),
+    (709_632, 1_636_866_927, "BIP-341/342 (Taproot + Tapscript)"),
 ];
 
 /// BIP activation dates for daily-mode charts (derived from block timestamps above).
@@ -265,7 +265,7 @@ const BIP_ACTIVATION_DATES: &[(&str, &str)] = &[
     ("2016-07-01", "BIP-68/112/113 (CSV)"),
     ("2017-07-21", "BIP-91 (SegWit Signaling)"),
     ("2017-08-24", "BIP-141 (SegWit)"),
-    ("2021-11-13", "BIP-341/342 (Taproot + Tapscript)"),
+    ("2021-11-14", "BIP-341/342 (Taproot + Tapscript)"),
 ];
 
 /// Bitcoin Core major release timestamps (Unix seconds) and labels.

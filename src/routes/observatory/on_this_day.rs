@@ -437,7 +437,7 @@ pub fn OnThisDayPage() -> impl IntoView {
                     <option value="05-11:2020">"May 11 \u{2013} Third Halving (2020)"</option>
                     <option value="05-19:2021">"May 19 \u{2013} China Mining Ban (2021)"</option>
                     <option value="11-10:2021">"Nov 10 \u{2013} BTC ATH $69K (2021)"</option>
-                    <option value="11-13:2021">"Nov 13 \u{2013} Taproot Activates (2021)"</option>
+                    <option value="11-14:2021">"Nov 14 \u{2013} Taproot Activates (2021)"</option>
                     <option value="11-11:2022">"Nov 11 \u{2013} FTX Bankruptcy (2022)"</option>
                     <option value="01-10:2024">"Jan 10 \u{2013} Spot ETFs Approved (2024)"</option>
                     <option value="04-20:2024">"Apr 20 \u{2013} Fourth Halving + Runes (2024)"</option>
