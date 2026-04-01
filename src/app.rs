@@ -27,9 +27,9 @@ use crate::routes::guideselector::{GuideLevelSelector, GuideSelector};
 use crate::routes::homepage::HomePage;
 use crate::routes::observatory::learn::protocols::ProtocolGuidePage;
 use crate::routes::observatory::{
-    EmbeddedChartsPage, FeeChartsPage, MiningChartsPage, NetworkChartsPage,
-    ObservatoryOverview, ObservatoryPage, OnThisDayPage, SignalingPage,
-    StatsSummaryPage,
+    EmbeddedChartsPage, FeeChartsPage, HeartbeatPage, MiningChartsPage,
+    NetworkChartsPage, ObservatoryOverview, ObservatoryPage, OnThisDayPage,
+    SignalingPage, StatsSummaryPage,
 };
 use leptos::prelude::*;
 use leptos_meta::*;
@@ -93,6 +93,9 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
 
                 // Collapsible sections within step content
                 <script defer src="/js/sections.js"></script>
+
+                // Block Heartbeat EKG animation
+                <script defer src="/js/heartbeat.js"></script>
 
                 // Service Worker registration (PWA) with update detection
                 <script>"
@@ -177,6 +180,7 @@ pub fn App() -> impl IntoView {
                             <Route path=path!("/signaling") view=SignalingPage/>
                             <Route path=path!("/stats") view=StatsSummaryPage/>
                             <Route path=path!("/on-this-day") view=OnThisDayPage/>
+                            <Route path=path!("/heartbeat") view=HeartbeatPage/>
                             <Route path=path!("/learn/protocols") view=ProtocolGuidePage/>
                             <Route path=path!("/*any") view=|| view! {
                                 <div class="flex flex-col items-center justify-center min-h-[40vh] px-6">
