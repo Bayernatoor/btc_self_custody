@@ -386,7 +386,7 @@ pub fn OnThisDayPage() -> impl IntoView {
         </div>
 
         // Year cards
-        <div class="space-y-3">
+        <div class="space-y-3 min-h-[60vh]">
             {move || {
                 let d = data.get().flatten();
                 match d {
