@@ -783,7 +783,7 @@ pub fn largest_tx_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 
     let has_data = blocks.iter().any(|b| b.largest_tx_size > 0);
     if !has_data {
-        return no_data_chart("Largest Transaction (backfill required)");
+        return no_data_chart("Largest Transaction");
     }
 
     let vals: Vec<f64> = blocks

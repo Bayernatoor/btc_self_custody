@@ -212,7 +212,7 @@ pub fn StatsSummaryPage() -> impl IntoView {
         if s.total_output_value > 0 {
             format!("{} BTC", format_number_f64(s.total_output_value as f64 / 100_000_000.0, 2))
         } else {
-            "backfill required".to_string()
+            "\u{2014}".to_string()
         }
     });
 
@@ -312,7 +312,7 @@ pub fn StatsSummaryPage() -> impl IntoView {
             <StatCard label="Avg TPS" value=avg_tps
                 tooltip="Average transactions per second, derived from avg txs/block divided by avg block time"/>
             <StatCard label="Transaction Volume" value=total_btc_transferred
-                tooltip="Sum of all non-coinbase output values. Includes change outputs, so the same BTC can be counted multiple times. Requires backfill for historical data"/>
+                tooltip="Sum of all non-coinbase output values. Includes change outputs, so the same BTC can be counted multiple times"/>
 
             <SectionHeader title="Fees"/>
             <StatCard label="Total Fees" value=total_fees_btc sub=total_fees_sub
