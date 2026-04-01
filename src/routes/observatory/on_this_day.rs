@@ -95,31 +95,31 @@ fn YearCard(year: OnThisDayYear) -> impl IntoView {
 
                 // Stats grid
                 <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-sm">
-                    <div>
+                    <div class="cursor-help" title="Blocks mined on this day (00:00-23:59 UTC)">
                         <p class="text-[11px] text-white/50 uppercase tracking-wider">"Blocks"</p>
                         <p class="text-white font-mono">{format_number(year.block_count)}</p>
                     </div>
-                    <div>
+                    <div class="cursor-help" title="Total transactions across all blocks this day">
                         <p class="text-[11px] text-white/50 uppercase tracking-wider">"Transactions"</p>
                         <p class="text-white font-mono">{format_compact(year.total_tx)}</p>
                     </div>
-                    <div>
+                    <div class="cursor-help" title="Total miner fees paid this day">
                         <p class="text-[11px] text-white/50 uppercase tracking-wider">"Fees"</p>
                         <p class="font-mono" style=format!("color: {color}")>
                             {format!("{:.4} BTC", fees_btc)}
                         </p>
                     </div>
-                    <div>
+                    <div class="cursor-help" title="Daily average BTC/USD price (blockchain.info)">
                         <p class="text-[11px] text-white/50 uppercase tracking-wider">"Price"</p>
                         <p class="text-white font-mono">{price_str}</p>
                     </div>
-                    <div>
+                    <div class="cursor-help" title="% of non-coinbase transactions using SegWit">
                         <p class="text-[11px] text-white/50 uppercase tracking-wider">"SegWit"</p>
                         <p class="text-white font-mono">
                             {if year.segwit_pct > 0.0 { format!("{:.0}%", year.segwit_pct) } else { "\u{2014}".to_string() }}
                         </p>
                     </div>
-                    <div>
+                    <div class="cursor-help" title="Average block weight as % of 4 MWU limit">
                         <p class="text-[11px] text-white/50 uppercase tracking-wider">"Block Fullness"</p>
                         <p class="text-xs font-mono tracking-tighter" style=format!("color: {color}")>
                             {fullness_bar(year.avg_weight_util)}
@@ -133,13 +133,13 @@ fn YearCard(year: OnThisDayYear) -> impl IntoView {
                     view! {
                         <div class="flex flex-wrap gap-x-4 gap-y-1 mt-2 pt-2 border-t border-white/5 text-xs text-white/50">
                             {(year.taproot_outputs > 0).then(|| view! {
-                                <span>{format!("Taproot: {}", format_compact(year.taproot_outputs))}</span>
+                                <span class="cursor-help" title="P2TR outputs created this day">{format!("Taproot: {}", format_compact(year.taproot_outputs))}</span>
                             })}
                             {(year.total_inscriptions > 0).then(|| view! {
-                                <span>{format!("Inscriptions: {}", format_compact(year.total_inscriptions))}</span>
+                                <span class="cursor-help" title="Ordinals inscriptions embedded in witness data">{format!("Inscriptions: {}", format_compact(year.total_inscriptions))}</span>
                             })}
                             {(year.total_runes > 0).then(|| view! {
-                                <span>{format!("Runes: {}", format_compact(year.total_runes))}</span>
+                                <span class="cursor-help" title="Runes protocol outputs (OP_RETURN, since block 840k)">{format!("Runes: {}", format_compact(year.total_runes))}</span>
                             })}
                         </div>
                     }.into_any()
