@@ -11,7 +11,7 @@ pub fn Footer() -> impl IntoView {
                     <div class="col-span-2 sm:col-span-1">
                         <div class="text-base font-semibold text-white uppercase tracking-wide">"WE HODL BTC"</div>
                         <p class="text-sm text-white/40 mt-2 leading-relaxed">
-                            "A free resource to help bitcoiners take self-custody and explore the network."
+                            "A free resource to help bitcoiners easily take self-custody, whether it\u{2019}s 100 sats or 100 bitcoin. Also, dive into the Bitcoin rabbit hole and observe the network in real time, with live charts and 900,000+ blocks of history."
                         </p>
                         // Social icons
                         <div class="flex items-center gap-1 mt-4">
