@@ -227,6 +227,16 @@ pub fn OnThisDayPage() -> impl IntoView {
             .unwrap_or_else(|| format!("{m}/{d}"))
     });
 
+    let notable_select_ref: NodeRef<leptos::html::Select> = NodeRef::new();
+
+    // Reset the Notable Dates dropdown to placeholder
+    let reset_notable = move || {
+        #[cfg(feature = "hydrate")]
+        if let Some(el) = notable_select_ref.get() {
+            el.set_value("");
+        }
+    };
+
     let nav_prev = move |_| {
         let (m, d) = month_day.get_untracked();
         let date = chrono::NaiveDate::from_ymd_opt(2024, m, d)
@@ -234,6 +244,7 @@ pub fn OnThisDayPage() -> impl IntoView {
         if let Some(prev) = date {
             let new = format!("{:02}-{:02}", prev.month(), prev.day());
             set_selected_date.set(new.clone());
+            reset_notable();
             #[cfg(feature = "hydrate")]
             {
                 let window = leptos::prelude::window();
@@ -253,6 +264,7 @@ pub fn OnThisDayPage() -> impl IntoView {
         if let Some(next) = date {
             let new = format!("{:02}-{:02}", next.month(), next.day());
             set_selected_date.set(new.clone());
+            reset_notable();
             #[cfg(feature = "hydrate")]
             {
                 let window = leptos::prelude::window();
@@ -269,6 +281,7 @@ pub fn OnThisDayPage() -> impl IntoView {
         let now = chrono::Utc::now();
         let new = format!("{:02}-{:02}", now.month(), now.day());
         set_selected_date.set(new.clone());
+        reset_notable();
         #[cfg(feature = "hydrate")]
         {
             let window = leptos::prelude::window();
@@ -353,6 +366,7 @@ pub fn OnThisDayPage() -> impl IntoView {
                                 if val.len() >= 10 {
                                     let md = val[5..10].to_string();
                                     set_selected_date.set(md.clone());
+                                    reset_notable();
                                     #[cfg(feature = "hydrate")]
                                     {
                                         let window = leptos::prelude::window();
@@ -380,6 +394,7 @@ pub fn OnThisDayPage() -> impl IntoView {
             }}
             <div class="relative inline-block">
                 <select
+                    node_ref=notable_select_ref
                     aria-label="Notable dates"
                     class="appearance-none bg-[#0a1a2e] text-white/60 text-xs border border-white/10 rounded-lg pl-3 pr-7 py-1.5 cursor-pointer focus:outline-none focus:border-[#f7931a]/40 transition-colors"
                     on:change=move |ev| {
