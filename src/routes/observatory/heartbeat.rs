@@ -28,6 +28,41 @@ extern "C" {
 
     #[wasm_bindgen(js_name = destroyHeartbeat)]
     fn destroy_heartbeat();
+
+    // Phase 2: Vital signs
+    #[wasm_bindgen(js_name = getHeartbeatVitals)]
+    fn get_heartbeat_vitals() -> String;
+
+    // Phase 3: Rhythm strip
+    #[wasm_bindgen(js_name = renderRhythmStrip)]
+    fn render_rhythm_strip(canvas_id: &str, blocks_json: &str);
+
+    #[wasm_bindgen(js_name = getHeartbeatRecentBlocks)]
+    fn get_heartbeat_recent_blocks() -> String;
+
+    // Phase 4: Polish
+    #[wasm_bindgen(js_name = heartbeatPulse)]
+    fn heartbeat_pulse();
+
+    #[wasm_bindgen(js_name = heartbeatFlash)]
+    fn heartbeat_flash();
+
+    #[wasm_bindgen(js_name = getOrganismStatus)]
+    fn get_organism_status() -> String;
+
+    // Phase 5: Sound
+    #[wasm_bindgen(js_name = heartbeatSoundToggle)]
+    fn heartbeat_sound_toggle(enable: bool) -> bool;
+
+    #[wasm_bindgen(js_name = heartbeatSoundIsEnabled)]
+    fn heartbeat_sound_is_enabled() -> bool;
+
+    #[wasm_bindgen(js_name = heartbeatPlaySound)]
+    fn heartbeat_play_sound();
+
+    // Phase 5: Capture
+    #[wasm_bindgen(js_name = heartbeatDownloadCapture)]
+    fn heartbeat_download_capture(vitals_json: &str);
 }
 
 #[cfg(not(feature = "hydrate"))]
@@ -38,6 +73,27 @@ fn push_heartbeat_blocks(_: &str, _: bool) {}
 fn update_heartbeat_live(_: &str) {}
 #[cfg(not(feature = "hydrate"))]
 fn destroy_heartbeat() {}
+#[cfg(not(feature = "hydrate"))]
+fn get_heartbeat_vitals() -> String { "{}".to_string() }
+#[cfg(not(feature = "hydrate"))]
+fn render_rhythm_strip(_: &str, _: &str) {}
+#[cfg(not(feature = "hydrate"))]
+fn get_heartbeat_recent_blocks() -> String { "[]".to_string() }
+#[cfg(not(feature = "hydrate"))]
+fn heartbeat_pulse() {}
+#[cfg(not(feature = "hydrate"))]
+fn heartbeat_flash() {}
+#[cfg(not(feature = "hydrate"))]
+fn get_organism_status() -> String { "{}".to_string() }
+#[cfg(not(feature = "hydrate"))]
+fn heartbeat_sound_toggle(_: bool) -> bool { false }
+#[cfg(not(feature = "hydrate"))]
+#[allow(dead_code)]
+fn heartbeat_sound_is_enabled() -> bool { false }
+#[cfg(not(feature = "hydrate"))]
+fn heartbeat_play_sound() {}
+#[cfg(not(feature = "hydrate"))]
+fn heartbeat_download_capture(_: &str) {}
 
 // ---------------------------------------------------------------------------
 // Heartbeat page component
@@ -52,7 +108,42 @@ pub fn HeartbeatPage() -> impl IntoView {
     let last_height = std::rc::Rc::new(std::cell::Cell::new(0u64));
     let initialized = std::rc::Rc::new(std::cell::Cell::new(false));
 
-    // Fetch recent blocks for initial waveform history
+    // Signals for vital signs display
+    let (hr_bpm, set_hr_bpm) = signal("--".to_string());
+    let (hr_label, set_hr_label) = signal("Waiting...".to_string());
+    let (hr_color, set_hr_color) = signal("#00e676".to_string());
+
+    let (bp_display, set_bp_display) = signal("-- / --".to_string());
+    let (bp_label, set_bp_label) = signal("Waiting...".to_string());
+    let (bp_color, set_bp_color) = signal("#00e676".to_string());
+
+    let (temp_display, set_temp_display) = signal("--.-".to_string());
+    let (temp_label, set_temp_label) = signal("Waiting...".to_string());
+    let (temp_color, set_temp_color) = signal("#00e676".to_string());
+
+    let (immune_display, set_immune_display) = signal("-- EH/s".to_string());
+    let (immune_label, set_immune_label) = signal("Waiting...".to_string());
+    let (immune_color, set_immune_color) = signal("#00e676".to_string());
+
+    // Organism status
+    let (org_condition, set_org_condition) = signal("Initializing".to_string());
+    let (org_desc, set_org_desc) = signal("Waiting for data...".to_string());
+    let (org_color, set_org_color) = signal("#00e676".to_string());
+
+    // Sound toggle state
+    let (sound_on, set_sound_on) = signal(false);
+
+    // Blocks until next difficulty adjustment
+    let blocks_until_retarget = Signal::derive(move || {
+        cached_live.get().map(|s| {
+            let height = s.blockchain.blocks;
+            let blocks_in_epoch = height % 2016;
+            let remaining = 2016 - blocks_in_epoch;
+            remaining
+        }).unwrap_or(0)
+    });
+
+    // Fetch recent blocks for initial waveform history (get 144 for rhythm strip)
     let initial_blocks = LocalResource::new(move || async move {
         let height = cached_live
             .get()
@@ -61,7 +152,7 @@ pub fn HeartbeatPage() -> impl IntoView {
         if height == 0 {
             return Vec::new();
         }
-        let from = height.saturating_sub(20);
+        let from = height.saturating_sub(144);
         crate::stats::server_fns::fetch_blocks(from, height)
             .await
             .unwrap_or_default()
@@ -93,8 +184,41 @@ pub fn HeartbeatPage() -> impl IntoView {
             if let Some(last) = blocks.last() {
                 last_height.set(last.height);
             }
+
+            // Render rhythm strip with all blocks
+            render_rhythm_strip("rhythm-strip-canvas", &json);
         }
     });
+
+    // Helper: refresh vital signs from JS state
+    let refresh_vitals = move || {
+        let vitals_json = get_heartbeat_vitals();
+        // Parse the JSON manually (no serde dependency needed)
+        if let Some(v) = parse_vitals_json(&vitals_json) {
+            set_hr_bpm.set(format!("{:.1}", v.heart_rate_bpm));
+            set_hr_label.set(v.heart_rate_label);
+            set_hr_color.set(v.heart_rate_color);
+
+            set_bp_display.set(format!("{:.0} / {:.0}", v.bp_systolic, v.bp_diastolic));
+            set_bp_label.set(v.bp_label);
+            set_bp_color.set(v.bp_color);
+
+            set_temp_display.set(format!("{:.1}", v.temp_c));
+            set_temp_label.set(v.temp_label);
+            set_temp_color.set(v.temp_color);
+
+            set_immune_display.set(format!("{:.0} EH/s", v.immune_eh));
+            set_immune_label.set(v.immune_label);
+            set_immune_color.set(v.immune_color);
+        }
+
+        let status_json = get_organism_status();
+        if let Some(s) = parse_status_json(&status_json) {
+            set_org_condition.set(s.condition);
+            set_org_desc.set(s.description);
+            set_org_color.set(s.color);
+        }
+    };
 
     // Watch for new blocks via LiveStats polling
     let last_height2 = last_height.clone();
@@ -105,19 +229,36 @@ pub fn HeartbeatPage() -> impl IntoView {
         };
         let current_height = live.blockchain.blocks;
 
-        // Forward live metrics for color computation
+        // Forward live metrics for color + vital signs computation
         let live_json = format!(
-            r#"{{"next_block_fee":{},"mempool_mb":{:.1},"block_time":{}}}"#,
+            r#"{{"next_block_fee":{},"mempool_mb":{:.1},"block_time":{},"hashrate_eh":{:.1},"mempool_min_fee":{},"difficulty":{},"block_height":{}}}"#,
             live.next_block_fee,
             live.mempool.bytes as f64 / 1_000_000.0,
             live.blockchain.time,
+            live.network.hashrate,
+            live.mempool.mempoolminfee,
+            live.blockchain.difficulty,
+            live.blockchain.blocks,
         );
         update_heartbeat_live(&live_json);
+
+        // Refresh vitals display
+        refresh_vitals();
 
         // Check for new blocks
         let prev = last_height2.get();
         if prev > 0 && current_height > prev && initialized2.get() {
             last_height2.set(current_height);
+
+            // Phase 4: flash and pulse on new block
+            heartbeat_flash();
+            heartbeat_pulse();
+
+            // Phase 5: sound on new block
+            if sound_on.get_untracked() {
+                heartbeat_play_sound();
+            }
+
             // Fetch the new block(s)
             leptos::task::spawn_local(async move {
                 if let Ok(blocks) =
@@ -126,6 +267,10 @@ pub fn HeartbeatPage() -> impl IntoView {
                     if !blocks.is_empty() {
                         let json = blocks_to_json(&blocks);
                         push_heartbeat_blocks(&json, false);
+
+                        // Re-render rhythm strip
+                        let recent = get_heartbeat_recent_blocks();
+                        render_rhythm_strip("rhythm-strip-canvas", &recent);
                     }
                 }
             });
@@ -179,7 +324,7 @@ pub fn HeartbeatPage() -> impl IntoView {
 
         <div class="space-y-6">
             // EKG Canvas card
-            <div class="relative bg-[#0d2137] border border-white/10 rounded-2xl overflow-hidden">
+            <div id="heartbeat-card" class="relative bg-[#0d2137] border border-white/10 rounded-2xl overflow-hidden">
                 // Status bar
                 <div class="flex items-center justify-between px-4 py-2.5 border-b border-white/5">
                     <div class="flex items-center gap-3">
@@ -209,6 +354,112 @@ pub fn HeartbeatPage() -> impl IntoView {
                     <span>{mempool_display}</span>
                     <span>"Next block: " {fee_display}</span>
                 </div>
+            </div>
+
+            // ── Phase 2: Vital Signs Panel ────────────────────
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                // Heart Rate
+                <VitalTile
+                    label="Heart Rate"
+                    value=hr_bpm
+                    unit=" bpm"
+                    status=hr_label
+                    color=hr_color
+                />
+
+                // Blood Pressure
+                <VitalTile
+                    label="Blood Pressure"
+                    value=bp_display
+                    unit=" sat/vB"
+                    status=bp_label
+                    color=bp_color
+                />
+
+                // Body Temperature
+                <VitalTile
+                    label="Temperature"
+                    value=temp_display
+                    unit="\u{00B0}C"
+                    status=temp_label
+                    color=temp_color
+                />
+
+                // Immune System
+                <VitalTile
+                    label="Immune System"
+                    value=immune_display
+                    unit=""
+                    status=immune_label
+                    color=immune_color
+                />
+            </div>
+
+            // Blocks until retarget
+            <div class="text-center text-xs text-white/30 font-mono">
+                "Next difficulty adjustment in ~"
+                {move || super::helpers::format_number(blocks_until_retarget.get())}
+                " blocks"
+            </div>
+
+            // ── Phase 3: 24-Hour Rhythm Strip ─────────────────
+            <div class="bg-[#0d2137] border border-white/10 rounded-2xl overflow-hidden">
+                <div class="px-4 py-2 border-b border-white/5">
+                    <span class="text-xs text-white/40 font-mono">"24-HOUR RHYTHM STRIP"</span>
+                </div>
+                <canvas
+                    id="rhythm-strip-canvas"
+                    class="w-full"
+                    style="height: 100px"
+                ></canvas>
+            </div>
+
+            // ── Phase 4: Organism Status ──────────────────────
+            <div class="bg-[#0d2137]/60 border border-white/5 rounded-xl px-5 py-4">
+                <div class="flex items-baseline gap-2">
+                    <span class="text-xs text-white/30 font-mono uppercase tracking-wider">"Condition:"</span>
+                    <span
+                        class="text-sm font-mono font-semibold"
+                        style=move || format!("color: {}", org_color.get())
+                    >
+                        {org_condition}
+                    </span>
+                </div>
+                <p class="text-sm text-white/40 italic mt-1 font-mono">
+                    {org_desc}
+                </p>
+            </div>
+
+            // ── Phase 5: Sound + Capture controls ─────────────
+            <div class="flex flex-wrap items-center justify-center gap-3">
+                // Sound toggle
+                <button
+                    class="flex items-center gap-2 px-4 py-2 rounded-lg border border-white/10 bg-[#0d2137]/60 text-xs font-mono text-white/50 hover:text-white/80 hover:border-white/20 transition-colors"
+                    on:click=move |_| {
+                        let new_state = !sound_on.get_untracked();
+                        let actual = heartbeat_sound_toggle(new_state);
+                        set_sound_on.set(actual);
+                    }
+                >
+                    <span class="text-base">
+                        {move || if sound_on.get() { "\u{1F50A}" } else { "\u{1F507}" }}
+                    </span>
+                    <span>
+                        {move || if sound_on.get() { "Sound On" } else { "Sound Off" }}
+                    </span>
+                </button>
+
+                // Capture moment
+                <button
+                    class="flex items-center gap-2 px-4 py-2 rounded-lg border border-white/10 bg-[#0d2137]/60 text-xs font-mono text-white/50 hover:text-white/80 hover:border-white/20 transition-colors"
+                    on:click=move |_| {
+                        let vitals = get_heartbeat_vitals();
+                        heartbeat_download_capture(&vitals);
+                    }
+                >
+                    <span class="text-base">{"\u{1F4F7}"}</span>
+                    <span>"Capture Moment"</span>
+                </button>
             </div>
 
             // Legend
@@ -246,6 +497,45 @@ pub fn HeartbeatPage() -> impl IntoView {
 }
 
 // ---------------------------------------------------------------------------
+// Vital Signs Tile component
+// ---------------------------------------------------------------------------
+
+#[component]
+fn VitalTile(
+    label: &'static str,
+    value: ReadSignal<String>,
+    unit: &'static str,
+    status: ReadSignal<String>,
+    color: ReadSignal<String>,
+) -> impl IntoView {
+    view! {
+        <div class="bg-[#0d2137] border border-white/10 rounded-xl px-4 py-3 flex flex-col gap-1">
+            <span class="text-xs text-white/30 font-mono uppercase tracking-wider">{label}</span>
+            <div class="flex items-baseline gap-1">
+                <span
+                    class="text-2xl sm:text-3xl font-mono font-bold tabular-nums"
+                    style=move || format!("color: {}", color.get())
+                >
+                    {value}
+                </span>
+                <span
+                    class="text-xs font-mono"
+                    style=move || format!("color: {}80", color.get())
+                >
+                    {unit}
+                </span>
+            </div>
+            <span
+                class="text-xs font-mono"
+                style=move || format!("color: {}99", color.get())
+            >
+                {status}
+            </span>
+        </div>
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -268,4 +558,79 @@ fn blocks_to_json(blocks: &[crate::stats::types::BlockSummary]) -> String {
     }
     buf.push(']');
     buf
+}
+
+/// Minimal JSON parsing for vital signs (avoids serde dependency).
+struct Vitals {
+    heart_rate_bpm: f64,
+    heart_rate_label: String,
+    heart_rate_color: String,
+    bp_systolic: f64,
+    bp_diastolic: f64,
+    bp_label: String,
+    bp_color: String,
+    temp_c: f64,
+    temp_label: String,
+    temp_color: String,
+    immune_eh: f64,
+    immune_label: String,
+    immune_color: String,
+}
+
+fn extract_json_f64(json: &str, key: &str) -> f64 {
+    let needle = format!("\"{}\":", key);
+    if let Some(pos) = json.find(&needle) {
+        let start = pos + needle.len();
+        let rest = &json[start..];
+        let end = rest.find(|c: char| c == ',' || c == '}').unwrap_or(rest.len());
+        rest[..end].trim().parse().unwrap_or(0.0)
+    } else {
+        0.0
+    }
+}
+
+fn extract_json_str(json: &str, key: &str) -> String {
+    let needle = format!("\"{}\":\"", key);
+    if let Some(pos) = json.find(&needle) {
+        let start = pos + needle.len();
+        let rest = &json[start..];
+        let end = rest.find('"').unwrap_or(rest.len());
+        rest[..end].to_string()
+    } else {
+        String::new()
+    }
+}
+
+fn parse_vitals_json(json: &str) -> Option<Vitals> {
+    if json.len() < 3 { return None; }
+    Some(Vitals {
+        heart_rate_bpm: extract_json_f64(json, "heart_rate_bpm"),
+        heart_rate_label: extract_json_str(json, "heart_rate_label"),
+        heart_rate_color: extract_json_str(json, "heart_rate_color"),
+        bp_systolic: extract_json_f64(json, "bp_systolic"),
+        bp_diastolic: extract_json_f64(json, "bp_diastolic"),
+        bp_label: extract_json_str(json, "bp_label"),
+        bp_color: extract_json_str(json, "bp_color"),
+        temp_c: extract_json_f64(json, "temp_c"),
+        temp_label: extract_json_str(json, "temp_label"),
+        temp_color: extract_json_str(json, "temp_color"),
+        immune_eh: extract_json_f64(json, "immune_eh"),
+        immune_label: extract_json_str(json, "immune_label"),
+        immune_color: extract_json_str(json, "immune_color"),
+    })
+}
+
+struct OrganismStatus {
+    condition: String,
+    description: String,
+    color: String,
+}
+
+fn parse_status_json(json: &str) -> Option<OrganismStatus> {
+    if json.len() < 3 { return None; }
+    Some(OrganismStatus {
+        condition: extract_json_str(json, "condition"),
+        description: extract_json_str(json, "description"),
+        color: extract_json_str(json, "color"),
+    })
 }
