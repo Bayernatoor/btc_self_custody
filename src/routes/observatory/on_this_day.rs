@@ -147,7 +147,7 @@ fn YearCard(year: OnThisDayYear) -> impl IntoView {
                         <p class="text-[11px] text-white/50 uppercase tracking-wider">"Price"</p>
                         <p class="text-white font-mono">{price_str}</p>
                         {(!mcap_str.is_empty()).then(|| view! {
-                            <p class="text-[10px] text-white/30">{mcap_str.clone()}</p>
+                            <p class="text-[10px] text-white/50">{mcap_str.clone()}</p>
                         })}
                     </div>
                     <div class="cursor-help" title="Total BTC mined as of this date">
