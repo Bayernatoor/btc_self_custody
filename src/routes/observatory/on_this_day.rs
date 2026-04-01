@@ -59,6 +59,20 @@ fn YearCard(year: OnThisDayYear) -> impl IntoView {
     };
     let supply = calc_supply(year.last_block);
     let supply_str = format!("{} BTC", format_number_f64(supply, 0));
+    let mcap_str = if year.price_usd > 0.0 {
+        let mcap = supply * year.price_usd;
+        if mcap >= 1e12 {
+            format!("${:.2}T mcap", mcap / 1e12)
+        } else if mcap >= 1e9 {
+            format!("${:.1}B mcap", mcap / 1e9)
+        } else if mcap >= 1e6 {
+            format!("${:.0}M mcap", mcap / 1e6)
+        } else {
+            format!("${:.0} mcap", mcap)
+        }
+    } else {
+        String::new()
+    };
 
     let has_events = !year.events.is_empty();
 
@@ -130,6 +144,9 @@ fn YearCard(year: OnThisDayYear) -> impl IntoView {
                     <div class="cursor-help" title="Daily average BTC/USD price (blockchain.info)">
                         <p class="text-[11px] text-white/50 uppercase tracking-wider">"Price"</p>
                         <p class="text-white font-mono">{price_str}</p>
+                        {(!mcap_str.is_empty()).then(|| view! {
+                            <p class="text-[10px] text-white/30">{mcap_str.clone()}</p>
+                        })}
                     </div>
                     <div class="cursor-help" title="Total BTC mined as of this date">
                         <p class="text-[11px] text-white/50 uppercase tracking-wider">"Supply"</p>
