@@ -326,7 +326,7 @@ pub fn StatsSummaryPage() -> impl IntoView {
 
             <SectionHeader title="Adoption"/>
             <StatCard label="SegWit Transactions" value=segwit_pct
-                tooltip="Percentage of non-coinbase transactions using SegWit witness data"/>
+                tooltip="Percentage of transactions with at least one SegWit input. A transaction counts even if it also creates legacy outputs, so this is higher than SegWit's share of total outputs"/>
             <StatCard label="Taproot Outputs" value=taproot_outputs sub=taproot_sub
                 tooltip="Total P2TR outputs created. Key-path is simple spends, script-path enables smart contracts"/>
             <StatCard label="Witness Data" value=witness_pct sub=Signal::derive(|| "of total block data".to_string())
