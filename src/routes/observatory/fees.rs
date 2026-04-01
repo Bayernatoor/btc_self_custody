@@ -16,7 +16,7 @@ pub fn FeeChartsPage() -> impl IntoView {
     let dashboard_data = state.dashboard_data;
 
     // Fee unit toggle — created OUTSIDE the reactive closure
-    let (fee_unit, set_fee_unit) = signal("btc".to_string());
+    let fee_unit = Signal::derive(|| "btc".to_string());
 
     view! {
         <Title text="Bitcoin Fee Charts: Miner Revenue & Subsidy Breakdown | WE HODL BTC"/>
@@ -79,18 +79,7 @@ pub fn FeeChartsPage() -> impl IntoView {
                                 description=chart_desc(range, "Total transaction fees earned by miners in each block", "Average daily transaction fees earned by miners per block")
                                 chart_id="chart-fees"
                                 option=fees_option
-                            >
-                                <button
-                                    class="text-xs text-white/40 hover:text-white/60 px-2 py-1 rounded border border-white/10 cursor-pointer"
-                                    on:click=move |_| {
-                                        set_fee_unit.update(|u| {
-                                            *u = if *u == "sats" { "btc".to_string() } else { "sats".to_string() }
-                                        });
-                                    }
-                                >
-                                    {move || if fee_unit.get() == "sats" { "Switch to BTC" } else { "Switch to sats" }}
-                                </button>
-                            </ChartCard>
+                            />
                             <ChartCard
                                 title="Avg Fee per Transaction"
                                 description=chart_desc(range, "Average fee paid per transaction in satoshis (excludes coinbase)", "Daily average fee per transaction in satoshis")
