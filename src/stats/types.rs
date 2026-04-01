@@ -197,6 +197,33 @@ pub struct RangeSummary {
     pub witness_pct: f64,
 }
 
+/// A single year's data for the "On This Day" feature.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct OnThisDayYear {
+    pub year: u32,
+    pub block_count: u64,
+    pub total_tx: u64,
+    pub total_fees: u64,
+    pub avg_block_size: f64,
+    pub avg_weight_util: f64,
+    pub total_inscriptions: u64,
+    pub total_runes: u64,
+    pub segwit_pct: f64,
+    pub taproot_outputs: u64,
+    pub price_usd: f64,
+    pub events: Vec<String>,
+    pub first_block: u64,
+    pub last_block: u64,
+}
+
+/// Full "On This Day" response for a given month+day.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct OnThisDayData {
+    pub month: u32,
+    pub day: u32,
+    pub years: Vec<OnThisDayYear>,
+}
+
 /// Mining pool + price context for a time range (Stats Dashboard).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MiningPriceSummary {

@@ -18,6 +18,7 @@ mod embedded;
 mod fees;
 mod mining;
 mod network;
+mod on_this_day;
 mod overview;
 mod signaling;
 mod stats;
@@ -27,6 +28,7 @@ pub use fees::FeeChartsPage;
 pub use mining::MiningChartsPage;
 pub use network::NetworkChartsPage;
 pub use overview::ObservatoryOverview;
+pub use on_this_day::OnThisDayPage;
 pub use signaling::SignalingPage;
 pub use stats::StatsSummaryPage;
 

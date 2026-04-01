@@ -870,7 +870,7 @@ pub fn OverlayPanel() -> impl IntoView {
     let location = leptos_router::hooks::use_location();
     let hide_overlays = Signal::derive(move || {
         let path = location.pathname.get();
-        path == "/observatory" || path == "/observatory/stats"
+        path == "/observatory" || path == "/observatory/stats" || path == "/observatory/on-this-day"
     });
 
     view! {
@@ -964,6 +964,7 @@ pub fn ObservatoryNav() -> impl IntoView {
     let tabs: Vec<(&'static str, &'static str)> = vec![
         ("/observatory", "Dashboard"),
         ("/observatory/stats", "Stats"),
+        ("/observatory/on-this-day", "On This Day"),
         ("/observatory/charts/network", "Network"),
         ("/observatory/charts/fees", "Fees"),
         ("/observatory/charts/mining", "Mining"),

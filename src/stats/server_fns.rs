@@ -948,6 +948,109 @@ pub async fn fetch_mining_price_summary(
     })
 }
 
+#[server(prefix = "/api", endpoint = "on_this_day")]
+pub async fn fetch_on_this_day(
+    month: u32,
+    day: u32,
+) -> Result<OnThisDayData, ServerFnError> {
+    let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
+        leptos_axum::extract().await.map_err(|e| {
+            ServerFnError::new(format!("Stats not available: {e}"))
+        })?;
+    let conn = state
+        .db
+        .get()
+        .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+
+    let month_day = format!("{:02}-{:02}", month, day);
+    let rows = super::db::query_on_this_day(&conn, &month_day)
+        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+
+    // Fetch price history for annotation
+    let prices = fetch_price_history(0, 4_000_000_000).await.unwrap_or_default();
+
+    // Notable Bitcoin events by date (MM-DD → description)
+    let notable_dates: Vec<(&str, &str)> = vec![
+        ("01-03", "Genesis Block mined"),
+        ("01-12", "First BTC transaction (Satoshi \u{2192} Hal Finney)"),
+        ("05-22", "Bitcoin Pizza Day (10,000 BTC for 2 pizzas)"),
+        ("07-17", "Mt. Gox exchange opens"),
+        ("02-09", "BTC reaches $1"),
+        ("11-28", "First halving (50 \u{2192} 25 BTC)"),
+        ("11-29", "BTC reaches $1,000"),
+        ("02-07", "Mt. Gox halts withdrawals"),
+        ("07-09", "Second halving (25 \u{2192} 12.5 BTC)"),
+        ("08-01", "Bitcoin Cash fork"),
+        ("08-24", "SegWit activates (BIP-141)"),
+        ("12-17", "BTC reaches $20,000"),
+        ("05-11", "Third halving (12.5 \u{2192} 6.25 BTC)"),
+        ("02-08", "Tesla buys $1.5B in BTC"),
+        ("06-09", "El Salvador adopts BTC as legal tender"),
+        ("09-07", "El Salvador BTC law takes effect"),
+        ("11-10", "BTC ATH ~$69,000"),
+        ("11-13", "Taproot activates (BIP-341)"),
+        ("01-21", "Ordinals inscriptions launch"),
+        ("01-10", "First spot Bitcoin ETFs approved"),
+        ("03-14", "BTC reaches $73,000"),
+        ("04-20", "Fourth halving (6.25 \u{2192} 3.125 BTC) + Runes launch"),
+    ];
+
+    let years: Vec<OnThisDayYear> = rows
+        .into_iter()
+        .map(|(year, block_count, total_tx, total_fees, avg_size, avg_weight,
+               inscriptions, runes, segwit_txs, taproot_outputs, _total_tx2,
+               first_block, last_block)| {
+            // Find price for this year's date
+            let target_date = format!("{}-{}", year, month_day);
+            let price_usd = prices
+                .iter()
+                .find(|p| {
+                    let dt = chrono::DateTime::from_timestamp((p.timestamp_ms / 1000) as i64, 0);
+                    dt.map(|d| d.format("%Y-%m-%d").to_string() == target_date)
+                        .unwrap_or(false)
+                })
+                .map(|p| p.price_usd)
+                .unwrap_or(0.0);
+
+            // Collect events for this date
+            let mut events = Vec::new();
+            for (date, desc) in &notable_dates {
+                if *date == month_day {
+                    // Check if this event's year matches (approximate by description)
+                    events.push(desc.to_string());
+                }
+            }
+
+            let segwit_pct = if total_tx > block_count {
+                segwit_txs as f64 / (total_tx - block_count) as f64 * 100.0
+            } else {
+                0.0
+            };
+
+            let avg_weight_util = avg_weight / 4_000_000.0 * 100.0;
+
+            OnThisDayYear {
+                year,
+                block_count,
+                total_tx,
+                total_fees,
+                avg_block_size: avg_size,
+                avg_weight_util,
+                total_inscriptions: inscriptions,
+                total_runes: runes,
+                segwit_pct,
+                taproot_outputs,
+                price_usd,
+                events,
+                first_block,
+                last_block,
+            }
+        })
+        .collect();
+
+    Ok(OnThisDayData { month, day, years })
+}
+
 #[server(prefix = "/api", endpoint = "range_summary")]
 pub async fn fetch_range_summary(
     from_ts: u64,
