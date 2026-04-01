@@ -503,4 +503,71 @@
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
     };
+    // ── Custom tooltip system (data-tip) ──────────────────────────
+    // Appends a single tooltip element to <body> so it's never clipped
+    // by overflow:hidden ancestors. Shows on hover (desktop) and tap (mobile).
+    (function() {
+        var tip = document.createElement('div');
+        tip.id = 'btc-tooltip';
+        document.body.appendChild(tip);
+
+        var isMobile = 'ontouchstart' in window;
+        var activeEl = null;
+
+        function show(el) {
+            var text = el.getAttribute('data-tip');
+            if (!text) return;
+            tip.textContent = text;
+            tip.classList.add('visible');
+            activeEl = el;
+            position(el);
+        }
+
+        function hide() {
+            tip.classList.remove('visible');
+            activeEl = null;
+        }
+
+        function position(el) {
+            if (window.innerWidth <= 640) return; // mobile uses fixed CSS positioning
+            var rect = el.getBoundingClientRect();
+            var tipW = tip.offsetWidth;
+            var left = rect.left + rect.width / 2 - tipW / 2;
+            // Clamp to viewport
+            if (left < 8) left = 8;
+            if (left + tipW > window.innerWidth - 8) left = window.innerWidth - 8 - tipW;
+            tip.style.left = left + 'px';
+            tip.style.top = (rect.top - tip.offsetHeight - 8) + 'px';
+        }
+
+        // Event delegation on document
+        document.addEventListener('mouseenter', function(e) {
+            var el = e.target.closest('[data-tip]:not([data-tip=""])');
+            if (el) show(el);
+        }, true);
+
+        document.addEventListener('mouseleave', function(e) {
+            var el = e.target.closest('[data-tip]:not([data-tip=""])');
+            if (el && el === activeEl) hide();
+        }, true);
+
+        // Mobile: tap to show, tap elsewhere to hide
+        if (isMobile) {
+            document.addEventListener('touchstart', function(e) {
+                var el = e.target.closest('[data-tip]:not([data-tip=""])');
+                if (el) {
+                    if (activeEl === el) { hide(); return; }
+                    show(el);
+                } else {
+                    hide();
+                }
+            }, { passive: true });
+        }
+
+        // Reposition on scroll
+        document.addEventListener('scroll', function() {
+            if (activeEl) position(activeEl);
+        }, { passive: true });
+    })();
+
 })();

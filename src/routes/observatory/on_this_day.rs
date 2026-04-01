@@ -81,7 +81,7 @@ fn YearCard(year: OnThisDayYear) -> impl IntoView {
     view! {
         <div
             id=format!("year-{}", year.year)
-            class="bg-[#0d2137] border border-white/10 rounded-xl overflow-hidden transition-all hover:border-white/20"
+            class="bg-[#0d2137] border border-white/10 rounded-xl transition-all hover:border-white/20"
             style=format!("border-left: 4px solid {color}")
         >
             <div class="p-4 sm:p-5">
@@ -129,32 +129,32 @@ fn YearCard(year: OnThisDayYear) -> impl IntoView {
 
                 // Stats grid
                 <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-sm">
-                    <div class="cursor-help" title="Blocks mined on this day (00:00-23:59 UTC)">
+                    <div data-tip="Blocks mined on this day (00:00-23:59 UTC)" tabindex="0">
                         <p class="text-[11px] text-white/50 uppercase tracking-wider">"Blocks"</p>
                         <p class="text-white font-mono">{format_number(year.block_count)}</p>
                     </div>
-                    <div class="cursor-help" title="Total transactions this day (includes 1 coinbase per block \u{2014} early blocks with only coinbase still show a count)">
+                    <div data-tip="Total transactions this day (includes 1 coinbase per block, early blocks with only coinbase still show a count)" tabindex="0">
                         <p class="text-[11px] text-white/50 uppercase tracking-wider">"Transactions"</p>
                         <p class="text-white font-mono">{format_compact(year.total_tx)}</p>
                     </div>
-                    <div class="cursor-help" title="Total miner fees paid this day">
+                    <div data-tip="Total miner fees paid this day" tabindex="0">
                         <p class="text-[11px] text-white/50 uppercase tracking-wider">"Fees"</p>
                         <p class="font-mono" style=format!("color: {color}")>
                             {format!("{:.4} BTC", fees_btc)}
                         </p>
                     </div>
-                    <div class="cursor-help" title="Daily average BTC/USD price (blockchain.info)">
+                    <div data-tip="Daily average BTC/USD price (blockchain.info)" tabindex="0">
                         <p class="text-[11px] text-white/50 uppercase tracking-wider">"Price"</p>
                         <p class="text-white font-mono">{price_str}</p>
                         {(!mcap_str.is_empty()).then(|| view! {
                             <p class="text-[10px] text-white/50">{mcap_str.clone()}</p>
                         })}
                     </div>
-                    <div class="cursor-help" title="Total BTC mined as of this date">
+                    <div data-tip="Total BTC mined as of this date" tabindex="0">
                         <p class="text-[11px] text-white/50 uppercase tracking-wider">"Supply"</p>
                         <p class="text-white font-mono">{supply_str}</p>
                     </div>
-                    <div class="cursor-help" title="Average block weight as % of 4 MWU limit">
+                    <div data-tip="Average block weight as % of 4 MWU limit" tabindex="0">
                         <p class="text-[11px] text-white/50 uppercase tracking-wider">"Block Fullness"</p>
                         <p class="text-xs font-mono tracking-tighter" style=format!("color: {color}")>
                             {fullness_bar(year.avg_weight_util)}
@@ -165,22 +165,22 @@ fn YearCard(year: OnThisDayYear) -> impl IntoView {
 
                 // Extra metrics row
                 <div class="flex flex-wrap gap-x-4 gap-y-1 mt-2 pt-2 border-t border-white/5 text-xs text-white/50">
-                    <span class="cursor-help" title="Block reward per block in this era (halves every 210,000 blocks)">{
+                    <span data-tip="Block reward per block in this era (halves every 210,000 blocks)" tabindex="0">{
                         let era = year.last_block / 210_000;
                         let subsidy = 50.0_f64 / 2.0_f64.powi(era as i32);
                         format!("Subsidy: {} BTC", if subsidy >= 1.0 { format!("{:.0}", subsidy) } else { format!("{:.4}", subsidy) })
                     }</span>
                     {(year.segwit_pct > 0.0).then(|| view! {
-                        <span class="cursor-help" title="% of non-coinbase transactions using SegWit">{format!("SegWit: {:.0}%", year.segwit_pct)}</span>
+                        <span data-tip="% of non-coinbase transactions using SegWit" tabindex="0">{format!("SegWit: {:.0}%", year.segwit_pct)}</span>
                     })}
                     {(year.taproot_outputs > 0).then(|| view! {
-                        <span class="cursor-help" title="P2TR outputs created this day">{format!("Taproot: {}", format_compact(year.taproot_outputs))}</span>
+                        <span data-tip="P2TR outputs created this day" tabindex="0">{format!("Taproot: {}", format_compact(year.taproot_outputs))}</span>
                     })}
                     {(year.total_inscriptions > 0).then(|| view! {
-                        <span class="cursor-help" title="Ordinals inscriptions embedded in witness data">{format!("Inscriptions: {}", format_compact(year.total_inscriptions))}</span>
+                        <span data-tip="Ordinals inscriptions embedded in witness data" tabindex="0">{format!("Inscriptions: {}", format_compact(year.total_inscriptions))}</span>
                     })}
                     {(year.total_runes > 0).then(|| view! {
-                        <span class="cursor-help" title="Runes protocol OP_RETURN outputs on this day">{format!("Runes: {}", format_compact(year.total_runes))}</span>
+                        <span data-tip="Runes protocol OP_RETURN outputs on this day" tabindex="0">{format!("Runes: {}", format_compact(year.total_runes))}</span>
                     })}
                 </div>
             </div>

@@ -250,12 +250,9 @@ pub fn LiveCard(
     let is_loading = Signal::derive(move || value.get() == "\u{2014}");
     view! {
         <div
-            class=if tooltip.is_some() {
-                "bg-[#0d2137] border border-white/10 rounded-lg p-2 sm:p-3 text-center cursor-help overflow-hidden min-w-0"
-            } else {
-                "bg-[#0d2137] border border-white/10 rounded-lg p-2 sm:p-3 text-center overflow-hidden min-w-0"
-            }
-            title=tooltip.unwrap_or("")
+            class="bg-[#0d2137] border border-white/10 rounded-lg p-2 sm:p-3 text-center overflow-hidden min-w-0"
+            data-tip=tooltip.unwrap_or("")
+            tabindex=if tooltip.is_some() { "0" } else { "-1" }
         >
             <div class="text-[0.6rem] sm:text-[0.7rem] text-[#8899aa] uppercase tracking-widest mb-1">{label}</div>
             <div

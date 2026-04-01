@@ -21,12 +21,9 @@ fn StatCard(
 ) -> impl IntoView {
     view! {
         <div
-            class=if tooltip.is_some() {
-                "bg-[#0d2137] border border-white/10 rounded-xl p-3 sm:p-4 cursor-help"
-            } else {
-                "bg-[#0d2137] border border-white/10 rounded-xl p-3 sm:p-4"
-            }
-            title=tooltip.unwrap_or("")
+            class="bg-[#0d2137] border border-white/10 rounded-xl p-3 sm:p-4"
+            data-tip=tooltip.unwrap_or("")
+            tabindex=if tooltip.is_some() { "0" } else { "-1" }
         >
             <p class="text-[10px] sm:text-xs text-white/40 uppercase tracking-wider mb-1">{label}</p>
             <p class="text-base sm:text-lg font-semibold text-[#f7931a] font-mono truncate" title=move || value.get()>
@@ -284,8 +281,9 @@ pub fn StatsSummaryPage() -> impl IntoView {
                     }}
                 </p>
                 <span
-                    class="inline-flex items-center justify-center w-4 h-4 rounded-full border border-white/20 text-[9px] font-bold text-white/30 hover:text-[#f7931a] hover:border-[#f7931a]/40 cursor-help transition-colors"
-                    title="Timestamps reflect the actual first and last block mined in this range, not the query boundaries. Bitcoin blocks are mined at irregular intervals so times won\u{2019}t align exactly with midnight."
+                    class="inline-flex items-center justify-center w-4 h-4 rounded-full border border-white/20 text-[9px] font-bold text-white/30 hover:text-[#f7931a] hover:border-[#f7931a]/40 transition-colors"
+                    data-tip="Timestamps reflect the actual first and last block mined in this range, not the query boundaries. Bitcoin blocks are mined at irregular intervals so times won\u{2019}t align exactly with midnight."
+                    tabindex="0"
                 >
                     "\u{20bf}"
                 </span>
