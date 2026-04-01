@@ -87,6 +87,17 @@ fn YearCard(year: OnThisDayYear) -> impl IntoView {
                                         <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-11.25a.75.75 0 0 0-1.5 0v2.5h-2.5a.75.75 0 0 0 0 1.5h2.5v2.5a.75.75 0 0 0 1.5 0v-2.5h2.5a.75.75 0 0 0 0-1.5h-2.5v-2.5Z" clip-rule="evenodd"/>
                                     </svg>
                                     <span class="text-sm font-semibold text-[#f7931a]">{e.title.clone()}</span>
+                                    {e.block.map(|height| view! {
+                                        <a
+                                            href=format!("https://mempool.space/block/{height}")
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            class="text-[10px] text-white/30 hover:text-[#f7931a] transition-colors ml-auto"
+                                        >
+                                            {format!("Block #{}", super::helpers::format_number(height))}
+                                            " \u{2192}"
+                                        </a>
+                                    })}
                                 </div>
                                 <p class="text-xs text-white/60 leading-relaxed pl-6">{e.context.clone()}</p>
                             </div>
