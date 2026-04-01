@@ -350,10 +350,10 @@
 
                 // — Signaling —
                 body.appendChild(bdDivider());
-                body.appendChild(bdSection('Consensus'));
-                body.appendChild(bdCopyRow('Version', versionHex, versionHex));
+                body.appendChild(bdSection('BIP Signaling'));
                 body.appendChild(bdRow('BIP-110 (bit 4)', bit4 ? '\u2713 Signaled' : '\u2717 No', bit4 ? '' : ''));
                 body.appendChild(bdRow('BIP-54', bip54 ? '\u2713 Compliant' : '\u2717 No', bip54 ? '' : ''));
+                body.appendChild(bdCopyRow('Block Version', versionHex, versionHex));
 
                 // — External link —
                 body.appendChild(bdDivider());
