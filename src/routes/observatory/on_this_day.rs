@@ -163,24 +163,26 @@ fn YearCard(year: OnThisDayYear) -> impl IntoView {
                     </div>
                 </div>
 
-                // Extra metrics row (only if data exists)
-                {if year.total_inscriptions > 0 || year.total_runes > 0 || year.taproot_outputs > 0 {
-                    view! {
-                        <div class="flex flex-wrap gap-x-4 gap-y-1 mt-2 pt-2 border-t border-white/5 text-xs text-white/50">
-                            {(year.taproot_outputs > 0).then(|| view! {
-                                <span class="cursor-help" title="P2TR outputs created this day">{format!("Taproot: {}", format_compact(year.taproot_outputs))}</span>
-                            })}
-                            {(year.total_inscriptions > 0).then(|| view! {
-                                <span class="cursor-help" title="Ordinals inscriptions embedded in witness data">{format!("Inscriptions: {}", format_compact(year.total_inscriptions))}</span>
-                            })}
-                            {(year.total_runes > 0).then(|| view! {
-                                <span class="cursor-help" title="Runes protocol OP_RETURN outputs on this day">{format!("Runes: {}", format_compact(year.total_runes))}</span>
-                            })}
-                        </div>
-                    }.into_any()
-                } else {
-                    view! { <div></div> }.into_any()
-                }}
+                // Extra metrics row
+                <div class="flex flex-wrap gap-x-4 gap-y-1 mt-2 pt-2 border-t border-white/5 text-xs text-white/50">
+                    <span class="cursor-help" title="Block reward per block in this era (halves every 210,000 blocks)">{
+                        let era = year.last_block / 210_000;
+                        let subsidy = 50.0_f64 / 2.0_f64.powi(era as i32);
+                        format!("Subsidy: {} BTC", if subsidy >= 1.0 { format!("{:.0}", subsidy) } else { format!("{:.4}", subsidy) })
+                    }</span>
+                    {(year.segwit_pct > 0.0).then(|| view! {
+                        <span class="cursor-help" title="% of non-coinbase transactions using SegWit">{format!("SegWit: {:.0}%", year.segwit_pct)}</span>
+                    })}
+                    {(year.taproot_outputs > 0).then(|| view! {
+                        <span class="cursor-help" title="P2TR outputs created this day">{format!("Taproot: {}", format_compact(year.taproot_outputs))}</span>
+                    })}
+                    {(year.total_inscriptions > 0).then(|| view! {
+                        <span class="cursor-help" title="Ordinals inscriptions embedded in witness data">{format!("Inscriptions: {}", format_compact(year.total_inscriptions))}</span>
+                    })}
+                    {(year.total_runes > 0).then(|| view! {
+                        <span class="cursor-help" title="Runes protocol OP_RETURN outputs on this day">{format!("Runes: {}", format_compact(year.total_runes))}</span>
+                    })}
+                </div>
             </div>
         </div>
     }
