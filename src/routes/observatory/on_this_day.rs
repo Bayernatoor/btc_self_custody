@@ -60,7 +60,7 @@ fn YearCard(year: OnThisDayYear) -> impl IntoView {
         "\u{2014}".to_string()
     };
     let supply = calc_supply(year.last_block);
-    let supply_str = format!("{} BTC", format_number_f64(supply, 0));
+    let supply_str = format!("\u{20bf}{}", format_number_f64(supply, 0));
     let mcap_str = if year.price_usd > 0.0 {
         let mcap = supply * year.price_usd;
         if mcap >= 1e12 {
@@ -140,7 +140,7 @@ fn YearCard(year: OnThisDayYear) -> impl IntoView {
                     <div data-tip="Total miner fees paid this day" tabindex="0">
                         <p class="text-[11px] text-white/50 uppercase tracking-wider">"Fees"</p>
                         <p class="font-mono" style=format!("color: {color}")>
-                            {format!("{:.4} BTC", fees_btc)}
+                            {format!("\u{20bf}{:.4}", fees_btc)}
                         </p>
                     </div>
                     <div data-tip="Daily average BTC/USD price (blockchain.info)" tabindex="0">
@@ -168,7 +168,7 @@ fn YearCard(year: OnThisDayYear) -> impl IntoView {
                     <span data-tip="Block reward per block in this era (halves every 210,000 blocks)" tabindex="0">{
                         let era = year.last_block / 210_000;
                         let subsidy = 50.0_f64 / 2.0_f64.powi(era as i32);
-                        format!("Subsidy: {} BTC", if subsidy >= 1.0 { format!("{:.0}", subsidy) } else { format!("{:.4}", subsidy) })
+                        format!("Subsidy: \u{20bf}{}", if subsidy >= 1.0 { format!("{:.0}", subsidy) } else { format!("{:.4}", subsidy) })
                     }</span>
                     {(year.segwit_pct > 0.0).then(|| view! {
                         <span data-tip="% of non-coinbase transactions using SegWit" tabindex="0">{format!("SegWit: {:.0}%", year.segwit_pct)}</span>
