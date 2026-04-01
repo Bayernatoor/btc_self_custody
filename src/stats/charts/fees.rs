@@ -349,7 +349,7 @@ pub fn fee_rate_band_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     // Check if p10/p90 data is available (non-zero)
     let has_percentiles = blocks.iter().any(|b| b.fee_rate_p10 > 0.0 || b.fee_rate_p90 > 0.0);
     if !has_percentiles {
-        return no_data_chart("Fee Rate Band (backfill required for percentile data)");
+        return no_data_chart("Fee Rate Band");
     }
 
     let p10_data: Vec<serde_json::Value> = blocks
@@ -402,7 +402,7 @@ pub fn fee_rate_band_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     }
     let has_data = days.iter().any(|d| d.avg_fee_rate_p10 > 0.0 || d.avg_fee_rate_p90 > 0.0);
     if !has_data {
-        return no_data_chart("Fee Rate Band (backfill required for percentile data)");
+        return no_data_chart("Fee Rate Band");
     }
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();

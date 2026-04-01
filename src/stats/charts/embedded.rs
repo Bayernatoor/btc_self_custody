@@ -900,7 +900,7 @@ pub fn stamps_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 
     let has_data = blocks.iter().any(|b| b.stamps_count > 0);
     if !has_data {
-        return no_data_chart("Stamps (backfill required)");
+        return no_data_chart("Stamps");
     }
 
     let vals: Vec<f64> = blocks.iter().map(|b| b.stamps_count as f64).collect();
@@ -951,7 +951,7 @@ pub fn stamps_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     }
     let has_data = days.iter().any(|d| d.avg_stamps_count > 0.0);
     if !has_data {
-        return no_data_chart("Stamps (backfill required)");
+        return no_data_chart("Stamps");
     }
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
