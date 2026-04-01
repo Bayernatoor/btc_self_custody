@@ -993,7 +993,8 @@ pub async fn fetch_on_this_day(
         (2024, "01-10", "First spot Bitcoin ETFs approved"),
         (2024, "03-14", "BTC reaches $73,000"),
         (2024, "04-20", "Fourth halving (6.25 \u{2192} 3.125 BTC) + Runes launch"),
-        (2025, "01-20", "BTC ATH ~$109,000"),
+        (2025, "01-20", "BTC breaks $109,000"),
+        (2025, "10-06", "BTC ATH ~$126,000"),
     ];
 
     let years: Vec<OnThisDayYear> = rows
