@@ -229,18 +229,25 @@ pub fn StatsSummaryPage() -> impl IntoView {
 
     // === Price ===
     let price_start = mp_stat(|s| {
-        if s.price_start > 0.0 { format!("${}", format_number_f64(s.price_start, 0)) }
-        else { "\u{2014}".to_string() }
+        if s.price_start >= 1.0 { format!("${}", format_number_f64(s.price_start, 0)) }
+        else if s.price_start > 0.0 { format!("${:.4}", s.price_start) }
+        else { "$0".to_string() }
     });
     let price_end = mp_stat(|s| {
-        if s.price_end > 0.0 { format!("${}", format_number_f64(s.price_end, 0)) }
+        if s.price_end >= 1.0 { format!("${}", format_number_f64(s.price_end, 0)) }
+        else if s.price_end > 0.0 { format!("${:.4}", s.price_end) }
         else { "\u{2014}".to_string() }
     });
     let price_change = mp_stat(|s| {
         if s.price_start > 0.0 {
             let sign = if s.price_change_pct >= 0.0 { "+" } else { "" };
             format!("{sign}{:.1}%", s.price_change_pct)
-        } else { "\u{2014}".to_string() }
+        } else if s.price_end > 0.0 {
+            // Start is $0 (pre-exchange), end has a price
+            "\u{221e}".to_string() // infinity symbol
+        } else {
+            "\u{2014}".to_string()
+        }
     });
 
     view! {
@@ -304,8 +311,8 @@ pub fn StatsSummaryPage() -> impl IntoView {
                 tooltip="Total raw block data added to the chain in this range"/>
             <StatCard label="Avg TPS" value=avg_tps
                 tooltip="Average transactions per second, derived from avg txs/block divided by avg block time"/>
-            <StatCard label="BTC Transferred" value=total_btc_transferred
-                tooltip="Sum of all non-coinbase output values. Requires backfill for historical data"/>
+            <StatCard label="Transaction Volume" value=total_btc_transferred
+                tooltip="Sum of all non-coinbase output values. Includes change outputs, so the same BTC can be counted multiple times. Requires backfill for historical data"/>
 
             <SectionHeader title="Fees"/>
             <StatCard label="Total Fees" value=total_fees_btc sub=total_fees_sub
