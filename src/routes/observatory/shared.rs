@@ -870,7 +870,7 @@ pub fn OverlayPanel() -> impl IntoView {
     let location = leptos_router::hooks::use_location();
     let hide_overlays = Signal::derive(move || {
         let path = location.pathname.get();
-        path == "/observatory" || path == "/observatory/stats" || path == "/observatory/on-this-day"
+        path == "/observatory" || path == "/observatory/stats" || path == "/observatory/on-this-day" || path == "/observatory/heartbeat"
     });
 
     view! {
@@ -959,7 +959,7 @@ fn OverlayCheckbox(
 }
 
 /// Observatory navigation bar with two-tier layout.
-/// Row 1: Experience pages (Dashboard, Overview, On This Day)
+/// Row 1: Experience pages (Dashboard, Overview, On This Day, Heartbeat)
 /// Row 2: Data explorer charts (Network, Fees, Mining, Embedded, Signaling)
 #[component]
 pub fn ObservatoryNav() -> impl IntoView {
@@ -967,6 +967,7 @@ pub fn ObservatoryNav() -> impl IntoView {
         ("/observatory", "Dashboard"),
         ("/observatory/stats", "Overview"),
         ("/observatory/on-this-day", "On This Day"),
+        ("/observatory/heartbeat", "Heartbeat"),
     ];
 
     let charts: Vec<(&'static str, &'static str)> = vec![

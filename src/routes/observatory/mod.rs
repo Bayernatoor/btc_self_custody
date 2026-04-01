@@ -16,6 +16,7 @@ pub mod shared;
 
 mod embedded;
 mod fees;
+mod heartbeat;
 mod mining;
 mod network;
 mod on_this_day;
@@ -25,6 +26,7 @@ mod stats;
 
 pub use embedded::EmbeddedChartsPage;
 pub use fees::FeeChartsPage;
+pub use heartbeat::HeartbeatPage;
 pub use mining::MiningChartsPage;
 pub use network::NetworkChartsPage;
 pub use overview::ObservatoryOverview;
