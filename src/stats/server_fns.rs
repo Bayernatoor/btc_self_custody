@@ -970,38 +970,70 @@ pub async fn fetch_on_this_day(
     let prices = fetch_price_history(0, 4_000_000_000).await.unwrap_or_default();
 
     // Notable Bitcoin events by (year, MM-DD, description)
-    let notable_dates: Vec<(u32, &str, &str)> = vec![
-        (2009, "01-03", "Genesis Block mined"),
-        (2009, "01-12", "First BTC transaction (Satoshi \u{2192} Hal Finney)"),
-        (2010, "05-22", "Bitcoin Pizza Day (10,000 BTC for 2 pizzas)"),
-        (2010, "07-17", "Mt. Gox exchange opens"),
-        (2010, "12-12", "Satoshi\u{2019}s last public post on BitcoinTalk"),
-        (2011, "02-09", "BTC reaches $1"),
-        (2011, "06-19", "Mt. Gox hack \u{2014} BTC briefly crashes to $0.01"),
-        (2012, "11-28", "First halving (50 \u{2192} 25 BTC)"),
-        (2013, "03-28", "BTC market cap reaches $1 billion"),
-        (2013, "11-29", "BTC reaches $1,000"),
-        (2014, "02-07", "Mt. Gox halts withdrawals"),
-        (2016, "07-09", "Second halving (25 \u{2192} 12.5 BTC)"),
-        (2017, "08-01", "Bitcoin Cash fork"),
-        (2017, "08-24", "SegWit activates (BIP-141)"),
-        (2017, "11-08", "SegWit2x cancelled"),
-        (2017, "12-17", "BTC reaches $20,000"),
-        (2020, "03-12", "Black Thursday \u{2014} BTC crashes 50% amid COVID"),
-        (2020, "05-11", "Third halving (12.5 \u{2192} 6.25 BTC)"),
-        (2021, "02-08", "Tesla buys $1.5B in BTC"),
-        (2021, "05-19", "China announces mining ban"),
-        (2021, "06-09", "El Salvador adopts BTC as legal tender"),
-        (2021, "09-07", "El Salvador BTC law takes effect"),
-        (2021, "11-10", "BTC ATH ~$69,000"),
-        (2021, "11-13", "Taproot activates (BIP-341)"),
-        (2022, "11-11", "FTX files for bankruptcy"),
-        (2023, "01-21", "Ordinals inscriptions launch"),
-        (2024, "01-10", "First spot Bitcoin ETFs approved"),
-        (2024, "03-14", "BTC reaches $73,000"),
-        (2024, "04-20", "Fourth halving (6.25 \u{2192} 3.125 BTC) + Runes launch"),
-        (2024, "12-05", "BTC breaks $100,000"),
-        (2025, "10-06", "BTC ATH ~$126,000"),
+    // (year, MM-DD, title, context/fun fact)
+    let notable_dates: Vec<(u32, &str, &str, &str)> = vec![
+        (2009, "01-03", "Genesis Block mined",
+            "Block 0 contains the famous headline: \"The Times 03/Jan/2009 Chancellor on brink of second bailout for banks\""),
+        (2009, "01-12", "First BTC transaction (Satoshi \u{2192} Hal Finney)",
+            "Satoshi sent 10 BTC to Hal Finney in block 170. Finney reportedly ran Bitcoin on his laptop while fighting ALS"),
+        (2010, "05-22", "Bitcoin Pizza Day",
+            "Laszlo Hanyecz paid 10,000 BTC for two Papa John\u{2019}s pizzas \u{2014} the first known real-world Bitcoin purchase"),
+        (2010, "07-17", "Mt. Gox exchange opens",
+            "Originally a Magic: The Gathering card trading site. Would grow to handle 70% of all BTC trades before its collapse"),
+        (2010, "12-12", "Satoshi\u{2019}s last public post",
+            "Satoshi\u{2019}s final message on BitcoinTalk discussed DoS attack prevention. He was never heard from publicly again"),
+        (2011, "02-09", "BTC reaches $1",
+            "Bitcoin achieved dollar parity, giving it a market cap of roughly $6 million"),
+        (2011, "06-19", "Mt. Gox hack",
+            "A hacker compromised an auditor\u{2019}s account and dumped thousands of BTC, crashing the price from $17 to $0.01"),
+        (2012, "11-28", "First halving",
+            "Block reward dropped from 50 to 25 BTC. About 10.5 million BTC (50% of supply) had been mined in just 4 years"),
+        (2013, "03-28", "BTC market cap reaches $1 billion",
+            "Bitcoin crossed the billion-dollar threshold at ~$92 per coin with 10.9 million BTC in circulation"),
+        (2013, "11-29", "BTC reaches $1,000",
+            "Driven by Chinese exchange demand, Bitcoin crossed $1,000 for the first time \u{2014} a 250,000x increase from Pizza Day"),
+        (2014, "02-07", "Mt. Gox halts withdrawals",
+            "The exchange suspended all withdrawals, later revealing 850,000 BTC (~$450M) had been stolen. It filed for bankruptcy weeks later"),
+        (2016, "07-09", "Second halving",
+            "Block reward dropped from 25 to 12.5 BTC. Price was ~$650 and would reach $20K within 18 months"),
+        (2017, "08-01", "Bitcoin Cash fork",
+            "A contentious hard fork created BCH with 8MB blocks. Bitcoin kept its 1MB+SegWit approach. The \"block size war\" ended"),
+        (2017, "08-24", "SegWit activates",
+            "BIP-141 activated at block 481,824. Segregated Witness fixed transaction malleability and enabled the Lightning Network"),
+        (2017, "11-08", "SegWit2x cancelled",
+            "The NYA plan to double the block size was abandoned due to lack of consensus. A pivotal moment for Bitcoin\u{2019}s governance"),
+        (2017, "12-17", "BTC reaches $20,000",
+            "The peak of the 2017 bull run. FOMO was so intense that Coinbase repeatedly crashed under traffic"),
+        (2020, "03-12", "Black Thursday",
+            "Bitcoin crashed 50% in hours alongside global markets as COVID panic hit. Liquidation cascades wiped $1B in leveraged positions"),
+        (2020, "05-11", "Third halving",
+            "Block reward dropped from 12.5 to 6.25 BTC. Price was ~$8,600 and would reach $69K within 18 months"),
+        (2021, "02-08", "Tesla buys $1.5B in BTC",
+            "Tesla\u{2019}s SEC filing revealed a massive Bitcoin purchase, legitimizing BTC as a corporate treasury asset"),
+        (2021, "05-19", "China announces mining ban",
+            "China ordered miners to shut down, triggering the largest hashrate migration in Bitcoin\u{2019}s history. Over 50% of mining moved abroad"),
+        (2021, "06-09", "El Salvador adopts BTC as legal tender",
+            "The first country to make Bitcoin legal tender. President Bukele pushed the \"Bitcoin Law\" through congress"),
+        (2021, "09-07", "El Salvador BTC law takes effect",
+            "Bitcoin became legal tender alongside the US dollar. The government launched the Chivo wallet with $30 in BTC for every citizen"),
+        (2021, "11-10", "BTC ATH ~$69,000",
+            "The peak of the 2021 cycle. Bitcoin\u{2019}s market cap briefly exceeded $1.2 trillion"),
+        (2021, "11-13", "Taproot activates",
+            "BIP-341 activated at block 709,632. The largest Bitcoin upgrade since SegWit, enabling more private and efficient smart contracts"),
+        (2022, "11-11", "FTX files for bankruptcy",
+            "Sam Bankman-Fried\u{2019}s exchange collapsed after revelations of massive fraud. ~$8B in customer funds were misused. BTC dropped to $16K"),
+        (2023, "01-21", "Ordinals inscriptions launch",
+            "Casey Rodarmor launched Ordinal Theory, enabling NFT-like inscriptions in Bitcoin witness data. Sparked a fierce debate about block space usage"),
+        (2024, "01-10", "First spot Bitcoin ETFs approved",
+            "The SEC approved 11 spot Bitcoin ETFs after a decade of rejections. Over $4B in volume traded on day one"),
+        (2024, "03-14", "BTC reaches $73,000",
+            "A new all-time high driven by ETF inflows. Bitcoin surpassed silver\u{2019}s market cap"),
+        (2024, "04-20", "Fourth halving + Runes launch",
+            "Block reward dropped from 6.25 to 3.125 BTC. The Runes protocol launched simultaneously, causing a fee spike as users minted tokens"),
+        (2024, "12-05", "BTC breaks $100,000",
+            "A psychological milestone 15 years in the making. From $0 to six figures, powered by ETF adoption and institutional demand"),
+        (2025, "10-06", "BTC ATH ~$126,000",
+            "The current all-time high. Bitcoin\u{2019}s market cap surpassed $2.5 trillion"),
     ];
 
     let years: Vec<OnThisDayYear> = rows
@@ -1061,9 +1093,12 @@ pub async fn fetch_on_this_day(
 
             // Collect events for this date AND year
             let mut events = Vec::new();
-            for (event_year, date, desc) in &notable_dates {
+            for (event_year, date, title, context) in &notable_dates {
                 if *date == month_day && *event_year == year {
-                    events.push(desc.to_string());
+                    events.push(NotableEvent {
+                        title: title.to_string(),
+                        context: context.to_string(),
+                    });
                 }
             }
 
