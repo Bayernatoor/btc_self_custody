@@ -1070,7 +1070,7 @@ pub async fn fetch_on_this_day(
     let years: Vec<OnThisDayYear> = rows
         .into_iter()
         .map(|(year, block_count, total_tx, total_fees, avg_size, avg_weight,
-               inscriptions, runes, segwit_txs, taproot_outputs, _total_tx2,
+               inscriptions, runes, segwit_txs, taproot_outputs,
                first_block, last_block)| {
             // Pre-exchange era prices (before blockchain.info data)
             // These are well-documented historical prices for early Bitcoin

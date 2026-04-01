@@ -749,7 +749,7 @@ pub fn query_cumulative_size_before_ts(
 pub fn query_on_this_day(
     conn: &Connection,
     month_day: &str, // "04-01" format
-) -> rusqlite::Result<Vec<(u32, u64, u64, u64, f64, f64, u64, u64, u64, u64, u64, u64, u64)>> {
+) -> rusqlite::Result<Vec<(u32, u64, u64, u64, f64, f64, u64, u64, u64, u64, u64, u64)>> {
     let mut stmt = conn.prepare(
         "SELECT CAST(strftime('%Y', datetime(timestamp, 'unixepoch')) AS INTEGER) as year,
                 COUNT(*) as block_count,
@@ -757,7 +757,6 @@ pub fn query_on_this_day(
                 AVG(size), AVG(weight),
                 SUM(inscription_count), SUM(runes_count),
                 SUM(segwit_spend_count), SUM(taproot_spend_count),
-                SUM(tx_count),
                 MIN(height), MAX(height)
          FROM blocks
          WHERE strftime('%m-%d', datetime(timestamp, 'unixepoch')) = ?1
@@ -776,9 +775,8 @@ pub fn query_on_this_day(
             row.get::<_, u64>(7)?,    // runes
             row.get::<_, u64>(8)?,    // segwit_txs
             row.get::<_, u64>(9)?,    // taproot_outputs
-            row.get::<_, u64>(10)?,   // total_tx (for segwit %)
-            row.get::<_, u64>(11)?,   // first_block
-            row.get::<_, u64>(12)?,   // last_block
+            row.get::<_, u64>(10)?,   // first_block
+            row.get::<_, u64>(11)?,   // last_block
         ))
     })?;
     rows.collect()
