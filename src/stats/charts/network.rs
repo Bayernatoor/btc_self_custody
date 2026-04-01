@@ -179,6 +179,106 @@ pub fn tx_count_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     }))
 }
 
+/// Average transactions per second (per-block).
+/// Computed as tx_count / seconds_since_previous_block.
+pub fn tps_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+    if blocks.len() < 2 {
+        return no_data_chart("Transactions per Second");
+    }
+
+    let vals: Vec<f64> = blocks
+        .windows(2)
+        .map(|w| {
+            let interval = w[1].timestamp.saturating_sub(w[0].timestamp);
+            if interval > 0 {
+                round(w[1].tx_count as f64 / interval as f64, 2)
+            } else {
+                0.0
+            }
+        })
+        .collect();
+
+    // First block has no previous — use 0
+    let mut all_vals = vec![0.0];
+    all_vals.extend_from_slice(&vals);
+
+    let raw: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(all_vals.iter())
+        .map(|(b, v)| dp(b, *v))
+        .collect();
+
+    let ma = moving_average(&all_vals, 144);
+    let ma_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(ma.iter())
+        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))]))
+        .collect();
+
+    let has_ma = show_ma(blocks.len());
+
+    let mut series = vec![json!({
+        "name": "TPS", "type": "line", "data": raw,
+        "lineStyle": { "width": if has_ma { 1.0 } else { 1.5 }, "color": DATA_COLOR },
+        "itemStyle": { "color": DATA_COLOR }, "symbol": "none",
+        "opacity": if has_ma { 0.4 } else { 1.0 }
+    })];
+    if has_ma {
+        series.push(json!({
+            "name": "144-block MA", "type": "line", "data": ma_data,
+            "lineStyle": { "width": 2, "color": MA_COLOR },
+            "itemStyle": { "color": MA_COLOR }, "symbol": "none"
+        }));
+    }
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("tx/s"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": has_ma },
+        "series": series
+    }))
+}
+
+/// Average transactions per second (daily).
+/// Computed as (avg_tx_count * block_count) / 86400 seconds.
+pub fn tps_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+    if days.is_empty() {
+        return no_data_chart("Transactions per Second");
+    }
+
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    let vals: Vec<f64> = days
+        .iter()
+        .map(|d| {
+            let total_tx = d.avg_tx_count * d.block_count as f64;
+            round(total_tx / 86_400.0, 2)
+        })
+        .collect();
+
+    let ma = moving_average(&vals, 7);
+    let ma_vals: Vec<serde_json::Value> = ma
+        .iter()
+        .map(|v| match v { Some(x) => json!(x), None => json!(null) })
+        .collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": y_axis("tx/s"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "series": [
+            { "name": "Avg TPS", "type": "line", "data": vals,
+              "lineStyle": { "width": 1, "color": DATA_COLOR },
+              "itemStyle": { "color": DATA_COLOR }, "symbol": "none", "opacity": 0.4 },
+            { "name": "7-day MA", "type": "line", "data": ma_vals,
+              "lineStyle": { "width": 2, "color": MA_COLOR },
+              "itemStyle": { "color": MA_COLOR }, "symbol": "none" }
+        ]
+    }))
+}
+
 /// Difficulty line chart.
 pub fn difficulty_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {

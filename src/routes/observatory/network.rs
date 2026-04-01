@@ -90,6 +90,10 @@ pub fn NetworkChartsPage() -> impl IntoView {
                             |blocks| crate::stats::charts::block_interval_chart(blocks),
                             |days| crate::stats::charts::block_interval_chart_daily(days)
                         );
+                        let tps_option = chart_memo!(dashboard_data, range, overlay_flags,
+                            |blocks| crate::stats::charts::tps_chart(blocks),
+                            |days| crate::stats::charts::tps_chart_daily(days)
+                        );
                         // Fetch cumulative block data size before the start of
                         // this range so the chain size chart starts at the right offset.
                         let chain_offset = LocalResource::new(move || {
@@ -131,6 +135,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
                                 <ChartCard title="Block Size" description=chart_desc(range, "How large each block is in megabytes", "Average block size per day in megabytes") chart_id="chart-size" option=size_option/>
                                 <ChartCard title="Weight Utilization" description=chart_desc(range, "How full each block is, as a percentage of the 4 MWU limit", "Average daily weight utilization as a percentage of the 4 MWU limit") chart_id="chart-weight-util" option=weight_util_option/>
                                 <ChartCard title="Transaction Count" description=chart_desc(range, "Number of transactions included in each block", "Average number of transactions per block each day") chart_id="chart-txcount" option=tx_option/>
+                                <ChartCard title="Transactions per Second" description=chart_desc(range, "Average TPS calculated from transactions per block interval", "Daily average transactions per second across all blocks") chart_id="chart-tps" option=tps_option/>
                                 <ChartCard title="Avg Transaction Size" description=chart_desc(range, "Average size of a transaction in bytes. Smaller means more efficient use of block space", "Daily average transaction size in bytes. Smaller means more efficient use of block space") chart_id="chart-avg-tx-size" option=avg_tx_size_option/>
                                 <ChartCard title="Block Interval" description=chart_desc(range, "Minutes between consecutive blocks. Target is 10 minutes", "Average daily block interval in minutes. Target is 10 minutes") chart_id="chart-interval" option=interval_option/>
                                 <ChartCard title="Chain Size Growth" description="Total blockchain size over time, showing how fast the chain is growing" chart_id="chart-chain-size" option=chain_size_option/>
