@@ -1000,13 +1000,30 @@ pub async fn fetch_on_this_day(
         .map(|(year, block_count, total_tx, total_fees, avg_size, avg_weight,
                inscriptions, runes, segwit_txs, taproot_outputs, _total_tx2,
                first_block, last_block)| {
-            // Find closest price for this year's date (within +/- 2 days)
+            // Pre-exchange era prices (before blockchain.info data)
+            // These are well-documented historical prices for early Bitcoin
+            let early_prices: &[(&str, f64)] = &[
+                ("2009", 0.0),       // No market price
+                ("2010-01", 0.0),    // No market
+                ("2010-03", 0.003),  // Early BitcoinMarket.com trades
+                ("2010-05", 0.004),  // Pizza Day era (~$0.0041)
+                ("2010-07", 0.05),   // Mt. Gox opens
+                ("2010-08", 0.06),
+                ("2010-10", 0.10),
+                ("2010-11", 0.25),   // Brief spike
+                ("2010-12", 0.25),
+                ("2011-01", 0.30),
+                ("2011-02", 1.00),   // BTC reaches $1
+            ];
+
+            // Find closest price: try blockchain.info first, fall back to early prices
             let price_usd = chrono::NaiveDate::from_ymd_opt(year as i32, month, day)
                 .and_then(|d| d.and_hms_opt(12, 0, 0))
                 .map(|dt| {
                     let target_ms = dt.and_utc().timestamp() as u64 * 1000;
                     let two_days_ms = 2 * 86_400 * 1000;
-                    prices
+                    // Try blockchain.info data first
+                    let api_price = prices
                         .iter()
                         .filter(|p| {
                             p.timestamp_ms >= target_ms.saturating_sub(two_days_ms)
@@ -1015,8 +1032,21 @@ pub async fn fetch_on_this_day(
                         .min_by_key(|p| {
                             (p.timestamp_ms as i64 - target_ms as i64).unsigned_abs()
                         })
-                        .map(|p| p.price_usd)
-                        .unwrap_or(0.0)
+                        .map(|p| p.price_usd);
+
+                    if let Some(p) = api_price {
+                        return p;
+                    }
+
+                    // Fall back to early price table
+                    let year_month = format!("{}-{:02}", year, month);
+                    let year_str = year.to_string();
+                    for (prefix, price) in early_prices.iter().rev() {
+                        if year_month.starts_with(prefix) || year_str.starts_with(prefix) {
+                            return *price;
+                        }
+                    }
+                    0.0
                 })
                 .unwrap_or(0.0);
 
