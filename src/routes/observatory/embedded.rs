@@ -140,16 +140,13 @@ pub fn EmbeddedChartsPage() -> impl IntoView {
                             |blocks| crate::stats::charts::inscription_share_chart(blocks),
                             |days| crate::stats::charts::inscription_share_chart_daily(days)
                         );
-                        let stamps_option = chart_memo!(dashboard_data, range, overlay_flags,
-                            |blocks| crate::stats::charts::stamps_chart(blocks),
-                            |days| crate::stats::charts::stamps_chart_daily(days)
-                        );
+                        // Stamps chart temporarily removed — detection logic needs rework
+                        // (fake pubkeys start with 02/03 but are invalid curve points)
 
                         view! {
                             <div class="space-y-10">
                                 <ChartCard title="Ordinals Inscriptions" description=chart_desc(range, "Inscriptions per block: images, text, and other data stored in witness data", "Daily average inscriptions per block") chart_id="chart-inscriptions" option=inscription_option/>
                                 <ChartCard title="Inscription Block Share" description=chart_desc(range, "Inscription data as a percentage of each block's size", "Daily average inscription data as a percentage of block size") chart_id="chart-inscription-share" option=inscription_share_option/>
-                                <ChartCard title="Stamps" description=chart_desc(range, "Stamps protocol outputs per block (bare multisig data encoding)", "Stamps (per-block ranges only)") chart_id="chart-stamps" option=stamps_option/>
                             </div>
                         }.into_any()
                     }).unwrap_or_else(|| view! { <ChartPageSkeleton count=2/> }.into_any())
