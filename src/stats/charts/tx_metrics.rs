@@ -377,6 +377,11 @@ pub fn address_type_pct_chart_daily(days: &[DailyAggregate]) -> serde_json::Valu
 }
 
 /// RBF adoption — % of transactions signaling RBF (per-block).
+/// BIP-125 opt-in RBF was merged in Core v0.12.0 (2016-02-23).
+/// Pre-BIP-125 nSequence < 0xFFFFFFFE was used for other purposes
+/// (original Satoshi replacement, nLockTime), so we gate to post-BIP-125.
+const BIP125_TIMESTAMP: u64 = 1456185600; // 2016-02-23 00:00 UTC
+
 pub fn rbf_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("RBF Adoption");
@@ -385,6 +390,10 @@ pub fn rbf_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let vals: Vec<f64> = blocks
         .iter()
         .map(|b| {
+            // Only count RBF after BIP-125 (Core v0.12, Feb 2016)
+            if b.timestamp < BIP125_TIMESTAMP {
+                return 0.0;
+            }
             if b.tx_count > 1 {
                 let pct = b.rbf_count as f64 / (b.tx_count - 1) as f64 * 100.0;
                 (pct.min(100.0) * 100.0).round() / 100.0
@@ -396,7 +405,13 @@ pub fn rbf_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let raw: Vec<serde_json::Value> = blocks
         .iter()
         .zip(vals.iter())
-        .map(|(b, v)| dp(b, v))
+        .map(|(b, v)| {
+            if b.timestamp < BIP125_TIMESTAMP {
+                json!([ts_ms(b.timestamp), null])
+            } else {
+                dp(b, v)
+            }
+        })
         .collect();
     let ma = moving_average(&vals, 144);
     let ma_data: Vec<serde_json::Value> = blocks
@@ -441,23 +456,33 @@ pub fn rbf_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
         return no_data_chart("RBF Adoption");
     }
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let vals: Vec<f64> = days
+    let vals: Vec<serde_json::Value> = days
         .iter()
         .map(|d| {
+            // Gate to post-BIP-125 (Feb 2016)
+            if d.date.as_str() < "2016-02-23" {
+                return json!(null);
+            }
             if d.avg_tx_count > 1.0 {
                 let pct = d.avg_rbf_count / (d.avg_tx_count - 1.0) * 100.0;
-                (pct.min(100.0) * 100.0).round() / 100.0
+                json!((pct.min(100.0) * 100.0).round() / 100.0)
             } else {
-                0.0
+                json!(0.0)
             }
         })
         .collect();
-    let ma = moving_average(&vals, 7);
-    let ma_vals: Vec<serde_json::Value> = ma
+    // Extract f64 for MA calculation (nulls become 0)
+    let ma_input: Vec<f64> = vals.iter().map(|v| v.as_f64().unwrap_or(0.0)).collect();
+    let ma = moving_average(&ma_input, 7);
+    let ma_vals: Vec<serde_json::Value> = days
         .iter()
-        .map(|v| match v {
-            Some(x) => json!(x),
-            None => json!(null),
+        .zip(ma.iter())
+        .map(|(d, v)| {
+            if d.date.as_str() < "2016-02-23" {
+                json!(null)
+            } else {
+                match v { Some(x) => json!(x), None => json!(null) }
+            }
         })
         .collect();
 
