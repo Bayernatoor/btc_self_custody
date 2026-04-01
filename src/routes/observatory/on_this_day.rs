@@ -404,17 +404,37 @@ pub fn OnThisDayPage() -> impl IntoView {
                 let d = data.get().flatten();
                 match d {
                     Some(otd) => {
-                        if otd.years.is_empty() {
+                        // Check if date is after genesis (Jan 3)
+                        let is_after_genesis = otd.month > 1
+                            || (otd.month == 1 && otd.day >= 3);
+                        let has_2009 = otd.years.iter().any(|y| y.year == 2009);
+
+                        if otd.years.is_empty() && !is_after_genesis {
                             view! {
                                 <div class="text-center text-white/30 py-20">
                                     <p class="text-lg">"No blocks mined on this date"</p>
-                                    <p class="text-sm mt-1">"Bitcoin may not have existed yet, or no blocks fell on this calendar day."</p>
+                                    <p class="text-sm mt-1">"Bitcoin didn\u{2019}t exist yet \u{2014} the genesis block was mined on January 3, 2009."</p>
                                 </div>
                             }.into_any()
                         } else {
-                            let cards = otd.years.into_iter().map(|year| {
-                                view! { <YearCard year=year/> }
-                            }).collect::<Vec<_>>();
+                            let mut cards: Vec<leptos::tachys::view::any_view::AnyView> = otd.years.into_iter().map(|year| {
+                                view! { <YearCard year=year/> }.into_any()
+                            }).collect();
+
+                            // Append a 2009 placeholder if date is after genesis but no 2009 data
+                            if is_after_genesis && !has_2009 {
+                                cards.push(view! {
+                                    <div id="year-2009" class="bg-[#0d2137] border border-white/10 rounded-xl overflow-hidden" style="border-left: 4px solid #3b82f6">
+                                        <div class="p-4 sm:p-5">
+                                            <div class="flex items-center gap-3 mb-2">
+                                                <span class="text-2xl sm:text-3xl font-title text-white font-bold">"2009"</span>
+                                                <span class="text-xs text-white/50 bg-white/5 rounded-full px-2.5 py-0.5">"Genesis year"</span>
+                                            </div>
+                                            <p class="text-sm text-white/40 italic">"No blocks mined on this date. In early 2009, Satoshi was often the only miner \u{2014} entire days could pass between blocks."</p>
+                                        </div>
+                                    </div>
+                                }.into_any());
+                            }
                             view! { <div class="space-y-3">{cards}</div> }.into_any()
                         }
                     }
