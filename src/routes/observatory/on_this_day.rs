@@ -365,12 +365,14 @@ pub fn OnThisDayPage() -> impl IntoView {
                                             let target_id = format!("year-{scroll_year}");
                                             leptos::prelude::set_timeout(move || {
                                                 if let Some(el) = leptos::prelude::document().get_element_by_id(&target_id) {
-                                                    el.scroll_into_view();
+                                                    let rect = el.get_bounding_client_rect();
+                                                    let offset = leptos::prelude::window().scroll_y().unwrap_or(0.0) + rect.top() - 80.0;
+                                                    let _ = leptos::prelude::window().scroll_to_with_x_and_y(0.0, offset);
                                                 }
-                                            }, std::time::Duration::from_millis(800));
+                                            }, std::time::Duration::from_millis(1500));
                                         }
                                     }
-                                    s.set_value("");
+                                    // Keep selection visible (don't reset to placeholder)
                                 }
                             }
                         }
