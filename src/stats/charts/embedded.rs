@@ -944,7 +944,37 @@ pub fn stamps_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     }))
 }
 
-/// Stamps count (daily — not available in daily aggregates yet).
-pub fn stamps_chart_daily(_days: &[DailyAggregate]) -> serde_json::Value {
-    no_data_chart("Stamps (per-block ranges only)")
+/// Stamps count (daily).
+pub fn stamps_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+    if days.is_empty() {
+        return no_data_chart("Stamps");
+    }
+    let has_data = days.iter().any(|d| d.avg_stamps_count > 0.0);
+    if !has_data {
+        return no_data_chart("Stamps (backfill required)");
+    }
+
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    let vals: Vec<f64> = days.iter().map(|d| round(d.avg_stamps_count, 2)).collect();
+    let ma = moving_average(&vals, 7);
+    let ma_vals: Vec<serde_json::Value> = ma
+        .iter()
+        .map(|v| match v { Some(x) => json!(x), None => json!(null) })
+        .collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": y_axis("Count/Block"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "series": [
+            { "name": "Stamps", "type": "line", "data": vals,
+              "areaStyle": { "color": STAMPS_COLOR, "opacity": 0.15 },
+              "lineStyle": { "width": 1, "color": STAMPS_COLOR },
+              "itemStyle": { "color": STAMPS_COLOR }, "symbol": "none", "opacity": 0.4 },
+            { "name": "7-day MA", "type": "line", "data": ma_vals,
+              "lineStyle": { "width": 2, "color": MA_COLOR },
+              "itemStyle": { "color": MA_COLOR }, "symbol": "none" }
+        ]
+    }))
 }

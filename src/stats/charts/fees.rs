@@ -395,9 +395,37 @@ pub fn fee_rate_band_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     }))
 }
 
-/// Fee rate percentile band (daily) — placeholder until daily aggregates include percentiles.
-pub fn fee_rate_band_chart_daily(_days: &[DailyAggregate]) -> serde_json::Value {
-    no_data_chart("Fee Rate Band (per-block ranges only)")
+/// Fee rate percentile band (daily).
+pub fn fee_rate_band_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+    if days.is_empty() {
+        return no_data_chart("Fee Rate Band");
+    }
+    let has_data = days.iter().any(|d| d.avg_fee_rate_p10 > 0.0 || d.avg_fee_rate_p90 > 0.0);
+    if !has_data {
+        return no_data_chart("Fee Rate Band (backfill required for percentile data)");
+    }
+
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    let p10: Vec<f64> = days.iter().map(|d| (d.avg_fee_rate_p10 * 100.0).round() / 100.0).collect();
+    let p90: Vec<f64> = days.iter().map(|d| (d.avg_fee_rate_p90 * 100.0).round() / 100.0).collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": y_axis("sat/vB"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            { "name": "90th Percentile", "type": "line", "data": p90,
+              "lineStyle": { "width": 1, "color": TARGET_COLOR, "opacity": 0.6 },
+              "itemStyle": { "color": TARGET_COLOR }, "symbol": "none",
+              "areaStyle": { "color": "rgba(231,76,60,0.08)" } },
+            { "name": "10th Percentile", "type": "line", "data": p10,
+              "lineStyle": { "width": 1, "color": SIGNAL_YES, "opacity": 0.6 },
+              "itemStyle": { "color": SIGNAL_YES }, "symbol": "none",
+              "areaStyle": { "color": "rgba(46,204,113,0.08)" } }
+        ]
+    }))
 }
 
 /// Block subsidy vs fee revenue ratio (stacked area).

@@ -135,6 +135,13 @@ pub fn StatsSummaryPage() -> impl IntoView {
         } else { "\u{2014}".to_string() }
     });
     let chain_growth = stat(|s| format_data_size(s.total_size));
+    let avg_tps = stat(|s| {
+        if s.block_count > 1 && s.avg_block_time > 0.0 {
+            let secs = s.avg_block_time * 60.0;
+            let avg_tx_per_block = s.total_tx as f64 / s.block_count as f64;
+            format!("{:.1} tx/s", avg_tx_per_block / secs)
+        } else { "\u{2014}".to_string() }
+    });
 
     // === Fees ===
     let total_fees_btc = stat(|s| format!("{} BTC", format_number_f64(s.total_fees as f64 / 100_000_000.0, 2)));
@@ -295,6 +302,8 @@ pub fn StatsSummaryPage() -> impl IntoView {
                 tooltip="How full blocks are on average, as % of the 4 MWU consensus limit"/>
             <StatCard label="Chain Growth" value=chain_growth
                 tooltip="Total raw block data added to the chain in this range"/>
+            <StatCard label="Avg TPS" value=avg_tps
+                tooltip="Average transactions per second, derived from avg txs/block divided by avg block time"/>
             <StatCard label="BTC Transferred" value=total_btc_transferred
                 tooltip="Sum of all non-coinbase output values. Requires backfill for historical data"/>
 
