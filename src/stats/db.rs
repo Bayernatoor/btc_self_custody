@@ -872,6 +872,9 @@ pub struct DailyRow {
     pub avg_brc20_count: f64,
     pub avg_taproot_keypath_count: f64,
     pub avg_taproot_scriptpath_count: f64,
+    pub avg_fee_rate_p10: f64,
+    pub avg_fee_rate_p90: f64,
+    pub avg_stamps_count: f64,
 }
 
 pub fn query_daily_aggregates(
@@ -896,7 +899,8 @@ pub fn query_daily_aggregates(
                 AVG(witness_bytes),
                 AVG(inscription_count), AVG(inscription_bytes),
                 AVG(brc20_count),
-                AVG(taproot_keypath_count), AVG(taproot_scriptpath_count)
+                AVG(taproot_keypath_count), AVG(taproot_scriptpath_count),
+                AVG(fee_rate_p10), AVG(fee_rate_p90), AVG(stamps_count)
          FROM blocks
          WHERE timestamp >= ?1 AND timestamp <= ?2
          GROUP BY day
@@ -940,6 +944,9 @@ pub fn query_daily_aggregates(
             avg_brc20_count: row.get(33)?,
             avg_taproot_keypath_count: row.get(34)?,
             avg_taproot_scriptpath_count: row.get(35)?,
+            avg_fee_rate_p10: row.get(36)?,
+            avg_fee_rate_p90: row.get(37)?,
+            avg_stamps_count: row.get(38)?,
         })
     })?;
     rows.collect()

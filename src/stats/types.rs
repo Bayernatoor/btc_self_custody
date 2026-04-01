@@ -149,6 +149,9 @@ pub struct DailyAggregate {
     pub avg_brc20_count: f64,
     pub avg_taproot_keypath_count: f64,
     pub avg_taproot_scriptpath_count: f64,
+    pub avg_fee_rate_p10: f64,
+    pub avg_fee_rate_p90: f64,
+    pub avg_stamps_count: f64,
 }
 
 /// Aggregated summary for an arbitrary time range (Stats Dashboard).
