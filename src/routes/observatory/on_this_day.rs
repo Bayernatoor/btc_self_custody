@@ -99,7 +99,7 @@ fn YearCard(year: OnThisDayYear) -> impl IntoView {
                         <p class="text-[11px] text-white/50 uppercase tracking-wider">"Blocks"</p>
                         <p class="text-white font-mono">{format_number(year.block_count)}</p>
                     </div>
-                    <div class="cursor-help" title="Total transactions across all blocks this day">
+                    <div class="cursor-help" title="Total transactions this day (includes 1 coinbase per block \u{2014} early blocks with only coinbase still show a count)">
                         <p class="text-[11px] text-white/50 uppercase tracking-wider">"Transactions"</p>
                         <p class="text-white font-mono">{format_compact(year.total_tx)}</p>
                     </div>
