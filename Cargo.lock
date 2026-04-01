@@ -3434,7 +3434,7 @@ dependencies = [
 
 [[package]]
 name = "we_hodl_btc"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "axum",
  "chrono",
