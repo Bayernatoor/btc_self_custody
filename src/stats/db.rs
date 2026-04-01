@@ -722,6 +722,45 @@ pub fn query_cumulative_size_before_ts(
     )
 }
 
+/// "On This Day" — aggregate block data grouped by year for a given month+day.
+pub fn query_on_this_day(
+    conn: &Connection,
+    month_day: &str, // "04-01" format
+) -> rusqlite::Result<Vec<(u32, u64, u64, u64, f64, f64, u64, u64, u64, u64, u64, u64, u64)>> {
+    let mut stmt = conn.prepare(
+        "SELECT CAST(strftime('%Y', datetime(timestamp, 'unixepoch')) AS INTEGER) as year,
+                COUNT(*) as block_count,
+                SUM(tx_count), SUM(total_fees),
+                AVG(size), AVG(weight),
+                SUM(inscription_count), SUM(runes_count),
+                SUM(segwit_spend_count), SUM(taproot_spend_count),
+                SUM(tx_count),
+                MIN(height), MAX(height)
+         FROM blocks
+         WHERE strftime('%m-%d', datetime(timestamp, 'unixepoch')) = ?1
+         GROUP BY year
+         ORDER BY year DESC",
+    )?;
+    let rows = stmt.query_map(params![month_day], |row| {
+        Ok((
+            row.get::<_, u32>(0)?,    // year
+            row.get::<_, u64>(1)?,    // block_count
+            row.get::<_, u64>(2)?,    // total_tx
+            row.get::<_, u64>(3)?,    // total_fees
+            row.get::<_, f64>(4)?,    // avg_size
+            row.get::<_, f64>(5)?,    // avg_weight
+            row.get::<_, u64>(6)?,    // inscriptions
+            row.get::<_, u64>(7)?,    // runes
+            row.get::<_, u64>(8)?,    // segwit_txs
+            row.get::<_, u64>(9)?,    // taproot_outputs
+            row.get::<_, u64>(10)?,   // total_tx (for segwit %)
+            row.get::<_, u64>(11)?,   // first_block
+            row.get::<_, u64>(12)?,   // last_block
+        ))
+    })?;
+    rows.collect()
+}
+
 #[derive(serde::Serialize)]
 pub struct OpReturnRow {
     pub height: u64,
