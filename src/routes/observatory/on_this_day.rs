@@ -52,8 +52,10 @@ fn YearCard(year: OnThisDayYear) -> impl IntoView {
     };
 
     let fees_btc = year.total_fees as f64 / 100_000_000.0;
-    let price_str = if year.price_usd > 0.0 {
+    let price_str = if year.price_usd >= 1.0 {
         format!("${}", format_number_f64(year.price_usd, 0))
+    } else if year.price_usd > 0.0 {
+        format!("${:.4}", year.price_usd)
     } else {
         "\u{2014}".to_string()
     };
