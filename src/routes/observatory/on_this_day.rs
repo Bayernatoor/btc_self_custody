@@ -139,7 +139,7 @@ fn YearCard(year: OnThisDayYear) -> impl IntoView {
                                 <span class="cursor-help" title="Ordinals inscriptions embedded in witness data">{format!("Inscriptions: {}", format_compact(year.total_inscriptions))}</span>
                             })}
                             {(year.total_runes > 0).then(|| view! {
-                                <span class="cursor-help" title="Runes protocol outputs (OP_RETURN, since block 840k)">{format!("Runes: {}", format_compact(year.total_runes))}</span>
+                                <span class="cursor-help" title="Runes protocol OP_RETURN outputs on this day">{format!("Runes: {}", format_compact(year.total_runes))}</span>
                             })}
                         </div>
                     }.into_any()
