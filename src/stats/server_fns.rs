@@ -969,30 +969,30 @@ pub async fn fetch_on_this_day(
     // Fetch price history for annotation
     let prices = fetch_price_history(0, 4_000_000_000).await.unwrap_or_default();
 
-    // Notable Bitcoin events by date (MM-DD → description)
-    let notable_dates: Vec<(&str, &str)> = vec![
-        ("01-03", "Genesis Block mined"),
-        ("01-12", "First BTC transaction (Satoshi \u{2192} Hal Finney)"),
-        ("05-22", "Bitcoin Pizza Day (10,000 BTC for 2 pizzas)"),
-        ("07-17", "Mt. Gox exchange opens"),
-        ("02-09", "BTC reaches $1"),
-        ("11-28", "First halving (50 \u{2192} 25 BTC)"),
-        ("11-29", "BTC reaches $1,000"),
-        ("02-07", "Mt. Gox halts withdrawals"),
-        ("07-09", "Second halving (25 \u{2192} 12.5 BTC)"),
-        ("08-01", "Bitcoin Cash fork"),
-        ("08-24", "SegWit activates (BIP-141)"),
-        ("12-17", "BTC reaches $20,000"),
-        ("05-11", "Third halving (12.5 \u{2192} 6.25 BTC)"),
-        ("02-08", "Tesla buys $1.5B in BTC"),
-        ("06-09", "El Salvador adopts BTC as legal tender"),
-        ("09-07", "El Salvador BTC law takes effect"),
-        ("11-10", "BTC ATH ~$69,000"),
-        ("11-13", "Taproot activates (BIP-341)"),
-        ("01-21", "Ordinals inscriptions launch"),
-        ("01-10", "First spot Bitcoin ETFs approved"),
-        ("03-14", "BTC reaches $73,000"),
-        ("04-20", "Fourth halving (6.25 \u{2192} 3.125 BTC) + Runes launch"),
+    // Notable Bitcoin events by (year, MM-DD, description)
+    let notable_dates: Vec<(u32, &str, &str)> = vec![
+        (2009, "01-03", "Genesis Block mined"),
+        (2009, "01-12", "First BTC transaction (Satoshi \u{2192} Hal Finney)"),
+        (2010, "05-22", "Bitcoin Pizza Day (10,000 BTC for 2 pizzas)"),
+        (2010, "07-17", "Mt. Gox exchange opens"),
+        (2011, "02-09", "BTC reaches $1"),
+        (2012, "11-28", "First halving (50 \u{2192} 25 BTC)"),
+        (2013, "11-29", "BTC reaches $1,000"),
+        (2014, "02-07", "Mt. Gox halts withdrawals"),
+        (2016, "07-09", "Second halving (25 \u{2192} 12.5 BTC)"),
+        (2017, "08-01", "Bitcoin Cash fork"),
+        (2017, "08-24", "SegWit activates (BIP-141)"),
+        (2017, "12-17", "BTC reaches $20,000"),
+        (2020, "05-11", "Third halving (12.5 \u{2192} 6.25 BTC)"),
+        (2021, "02-08", "Tesla buys $1.5B in BTC"),
+        (2021, "06-09", "El Salvador adopts BTC as legal tender"),
+        (2021, "09-07", "El Salvador BTC law takes effect"),
+        (2021, "11-10", "BTC ATH ~$69,000"),
+        (2021, "11-13", "Taproot activates (BIP-341)"),
+        (2023, "01-21", "Ordinals inscriptions launch"),
+        (2024, "01-10", "First spot Bitcoin ETFs approved"),
+        (2024, "03-14", "BTC reaches $73,000"),
+        (2024, "04-20", "Fourth halving (6.25 \u{2192} 3.125 BTC) + Runes launch"),
     ];
 
     let years: Vec<OnThisDayYear> = rows
@@ -1050,11 +1050,10 @@ pub async fn fetch_on_this_day(
                 })
                 .unwrap_or(0.0);
 
-            // Collect events for this date
+            // Collect events for this date AND year
             let mut events = Vec::new();
-            for (date, desc) in &notable_dates {
-                if *date == month_day {
-                    // Check if this event's year matches (approximate by description)
+            for (event_year, date, desc) in &notable_dates {
+                if *date == month_day && *event_year == year {
                     events.push(desc.to_string());
                 }
             }
