@@ -84,11 +84,11 @@ fn YearCard(year: OnThisDayYear) -> impl IntoView {
             class="bg-[#0d2137] border border-white/10 rounded-xl transition-all hover:border-white/20"
             style=format!("border-left: 4px solid {color}")
         >
-            <div class="p-4 sm:p-5">
+            <div class="p-3 sm:p-5">
                 // Year header
-                <div class="flex items-center justify-between mb-3">
-                    <div class="flex items-center gap-3">
-                        <span class="text-2xl sm:text-3xl font-title text-white font-bold">{year.year}</span>
+                <div class="flex items-center justify-between mb-2 sm:mb-3">
+                    <div class="flex items-center gap-2 sm:gap-3">
+                        <span class="text-xl sm:text-3xl font-title text-white font-bold">{year.year}</span>
                         <span class="text-xs text-white/50 bg-white/5 rounded-full px-2.5 py-0.5">{age_label}</span>
                     </div>
                     <span class="text-xs text-white/60 font-mono">
@@ -127,34 +127,34 @@ fn YearCard(year: OnThisDayYear) -> impl IntoView {
                     view! { <div></div> }.into_any()
                 }}
 
-                // Stats grid
-                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-sm">
+                // Stats grid — top 4 always visible, last 2 hidden on mobile
+                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 text-sm">
                     <div data-tip="Blocks mined on this day (00:00-23:59 UTC)" tabindex="0">
-                        <p class="text-[11px] text-white/50 uppercase tracking-wider">"Blocks"</p>
-                        <p class="text-white font-mono">{format_number(year.block_count)}</p>
+                        <p class="text-[10px] sm:text-[11px] text-white/50 uppercase tracking-wider">"Blocks"</p>
+                        <p class="text-white font-mono text-xs sm:text-sm">{format_number(year.block_count)}</p>
                     </div>
                     <div data-tip="Total transactions this day (includes 1 coinbase per block, early blocks with only coinbase still show a count)" tabindex="0">
-                        <p class="text-[11px] text-white/50 uppercase tracking-wider">"Transactions"</p>
-                        <p class="text-white font-mono">{format_compact(year.total_tx)}</p>
+                        <p class="text-[10px] sm:text-[11px] text-white/50 uppercase tracking-wider">"Txs"</p>
+                        <p class="text-white font-mono text-xs sm:text-sm">{format_compact(year.total_tx)}</p>
                     </div>
                     <div data-tip="Total miner fees paid this day" tabindex="0">
-                        <p class="text-[11px] text-white/50 uppercase tracking-wider">"Fees"</p>
-                        <p class="font-mono" style=format!("color: {color}")>
+                        <p class="text-[10px] sm:text-[11px] text-white/50 uppercase tracking-wider">"Fees"</p>
+                        <p class="font-mono text-xs sm:text-sm" style=format!("color: {color}")>
                             {format!("\u{20bf}{:.4}", fees_btc)}
                         </p>
                     </div>
                     <div data-tip="Daily average BTC/USD price (blockchain.info)" tabindex="0">
-                        <p class="text-[11px] text-white/50 uppercase tracking-wider">"Price"</p>
-                        <p class="text-white font-mono">{price_str}</p>
+                        <p class="text-[10px] sm:text-[11px] text-white/50 uppercase tracking-wider">"Price"</p>
+                        <p class="text-white font-mono text-xs sm:text-sm">{price_str}</p>
                         {(!mcap_str.is_empty()).then(|| view! {
                             <p class="text-[10px] text-white/50">{mcap_str.clone()}</p>
                         })}
                     </div>
-                    <div data-tip="Total BTC mined as of this date" tabindex="0">
+                    <div class="hidden sm:block" data-tip="Total BTC mined as of this date" tabindex="0">
                         <p class="text-[11px] text-white/50 uppercase tracking-wider">"Supply"</p>
                         <p class="text-white font-mono">{supply_str}</p>
                     </div>
-                    <div data-tip="Average block weight as % of 4 MWU limit" tabindex="0">
+                    <div class="hidden sm:block" data-tip="Average block weight as % of 4 MWU limit" tabindex="0">
                         <p class="text-[11px] text-white/50 uppercase tracking-wider">"Block Fullness"</p>
                         <p class="text-xs font-mono tracking-tighter" style=format!("color: {color}")>
                             {fullness_bar(year.avg_weight_util)}
@@ -163,8 +163,8 @@ fn YearCard(year: OnThisDayYear) -> impl IntoView {
                     </div>
                 </div>
 
-                // Extra metrics row
-                <div class="flex flex-wrap gap-x-4 gap-y-1 mt-2 pt-2 border-t border-white/5 text-xs text-white/50">
+                // Extra metrics row — hidden on mobile
+                <div class="hidden sm:flex flex-wrap gap-x-4 gap-y-1 mt-2 pt-2 border-t border-white/5 text-xs text-white/50">
                     <span data-tip="Block reward per block in this era (halves every 210,000 blocks)" tabindex="0">{
                         let era = year.last_block / 210_000;
                         let subsidy = 50.0_f64 / 2.0_f64.powi(era as i32);
@@ -357,7 +357,7 @@ pub fn OnThisDayPage() -> impl IntoView {
                         <input
                             type="date"
                             class="bg-[#0a1a2e] text-white text-xs border border-white/10 rounded-lg px-2 py-1 cursor-pointer focus:outline-none focus:border-[#f7931a]/40"
-                            style="color-scheme: dark"
+                            style="color-scheme: dark; -webkit-appearance: none;"
                             min=format!("{year}-01-01")
                             max=format!("{year}-12-31")
                             on:change=move |ev| {
