@@ -61,6 +61,7 @@ fn YearCard(year: OnThisDayYear) -> impl IntoView {
 
     view! {
         <div
+            id=format!("year-{}", year.year)
             class="bg-[#0d2137] border border-white/10 rounded-xl overflow-hidden transition-all hover:border-white/20"
             style=format!("border-left: 4px solid {color}")
         >
@@ -346,17 +347,29 @@ pub fn OnThisDayPage() -> impl IntoView {
                             if let Ok(s) = t.dyn_into::<leptos::web_sys::HtmlSelectElement>() {
                                 let val = s.value();
                                 if !val.is_empty() {
-                                    set_selected_date.set(val.clone());
+                                    // Format: "MM-DD:YYYY" — date + target year for scrolling
+                                    let parts: Vec<&str> = val.split(':').collect();
+                                    let date = parts[0].to_string();
+                                    let scroll_year = parts.get(1).unwrap_or(&"").to_string();
+                                    set_selected_date.set(date.clone());
                                     #[cfg(feature = "hydrate")]
                                     {
                                         let window = leptos::prelude::window();
                                         let pathname = window.location().pathname().unwrap_or_default();
-                                        let url = format!("{pathname}?date={val}");
+                                        let url = format!("{pathname}?date={date}");
                                         let _ = window.history().expect("history").replace_state_with_url(
                                             &wasm_bindgen::JsValue::NULL, "", Some(&url),
                                         );
+                                        // Scroll to the event's year after data loads
+                                        if !scroll_year.is_empty() {
+                                            let target_id = format!("year-{scroll_year}");
+                                            leptos::prelude::set_timeout(move || {
+                                                if let Some(el) = leptos::prelude::document().get_element_by_id(&target_id) {
+                                                    el.scroll_into_view();
+                                                }
+                                            }, std::time::Duration::from_millis(800));
+                                        }
                                     }
-                                    // Reset select to placeholder
                                     s.set_value("");
                                 }
                             }
@@ -364,20 +377,20 @@ pub fn OnThisDayPage() -> impl IntoView {
                     }
                 >
                     <option value="" disabled selected>"Notable Dates"</option>
-                    <option value="01-03">"Jan 3 \u{2013} Genesis Block"</option>
-                    <option value="01-12">"Jan 12 \u{2013} First Transaction"</option>
-                    <option value="05-22">"May 22 \u{2013} Pizza Day"</option>
-                    <option value="02-09">"Feb 9 \u{2013} BTC Reaches $1"</option>
-                    <option value="11-28">"Nov 28 \u{2013} First Halving"</option>
-                    <option value="08-24">"Aug 24 \u{2013} SegWit Activates"</option>
-                    <option value="07-09">"Jul 9 \u{2013} Second Halving"</option>
-                    <option value="08-01">"Aug 1 \u{2013} BCH Fork"</option>
-                    <option value="12-17">"Dec 17 \u{2013} BTC $20K"</option>
-                    <option value="05-11">"May 11 \u{2013} Third Halving"</option>
-                    <option value="11-13">"Nov 13 \u{2013} Taproot Activates"</option>
-                    <option value="11-10">"Nov 10 \u{2013} BTC ATH $69K"</option>
-                    <option value="01-10">"Jan 10 \u{2013} Spot ETFs Approved"</option>
-                    <option value="04-20">"Apr 20 \u{2013} Fourth Halving + Runes"</option>
+                    <option value="01-03:2009">"Jan 3 \u{2013} Genesis Block (2009)"</option>
+                    <option value="01-12:2009">"Jan 12 \u{2013} First Transaction (2009)"</option>
+                    <option value="05-22:2010">"May 22 \u{2013} Pizza Day (2010)"</option>
+                    <option value="02-09:2011">"Feb 9 \u{2013} BTC Reaches $1 (2011)"</option>
+                    <option value="11-28:2012">"Nov 28 \u{2013} First Halving (2012)"</option>
+                    <option value="07-09:2016">"Jul 9 \u{2013} Second Halving (2016)"</option>
+                    <option value="08-01:2017">"Aug 1 \u{2013} BCH Fork (2017)"</option>
+                    <option value="08-24:2017">"Aug 24 \u{2013} SegWit Activates (2017)"</option>
+                    <option value="12-17:2017">"Dec 17 \u{2013} BTC $20K (2017)"</option>
+                    <option value="05-11:2020">"May 11 \u{2013} Third Halving (2020)"</option>
+                    <option value="11-13:2021">"Nov 13 \u{2013} Taproot Activates (2021)"</option>
+                    <option value="11-10:2021">"Nov 10 \u{2013} BTC ATH $69K (2021)"</option>
+                    <option value="01-10:2024">"Jan 10 \u{2013} Spot ETFs Approved (2024)"</option>
+                    <option value="04-20:2024">"Apr 20 \u{2013} Fourth Halving + Runes (2024)"</option>
                 </select>
                 <svg class="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none w-3 h-3 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
