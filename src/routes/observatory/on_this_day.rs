@@ -69,9 +69,9 @@ fn YearCard(year: OnThisDayYear) -> impl IntoView {
                 <div class="flex items-center justify-between mb-3">
                     <div class="flex items-center gap-3">
                         <span class="text-2xl sm:text-3xl font-title text-white font-bold">{year.year}</span>
-                        <span class="text-xs text-white/30 bg-white/5 rounded-full px-2.5 py-0.5">{age_label}</span>
+                        <span class="text-xs text-white/50 bg-white/5 rounded-full px-2.5 py-0.5">{age_label}</span>
                     </div>
-                    <span class="text-xs text-white/20 font-mono">
+                    <span class="text-xs text-white/50 font-mono">
                         {format!("#{}\u{2013}#{}", format_number(year.first_block), format_number(year.last_block))}
                     </span>
                 </div>
@@ -96,31 +96,31 @@ fn YearCard(year: OnThisDayYear) -> impl IntoView {
                 // Stats grid
                 <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-sm">
                     <div>
-                        <p class="text-[10px] text-white/30 uppercase tracking-wider">"Blocks"</p>
+                        <p class="text-[11px] text-white/50 uppercase tracking-wider">"Blocks"</p>
                         <p class="text-white font-mono">{format_number(year.block_count)}</p>
                     </div>
                     <div>
-                        <p class="text-[10px] text-white/30 uppercase tracking-wider">"Transactions"</p>
+                        <p class="text-[11px] text-white/50 uppercase tracking-wider">"Transactions"</p>
                         <p class="text-white font-mono">{format_compact(year.total_tx)}</p>
                     </div>
                     <div>
-                        <p class="text-[10px] text-white/30 uppercase tracking-wider">"Fees"</p>
+                        <p class="text-[11px] text-white/50 uppercase tracking-wider">"Fees"</p>
                         <p class="font-mono" style=format!("color: {color}")>
                             {format!("{:.4} BTC", fees_btc)}
                         </p>
                     </div>
                     <div>
-                        <p class="text-[10px] text-white/30 uppercase tracking-wider">"Price"</p>
+                        <p class="text-[11px] text-white/50 uppercase tracking-wider">"Price"</p>
                         <p class="text-white font-mono">{price_str}</p>
                     </div>
                     <div>
-                        <p class="text-[10px] text-white/30 uppercase tracking-wider">"SegWit"</p>
+                        <p class="text-[11px] text-white/50 uppercase tracking-wider">"SegWit"</p>
                         <p class="text-white font-mono">
                             {if year.segwit_pct > 0.0 { format!("{:.0}%", year.segwit_pct) } else { "\u{2014}".to_string() }}
                         </p>
                     </div>
                     <div>
-                        <p class="text-[10px] text-white/30 uppercase tracking-wider">"Block Fullness"</p>
+                        <p class="text-[11px] text-white/50 uppercase tracking-wider">"Block Fullness"</p>
                         <p class="text-xs font-mono tracking-tighter" style=format!("color: {color}")>
                             {fullness_bar(year.avg_weight_util)}
                             {format!(" {:.0}%", year.avg_weight_util)}
@@ -131,7 +131,7 @@ fn YearCard(year: OnThisDayYear) -> impl IntoView {
                 // Extra metrics row (only if data exists)
                 {if year.total_inscriptions > 0 || year.total_runes > 0 || year.taproot_outputs > 0 {
                     view! {
-                        <div class="flex flex-wrap gap-x-4 gap-y-1 mt-2 pt-2 border-t border-white/5 text-xs text-white/40">
+                        <div class="flex flex-wrap gap-x-4 gap-y-1 mt-2 pt-2 border-t border-white/5 text-xs text-white/50">
                             {(year.taproot_outputs > 0).then(|| view! {
                                 <span>{format!("Taproot: {}", format_compact(year.taproot_outputs))}</span>
                             })}
@@ -267,7 +267,7 @@ pub fn OnThisDayPage() -> impl IntoView {
         // Date navigation
         <div class="flex items-center justify-center gap-4 mb-8">
             <button
-                class="text-white/40 hover:text-white/80 cursor-pointer p-2 rounded-lg hover:bg-white/5 transition-colors"
+                class="text-white/50 hover:text-white/80 cursor-pointer p-2 rounded-lg hover:bg-white/5 transition-colors"
                 on:click=nav_prev
                 title="Previous day"
             >
@@ -283,7 +283,7 @@ pub fn OnThisDayPage() -> impl IntoView {
                 }}</p>
             </div>
             <button
-                class="text-white/40 hover:text-white/80 cursor-pointer p-2 rounded-lg hover:bg-white/5 transition-colors"
+                class="text-white/50 hover:text-white/80 cursor-pointer p-2 rounded-lg hover:bg-white/5 transition-colors"
                 on:click=nav_next
                 title="Next day"
             >
@@ -292,7 +292,7 @@ pub fn OnThisDayPage() -> impl IntoView {
                 </svg>
             </button>
             <button
-                class="text-xs text-white/40 hover:text-white/70 px-3 py-1.5 rounded-lg border border-white/10 hover:border-white/20 cursor-pointer transition-colors"
+                class="text-xs text-white/50 hover:text-white/70 px-3 py-1.5 rounded-lg border border-white/10 hover:border-white/20 cursor-pointer transition-colors"
                 on:click=nav_today
             >
                 "Today"
