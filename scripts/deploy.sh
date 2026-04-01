@@ -10,7 +10,7 @@ source "$HOME/.cargo/env"
 
 cd /opt/wehodlbtc/app
 echo "==> Pulling latest code..."
-git checkout -- assets/sw.js 2>/dev/null  # reset SW cache stamp from previous deploy
+git checkout -- . 2>/dev/null  # discard any local changes from previous build/deploy
 git pull origin master
 
 echo "==> Updating service worker cache version..."
