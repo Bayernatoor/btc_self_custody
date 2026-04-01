@@ -1060,7 +1060,7 @@ pub async fn fetch_on_this_day(
             "Block reward dropped from 6.25 to 3.125 BTC. The Runes protocol launched simultaneously, causing a fee spike as users minted tokens",
             Some(840_000)),
         (2024, "12-05", "BTC breaks $100,000",
-            "A psychological milestone 15 years in the making. From $0 to six figures, powered by ETF adoption and institutional demand",
+            "A psychological milestone 15 years in the making. From $0 to six figures",
             None),
         (2025, "10-06", "BTC ATH ~$126,000",
             "The current all-time high. Bitcoin's market cap surpassed $2.5 trillion",
