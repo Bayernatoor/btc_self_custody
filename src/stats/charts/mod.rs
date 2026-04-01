@@ -246,22 +246,26 @@ const HALVING_DATES: &[&str] =
 
 /// Notable BIP activation block heights and timestamps.
 const BIP_ACTIVATIONS: &[(u64, u64, &str)] = &[
+    (227_835, 1_363_609_548, "BIP-34 (Height in Coinbase)"),
     (227_931, 1_363_636_474, "BIP-16 (P2SH)"),
     (363_725, 1_436_486_408, "BIP-66 (Strict DER)"),
     (388_381, 1_449_187_214, "BIP-65 (CLTV)"),
     (419_328, 1_467_331_589, "BIP-68/112/113 (CSV)"),
+    (477_120, 1_500_584_608, "BIP-91 (SegWit Signaling)"),
     (481_824, 1_503_539_857, "BIP-141 (SegWit)"),
-    (709_632, 1_636_839_505, "BIP-341 (Taproot)"),
+    (709_632, 1_636_839_505, "BIP-341/342 (Taproot + Tapscript)"),
 ];
 
 /// BIP activation dates for daily-mode charts (derived from block timestamps above).
 const BIP_ACTIVATION_DATES: &[(&str, &str)] = &[
+    ("2013-03-18", "BIP-34 (Height in Coinbase)"),
     ("2013-03-18", "BIP-16 (P2SH)"),
     ("2015-07-10", "BIP-66 (Strict DER)"),
     ("2015-12-04", "BIP-65 (CLTV)"),
     ("2016-07-01", "BIP-68/112/113 (CSV)"),
+    ("2017-07-21", "BIP-91 (SegWit Signaling)"),
     ("2017-08-24", "BIP-141 (SegWit)"),
-    ("2021-11-13", "BIP-341 (Taproot)"),
+    ("2021-11-13", "BIP-341/342 (Taproot + Tapscript)"),
 ];
 
 /// Bitcoin Core major release timestamps (Unix seconds) and labels.
