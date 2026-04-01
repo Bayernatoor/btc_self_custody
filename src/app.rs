@@ -177,6 +177,7 @@ pub fn App() -> impl IntoView {
                             <Route path=path!("/signaling") view=SignalingPage/>
                             <Route path=path!("/stats") view=StatsSummaryPage/>
                             <Route path=path!("/on-this-day") view=OnThisDayPage/>
+                            <Route path=path!("/learn/protocols") view=ProtocolGuidePage/>
                             <Route path=path!("/*any") view=|| view! {
                                 <div class="flex flex-col items-center justify-center min-h-[40vh] px-6">
                                     <div class="text-[4rem] font-title text-white/10 font-bold mb-4">"404"</div>
@@ -186,7 +187,6 @@ pub fn App() -> impl IntoView {
                                 </div>
                             }/>
                         </ParentRoute>
-                        <Route path=path!("/observatory/learn/protocols") view=ProtocolGuidePage/>
                         // Other routes
                         <Route path=path!("/blog") view=BlogPage/>
                         <Route path=path!("/faq") view=FaqPage/>
