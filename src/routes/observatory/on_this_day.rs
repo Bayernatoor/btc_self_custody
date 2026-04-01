@@ -281,32 +281,37 @@ pub fn OnThisDayPage() -> impl IntoView {
         </div>
 
         // Date navigation
-        <div class="flex items-center justify-center gap-4 mb-8">
-            <button
-                class="text-white/50 hover:text-white/80 cursor-pointer p-2 rounded-lg hover:bg-white/5 transition-colors"
-                on:click=nav_prev
-                title="Previous day"
-            >
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
-                </svg>
-            </button>
-            <div class="text-center">
-                <p class="text-2xl sm:text-3xl font-title text-[#f7931a] font-bold">{move || display_date.get()}</p>
-                <p class="text-xs text-white/30 mt-0.5">{move || {
-                    let d = data.get().flatten();
-                    d.map(|otd| format!("{} years of data", otd.years.len())).unwrap_or_default()
-                }}</p>
+        <div class="flex flex-col items-center gap-2 mb-8">
+            // Row 1: arrows + date
+            <div class="flex items-center gap-3">
+                <button
+                    class="text-white/50 hover:text-white/80 cursor-pointer p-2 rounded-lg hover:bg-white/5 transition-colors"
+                    on:click=nav_prev
+                    title="Previous day"
+                >
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
+                    </svg>
+                </button>
+                <div class="text-center">
+                    <p class="text-2xl sm:text-3xl font-title text-[#f7931a] font-bold">{move || display_date.get()}</p>
+                    <p class="text-xs text-white/30 mt-0.5">{move || {
+                        let d = data.get().flatten();
+                        d.map(|otd| format!("{} years of data", otd.years.len())).unwrap_or_default()
+                    }}</p>
+                </div>
+                <button
+                    class="text-white/50 hover:text-white/80 cursor-pointer p-2 rounded-lg hover:bg-white/5 transition-colors"
+                    on:click=nav_next
+                    title="Next day"
+                >
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+                    </svg>
+                </button>
             </div>
-            <button
-                class="text-white/50 hover:text-white/80 cursor-pointer p-2 rounded-lg hover:bg-white/5 transition-colors"
-                on:click=nav_next
-                title="Next day"
-            >
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
-                </svg>
-            </button>
+            // Row 2: today/picker + notable dates
+            <div class="flex items-center gap-2 flex-wrap justify-center">
             {move || {
                 let now = chrono::Utc::now();
                 let today = format!("{:02}-{:02}", now.month(), now.day());
@@ -421,6 +426,7 @@ pub fn OnThisDayPage() -> impl IntoView {
                 <svg class="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none w-3 h-3 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                 </svg>
+            </div>
             </div>
         </div>
 
