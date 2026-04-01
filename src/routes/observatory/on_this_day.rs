@@ -444,7 +444,8 @@ pub fn OnThisDayPage() -> impl IntoView {
                                                 <span class="text-2xl sm:text-3xl font-title text-white font-bold">"2009"</span>
                                                 <span class="text-xs text-white/50 bg-white/5 rounded-full px-2.5 py-0.5">"Genesis year"</span>
                                             </div>
-                                            <p class="text-sm text-white/40 italic">"No blocks mined on this date. In early 2009, Satoshi was often the only miner \u{2014} entire days could pass between blocks."</p>
+                                            <p class="text-sm text-white/50">"No blocks were mined on this date."</p>
+                                            <p class="text-xs text-white/40 mt-2 leading-relaxed">"In Bitcoin\u{2019}s earliest days, Satoshi was often the only miner. After the genesis block on January 3rd, the next block wasn\u{2019}t mined until January 9th, a gap of over 5 days. Some believe this was intentional, giving people time to see the announcement on the cryptography mailing list and begin mining. Others think Satoshi was still testing the software. Either way, entire days with zero blocks were common in 2009."</p>
                                         </div>
                                     </div>
                                 }.into_any());
