@@ -75,8 +75,8 @@ A subset of inscriptions. Detected by checking if the inscription contains `{"p"
 ### Runes
 Detected via `OP_RETURN` outputs starting with `OP_13` (`6a5d` hex). Height-gated to block 840,000+ to prevent false positives from pre-launch OP_RETURN data that coincidentally matched the pattern.
 
-### Stamps
-Bare multisig outputs where the "public keys" are actually data (not valid compressed pubkeys starting with `02`/`03`). Detected by checking if any 33-byte key in a multisig output doesn't start with a valid prefix.
+### Stamps (not yet tracked)
+Stamps are built on top of the Counterparty protocol. They use Counterparty's encoding with a `STAMP:` prefix in the description field, and store data in bare multisig outputs. Detection requires decoding the Counterparty payload first, which we don't currently do. The "Counterparty" category in our OP_RETURN charts includes all Counterparty transactions (tokens, DEX orders, Stamps, etc.) — we cannot distinguish Stamps from other Counterparty usage without protocol-level decoding. The spike in Counterparty activity from 2023+ is likely a mix of Stamps and renewed XCP activity.
 
 ### OP_RETURN Classification
 Each OP_RETURN output is classified by checking the payload at the correct offset after the push opcode:
