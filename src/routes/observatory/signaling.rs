@@ -46,8 +46,8 @@ pub fn SignalingPage() -> impl IntoView {
     });
 
     view! {
-        <Title text="BIP Signaling Tracker: BIP-110 & BIP-54 Activation | WE HODL BTC"/>
-        <Meta name="description" content="Track Bitcoin Improvement Proposal signaling in real time. Monitor BIP-110 (OP_RETURN limits, version bit 4) and BIP-54 (consensus cleanup, coinbase locktime) miner readiness per 2,016-block retarget period."/>
+        <Title text="BIP Signaling Tracker | WE HODL BTC"/>
+        <Meta name="description" content="Track Bitcoin Improvement Proposal signaling in real time. Monitor miner readiness for proposed protocol upgrades via version bit signaling and coinbase compliance across 2,016-block retarget periods."/>
         <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/signaling"/>
 
         // Slim hero banner
@@ -60,13 +60,13 @@ pub fn SignalingPage() -> impl IntoView {
             <div class="absolute inset-0 bg-gradient-to-t from-[#123c64] via-[#123c64]/60 to-[#123c64]/30"></div>
             <div class="absolute inset-0 flex flex-col items-center justify-end pb-3 sm:pb-4">
                 <h1 class="text-lg sm:text-xl lg:text-2xl font-title text-white mb-0.5 drop-shadow-lg">"Signaling"</h1>
-                <p class="text-[11px] sm:text-xs text-white/50 max-w-lg mx-auto px-4 text-center drop-shadow">"BIP version bit signaling and coinbase locktime compliance tracking"</p>
+                <p class="text-[11px] sm:text-xs text-white/50 max-w-lg mx-auto px-4 text-center drop-shadow">"Track miner readiness for proposed Bitcoin protocol upgrades"</p>
             </div>
         </div>
 
         // SEO: crawlable description for search engines (visually hidden, accessible)
         <p class="sr-only">
-            "Track miner readiness for proposed Bitcoin protocol upgrades. BIP-110 proposes relaxing the OP_RETURN data size limit and requires 55% miner signaling via version bit 4. BIP-54 (Great Consensus Cleanup) fixes legacy vulnerabilities and requires 95% signaling via coinbase locktime. The block grid shows per-block signaling, while the period chart tracks progress across 2,016-block retarget windows."
+            "Track miner readiness for proposed Bitcoin protocol upgrades. The block grid shows per-block signaling, while the period chart tracks progress toward activation thresholds across 2,016-block retarget windows."
         </p>
 
         // BIP selector
