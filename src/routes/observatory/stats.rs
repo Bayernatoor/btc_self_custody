@@ -141,7 +141,7 @@ pub fn StatsSummaryPage() -> impl IntoView {
     });
 
     // === Fees ===
-    let total_fees_btc = stat(|s| format!("{} BTC", format_number_f64(s.total_fees as f64 / 100_000_000.0, 2)));
+    let total_fees_btc = stat(|s| format!("\u{20bf}{}", format_number_f64(s.total_fees as f64 / 100_000_000.0, 2)));
     let total_fees_sub = stat(|s| format!("{} sats", format_number(s.total_fees)));
     let avg_fee_rate = stat(|s| format!("{:.1} sat/vB", s.avg_fee_rate));
     let avg_fee_per_tx = {
@@ -202,13 +202,13 @@ pub fn StatsSummaryPage() -> impl IntoView {
 
     // === Extremes ===
     let max_block_size = stat(|s| format!("{:.2} MB", s.max_block_size as f64 / 1_000_000.0));
-    let max_block_fees = stat(|s| format!("{} BTC", format_number_f64(s.max_block_fees as f64 / 100_000_000.0, 4)));
+    let max_block_fees = stat(|s| format!("\u{20bf}{}", format_number_f64(s.max_block_fees as f64 / 100_000_000.0, 4)));
     let max_fee_rate = stat(|s| format!("{:.1} sat/vB", s.max_fee_rate));
 
     // === Volume ===
     let total_btc_transferred = stat(|s| {
         if s.total_output_value > 0 {
-            format!("{} BTC", format_number_f64(s.total_output_value as f64 / 100_000_000.0, 2))
+            format!("\u{20bf}{}", format_number_f64(s.total_output_value as f64 / 100_000_000.0, 2))
         } else {
             "\u{2014}".to_string()
         }
