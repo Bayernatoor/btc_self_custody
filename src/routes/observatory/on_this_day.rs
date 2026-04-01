@@ -297,6 +297,53 @@ pub fn OnThisDayPage() -> impl IntoView {
             >
                 "Today"
             </button>
+            <div class="relative inline-block">
+                <select
+                    aria-label="Notable dates"
+                    class="appearance-none bg-[#0a1a2e] text-white/60 text-xs border border-white/10 rounded-lg pl-3 pr-7 py-1.5 cursor-pointer focus:outline-none focus:border-[#f7931a]/40 transition-colors"
+                    on:change=move |ev| {
+                        use wasm_bindgen::JsCast;
+                        if let Some(t) = ev.target() {
+                            if let Ok(s) = t.dyn_into::<leptos::web_sys::HtmlSelectElement>() {
+                                let val = s.value();
+                                if !val.is_empty() {
+                                    set_selected_date.set(val.clone());
+                                    #[cfg(feature = "hydrate")]
+                                    {
+                                        let window = leptos::prelude::window();
+                                        let pathname = window.location().pathname().unwrap_or_default();
+                                        let url = format!("{pathname}?date={val}");
+                                        let _ = window.history().expect("history").replace_state_with_url(
+                                            &wasm_bindgen::JsValue::NULL, "", Some(&url),
+                                        );
+                                    }
+                                    // Reset select to placeholder
+                                    s.set_value("");
+                                }
+                            }
+                        }
+                    }
+                >
+                    <option value="" disabled selected>"Notable Dates"</option>
+                    <option value="01-03">"Jan 3 \u{2013} Genesis Block"</option>
+                    <option value="01-12">"Jan 12 \u{2013} First Transaction"</option>
+                    <option value="05-22">"May 22 \u{2013} Pizza Day"</option>
+                    <option value="02-09">"Feb 9 \u{2013} BTC Reaches $1"</option>
+                    <option value="11-28">"Nov 28 \u{2013} First Halving"</option>
+                    <option value="08-24">"Aug 24 \u{2013} SegWit Activates"</option>
+                    <option value="07-09">"Jul 9 \u{2013} Second Halving"</option>
+                    <option value="08-01">"Aug 1 \u{2013} BCH Fork"</option>
+                    <option value="12-17">"Dec 17 \u{2013} BTC $20K"</option>
+                    <option value="05-11">"May 11 \u{2013} Third Halving"</option>
+                    <option value="11-13">"Nov 13 \u{2013} Taproot Activates"</option>
+                    <option value="11-10">"Nov 10 \u{2013} BTC ATH $69K"</option>
+                    <option value="01-10">"Jan 10 \u{2013} Spot ETFs Approved"</option>
+                    <option value="04-20">"Apr 20 \u{2013} Fourth Halving + Runes"</option>
+                </select>
+                <svg class="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none w-3 h-3 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </div>
         </div>
 
         // Year cards
