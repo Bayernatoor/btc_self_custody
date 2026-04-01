@@ -34,6 +34,7 @@ ARCHITECTURE.md
 *.db-wal
 *.db-journal
 tasks/*
+docs/*
 MIGRATION_PLAN.md
 wallet_research_2026_03.md
 notes/*
