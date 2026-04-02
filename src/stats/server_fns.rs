@@ -578,10 +578,33 @@ pub async fn fetch_signaling(
     from: u64,
     to: u64,
 ) -> Result<(Vec<SignalingBlock>, PeriodStats), ServerFnError> {
+    use std::time::Instant;
+
     let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
         leptos_axum::extract().await.map_err(|e| {
             ServerFnError::new(format!("Stats not available: {e}"))
         })?;
+
+    // Cache key includes method, bit, and range
+    let cache_key = if method == "locktime" {
+        format!("locktime:{from}:{to}")
+    } else {
+        format!("bit:{bit}:{from}:{to}")
+    };
+
+    // Return cached result if fresh (< 60 seconds)
+    {
+        let cached = state
+            .signaling_blocks_cache
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if let Some((ref key, ref blocks, ref stats, ref ts)) = *cached {
+            if key == &cache_key && ts.elapsed().as_secs() < 60 {
+                return Ok((blocks.clone(), stats.clone()));
+            }
+        }
+    }
+
     let conn = state
         .db
         .get()
@@ -626,16 +649,22 @@ pub async fn fetch_signaling(
         })
         .collect();
 
-    Ok((
-        signaling_blocks,
-        PeriodStats {
-            period_start,
-            period_end,
-            total_blocks: mined,
-            signaled_count,
-            signaled_pct: pct,
-        },
-    ))
+    let period_stats = PeriodStats {
+        period_start,
+        period_end,
+        total_blocks: mined,
+        signaled_count,
+        signaled_pct: pct,
+    };
+
+    // Cache the result
+    *state
+        .signaling_blocks_cache
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) =
+        Some((cache_key, signaling_blocks.clone(), period_stats.clone(), Instant::now()));
+
+    Ok((signaling_blocks, period_stats))
 }
 
 #[server(prefix = "/api", endpoint = "stats_signaling_periods")]
