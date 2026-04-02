@@ -1,7 +1,8 @@
-// Block Heartbeat — EKG canvas animation engine
-// Draws a hospital cardiac monitor sweep line driven by real Bitcoin block data.
-// Each block arrival produces a PQRST waveform spike. The flatline between
-// beats represents the real wait for the next block.
+// Block Heartbeat v2 — Scrollable Timeline EKG engine
+// Draws a hospital cardiac monitor driven by real Bitcoin block data.
+// v2 replaces the circular sweep with an infinite scrollable horizontal
+// timeline. Users can scroll/drag left to see past blocks, click on
+// waveforms for block details, and see mempool blips on the live flatline.
 (function() {
     'use strict';
 
@@ -17,7 +18,6 @@
     };
 
     var BG_COLOR = 'rgba(13, 33, 55, 1)'; // matches bg-[#0d2137]
-    var BG_FADE  = 'rgba(13, 33, 55, 0.06)';
     var GRID_COLOR = 'rgba(255, 255, 255, 0.03)';
 
     // ── PQRST waveform generation ──────────────────────────────
@@ -104,17 +104,6 @@
         return points;
     }
 
-    // Compute flatline pixels for inter-block time.
-    // replay=true compresses history, false = real-time proportional gaps
-    function flatlinePixels(interBlockSeconds, replay) {
-        if (replay) {
-            // Compressed: show relative differences but keep it tight
-            return Math.max(15, Math.min(interBlockSeconds / 15, 80));
-        }
-        // Real-time: longer wait = more flatline. 10min=~150px, 30min=~350px
-        return Math.max(40, Math.min(interBlockSeconds / 4, 350));
-    }
-
     // ── Color computation ──────────────────────────────────────
     function computeColor(elapsedSec, feeRate, mempoolMB) {
         var timeStress = Math.min(elapsedSec / 1800, 1.0);
@@ -145,6 +134,14 @@
         return 'rgb(' + r + ',' + g + ',' + bl + ')';
     }
 
+    // ── Constants for timeline pixel mapping ───────────────────
+    var POINT_WIDTH = 1.5;  // Each PQRST point = 1.5 virtual pixels wide
+
+    // Compute flatline width in virtual pixels for a completed (history) flatline
+    function historyFlatlineWidth(interBlockSeconds) {
+        return Math.max(40, Math.min(interBlockSeconds / 10, 120));
+    }
+
     // ── Grid drawing ───────────────────────────────────────────
     function drawGrid(ctx, w, h) {
         ctx.strokeStyle = GRID_COLOR;
@@ -164,30 +161,256 @@
         }
     }
 
+    // ── Timeline segment helpers ───────────────────────────────
+
+    // Create a block segment from block data
+    function createBlockSegment(block, xStart) {
+        var points = generatePQRST(block);
+        var width = points.length * POINT_WIDTH;
+        var interBlock = block.inter_block_seconds || 600;
+        var feeRate = block.total_fees ? block.total_fees / 100000 : 0;
+        var color = computeColor(interBlock, feeRate, _hb ? _hb.mempoolMB : 0);
+
+        return {
+            type: 'block',
+            height: block.height || 0,
+            timestamp: block.timestamp || 0,
+            tx_count: block.tx_count || 0,
+            total_fees: block.total_fees || 0,
+            weight: block.weight || 0,
+            inter_block_seconds: interBlock,
+            points: points,
+            x_start: xStart,
+            x_end: xStart + width,
+            color: color
+        };
+    }
+
+    // Create a flatline segment
+    function createFlatlineSegment(xStart, xEnd) {
+        return {
+            type: 'flatline',
+            x_start: xStart,
+            x_end: xEnd,   // null for live (open-ended)
+            blips: []
+        };
+    }
+
+    // ── Hit testing: find block segment under a virtual x position ──
+    function blockAtVirtualX(vx) {
+        if (!_hb) return null;
+        for (var i = 0; i < _hb.timeline.length; i++) {
+            var seg = _hb.timeline[i];
+            if (seg.type === 'block' && vx >= seg.x_start && vx <= seg.x_end) {
+                return seg;
+            }
+        }
+        return null;
+    }
+
+    // Convert canvas pixel x to virtual x
+    function canvasToVirtual(canvasX) {
+        if (!_hb) return 0;
+        return _hb.viewOffset + canvasX;
+    }
+
+    // Convert virtual x to canvas pixel x
+    function virtualToCanvas(vx) {
+        if (!_hb) return 0;
+        return vx - _hb.viewOffset;
+    }
+
+    // ── Mempool WebSocket feed ─────────────────────────────────
+    function connectMempoolFeed() {
+        if (!_hb) return;
+        try {
+            var ws = new WebSocket('wss://mempool.space/api/v1/ws');
+            ws.onopen = function() {
+                ws.send(JSON.stringify({ action: 'want', data: ['mempool-blocks'] }));
+                _hb.wsConnected = true;
+            };
+            ws.onmessage = function(e) {
+                if (!_hb) return;
+                try {
+                    var data = JSON.parse(e.data);
+                    // mempool-blocks gives us projected next blocks with tx count changes
+                    if (data['mempool-blocks']) {
+                        var mblocks = data['mempool-blocks'];
+                        var totalTx = 0;
+                        for (var i = 0; i < mblocks.length; i++) {
+                            totalTx += mblocks[i].nTx || 0;
+                        }
+                        addMempoolBlips(totalTx, mblocks[0] ? mblocks[0].medianFee : 5);
+                    }
+                } catch (err) {
+                    // Ignore parse errors from WS
+                }
+            };
+            ws.onclose = function() {
+                if (_hb) _hb.wsConnected = false;
+                // Auto-reconnect after 5s
+                setTimeout(function() {
+                    if (_hb) connectMempoolFeed();
+                }, 5000);
+            };
+            ws.onerror = function() { ws.close(); };
+            _hb.ws = ws;
+        } catch (err) {
+            // WebSocket not available or blocked, silently degrade
+        }
+    }
+
+    function addMempoolBlips(count, avgFeeRate) {
+        if (!_hb) return;
+        // Add blips to the current live flatline
+        var liveSeg = _hb.timeline[_hb.timeline.length - 1];
+        if (!liveSeg || liveSeg.type !== 'flatline') return;
+
+        // Rate limit: max 5 blips per update
+        var n = Math.min(count > 0 ? Math.ceil(Math.log2(count + 1)) : 0, 5);
+        for (var i = 0; i < n; i++) {
+            var feeNorm = Math.min(avgFeeRate / 100, 1.0);
+            liveSeg.blips.push({
+                x: _hb.virtualX + (Math.random() - 0.5) * 10,
+                height: 2 + feeNorm * 8,    // 2-10px tall
+                opacity: 0.4 + feeNorm * 0.4,
+                timestamp: Date.now() / 1000,
+                fadeStart: 0  // set when block arrives
+            });
+        }
+    }
+
+    // ── Tooltip drawing ────────────────────────────────────────
+    function drawTooltip(ctx, seg, canvasX, canvasY, baseline) {
+        var padding = 8;
+        var lineH = 16;
+        var lines = [
+            'Block #' + seg.height,
+            'Txns: ' + seg.tx_count.toLocaleString(),
+            'Fees: ' + (seg.total_fees / 100000000).toFixed(4) + ' BTC',
+            'Wait: ' + formatDuration(seg.inter_block_seconds)
+        ];
+        if (seg.timestamp) {
+            var d = new Date(seg.timestamp * 1000);
+            lines.push(d.toISOString().replace('T', ' ').slice(0, 19) + ' UTC');
+        }
+
+        ctx.font = '12px monospace';
+        var maxW = 0;
+        for (var i = 0; i < lines.length; i++) {
+            var m = ctx.measureText(lines[i]).width;
+            if (m > maxW) maxW = m;
+        }
+
+        var boxW = maxW + padding * 2;
+        var boxH = lines.length * lineH + padding * 2;
+        var boxX = canvasX - boxW / 2;
+        var boxY = canvasY - boxH - 12; // above the waveform
+
+        // Clamp to canvas bounds
+        if (boxX < 4) boxX = 4;
+        if (boxX + boxW > _hb.width - 4) boxX = _hb.width - boxW - 4;
+        if (boxY < 4) boxY = 4;
+
+        // Background
+        ctx.fillStyle = 'rgba(10, 25, 41, 0.92)';
+        ctx.beginPath();
+        roundRect(ctx, boxX, boxY, boxW, boxH, 4);
+        ctx.fill();
+
+        // Border
+        ctx.strokeStyle = seg.color;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        roundRect(ctx, boxX, boxY, boxW, boxH, 4);
+        ctx.stroke();
+
+        // Text
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+        ctx.font = '12px monospace';
+        for (var i = 0; i < lines.length; i++) {
+            ctx.fillText(lines[i], boxX + padding, boxY + padding + (i + 1) * lineH - 3);
+        }
+    }
+
+    function roundRect(ctx, x, y, w, h, r) {
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + w - r, y);
+        ctx.arcTo(x + w, y, x + w, y + r, r);
+        ctx.lineTo(x + w, y + h - r);
+        ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+        ctx.lineTo(x + r, y + h);
+        ctx.arcTo(x, y + h, x, y + h - r, r);
+        ctx.lineTo(x, y + r);
+        ctx.arcTo(x, y, x + r, y, r);
+    }
+
+    function formatDuration(sec) {
+        if (sec < 60) return sec + 's';
+        var m = Math.floor(sec / 60);
+        var s = sec % 60;
+        if (m < 60) return m + 'm ' + s + 's';
+        var h = Math.floor(m / 60);
+        m = m % 60;
+        return h + 'h ' + m + 'm';
+    }
+
+    // ── "Jump to Live" button ──────────────────────────────────
+    function drawJumpToLive(ctx, w, h) {
+        var btnW = 110, btnH = 28;
+        var btnX = w - btnW - 12;
+        var btnY = 12;
+
+        ctx.fillStyle = 'rgba(0, 230, 118, 0.15)';
+        ctx.beginPath();
+        roundRect(ctx, btnX, btnY, btnW, btnH, 4);
+        ctx.fill();
+
+        ctx.strokeStyle = COLORS.healthy;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        roundRect(ctx, btnX, btnY, btnW, btnH, 4);
+        ctx.stroke();
+
+        ctx.fillStyle = COLORS.healthy;
+        ctx.font = 'bold 12px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('Jump to Live', btnX + btnW / 2, btnY + 18);
+        ctx.textAlign = 'left';
+
+        // Store button bounds for click detection
+        _hb._jumpBtn = { x: btnX, y: btnY, w: btnW, h: btnH };
+    }
+
     // ── Main draw loop ─────────────────────────────────────────
-    function drawFrame() {
+    function drawFrame(frameTime) {
         if (!_hb) return;
 
         var ctx = _hb.ctx;
         var w = _hb.width;
         var h = _hb.height;
-        var baseline = h * 0.55; // slightly below center
+        var baseline = h * 0.55;
 
-        // Eraser bar: clear a strip ahead of the sweep line
-        var eraserWidth = 30;
-        ctx.fillStyle = BG_COLOR;
-        ctx.fillRect(_hb.x, 0, eraserWidth, h);
-
-        // Redraw grid in erased area
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(_hb.x, 0, eraserWidth, h);
-        ctx.clip();
-        drawGrid(ctx, w, h);
-        ctx.restore();
-
-        // Compute current color
+        // Compute time delta
         var now = Date.now() / 1000;
+        var dt = _hb.lastFrameTime > 0 ? (now - _hb.lastFrameTime) : 0;
+        if (dt > 0.5) dt = 0.5; // clamp to avoid huge jumps on tab switch
+        _hb.lastFrameTime = now;
+
+        // ── Advance live flatline ──────────────────────────────
+        var liveSeg = _hb.timeline.length > 0 ? _hb.timeline[_hb.timeline.length - 1] : null;
+        if (liveSeg && liveSeg.type === 'flatline' && liveSeg.x_end === null) {
+            // Grow at 1 virtual pixel per second
+            _hb.virtualX += dt * 1.0;
+        }
+
+        // If auto-following, keep viewport pinned to the head
+        if (_hb.autoFollow) {
+            // Place the head at 85% of the canvas width so there is some look-ahead
+            _hb.viewOffset = _hb.virtualX - w * 0.85;
+        }
+
+        // ── Compute current color from live state ──────────────
         var elapsed = _hb.lastBlockTime > 0 ? now - _hb.lastBlockTime : 0;
         var targetColor = computeColor(elapsed, _hb.nextBlockFee, _hb.mempoolMB);
         _hb.colorLerp += 0.02;
@@ -201,80 +424,338 @@
             _hb.targetColor = targetColor;
             _hb.colorLerp = 0;
         }
-        var drawColor = _hb.colorLerp < 1
+        var liveColor = _hb.colorLerp < 1
             ? lerpColor(_hb.prevColor, _hb.targetColor, _hb.colorLerp)
             : _hb.currentColor;
 
-        // Subtle jitter on long waits
+        // ── Clear and draw background ──────────────────────────
+        ctx.fillStyle = BG_COLOR;
+        ctx.fillRect(0, 0, w, h);
+        drawGrid(ctx, w, h);
+
+        // ── Visible virtual x range ────────────────────────────
+        var viewLeft = _hb.viewOffset;
+        var viewRight = _hb.viewOffset + w;
+
+        // ── Draw timeline segments ─────────────────────────────
+        // Subtle jitter on long waits (only for live flatline)
         var jitter = 0;
         if (elapsed > 1200) {
             jitter = (Math.random() - 0.5) * Math.min((elapsed - 1200) / 600, 1) * 3;
         }
 
-        // Determine y value
-        var y = baseline + jitter;
+        for (var si = 0; si < _hb.timeline.length; si++) {
+            var seg = _hb.timeline[si];
 
-        if (_hb.currentWave) {
-            // Drawing a waveform
-            if (_hb.waveIdx < _hb.currentWave.length) {
-                y = baseline + _hb.currentWave[_hb.waveIdx];
-                _hb.waveIdx++;
+            // Determine segment x range
+            var segStart = seg.x_start;
+            var segEnd;
+            if (seg.type === 'block') {
+                segEnd = seg.x_end;
             } else {
-                // Waveform complete
-                _hb.currentWave = null;
-                _hb.waveIdx = 0;
-                _hb.flatlineRemaining = 0;
+                // Flatline: x_end is null for live segment
+                segEnd = (seg.x_end !== null) ? seg.x_end : _hb.virtualX;
             }
-        } else if (_hb.flatlineRemaining > 0) {
-            // Between waveforms: flatline
-            _hb.flatlineRemaining--;
-            y = baseline + jitter;
-        } else if (_hb.queue.length > 0) {
-            // Start next waveform from queue
-            var next = _hb.queue.shift();
-            _hb.currentWave = next.points;
-            _hb.waveIdx = 0;
-            _hb.flatlineRemaining = next.flatline;
-            // Update last block time for color
-            if (next.timestamp) {
-                _hb.lastBlockTime = next.timestamp;
+
+            // Skip segments outside visible range
+            if (segEnd < viewLeft || segStart > viewRight) continue;
+
+            if (seg.type === 'block') {
+                drawBlockSegment(ctx, seg, viewLeft, baseline, liveColor);
+            } else {
+                drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, baseline, liveColor, jitter, seg.x_end === null);
             }
-            y = baseline + jitter;
-        } else {
-            // No queued waveforms — real-time flatline
-            y = baseline + jitter;
         }
 
-        // Draw line segment
-        ctx.beginPath();
-        ctx.moveTo(_hb.prevX, _hb.prevY);
-        ctx.lineTo(_hb.x, y);
-        ctx.strokeStyle = drawColor;
-        ctx.lineWidth = 2;
-        ctx.shadowBlur = 12;
-        ctx.shadowColor = drawColor;
-        ctx.stroke();
-        ctx.shadowBlur = 0;
+        // ── Draw tooltip if hovering ───────────────────────────
+        if (_hb.hoveredBlock) {
+            var hSeg = _hb.hoveredBlock;
+            var midX = virtualToCanvas((hSeg.x_start + hSeg.x_end) / 2);
+            drawTooltip(ctx, hSeg, midX, baseline - 30, baseline);
+        }
 
-        // Store for next frame
-        _hb.prevX = _hb.x;
-        _hb.prevY = y;
+        // ── Draw "Jump to Live" if not auto-following ──────────
+        if (!_hb.autoFollow) {
+            drawJumpToLive(ctx, w, h);
+        } else {
+            _hb._jumpBtn = null;
+        }
 
-        // Advance sweep position
-        _hb.x += _hb.speed;
-        if (_hb.x >= w) {
-            _hb.x = 0;
-            _hb.prevX = 0;
-            _hb.prevY = baseline;
+        // ── Draw live indicator dot ────────────────────────────
+        if (_hb.autoFollow && liveSeg && liveSeg.x_end === null) {
+            var dotX = virtualToCanvas(_hb.virtualX);
+            if (dotX >= 0 && dotX <= w) {
+                var dotPulse = 0.5 + 0.5 * Math.sin(now * 3);
+                ctx.beginPath();
+                ctx.arc(dotX, baseline, 3, 0, Math.PI * 2);
+                ctx.fillStyle = liveColor;
+                ctx.globalAlpha = 0.4 + dotPulse * 0.4;
+                ctx.fill();
+                ctx.globalAlpha = 1;
+            }
         }
 
         _hb.rafId = requestAnimationFrame(drawFrame);
     }
 
+    // Draw a single block waveform segment
+    function drawBlockSegment(ctx, seg, viewLeft, baseline, fallbackColor) {
+        var pts = seg.points;
+        var color = seg.color || fallbackColor;
+
+        ctx.beginPath();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = color;
+
+        var isHovered = (_hb.hoveredBlock === seg);
+        if (isHovered) {
+            ctx.lineWidth = 3;
+            ctx.shadowBlur = 18;
+        }
+
+        for (var i = 0; i < pts.length; i++) {
+            var vx = seg.x_start + i * POINT_WIDTH;
+            var cx = vx - viewLeft;
+            var cy = baseline + pts[i];
+            if (i === 0) {
+                ctx.moveTo(cx, cy);
+            } else {
+                ctx.lineTo(cx, cy);
+            }
+        }
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+    }
+
+    // Draw a flatline segment (with optional blips)
+    function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, baseline, color, jitter, isLive) {
+        // Clamp to visible range
+        var drawStart = Math.max(seg.x_start, viewLeft);
+        var drawEnd = Math.min(segEnd, viewRight);
+
+        if (drawStart >= drawEnd) return;
+
+        var cx1 = drawStart - viewLeft;
+        var cx2 = drawEnd - viewLeft;
+        var y = baseline + (isLive ? jitter : 0);
+
+        ctx.beginPath();
+        ctx.moveTo(cx1, y);
+        ctx.lineTo(cx2, y);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = color;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        // Draw blips
+        if (seg.blips && seg.blips.length > 0) {
+            for (var bi = 0; bi < seg.blips.length; bi++) {
+                var blip = seg.blips[bi];
+                // Skip blips outside visible range
+                if (blip.x < viewLeft || blip.x > viewRight) continue;
+
+                var bx = blip.x - viewLeft;
+                var bOpacity = blip.opacity;
+
+                // Fade out confirmed blips (fadeStart > 0 means block arrived)
+                if (blip.fadeStart > 0) {
+                    var fadeDt = Date.now() / 1000 - blip.fadeStart;
+                    bOpacity = Math.max(0, blip.opacity - fadeDt * 0.5);
+                    if (bOpacity <= 0) continue;
+                }
+
+                ctx.beginPath();
+                ctx.moveTo(bx, baseline);
+                ctx.lineTo(bx, baseline - blip.height);
+                ctx.strokeStyle = 'rgba(0, 230, 118, ' + bOpacity + ')';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
+        }
+    }
+
+    // ── Input handling ─────────────────────────────────────────
+
+    function setupInputHandlers(canvas) {
+        // Mouse wheel: scroll viewport left/right
+        canvas.addEventListener('wheel', function(e) {
+            if (!_hb) return;
+            e.preventDefault();
+            // deltaY scrolls horizontally on the timeline
+            _hb.viewOffset += e.deltaY * 0.8;
+            _hb.autoFollow = false;
+            checkAutoFollow();
+        }, { passive: false });
+
+        // Mouse drag: click and drag to pan
+        canvas.addEventListener('mousedown', function(e) {
+            if (!_hb) return;
+
+            // Check "Jump to Live" button click
+            if (_hb._jumpBtn) {
+                var rect = canvas.getBoundingClientRect();
+                var mx = e.clientX - rect.left;
+                var my = e.clientY - rect.top;
+                var btn = _hb._jumpBtn;
+                if (mx >= btn.x && mx <= btn.x + btn.w && my >= btn.y && my <= btn.y + btn.h) {
+                    _hb.autoFollow = true;
+                    _hb.hoveredBlock = null;
+                    return;
+                }
+            }
+
+            _hb.isDragging = true;
+            _hb.dragStartX = e.clientX;
+            _hb.dragStartOffset = _hb.viewOffset;
+            canvas.style.cursor = 'grabbing';
+        });
+
+        window.addEventListener('mousemove', function(e) {
+            if (!_hb) return;
+
+            if (_hb.isDragging) {
+                var dx = e.clientX - _hb.dragStartX;
+                _hb.viewOffset = _hb.dragStartOffset - dx;
+                _hb.autoFollow = false;
+                checkAutoFollow();
+            } else {
+                // Hover detection
+                var rect = canvas.getBoundingClientRect();
+                var mx = e.clientX - rect.left;
+                var my = e.clientY - rect.top;
+                if (mx >= 0 && mx <= _hb.width && my >= 0 && my <= _hb.height) {
+                    var vx = canvasToVirtual(mx);
+                    _hb.hoveredBlock = blockAtVirtualX(vx);
+                    canvas.style.cursor = _hb.hoveredBlock ? 'pointer' : 'default';
+                } else {
+                    _hb.hoveredBlock = null;
+                }
+            }
+        });
+
+        window.addEventListener('mouseup', function() {
+            if (!_hb) return;
+            if (_hb.isDragging) {
+                _hb.isDragging = false;
+                canvas.style.cursor = 'default';
+            }
+        });
+
+        // Click: dispatch block-click event
+        canvas.addEventListener('click', function(e) {
+            if (!_hb) return;
+
+            // Jump to live button
+            if (_hb._jumpBtn) {
+                var rect = canvas.getBoundingClientRect();
+                var mx = e.clientX - rect.left;
+                var my = e.clientY - rect.top;
+                var btn = _hb._jumpBtn;
+                if (mx >= btn.x && mx <= btn.x + btn.w && my >= btn.y && my <= btn.y + btn.h) {
+                    _hb.autoFollow = true;
+                    _hb.hoveredBlock = null;
+                    return;
+                }
+            }
+
+            if (_hb.hoveredBlock) {
+                window.dispatchEvent(new CustomEvent('heartbeat-block-click', {
+                    detail: {
+                        height: _hb.hoveredBlock.height,
+                        timestamp: _hb.hoveredBlock.timestamp,
+                        tx_count: _hb.hoveredBlock.tx_count,
+                        total_fees: _hb.hoveredBlock.total_fees,
+                        weight: _hb.hoveredBlock.weight,
+                        inter_block_seconds: _hb.hoveredBlock.inter_block_seconds
+                    }
+                }));
+            }
+        });
+
+        // Touch support for mobile
+        canvas.addEventListener('touchstart', function(e) {
+            if (!_hb || e.touches.length !== 1) return;
+            _hb.isDragging = true;
+            _hb.dragStartX = e.touches[0].clientX;
+            _hb.dragStartOffset = _hb.viewOffset;
+        }, { passive: true });
+
+        canvas.addEventListener('touchmove', function(e) {
+            if (!_hb || !_hb.isDragging) return;
+            e.preventDefault();
+            var dx = e.touches[0].clientX - _hb.dragStartX;
+            _hb.viewOffset = _hb.dragStartOffset - dx;
+            _hb.autoFollow = false;
+            checkAutoFollow();
+        }, { passive: false });
+
+        canvas.addEventListener('touchend', function(e) {
+            if (!_hb) return;
+            if (_hb.isDragging) {
+                _hb.isDragging = false;
+
+                // Tap detection (minimal drag distance = click)
+                if (e.changedTouches && e.changedTouches.length > 0) {
+                    var dx = Math.abs(e.changedTouches[0].clientX - _hb.dragStartX);
+                    if (dx < 10) {
+                        // Treat as tap
+                        var rect = canvas.getBoundingClientRect();
+                        var mx = e.changedTouches[0].clientX - rect.left;
+                        var vx = canvasToVirtual(mx);
+                        var tapped = blockAtVirtualX(vx);
+
+                        // Check jump button
+                        if (_hb._jumpBtn) {
+                            var my = e.changedTouches[0].clientY - rect.top;
+                            var btn = _hb._jumpBtn;
+                            if (mx >= btn.x && mx <= btn.x + btn.w && my >= btn.y && my <= btn.y + btn.h) {
+                                _hb.autoFollow = true;
+                                _hb.hoveredBlock = null;
+                                return;
+                            }
+                        }
+
+                        if (tapped) {
+                            _hb.hoveredBlock = (_hb.hoveredBlock === tapped) ? null : tapped;
+                            if (_hb.hoveredBlock) {
+                                window.dispatchEvent(new CustomEvent('heartbeat-block-click', {
+                                    detail: {
+                                        height: tapped.height,
+                                        timestamp: tapped.timestamp,
+                                        tx_count: tapped.tx_count,
+                                        total_fees: tapped.total_fees,
+                                        weight: tapped.weight,
+                                        inter_block_seconds: tapped.inter_block_seconds
+                                    }
+                                }));
+                            }
+                        } else {
+                            _hb.hoveredBlock = null;
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Check if user has scrolled close enough to the live head to re-enable auto-follow
+    function checkAutoFollow() {
+        if (!_hb) return;
+        var headOnCanvas = _hb.virtualX - _hb.viewOffset;
+        // If the head is visible and within 50px of the right edge, snap back
+        if (headOnCanvas >= _hb.width * 0.75 && headOnCanvas <= _hb.width + 50) {
+            _hb.autoFollow = true;
+        }
+    }
+
     // ── Public API ─────────────────────────────────────────────
 
     window.initHeartbeat = function(canvasId) {
-        if (_hb) destroyHeartbeat();
+        if (_hb) window.destroyHeartbeat();
 
         var canvas = document.getElementById(canvasId);
         if (!canvas) return;
@@ -291,7 +772,6 @@
 
         var w = rect.width;
         var h = rect.height;
-        var baseline = h * 0.55;
 
         // Fill background and draw grid
         ctx.fillStyle = BG_COLOR;
@@ -303,23 +783,51 @@
             ctx: ctx,
             width: w,
             height: h,
-            x: 0,
-            prevX: 0,
-            prevY: baseline,
-            speed: 1.5,
-            queue: [],
-            currentWave: null,
-            waveIdx: 0,
-            flatlineRemaining: 0,
+            dpr: dpr,
+
+            // Virtual timeline
+            timeline: [],
+            virtualX: 0,
+            viewOffset: -w * 0.85,  // start so that x=0 is near the right
+            autoFollow: true,
+
+            // Rendering
+            rafId: null,
+            lastFrameTime: 0,
+
+            // Live state
             lastBlockTime: 0,
             nextBlockFee: 0,
             mempoolMB: 0,
+            mempoolMinFee: 0,
+            hashrateEH: 0,
+            difficulty: 0,
+            blockHeight: 0,
             currentColor: COLORS.healthy,
             prevColor: COLORS.healthy,
             targetColor: COLORS.healthy,
             colorLerp: 1,
-            rafId: null
+
+            // Interaction
+            isDragging: false,
+            dragStartX: 0,
+            dragStartOffset: 0,
+            hoveredBlock: null,
+            _jumpBtn: null,
+
+            // Mempool feed
+            ws: null,
+            wsConnected: false,
+
+            // Recent blocks (kept for vital signs / rhythm strip)
+            recentBlocks: []
         };
+
+        // Start with a live flatline at position 0
+        _hb.timeline.push(createFlatlineSegment(0, null));
+
+        // Setup input handlers
+        setupInputHandlers(canvas);
 
         // ResizeObserver for responsive canvas
         if (typeof ResizeObserver !== 'undefined') {
@@ -332,17 +840,15 @@
                 _hb.ctx.scale(dpr, dpr);
                 _hb.width = r.width;
                 _hb.height = r.height;
-                _hb.x = 0;
-                _hb.prevX = 0;
-                _hb.prevY = r.height * 0.55;
-                _hb.ctx.fillStyle = BG_COLOR;
-                _hb.ctx.fillRect(0, 0, r.width, r.height);
-                drawGrid(_hb.ctx, r.width, r.height);
             });
             _hb.resizeObs.observe(container);
         }
 
+        // Start animation loop
         _hb.rafId = requestAnimationFrame(drawFrame);
+
+        // Connect mempool WebSocket feed
+        connectMempoolFeed();
     };
 
     window.pushHeartbeatBlocks = function(json, replay) {
@@ -355,21 +861,64 @@
             for (var i = 0; i < blocks.length; i++) {
                 var b = blocks[i];
                 var interBlock = b.inter_block_seconds || 600;
-                var points = generatePQRST(b);
-                var flat = flatlinePixels(interBlock, isReplay);
 
-                _hb.queue.push({
-                    points: points,
-                    flatline: flat,
-                    timestamp: b.timestamp || 0,
-                    height: b.height || 0
-                });
+                // Close the current live flatline
+                var lastSeg = _hb.timeline[_hb.timeline.length - 1];
+                if (lastSeg && lastSeg.type === 'flatline' && lastSeg.x_end === null) {
+                    if (isReplay) {
+                        // For replay, use compressed flatline width based on inter-block time
+                        lastSeg.x_end = lastSeg.x_start + historyFlatlineWidth(interBlock);
+                        _hb.virtualX = lastSeg.x_end;
+                    } else {
+                        // For live, close at current virtual head position
+                        lastSeg.x_end = _hb.virtualX;
+                    }
+                    // Mark existing blips for fade-out (they got confirmed)
+                    if (lastSeg.blips) {
+                        var fadeNow = Date.now() / 1000;
+                        for (var bi = 0; bi < lastSeg.blips.length; bi++) {
+                            if (lastSeg.blips[bi].fadeStart === 0) {
+                                lastSeg.blips[bi].fadeStart = fadeNow;
+                            }
+                        }
+                    }
+                }
+
+                // Create block segment at the current virtual head
+                var blockSeg = createBlockSegment(b, _hb.virtualX);
+                _hb.timeline.push(blockSeg);
+                _hb.virtualX = blockSeg.x_end;
 
                 // Update last block time
                 if (b.timestamp) {
                     _hb.lastBlockTime = b.timestamp;
                 }
+
+                // Create a new live flatline after this block
+                _hb.timeline.push(createFlatlineSegment(_hb.virtualX, null));
+
+                // Maintain recentBlocks list (up to 2016 for period history)
+                _hb.recentBlocks.push({
+                    timestamp: b.timestamp,
+                    height: b.height,
+                    tx_count: b.tx_count,
+                    total_fees: b.total_fees,
+                    size: b.size,
+                    weight: b.weight,
+                    inter_block_seconds: b.inter_block_seconds
+                });
             }
+
+            // Trim recentBlocks to last 2016
+            if (_hb.recentBlocks.length > 2016) {
+                _hb.recentBlocks = _hb.recentBlocks.slice(-2016);
+            }
+
+            // Prune very old timeline segments to avoid unbounded memory growth.
+            // Keep at least enough segments to fill 3x the canvas width behind the
+            // current viewport, which is plenty for casual scrolling. If the user
+            // scrolls further back after pruning, they just see a flat start.
+            pruneTimeline();
 
             // Dispatch event for UI updates
             if (blocks.length > 0) {
@@ -388,6 +937,25 @@
         }
     };
 
+    // Prune timeline segments that are far behind the viewport to limit memory
+    function pruneTimeline() {
+        if (!_hb || _hb.timeline.length < 200) return;
+        var minX = _hb.viewOffset - _hb.width * 3;
+        var cutIdx = 0;
+        for (var i = 0; i < _hb.timeline.length; i++) {
+            var seg = _hb.timeline[i];
+            var segEnd = seg.type === 'block' ? seg.x_end : (seg.x_end !== null ? seg.x_end : _hb.virtualX);
+            if (segEnd < minX) {
+                cutIdx = i;
+            } else {
+                break;
+            }
+        }
+        if (cutIdx > 0) {
+            _hb.timeline = _hb.timeline.slice(cutIdx);
+        }
+    }
+
     window.updateHeartbeatLive = function(json) {
         if (!_hb) return;
         try {
@@ -397,9 +965,23 @@
             if (data.block_time !== undefined && data.block_time > _hb.lastBlockTime) {
                 _hb.lastBlockTime = data.block_time;
             }
+            if (data.hashrate_eh !== undefined) _hb.hashrateEH = data.hashrate_eh;
+            if (data.mempool_min_fee !== undefined) _hb.mempoolMinFee = data.mempool_min_fee;
+            if (data.difficulty !== undefined) _hb.difficulty = data.difficulty;
+            if (data.block_height !== undefined) _hb.blockHeight = data.block_height;
         } catch (e) {
             console.warn('heartbeat: bad live json', e);
         }
+    };
+
+    window.destroyHeartbeat = function() {
+        if (!_hb) return;
+        if (_hb.rafId) cancelAnimationFrame(_hb.rafId);
+        if (_hb.resizeObs) _hb.resizeObs.disconnect();
+        if (_hb.ws) {
+            try { _hb.ws.close(); } catch(e) {}
+        }
+        _hb = null;
     };
 
     // ── Phase 2: Vital Signs computation ─────────────────────
@@ -864,62 +1446,10 @@
         document.body.removeChild(link);
     };
 
-    // ── Update existing functions to support new features ─────
-
-    // Override pushHeartbeatBlocks to also track recent blocks
-    var _origPush = window.pushHeartbeatBlocks;
-    window.pushHeartbeatBlocks = function(json, replay) {
-        _origPush(json, replay);
-        if (!_hb) return;
-        // Maintain recentBlocks list (up to 144 for rhythm strip)
-        if (!_hb.recentBlocks) _hb.recentBlocks = [];
-        try {
-            var blocks = JSON.parse(json);
-            if (Array.isArray(blocks)) {
-                for (var i = 0; i < blocks.length; i++) {
-                    _hb.recentBlocks.push({
-                        timestamp: blocks[i].timestamp,
-                        height: blocks[i].height,
-                        tx_count: blocks[i].tx_count,
-                        total_fees: blocks[i].total_fees,
-                        size: blocks[i].size,
-                        weight: blocks[i].weight,
-                        inter_block_seconds: blocks[i].inter_block_seconds
-                    });
-                }
-                // Keep last 144
-                if (_hb.recentBlocks.length > 144) {
-                    _hb.recentBlocks = _hb.recentBlocks.slice(-144);
-                }
-            }
-        } catch(e) {}
-    };
-
-    // Override updateHeartbeatLive to accept additional fields
-    var _origUpdate = window.updateHeartbeatLive;
-    window.updateHeartbeatLive = function(json) {
-        _origUpdate(json);
-        if (!_hb) return;
-        try {
-            var data = JSON.parse(json);
-            if (data.hashrate_eh !== undefined) _hb.hashrateEH = data.hashrate_eh;
-            if (data.mempool_min_fee !== undefined) _hb.mempoolMinFee = data.mempool_min_fee;
-            if (data.difficulty !== undefined) _hb.difficulty = data.difficulty;
-            if (data.block_height !== undefined) _hb.blockHeight = data.block_height;
-        } catch(e) {}
-    };
-
     // Get recent blocks JSON for rhythm strip
     window.getHeartbeatRecentBlocks = function() {
         if (!_hb || !_hb.recentBlocks) return '[]';
         return JSON.stringify(_hb.recentBlocks);
-    };
-
-    window.destroyHeartbeat = function() {
-        if (!_hb) return;
-        if (_hb.rafId) cancelAnimationFrame(_hb.rafId);
-        if (_hb.resizeObs) _hb.resizeObs.disconnect();
-        _hb = null;
     };
 
 })();
