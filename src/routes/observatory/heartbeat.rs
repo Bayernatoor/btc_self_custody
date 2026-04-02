@@ -364,8 +364,6 @@ pub fn HeartbeatPage() -> impl IntoView {
                             leptos::prelude::set_timeout(move || {
                                 try_fetch(from, to, rest);
                             }, std::time::Duration::from_secs(delay));
-                        } else {
-
                         }
                     });
                 }
