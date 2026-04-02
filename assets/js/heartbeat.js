@@ -942,23 +942,45 @@
 
                 // Draw normal blip as a stacked brick
                 if (!isAbsorbing) {
-                    // Draw at grid-snapped position for clean columns
                     var bx = virtualToCanvas(blip.gridX || blipX);
                     var blipColor = blip.color || 'rgba(0, 230, 118, ';
                     var bw = (blip.brickW || 4) * zoom;
                     var bh = blip.brickH || blipH;
                     var sy = blip.stackY || 0;
-                    // Draw filled rectangle stacked above baseline
+
+                    // Fade-in animation: bricks grow from 0 to full size over 0.4s
+                    var age = nowSec - blip.timestamp;
+                    var fadeIn = Math.min(age / 0.4, 1.0);
+                    bh *= fadeIn;
+                    bOpacity *= fadeIn;
+
+                    // At high zoom: add padding between bricks for distinction
+                    var gap = 0;
+                    if (zoom > 4) {
+                        gap = Math.min((zoom - 4) * 0.3, 2); // up to 2px gap
+                        bw = Math.max(bw - gap, 2);
+                    }
+
+                    // Draw filled rectangle
                     ctx.fillStyle = blipColor + bOpacity + ')';
-                    ctx.shadowBlur = 4;
+                    ctx.shadowBlur = zoom > 6 ? 2 : 4;
                     ctx.shadowColor = blipColor + (bOpacity * 0.4) + ')';
                     ctx.fillRect(bx - bw / 2, baseline - sy - bh, bw, bh);
                     ctx.shadowBlur = 0;
-                    // Subtle border for definition
+
+                    // Border: subtle at low zoom, clear at high zoom
                     if (zoom > 1.5) {
-                        ctx.strokeStyle = blipColor + (bOpacity * 0.3) + ')';
-                        ctx.lineWidth = 0.5;
-                        ctx.strokeRect(bx - bw / 2, baseline - sy - bh, bw, bh);
+                        var borderAlpha = zoom > 6 ? 0.5 : 0.3;
+                        ctx.strokeStyle = blipColor + (bOpacity * borderAlpha) + ')';
+                        ctx.lineWidth = zoom > 10 ? 1 : 0.5;
+                        ctx.strokeRect(bx - bw / 2 + 0.5, baseline - sy - bh + 0.5, bw - 1, bh - 1);
+                    }
+
+                    // At very high zoom (>15x): show txid text inside the brick
+                    if (zoom > 15 && blip.txid && bw > 30 && bh > 10) {
+                        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                        ctx.font = '7px monospace';
+                        ctx.fillText(blip.txid.substring(0, 6), bx - bw / 2 + 2, baseline - sy - bh + 8);
                     }
                 }
                 ctx.shadowBlur = 0;
@@ -1113,9 +1135,9 @@
                     _hb.hoveredFlatline = null;
 
                     if (!_hb.hoveredBlock) {
-                        // Check for blip hover (above flatline, when zoomed in)
-                        if (my < baseline && _hb.zoom >= 1.5) {
-                            _hb.hoveredBlip = blipAtVirtualX(vx, 5 / _hb.zoom);
+                        // Check for blip hover above flatline (at 4x+ zoom, bricks are distinct)
+                        if (my < baseline && _hb.zoom >= 4) {
+                            _hb.hoveredBlip = blipAtVirtualX(vx, 3 / _hb.zoom);
                         }
                         if (!_hb.hoveredBlip) {
                             _hb.hoveredFlatline = flatlineAtVirtualX(vx);
@@ -1316,7 +1338,7 @@
             autoFollow: true,
             zoom: 1.9,              // default zoom for brick-level detail
             minZoom: 0.1,
-            maxZoom: 8.0,
+            maxZoom: 30.0,
 
             // Rendering
             rafId: null,
