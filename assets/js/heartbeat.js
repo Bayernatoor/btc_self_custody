@@ -41,17 +41,20 @@
 
         // Normalize inputs (0-1 range)
         var txNorm = Math.min(txCount / 6000, 1.0);
-        var feeNorm = Math.min(fees / 5000000, 1.0);    // 0.05 BTC — typical range 0.003-0.03
         var waitNorm = Math.min(interBlock / 1800, 1.0); // 30 min cap
         var fullNorm = Math.min(weight / 4000000, 1.0);
 
-        // Use log scale for fees to amplify differences in normal range
-        var feeLog = fees > 0 ? Math.min(Math.log10(fees) / 7.7, 1.0) : 0; // log10(50M)=7.7
+        // Fee normalization: use sqrt to preserve visible differences in the
+        // typical range (1M-50M sats). The old log10/7.7 compressed 0.02 BTC
+        // vs 0.1 BTC into 0.82 vs 0.91 — barely distinguishable.
+        // sqrt maps: 1M sats -> 0.14, 2M -> 0.20, 5M -> 0.32, 10M -> 0.45,
+        //            20M -> 0.63, 50M -> 1.0  (good spread across the range)
+        var feeNorm = fees > 0 ? Math.min(Math.sqrt(fees / 50000000), 1.0) : 0;
 
         // Waveform amplitudes (pixels)
         var pAmp   = 6 + txNorm * 28;           // P wave: 6-34px
         var qDepth = 8 + waitNorm * 60;          // Q dip: 8-68px
-        var rHeight = 30 + feeLog * 170;          // R spike: 30-200px (log scale)
+        var rHeight = 25 + feeNorm * 195;         // R spike: 25-220px (sqrt scale)
         var sDepth = rHeight * 0.45;              // S dip: 45% of R
         var tAmp   = 4 + fullNorm * 30;           // T wave: 4-34px
 
