@@ -633,7 +633,7 @@ fn VitalTile(
                 {status}
             </span>
             {subtitle.map(|sub| view! {
-                <span class="text-[10px] text-white/25 font-mono">{sub}</span>
+                <span class="text-[11px] text-white/50 font-mono">{sub}</span>
             })}
         </div>
     }
