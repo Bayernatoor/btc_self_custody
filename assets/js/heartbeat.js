@@ -1153,8 +1153,11 @@
             for (var i = 0; i < blocks.length; i++) {
                 var b = blocks[i];
                 var interBlock = b.inter_block_seconds || 600;
-                // For live blocks, compute real interval from last known block time
-                if (!isReplay && _hb.lastBlockTime > 0 && b.timestamp > _hb.lastBlockTime) {
+                // For live blocks, compute real interval from the previous block's timestamp
+                // Use _prevBlockTime (set before LiveStats overwrites lastBlockTime)
+                if (!isReplay && _hb._prevBlockTime > 0 && b.timestamp > _hb._prevBlockTime) {
+                    interBlock = b.timestamp - _hb._prevBlockTime;
+                } else if (!isReplay && _hb.lastBlockTime > 0 && b.timestamp > _hb.lastBlockTime) {
                     interBlock = b.timestamp - _hb.lastBlockTime;
                 }
 
@@ -1305,6 +1308,8 @@
             if (data.next_block_fee !== undefined) _hb.nextBlockFee = data.next_block_fee;
             if (data.mempool_mb !== undefined) _hb.mempoolMB = data.mempool_mb;
             if (data.block_time !== undefined && data.block_time > _hb.lastBlockTime) {
+                // Store previous block time before overwriting (needed for inter-block calc)
+                _hb._prevBlockTime = _hb.lastBlockTime;
                 _hb.lastBlockTime = data.block_time;
             }
             if (data.hashrate_eh !== undefined) _hb.hashrateEH = data.hashrate_eh;
