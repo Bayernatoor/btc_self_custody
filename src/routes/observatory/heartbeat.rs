@@ -181,10 +181,14 @@ pub fn HeartbeatPage() -> impl IntoView {
             let json = blocks_to_json(&blocks);
             push_heartbeat_blocks(&json, true);
 
-            // Store last height
-            if let Some(last) = blocks.last() {
-                last_height.set(last.height);
-            }
+            // Store last height — use the latest from LiveStats (not the last replayed block)
+            // to avoid missing blocks that arrived between fetch and now
+            let live_height = cached_live.get_untracked()
+                .map(|s| s.blockchain.blocks)
+                .unwrap_or(0);
+            let replay_height = blocks.last().map(|b| b.height).unwrap_or(0);
+            last_height.set(std::cmp::max(live_height, replay_height));
+            leptos::logging::log!("heartbeat: init done, last_height={}", last_height.get());
 
             // Render rhythm strip with last 144 blocks (24hr)
             let strip_blocks = if blocks.len() > 144 {
@@ -252,9 +256,14 @@ pub fn HeartbeatPage() -> impl IntoView {
         // Refresh vitals display
         refresh_vitals();
 
-        // Check for new blocks
+        // Check for new blocks (only after init completes)
+        if !initialized2.get() {
+            return;
+        }
         let prev = last_height2.get();
-        if prev > 0 && current_height > prev && initialized2.get() {
+        leptos::logging::log!("heartbeat: poll height={} prev={} init=true", current_height, prev);
+        if prev > 0 && current_height > prev {
+            leptos::logging::log!("heartbeat: NEW BLOCK detected! fetching {}..{}", prev + 1, current_height);
             last_height2.set(current_height);
 
             // Phase 4: flash and pulse on new block
@@ -298,8 +307,6 @@ pub fn HeartbeatPage() -> impl IntoView {
                     }
                 }
             });
-        } else if prev == 0 && current_height > 0 {
-            last_height2.set(current_height);
         }
     });
 

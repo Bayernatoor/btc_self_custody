@@ -1119,11 +1119,13 @@
     };
 
     window.pushHeartbeatBlocks = function(json, replay) {
-        if (!_hb) return;
+        if (!_hb) { console.warn('heartbeat: push called but _hb is null'); return; }
         var isReplay = !!replay;
         try {
             var blocks = JSON.parse(json);
             if (!Array.isArray(blocks)) return;
+            console.log('heartbeat: pushing ' + blocks.length + ' block(s), replay=' + isReplay,
+                blocks.length > 0 ? 'height=' + blocks[0].height : '');
 
             for (var i = 0; i < blocks.length; i++) {
                 var b = blocks[i];
