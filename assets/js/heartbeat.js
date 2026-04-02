@@ -1481,7 +1481,7 @@
     };
 
     window.pushHeartbeatBlocks = function(json, replay) {
-        if (!_hb) { console.warn('heartbeat: push called but _hb is null'); return; }
+        if (!_hb) return;
         var isReplay = !!replay;
         try {
             var blocks = JSON.parse(json);
@@ -1605,7 +1605,7 @@
             }
 
         } catch (e) {
-            console.warn('heartbeat: bad block json', e);
+            // silently ignore malformed block JSON
         }
     };
 
@@ -1644,7 +1644,7 @@
             if (data.difficulty !== undefined) _hb.difficulty = data.difficulty;
             if (data.block_height !== undefined) _hb.blockHeight = data.block_height;
         } catch (e) {
-            console.warn('heartbeat: bad live json', e);
+            // silently ignore malformed live JSON
         }
     };
 
