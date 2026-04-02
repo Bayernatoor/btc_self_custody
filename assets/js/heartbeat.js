@@ -20,6 +20,15 @@
     var BG_COLOR = 'rgba(13, 33, 55, 1)'; // matches bg-[#0d2137]
     var GRID_COLOR = 'rgba(255, 255, 255, 0.03)';
 
+    // ── Thresholds & dimensions ───────────────────────────────
+    var POINT_WIDTH = 1.5;          // virtual pixels per PQRST point
+    var FLATLINE_PX_PER_SEC = 5.0;  // live flatline advance rate
+    var HEAD_POSITION_FRAC = 0.85;  // viewport fraction for live head
+    var MAX_FLATLINE_WIDTH = 300;   // max compressed flatline px
+    var RETARGET_PERIOD = 2016;     // blocks per difficulty epoch
+    var RHYTHM_STRIP_BLOCKS = 144;  // blocks in 24hr strip
+    var MAX_BLIPS_PER_SEGMENT = 2000; // prune threshold
+
     // ── PQRST waveform generation ──────────────────────────────
     // Converts block data into an array of y-offset points (from baseline).
     // Negative y = upward on canvas (screen coords).
@@ -134,13 +143,10 @@
         return 'rgb(' + r + ',' + g + ',' + bl + ')';
     }
 
-    // ── Constants for timeline pixel mapping ───────────────────
-    var POINT_WIDTH = 1.5;  // Each PQRST point = 1.5 virtual pixels wide
-
     // Compute flatline width in virtual pixels for a completed (history) flatline
     function historyFlatlineWidth(interBlockSeconds) {
         // Proportional: 1min=15px, 5min=75px, 10min=150px, 30min=300px (capped)
-        return Math.max(10, Math.min(interBlockSeconds / 4, 300));
+        return Math.max(10, Math.min(interBlockSeconds / 4, MAX_FLATLINE_WIDTH));
     }
 
     // ── Grid drawing ───────────────────────────────────────────
@@ -374,21 +380,15 @@
     }
 
     // ── Tooltip drawing ────────────────────────────────────────
-    function drawTooltip(ctx, seg, canvasX, canvasY, baseline) {
-        var padding = 8;
-        var lineH = 16;
-        var lines = [
-            'Block #' + seg.height,
-            'Txns: ' + seg.tx_count.toLocaleString(),
-            'Fees: ' + (seg.total_fees / 100000000).toFixed(4) + ' BTC',
-            'Wait: ' + formatDuration(seg.inter_block_seconds)
-        ];
-        if (seg.timestamp) {
-            var d = new Date(seg.timestamp * 1000);
-            lines.push(d.toISOString().replace('T', ' ').slice(0, 19) + ' UTC');
-        }
 
-        ctx.font = '12px monospace';
+    // Generic tooltip box: draws a rounded rect with lines of text.
+    // `anchorY` is the y position to place the box above; `borderColor` sets the border.
+    function drawTooltipBox(ctx, lines, canvasX, anchorY, borderColor, opts) {
+        var padding = (opts && opts.padding) || 8;
+        var lineH = (opts && opts.lineH) || 16;
+        var fontSize = (opts && opts.fontSize) || '12px monospace';
+
+        ctx.font = fontSize;
         var maxW = 0;
         for (var i = 0; i < lines.length; i++) {
             var m = ctx.measureText(lines[i]).width;
@@ -398,7 +398,7 @@
         var boxW = maxW + padding * 2;
         var boxH = lines.length * lineH + padding * 2;
         var boxX = canvasX - boxW / 2;
-        var boxY = canvasY - boxH - 12; // above the waveform
+        var boxY = anchorY - boxH;
 
         // Clamp to canvas bounds
         if (boxX < 4) boxX = 4;
@@ -412,18 +412,32 @@
         ctx.fill();
 
         // Border
-        ctx.strokeStyle = seg.color;
+        ctx.strokeStyle = borderColor;
         ctx.lineWidth = 1;
         ctx.beginPath();
         roundRect(ctx, boxX, boxY, boxW, boxH, 4);
         ctx.stroke();
 
         // Text
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-        ctx.font = '12px monospace';
+        ctx.fillStyle = (opts && opts.textColor) || 'rgba(255, 255, 255, 0.85)';
+        ctx.font = fontSize;
         for (var i = 0; i < lines.length; i++) {
             ctx.fillText(lines[i], boxX + padding, boxY + padding + (i + 1) * lineH - 3);
         }
+    }
+
+    function drawTooltip(ctx, seg, canvasX, canvasY, baseline) {
+        var lines = [
+            'Block #' + seg.height,
+            'Txns: ' + seg.tx_count.toLocaleString(),
+            'Fees: ' + (seg.total_fees / 100000000).toFixed(4) + ' BTC',
+            'Wait: ' + formatDuration(seg.inter_block_seconds)
+        ];
+        if (seg.timestamp) {
+            var d = new Date(seg.timestamp * 1000);
+            lines.push(d.toISOString().replace('T', ' ').slice(0, 19) + ' UTC');
+        }
+        drawTooltipBox(ctx, lines, canvasX, canvasY - 12, seg.color);
     }
 
     function roundRect(ctx, x, y, w, h, r) {
@@ -444,43 +458,14 @@
             '~' + (blip.txCount || 1) + ' tx' + ((blip.txCount || 1) > 1 ? 's' : ''),
             'Fee: ~' + (blip.feeRate ? Math.round(blip.feeRate * 10) / 10 : '?') + ' sat/vB',
         ];
-        var d = new Date((blip.timestamp || 0) * 1000);
         if (blip.timestamp) {
+            var d = new Date(blip.timestamp * 1000);
             lines.push(d.toLocaleTimeString());
         }
-
-        var padding = 6;
-        var lineH = 15;
-        ctx.font = '11px monospace';
-        var maxW = 0;
-        for (var i = 0; i < lines.length; i++) {
-            var m = ctx.measureText(lines[i]).width;
-            if (m > maxW) maxW = m;
-        }
-        var boxW = maxW + padding * 2;
-        var boxH = lines.length * lineH + padding * 2;
-        var boxX = canvasX - boxW / 2;
-        var boxY = baseline - blip.height - boxH - 12;
-        if (boxX < 4) boxX = 4;
-        if (boxX + boxW > _hb.width - 4) boxX = _hb.width - boxW - 4;
-        if (boxY < 4) boxY = 4;
-
-        ctx.fillStyle = 'rgba(10, 25, 41, 0.92)';
-        ctx.beginPath();
-        roundRect(ctx, boxX, boxY, boxW, boxH, 4);
-        ctx.fill();
         var blipColor = blip.color ? blip.color + '0.6)' : 'rgba(0,230,118,0.6)';
-        ctx.strokeStyle = blipColor;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        roundRect(ctx, boxX, boxY, boxW, boxH, 4);
-        ctx.stroke();
-
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-        ctx.font = '11px monospace';
-        for (var i = 0; i < lines.length; i++) {
-            ctx.fillText(lines[i], boxX + padding, boxY + padding + (i + 1) * lineH - 3);
-        }
+        drawTooltipBox(ctx, lines, canvasX, baseline - blip.height - 12, blipColor, {
+            padding: 6, lineH: 15, fontSize: '11px monospace', textColor: 'rgba(255, 255, 255, 0.8)'
+        });
     }
 
     // Flatline tooltip: shows interval between surrounding blocks
@@ -491,7 +476,6 @@
             lines.push('Block #' + info.prevBlock.height + ' \u2192 #' + info.nextBlock.height);
             lines.push('Interval: ' + formatDuration(interval));
         } else if (info.prevBlock && !info.nextBlock) {
-            // Live flatline - show time since last block + tx count
             var elapsed = Math.floor(Date.now() / 1000 - info.prevBlock.timestamp);
             var totalTxs = 0;
             if (info.segment.blips) {
@@ -506,41 +490,9 @@
             lines.push('Waiting for blocks...');
         }
         lines = lines.filter(function(l) { return l.length > 0; });
-
-        var padding = 8;
-        var lineH = 16;
-        ctx.font = '12px monospace';
-        var maxW = 0;
-        for (var i = 0; i < lines.length; i++) {
-            var m = ctx.measureText(lines[i]).width;
-            if (m > maxW) maxW = m;
-        }
-
-        var boxW = maxW + padding * 2;
-        var boxH = lines.length * lineH + padding * 2;
-        var boxX = canvasX - boxW / 2;
-        var boxY = baseline - boxH - 20;
-
-        if (boxX < 4) boxX = 4;
-        if (boxX + boxW > _hb.width - 4) boxX = _hb.width - boxW - 4;
-        if (boxY < 4) boxY = 4;
-
-        ctx.fillStyle = 'rgba(10, 25, 41, 0.92)';
-        ctx.beginPath();
-        roundRect(ctx, boxX, boxY, boxW, boxH, 4);
-        ctx.fill();
-
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        roundRect(ctx, boxX, boxY, boxW, boxH, 4);
-        ctx.stroke();
-
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-        ctx.font = '12px monospace';
-        for (var i = 0; i < lines.length; i++) {
-            ctx.fillText(lines[i], boxX + padding, boxY + padding + (i + 1) * lineH - 3);
-        }
+        drawTooltipBox(ctx, lines, canvasX, baseline - 20, 'rgba(255, 255, 255, 0.15)', {
+            textColor: 'rgba(255, 255, 255, 0.7)'
+        });
     }
 
     function formatDuration(sec) {
@@ -598,14 +550,12 @@
         // ── Advance live flatline ──────────────────────────────
         var liveSeg = _hb.timeline.length > 0 ? _hb.timeline[_hb.timeline.length - 1] : null;
         if (liveSeg && liveSeg.type === 'flatline' && liveSeg.x_end === null) {
-            // Grow at 5 virtual pixels per second (10min block = ~3000px of flatline)
-            _hb.virtualX += dt * 5.0;
+            _hb.virtualX += dt * FLATLINE_PX_PER_SEC;
         }
 
         // If auto-following, keep viewport pinned to the head (zoom-aware)
         if (_hb.autoFollow) {
-            // Place the head at 85% of canvas width in virtual coords
-            _hb.viewOffset = _hb.virtualX - (w * 0.85) / _hb.zoom;
+            _hb.viewOffset = _hb.virtualX - (w * HEAD_POSITION_FRAC) / _hb.zoom;
         }
 
         // ── Compute current color from live state ──────────────
@@ -668,7 +618,7 @@
                 drawBlockSegment(ctx, seg, viewLeft, baseline, liveColor);
             } else {
                 var flatColor = (seg.x_end === null) ? liveColor : (seg.color || COLORS.healthy);
-                drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, baseline, flatColor, jitter, seg.x_end === null);
+                drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, baseline, flatColor, jitter, seg.x_end === null, now);
             }
         }
 
@@ -748,7 +698,7 @@
     }
 
     // Draw a flatline segment (with optional blips)
-    function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, baseline, color, jitter, isLive) {
+    function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, baseline, color, jitter, isLive, nowSec) {
         // Clamp to visible range
         var drawStart = Math.max(seg.x_start, viewLeft);
         var drawEnd = Math.min(segEnd, viewRight);
@@ -779,11 +729,10 @@
 
                 var bx = virtualToCanvas(blip.x);
                 var bOpacity = blip.opacity;
-                var now = Date.now() / 1000;
 
                 // Fade out confirmed blips fast (block arrived)
                 if (blip.fadeStart > 0) {
-                    var fadeDt = now - blip.fadeStart;
+                    var fadeDt = nowSec - blip.fadeStart;
                     bOpacity = Math.max(0, blip.opacity - fadeDt * 0.5);
                     if (bOpacity <= 0) continue;
                 }
@@ -802,8 +751,8 @@
             }
 
             // Only prune confirmed blips that have fully faded (block arrived)
-            if (seg.blips.length > 2000) {
-                var cutoff = Date.now() / 1000;
+            if (seg.blips.length > MAX_BLIPS_PER_SEGMENT) {
+                var cutoff = nowSec;
                 seg.blips = seg.blips.filter(function(b) {
                     if (b.fadeStart > 0) return (cutoff - b.fadeStart) < 3;
                     return true; // keep all unconfirmed blips
@@ -854,6 +803,19 @@
 
     // ── Input handling ─────────────────────────────────────────
 
+    // Check if (mx, my) hits the "Jump to Live" button; if so, activate auto-follow.
+    function tryJumpToLive(mx, my) {
+        if (!_hb || !_hb._jumpBtn) return false;
+        var btn = _hb._jumpBtn;
+        if (mx >= btn.x && mx <= btn.x + btn.w && my >= btn.y && my <= btn.y + btn.h) {
+            _hb.autoFollow = true;
+            _hb.zoom = 1.0;
+            _hb.hoveredBlock = null;
+            return true;
+        }
+        return false;
+    }
+
     function setupInputHandlers(canvas) {
         // Track listeners for cleanup in destroyHeartbeat
         _hb._listeners = [];
@@ -895,19 +857,8 @@
         listen(canvas, 'mousedown', function(e) {
             if (!_hb) return;
 
-            // Check "Jump to Live" button click
-            if (_hb._jumpBtn) {
-                var rect = canvas.getBoundingClientRect();
-                var mx = e.clientX - rect.left;
-                var my = e.clientY - rect.top;
-                var btn = _hb._jumpBtn;
-                if (mx >= btn.x && mx <= btn.x + btn.w && my >= btn.y && my <= btn.y + btn.h) {
-                    _hb.autoFollow = true;
-                    _hb.zoom = 1.0;
-                    _hb.hoveredBlock = null;
-                    return;
-                }
-            }
+            var rect = canvas.getBoundingClientRect();
+            if (tryJumpToLive(e.clientX - rect.left, e.clientY - rect.top)) return;
 
             stopMomentum();
             _hb.isDragging = true;
@@ -957,7 +908,6 @@
                         }
                     }
                     _hb.hoverCanvasX = mx;
-                    _hb.hoverCanvasY = my;
                     canvas.style.cursor = _hb.hoveredBlock ? 'pointer'
                         : _hb.hoveredBlip ? 'pointer'
                         : _hb.hoveredFlatline ? 'crosshair' : 'default';
@@ -982,36 +932,10 @@
             }
         });
 
-        // Click: dispatch block-click event
         listen(canvas, 'click', function(e) {
             if (!_hb) return;
-
-            // Jump to live button
-            if (_hb._jumpBtn) {
-                var rect = canvas.getBoundingClientRect();
-                var mx = e.clientX - rect.left;
-                var my = e.clientY - rect.top;
-                var btn = _hb._jumpBtn;
-                if (mx >= btn.x && mx <= btn.x + btn.w && my >= btn.y && my <= btn.y + btn.h) {
-                    _hb.autoFollow = true;
-                    _hb.zoom = 1.0;
-                    _hb.hoveredBlock = null;
-                    return;
-                }
-            }
-
-            if (_hb.hoveredBlock) {
-                window.dispatchEvent(new CustomEvent('heartbeat-block-click', {
-                    detail: {
-                        height: _hb.hoveredBlock.height,
-                        timestamp: _hb.hoveredBlock.timestamp,
-                        tx_count: _hb.hoveredBlock.tx_count,
-                        total_fees: _hb.hoveredBlock.total_fees,
-                        weight: _hb.hoveredBlock.weight,
-                        inter_block_seconds: _hb.hoveredBlock.inter_block_seconds
-                    }
-                }));
-            }
+            var rect = canvas.getBoundingClientRect();
+            tryJumpToLive(e.clientX - rect.left, e.clientY - rect.top);
         });
 
         // Touch support: 1 finger = pan with momentum, 2 fingers = pinch-to-zoom
@@ -1098,32 +1022,11 @@
                         var vx = canvasToVirtual(mx);
                         var tapped = blockAtVirtualX(vx);
 
-                        // Check jump button
-                        if (_hb._jumpBtn) {
-                            var my = e.changedTouches[0].clientY - rect.top;
-                            var btn = _hb._jumpBtn;
-                            if (mx >= btn.x && mx <= btn.x + btn.w && my >= btn.y && my <= btn.y + btn.h) {
-                                _hb.autoFollow = true;
-                    _hb.zoom = 1.0;
-                                _hb.hoveredBlock = null;
-                                return;
-                            }
-                        }
+                        var my = e.changedTouches[0].clientY - rect.top;
+                        if (tryJumpToLive(mx, my)) return;
 
                         if (tapped) {
                             _hb.hoveredBlock = (_hb.hoveredBlock === tapped) ? null : tapped;
-                            if (_hb.hoveredBlock) {
-                                window.dispatchEvent(new CustomEvent('heartbeat-block-click', {
-                                    detail: {
-                                        height: tapped.height,
-                                        timestamp: tapped.timestamp,
-                                        tx_count: tapped.tx_count,
-                                        total_fees: tapped.total_fees,
-                                        weight: tapped.weight,
-                                        inter_block_seconds: tapped.inter_block_seconds
-                                    }
-                                }));
-                            }
                         } else {
                             _hb.hoveredBlock = null;
                         }
@@ -1180,7 +1083,7 @@
             // Virtual timeline
             timeline: [],
             virtualX: 0,
-            viewOffset: -w * 0.85,  // start so that x=0 is near the right
+            viewOffset: -w * HEAD_POSITION_FRAC,
             autoFollow: true,
             zoom: 1.0,              // 1.0 = normal, >1 = zoomed in, <1 = zoomed out
             minZoom: 0.1,
@@ -1211,8 +1114,8 @@
             hoveredBlip: null,
             hoveredFlatline: null,
             hoverCanvasX: 0,
-            hoverCanvasY: 0,
             _jumpBtn: null,
+            _flashTimer: null,
 
             // Mempool feed
             ws: null,
@@ -1256,9 +1159,6 @@
         try {
             var blocks = JSON.parse(json);
             if (!Array.isArray(blocks)) return;
-            console.log('heartbeat: pushing ' + blocks.length + ' block(s), replay=' + isReplay,
-                blocks.length > 0 ? 'height=' + blocks[0].height : '');
-
             for (var i = 0; i < blocks.length; i++) {
                 var b = blocks[i];
                 var interBlock = b.inter_block_seconds || 600;
@@ -1325,9 +1225,8 @@
                 });
             }
 
-            // Trim recentBlocks to last 2016
-            if (_hb.recentBlocks.length > 2016) {
-                _hb.recentBlocks = _hb.recentBlocks.slice(-2016);
+            if (_hb.recentBlocks.length > RETARGET_PERIOD) {
+                _hb.recentBlocks = _hb.recentBlocks.slice(-RETARGET_PERIOD);
             }
 
             // Prune very old timeline segments to avoid unbounded memory growth.
@@ -1342,7 +1241,7 @@
                 var elapsed = nowSec - _hb.lastBlockTime;
                 if (elapsed > 0 && elapsed < 7200) { // cap at 2 hours
                     // Advance virtualX to represent the elapsed time
-                    var advancePx = elapsed * 5.0; // same rate as live (5px/sec)
+                    var advancePx = elapsed * FLATLINE_PX_PER_SEC;
                     _hb.virtualX += advancePx;
 
                     // Scatter some synthetic blips across the gap to represent
@@ -1375,23 +1274,11 @@
                     // Ensure viewport is at 1x zoom and following the head
                     _hb.zoom = 1.0;
                     _hb.autoFollow = true;
-                    _hb.viewOffset = _hb.virtualX - (_hb.width * 0.85);
-                    console.log('heartbeat: fast-forwarded ' + Math.round(elapsed) + 's (' + Math.round(advancePx) + 'px), ' + numBlips + ' synthetic blips');
+                    _hb.viewOffset = _hb.virtualX - (_hb.width * HEAD_POSITION_FRAC);
+
                 }
             }
 
-            // Dispatch event for UI updates
-            if (blocks.length > 0) {
-                var last = blocks[blocks.length - 1];
-                window.dispatchEvent(new CustomEvent('heartbeat-block', {
-                    detail: {
-                        height: last.height,
-                        timestamp: last.timestamp,
-                        tx_count: last.tx_count,
-                        total_fees: last.total_fees
-                    }
-                }));
-            }
         } catch (e) {
             console.warn('heartbeat: bad block json', e);
         }
@@ -1440,6 +1327,7 @@
         if (!_hb) return;
         stopMomentum();
         if (_hb.rafId) cancelAnimationFrame(_hb.rafId);
+        if (_hb._flashTimer) clearTimeout(_hb._flashTimer);
         if (_hb.resizeObs) _hb.resizeObs.disconnect();
         if (_hb.ws) {
             try { _hb.ws.close(); } catch(e) {}
@@ -1696,15 +1584,14 @@
     };
 
     // Flash the EKG line white on new block
-    var _flashTimer = null;
     window.heartbeatFlash = function() {
         if (!_hb) return;
         _hb._flashColor = _hb.currentColor;
         _hb.currentColor = '#ffffff';
         _hb.prevColor = '#ffffff';
         _hb.colorLerp = 1;
-        if (_flashTimer) clearTimeout(_flashTimer);
-        _flashTimer = setTimeout(function() {
+        if (_hb._flashTimer) clearTimeout(_hb._flashTimer);
+        _hb._flashTimer = setTimeout(function() {
             if (_hb && _hb._flashColor) {
                 _hb.prevColor = '#ffffff';
                 _hb.targetColor = _hb._flashColor;
@@ -1769,7 +1656,6 @@
 
     // Play lub-dub heartbeat sound
     window.heartbeatPlaySound = function() {
-        console.log('heartbeat: playSound called, enabled=' + _soundEnabled + ', ctx=' + (_audioCtx ? _audioCtx.state : 'null'));
         if (!_soundEnabled || !_audioCtx) return;
         // Resume if suspended (autoplay policy)
         if (_audioCtx.state === 'suspended') {
@@ -1804,7 +1690,7 @@
 
     // ── Phase 5: Moment Capture ───────────────────────────────
 
-    window.heartbeatCapture = function(vitalsJson) {
+    function heartbeatCapture(vitalsJson) {
         if (!_hb) return null;
 
         // Create an offscreen canvas for the share card
@@ -1906,11 +1792,11 @@
 
         // Return data URL
         return offscreen.toDataURL('image/png');
-    };
+    }
 
     // Trigger download of captured image
     window.heartbeatDownloadCapture = function(vitalsJson) {
-        var dataUrl = window.heartbeatCapture(vitalsJson);
+        var dataUrl = heartbeatCapture(vitalsJson);
         if (!dataUrl) return;
         var link = document.createElement('a');
         link.download = 'bitcoin-heartbeat-' + Date.now() + '.png';
@@ -1925,8 +1811,8 @@
         if (!_hb || !_hb.recentBlocks) return '[]';
         // Return last 144 blocks for the 24-hour rhythm strip
         var blocks = _hb.recentBlocks;
-        if (blocks.length > 144) {
-            blocks = blocks.slice(-144);
+        if (blocks.length > RHYTHM_STRIP_BLOCKS) {
+            blocks = blocks.slice(-RHYTHM_STRIP_BLOCKS);
         }
         return JSON.stringify(blocks);
     };

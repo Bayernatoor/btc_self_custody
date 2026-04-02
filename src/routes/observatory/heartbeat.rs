@@ -95,6 +95,10 @@ fn heartbeat_play_sound() {}
 #[cfg(not(feature = "hydrate"))]
 fn heartbeat_download_capture(_: &str) {}
 
+const RETARGET_PERIOD: u64 = 2016;
+const BRADYCARDIA_THRESHOLD: f64 = 0.7;
+const TACHYCARDIA_THRESHOLD: f64 = 1.3;
+
 // ---------------------------------------------------------------------------
 // Heartbeat page component
 // ---------------------------------------------------------------------------
@@ -142,8 +146,8 @@ pub fn HeartbeatPage() -> impl IntoView {
     let blocks_until_retarget = Signal::derive(move || {
         cached_live.get().map(|s| {
             let height = s.blockchain.blocks;
-            let blocks_in_epoch = height % 2016;
-            let remaining = 2016 - blocks_in_epoch;
+            let blocks_in_epoch = height % RETARGET_PERIOD;
+            let remaining = RETARGET_PERIOD - blocks_in_epoch;
             remaining
         }).unwrap_or(0)
     });
@@ -158,7 +162,7 @@ pub fn HeartbeatPage() -> impl IntoView {
             return Vec::new();
         }
         // Fetch from start of current retarget period
-        let period_start = (height / 2016) * 2016;
+        let period_start = (height / RETARGET_PERIOD) * RETARGET_PERIOD;
         crate::stats::server_fns::fetch_blocks(period_start, height)
             .await
             .unwrap_or_default()
@@ -198,7 +202,6 @@ pub fn HeartbeatPage() -> impl IntoView {
                 .unwrap_or(0);
             let replay_height = blocks.last().map(|b| b.height).unwrap_or(0);
             last_height.set(std::cmp::max(live_height, replay_height));
-            leptos::logging::log!("heartbeat: init done, last_height={}", last_height.get());
 
             // Render rhythm strip with last 144 blocks (24hr)
             let strip_blocks = if blocks.len() > 144 {
@@ -220,7 +223,7 @@ pub fn HeartbeatPage() -> impl IntoView {
             let period_ts = period_start_ts.get();
             if let Some(live) = cached_live.get_untracked() {
                 let current_ts = live.blockchain.time;
-                let blocks_in = live.blockchain.blocks % 2016;
+                let blocks_in = live.blockchain.blocks % RETARGET_PERIOD;
                 if period_ts > 0 && current_ts > period_ts && blocks_in > 1 {
                     let span = (current_ts - period_ts) as f64;
                     let avg_secs = span / blocks_in as f64;
@@ -228,9 +231,9 @@ pub fn HeartbeatPage() -> impl IntoView {
                     set_hr_display.set(format!("{}:{:02}", avg_u / 60, avg_u % 60));
                     let bpm = 600.0 / avg_secs;
                     set_hr_subtitle.set(format!("{:.2} bpm", bpm));
-                    let (label, color) = if bpm < 0.7 {
+                    let (label, color) = if bpm < BRADYCARDIA_THRESHOLD {
                         ("Bradycardia", "#42a5f5")
-                    } else if bpm <= 1.3 {
+                    } else if bpm <= TACHYCARDIA_THRESHOLD {
                         ("Normal", "#00e676")
                     } else {
                         ("Tachycardia", "#f7931a")
@@ -259,7 +262,7 @@ pub fn HeartbeatPage() -> impl IntoView {
             set_bp_display.set(format!("{:.1} / {}", v.bp_systolic, dia_fmt));
             let bp_context = if (v.bp_systolic + diastolic) / 2.0 < 5.0 {
                 format!("{} \u{00b7} Low fee environment", v.bp_label)
-            } else if (v.bp_systolic + v.bp_diastolic) / 2.0 < 20.0 {
+            } else if (v.bp_systolic + diastolic) / 2.0 < 20.0 {
                 format!("{} \u{00b7} Moderate fees", v.bp_label)
             } else {
                 format!("{} \u{00b7} High fee pressure", v.bp_label)
@@ -328,9 +331,7 @@ pub fn HeartbeatPage() -> impl IntoView {
             return;
         }
         let prev = last_height2.get();
-        leptos::logging::log!("heartbeat: poll height={} prev={} init=true", current_height, prev);
         if prev > 0 && current_height > prev {
-            leptos::logging::log!("heartbeat: NEW BLOCK detected! fetching {}..{}", prev + 1, current_height);
             last_height2.set(current_height);
 
             // Phase 4: flash and pulse on new block
@@ -353,7 +354,6 @@ pub fn HeartbeatPage() -> impl IntoView {
                             .await
                             .unwrap_or_default();
                         if !blocks.is_empty() {
-                            leptos::logging::log!("heartbeat: got {} block(s) from DB", blocks.len());
                             let json = blocks_to_json(&blocks);
                             push_heartbeat_blocks(&json, false);
                             let recent = get_heartbeat_recent_blocks();
@@ -361,12 +361,11 @@ pub fn HeartbeatPage() -> impl IntoView {
                         } else if !delays.is_empty() {
                             let delay = delays[0];
                             let rest = &delays[1..];
-                            leptos::logging::log!("heartbeat: block not in DB yet, retry in {}s", delay);
                             leptos::prelude::set_timeout(move || {
                                 try_fetch(from, to, rest);
                             }, std::time::Duration::from_secs(delay));
                         } else {
-                            leptos::logging::log!("heartbeat: gave up fetching block {}..{}", from, to);
+
                         }
                     });
                 }
@@ -690,11 +689,7 @@ fn blocks_to_json(blocks: &[crate::stats::types::BlockSummary]) -> String {
 
 /// Minimal JSON parsing for vital signs (avoids serde dependency).
 struct Vitals {
-    heart_rate_bpm: f64,
-    heart_rate_label: String,
-    heart_rate_color: String,
     bp_systolic: f64,
-    bp_diastolic: f64,
     bp_label: String,
     bp_color: String,
     temp_c: f64,
@@ -732,11 +727,7 @@ fn extract_json_str(json: &str, key: &str) -> String {
 fn parse_vitals_json(json: &str) -> Option<Vitals> {
     if json.len() < 3 { return None; }
     Some(Vitals {
-        heart_rate_bpm: extract_json_f64(json, "heart_rate_bpm"),
-        heart_rate_label: extract_json_str(json, "heart_rate_label"),
-        heart_rate_color: extract_json_str(json, "heart_rate_color"),
         bp_systolic: extract_json_f64(json, "bp_systolic"),
-        bp_diastolic: extract_json_f64(json, "bp_diastolic"),
         bp_label: extract_json_str(json, "bp_label"),
         bp_color: extract_json_str(json, "bp_color"),
         temp_c: extract_json_f64(json, "temp_c"),
