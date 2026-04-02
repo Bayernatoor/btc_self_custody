@@ -297,8 +297,9 @@
         var liveSeg = _hb.timeline[_hb.timeline.length - 1];
         if (!liveSeg || liveSeg.type !== 'flatline') return;
 
-        // Visual blips: 1 blip per ~20 txs, cap at 12 per update
-        var n = Math.min(Math.max(1, Math.ceil(newTxCount / 20)), 12);
+        // Visual blips: 1 blip per ~15 txs, cap at 15 per update
+        var n = Math.min(Math.max(1, Math.ceil(newTxCount / 15)), 15);
+        var txPerBlip = Math.ceil(newTxCount / n);
 
         for (var i = 0; i < n; i++) {
             // Vary fee rate per blip to show distribution
@@ -318,12 +319,14 @@
                 color = 'rgba(255, 87, 34, ';   // red (high urgency)
             }
 
-            // Place at the live head with tiny random jitter (within ~6px)
+            // Place at the live head with small random jitter
             liveSeg.blips.push({
-                x: _hb.virtualX - Math.random() * 6,
-                height: 4 + feeNorm * 40 + Math.random() * 10,  // 4-54px
+                x: _hb.virtualX - Math.random() * 10,
+                height: 10 + feeNorm * 60 + Math.random() * 20,  // 10-90px
                 color: color,
-                opacity: 0.4 + feeNorm * 0.5,
+                opacity: 0.5 + feeNorm * 0.4,
+                txCount: txPerBlip,
+                feeRate: Math.round(feeRate * 10) / 10,
                 timestamp: Date.now() / 1000,
                 fadeStart: 0
             });
@@ -403,11 +406,17 @@
             lines.push('Block #' + info.prevBlock.height + ' \u2192 #' + info.nextBlock.height);
             lines.push('Interval: ' + formatDuration(interval));
         } else if (info.prevBlock && !info.nextBlock) {
-            // Live flatline - show time since last block
+            // Live flatline - show time since last block + tx count
             var elapsed = Math.floor(Date.now() / 1000 - info.prevBlock.timestamp);
+            var totalTxs = 0;
+            if (info.segment.blips) {
+                for (var t = 0; t < info.segment.blips.length; t++) {
+                    totalTxs += info.segment.blips[t].txCount || 1;
+                }
+            }
             lines.push('After block #' + info.prevBlock.height);
             lines.push('Waiting: ' + formatDuration(elapsed));
-            lines.push(info.segment.blips ? info.segment.blips.length + ' mempool blips' : '');
+            if (totalTxs > 0) lines.push('~' + totalTxs.toLocaleString() + ' new txs in mempool');
         } else {
             lines.push('Waiting for blocks...');
         }
@@ -504,8 +513,8 @@
         // ── Advance live flatline ──────────────────────────────
         var liveSeg = _hb.timeline.length > 0 ? _hb.timeline[_hb.timeline.length - 1] : null;
         if (liveSeg && liveSeg.type === 'flatline' && liveSeg.x_end === null) {
-            // Grow at 3 virtual pixels per second (10min block = ~1800px of flatline)
-            _hb.virtualX += dt * 3.0;
+            // Grow at 5 virtual pixels per second (10min block = ~3000px of flatline)
+            _hb.virtualX += dt * 5.0;
         }
 
         // If auto-following, keep viewport pinned to the head
@@ -679,8 +688,8 @@
                 ctx.moveTo(bx, baseline);
                 ctx.lineTo(bx, baseline - blip.height);
                 ctx.strokeStyle = blipColor + bOpacity + ')';
-                ctx.lineWidth = 1.5;
-                ctx.shadowBlur = 6;
+                ctx.lineWidth = 2;
+                ctx.shadowBlur = 8;
                 ctx.shadowColor = blipColor + (bOpacity * 0.5) + ')';
                 ctx.stroke();
                 ctx.shadowBlur = 0;
