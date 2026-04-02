@@ -442,7 +442,7 @@
     function drawBlipTooltip(ctx, blip, canvasX, baseline) {
         var lines = [
             '~' + (blip.txCount || 1) + ' tx' + ((blip.txCount || 1) > 1 ? 's' : ''),
-            'Fee: ~' + (blip.feeRate || '?') + ' sat/vB',
+            'Fee: ~' + (blip.feeRate ? Math.round(blip.feeRate * 10) / 10 : '?') + ' sat/vB',
         ];
         var d = new Date((blip.timestamp || 0) * 1000);
         if (blip.timestamp) {
@@ -1251,7 +1251,7 @@
                                 color: color,
                                 opacity: 0.3 + Math.random() * 0.3, // dimmer (synthetic)
                                 txCount: Math.ceil(Math.random() * 10),
-                                feeRate: 1 + Math.random() * 5,
+                                feeRate: Math.round((1 + Math.random() * 5) * 10) / 10,
                                 timestamp: _hb.lastBlockTime + frac * elapsed,
                                 fadeStart: 0
                             });
