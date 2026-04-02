@@ -303,8 +303,8 @@ pub fn HeartbeatPage() -> impl IntoView {
                         }
                     });
                 }
-                // Try now, then retry at 3s, 8s, 15s, 25s
-                try_fetch(from, to, &[3, 8, 15, 25]);
+                // Try now, then retry at escalating intervals (ingestion polls every 60s)
+                try_fetch(from, to, &[5, 15, 30, 45, 60, 90]);
             }
         }
     });
