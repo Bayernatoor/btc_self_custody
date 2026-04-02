@@ -143,7 +143,7 @@ pub fn HeartbeatPage() -> impl IntoView {
         }).unwrap_or(0)
     });
 
-    // Fetch recent blocks for initial waveform history (get 144 for rhythm strip)
+    // Fetch blocks for initial timeline (current retarget period = 2016 blocks)
     let initial_blocks = LocalResource::new(move || async move {
         let height = cached_live
             .get()
@@ -152,8 +152,9 @@ pub fn HeartbeatPage() -> impl IntoView {
         if height == 0 {
             return Vec::new();
         }
-        let from = height.saturating_sub(144);
-        crate::stats::server_fns::fetch_blocks(from, height)
+        // Fetch from start of current retarget period
+        let period_start = (height / 2016) * 2016;
+        crate::stats::server_fns::fetch_blocks(period_start, height)
             .await
             .unwrap_or_default()
     });
@@ -185,8 +186,14 @@ pub fn HeartbeatPage() -> impl IntoView {
                 last_height.set(last.height);
             }
 
-            // Render rhythm strip with all blocks
-            render_rhythm_strip("rhythm-strip-canvas", &json);
+            // Render rhythm strip with last 144 blocks (24hr)
+            let strip_blocks = if blocks.len() > 144 {
+                &blocks[blocks.len() - 144..]
+            } else {
+                &blocks
+            };
+            let strip_json = blocks_to_json(strip_blocks);
+            render_rhythm_strip("rhythm-strip-canvas", &strip_json);
         }
     });
 
@@ -468,7 +475,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                         {move || if sound_on.get() { "\u{1F50A}" } else { "\u{1F507}" }}
                     </span>
                     <span>
-                        {move || if sound_on.get() { "Sound On" } else { "Sound Off" }}
+                        {move || if sound_on.get() { "Mute" } else { "Unmute" }}
                     </span>
                 </button>
 
