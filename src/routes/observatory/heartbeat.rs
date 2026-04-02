@@ -268,16 +268,33 @@ pub fn HeartbeatPage() -> impl IntoView {
 
             // Fetch the new block(s)
             leptos::task::spawn_local(async move {
-                if let Ok(blocks) =
-                    crate::stats::server_fns::fetch_blocks(prev + 1, current_height).await
-                {
-                    if !blocks.is_empty() {
-                        let json = blocks_to_json(&blocks);
-                        push_heartbeat_blocks(&json, false);
-
-                        // Re-render rhythm strip
-                        let recent = get_heartbeat_recent_blocks();
-                        render_rhythm_strip("rhythm-strip-canvas", &recent);
+                // Try immediately first
+                let blocks = crate::stats::server_fns::fetch_blocks(prev + 1, current_height)
+                    .await
+                    .unwrap_or_default();
+                if !blocks.is_empty() {
+                    let json = blocks_to_json(&blocks);
+                    push_heartbeat_blocks(&json, false);
+                    let recent = get_heartbeat_recent_blocks();
+                    render_rhythm_strip("rhythm-strip-canvas", &recent);
+                } else {
+                    // Block not ingested yet — schedule a retry via JS setTimeout
+                    #[cfg(feature = "hydrate")]
+                    {
+                        let from = prev + 1;
+                        let to = current_height;
+                        leptos::prelude::set_timeout(move || {
+                            leptos::task::spawn_local(async move {
+                                if let Ok(blocks) = crate::stats::server_fns::fetch_blocks(from, to).await {
+                                    if !blocks.is_empty() {
+                                        let json = blocks_to_json(&blocks);
+                                        push_heartbeat_blocks(&json, false);
+                                        let recent = get_heartbeat_recent_blocks();
+                                        render_rhythm_strip("rhythm-strip-canvas", &recent);
+                                    }
+                                }
+                            });
+                        }, std::time::Duration::from_secs(5));
                     }
                 }
             });

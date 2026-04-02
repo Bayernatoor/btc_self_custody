@@ -690,12 +690,19 @@
 
                 var bx = blip.x - viewLeft;
                 var bOpacity = blip.opacity;
+                var now = Date.now() / 1000;
 
-                // Fade out confirmed blips (fadeStart > 0 means block arrived)
+                // Fade out confirmed blips fast (block arrived)
                 if (blip.fadeStart > 0) {
-                    var fadeDt = Date.now() / 1000 - blip.fadeStart;
+                    var fadeDt = now - blip.fadeStart;
                     bOpacity = Math.max(0, blip.opacity - fadeDt * 0.5);
                     if (bOpacity <= 0) continue;
+                } else {
+                    // Natural age fade: start dimming after 30s, fully faded at 180s
+                    var age = now - blip.timestamp;
+                    if (age > 30) {
+                        bOpacity *= Math.max(0.15, 1 - (age - 30) / 150);
+                    }
                 }
 
                 var blipColor = blip.color || 'rgba(0, 230, 118, ';
