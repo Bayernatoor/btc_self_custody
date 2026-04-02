@@ -944,10 +944,11 @@
                 if (!isAbsorbing) {
                     var bx = virtualToCanvas(blip.gridX || blipX);
                     var blipColor = blip.color || 'rgba(0, 230, 118, ';
-                    // Cap brick width so they don't become huge blobs at high zoom
-                    var bw = Math.min((blip.brickW || 4) * zoom, 40);
-                    var bh = blip.brickH || blipH;
-                    var sy = blip.stackY || 0;
+                    // Both width and height scale with zoom so bricks become large tiles
+                    var bw = (blip.brickW || 4) * zoom;
+                    var heightScale = zoom > 4 ? 1 + (zoom - 4) * 0.15 : 1; // height grows at high zoom
+                    var bh = (blip.brickH || blipH) * heightScale;
+                    var sy = (blip.stackY || 0) * heightScale;
 
                     // Fade-in animation: bricks grow from 0 to full size over 0.4s
                     var age = nowSec - blip.timestamp;
@@ -955,38 +956,35 @@
                     bh *= fadeIn;
                     bOpacity *= fadeIn;
 
-                    // At high zoom: add vertical gaps between stacked bricks
-                    var vGap = 0;
-                    if (zoom > 4) {
-                        vGap = Math.min((zoom - 4) * 0.15, 2); // vertical gap per brick
-                        sy += vGap * (sy / (blip.brickH || 8)); // scale gap with stack position
-                    }
-
-                    // Inset: slight padding to separate from neighbors
-                    var inset = zoom > 6 ? 1 : 0;
-
-                    // Draw filled rectangle
+                    // Draw filled rectangle with 1px gap for separation
+                    var gap = zoom > 4 ? 1 : 0;
                     ctx.fillStyle = blipColor + bOpacity + ')';
-                    if (zoom < 6) {
+                    if (zoom < 4) {
                         ctx.shadowBlur = 4;
                         ctx.shadowColor = blipColor + (bOpacity * 0.4) + ')';
                     }
-                    ctx.fillRect(bx - bw / 2 + inset, baseline - sy - bh, bw - inset * 2, bh - (zoom > 6 ? 1 : 0));
+                    ctx.fillRect(bx - bw / 2 + gap, baseline - sy - bh + gap, bw - gap * 2, bh - gap * 2);
                     ctx.shadowBlur = 0;
 
-                    // Dark outline at high zoom for clear separation
+                    // Dark outline at 4x+ zoom for clear brick separation
                     if (zoom > 4) {
-                        ctx.strokeStyle = 'rgba(13, 33, 55, ' + (zoom > 8 ? 0.8 : 0.4) + ')';
-                        ctx.lineWidth = zoom > 10 ? 1.5 : 1;
-                        ctx.strokeRect(bx - bw / 2 + inset, baseline - sy - bh, bw - inset * 2, bh - (zoom > 6 ? 1 : 0));
+                        ctx.strokeStyle = 'rgba(8, 15, 30, 0.7)';
+                        ctx.lineWidth = zoom > 10 ? 2 : 1;
+                        ctx.strokeRect(bx - bw / 2 + gap, baseline - sy - bh + gap, bw - gap * 2, bh - gap * 2);
                     }
 
-                    // At very high zoom: show txid and fee inside the brick
-                    if (zoom > 12 && blip.txid && bw > 25 && bh > 10) {
-                        ctx.fillStyle = 'rgba(255,255,255,0.7)';
-                        ctx.font = Math.min(Math.floor(bh * 0.6), 10) + 'px monospace';
-                        var label = blip.txid.substring(0, Math.floor(bw / 6));
-                        ctx.fillText(label, bx - bw / 2 + inset + 2, baseline - sy - bh + Math.min(bh * 0.7, 10));
+                    // At high zoom: show txid and fee inside the brick
+                    if (zoom > 8 && blip.txid && bw > 30 && bh > 12) {
+                        ctx.fillStyle = 'rgba(255,255,255,0.8)';
+                        var fs = Math.min(Math.floor(bh * 0.35), 12);
+                        ctx.font = fs + 'px monospace';
+                        var maxChars = Math.floor((bw - 6) / (fs * 0.6));
+                        ctx.fillText(blip.txid.substring(0, maxChars), bx - bw / 2 + 3, baseline - sy - bh + fs + 2);
+                        if (bh > 24) {
+                            ctx.fillStyle = 'rgba(255,255,255,0.5)';
+                            ctx.font = Math.min(fs - 1, 9) + 'px monospace';
+                            ctx.fillText((blip.feeRate || '?') + ' sat/vB', bx - bw / 2 + 3, baseline - sy - bh + fs * 2 + 2);
+                        }
                     }
                 }
                 ctx.shadowBlur = 0;
@@ -1091,7 +1089,7 @@
                 _hb.viewOffset = vxUnderCursor - mx / _hb.zoom;
 
                 _hb.autoFollow = false;
-                checkAutoFollow();
+                // Don't checkAutoFollow here - zooming should stay where you aimed
             }
         }, { passive: false });
 
