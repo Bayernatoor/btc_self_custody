@@ -193,6 +193,7 @@
             type: 'flatline',
             x_start: xStart,
             x_end: xEnd,   // null for live (open-ended)
+            color: null,    // set when closed (block arrives). null = use live color
             blips: []
         };
     }
@@ -666,7 +667,8 @@
             if (seg.type === 'block') {
                 drawBlockSegment(ctx, seg, viewLeft, baseline, liveColor);
             } else {
-                drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, baseline, liveColor, jitter, seg.x_end === null);
+                var flatColor = (seg.x_end === null) ? liveColor : (seg.color || COLORS.healthy);
+                drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, baseline, flatColor, jitter, seg.x_end === null);
             }
         }
 
@@ -1163,10 +1165,15 @@
                         // For replay, use compressed flatline width based on inter-block time
                         lastSeg.x_end = lastSeg.x_start + historyFlatlineWidth(interBlock);
                         _hb.virtualX = lastSeg.x_end;
+                        // Color based on inter-block time for replay
+                        var feeRate = b.total_fees ? b.total_fees / 100000 : 0;
+                        lastSeg.color = computeColor(interBlock, feeRate, 0);
                     } else {
                         // For live, close at current virtual head position
                         lastSeg.x_end = _hb.virtualX;
                     }
+                    // Stamp the flatline with its color at close time
+                    lastSeg.color = _hb.currentColor || COLORS.healthy;
                     // Mark existing blips for fade-out (they got confirmed)
                     if (lastSeg.blips) {
                         var fadeNow = Date.now() / 1000;
