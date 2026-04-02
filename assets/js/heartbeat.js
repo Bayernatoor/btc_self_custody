@@ -270,6 +270,7 @@
             ws.onopen = function() {
                 ws.send(JSON.stringify({ action: 'want', data: ['mempool-blocks'] }));
                 _hb.wsConnected = true;
+                _hb._wsRetryDelay = 5000; // reset backoff on success
             };
             ws.onmessage = function(e) {
                 if (!_hb) return;
@@ -290,8 +291,8 @@
                         _hb._lastMempoolTxCount = totalTx;
 
                         // Get fee rate distribution from the first projected block
-                        var topFee = mblocks[0] ? (mblocks[0].feeRange || [1, 5, 10])[2] || 10 : 5;
-                        var medFee = mblocks[0] ? mblocks[0].medianFee || 5 : 5;
+                        var topFee = Math.max(2, mblocks[0] ? (mblocks[0].feeRange || [1, 5, 10])[2] || 10 : 5);
+                        var medFee = Math.max(1, mblocks[0] ? mblocks[0].medianFee || 5 : 5);
 
                         if (newTx > 0) {
                             addMempoolTxs(newTx, medFee, topFee);
@@ -300,10 +301,13 @@
                 } catch (err) {}
             };
             ws.onclose = function() {
-                if (_hb) _hb.wsConnected = false;
+                if (!_hb) return;
+                _hb.wsConnected = false;
+                // Exponential backoff: 5s, 10s, 20s, 40s... max 5min
+                _hb._wsRetryDelay = Math.min((_hb._wsRetryDelay || 5000) * 2, 300000);
                 setTimeout(function() {
                     if (_hb) connectMempoolFeed();
-                }, 5000);
+                }, _hb._wsRetryDelay);
             };
             ws.onerror = function() { ws.close(); };
             _hb.ws = ws;
@@ -606,16 +610,17 @@
         // ── Compute current color from live state ──────────────
         var elapsed = _hb.lastBlockTime > 0 ? now - _hb.lastBlockTime : 0;
         var targetColor = computeColor(elapsed, _hb.nextBlockFee, _hb.mempoolMB);
-        _hb.colorLerp += 0.02;
-        if (_hb.colorLerp >= 1) {
-            _hb.currentColor = targetColor;
-            _hb.prevColor = targetColor;
-            _hb.colorLerp = 1;
-        }
+        // Check for color change BEFORE advancing lerp to avoid state corruption
         if (targetColor !== _hb.targetColor) {
             _hb.prevColor = _hb.currentColor;
             _hb.targetColor = targetColor;
             _hb.colorLerp = 0;
+        } else {
+            _hb.colorLerp = Math.min(_hb.colorLerp + 0.02, 1);
+            if (_hb.colorLerp >= 1) {
+                _hb.currentColor = targetColor;
+                _hb.prevColor = targetColor;
+            }
         }
         var liveColor = _hb.colorLerp < 1
             ? lerpColor(_hb.prevColor, _hb.targetColor, _hb.colorLerp)
@@ -794,14 +799,30 @@
                 ctx.stroke();
                 ctx.shadowBlur = 0;
             }
+
+            // Prune fully faded blips to prevent unbounded memory growth
+            if (seg.blips.length > 300) {
+                var cutoff = Date.now() / 1000;
+                seg.blips = seg.blips.filter(function(b) {
+                    if (b.fadeStart > 0) return (cutoff - b.fadeStart) < 3;
+                    return (cutoff - b.timestamp) < 300; // 5 min max age
+                });
+            }
         }
     }
 
     // ── Input handling ─────────────────────────────────────────
 
     function setupInputHandlers(canvas) {
+        // Track listeners for cleanup in destroyHeartbeat
+        _hb._listeners = [];
+        function listen(target, evt, fn, opts) {
+            target.addEventListener(evt, fn, opts);
+            _hb._listeners.push({ target: target, evt: evt, fn: fn, opts: opts });
+        }
+
         // Mouse wheel: zoom (centered on cursor). Shift+wheel: pan.
-        canvas.addEventListener('wheel', function(e) {
+        listen(canvas, 'wheel', function(e) {
             if (!_hb) return;
             e.preventDefault();
 
@@ -830,7 +851,7 @@
         }, { passive: false });
 
         // Mouse drag: click and drag to pan
-        canvas.addEventListener('mousedown', function(e) {
+        listen(canvas, 'mousedown', function(e) {
             if (!_hb) return;
 
             // Check "Jump to Live" button click
@@ -853,7 +874,7 @@
             canvas.style.cursor = 'grabbing';
         });
 
-        window.addEventListener('mousemove', function(e) {
+        listen(window, 'mousemove', function(e) {
             if (!_hb) return;
 
             if (_hb.isDragging) {
@@ -895,7 +916,7 @@
             }
         });
 
-        window.addEventListener('mouseup', function() {
+        listen(window, 'mouseup', function() {
             if (!_hb) return;
             if (_hb.isDragging) {
                 _hb.isDragging = false;
@@ -904,7 +925,7 @@
         });
 
         // Click: dispatch block-click event
-        canvas.addEventListener('click', function(e) {
+        listen(canvas, 'click', function(e) {
             if (!_hb) return;
 
             // Jump to live button
@@ -936,14 +957,14 @@
         });
 
         // Touch support for mobile
-        canvas.addEventListener('touchstart', function(e) {
+        listen(canvas, 'touchstart', function(e) {
             if (!_hb || e.touches.length !== 1) return;
             _hb.isDragging = true;
             _hb.dragStartX = e.touches[0].clientX;
             _hb.dragStartOffset = _hb.viewOffset;
         }, { passive: true });
 
-        canvas.addEventListener('touchmove', function(e) {
+        listen(canvas, 'touchmove', function(e) {
             if (!_hb || !_hb.isDragging) return;
             e.preventDefault();
             var dx = e.touches[0].clientX - _hb.dragStartX;
@@ -952,7 +973,7 @@
             checkAutoFollow();
         }, { passive: false });
 
-        canvas.addEventListener('touchend', function(e) {
+        listen(canvas, 'touchend', function(e) {
             if (!_hb) return;
             if (_hb.isDragging) {
                 _hb.isDragging = false;
@@ -1007,9 +1028,9 @@
         if (!_hb) return;
         var headOnCanvas = virtualToCanvas(_hb.virtualX);
         // If the head is visible and near the right edge, snap back to auto-follow
+        // but preserve the user's zoom level
         if (headOnCanvas >= _hb.width * 0.7 && headOnCanvas <= _hb.width + 80) {
             _hb.autoFollow = true;
-            _hb.zoom = 1.0; // reset zoom when re-engaging auto-follow
         }
     }
 
@@ -1250,6 +1271,13 @@
         if (_hb.resizeObs) _hb.resizeObs.disconnect();
         if (_hb.ws) {
             try { _hb.ws.close(); } catch(e) {}
+        }
+        // Remove all event listeners registered via listen()
+        if (_hb._listeners) {
+            for (var i = 0; i < _hb._listeners.length; i++) {
+                var l = _hb._listeners[i];
+                l.target.removeEventListener(l.evt, l.fn, l.opts);
+            }
         }
         _hb = null;
     };
