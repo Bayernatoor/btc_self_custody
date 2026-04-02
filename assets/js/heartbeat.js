@@ -942,9 +942,10 @@
 
                 // Draw normal blip as a stacked brick
                 if (!isAbsorbing) {
-                    var bx = virtualToCanvas(blipX);
+                    // Draw at grid-snapped position for clean columns
+                    var bx = virtualToCanvas(blip.gridX || blipX);
                     var blipColor = blip.color || 'rgba(0, 230, 118, ';
-                    var bw = (blip.brickW || 3) * zoom;
+                    var bw = (blip.brickW || 4) * zoom;
                     var bh = blip.brickH || blipH;
                     var sy = blip.stackY || 0;
                     // Draw filled rectangle stacked above baseline
@@ -1152,16 +1153,17 @@
             var my = e.clientY - rect.top;
             if (tryJumpToLive(mx, my)) return;
 
-            // Click on a brick -> pin tooltip. Click pinned brick again -> open mempool.space
-            if (_hb.hoveredBlip) {
-                if (_hb._pinnedBlip === _hb.hoveredBlip && _hb.hoveredBlip.txid) {
-                    window.open('https://mempool.space/tx/' + _hb.hoveredBlip.txid, '_blank');
-                    _hb._pinnedBlip = null;
-                } else {
-                    _hb._pinnedBlip = _hb.hoveredBlip;
+            // Click on a brick -> pin tooltip. If already pinned, unpin (or open mempool)
+            if (_hb._pinnedBlip) {
+                // If clicking the pinned brick again -> open mempool.space
+                if (_hb.hoveredBlip && _hb.hoveredBlip === _hb._pinnedBlip && _hb._pinnedBlip.txid) {
+                    window.open('https://mempool.space/tx/' + _hb._pinnedBlip.txid, '_blank');
                 }
-            } else {
+                // Always unpin on any click when pinned
                 _hb._pinnedBlip = null;
+            } else if (_hb.hoveredBlip) {
+                // Pin the hovered brick
+                _hb._pinnedBlip = _hb.hoveredBlip;
             }
         });
 
