@@ -1348,7 +1348,7 @@
                     // mempool activity that happened while we weren't watching
                     var liveSeg = _hb.timeline[_hb.timeline.length - 1];
                     if (liveSeg && liveSeg.type === 'flatline') {
-                        var numBlips = Math.min(Math.floor(elapsed / 0.5), 1500);
+                        var numBlips = Math.min(Math.floor(elapsed / 2), 500); // ~1 blip per 2s, cap 500
                         var columnHeights = {}; // grid column -> accumulated height
                         for (var bi = 0; bi < numBlips; bi++) {
                             var frac = bi / numBlips;
