@@ -1238,7 +1238,7 @@
                     // mempool activity that happened while we weren't watching
                     var liveSeg = _hb.timeline[_hb.timeline.length - 1];
                     if (liveSeg && liveSeg.type === 'flatline') {
-                        var numBlips = Math.min(Math.floor(elapsed / 3), 200); // ~1 blip per 3s
+                        var numBlips = Math.min(Math.floor(elapsed / 0.5), 1500); // ~2 blips per second, cap 1500
                         for (var bi = 0; bi < numBlips; bi++) {
                             var frac = bi / numBlips;
                             // Random position across the gap (not evenly spaced)
