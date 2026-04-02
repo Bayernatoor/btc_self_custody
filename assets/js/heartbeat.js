@@ -730,38 +730,80 @@
                 var blipX = blip.x;
                 var blipH = blip.height;
                 var bOpacity = blip.opacity;
+                var isAbsorbing = false;
+                var absorbT = 0;
 
-                // Absorption animation: slide toward block + shrink + fade
-                if (blip.fadeStart > 0) {
+                // Black hole absorption: rip upward, stretch, curve into the spike
+                if (blip.fadeStart > 0 && blip.absorbTargetX !== undefined) {
                     var fadeDt = nowSec - blip.fadeStart;
-                    var animDuration = 2.5; // seconds for full absorption
-                    var t = Math.min(fadeDt / animDuration, 1.0);
-                    // Ease-in curve (accelerates toward the block)
-                    var ease = t * t;
+                    var animDuration = 2.8;
+                    absorbT = Math.min(fadeDt / animDuration, 1.0);
+                    if (absorbT >= 1.0) continue;
+                    isAbsorbing = true;
 
-                    // Slide x toward the block position
-                    if (blip.absorbTargetX !== undefined) {
-                        blipX = blip.absorbOriginX + (blip.absorbTargetX - blip.absorbOriginX) * ease;
-                    }
-                    // Shrink height
-                    blipH = blip.height * (1 - ease);
-                    // Fade opacity
-                    bOpacity = blip.opacity * (1 - ease * 0.8);
+                    // Ease-in-cubic (slow start, accelerates hard at the end)
+                    var ease = absorbT * absorbT * absorbT;
 
-                    if (t >= 1.0) continue; // fully absorbed
+                    // Phase 1 (t=0..0.3): blip lifts off baseline, stretches upward
+                    // Phase 2 (t=0.3..1.0): streaks toward the spike in a curve
+                    var liftPhase = Math.min(absorbT / 0.3, 1.0);
+                    var streakPhase = absorbT > 0.3 ? (absorbT - 0.3) / 0.7 : 0;
+                    var streakEase = streakPhase * streakPhase;
+
+                    // X: stays put during lift, then accelerates toward spike
+                    blipX = blip.absorbOriginX + (blip.absorbTargetX - blip.absorbOriginX) * streakEase;
+
+                    // Height: grows during lift (stretching), then shrinks during streak
+                    var stretchFactor = liftPhase < 1 ? 1 + liftPhase * 2.5 : 3.5 * (1 - streakEase);
+                    blipH = blip.height * Math.max(stretchFactor, 0.1);
+
+                    // Y offset: lifts off baseline during stretch
+                    var liftY = liftPhase * blip.height * 1.5 + streakEase * 60;
+
+                    // Opacity: brightens on rip, fades at end
+                    bOpacity = absorbT < 0.2 ? blip.opacity * (1 + absorbT * 3) : blip.opacity * (1.6 - streakPhase * 1.2);
+                    bOpacity = Math.max(0, Math.min(1, bOpacity));
+
+                    var bx = virtualToCanvas(blipX);
+                    var blipColor = blip.color || 'rgba(0, 230, 118, ';
+
+                    // Draw as a curved streak (quadratic bezier from base to tip)
+                    var baseY = baseline - liftY;
+                    var tipY = baseY - blipH;
+                    // Control point curves toward the spike
+                    var cpX = bx + (virtualToCanvas(blip.absorbTargetX) - bx) * 0.4;
+                    var cpY = tipY - 15 * streakPhase;
+
+                    ctx.beginPath();
+                    ctx.moveTo(bx, baseY);
+                    ctx.quadraticCurveTo(cpX, cpY, bx + (virtualToCanvas(blip.absorbTargetX) - bx) * streakEase * 0.3, tipY);
+                    ctx.strokeStyle = blipColor + bOpacity + ')';
+                    ctx.lineWidth = Math.max(1, (2 - streakPhase * 1.5) + (zoom - 1) * 1.5);
+                    ctx.shadowBlur = 6 + streakPhase * 10;
+                    ctx.shadowColor = blipColor + (bOpacity * 0.7) + ')';
+                    ctx.stroke();
+                    ctx.shadowBlur = 0;
+                } else if (blip.fadeStart > 0) {
+                    // Simple fade for blips without absorption target (edge case)
+                    var fadeDt = nowSec - blip.fadeStart;
+                    bOpacity = Math.max(0, blip.opacity - fadeDt * 0.4);
+                    if (bOpacity <= 0) continue;
                 }
 
-                var bx = virtualToCanvas(blipX);
-                var blipColor = blip.color || 'rgba(0, 230, 118, ';
-                ctx.beginPath();
-                ctx.moveTo(bx, baseline);
-                ctx.lineTo(bx, baseline - blipH);
-                ctx.strokeStyle = blipColor + bOpacity + ')';
-                // Widen blips when zoomed in for easier interaction
-                ctx.lineWidth = Math.min(2 + (zoom - 1) * 1.5, 8);
-                ctx.shadowBlur = 8;
-                ctx.shadowColor = blipColor + (bOpacity * 0.5) + ')';
-                ctx.stroke();
+                // Draw normal blip (not absorbing)
+                if (!isAbsorbing) {
+                    var bx = virtualToCanvas(blipX);
+                    var blipColor = blip.color || 'rgba(0, 230, 118, ';
+                    ctx.beginPath();
+                    ctx.moveTo(bx, baseline);
+                    ctx.lineTo(bx, baseline - blipH);
+                    ctx.strokeStyle = blipColor + bOpacity + ')';
+                    ctx.lineWidth = Math.min(2 + (zoom - 1) * 1.5, 8);
+                    ctx.shadowBlur = 8;
+                    ctx.shadowColor = blipColor + (bOpacity * 0.5) + ')';
+                    ctx.stroke();
+                    ctx.shadowBlur = 0;
+                }
                 ctx.shadowBlur = 0;
             }
 
