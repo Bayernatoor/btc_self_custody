@@ -244,11 +244,10 @@ pub fn HeartbeatPage() -> impl IntoView {
             let raw_minfee = cached_live.get_untracked()
                 .map(|s| s.mempool.mempoolminfee)
                 .unwrap_or(0.0);
-            // BTC/kB to sat/vB: * 100_000_000 (to sats) / 1000 (kB to bytes)
-            // Use integer math to avoid float precision issues
-            let sats_per_kb = (raw_minfee * 1e8).round() as u64; // e.g. 100 sats/kB
-            let diastolic = sats_per_kb as f64 / 1000.0; // 0.1 sat/vB
-            leptos::logging::log!("heartbeat: mempoolminfee raw={:.10} sats_per_kb={} diastolic={}", raw_minfee, sats_per_kb, diastolic);
+            // BTC/kB to sat/vB: raw * 1e8 / 1000
+            // Note: f64 may store 0.00000100 as ~1e-7 due to precision, giving 0.01 sat/vB
+            // This is the actual value the node enforces
+            let diastolic = (raw_minfee * 1e8).round() / 1000.0;
             // Use 2 decimals if diastolic is < 0.1, otherwise 1
             let dia_fmt = if diastolic < 0.1 && diastolic > 0.0 {
                 format!("{:.2}", diastolic)
