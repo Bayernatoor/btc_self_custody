@@ -276,7 +276,7 @@
             var ws = new WebSocket('wss://mempool.space/api/v1/ws');
             ws.onopen = function() {
                 // Subscribe to both individual txs and projected blocks
-                ws.send(JSON.stringify({ action: 'want', data: ['mempool-blocks', 'transactions'] }));
+                ws.send(JSON.stringify({ action: 'want', data: ['mempool-blocks', 'stats'] }));
                 _hb.wsConnected = true;
                 _hb._wsRetryDelay = 5000;
                 _hb._txThrottleTime = 0;
