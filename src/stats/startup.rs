@@ -88,7 +88,7 @@ pub fn spawn_background_tasks(state: Arc<StatsState>) {
         let state = Arc::clone(&state);
         tokio::spawn(async move {
             loop {
-                tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                tokio::time::sleep(std::time::Duration::from_secs(15)).await;
                 ingest::poll_new_blocks(&state.rpc, &state.db).await;
             }
         });
