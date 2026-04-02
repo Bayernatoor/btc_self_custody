@@ -365,19 +365,19 @@
                 color = 'rgba(255, 87, 34, ';   // red (outlier/urgent)
             }
 
-            // Brick dimensions
-            var brickW = 3 + Math.random() * 2;  // 3-5px wide
-            var brickH = 4 + feeNorm * 16 + Math.random() * 4; // 4-24px tall
+            // Brick dimensions - consistent width for clean stacking
+            var brickW = 4;  // fixed width for uniform columns
+            var brickH = 3 + feeNorm * 14 + Math.random() * 3; // 3-20px tall
 
-            // Place at the live head, quantize x to grid for stacking
-            var brickX = _hb.virtualX - Math.random() * 12;
-            var gridX = Math.round(brickX / 6) * 6; // snap to 6px grid
+            // Place at the live head, snap to tight grid for clean columns
+            var brickX = _hb.virtualX - Math.random() * 15;
+            var gridX = Math.round(brickX / 5) * 5; // snap to 5px grid (matches brick width)
 
             // Stack: find how high bricks already are at this grid column
             var stackY = 0;
             for (var si2 = 0; si2 < liveSeg.blips.length; si2++) {
                 var other = liveSeg.blips[si2];
-                if (other.fadeStart === 0 && Math.abs(other.gridX - gridX) < 3) {
+                if (other.fadeStart === 0 && other.gridX === gridX) {
                     stackY += other.brickH || 0;
                 }
             }
@@ -1262,8 +1262,9 @@
                         lastSeg.x_end = _hb.virtualX;
                     }
                     // Stamp the flatline with its color at close time (only for live, replay sets its own)
+                    // Use pre-flash color if flash is active (avoid white flatline)
                     if (!isReplay) {
-                        lastSeg.color = _hb.currentColor || COLORS.healthy;
+                        lastSeg.color = _hb._preFlashColor || _hb.currentColor || COLORS.healthy;
                     }
                     // Shatter blips into particles that get sucked into the block
                     if (lastSeg.blips) {
@@ -1359,9 +1360,9 @@
                             else if (feeRoll < 0.8) color = 'rgba(66, 165, 245, ';
                             else if (feeRoll < 0.95) color = 'rgba(247, 147, 26, ';
                             else color = 'rgba(255, 87, 34, ';
-                            var synthBrickH = 4 + Math.random() * 14;
-                            var synthBrickW = 3 + Math.random() * 2;
-                            var synthGridX = Math.round(blipX / 6) * 6;
+                            var synthBrickH = 3 + Math.random() * 12;
+                            var synthBrickW = 4;
+                            var synthGridX = Math.round(blipX / 5) * 5;
                             var synthStackY = columnHeights[synthGridX] || 0;
                             columnHeights[synthGridX] = synthStackY + synthBrickH;
                             liveSeg.blips.push({
@@ -1372,7 +1373,7 @@
                                 brickW: synthBrickW,
                                 stackY: synthStackY,
                                 color: color,
-                                opacity: 0.3 + Math.random() * 0.3,
+                                opacity: 0.55 + Math.random() * 0.3,
                                 txCount: Math.ceil(Math.random() * 10),
                                 feeRate: Math.round((1 + Math.random() * 5) * 10) / 10,
                                 timestamp: _hb.lastBlockTime + frac * elapsed,
@@ -1693,8 +1694,10 @@
     };
 
     // Flash the EKG line white on new block
+    // Stores the real color in _preFlashColor so flatline stamping isn't affected
     window.heartbeatFlash = function() {
         if (!_hb) return;
+        _hb._preFlashColor = _hb.currentColor; // preserve for flatline stamping
         _hb._flashColor = _hb.currentColor;
         _hb.currentColor = '#ffffff';
         _hb.prevColor = '#ffffff';
@@ -1706,6 +1709,7 @@
                 _hb.targetColor = _hb._flashColor;
                 _hb.colorLerp = 0;
                 _hb._flashColor = null;
+                _hb._preFlashColor = null;
             }
         }, 200);
     };
