@@ -1719,7 +1719,12 @@
     // Get recent blocks JSON for rhythm strip
     window.getHeartbeatRecentBlocks = function() {
         if (!_hb || !_hb.recentBlocks) return '[]';
-        return JSON.stringify(_hb.recentBlocks);
+        // Return last 144 blocks for the 24-hour rhythm strip
+        var blocks = _hb.recentBlocks;
+        if (blocks.length > 144) {
+            blocks = blocks.slice(-144);
+        }
+        return JSON.stringify(blocks);
     };
 
 })();
