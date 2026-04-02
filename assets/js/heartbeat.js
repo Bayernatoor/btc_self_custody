@@ -268,6 +268,38 @@
         return best;
     }
 
+    // 2D hit test: find which brick the cursor is inside (canvas coords)
+    function blipAtCanvasXY(cx, cy, baseline) {
+        if (!_hb) return null;
+        var zoom = _hb.zoom;
+        var heightScale = zoom > 4 ? 1 + (zoom - 4) * 0.15 : 1;
+
+        for (var i = _hb.timeline.length - 1; i >= 0; i--) {
+            var seg = _hb.timeline[i];
+            if (seg.type !== 'flatline' || !seg.blips) continue;
+            // Check blips in reverse order (top of stack first)
+            for (var bi = seg.blips.length - 1; bi >= 0; bi--) {
+                var blip = seg.blips[bi];
+                if (blip.fadeStart > 0) continue;
+
+                var bx = virtualToCanvas(blip.gridX || blip.x);
+                var bw = (blip.brickW || 4) * zoom;
+                var bh = (blip.brickH || 10) * heightScale;
+                var sy = (blip.stackY || 0) * heightScale;
+
+                var left = bx - bw / 2;
+                var top = baseline - sy - bh;
+                var right = left + bw;
+                var bottom = top + bh;
+
+                if (cx >= left && cx <= right && cy >= top && cy <= bottom) {
+                    return blip;
+                }
+            }
+        }
+        return null;
+    }
+
     // ── Mempool WebSocket feed ─────────────────────────────────
     function connectMempoolFeed() {
         if (!_hb) return;
@@ -692,7 +724,7 @@
         var ctx = _hb.ctx;
         var w = _hb.width;
         var h = _hb.height;
-        var baseline = h * 0.55;
+        var baseline = h * 0.55 + (_hb.viewOffsetY || 0);
 
         // Compute time delta
         var now = Date.now() / 1000;
@@ -973,17 +1005,26 @@
                         ctx.strokeRect(bx - bw / 2 + gap, baseline - sy - bh + gap, bw - gap * 2, bh - gap * 2);
                     }
 
-                    // At high zoom: show txid and fee inside the brick
-                    if (zoom > 8 && blip.txid && bw > 30 && bh > 12) {
-                        ctx.fillStyle = 'rgba(255,255,255,0.8)';
-                        var fs = Math.min(Math.floor(bh * 0.35), 12);
-                        ctx.font = fs + 'px monospace';
-                        var maxChars = Math.floor((bw - 6) / (fs * 0.6));
-                        ctx.fillText(blip.txid.substring(0, maxChars), bx - bw / 2 + 3, baseline - sy - bh + fs + 2);
-                        if (bh > 24) {
+                    // At high zoom: show fee rate + value on brick face
+                    if (zoom > 8 && bw > 25 && bh > 10) {
+                        var brickLeft = bx - bw / 2 + 3;
+                        var brickTop = baseline - sy - bh;
+                        var fs = Math.min(Math.floor(bh * 0.35), 11);
+                        ctx.font = 'bold ' + fs + 'px monospace';
+                        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+                        // Primary: fee rate
+                        ctx.fillText((blip.feeRate || '?') + ' s/vB', brickLeft, brickTop + fs + 2);
+                        // Secondary: value or size
+                        if (bh > 22 && fs > 6) {
+                            ctx.font = (fs - 1) + 'px monospace';
                             ctx.fillStyle = 'rgba(255,255,255,0.5)';
-                            ctx.font = Math.min(fs - 1, 9) + 'px monospace';
-                            ctx.fillText((blip.feeRate || '?') + ' sat/vB', bx - bw / 2 + 3, baseline - sy - bh + fs * 2 + 2);
+                            if (blip.value) {
+                                var btc = blip.value / 1e8;
+                                var valStr = btc >= 0.01 ? btc.toFixed(3) : btc.toFixed(6);
+                                ctx.fillText('\u{20bf}' + valStr, brickLeft, brickTop + fs * 2 + 1);
+                            } else if (blip.vsize) {
+                                ctx.fillText(Math.round(blip.vsize) + ' vB', brickLeft, brickTop + fs * 2 + 1);
+                            }
                         }
                     }
                 }
@@ -1103,7 +1144,9 @@
             stopMomentum();
             _hb.isDragging = true;
             _hb.dragStartX = e.clientX;
+            _hb.dragStartY = e.clientY;
             _hb.dragStartOffset = _hb.viewOffset;
+            _hb.dragStartOffsetY = _hb.viewOffsetY || 0;
             _hb._lastDragX = e.clientX;
             _hb._lastDragTime = Date.now();
             _hb._dragVelocity = 0;
@@ -1115,7 +1158,9 @@
 
             if (_hb.isDragging) {
                 var dx = e.clientX - _hb.dragStartX;
+                var dy = e.clientY - (_hb.dragStartY || e.clientY);
                 _hb.viewOffset = _hb.dragStartOffset - dx / _hb.zoom;
+                _hb.viewOffsetY = (_hb.dragStartOffsetY || 0) + dy;
                 _hb.autoFollow = false;
                 // Track velocity for momentum
                 var now = Date.now();
@@ -1133,15 +1178,19 @@
                 var my = e.clientY - rect.top;
                 if (mx >= 0 && mx <= _hb.width && my >= 0 && my <= _hb.height) {
                     var vx = canvasToVirtual(mx);
-                    var baseline = _hb.height * 0.55;
+                    var baseline = _hb.height * 0.55 + (_hb.viewOffsetY || 0);
                     _hb.hoveredBlock = blockAtVirtualX(vx);
                     _hb.hoveredBlip = null;
                     _hb.hoveredFlatline = null;
 
                     if (!_hb.hoveredBlock) {
-                        // Check for blip hover above flatline (at 4x+ zoom, bricks are distinct)
+                        // Check for blip hover (2D hit test at any zoom above 4x)
                         if (my < baseline && _hb.zoom >= 4) {
-                            _hb.hoveredBlip = blipAtVirtualX(vx, 3 / _hb.zoom);
+                            _hb.hoveredBlip = blipAtCanvasXY(mx, my, baseline);
+                        }
+                        // Fallback to x-only match at lower zoom
+                        if (!_hb.hoveredBlip && my < baseline && _hb.zoom >= 1.5) {
+                            _hb.hoveredBlip = blipAtVirtualX(vx, 4 / _hb.zoom);
                         }
                         if (!_hb.hoveredBlip) {
                             _hb.hoveredFlatline = flatlineAtVirtualX(vx);
@@ -1339,6 +1388,7 @@
             timeline: [],
             virtualX: 0,
             viewOffset: -w * HEAD_POSITION_FRAC,
+            viewOffsetY: 0,       // vertical pan offset (0 = default baseline)
             autoFollow: true,
             zoom: 1.9,              // default zoom for brick-level detail
             minZoom: 0.1,
