@@ -379,7 +379,7 @@ pub fn provide_observatory_state() -> ObservatoryState {
     #[allow(clippy::redundant_closure)]
     let live = LocalResource::new(move || fetch_live_stats());
 
-    let (countdown, set_countdown) = signal(30u32);
+    let (countdown, set_countdown) = signal(15u32);
     let (_last_updated, set_last_updated) = signal("connecting...".to_string());
 
     leptos_use::use_interval_fn(
@@ -394,7 +394,7 @@ pub fn provide_observatory_state() -> ObservatoryState {
             }
             set_countdown.update(|c| {
                 if *c == 0 {
-                    *c = 30;
+                    *c = 15;
                     live.refetch();
                     set_last_updated.set(format!(
                         "updated {}",
