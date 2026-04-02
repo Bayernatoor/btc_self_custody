@@ -1152,6 +1152,10 @@
             for (var i = 0; i < blocks.length; i++) {
                 var b = blocks[i];
                 var interBlock = b.inter_block_seconds || 600;
+                // For live blocks, compute real interval from last known block time
+                if (!isReplay && _hb.lastBlockTime > 0 && b.timestamp > _hb.lastBlockTime) {
+                    interBlock = b.timestamp - _hb.lastBlockTime;
+                }
 
                 // Close the current live flatline
                 var lastSeg = _hb.timeline[_hb.timeline.length - 1];
@@ -1175,7 +1179,8 @@
                     }
                 }
 
-                // Create block segment at the current virtual head
+                // Create block segment with corrected inter-block time
+                b.inter_block_seconds = interBlock;
                 var blockSeg = createBlockSegment(b, _hb.virtualX);
                 _hb.timeline.push(blockSeg);
                 _hb.virtualX = blockSeg.x_end;
@@ -1450,37 +1455,38 @@
         var scale = w / totalPoints;
         if (scale > 3) scale = 3; // cap individual point width
 
-        // Draw
-        ctx.beginPath();
-        ctx.moveTo(0, baseline);
+        // Draw each block segment with its own color
         var x = 0;
+        var vScale = 0.4; // compress vertically
         for (var wi = 0; wi < waveforms.length; wi++) {
             var wf = waveforms[wi];
             var interBlock = wf.block.inter_block_seconds || 600;
 
-            // Color for this block's segment
-            var feeRate = wf.block.total_fees ? wf.block.total_fees / 100000 : 0; // rough approx
+            // Color based on inter-block time and fee pressure
+            var feeRate = wf.block.total_fees ? wf.block.total_fees / 100000 : 0;
             var segColor = computeColor(interBlock, feeRate, 0);
+
+            ctx.beginPath();
+            ctx.moveTo(x, baseline);
 
             // Draw flatline before waveform
             var flatEnd = x + wf.flatline * scale;
             ctx.lineTo(flatEnd, baseline);
             x = flatEnd;
 
-            // Draw waveform points with vertical scaling (compressed)
-            var vScale = 0.4; // compress vertically
+            // Draw waveform points
             for (var pi = 0; pi < wf.points.length; pi++) {
                 x += scale;
                 ctx.lineTo(x, baseline + wf.points[pi] * vScale);
             }
-        }
 
-        ctx.strokeStyle = COLORS.healthy;
-        ctx.lineWidth = 1;
-        ctx.shadowBlur = 4;
-        ctx.shadowColor = COLORS.healthy;
-        ctx.stroke();
-        ctx.shadowBlur = 0;
+            ctx.strokeStyle = segColor;
+            ctx.lineWidth = 1;
+            ctx.shadowBlur = 4;
+            ctx.shadowColor = segColor;
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+        }
 
         // Draw hour markers at the bottom
         if (blocks.length > 1) {
@@ -1594,6 +1600,7 @@
 
     // Play lub-dub heartbeat sound
     window.heartbeatPlaySound = function() {
+        console.log('heartbeat: playSound called, enabled=' + _soundEnabled + ', ctx=' + (_audioCtx ? _audioCtx.state : 'null'));
         if (!_soundEnabled || !_audioCtx) return;
         // Resume if suspended (autoplay policy)
         if (_audioCtx.state === 'suspended') {
