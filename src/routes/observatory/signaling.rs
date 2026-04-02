@@ -289,9 +289,16 @@ pub fn SignalingPage() -> impl IntoView {
                                 </div>
                             }.into_any()
                         }
-                        Err(ref e) => {
-                            let msg = format!("Error loading signaling data: {e}");
-                            view! { <p class="text-center text-white/40 text-sm">{msg}</p> }.into_any()
+                        Err(ref _e) => {
+                            view! {
+                                <div class="flex flex-col items-center justify-center py-12 gap-3">
+                                    <svg class="w-10 h-10 text-[#f7931a]/40" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/>
+                                    </svg>
+                                    <p class="text-sm text-white/50">"Unable to load signaling data"</p>
+                                    <p class="text-xs text-white/30">"The Bitcoin node may be temporarily unavailable. Try refreshing in a moment."</p>
+                                </div>
+                            }.into_any()
                         }
                     }
                 })
