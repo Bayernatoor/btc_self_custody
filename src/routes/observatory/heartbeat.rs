@@ -245,9 +245,11 @@ pub fn HeartbeatPage() -> impl IntoView {
                 .map(|s| s.mempool.mempoolminfee)
                 .unwrap_or(0.0);
             // BTC/kB to sat/vB: raw * 1e8 / 1000
-            // Note: f64 may store 0.00000100 as ~1e-7 due to precision, giving 0.01 sat/vB
-            // This is the actual value the node enforces
-            let diastolic = (raw_minfee * 1e8).round() / 1000.0;
+            // f64 stores 0.00000100 as ~9.99e-7, losing precision.
+            // Round to nearest 0.1 sat/vB since relay fees are always clean multiples.
+            let raw_sat_vb = raw_minfee * 1e8 / 1000.0;
+            let diastolic = (raw_sat_vb * 10.0 + 0.5).floor() / 10.0;
+            let diastolic = if diastolic < 0.1 && raw_minfee > 0.0 { 0.1 } else { diastolic };
             // Use 2 decimals if diastolic is < 0.1, otherwise 1
             let dia_fmt = if diastolic < 0.1 && diastolic > 0.0 {
                 format!("{:.2}", diastolic)
