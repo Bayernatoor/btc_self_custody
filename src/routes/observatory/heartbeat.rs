@@ -471,7 +471,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                     status=hr_label
                     color=hr_color
                     subtitle=Signal::derive(move || hr_subtitle.get())
-                    tip="Average time between blocks this difficulty period. Target is 10:00. Below = blocks found faster than expected. Above = slower. Adjusts every 2,016 blocks."
+                    tip="Average time between blocks this difficulty period. Target is 10:00. Below 10:00 (Tachycardia) = blocks found faster than expected. Above 10:00 (Bradycardia) = slower. Adjusts every 2,016 blocks."
                 />
 
                 // Blood Pressure
