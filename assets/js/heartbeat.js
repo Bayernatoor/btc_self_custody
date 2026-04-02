@@ -861,6 +861,43 @@
             _hb._jumpBtn = null;
         }
 
+        // ── Draw block arrival announcement ───────────────────
+        if (_hb._announcement && now < _hb._announcement.end) {
+            var ann = _hb._announcement;
+            var annElapsed = now - ann.start;
+            var annDuration = ann.end - ann.start;
+            // Fade in 0-0.4s, hold 0.4-2.2s, fade out 2.2-3.0s
+            var annAlpha;
+            if (annElapsed < 0.4) {
+                annAlpha = annElapsed / 0.4;
+            } else if (annElapsed < annDuration - 0.8) {
+                annAlpha = 1.0;
+            } else {
+                annAlpha = (annDuration - annElapsed) / 0.8;
+            }
+            annAlpha = Math.max(0, Math.min(1, annAlpha));
+
+            ctx.save();
+            ctx.textAlign = 'center';
+            ctx.globalAlpha = annAlpha;
+
+            // Block number
+            ctx.font = 'bold 18px monospace';
+            ctx.fillStyle = ann.color;
+            ctx.fillText(ann.title, w / 2, 50);
+
+            // Fee + tx count subtitle
+            ctx.font = '13px monospace';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            ctx.fillText(ann.subtitle, w / 2, 72);
+
+            ctx.globalAlpha = 1;
+            ctx.textAlign = 'left';
+            ctx.restore();
+        } else if (_hb._announcement && now >= _hb._announcement.end) {
+            _hb._announcement = null;
+        }
+
         // ── Draw live indicator dot ────────────────────────────
         if (_hb.autoFollow && liveSeg && liveSeg.x_end === null) {
             var dotX = virtualToCanvas(_hb.virtualX);
@@ -1587,6 +1624,20 @@
                     weight: b.weight,
                     inter_block_seconds: b.inter_block_seconds
                 });
+
+                // Show block arrival announcement (live blocks only)
+                if (!isReplay && b.height) {
+                    var feeBtc = (b.total_fees || 0) / 100000000;
+                    var heightStr = b.height.toLocaleString();
+                    var nowAnn = Date.now() / 1000;
+                    _hb._announcement = {
+                        title: 'Block #' + heightStr + ' found',
+                        subtitle: feeBtc.toFixed(4) + ' BTC fees \u00b7 ' + (b.tx_count || 0).toLocaleString() + ' txs',
+                        color: blockSeg.color || _hb.currentColor || COLORS.healthy,
+                        start: nowAnn,
+                        end: nowAnn + 3.0
+                    };
+                }
             }
 
             if (_hb.recentBlocks.length > RETARGET_PERIOD) {
