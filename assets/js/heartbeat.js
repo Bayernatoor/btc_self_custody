@@ -801,12 +801,12 @@
                 ctx.shadowBlur = 0;
             }
 
-            // Prune fully faded blips to prevent unbounded memory growth
-            if (seg.blips.length > 300) {
+            // Only prune confirmed blips that have fully faded (block arrived)
+            if (seg.blips.length > 2000) {
                 var cutoff = Date.now() / 1000;
                 seg.blips = seg.blips.filter(function(b) {
                     if (b.fadeStart > 0) return (cutoff - b.fadeStart) < 3;
-                    return (cutoff - b.timestamp) < 300; // 5 min max age
+                    return true; // keep all unconfirmed blips
                 });
             }
         }
