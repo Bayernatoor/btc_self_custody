@@ -886,7 +886,7 @@
         var btn = _hb._jumpBtn;
         if (mx >= btn.x && mx <= btn.x + btn.w && my >= btn.y && my <= btn.y + btn.h) {
             _hb.autoFollow = true;
-            _hb.zoom = 1.0;
+            _hb.zoom = 1.9;
             _hb.hoveredBlock = null;
             return true;
         }
@@ -1162,7 +1162,7 @@
             virtualX: 0,
             viewOffset: -w * HEAD_POSITION_FRAC,
             autoFollow: true,
-            zoom: 1.0,              // 1.0 = normal, >1 = zoomed in, <1 = zoomed out
+            zoom: 1.9,              // default zoom for brick-level detail
             minZoom: 0.1,
             maxZoom: 8.0,
 
@@ -1382,7 +1382,7 @@
                         }
                     }
                     // Ensure viewport is at 1x zoom and following the head
-                    _hb.zoom = 1.0;
+                    _hb.zoom = 1.9;
                     _hb.autoFollow = true;
                     _hb.viewOffset = _hb.virtualX - (_hb.width * HEAD_POSITION_FRAC);
 
