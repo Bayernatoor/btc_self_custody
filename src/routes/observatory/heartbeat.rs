@@ -109,9 +109,10 @@ pub fn HeartbeatPage() -> impl IntoView {
     let initialized = std::rc::Rc::new(std::cell::Cell::new(false));
 
     // Signals for vital signs display
-    let (hr_bpm, set_hr_bpm) = signal("--".to_string());
+    let (hr_display, set_hr_display) = signal("--:--".to_string());
     let (hr_label, set_hr_label) = signal("Waiting...".to_string());
     let (hr_color, set_hr_color) = signal("#00e676".to_string());
+    let (hr_subtitle, set_hr_subtitle) = signal(String::new());
 
     let (bp_display, set_bp_display) = signal("-- / --".to_string());
     let (bp_label, set_bp_label) = signal("Waiting...".to_string());
@@ -120,6 +121,7 @@ pub fn HeartbeatPage() -> impl IntoView {
     let (temp_display, set_temp_display) = signal("--.-".to_string());
     let (temp_label, set_temp_label) = signal("Waiting...".to_string());
     let (temp_color, set_temp_color) = signal("#00e676".to_string());
+    let (temp_subtitle, set_temp_subtitle) = signal(String::new());
 
     let (immune_display, set_immune_display) = signal("-- EH/s".to_string());
     let (immune_label, set_immune_label) = signal("Waiting...".to_string());
@@ -206,20 +208,50 @@ pub fn HeartbeatPage() -> impl IntoView {
         let vitals_json = get_heartbeat_vitals();
         // Parse the JSON manually (no serde dependency needed)
         if let Some(v) = parse_vitals_json(&vitals_json) {
-            set_hr_bpm.set(format!("{:.1}", v.heart_rate_bpm));
+            // Heart Rate: show avg block time as main value, bpm as subtitle
+            let bpm = v.heart_rate_bpm;
+            if bpm > 0.0 {
+                let avg_secs = (600.0 / bpm) as u64;
+                set_hr_display.set(format!("{}:{:02}", avg_secs / 60, avg_secs % 60));
+            } else {
+                set_hr_display.set("--:--".to_string());
+            }
             set_hr_label.set(v.heart_rate_label);
             set_hr_color.set(v.heart_rate_color);
+            set_hr_subtitle.set(format!("{:.1} bpm", bpm));
 
+            // Blood Pressure: fee rates with context
             set_bp_display.set(format!("{:.0} / {:.0}", v.bp_systolic, v.bp_diastolic));
-            set_bp_label.set(v.bp_label);
+            let bp_context = if (v.bp_systolic + v.bp_diastolic) / 2.0 < 5.0 {
+                format!("{} \u{00b7} Low fee environment", v.bp_label)
+            } else if (v.bp_systolic + v.bp_diastolic) / 2.0 < 20.0 {
+                format!("{} \u{00b7} Moderate fees", v.bp_label)
+            } else {
+                format!("{} \u{00b7} High fee pressure", v.bp_label)
+            };
+            set_bp_label.set(bp_context);
             set_bp_color.set(v.bp_color);
 
-            set_temp_display.set(format!("{:.1}", v.temp_c));
-            set_temp_label.set(v.temp_label);
+            // Temperature: show mempool stats as main, temp as subtitle
+            if let Some(live) = cached_live.get_untracked() {
+                let vmb = live.mempool.bytes as f64 / 1_000_000.0;
+                set_temp_display.set(format!("{:.1}", vmb));
+                set_temp_subtitle.set(format!("{:.1}\u{00B0}C \u{00b7} {}", v.temp_c, v.temp_label));
+            } else {
+                set_temp_display.set(format!("{:.1}", v.temp_c));
+                set_temp_subtitle.set(String::new());
+            }
+            set_temp_label.set(format!("{} tx in mempool",
+                cached_live.get_untracked()
+                    .map(|s| super::helpers::format_number(s.mempool.size))
+                    .unwrap_or_else(|| "--".to_string())));
             set_temp_color.set(v.temp_color);
 
+            // Immune System: hashrate + retarget context
             set_immune_display.set(format!("{:.1} EH/s", v.immune_eh));
-            set_immune_label.set(v.immune_label);
+            set_immune_label.set(format!("{} \u{00b7} Retarget in ~{} blocks",
+                v.immune_label,
+                blocks_until_retarget.get_untracked()));
             set_immune_color.set(v.immune_color);
         }
 
@@ -414,10 +446,11 @@ pub fn HeartbeatPage() -> impl IntoView {
                 // Heart Rate
                 <VitalTile
                     label="Heart Rate"
-                    value=hr_bpm
-                    unit=" bpm"
+                    value=hr_display
+                    unit=" avg"
                     status=hr_label
                     color=hr_color
+                    subtitle=Signal::derive(move || hr_subtitle.get())
                 />
 
                 // Blood Pressure
@@ -429,13 +462,14 @@ pub fn HeartbeatPage() -> impl IntoView {
                     color=bp_color
                 />
 
-                // Body Temperature
+                // Temperature (mempool)
                 <VitalTile
-                    label="Temperature"
+                    label="Mempool"
                     value=temp_display
-                    unit="\u{00B0}C"
+                    unit=" vMB"
                     status=temp_label
                     color=temp_color
+                    subtitle=Signal::derive(move || temp_subtitle.get())
                 />
 
                 // Immune System
@@ -446,13 +480,6 @@ pub fn HeartbeatPage() -> impl IntoView {
                     status=immune_label
                     color=immune_color
                 />
-            </div>
-
-            // Blocks until retarget
-            <div class="text-center text-xs text-white/30 font-mono">
-                "Next difficulty adjustment in ~"
-                {move || super::helpers::format_number(blocks_until_retarget.get())}
-                " blocks"
             </div>
 
             // ── Phase 3: 24-Hour Rhythm Strip ─────────────────
@@ -560,6 +587,7 @@ fn VitalTile(
     unit: &'static str,
     status: ReadSignal<String>,
     color: ReadSignal<String>,
+    #[prop(optional, into)] subtitle: Option<Signal<String>>,
 ) -> impl IntoView {
     view! {
         <div class="bg-[#0d2137] border border-white/10 rounded-xl px-4 py-3 flex flex-col gap-1">
@@ -584,6 +612,9 @@ fn VitalTile(
             >
                 {status}
             </span>
+            {subtitle.map(|sub| view! {
+                <span class="text-[10px] text-white/25 font-mono">{sub}</span>
+            })}
         </div>
     }
 }
