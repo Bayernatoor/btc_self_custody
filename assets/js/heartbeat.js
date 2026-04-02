@@ -1263,6 +1263,10 @@
                             });
                         }
                     }
+                    // Ensure viewport is at 1x zoom and following the head
+                    _hb.zoom = 1.0;
+                    _hb.autoFollow = true;
+                    _hb.viewOffset = _hb.virtualX - (_hb.width * 0.85);
                     console.log('heartbeat: fast-forwarded ' + Math.round(elapsed) + 's (' + Math.round(advancePx) + 'px), ' + numBlips + ' synthetic blips');
                 }
             }
