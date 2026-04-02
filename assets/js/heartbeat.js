@@ -1175,8 +1175,10 @@
                         // For live, close at current virtual head position
                         lastSeg.x_end = _hb.virtualX;
                     }
-                    // Stamp the flatline with its color at close time
-                    lastSeg.color = _hb.currentColor || COLORS.healthy;
+                    // Stamp the flatline with its color at close time (only for live, replay sets its own)
+                    if (!isReplay) {
+                        lastSeg.color = _hb.currentColor || COLORS.healthy;
+                    }
                     // Mark existing blips for fade-out (they got confirmed)
                     if (lastSeg.blips) {
                         var fadeNow = Date.now() / 1000;
