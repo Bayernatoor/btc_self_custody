@@ -935,7 +935,9 @@
                 // Particle absorption: blip shatters into fragments sucked into the spike
                 if (blip.fadeStart > 0 && blip.particles && blip.particles.length > 0) {
                     var fadeDt = nowSec - blip.fadeStart;
-                    var animDuration = 3.0;
+                    // Duration scales with distance so far particles have time to arrive
+                    var dist = Math.abs(blip.absorbTargetX - blip.absorbOriginX);
+                    var animDuration = Math.max(1.5, Math.min(dist / 40, 4.0));
                     absorbT = Math.min(fadeDt / animDuration, 1.0);
                     if (absorbT >= 1.0) continue;
                     isAbsorbing = true;
@@ -947,26 +949,30 @@
                     for (var pi = 0; pi < blip.particles.length; pi++) {
                         var p = blip.particles[pi];
                         // Per-particle time (with stagger delay and speed variation)
-                        var pt = Math.max(0, (fadeDt - p.delay) / (animDuration * (1 / p.speed)));
+                        var pDuration = animDuration * (1 / p.speed);
+                        var pt = Math.max(0, (fadeDt - p.delay) / pDuration);
                         pt = Math.min(pt, 1.0);
                         if (pt <= 0) continue;
 
-                        // Ease-in-quad per particle (gravitational pull)
-                        var pEase = pt * pt;
+                        // Smooth ease-in-out: accelerate then decelerate into target
+                        var pEase = pt < 0.5
+                            ? 2 * pt * pt
+                            : 1 - Math.pow(-2 * pt + 2, 2) / 2;
 
-                        // X: from blip origin toward spike
-                        var px = originCX + p.offsetX + (targetCX - originCX - p.offsetX) * pEase;
+                        // X: lerp from origin to target center (not offset edge)
+                        var startX = originCX + p.offsetX;
+                        var px = startX + (targetCX - startX) * pEase;
 
-                        // Y: arc upward then down into the spike
-                        // Parabolic arc: peaks at t=0.4, lands at baseline at t=1
-                        var arcT = pt < 0.4 ? pt / 0.4 : (1 - pt) / 0.6;
-                        var py = baseline - p.offsetY - p.arcHeight * arcT * (2 - arcT);
+                        // Y: parabolic arc that always lands at baseline
+                        // peaks at t=0.3, returns to baseline at t=1.0
+                        var arcPhase = Math.sin(pt * Math.PI);
+                        var py = baseline - p.offsetY * (1 - pEase) - p.arcHeight * arcPhase;
 
                         // Particle shrinks as it approaches the spike
-                        var pSize = p.size * (1 - pEase * 0.7);
+                        var pSize = p.size * (1 - pEase * 0.8);
 
                         // Opacity: bright at start, fades as absorbed
-                        var pOpacity = blip.opacity * (1 - pEase * 0.6);
+                        var pOpacity = blip.opacity * (1 - pEase * 0.7);
                         pOpacity = Math.max(0, Math.min(1, pOpacity));
 
                         // Draw particle as a small filled square
