@@ -636,10 +636,15 @@
         var viewRight = _hb.viewOffset + w / _hb.zoom;
 
         // ── Draw timeline segments ─────────────────────────────
-        // Subtle jitter on long waits (only for live flatline)
+        // Smooth organic tremor on long waits (sine-based, not random)
         var jitter = 0;
-        if (elapsed > 1200) {
-            jitter = (Math.random() - 0.5) * Math.min((elapsed - 1200) / 600, 1) * 3;
+        if (elapsed > 600) {
+            // Gradually increases: starts subtle at 10min, more pronounced at 30min+
+            var intensity = Math.min((elapsed - 600) / 1200, 1.0) * 2.5;
+            // Layered sine waves for organic feel (not mechanical)
+            jitter = Math.sin(now * 2.3) * intensity
+                   + Math.sin(now * 5.7) * intensity * 0.4
+                   + Math.sin(now * 0.8) * intensity * 0.6;
         }
 
         for (var si = 0; si < _hb.timeline.length; si++) {
