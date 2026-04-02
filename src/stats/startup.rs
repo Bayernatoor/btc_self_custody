@@ -45,6 +45,7 @@ pub async fn init() -> Option<(Arc<StatsState>, Router)> {
         stats_summary_cache: Mutex::new(None),
         daily_cache: Mutex::new(None),
         block_ts_cache: Mutex::new(std::collections::HashMap::new()),
+        signaling_blocks_cache: Mutex::new(None),
         signaling_periods_cache: Mutex::new(None),
         price_history_cache: Mutex::new(None),
     });
