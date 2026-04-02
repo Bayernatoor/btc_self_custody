@@ -1893,6 +1893,17 @@
         }
     };
 
+    // ── Center view on live head ─────────────────────────────
+    window.heartbeatCenter = function() {
+        if (!_hb) return;
+        _hb.autoFollow = true;
+        _hb.viewOffsetY = 0;
+        _hb.viewOffset = _hb.virtualX - (_hb.width * HEAD_POSITION_FRAC) / _hb.zoom;
+        _hb.hoveredBlock = null;
+        _hb.hoveredBlip = null;
+        _hb._pinnedBlip = null;
+    };
+
     // ── Phase 4: Polish effects ───────────────────────────────
 
     // Background breathing pulse on block arrival

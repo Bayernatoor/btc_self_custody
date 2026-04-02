@@ -50,6 +50,10 @@ extern "C" {
     #[wasm_bindgen(js_name = getOrganismStatus)]
     fn get_organism_status() -> String;
 
+    // Center view
+    #[wasm_bindgen(js_name = heartbeatCenter)]
+    fn heartbeat_center();
+
     // Phase 5: Sound
     #[wasm_bindgen(js_name = heartbeatSoundToggle)]
     fn heartbeat_sound_toggle(enable: bool) -> bool;
@@ -85,6 +89,8 @@ fn heartbeat_pulse() {}
 fn heartbeat_flash() {}
 #[cfg(not(feature = "hydrate"))]
 fn get_organism_status() -> String { "{}".to_string() }
+#[cfg(not(feature = "hydrate"))]
+fn heartbeat_center() {}
 #[cfg(not(feature = "hydrate"))]
 fn heartbeat_sound_toggle(_: bool) -> bool { false }
 #[cfg(not(feature = "hydrate"))]
@@ -456,6 +462,19 @@ pub fn HeartbeatPage() -> impl IntoView {
                     </div>
                     <div class="flex items-center gap-3 text-sm sm:text-base text-[#00e676] font-mono">
                         <span>"Last block: " {time_since}</span>
+                        // Center view button
+                        <button
+                            class="text-white/30 hover:text-[#00e676] transition-colors cursor-pointer"
+                            title="Center on live head"
+                            on:click=move |_| {
+                                heartbeat_center();
+                            }
+                        >
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                <circle cx="12" cy="12" r="3"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 2v4m0 12v4m10-10h-4M6 12H2"/>
+                            </svg>
+                        </button>
                         // Fullscreen toggle
                         <button
                             class="text-white/30 hover:text-[#00e676] transition-colors cursor-pointer"
