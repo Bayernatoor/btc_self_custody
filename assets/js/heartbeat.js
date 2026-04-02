@@ -287,15 +287,19 @@
         var liveSeg = _hb.timeline[_hb.timeline.length - 1];
         if (!liveSeg || liveSeg.type !== 'flatline') return;
 
-        // More blips for more activity, cap at 8 per update
-        var n = Math.min(count > 0 ? Math.ceil(Math.sqrt(count / 50)) : 0, 8);
+        // More blips for more activity, cap at 10 per update
+        var n = Math.min(count > 0 ? Math.ceil(Math.sqrt(count / 30)) : 0, 10);
+        // Spread blips across the recent portion of the flatline (last 60px)
+        var spreadStart = Math.max(liveSeg.x_start, _hb.virtualX - 80);
+        var spreadEnd = _hb.virtualX;
+        var spreadRange = spreadEnd - spreadStart;
+        if (spreadRange < 10) spreadRange = 10;
+
         for (var i = 0; i < n; i++) {
             var feeNorm = Math.min(avgFeeRate / 50, 1.0);
-            // Spread blips across a wider range around the current head
-            var spread = 5 + Math.random() * 20;
             liveSeg.blips.push({
-                x: _hb.virtualX - spread + Math.random() * spread * 0.5,
-                height: 8 + feeNorm * 30 + Math.random() * 12,  // 8-50px tall
+                x: spreadStart + Math.random() * spreadRange,
+                height: 8 + feeNorm * 30 + Math.random() * 15,  // 8-53px tall
                 opacity: 0.5 + feeNorm * 0.4,
                 timestamp: Date.now() / 1000,
                 fadeStart: 0
@@ -477,8 +481,8 @@
         // ── Advance live flatline ──────────────────────────────
         var liveSeg = _hb.timeline.length > 0 ? _hb.timeline[_hb.timeline.length - 1] : null;
         if (liveSeg && liveSeg.type === 'flatline' && liveSeg.x_end === null) {
-            // Grow at 1 virtual pixel per second
-            _hb.virtualX += dt * 1.0;
+            // Grow at 3 virtual pixels per second (10min block = ~1800px of flatline)
+            _hb.virtualX += dt * 3.0;
         }
 
         // If auto-following, keep viewport pinned to the head
