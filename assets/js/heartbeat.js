@@ -733,56 +733,50 @@
                 var isAbsorbing = false;
                 var absorbT = 0;
 
-                // Black hole absorption: rip upward, stretch, curve into the spike
-                if (blip.fadeStart > 0 && blip.absorbTargetX !== undefined) {
+                // Particle absorption: blip shatters into fragments sucked into the spike
+                if (blip.fadeStart > 0 && blip.particles && blip.particles.length > 0) {
                     var fadeDt = nowSec - blip.fadeStart;
-                    var animDuration = 2.8;
+                    var animDuration = 3.0;
                     absorbT = Math.min(fadeDt / animDuration, 1.0);
                     if (absorbT >= 1.0) continue;
                     isAbsorbing = true;
 
-                    // Ease-in-cubic (slow start, accelerates hard at the end)
-                    var ease = absorbT * absorbT * absorbT;
-
-                    // Phase 1 (t=0..0.3): blip lifts off baseline, stretches upward
-                    // Phase 2 (t=0.3..1.0): streaks toward the spike in a curve
-                    var liftPhase = Math.min(absorbT / 0.3, 1.0);
-                    var streakPhase = absorbT > 0.3 ? (absorbT - 0.3) / 0.7 : 0;
-                    var streakEase = streakPhase * streakPhase;
-
-                    // X: stays put during lift, then accelerates toward spike
-                    blipX = blip.absorbOriginX + (blip.absorbTargetX - blip.absorbOriginX) * streakEase;
-
-                    // Height: grows during lift (stretching), then shrinks during streak
-                    var stretchFactor = liftPhase < 1 ? 1 + liftPhase * 2.5 : 3.5 * (1 - streakEase);
-                    blipH = blip.height * Math.max(stretchFactor, 0.1);
-
-                    // Y offset: lifts off baseline during stretch
-                    var liftY = liftPhase * blip.height * 1.5 + streakEase * 60;
-
-                    // Opacity: brightens on rip, fades at end
-                    bOpacity = absorbT < 0.2 ? blip.opacity * (1 + absorbT * 3) : blip.opacity * (1.6 - streakPhase * 1.2);
-                    bOpacity = Math.max(0, Math.min(1, bOpacity));
-
-                    var bx = virtualToCanvas(blipX);
+                    var targetCX = virtualToCanvas(blip.absorbTargetX);
+                    var originCX = virtualToCanvas(blip.absorbOriginX);
                     var blipColor = blip.color || 'rgba(0, 230, 118, ';
 
-                    // Draw as a curved streak (quadratic bezier from base to tip)
-                    var baseY = baseline - liftY;
-                    var tipY = baseY - blipH;
-                    // Control point curves toward the spike
-                    var cpX = bx + (virtualToCanvas(blip.absorbTargetX) - bx) * 0.4;
-                    var cpY = tipY - 15 * streakPhase;
+                    for (var pi = 0; pi < blip.particles.length; pi++) {
+                        var p = blip.particles[pi];
+                        // Per-particle time (with stagger delay and speed variation)
+                        var pt = Math.max(0, (fadeDt - p.delay) / (animDuration * (1 / p.speed)));
+                        pt = Math.min(pt, 1.0);
+                        if (pt <= 0) continue;
 
-                    ctx.beginPath();
-                    ctx.moveTo(bx, baseY);
-                    ctx.quadraticCurveTo(cpX, cpY, bx + (virtualToCanvas(blip.absorbTargetX) - bx) * streakEase * 0.3, tipY);
-                    ctx.strokeStyle = blipColor + bOpacity + ')';
-                    ctx.lineWidth = Math.max(1, (2 - streakPhase * 1.5) + (zoom - 1) * 1.5);
-                    ctx.shadowBlur = 6 + streakPhase * 10;
-                    ctx.shadowColor = blipColor + (bOpacity * 0.7) + ')';
-                    ctx.stroke();
-                    ctx.shadowBlur = 0;
+                        // Ease-in-quad per particle (gravitational pull)
+                        var pEase = pt * pt;
+
+                        // X: from blip origin toward spike
+                        var px = originCX + p.offsetX + (targetCX - originCX - p.offsetX) * pEase;
+
+                        // Y: arc upward then down into the spike
+                        // Parabolic arc: peaks at t=0.4, lands at baseline at t=1
+                        var arcT = pt < 0.4 ? pt / 0.4 : (1 - pt) / 0.6;
+                        var py = baseline - p.offsetY - p.arcHeight * arcT * (2 - arcT);
+
+                        // Particle shrinks as it approaches the spike
+                        var pSize = p.size * (1 - pEase * 0.7);
+
+                        // Opacity: bright at start, fades as absorbed
+                        var pOpacity = blip.opacity * (1 - pEase * 0.6);
+                        pOpacity = Math.max(0, Math.min(1, pOpacity));
+
+                        // Draw particle as a small filled square
+                        ctx.fillStyle = blipColor + pOpacity + ')';
+                        ctx.shadowBlur = 4 + pEase * 8;
+                        ctx.shadowColor = blipColor + (pOpacity * 0.6) + ')';
+                        ctx.fillRect(px - pSize / 2, py - pSize / 2, pSize, pSize);
+                        ctx.shadowBlur = 0;
+                    }
                 } else if (blip.fadeStart > 0) {
                     // Simple fade for blips without absorption target (edge case)
                     var fadeDt = nowSec - blip.fadeStart;
@@ -1245,15 +1239,34 @@
                     if (!isReplay) {
                         lastSeg.color = _hb.currentColor || COLORS.healthy;
                     }
-                    // Animate blips being absorbed into the block
+                    // Shatter blips into particles that get sucked into the block
                     if (lastSeg.blips) {
-                        var absorbX = _hb.virtualX; // block's position
+                        var absorbX = _hb.virtualX;
                         var absorbNow = Date.now() / 1000;
                         for (var bi = 0; bi < lastSeg.blips.length; bi++) {
-                            if (lastSeg.blips[bi].fadeStart === 0) {
-                                lastSeg.blips[bi].fadeStart = absorbNow;
-                                lastSeg.blips[bi].absorbTargetX = absorbX;
-                                lastSeg.blips[bi].absorbOriginX = lastSeg.blips[bi].x;
+                            var blp = lastSeg.blips[bi];
+                            if (blp.fadeStart === 0) {
+                                blp.fadeStart = absorbNow;
+                                blp.absorbTargetX = absorbX;
+                                blp.absorbOriginX = blp.x;
+                                // Generate 3-5 particles per blip with unique trajectories
+                                var nParts = 3 + Math.floor(Math.random() * 3);
+                                blp.particles = [];
+                                for (var pi = 0; pi < nParts; pi++) {
+                                    blp.particles.push({
+                                        // Random offset from blip origin
+                                        offsetX: (Math.random() - 0.5) * 8,
+                                        offsetY: Math.random() * blp.height * 0.8,
+                                        // Each particle has slightly different speed (0.7-1.3x)
+                                        speed: 0.7 + Math.random() * 0.6,
+                                        // Curve intensity: how much the arc bends upward
+                                        arcHeight: 20 + Math.random() * 60,
+                                        // Slight delay before this particle starts moving (stagger)
+                                        delay: Math.random() * 0.3,
+                                        // Size: small square
+                                        size: 1.5 + Math.random() * 2.5
+                                    });
+                                }
                             }
                         }
                     }
