@@ -244,6 +244,7 @@
     // ── Mempool WebSocket feed ─────────────────────────────────
     function connectMempoolFeed() {
         if (!_hb) return;
+        _hb._lastMempoolTxCount = 0; // for diffing
         try {
             var ws = new WebSocket('wss://mempool.space/api/v1/ws');
             ws.onopen = function() {
@@ -254,53 +255,75 @@
                 if (!_hb) return;
                 try {
                     var data = JSON.parse(e.data);
-                    // mempool-blocks gives us projected next blocks with tx count changes
                     if (data['mempool-blocks']) {
                         var mblocks = data['mempool-blocks'];
+                        // Count total txs across all projected blocks
                         var totalTx = 0;
                         for (var i = 0; i < mblocks.length; i++) {
                             totalTx += mblocks[i].nTx || 0;
                         }
-                        addMempoolBlips(totalTx, mblocks[0] ? mblocks[0].medianFee : 5);
+                        // Diff: only new txs since last update create visual blips
+                        var newTx = 0;
+                        if (_hb._lastMempoolTxCount > 0) {
+                            newTx = Math.max(0, totalTx - _hb._lastMempoolTxCount);
+                        }
+                        _hb._lastMempoolTxCount = totalTx;
+
+                        // Get fee rate distribution from the first projected block
+                        var topFee = mblocks[0] ? (mblocks[0].feeRange || [1, 5, 10])[2] || 10 : 5;
+                        var medFee = mblocks[0] ? mblocks[0].medianFee || 5 : 5;
+
+                        if (newTx > 0) {
+                            addMempoolTxs(newTx, medFee, topFee);
+                        }
                     }
-                } catch (err) {
-                    // Ignore parse errors from WS
-                }
+                } catch (err) {}
             };
             ws.onclose = function() {
                 if (_hb) _hb.wsConnected = false;
-                // Auto-reconnect after 5s
                 setTimeout(function() {
                     if (_hb) connectMempoolFeed();
                 }, 5000);
             };
             ws.onerror = function() { ws.close(); };
             _hb.ws = ws;
-        } catch (err) {
-            // WebSocket not available or blocked, silently degrade
-        }
+        } catch (err) {}
     }
 
-    function addMempoolBlips(count, avgFeeRate) {
+    // Add tx blips at the live head position. Each blip represents ~N new txs.
+    // Placed at the current head so they naturally spread out as time advances.
+    function addMempoolTxs(newTxCount, medianFeeRate, topFeeRate) {
         if (!_hb) return;
-        // Add blips to the current live flatline
         var liveSeg = _hb.timeline[_hb.timeline.length - 1];
         if (!liveSeg || liveSeg.type !== 'flatline') return;
 
-        // More blips for more activity, cap at 10 per update
-        var n = Math.min(count > 0 ? Math.ceil(Math.sqrt(count / 30)) : 0, 10);
-        // Spread blips across the recent portion of the flatline (last 60px)
-        var spreadStart = Math.max(liveSeg.x_start, _hb.virtualX - 80);
-        var spreadEnd = _hb.virtualX;
-        var spreadRange = spreadEnd - spreadStart;
-        if (spreadRange < 10) spreadRange = 10;
+        // Visual blips: 1 blip per ~20 txs, cap at 12 per update
+        var n = Math.min(Math.max(1, Math.ceil(newTxCount / 20)), 12);
 
         for (var i = 0; i < n; i++) {
-            var feeNorm = Math.min(avgFeeRate / 50, 1.0);
+            // Vary fee rate per blip to show distribution
+            var feeRate = medianFeeRate + (Math.random() - 0.3) * (topFeeRate - medianFeeRate);
+            feeRate = Math.max(1, feeRate);
+            var feeNorm = Math.min(feeRate / 80, 1.0);
+
+            // Color: low fee = dim cyan, medium = green, high = orange/red
+            var color;
+            if (feeRate < 5) {
+                color = 'rgba(66, 165, 245, '; // blue (low priority)
+            } else if (feeRate < 20) {
+                color = 'rgba(0, 230, 118, ';   // green (normal)
+            } else if (feeRate < 50) {
+                color = 'rgba(247, 147, 26, ';  // orange (elevated)
+            } else {
+                color = 'rgba(255, 87, 34, ';   // red (high urgency)
+            }
+
+            // Place at the live head with tiny random jitter (within ~6px)
             liveSeg.blips.push({
-                x: spreadStart + Math.random() * spreadRange,
-                height: 8 + feeNorm * 30 + Math.random() * 15,  // 8-53px tall
-                opacity: 0.5 + feeNorm * 0.4,
+                x: _hb.virtualX - Math.random() * 6,
+                height: 4 + feeNorm * 40 + Math.random() * 10,  // 4-54px
+                color: color,
+                opacity: 0.4 + feeNorm * 0.5,
                 timestamp: Date.now() / 1000,
                 fadeStart: 0
             });
@@ -651,13 +674,14 @@
                     if (bOpacity <= 0) continue;
                 }
 
+                var blipColor = blip.color || 'rgba(0, 230, 118, ';
                 ctx.beginPath();
                 ctx.moveTo(bx, baseline);
                 ctx.lineTo(bx, baseline - blip.height);
-                ctx.strokeStyle = 'rgba(0, 230, 118, ' + bOpacity + ')';
+                ctx.strokeStyle = blipColor + bOpacity + ')';
                 ctx.lineWidth = 1.5;
                 ctx.shadowBlur = 6;
-                ctx.shadowColor = 'rgba(0, 230, 118, ' + (bOpacity * 0.6) + ')';
+                ctx.shadowColor = blipColor + (bOpacity * 0.5) + ')';
                 ctx.stroke();
                 ctx.shadowBlur = 0;
             }
