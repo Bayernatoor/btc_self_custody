@@ -499,14 +499,15 @@
                     stackY += other.brickH || 0;
                 }
             }
+            stackY = Math.min(stackY, 150); // cap stack height
 
             liveSeg.blips.push({
                 x: brickX,
                 gridX: gridX,
-                height: brickH + stackY,  // total height from baseline (for tooltip hit testing)
-                brickH: brickH,           // individual brick height
+                height: brickH + stackY,
+                brickH: brickH,
                 brickW: brickW,
-                stackY: stackY,           // y offset from baseline where this brick starts
+                stackY: stackY,
                 color: color,
                 opacity: 0.6 + feeNorm * 0.3,
                 txCount: txPerBlip,
@@ -594,20 +595,28 @@
     function drawBlipTooltip(ctx, blip, canvasX, baseline) {
         var lines = [];
         if (blip.txid) {
-            lines.push('TX: ' + blip.txid.substring(0, 12) + '...');
+            lines.push('TX: ' + blip.txid.substring(0, 16) + '...');
         } else {
             lines.push('~' + (blip.txCount || 1) + ' tx' + ((blip.txCount || 1) > 1 ? 's' : ''));
         }
         lines.push('Fee: ' + (blip.feeRate ? Math.round(blip.feeRate * 10) / 10 : '?') + ' sat/vB');
         if (blip.vsize) {
-            lines.push('Size: ' + blip.vsize + ' vB');
+            lines.push('Size: ' + Math.round(blip.vsize) + ' vB');
+        }
+        if (blip.value) {
+            var btcVal = blip.value / 100000000;
+            lines.push('Value: ' + (btcVal < 0.001 ? btcVal.toFixed(8) : btcVal.toFixed(4)) + ' BTC');
         }
         if (blip.timestamp) {
             var d = new Date(blip.timestamp * 1000);
             lines.push(d.toLocaleTimeString());
         }
+        // Show link hint for pinned blips with txid
+        if (blip.txid && _hb._pinnedBlip === blip) {
+            lines.push('\u2192 Click again to view on mempool.space');
+        }
         var blipColor = blip.color ? blip.color + '0.6)' : 'rgba(0,230,118,0.6)';
-        drawTooltipBox(ctx, lines, canvasX, baseline - blip.height - 12, blipColor, {
+        drawTooltipBox(ctx, lines, canvasX, baseline - (blip.stackY || 0) - blip.height - 12, blipColor, {
             padding: 6, lineH: 15, fontSize: '11px monospace', textColor: 'rgba(255, 255, 255, 0.8)'
         });
     }
@@ -771,6 +780,9 @@
             var hSeg = _hb.hoveredBlock;
             var midX = virtualToCanvas((hSeg.x_start + hSeg.x_end) / 2);
             drawTooltip(ctx, hSeg, midX, baseline - 30, baseline);
+        } else if (_hb._pinnedBlip) {
+            var pbx = virtualToCanvas(_hb._pinnedBlip.x);
+            drawBlipTooltip(ctx, _hb._pinnedBlip, pbx, baseline);
         } else if (_hb.hoveredBlip) {
             drawBlipTooltip(ctx, _hb.hoveredBlip, _hb.hoverCanvasX, baseline);
         } else if (_hb.hoveredFlatline) {
@@ -1140,9 +1152,16 @@
             var my = e.clientY - rect.top;
             if (tryJumpToLive(mx, my)) return;
 
-            // Click on a brick with txid -> open mempool.space
-            if (_hb.hoveredBlip && _hb.hoveredBlip.txid) {
-                window.open('https://mempool.space/tx/' + _hb.hoveredBlip.txid, '_blank');
+            // Click on a brick -> pin tooltip. Click pinned brick again -> open mempool.space
+            if (_hb.hoveredBlip) {
+                if (_hb._pinnedBlip === _hb.hoveredBlip && _hb.hoveredBlip.txid) {
+                    window.open('https://mempool.space/tx/' + _hb.hoveredBlip.txid, '_blank');
+                    _hb._pinnedBlip = null;
+                } else {
+                    _hb._pinnedBlip = _hb.hoveredBlip;
+                }
+            } else {
+                _hb._pinnedBlip = null;
             }
         });
 
@@ -1320,6 +1339,7 @@
             dragStartOffset: 0,
             hoveredBlock: null,
             hoveredBlip: null,
+            _pinnedBlip: null,
             hoveredFlatline: null,
             hoverCanvasX: 0,
             _jumpBtn: null,
@@ -1494,7 +1514,7 @@
                             var synthBrickH = 3 + Math.random() * 12;
                             var synthBrickW = 4;
                             var synthGridX = Math.round(blipX / 5) * 5;
-                            var synthStackY = columnHeights[synthGridX] || 0;
+                            var synthStackY = Math.min(columnHeights[synthGridX] || 0, 150);
                             columnHeights[synthGridX] = synthStackY + synthBrickH;
                             liveSeg.blips.push({
                                 x: blipX,
