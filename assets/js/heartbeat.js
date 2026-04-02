@@ -727,20 +727,35 @@
                 // Skip blips outside visible range
                 if (blip.x < viewLeft || blip.x > viewRight) continue;
 
-                var bx = virtualToCanvas(blip.x);
+                var blipX = blip.x;
+                var blipH = blip.height;
                 var bOpacity = blip.opacity;
 
-                // Fade out confirmed blips fast (block arrived)
+                // Absorption animation: slide toward block + shrink + fade
                 if (blip.fadeStart > 0) {
                     var fadeDt = nowSec - blip.fadeStart;
-                    bOpacity = Math.max(0, blip.opacity - fadeDt * 0.5);
-                    if (bOpacity <= 0) continue;
+                    var animDuration = 1.2; // seconds for full absorption
+                    var t = Math.min(fadeDt / animDuration, 1.0);
+                    // Ease-in curve (accelerates toward the block)
+                    var ease = t * t;
+
+                    // Slide x toward the block position
+                    if (blip.absorbTargetX !== undefined) {
+                        blipX = blip.absorbOriginX + (blip.absorbTargetX - blip.absorbOriginX) * ease;
+                    }
+                    // Shrink height
+                    blipH = blip.height * (1 - ease);
+                    // Fade opacity
+                    bOpacity = blip.opacity * (1 - ease * 0.8);
+
+                    if (t >= 1.0) continue; // fully absorbed
                 }
 
+                var bx = virtualToCanvas(blipX);
                 var blipColor = blip.color || 'rgba(0, 230, 118, ';
                 ctx.beginPath();
                 ctx.moveTo(bx, baseline);
-                ctx.lineTo(bx, baseline - blip.height);
+                ctx.lineTo(bx, baseline - blipH);
                 ctx.strokeStyle = blipColor + bOpacity + ')';
                 // Widen blips when zoomed in for easier interaction
                 ctx.lineWidth = Math.min(2 + (zoom - 1) * 1.5, 8);
@@ -1188,12 +1203,15 @@
                     if (!isReplay) {
                         lastSeg.color = _hb.currentColor || COLORS.healthy;
                     }
-                    // Mark existing blips for fade-out (they got confirmed)
+                    // Animate blips being absorbed into the block
                     if (lastSeg.blips) {
-                        var fadeNow = Date.now() / 1000;
+                        var absorbX = _hb.virtualX; // block's position
+                        var absorbNow = Date.now() / 1000;
                         for (var bi = 0; bi < lastSeg.blips.length; bi++) {
                             if (lastSeg.blips[bi].fadeStart === 0) {
-                                lastSeg.blips[bi].fadeStart = fadeNow;
+                                lastSeg.blips[bi].fadeStart = absorbNow;
+                                lastSeg.blips[bi].absorbTargetX = absorbX;
+                                lastSeg.blips[bi].absorbOriginX = lastSeg.blips[bi].x;
                             }
                         }
                     }
