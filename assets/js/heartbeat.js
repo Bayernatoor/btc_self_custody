@@ -365,12 +365,32 @@
                 color = 'rgba(255, 87, 34, ';   // red (outlier/urgent)
             }
 
-            // Place at the live head with small random jitter
+            // Brick dimensions
+            var brickW = 3 + Math.random() * 2;  // 3-5px wide
+            var brickH = 4 + feeNorm * 16 + Math.random() * 4; // 4-24px tall
+
+            // Place at the live head, quantize x to grid for stacking
+            var brickX = _hb.virtualX - Math.random() * 12;
+            var gridX = Math.round(brickX / 6) * 6; // snap to 6px grid
+
+            // Stack: find how high bricks already are at this grid column
+            var stackY = 0;
+            for (var si2 = 0; si2 < liveSeg.blips.length; si2++) {
+                var other = liveSeg.blips[si2];
+                if (other.fadeStart === 0 && Math.abs(other.gridX - gridX) < 3) {
+                    stackY += other.brickH || 0;
+                }
+            }
+
             liveSeg.blips.push({
-                x: _hb.virtualX - Math.random() * 10,
-                height: 10 + feeNorm * 60 + Math.random() * 20,  // 10-90px
+                x: brickX,
+                gridX: gridX,
+                height: brickH + stackY,  // total height from baseline (for tooltip hit testing)
+                brickH: brickH,           // individual brick height
+                brickW: brickW,
+                stackY: stackY,           // y offset from baseline where this brick starts
                 color: color,
-                opacity: 0.5 + feeNorm * 0.4,
+                opacity: 0.6 + feeNorm * 0.3,
                 txCount: txPerBlip,
                 feeRate: Math.round(feeRate * 10) / 10,
                 timestamp: Date.now() / 1000,
@@ -784,19 +804,25 @@
                     if (bOpacity <= 0) continue;
                 }
 
-                // Draw normal blip (not absorbing)
+                // Draw normal blip as a stacked brick
                 if (!isAbsorbing) {
                     var bx = virtualToCanvas(blipX);
                     var blipColor = blip.color || 'rgba(0, 230, 118, ';
-                    ctx.beginPath();
-                    ctx.moveTo(bx, baseline);
-                    ctx.lineTo(bx, baseline - blipH);
-                    ctx.strokeStyle = blipColor + bOpacity + ')';
-                    ctx.lineWidth = Math.min(2 + (zoom - 1) * 1.5, 8);
-                    ctx.shadowBlur = 8;
-                    ctx.shadowColor = blipColor + (bOpacity * 0.5) + ')';
-                    ctx.stroke();
+                    var bw = (blip.brickW || 3) * zoom;
+                    var bh = blip.brickH || blipH;
+                    var sy = blip.stackY || 0;
+                    // Draw filled rectangle stacked above baseline
+                    ctx.fillStyle = blipColor + bOpacity + ')';
+                    ctx.shadowBlur = 4;
+                    ctx.shadowColor = blipColor + (bOpacity * 0.4) + ')';
+                    ctx.fillRect(bx - bw / 2, baseline - sy - bh, bw, bh);
                     ctx.shadowBlur = 0;
+                    // Subtle border for definition
+                    if (zoom > 1.5) {
+                        ctx.strokeStyle = blipColor + (bOpacity * 0.3) + ')';
+                        ctx.lineWidth = 0.5;
+                        ctx.strokeRect(bx - bw / 2, baseline - sy - bh, bw, bh);
+                    }
                 }
                 ctx.shadowBlur = 0;
             }
@@ -1321,7 +1347,8 @@
                     // mempool activity that happened while we weren't watching
                     var liveSeg = _hb.timeline[_hb.timeline.length - 1];
                     if (liveSeg && liveSeg.type === 'flatline') {
-                        var numBlips = Math.min(Math.floor(elapsed / 0.5), 1500); // ~2 blips per second, cap 1500
+                        var numBlips = Math.min(Math.floor(elapsed / 0.5), 1500);
+                        var columnHeights = {}; // grid column -> accumulated height
                         for (var bi = 0; bi < numBlips; bi++) {
                             var frac = bi / numBlips;
                             // Random position across the gap (not evenly spaced)
@@ -1332,11 +1359,20 @@
                             else if (feeRoll < 0.8) color = 'rgba(66, 165, 245, ';
                             else if (feeRoll < 0.95) color = 'rgba(247, 147, 26, ';
                             else color = 'rgba(255, 87, 34, ';
+                            var synthBrickH = 4 + Math.random() * 14;
+                            var synthBrickW = 3 + Math.random() * 2;
+                            var synthGridX = Math.round(blipX / 6) * 6;
+                            var synthStackY = columnHeights[synthGridX] || 0;
+                            columnHeights[synthGridX] = synthStackY + synthBrickH;
                             liveSeg.blips.push({
                                 x: blipX,
-                                height: 6 + Math.random() * 30,
+                                gridX: synthGridX,
+                                height: synthBrickH + synthStackY,
+                                brickH: synthBrickH,
+                                brickW: synthBrickW,
+                                stackY: synthStackY,
                                 color: color,
-                                opacity: 0.3 + Math.random() * 0.3, // dimmer (synthetic)
+                                opacity: 0.3 + Math.random() * 0.3,
                                 txCount: Math.ceil(Math.random() * 10),
                                 feeRate: Math.round((1 + Math.random() * 5) * 10) / 10,
                                 timestamp: _hb.lastBlockTime + frac * elapsed,
