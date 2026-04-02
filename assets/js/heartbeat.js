@@ -1238,7 +1238,8 @@
                         var numBlips = Math.min(Math.floor(elapsed / 3), 200); // ~1 blip per 3s
                         for (var bi = 0; bi < numBlips; bi++) {
                             var frac = bi / numBlips;
-                            var blipX = liveSeg.x_start + frac * advancePx;
+                            // Random position across the gap (not evenly spaced)
+                            var blipX = liveSeg.x_start + Math.random() * advancePx;
                             var feeRoll = Math.random();
                             var color;
                             if (feeRoll < 0.5) color = 'rgba(0, 230, 118, ';
