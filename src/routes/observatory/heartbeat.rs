@@ -443,7 +443,7 @@ pub fn HeartbeatPage() -> impl IntoView {
 
         <div class="space-y-6">
             // EKG Canvas card
-            <div id="heartbeat-card" class="relative bg-[#0d2137] border border-white/10 rounded-2xl overflow-hidden">
+            <div id="heartbeat-card" class="relative bg-[#0d2137] border border-white/10 rounded-2xl overflow-hidden flex flex-col">
                 // Status bar
                 <div class="flex items-center justify-between px-4 py-2.5 border-b border-white/5">
                     <div class="flex items-center gap-3">
@@ -456,16 +456,37 @@ pub fn HeartbeatPage() -> impl IntoView {
                         </div>
                         <span class="text-sm sm:text-base text-[#00e676] font-mono font-semibold">{block_height}</span>
                     </div>
-                    <div class="flex items-center gap-4 text-sm sm:text-base text-[#00e676] font-mono">
+                    <div class="flex items-center gap-3 text-sm sm:text-base text-[#00e676] font-mono">
                         <span>"Last block: " {time_since}</span>
+                        // Fullscreen toggle
+                        <button
+                            class="text-white/30 hover:text-[#00e676] transition-colors cursor-pointer"
+                            title="Toggle fullscreen"
+                            on:click=move |_| {
+                                #[cfg(feature = "hydrate")]
+                                {
+                                    use wasm_bindgen::JsCast;
+                                    let doc = leptos::prelude::document();
+                                    if doc.fullscreen_element().is_some() {
+                                        doc.exit_fullscreen();
+                                    } else if let Some(el) = doc.get_element_by_id("heartbeat-card") {
+                                        let _ = el.request_fullscreen();
+                                    }
+                                }
+                            }
+                        >
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15"/>
+                            </svg>
+                        </button>
                     </div>
                 </div>
 
-                // Canvas
+                // Canvas (flex-1 fills remaining space in fullscreen)
                 <canvas
                     id="heartbeat-canvas"
-                    class="w-full"
-                    style="height: 450px"
+                    class="w-full flex-1"
+                    style="height: 450px; min-height: 200px"
                 ></canvas>
 
                 // Bottom info bar
