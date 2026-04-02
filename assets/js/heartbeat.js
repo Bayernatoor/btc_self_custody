@@ -944,7 +944,8 @@
                 if (!isAbsorbing) {
                     var bx = virtualToCanvas(blip.gridX || blipX);
                     var blipColor = blip.color || 'rgba(0, 230, 118, ';
-                    var bw = (blip.brickW || 4) * zoom;
+                    // Cap brick width so they don't become huge blobs at high zoom
+                    var bw = Math.min((blip.brickW || 4) * zoom, 40);
                     var bh = blip.brickH || blipH;
                     var sy = blip.stackY || 0;
 
@@ -954,33 +955,38 @@
                     bh *= fadeIn;
                     bOpacity *= fadeIn;
 
-                    // At high zoom: add padding between bricks for distinction
-                    var gap = 0;
+                    // At high zoom: add vertical gaps between stacked bricks
+                    var vGap = 0;
                     if (zoom > 4) {
-                        gap = Math.min((zoom - 4) * 0.3, 2); // up to 2px gap
-                        bw = Math.max(bw - gap, 2);
+                        vGap = Math.min((zoom - 4) * 0.15, 2); // vertical gap per brick
+                        sy += vGap * (sy / (blip.brickH || 8)); // scale gap with stack position
                     }
+
+                    // Inset: slight padding to separate from neighbors
+                    var inset = zoom > 6 ? 1 : 0;
 
                     // Draw filled rectangle
                     ctx.fillStyle = blipColor + bOpacity + ')';
-                    ctx.shadowBlur = zoom > 6 ? 2 : 4;
-                    ctx.shadowColor = blipColor + (bOpacity * 0.4) + ')';
-                    ctx.fillRect(bx - bw / 2, baseline - sy - bh, bw, bh);
+                    if (zoom < 6) {
+                        ctx.shadowBlur = 4;
+                        ctx.shadowColor = blipColor + (bOpacity * 0.4) + ')';
+                    }
+                    ctx.fillRect(bx - bw / 2 + inset, baseline - sy - bh, bw - inset * 2, bh - (zoom > 6 ? 1 : 0));
                     ctx.shadowBlur = 0;
 
-                    // Border: subtle at low zoom, clear at high zoom
-                    if (zoom > 1.5) {
-                        var borderAlpha = zoom > 6 ? 0.5 : 0.3;
-                        ctx.strokeStyle = blipColor + (bOpacity * borderAlpha) + ')';
-                        ctx.lineWidth = zoom > 10 ? 1 : 0.5;
-                        ctx.strokeRect(bx - bw / 2 + 0.5, baseline - sy - bh + 0.5, bw - 1, bh - 1);
+                    // Dark outline at high zoom for clear separation
+                    if (zoom > 4) {
+                        ctx.strokeStyle = 'rgba(13, 33, 55, ' + (zoom > 8 ? 0.8 : 0.4) + ')';
+                        ctx.lineWidth = zoom > 10 ? 1.5 : 1;
+                        ctx.strokeRect(bx - bw / 2 + inset, baseline - sy - bh, bw - inset * 2, bh - (zoom > 6 ? 1 : 0));
                     }
 
-                    // At very high zoom (>15x): show txid text inside the brick
-                    if (zoom > 15 && blip.txid && bw > 30 && bh > 10) {
-                        ctx.fillStyle = 'rgba(0,0,0,0.5)';
-                        ctx.font = '7px monospace';
-                        ctx.fillText(blip.txid.substring(0, 6), bx - bw / 2 + 2, baseline - sy - bh + 8);
+                    // At very high zoom: show txid and fee inside the brick
+                    if (zoom > 12 && blip.txid && bw > 25 && bh > 10) {
+                        ctx.fillStyle = 'rgba(255,255,255,0.7)';
+                        ctx.font = Math.min(Math.floor(bh * 0.6), 10) + 'px monospace';
+                        var label = blip.txid.substring(0, Math.floor(bw / 6));
+                        ctx.fillText(label, bx - bw / 2 + inset + 2, baseline - sy - bh + Math.min(bh * 0.7, 10));
                     }
                 }
                 ctx.shadowBlur = 0;
