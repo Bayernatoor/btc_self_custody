@@ -1222,6 +1222,45 @@
             // scrolls further back after pruning, they just see a flat start.
             pruneTimeline();
 
+            // After replay: fast-forward the live flatline to reflect time since last block
+            if (isReplay && blocks.length > 0 && _hb.lastBlockTime > 0) {
+                var nowSec = Date.now() / 1000;
+                var elapsed = nowSec - _hb.lastBlockTime;
+                if (elapsed > 0 && elapsed < 7200) { // cap at 2 hours
+                    // Advance virtualX to represent the elapsed time
+                    var advancePx = elapsed * 5.0; // same rate as live (5px/sec)
+                    _hb.virtualX += advancePx;
+
+                    // Scatter some synthetic blips across the gap to represent
+                    // mempool activity that happened while we weren't watching
+                    var liveSeg = _hb.timeline[_hb.timeline.length - 1];
+                    if (liveSeg && liveSeg.type === 'flatline') {
+                        var numBlips = Math.min(Math.floor(elapsed / 3), 200); // ~1 blip per 3s
+                        for (var bi = 0; bi < numBlips; bi++) {
+                            var frac = bi / numBlips;
+                            var blipX = liveSeg.x_start + frac * advancePx;
+                            var feeRoll = Math.random();
+                            var color;
+                            if (feeRoll < 0.5) color = 'rgba(0, 230, 118, ';
+                            else if (feeRoll < 0.8) color = 'rgba(66, 165, 245, ';
+                            else if (feeRoll < 0.95) color = 'rgba(247, 147, 26, ';
+                            else color = 'rgba(255, 87, 34, ';
+                            liveSeg.blips.push({
+                                x: blipX,
+                                height: 6 + Math.random() * 30,
+                                color: color,
+                                opacity: 0.3 + Math.random() * 0.3, // dimmer (synthetic)
+                                txCount: Math.ceil(Math.random() * 10),
+                                feeRate: 1 + Math.random() * 5,
+                                timestamp: _hb.lastBlockTime + frac * elapsed,
+                                fadeStart: 0
+                            });
+                        }
+                    }
+                    console.log('heartbeat: fast-forwarded ' + Math.round(elapsed) + 's (' + Math.round(advancePx) + 'px), ' + numBlips + ' synthetic blips');
+                }
+            }
+
             // Dispatch event for UI updates
             if (blocks.length > 0) {
                 var last = blocks[blocks.length - 1];
