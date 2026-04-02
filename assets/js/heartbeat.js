@@ -779,12 +779,6 @@
                     var fadeDt = now - blip.fadeStart;
                     bOpacity = Math.max(0, blip.opacity - fadeDt * 0.5);
                     if (bOpacity <= 0) continue;
-                } else {
-                    // Natural age fade: start dimming after 30s, fully faded at 180s
-                    var age = now - blip.timestamp;
-                    if (age > 30) {
-                        bOpacity *= Math.max(0.15, 1 - (age - 30) / 150);
-                    }
                 }
 
                 var blipColor = blip.color || 'rgba(0, 230, 118, ';
@@ -1292,12 +1286,14 @@
     // Store recent block timestamps for heart rate calculation
     // _hb.recentBlocks = [{timestamp, height}, ...]
 
-    // Compute blocks per 10 minutes from the last ~6 blocks (rolling 1hr window)
+    // Compute blocks per 10 minutes from the last ~20 blocks (~3hr rolling window)
     function computeHeartRate() {
         if (!_hb || !_hb.recentBlocks || _hb.recentBlocks.length < 2) {
             return { bpm: 1.0, label: 'Normal', color: COLORS.healthy };
         }
-        var blocks = _hb.recentBlocks;
+        // Use last 20 blocks for a sensitive, recent reading
+        var allBlocks = _hb.recentBlocks;
+        var blocks = allBlocks.length > 20 ? allBlocks.slice(-20) : allBlocks;
         var newest = blocks[blocks.length - 1].timestamp;
         var oldest = blocks[0].timestamp;
         var spanSec = newest - oldest;
