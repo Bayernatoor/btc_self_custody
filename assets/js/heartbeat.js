@@ -812,6 +812,46 @@
         }
     }
 
+    // ── Momentum scrolling ──────────────────────────────────────
+    function startMomentum(velocity) {
+        if (!_hb) return;
+        _hb._momentumVel = velocity * 15; // scale up for visible effect
+        _hb._momentumId = null;
+
+        function tick() {
+            if (!_hb || Math.abs(_hb._momentumVel) < 0.5) {
+                _hb._momentumId = null;
+                checkAutoFollow();
+                return;
+            }
+            _hb.viewOffset -= _hb._momentumVel / _hb.zoom;
+            _hb._momentumVel *= 0.92; // friction
+            _hb._momentumId = requestAnimationFrame(tick);
+        }
+        tick();
+    }
+
+    function stopMomentum() {
+        if (_hb && _hb._momentumId) {
+            cancelAnimationFrame(_hb._momentumId);
+            _hb._momentumId = null;
+        }
+    }
+
+    // ── Pinch-to-zoom helper ──────────────────────────────────
+    function touchDistance(t1, t2) {
+        var dx = t1.clientX - t2.clientX;
+        var dy = t1.clientY - t2.clientY;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    function touchMidpoint(t1, t2, rect) {
+        return {
+            x: (t1.clientX + t2.clientX) / 2 - rect.left,
+            y: (t1.clientY + t2.clientY) / 2 - rect.top
+        };
+    }
+
     // ── Input handling ─────────────────────────────────────────
 
     function setupInputHandlers(canvas) {
@@ -869,9 +909,13 @@
                 }
             }
 
+            stopMomentum();
             _hb.isDragging = true;
             _hb.dragStartX = e.clientX;
             _hb.dragStartOffset = _hb.viewOffset;
+            _hb._lastDragX = e.clientX;
+            _hb._lastDragTime = Date.now();
+            _hb._dragVelocity = 0;
             canvas.style.cursor = 'grabbing';
         });
 
@@ -882,6 +926,14 @@
                 var dx = e.clientX - _hb.dragStartX;
                 _hb.viewOffset = _hb.dragStartOffset - dx / _hb.zoom;
                 _hb.autoFollow = false;
+                // Track velocity for momentum
+                var now = Date.now();
+                var dt = now - (_hb._lastDragTime || now);
+                if (dt > 0) {
+                    _hb._dragVelocity = (e.clientX - (_hb._lastDragX || e.clientX)) / dt;
+                }
+                _hb._lastDragX = e.clientX;
+                _hb._lastDragTime = now;
                 checkAutoFollow();
             } else {
                 // Hover detection
@@ -922,6 +974,11 @@
             if (_hb.isDragging) {
                 _hb.isDragging = false;
                 canvas.style.cursor = 'default';
+                // Start momentum scrolling
+                var vel = _hb._dragVelocity || 0;
+                if (Math.abs(vel) > 0.1) {
+                    startMomentum(vel);
+                }
             }
         });
 
@@ -957,27 +1014,79 @@
             }
         });
 
-        // Touch support for mobile
+        // Touch support: 1 finger = pan with momentum, 2 fingers = pinch-to-zoom
         listen(canvas, 'touchstart', function(e) {
-            if (!_hb || e.touches.length !== 1) return;
-            _hb.isDragging = true;
-            _hb.dragStartX = e.touches[0].clientX;
-            _hb.dragStartOffset = _hb.viewOffset;
+            if (!_hb) return;
+            stopMomentum();
+
+            if (e.touches.length === 2) {
+                // Pinch start
+                _hb._pinching = true;
+                _hb.isDragging = false;
+                _hb._pinchStartDist = touchDistance(e.touches[0], e.touches[1]);
+                _hb._pinchStartZoom = _hb.zoom;
+                var rect = canvas.getBoundingClientRect();
+                _hb._pinchMid = touchMidpoint(e.touches[0], e.touches[1], rect);
+                _hb._pinchVx = canvasToVirtual(_hb._pinchMid.x);
+            } else if (e.touches.length === 1) {
+                // Pan start
+                _hb._pinching = false;
+                _hb.isDragging = true;
+                _hb.dragStartX = e.touches[0].clientX;
+                _hb.dragStartOffset = _hb.viewOffset;
+                _hb._lastDragX = e.touches[0].clientX;
+                _hb._lastDragTime = Date.now();
+                _hb._dragVelocity = 0;
+            }
         }, { passive: true });
 
         listen(canvas, 'touchmove', function(e) {
-            if (!_hb || !_hb.isDragging) return;
+            if (!_hb) return;
             e.preventDefault();
-            var dx = e.touches[0].clientX - _hb.dragStartX;
-            _hb.viewOffset = _hb.dragStartOffset - dx / _hb.zoom;
-            _hb.autoFollow = false;
-            checkAutoFollow();
+
+            if (_hb._pinching && e.touches.length === 2) {
+                // Pinch zoom
+                var dist = touchDistance(e.touches[0], e.touches[1]);
+                var scale = dist / _hb._pinchStartDist;
+                var newZoom = Math.max(_hb.minZoom, Math.min(_hb.maxZoom, _hb._pinchStartZoom * scale));
+                // Keep the midpoint virtual x stable
+                _hb.zoom = newZoom;
+                _hb.viewOffset = _hb._pinchVx - _hb._pinchMid.x / newZoom;
+                _hb.autoFollow = false;
+            } else if (_hb.isDragging && e.touches.length === 1) {
+                // Pan
+                var dx = e.touches[0].clientX - _hb.dragStartX;
+                _hb.viewOffset = _hb.dragStartOffset - dx / _hb.zoom;
+                _hb.autoFollow = false;
+                // Track velocity
+                var now = Date.now();
+                var dt = now - (_hb._lastDragTime || now);
+                if (dt > 0) {
+                    _hb._dragVelocity = (e.touches[0].clientX - (_hb._lastDragX || e.touches[0].clientX)) / dt;
+                }
+                _hb._lastDragX = e.touches[0].clientX;
+                _hb._lastDragTime = now;
+                checkAutoFollow();
+            }
         }, { passive: false });
 
         listen(canvas, 'touchend', function(e) {
             if (!_hb) return;
+
+            if (_hb._pinching) {
+                _hb._pinching = false;
+                checkAutoFollow();
+                return;
+            }
+
             if (_hb.isDragging) {
                 _hb.isDragging = false;
+
+                // Momentum
+                var vel = _hb._dragVelocity || 0;
+                if (Math.abs(vel) > 0.1) {
+                    startMomentum(vel);
+                }
 
                 // Tap detection (minimal drag distance = click)
                 if (e.changedTouches && e.changedTouches.length > 0) {
@@ -1329,6 +1438,7 @@
 
     window.destroyHeartbeat = function() {
         if (!_hb) return;
+        stopMomentum();
         if (_hb.rafId) cancelAnimationFrame(_hb.rafId);
         if (_hb.resizeObs) _hb.resizeObs.disconnect();
         if (_hb.ws) {
