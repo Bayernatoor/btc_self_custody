@@ -631,7 +631,11 @@
         } else {
             lines.push('~' + (blip.txCount || 1) + ' tx' + ((blip.txCount || 1) > 1 ? 's' : ''));
         }
-        lines.push('Fee: ' + (blip.feeRate ? Math.round(blip.feeRate * 10) / 10 : '?') + ' sat/vB');
+        lines.push('Fee rate: ' + (blip.feeRate ? Math.round(blip.feeRate * 10) / 10 : '?') + ' sat/vB');
+        if (blip.feeRate && blip.vsize) {
+            var feeSats = Math.round(blip.feeRate * blip.vsize);
+            lines.push('Fee paid: ' + feeSats.toLocaleString() + ' sats');
+        }
         if (blip.vsize) {
             lines.push('Size: ' + Math.round(blip.vsize) + ' vB');
         }
@@ -648,8 +652,12 @@
             lines.push('\u2192 Click again to view on mempool.space');
         }
         var blipColor = blip.color ? blip.color + '0.6)' : 'rgba(0,230,118,0.6)';
-        drawTooltipBox(ctx, lines, canvasX, baseline - (blip.stackY || 0) - blip.height - 12, blipColor, {
-            padding: 6, lineH: 15, fontSize: '11px monospace', textColor: 'rgba(255, 255, 255, 0.8)'
+        // Clamp tooltip y to stay within canvas (at least 10px from top)
+        var heightScale = _hb.zoom > 4 ? 1 + (_hb.zoom - 4) * 0.15 : 1;
+        var tipY = baseline - ((blip.stackY || 0) + (blip.brickH || blip.height)) * heightScale - 12;
+        tipY = Math.max(10, Math.min(tipY, _hb.height - 80));
+        drawTooltipBox(ctx, lines, canvasX, tipY, blipColor, {
+            padding: 6, lineH: 15, fontSize: '11px monospace', textColor: 'rgba(255, 255, 255, 0.9)'
         });
     }
 
@@ -1011,13 +1019,13 @@
                         var brickTop = baseline - sy - bh;
                         var fs = Math.min(Math.floor(bh * 0.35), 11);
                         ctx.font = 'bold ' + fs + 'px monospace';
-                        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+                        ctx.fillStyle = 'rgba(255,255,255,0.95)';
                         // Primary: fee rate
                         ctx.fillText((blip.feeRate || '?') + ' s/vB', brickLeft, brickTop + fs + 2);
                         // Secondary: value or size
                         if (bh > 22 && fs > 6) {
                             ctx.font = (fs - 1) + 'px monospace';
-                            ctx.fillStyle = 'rgba(255,255,255,0.5)';
+                            ctx.fillStyle = 'rgba(255,255,255,0.7)';
                             if (blip.value) {
                                 var btc = blip.value / 1e8;
                                 var valStr = btc >= 0.01 ? btc.toFixed(3) : btc.toFixed(6);
@@ -1091,7 +1099,10 @@
         if (mx >= btn.x && mx <= btn.x + btn.w && my >= btn.y && my <= btn.y + btn.h) {
             _hb.autoFollow = true;
             _hb.zoom = 1.9;
+            _hb.viewOffsetY = 0; // reset vertical pan
             _hb.hoveredBlock = null;
+            _hb.hoveredBlip = null;
+            _hb._pinnedBlip = null;
             return true;
         }
         return false;
@@ -1392,7 +1403,7 @@
             autoFollow: true,
             zoom: 1.9,              // default zoom for brick-level detail
             minZoom: 0.1,
-            maxZoom: 30.0,
+            maxZoom: 50.0,
 
             // Rendering
             rafId: null,
