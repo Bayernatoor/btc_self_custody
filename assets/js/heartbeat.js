@@ -208,6 +208,27 @@
         return null;
     }
 
+    // Find flatline segment under a virtual x position, with context
+    function flatlineAtVirtualX(vx) {
+        if (!_hb) return null;
+        for (var i = 0; i < _hb.timeline.length; i++) {
+            var seg = _hb.timeline[i];
+            var xEnd = seg.x_end !== null ? seg.x_end : _hb.virtualX;
+            if (seg.type === 'flatline' && vx >= seg.x_start && vx <= xEnd) {
+                // Find surrounding blocks for interval display
+                var prevBlock = null, nextBlock = null;
+                for (var j = i - 1; j >= 0; j--) {
+                    if (_hb.timeline[j].type === 'block') { prevBlock = _hb.timeline[j]; break; }
+                }
+                for (var j = i + 1; j < _hb.timeline.length; j++) {
+                    if (_hb.timeline[j].type === 'block') { nextBlock = _hb.timeline[j]; break; }
+                }
+                return { segment: seg, prevBlock: prevBlock, nextBlock: nextBlock };
+            }
+        }
+        return null;
+    }
+
     // Convert canvas pixel x to virtual x
     function canvasToVirtual(canvasX) {
         if (!_hb) return 0;
@@ -266,16 +287,18 @@
         var liveSeg = _hb.timeline[_hb.timeline.length - 1];
         if (!liveSeg || liveSeg.type !== 'flatline') return;
 
-        // Rate limit: max 5 blips per update
-        var n = Math.min(count > 0 ? Math.ceil(Math.log2(count + 1)) : 0, 5);
+        // More blips for more activity, cap at 8 per update
+        var n = Math.min(count > 0 ? Math.ceil(Math.sqrt(count / 50)) : 0, 8);
         for (var i = 0; i < n; i++) {
-            var feeNorm = Math.min(avgFeeRate / 100, 1.0);
+            var feeNorm = Math.min(avgFeeRate / 50, 1.0);
+            // Spread blips across a wider range around the current head
+            var spread = 5 + Math.random() * 20;
             liveSeg.blips.push({
-                x: _hb.virtualX + (Math.random() - 0.5) * 10,
-                height: 2 + feeNorm * 8,    // 2-10px tall
-                opacity: 0.4 + feeNorm * 0.4,
+                x: _hb.virtualX - spread + Math.random() * spread * 0.5,
+                height: 8 + feeNorm * 30 + Math.random() * 12,  // 8-50px tall
+                opacity: 0.5 + feeNorm * 0.4,
                 timestamp: Date.now() / 1000,
-                fadeStart: 0  // set when block arrives
+                fadeStart: 0
             });
         }
     }
@@ -343,6 +366,60 @@
         ctx.arcTo(x, y + h, x, y + h - r, r);
         ctx.lineTo(x, y + r);
         ctx.arcTo(x, y, x + r, y, r);
+    }
+
+    // Flatline tooltip: shows interval between surrounding blocks
+    function drawFlatlineTooltip(ctx, info, canvasX, baseline) {
+        var lines = [];
+        if (info.prevBlock && info.nextBlock) {
+            var interval = info.nextBlock.timestamp - info.prevBlock.timestamp;
+            lines.push('Block #' + info.prevBlock.height + ' \u2192 #' + info.nextBlock.height);
+            lines.push('Interval: ' + formatDuration(interval));
+        } else if (info.prevBlock && !info.nextBlock) {
+            // Live flatline - show time since last block
+            var elapsed = Math.floor(Date.now() / 1000 - info.prevBlock.timestamp);
+            lines.push('After block #' + info.prevBlock.height);
+            lines.push('Waiting: ' + formatDuration(elapsed));
+            lines.push(info.segment.blips ? info.segment.blips.length + ' mempool blips' : '');
+        } else {
+            lines.push('Waiting for blocks...');
+        }
+        lines = lines.filter(function(l) { return l.length > 0; });
+
+        var padding = 8;
+        var lineH = 16;
+        ctx.font = '12px monospace';
+        var maxW = 0;
+        for (var i = 0; i < lines.length; i++) {
+            var m = ctx.measureText(lines[i]).width;
+            if (m > maxW) maxW = m;
+        }
+
+        var boxW = maxW + padding * 2;
+        var boxH = lines.length * lineH + padding * 2;
+        var boxX = canvasX - boxW / 2;
+        var boxY = baseline - boxH - 20;
+
+        if (boxX < 4) boxX = 4;
+        if (boxX + boxW > _hb.width - 4) boxX = _hb.width - boxW - 4;
+        if (boxY < 4) boxY = 4;
+
+        ctx.fillStyle = 'rgba(10, 25, 41, 0.92)';
+        ctx.beginPath();
+        roundRect(ctx, boxX, boxY, boxW, boxH, 4);
+        ctx.fill();
+
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        roundRect(ctx, boxX, boxY, boxW, boxH, 4);
+        ctx.stroke();
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.font = '12px monospace';
+        for (var i = 0; i < lines.length; i++) {
+            ctx.fillText(lines[i], boxX + padding, boxY + padding + (i + 1) * lineH - 3);
+        }
     }
 
     function formatDuration(sec) {
@@ -472,6 +549,8 @@
             var hSeg = _hb.hoveredBlock;
             var midX = virtualToCanvas((hSeg.x_start + hSeg.x_end) / 2);
             drawTooltip(ctx, hSeg, midX, baseline - 30, baseline);
+        } else if (_hb.hoveredFlatline) {
+            drawFlatlineTooltip(ctx, _hb.hoveredFlatline, _hb.hoverCanvasX || w / 2, baseline);
         }
 
         // ── Draw "Jump to Live" if not auto-following ──────────
@@ -572,8 +651,11 @@
                 ctx.moveTo(bx, baseline);
                 ctx.lineTo(bx, baseline - blip.height);
                 ctx.strokeStyle = 'rgba(0, 230, 118, ' + bOpacity + ')';
-                ctx.lineWidth = 1;
+                ctx.lineWidth = 1.5;
+                ctx.shadowBlur = 6;
+                ctx.shadowColor = 'rgba(0, 230, 118, ' + (bOpacity * 0.6) + ')';
                 ctx.stroke();
+                ctx.shadowBlur = 0;
             }
         }
     }
@@ -630,9 +712,13 @@
                 if (mx >= 0 && mx <= _hb.width && my >= 0 && my <= _hb.height) {
                     var vx = canvasToVirtual(mx);
                     _hb.hoveredBlock = blockAtVirtualX(vx);
-                    canvas.style.cursor = _hb.hoveredBlock ? 'pointer' : 'default';
+                    _hb.hoveredFlatline = !_hb.hoveredBlock ? flatlineAtVirtualX(vx) : null;
+                    _hb.hoverCanvasX = mx;
+                    _hb.hoverCanvasY = my;
+                    canvas.style.cursor = _hb.hoveredBlock ? 'pointer' : (_hb.hoveredFlatline ? 'crosshair' : 'default');
                 } else {
                     _hb.hoveredBlock = null;
+                    _hb.hoveredFlatline = null;
                 }
             }
         });
@@ -813,6 +899,9 @@
             dragStartX: 0,
             dragStartOffset: 0,
             hoveredBlock: null,
+            hoveredFlatline: null,
+            hoverCanvasX: 0,
+            hoverCanvasY: 0,
             _jumpBtn: null,
 
             // Mempool feed
