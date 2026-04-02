@@ -302,21 +302,36 @@
         var txPerBlip = Math.ceil(newTxCount / n);
 
         for (var i = 0; i < n; i++) {
-            // Vary fee rate per blip to show distribution
-            var feeRate = medianFeeRate + (Math.random() - 0.3) * (topFeeRate - medianFeeRate);
-            feeRate = Math.max(1, feeRate);
-            var feeNorm = Math.min(feeRate / 80, 1.0);
-
-            // Color: low fee = dim cyan, medium = green, high = orange/red
-            var color;
-            if (feeRate < 5) {
-                color = 'rgba(66, 165, 245, '; // blue (low priority)
-            } else if (feeRate < 20) {
-                color = 'rgba(0, 230, 118, ';   // green (normal)
-            } else if (feeRate < 50) {
-                color = 'rgba(247, 147, 26, ';  // orange (elevated)
+            // Vary fee rate per blip: use wider random range to show diversity
+            // even in calm periods. Mix of min-fee txs and higher-fee txs.
+            var roll = Math.random();
+            var feeRate;
+            if (roll < 0.5) {
+                // Half at or below median
+                feeRate = medianFeeRate * (0.3 + Math.random() * 0.7);
+            } else if (roll < 0.85) {
+                // 35% between median and top
+                feeRate = medianFeeRate + Math.random() * (topFeeRate - medianFeeRate);
             } else {
-                color = 'rgba(255, 87, 34, ';   // red (high urgency)
+                // 15% outliers (2-5x top fee) - these are the urgent/RBF txs
+                feeRate = topFeeRate * (2 + Math.random() * 3);
+            }
+            feeRate = Math.max(0.5, feeRate);
+
+            // Normalize: use log scale so low-fee differences are visible
+            var feeNorm = Math.min(Math.log2(feeRate + 1) / 6, 1.0); // log2(64)=6
+
+            // Color: adaptive thresholds based on current median
+            // This ensures color variety even when fees are uniformly low
+            var color;
+            if (feeRate < medianFeeRate * 0.8) {
+                color = 'rgba(66, 165, 245, '; // blue (below median)
+            } else if (feeRate < medianFeeRate * 1.5) {
+                color = 'rgba(0, 230, 118, ';   // green (around median)
+            } else if (feeRate < medianFeeRate * 4) {
+                color = 'rgba(247, 147, 26, ';  // orange (above median)
+            } else {
+                color = 'rgba(255, 87, 34, ';   // red (outlier/urgent)
             }
 
             // Place at the live head with small random jitter
