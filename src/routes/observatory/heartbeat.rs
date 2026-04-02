@@ -299,7 +299,7 @@ pub fn HeartbeatPage() -> impl IntoView {
             live.mempool.bytes as f64 / 1_000_000.0,
             live.blockchain.time,
             live.network.hashrate / 1e18,
-            live.mempool.mempoolminfee,
+            live.mempool.mempoolminfee * 100_000.0, // BTC/kB to sat/vB
             live.blockchain.difficulty,
             live.blockchain.blocks,
         );
