@@ -287,12 +287,18 @@
                 try {
                     var data = JSON.parse(e.data);
 
-                    // Individual transactions: real txid, fee, vsize
-                    if (data.transactions && Array.isArray(data.transactions)) {
-                        for (var ti = 0; ti < data.transactions.length; ti++) {
-                            _hb._txBatchQueue.push(data.transactions[ti]);
+                    // Individual transactions: try multiple field names
+                    // mempool.space may use 'transactions', 'tx', or 'txs'
+                    var txArr = data.transactions || data.txs || null;
+                    // Single tx object
+                    if (!txArr && data.tx && data.tx.txid) {
+                        txArr = [data.tx];
+                    }
+                    if (txArr && Array.isArray(txArr) && txArr.length > 0) {
+                        _hb._hasTxStream = true;
+                        for (var ti = 0; ti < txArr.length; ti++) {
+                            _hb._txBatchQueue.push(txArr[ti]);
                         }
-                        // Throttle: flush batch at most every 200ms (~5 updates/sec)
                         var now = Date.now();
                         if (now - _hb._txThrottleTime > 200) {
                             _hb._txThrottleTime = now;
@@ -300,16 +306,27 @@
                         }
                     }
 
-                    // Projected blocks: still used for vital signs (fee rates, mempool size)
+                    // Projected blocks: vital signs + fallback brick creation
                     if (data['mempool-blocks']) {
                         var mblocks = data['mempool-blocks'];
                         var totalTx = 0;
                         for (var i = 0; i < mblocks.length; i++) {
                             totalTx += mblocks[i].nTx || 0;
                         }
+
+                        // Diff for fallback aggregate bricks
+                        var newTx = 0;
+                        if (_hb._lastMempoolTxCount > 0) {
+                            newTx = Math.max(0, totalTx - _hb._lastMempoolTxCount);
+                        }
                         _hb._lastMempoolTxCount = totalTx;
-                        // Store median fee for color computation
                         _hb._wsMedianFee = Math.max(1, mblocks[0] ? mblocks[0].medianFee || 5 : 5);
+
+                        // Fallback: if individual tx stream isn't working, use aggregate
+                        if (!_hb._hasTxStream && newTx > 0) {
+                            var topFee = Math.max(2, mblocks[0] ? (mblocks[0].feeRange || [1, 5, 10])[2] || 10 : 5);
+                            addMempoolTxs(newTx, _hb._wsMedianFee, topFee);
+                        }
                     }
                 } catch (err) {}
             };
