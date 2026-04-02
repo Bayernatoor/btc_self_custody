@@ -139,7 +139,8 @@
 
     // Compute flatline width in virtual pixels for a completed (history) flatline
     function historyFlatlineWidth(interBlockSeconds) {
-        return Math.max(40, Math.min(interBlockSeconds / 10, 120));
+        // Proportional: 1min=15px, 5min=75px, 10min=150px, 30min=300px (capped)
+        return Math.max(10, Math.min(interBlockSeconds / 4, 300));
     }
 
     // ── Grid drawing ───────────────────────────────────────────
