@@ -1203,7 +1203,8 @@
                         if (!_hb.hoveredBlip && my < baseline && _hb.zoom >= 1.5) {
                             _hb.hoveredBlip = blipAtVirtualX(vx, 4 / _hb.zoom);
                         }
-                        if (!_hb.hoveredBlip) {
+                        if (!_hb.hoveredBlip && my >= baseline) {
+                            // Only show flatline tooltip when cursor is below the baseline
                             _hb.hoveredFlatline = flatlineAtVirtualX(vx);
                         }
                     }
@@ -1584,45 +1585,10 @@
                     var advancePx = elapsed * FLATLINE_PX_PER_SEC;
                     _hb.virtualX += advancePx;
 
-                    // Scatter some synthetic blips across the gap to represent
-                    // mempool activity that happened while we weren't watching
-                    var liveSeg = _hb.timeline[_hb.timeline.length - 1];
-                    if (liveSeg && liveSeg.type === 'flatline') {
-                        var numBlips = Math.min(Math.floor(elapsed / 1.5), 700); // ~1 blip per 1.5s, cap 700
-                        var columnHeights = {}; // grid column -> accumulated height
-                        for (var bi = 0; bi < numBlips; bi++) {
-                            var frac = bi / numBlips;
-                            // Random position across the gap (not evenly spaced)
-                            var blipX = liveSeg.x_start + Math.random() * advancePx;
-                            var feeRoll = Math.random();
-                            var color;
-                            if (feeRoll < 0.5) color = 'rgba(0, 230, 118, ';
-                            else if (feeRoll < 0.8) color = 'rgba(66, 165, 245, ';
-                            else if (feeRoll < 0.95) color = 'rgba(247, 147, 26, ';
-                            else color = 'rgba(255, 87, 34, ';
-                            var synthBrickH = 3 + Math.random() * 12;
-                            var synthBrickW = 4;
-                            var synthGridX = Math.round(blipX / 5) * 5;
-                            var synthStackY = Math.min(columnHeights[synthGridX] || 0, 150);
-                            columnHeights[synthGridX] = synthStackY + synthBrickH;
-                            liveSeg.blips.push({
-                                x: blipX,
-                                gridX: synthGridX,
-                                height: synthBrickH + synthStackY,
-                                brickH: synthBrickH,
-                                brickW: synthBrickW,
-                                stackY: synthStackY,
-                                color: color,
-                                opacity: 0.55 + Math.random() * 0.3,
-                                txCount: Math.ceil(Math.random() * 10),
-                                feeRate: Math.round((1 + Math.random() * 5) * 10) / 10,
-                                timestamp: _hb.lastBlockTime + frac * elapsed,
-                                fadeStart: 0
-                            });
-                        }
-                    }
-                    // Ensure viewport is at 1x zoom and following the head
+                    // No synthetic blips - only real txs from the WS feed
+                    // Reset viewport to default state
                     _hb.zoom = 1.9;
+                    _hb.viewOffsetY = 0;
                     _hb.autoFollow = true;
                     _hb.viewOffset = _hb.virtualX - (_hb.width * HEAD_POSITION_FRAC);
 
