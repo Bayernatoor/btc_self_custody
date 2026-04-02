@@ -464,7 +464,7 @@ pub fn HeartbeatPage() -> impl IntoView {
 
                 // Temperature (mempool)
                 <VitalTile
-                    label="Mempool"
+                    label="Temperature"
                     value=temp_display
                     unit=" vMB"
                     status=temp_label
