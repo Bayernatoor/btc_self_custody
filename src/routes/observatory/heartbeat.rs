@@ -240,9 +240,12 @@ pub fn HeartbeatPage() -> impl IntoView {
                 }
             }
 
-            // Blood Pressure: fee rates with context
-            set_bp_display.set(format!("{:.1} / {:.1}", v.bp_systolic, v.bp_diastolic));
-            let bp_context = if (v.bp_systolic + v.bp_diastolic) / 2.0 < 5.0 {
+            // Blood Pressure: compute diastolic directly from LiveStats (JS value unreliable)
+            let diastolic = cached_live.get_untracked()
+                .map(|s| (s.mempool.mempoolminfee * 1e8 / 100.0).round() / 10.0)
+                .unwrap_or(v.bp_diastolic);
+            set_bp_display.set(format!("{:.1} / {:.1}", v.bp_systolic, diastolic));
+            let bp_context = if (v.bp_systolic + diastolic) / 2.0 < 5.0 {
                 format!("{} \u{00b7} Low fee environment", v.bp_label)
             } else if (v.bp_systolic + v.bp_diastolic) / 2.0 < 20.0 {
                 format!("{} \u{00b7} Moderate fees", v.bp_label)
