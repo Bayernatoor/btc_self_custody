@@ -256,11 +256,17 @@
     function blipAtVirtualX(vx, hitRadius) {
         if (!_hb) return null;
         var best = null, bestDist = hitRadius;
+        var viewLeft = _hb.viewOffset;
+        var viewRight = _hb.viewOffset + _hb.width / _hb.zoom;
         for (var i = 0; i < _hb.timeline.length; i++) {
             var seg = _hb.timeline[i];
             if (seg.type !== 'flatline' || !seg.blips) continue;
+            // Skip segments outside visible range
+            var segEnd = seg.x_end !== null ? seg.x_end : _hb.virtualX;
+            if (segEnd < viewLeft || seg.x_start > viewRight) continue;
             for (var bi = 0; bi < seg.blips.length; bi++) {
                 var blip = seg.blips[bi];
+                if (blip.fadeStart > 0) continue;
                 var dist = Math.abs(blip.x - vx);
                 if (dist < bestDist) {
                     bestDist = dist;
@@ -276,16 +282,24 @@
         if (!_hb) return null;
         var zoom = _hb.zoom;
         var heightScale = zoom > 4 ? 1 + (zoom - 4) * 0.15 : 1;
+        var viewLeft = _hb.viewOffset;
+        var viewRight = _hb.viewOffset + _hb.width / zoom;
 
         for (var i = _hb.timeline.length - 1; i >= 0; i--) {
             var seg = _hb.timeline[i];
             if (seg.type !== 'flatline' || !seg.blips) continue;
+            // Skip segments entirely outside visible range
+            var segEnd = seg.x_end !== null ? seg.x_end : _hb.virtualX;
+            if (segEnd < viewLeft || seg.x_start > viewRight) continue;
             // Check blips in reverse order (top of stack first)
             for (var bi = seg.blips.length - 1; bi >= 0; bi--) {
                 var blip = seg.blips[bi];
                 if (blip.fadeStart > 0) continue;
+                // Quick x-range check before computing canvas coords
+                var bvx = blip.gridX || blip.x;
+                if (bvx < viewLeft || bvx > viewRight) continue;
 
-                var bx = virtualToCanvas(blip.gridX || blip.x);
+                var bx = virtualToCanvas(bvx);
                 var bw = (blip.brickW || 4) * zoom;
                 var bh = (blip.brickH || 10) * heightScale;
                 var sy = (blip.stackY || 0) * heightScale;
