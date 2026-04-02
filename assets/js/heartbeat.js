@@ -832,9 +832,9 @@
         // Block height
         octx.font = 'bold 18px monospace';
         octx.fillStyle = 'rgba(255,255,255,0.4)';
-        var blockTxt = 'Block ' + (_hb.recentBlocks && _hb.recentBlocks.length > 0
-            ? '#' + _hb.recentBlocks[_hb.recentBlocks.length - 1].height
-            : '---');
+        var blockTxt = 'Block #' + (_hb.blockHeight || (_hb.recentBlocks && _hb.recentBlocks.length > 0
+            ? _hb.recentBlocks[_hb.recentBlocks.length - 1].height
+            : '---'));
         octx.fillText(blockTxt, col1, cardH - 50);
 
         // Timestamp

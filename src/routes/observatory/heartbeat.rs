@@ -207,7 +207,7 @@ pub fn HeartbeatPage() -> impl IntoView {
             set_temp_label.set(v.temp_label);
             set_temp_color.set(v.temp_color);
 
-            set_immune_display.set(format!("{:.0} EH/s", v.immune_eh));
+            set_immune_display.set(format!("{:.1} EH/s", v.immune_eh));
             set_immune_label.set(v.immune_label);
             set_immune_color.set(v.immune_color);
         }
@@ -235,7 +235,7 @@ pub fn HeartbeatPage() -> impl IntoView {
             live.next_block_fee,
             live.mempool.bytes as f64 / 1_000_000.0,
             live.blockchain.time,
-            live.network.hashrate,
+            live.network.hashrate / 1e18,
             live.mempool.mempoolminfee,
             live.blockchain.difficulty,
             live.blockchain.blocks,
@@ -292,16 +292,39 @@ pub fn HeartbeatPage() -> impl IntoView {
             .unwrap_or_else(|| "---".to_string())
     });
 
+    // Tick counter that increments every second for live countdown
+    let (tick, set_tick) = signal(0u64);
+    let (last_block_ts, set_last_block_ts) = signal(0u64);
+
+    #[cfg(feature = "hydrate")]
+    {
+        let handle = leptos::prelude::set_interval_with_handle(
+            move || set_tick.update(|t| *t += 1),
+            std::time::Duration::from_secs(1),
+        );
+        on_cleanup(move || { if let Ok(h) = handle { h.clear(); } });
+    }
+
+    // Update stored timestamp when LiveStats refreshes
+    Effect::new(move || {
+        if let Some(s) = cached_live.get() {
+            set_last_block_ts.set(s.blockchain.time);
+        }
+    });
+
     let time_since = Signal::derive(move || {
-        cached_live.get().map(|s| {
-            let now = chrono::Utc::now().timestamp() as u64;
-            let elapsed = now.saturating_sub(s.blockchain.time);
-            if elapsed < 60 {
-                format!("{}s ago", elapsed)
-            } else {
-                format!("{}m {}s ago", elapsed / 60, elapsed % 60)
-            }
-        }).unwrap_or_else(|| "waiting...".to_string())
+        let _ = tick.get(); // re-run every tick
+        let ts = last_block_ts.get();
+        if ts == 0 {
+            return "waiting...".to_string();
+        }
+        let now = chrono::Utc::now().timestamp() as u64;
+        let elapsed = now.saturating_sub(ts);
+        if elapsed < 60 {
+            format!("{}s ago", elapsed)
+        } else {
+            format!("{}m {}s ago", elapsed / 60, elapsed % 60)
+        }
     });
 
     let mempool_display = Signal::derive(move || {
