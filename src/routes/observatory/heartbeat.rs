@@ -241,10 +241,21 @@ pub fn HeartbeatPage() -> impl IntoView {
             }
 
             // Blood Pressure: compute diastolic directly from LiveStats (JS value unreliable)
-            let diastolic = cached_live.get_untracked()
-                .map(|s| (s.mempool.mempoolminfee * 1e8 / 100.0).round() / 10.0)
-                .unwrap_or(v.bp_diastolic);
-            set_bp_display.set(format!("{:.1} / {:.1}", v.bp_systolic, diastolic));
+            let raw_minfee = cached_live.get_untracked()
+                .map(|s| s.mempool.mempoolminfee)
+                .unwrap_or(0.0);
+            // BTC/kB to sat/vB: * 100_000_000 (to sats) / 1000 (kB to bytes)
+            // Use integer math to avoid float precision issues
+            let sats_per_kb = (raw_minfee * 1e8).round() as u64; // e.g. 100 sats/kB
+            let diastolic = sats_per_kb as f64 / 1000.0; // 0.1 sat/vB
+            leptos::logging::log!("heartbeat: mempoolminfee raw={:.10} sats_per_kb={} diastolic={}", raw_minfee, sats_per_kb, diastolic);
+            // Use 2 decimals if diastolic is < 0.1, otherwise 1
+            let dia_fmt = if diastolic < 0.1 && diastolic > 0.0 {
+                format!("{:.2}", diastolic)
+            } else {
+                format!("{:.1}", diastolic)
+            };
+            set_bp_display.set(format!("{:.1} / {}", v.bp_systolic, dia_fmt));
             let bp_context = if (v.bp_systolic + diastolic) / 2.0 < 5.0 {
                 format!("{} \u{00b7} Low fee environment", v.bp_label)
             } else if (v.bp_systolic + v.bp_diastolic) / 2.0 < 20.0 {
