@@ -49,11 +49,11 @@
         var feeLog = fees > 0 ? Math.min(Math.log10(fees) / 7.7, 1.0) : 0; // log10(50M)=7.7
 
         // Waveform amplitudes (pixels)
-        var pAmp   = 4 + txNorm * 20;           // P wave: 4-24px
-        var qDepth = 6 + waitNorm * 45;          // Q dip: 6-51px
-        var rHeight = 20 + feeLog * 130;          // R spike: 20-150px (log scale)
+        var pAmp   = 6 + txNorm * 28;           // P wave: 6-34px
+        var qDepth = 8 + waitNorm * 60;          // Q dip: 8-68px
+        var rHeight = 30 + feeLog * 170;          // R spike: 30-200px (log scale)
         var sDepth = rHeight * 0.45;              // S dip: 45% of R
-        var tAmp   = 3 + fullNorm * 22;           // T wave: 3-25px
+        var tAmp   = 4 + fullNorm * 30;           // T wave: 4-34px
 
         // Baseline flat lead-in (2-4 points)
         points.push(0, 0, 0);
@@ -1348,7 +1348,7 @@
                     // mempool activity that happened while we weren't watching
                     var liveSeg = _hb.timeline[_hb.timeline.length - 1];
                     if (liveSeg && liveSeg.type === 'flatline') {
-                        var numBlips = Math.min(Math.floor(elapsed / 2), 500); // ~1 blip per 2s, cap 500
+                        var numBlips = Math.min(Math.floor(elapsed / 1.5), 700); // ~1 blip per 1.5s, cap 700
                         var columnHeights = {}; // grid column -> accumulated height
                         for (var bi = 0; bi < numBlips; bi++) {
                             var frac = bi / numBlips;
