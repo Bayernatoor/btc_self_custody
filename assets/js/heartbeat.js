@@ -734,7 +734,7 @@
                 // Absorption animation: slide toward block + shrink + fade
                 if (blip.fadeStart > 0) {
                     var fadeDt = nowSec - blip.fadeStart;
-                    var animDuration = 1.2; // seconds for full absorption
+                    var animDuration = 2.5; // seconds for full absorption
                     var t = Math.min(fadeDt / animDuration, 1.0);
                     // Ease-in curve (accelerates toward the block)
                     var ease = t * t;
