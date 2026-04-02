@@ -275,35 +275,41 @@
         try {
             var ws = new WebSocket('wss://mempool.space/api/v1/ws');
             ws.onopen = function() {
-                ws.send(JSON.stringify({ action: 'want', data: ['mempool-blocks'] }));
+                // Subscribe to both individual txs and projected blocks
+                ws.send(JSON.stringify({ action: 'want', data: ['mempool-blocks', 'transactions'] }));
                 _hb.wsConnected = true;
-                _hb._wsRetryDelay = 5000; // reset backoff on success
+                _hb._wsRetryDelay = 5000;
+                _hb._txThrottleTime = 0;
+                _hb._txBatchQueue = [];
             };
             ws.onmessage = function(e) {
                 if (!_hb) return;
                 try {
                     var data = JSON.parse(e.data);
+
+                    // Individual transactions: real txid, fee, vsize
+                    if (data.transactions && Array.isArray(data.transactions)) {
+                        for (var ti = 0; ti < data.transactions.length; ti++) {
+                            _hb._txBatchQueue.push(data.transactions[ti]);
+                        }
+                        // Throttle: flush batch at most every 200ms (~5 updates/sec)
+                        var now = Date.now();
+                        if (now - _hb._txThrottleTime > 200) {
+                            _hb._txThrottleTime = now;
+                            flushTxBatch();
+                        }
+                    }
+
+                    // Projected blocks: still used for vital signs (fee rates, mempool size)
                     if (data['mempool-blocks']) {
                         var mblocks = data['mempool-blocks'];
-                        // Count total txs across all projected blocks
                         var totalTx = 0;
                         for (var i = 0; i < mblocks.length; i++) {
                             totalTx += mblocks[i].nTx || 0;
                         }
-                        // Diff: only new txs since last update create visual blips
-                        var newTx = 0;
-                        if (_hb._lastMempoolTxCount > 0) {
-                            newTx = Math.max(0, totalTx - _hb._lastMempoolTxCount);
-                        }
                         _hb._lastMempoolTxCount = totalTx;
-
-                        // Get fee rate distribution from the first projected block
-                        var topFee = Math.max(2, mblocks[0] ? (mblocks[0].feeRange || [1, 5, 10])[2] || 10 : 5);
-                        var medFee = Math.max(1, mblocks[0] ? mblocks[0].medianFee || 5 : 5);
-
-                        if (newTx > 0) {
-                            addMempoolTxs(newTx, medFee, topFee);
-                        }
+                        // Store median fee for color computation
+                        _hb._wsMedianFee = Math.max(1, mblocks[0] ? mblocks[0].medianFee || 5 : 5);
                     }
                 } catch (err) {}
             };
@@ -323,6 +329,101 @@
 
     // Add tx blips at the live head position. Each blip represents ~N new txs.
     // Placed at the current head so they naturally spread out as time advances.
+    // Flush queued individual transactions into visual bricks
+    function flushTxBatch() {
+        if (!_hb || !_hb._txBatchQueue || _hb._txBatchQueue.length === 0) return;
+        var liveSeg = _hb.timeline[_hb.timeline.length - 1];
+        if (!liveSeg || liveSeg.type !== 'flatline') return;
+
+        var batch = _hb._txBatchQueue;
+        _hb._txBatchQueue = [];
+
+        // Cap visual bricks at 10 per flush (batch the rest into 1 aggregate)
+        var maxBricks = 10;
+        var medianFee = _hb._wsMedianFee || 5;
+
+        for (var i = 0; i < Math.min(batch.length, maxBricks); i++) {
+            var tx = batch[i];
+            var feeRate = tx.fee && tx.vsize ? tx.fee / tx.vsize : 1;
+            var feeNorm = Math.min(Math.log2(feeRate + 1) / 6, 1.0);
+
+            // Color based on fee rate relative to median
+            var color;
+            if (feeRate < medianFee * 0.8) {
+                color = 'rgba(66, 165, 245, ';
+            } else if (feeRate < medianFee * 1.5) {
+                color = 'rgba(0, 230, 118, ';
+            } else if (feeRate < medianFee * 4) {
+                color = 'rgba(247, 147, 26, ';
+            } else {
+                color = 'rgba(255, 87, 34, ';
+            }
+
+            // Brick size based on vsize
+            var brickW = 4;
+            var brickH = 3 + feeNorm * 14 + Math.random() * 3;
+            var brickX = _hb.virtualX - Math.random() * 15;
+            var gridX = Math.round(brickX / 5) * 5;
+
+            // Stack height
+            var stackY = 0;
+            for (var si2 = 0; si2 < liveSeg.blips.length; si2++) {
+                var other = liveSeg.blips[si2];
+                if (other.fadeStart === 0 && other.gridX === gridX) {
+                    stackY += other.brickH || 0;
+                }
+            }
+
+            liveSeg.blips.push({
+                x: brickX,
+                gridX: gridX,
+                height: brickH + stackY,
+                brickH: brickH,
+                brickW: brickW,
+                stackY: stackY,
+                color: color,
+                opacity: 0.65 + feeNorm * 0.3,
+                txCount: 1,
+                txid: tx.txid || null,
+                feeRate: Math.round(feeRate * 10) / 10,
+                vsize: tx.vsize || 0,
+                value: tx.value || 0,
+                timestamp: Date.now() / 1000,
+                fadeStart: 0
+            });
+        }
+
+        // If there are excess txs beyond maxBricks, create one aggregate brick
+        if (batch.length > maxBricks) {
+            var remaining = batch.length - maxBricks;
+            var avgFee = 0;
+            for (var j = maxBricks; j < batch.length; j++) {
+                avgFee += (batch[j].fee && batch[j].vsize ? batch[j].fee / batch[j].vsize : 1);
+            }
+            avgFee /= remaining;
+            var aggFeeNorm = Math.min(Math.log2(avgFee + 1) / 6, 1.0);
+            var aggColor = avgFee < medianFee ? 'rgba(0, 230, 118, ' : 'rgba(247, 147, 26, ';
+            var aggX = _hb.virtualX - Math.random() * 10;
+            var aggGridX = Math.round(aggX / 5) * 5;
+            var aggStackY = 0;
+            for (var si3 = 0; si3 < liveSeg.blips.length; si3++) {
+                var oth = liveSeg.blips[si3];
+                if (oth.fadeStart === 0 && oth.gridX === aggGridX) {
+                    aggStackY += oth.brickH || 0;
+                }
+            }
+            var aggH = 3 + aggFeeNorm * 10;
+            liveSeg.blips.push({
+                x: aggX, gridX: aggGridX,
+                height: aggH + aggStackY, brickH: aggH, brickW: 4, stackY: aggStackY,
+                color: aggColor, opacity: 0.5,
+                txCount: remaining, feeRate: Math.round(avgFee * 10) / 10,
+                timestamp: Date.now() / 1000, fadeStart: 0
+            });
+        }
+    }
+
+    // Fallback: add aggregate blips when individual tx stream isn't available
     function addMempoolTxs(newTxCount, medianFeeRate, topFeeRate) {
         if (!_hb) return;
         var liveSeg = _hb.timeline[_hb.timeline.length - 1];
@@ -472,12 +573,18 @@
         ctx.arcTo(x, y, x + r, y, r);
     }
 
-    // Blip tooltip: shows fee rate and tx info for a single blip
+    // Blip tooltip: shows fee rate and tx info for a single blip/brick
     function drawBlipTooltip(ctx, blip, canvasX, baseline) {
-        var lines = [
-            '~' + (blip.txCount || 1) + ' tx' + ((blip.txCount || 1) > 1 ? 's' : ''),
-            'Fee: ~' + (blip.feeRate ? Math.round(blip.feeRate * 10) / 10 : '?') + ' sat/vB',
-        ];
+        var lines = [];
+        if (blip.txid) {
+            lines.push('TX: ' + blip.txid.substring(0, 12) + '...');
+        } else {
+            lines.push('~' + (blip.txCount || 1) + ' tx' + ((blip.txCount || 1) > 1 ? 's' : ''));
+        }
+        lines.push('Fee: ' + (blip.feeRate ? Math.round(blip.feeRate * 10) / 10 : '?') + ' sat/vB');
+        if (blip.vsize) {
+            lines.push('Size: ' + blip.vsize + ' vB');
+        }
         if (blip.timestamp) {
             var d = new Date(blip.timestamp * 1000);
             lines.push(d.toLocaleTimeString());
@@ -1012,7 +1119,14 @@
         listen(canvas, 'click', function(e) {
             if (!_hb) return;
             var rect = canvas.getBoundingClientRect();
-            tryJumpToLive(e.clientX - rect.left, e.clientY - rect.top);
+            var mx = e.clientX - rect.left;
+            var my = e.clientY - rect.top;
+            if (tryJumpToLive(mx, my)) return;
+
+            // Click on a brick with txid -> open mempool.space
+            if (_hb.hoveredBlip && _hb.hoveredBlip.txid) {
+                window.open('https://mempool.space/tx/' + _hb.hoveredBlip.txid, '_blank');
+            }
         });
 
         // Touch support: 1 finger = pan with momentum, 2 fingers = pinch-to-zoom
