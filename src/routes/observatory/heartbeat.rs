@@ -135,6 +135,9 @@ pub fn HeartbeatPage() -> impl IntoView {
     // Sound toggle state
     let (sound_on, set_sound_on) = signal(false);
 
+    // Period start timestamp (first block in current retarget period)
+    let (period_start_ts, set_period_start_ts) = signal(0u64);
+
     // Blocks until next difficulty adjustment
     let blocks_until_retarget = Signal::derive(move || {
         cached_live.get().map(|s| {
@@ -179,6 +182,11 @@ pub fn HeartbeatPage() -> impl IntoView {
             init_heartbeat("heartbeat-canvas");
             initialized.set(true);
 
+            // Store period start timestamp for heart rate calculation
+            if let Some(first) = blocks.first() {
+                set_period_start_ts.set(first.timestamp);
+            }
+
             // Build block events with inter-block time (replay=true for compressed history)
             let json = blocks_to_json(&blocks);
             push_heartbeat_blocks(&json, true);
@@ -208,17 +216,29 @@ pub fn HeartbeatPage() -> impl IntoView {
         let vitals_json = get_heartbeat_vitals();
         // Parse the JSON manually (no serde dependency needed)
         if let Some(v) = parse_vitals_json(&vitals_json) {
-            // Heart Rate: show avg block time as main value, bpm as subtitle
-            let bpm = v.heart_rate_bpm;
-            if bpm > 0.0 {
-                let avg_secs = (600.0 / bpm) as u64;
-                set_hr_display.set(format!("{}:{:02}", avg_secs / 60, avg_secs % 60));
-            } else {
-                set_hr_display.set("--:--".to_string());
+            // Heart Rate: compute from period start timestamp stored at init
+            let period_ts = period_start_ts.get();
+            if let Some(live) = cached_live.get_untracked() {
+                let current_ts = live.blockchain.time;
+                let blocks_in = live.blockchain.blocks % 2016;
+                if period_ts > 0 && current_ts > period_ts && blocks_in > 1 {
+                    let span = (current_ts - period_ts) as f64;
+                    let avg_secs = span / blocks_in as f64;
+                    let avg_u = avg_secs.round() as u64;
+                    set_hr_display.set(format!("{}:{:02}", avg_u / 60, avg_u % 60));
+                    let bpm = 600.0 / avg_secs;
+                    set_hr_subtitle.set(format!("{:.2} bpm", bpm));
+                    let (label, color) = if bpm < 0.7 {
+                        ("Bradycardia", "#42a5f5")
+                    } else if bpm <= 1.3 {
+                        ("Normal", "#00e676")
+                    } else {
+                        ("Tachycardia", "#f7931a")
+                    };
+                    set_hr_label.set(label.to_string());
+                    set_hr_color.set(color.to_string());
+                }
             }
-            set_hr_label.set(v.heart_rate_label);
-            set_hr_color.set(v.heart_rate_color);
-            set_hr_subtitle.set(format!("{:.1} bpm", bpm));
 
             // Blood Pressure: fee rates with context
             set_bp_display.set(format!("{:.0} / {:.0}", v.bp_systolic, v.bp_diastolic));
