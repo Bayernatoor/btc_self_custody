@@ -229,16 +229,35 @@
         return null;
     }
 
-    // Convert canvas pixel x to virtual x
+    // Convert canvas pixel x to virtual x (zoom-aware)
     function canvasToVirtual(canvasX) {
         if (!_hb) return 0;
-        return _hb.viewOffset + canvasX;
+        return _hb.viewOffset + canvasX / _hb.zoom;
     }
 
-    // Convert virtual x to canvas pixel x
+    // Convert virtual x to canvas pixel x (zoom-aware)
     function virtualToCanvas(vx) {
         if (!_hb) return 0;
-        return vx - _hb.viewOffset;
+        return (vx - _hb.viewOffset) * _hb.zoom;
+    }
+
+    // Find nearest blip within hitRadius virtual pixels
+    function blipAtVirtualX(vx, hitRadius) {
+        if (!_hb) return null;
+        var best = null, bestDist = hitRadius;
+        for (var i = 0; i < _hb.timeline.length; i++) {
+            var seg = _hb.timeline[i];
+            if (seg.type !== 'flatline' || !seg.blips) continue;
+            for (var bi = 0; bi < seg.blips.length; bi++) {
+                var blip = seg.blips[bi];
+                var dist = Math.abs(blip.x - vx);
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    best = blip;
+                }
+            }
+        }
+        return best;
     }
 
     // ── Mempool WebSocket feed ─────────────────────────────────
@@ -413,6 +432,51 @@
         ctx.arcTo(x, y, x + r, y, r);
     }
 
+    // Blip tooltip: shows fee rate and tx info for a single blip
+    function drawBlipTooltip(ctx, blip, canvasX, baseline) {
+        var lines = [
+            '~' + (blip.txCount || 1) + ' tx' + ((blip.txCount || 1) > 1 ? 's' : ''),
+            'Fee: ~' + (blip.feeRate || '?') + ' sat/vB',
+        ];
+        var d = new Date((blip.timestamp || 0) * 1000);
+        if (blip.timestamp) {
+            lines.push(d.toLocaleTimeString());
+        }
+
+        var padding = 6;
+        var lineH = 15;
+        ctx.font = '11px monospace';
+        var maxW = 0;
+        for (var i = 0; i < lines.length; i++) {
+            var m = ctx.measureText(lines[i]).width;
+            if (m > maxW) maxW = m;
+        }
+        var boxW = maxW + padding * 2;
+        var boxH = lines.length * lineH + padding * 2;
+        var boxX = canvasX - boxW / 2;
+        var boxY = baseline - blip.height - boxH - 12;
+        if (boxX < 4) boxX = 4;
+        if (boxX + boxW > _hb.width - 4) boxX = _hb.width - boxW - 4;
+        if (boxY < 4) boxY = 4;
+
+        ctx.fillStyle = 'rgba(10, 25, 41, 0.92)';
+        ctx.beginPath();
+        roundRect(ctx, boxX, boxY, boxW, boxH, 4);
+        ctx.fill();
+        var blipColor = blip.color ? blip.color + '0.6)' : 'rgba(0,230,118,0.6)';
+        ctx.strokeStyle = blipColor;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        roundRect(ctx, boxX, boxY, boxW, boxH, 4);
+        ctx.stroke();
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.font = '11px monospace';
+        for (var i = 0; i < lines.length; i++) {
+            ctx.fillText(lines[i], boxX + padding, boxY + padding + (i + 1) * lineH - 3);
+        }
+    }
+
     // Flatline tooltip: shows interval between surrounding blocks
     function drawFlatlineTooltip(ctx, info, canvasX, baseline) {
         var lines = [];
@@ -532,10 +596,10 @@
             _hb.virtualX += dt * 5.0;
         }
 
-        // If auto-following, keep viewport pinned to the head
+        // If auto-following, keep viewport pinned to the head (zoom-aware)
         if (_hb.autoFollow) {
-            // Place the head at 85% of the canvas width so there is some look-ahead
-            _hb.viewOffset = _hb.virtualX - w * 0.85;
+            // Place the head at 85% of canvas width in virtual coords
+            _hb.viewOffset = _hb.virtualX - (w * 0.85) / _hb.zoom;
         }
 
         // ── Compute current color from live state ──────────────
@@ -561,9 +625,9 @@
         ctx.fillRect(0, 0, w, h);
         drawGrid(ctx, w, h);
 
-        // ── Visible virtual x range ────────────────────────────
+        // ── Visible virtual x range (zoom-aware) ────────────────
         var viewLeft = _hb.viewOffset;
-        var viewRight = _hb.viewOffset + w;
+        var viewRight = _hb.viewOffset + w / _hb.zoom;
 
         // ── Draw timeline segments ─────────────────────────────
         // Subtle jitter on long waits (only for live flatline)
@@ -600,8 +664,18 @@
             var hSeg = _hb.hoveredBlock;
             var midX = virtualToCanvas((hSeg.x_start + hSeg.x_end) / 2);
             drawTooltip(ctx, hSeg, midX, baseline - 30, baseline);
+        } else if (_hb.hoveredBlip) {
+            drawBlipTooltip(ctx, _hb.hoveredBlip, _hb.hoverCanvasX, baseline);
         } else if (_hb.hoveredFlatline) {
             drawFlatlineTooltip(ctx, _hb.hoveredFlatline, _hb.hoverCanvasX || w / 2, baseline);
+        }
+
+        // ── Draw zoom indicator ────────────────────────────────
+        if (_hb.zoom !== 1.0) {
+            ctx.font = '11px monospace';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.textAlign = 'left';
+            ctx.fillText(_hb.zoom.toFixed(1) + 'x', 10, h - 10);
         }
 
         // ── Draw "Jump to Live" if not auto-following ──────────
@@ -632,6 +706,7 @@
     function drawBlockSegment(ctx, seg, viewLeft, baseline, fallbackColor) {
         var pts = seg.points;
         var color = seg.color || fallbackColor;
+        var zoom = _hb.zoom;
 
         ctx.beginPath();
         ctx.strokeStyle = color;
@@ -647,7 +722,7 @@
 
         for (var i = 0; i < pts.length; i++) {
             var vx = seg.x_start + i * POINT_WIDTH;
-            var cx = vx - viewLeft;
+            var cx = virtualToCanvas(vx);
             var cy = baseline + pts[i];
             if (i === 0) {
                 ctx.moveTo(cx, cy);
@@ -667,8 +742,8 @@
 
         if (drawStart >= drawEnd) return;
 
-        var cx1 = drawStart - viewLeft;
-        var cx2 = drawEnd - viewLeft;
+        var cx1 = virtualToCanvas(drawStart);
+        var cx2 = virtualToCanvas(drawEnd);
         var y = baseline + (isLive ? jitter : 0);
 
         ctx.beginPath();
@@ -683,12 +758,13 @@
 
         // Draw blips
         if (seg.blips && seg.blips.length > 0) {
+            var zoom = _hb.zoom;
             for (var bi = 0; bi < seg.blips.length; bi++) {
                 var blip = seg.blips[bi];
                 // Skip blips outside visible range
                 if (blip.x < viewLeft || blip.x > viewRight) continue;
 
-                var bx = blip.x - viewLeft;
+                var bx = virtualToCanvas(blip.x);
                 var bOpacity = blip.opacity;
                 var now = Date.now() / 1000;
 
@@ -710,7 +786,8 @@
                 ctx.moveTo(bx, baseline);
                 ctx.lineTo(bx, baseline - blip.height);
                 ctx.strokeStyle = blipColor + bOpacity + ')';
-                ctx.lineWidth = 2;
+                // Widen blips when zoomed in for easier interaction
+                ctx.lineWidth = Math.min(2 + (zoom - 1) * 1.5, 8);
                 ctx.shadowBlur = 8;
                 ctx.shadowColor = blipColor + (bOpacity * 0.5) + ')';
                 ctx.stroke();
@@ -722,14 +799,33 @@
     // ── Input handling ─────────────────────────────────────────
 
     function setupInputHandlers(canvas) {
-        // Mouse wheel: scroll viewport left/right
+        // Mouse wheel: zoom (centered on cursor). Shift+wheel: pan.
         canvas.addEventListener('wheel', function(e) {
             if (!_hb) return;
             e.preventDefault();
-            // deltaY scrolls horizontally on the timeline
-            _hb.viewOffset += e.deltaY * 0.8;
-            _hb.autoFollow = false;
-            checkAutoFollow();
+
+            if (e.shiftKey) {
+                // Shift+wheel: horizontal pan
+                _hb.viewOffset += e.deltaY * 0.8 / _hb.zoom;
+                _hb.autoFollow = false;
+                checkAutoFollow();
+            } else {
+                // Wheel: zoom centered on cursor position
+                var rect = canvas.getBoundingClientRect();
+                var mx = e.clientX - rect.left;
+                // Virtual x under the cursor before zoom
+                var vxUnderCursor = canvasToVirtual(mx);
+
+                // Apply zoom
+                var zoomDelta = e.deltaY > 0 ? 0.85 : 1.18; // scroll down = zoom out
+                _hb.zoom = Math.max(_hb.minZoom, Math.min(_hb.maxZoom, _hb.zoom * zoomDelta));
+
+                // Adjust viewOffset so the virtual point under cursor stays put
+                _hb.viewOffset = vxUnderCursor - mx / _hb.zoom;
+
+                _hb.autoFollow = false;
+                checkAutoFollow();
+            }
         }, { passive: false });
 
         // Mouse drag: click and drag to pan
@@ -744,6 +840,7 @@
                 var btn = _hb._jumpBtn;
                 if (mx >= btn.x && mx <= btn.x + btn.w && my >= btn.y && my <= btn.y + btn.h) {
                     _hb.autoFollow = true;
+                    _hb.zoom = 1.0;
                     _hb.hoveredBlock = null;
                     return;
                 }
@@ -760,7 +857,7 @@
 
             if (_hb.isDragging) {
                 var dx = e.clientX - _hb.dragStartX;
-                _hb.viewOffset = _hb.dragStartOffset - dx;
+                _hb.viewOffset = _hb.dragStartOffset - dx / _hb.zoom;
                 _hb.autoFollow = false;
                 checkAutoFollow();
             } else {
@@ -770,13 +867,28 @@
                 var my = e.clientY - rect.top;
                 if (mx >= 0 && mx <= _hb.width && my >= 0 && my <= _hb.height) {
                     var vx = canvasToVirtual(mx);
+                    var baseline = _hb.height * 0.55;
                     _hb.hoveredBlock = blockAtVirtualX(vx);
-                    _hb.hoveredFlatline = !_hb.hoveredBlock ? flatlineAtVirtualX(vx) : null;
+                    _hb.hoveredBlip = null;
+                    _hb.hoveredFlatline = null;
+
+                    if (!_hb.hoveredBlock) {
+                        // Check for blip hover (above flatline, when zoomed in)
+                        if (my < baseline && _hb.zoom >= 1.5) {
+                            _hb.hoveredBlip = blipAtVirtualX(vx, 5 / _hb.zoom);
+                        }
+                        if (!_hb.hoveredBlip) {
+                            _hb.hoveredFlatline = flatlineAtVirtualX(vx);
+                        }
+                    }
                     _hb.hoverCanvasX = mx;
                     _hb.hoverCanvasY = my;
-                    canvas.style.cursor = _hb.hoveredBlock ? 'pointer' : (_hb.hoveredFlatline ? 'crosshair' : 'default');
+                    canvas.style.cursor = _hb.hoveredBlock ? 'pointer'
+                        : _hb.hoveredBlip ? 'pointer'
+                        : _hb.hoveredFlatline ? 'crosshair' : 'default';
                 } else {
                     _hb.hoveredBlock = null;
+                    _hb.hoveredBlip = null;
                     _hb.hoveredFlatline = null;
                 }
             }
@@ -802,6 +914,7 @@
                 var btn = _hb._jumpBtn;
                 if (mx >= btn.x && mx <= btn.x + btn.w && my >= btn.y && my <= btn.y + btn.h) {
                     _hb.autoFollow = true;
+                    _hb.zoom = 1.0;
                     _hb.hoveredBlock = null;
                     return;
                 }
@@ -833,7 +946,7 @@
             if (!_hb || !_hb.isDragging) return;
             e.preventDefault();
             var dx = e.touches[0].clientX - _hb.dragStartX;
-            _hb.viewOffset = _hb.dragStartOffset - dx;
+            _hb.viewOffset = _hb.dragStartOffset - dx / _hb.zoom;
             _hb.autoFollow = false;
             checkAutoFollow();
         }, { passive: false });
@@ -859,6 +972,7 @@
                             var btn = _hb._jumpBtn;
                             if (mx >= btn.x && mx <= btn.x + btn.w && my >= btn.y && my <= btn.y + btn.h) {
                                 _hb.autoFollow = true;
+                    _hb.zoom = 1.0;
                                 _hb.hoveredBlock = null;
                                 return;
                             }
@@ -890,10 +1004,11 @@
     // Check if user has scrolled close enough to the live head to re-enable auto-follow
     function checkAutoFollow() {
         if (!_hb) return;
-        var headOnCanvas = _hb.virtualX - _hb.viewOffset;
-        // If the head is visible and within 50px of the right edge, snap back
-        if (headOnCanvas >= _hb.width * 0.75 && headOnCanvas <= _hb.width + 50) {
+        var headOnCanvas = virtualToCanvas(_hb.virtualX);
+        // If the head is visible and near the right edge, snap back to auto-follow
+        if (headOnCanvas >= _hb.width * 0.7 && headOnCanvas <= _hb.width + 80) {
             _hb.autoFollow = true;
+            _hb.zoom = 1.0; // reset zoom when re-engaging auto-follow
         }
     }
 
@@ -935,6 +1050,9 @@
             virtualX: 0,
             viewOffset: -w * 0.85,  // start so that x=0 is near the right
             autoFollow: true,
+            zoom: 1.0,              // 1.0 = normal, >1 = zoomed in, <1 = zoomed out
+            minZoom: 0.1,
+            maxZoom: 8.0,
 
             // Rendering
             rafId: null,
@@ -958,6 +1076,7 @@
             dragStartX: 0,
             dragStartOffset: 0,
             hoveredBlock: null,
+            hoveredBlip: null,
             hoveredFlatline: null,
             hoverCanvasX: 0,
             hoverCanvasY: 0,
