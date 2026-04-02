@@ -541,20 +541,27 @@
         }
 
         // Event delegation on document
+        // Guard: e.target may be a text node or SVG that lacks .closest()
+        function findTip(e) {
+            var t = e.target;
+            if (!t || !t.closest) return null;
+            return t.closest('[data-tip]:not([data-tip=""])');
+        }
+
         document.addEventListener('mouseenter', function(e) {
-            var el = e.target.closest('[data-tip]:not([data-tip=""])');
+            var el = findTip(e);
             if (el) show(el);
         }, true);
 
         document.addEventListener('mouseleave', function(e) {
-            var el = e.target.closest('[data-tip]:not([data-tip=""])');
+            var el = findTip(e);
             if (el && el === activeEl) hide();
         }, true);
 
         // Mobile: tap to show, tap elsewhere to hide
         if (isMobile) {
             document.addEventListener('touchstart', function(e) {
-                var el = e.target.closest('[data-tip]:not([data-tip=""])');
+                var el = findTip(e);
                 if (el) {
                     if (activeEl === el) { hide(); return; }
                     show(el);
