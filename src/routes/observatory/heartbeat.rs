@@ -471,6 +471,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                     status=hr_label
                     color=hr_color
                     subtitle=Signal::derive(move || hr_subtitle.get())
+                    tip="Average time between blocks this difficulty period. Target is 10:00. Below = blocks found faster than expected. Above = slower. Adjusts every 2,016 blocks."
                 />
 
                 // Blood Pressure
@@ -480,6 +481,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                     unit=" sat/vB"
                     status=bp_label
                     color=bp_color
+                    tip="Fee pressure. Systolic (left) = next block fee rate. Diastolic (right) = mempool minimum fee. Higher numbers mean it costs more to transact."
                 />
 
                 // Temperature (mempool)
@@ -490,6 +492,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                     status=temp_label
                     color=temp_color
                     subtitle=Signal::derive(move || temp_subtitle.get())
+                    tip="Mempool size in virtual megabytes. Under 10 vMB is calm. Over 100 vMB means congestion and rising fees. Temperature maps this to a human-readable scale."
                 />
 
                 // Immune System
@@ -499,6 +502,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                     unit=""
                     status=immune_label
                     color=immune_color
+                    tip="Network hashrate, the total computational power securing Bitcoin. Higher = more resilient against attacks. Measured in exahashes per second."
                 />
             </div>
 
@@ -608,9 +612,14 @@ fn VitalTile(
     status: ReadSignal<String>,
     color: ReadSignal<String>,
     #[prop(optional, into)] subtitle: Option<Signal<String>>,
+    #[prop(optional)] tip: Option<&'static str>,
 ) -> impl IntoView {
     view! {
-        <div class="bg-[#0d2137] border border-white/10 rounded-xl px-4 py-3 flex flex-col gap-1">
+        <div
+            class="bg-[#0d2137] border border-white/10 rounded-xl px-4 py-3 flex flex-col gap-1"
+            data-tip=tip.unwrap_or("")
+            tabindex=if tip.is_some() { "0" } else { "-1" }
+        >
             <span class="text-xs text-white/30 font-mono uppercase tracking-wider">{label}</span>
             <div class="flex items-baseline gap-1">
                 <span
