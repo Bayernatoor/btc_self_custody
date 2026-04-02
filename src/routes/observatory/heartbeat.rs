@@ -275,38 +275,37 @@ pub fn HeartbeatPage() -> impl IntoView {
                 heartbeat_play_sound();
             }
 
-            // Fetch the new block(s)
-            leptos::task::spawn_local(async move {
-                // Try immediately first
-                let blocks = crate::stats::server_fns::fetch_blocks(prev + 1, current_height)
-                    .await
-                    .unwrap_or_default();
-                if !blocks.is_empty() {
-                    let json = blocks_to_json(&blocks);
-                    push_heartbeat_blocks(&json, false);
-                    let recent = get_heartbeat_recent_blocks();
-                    render_rhythm_strip("rhythm-strip-canvas", &recent);
-                } else {
-                    // Block not ingested yet — schedule a retry via JS setTimeout
-                    #[cfg(feature = "hydrate")]
-                    {
-                        let from = prev + 1;
-                        let to = current_height;
-                        leptos::prelude::set_timeout(move || {
-                            leptos::task::spawn_local(async move {
-                                if let Ok(blocks) = crate::stats::server_fns::fetch_blocks(from, to).await {
-                                    if !blocks.is_empty() {
-                                        let json = blocks_to_json(&blocks);
-                                        push_heartbeat_blocks(&json, false);
-                                        let recent = get_heartbeat_recent_blocks();
-                                        render_rhythm_strip("rhythm-strip-canvas", &recent);
-                                    }
-                                }
-                            });
-                        }, std::time::Duration::from_secs(5));
-                    }
+            // Fetch the new block(s) with retry chain (ingestion can lag 5-20s)
+            #[cfg(feature = "hydrate")]
+            {
+                let from = prev + 1;
+                let to = current_height;
+                fn try_fetch(from: u64, to: u64, delays: &'static [u64]) {
+                    leptos::task::spawn_local(async move {
+                        let blocks = crate::stats::server_fns::fetch_blocks(from, to)
+                            .await
+                            .unwrap_or_default();
+                        if !blocks.is_empty() {
+                            leptos::logging::log!("heartbeat: got {} block(s) from DB", blocks.len());
+                            let json = blocks_to_json(&blocks);
+                            push_heartbeat_blocks(&json, false);
+                            let recent = get_heartbeat_recent_blocks();
+                            render_rhythm_strip("rhythm-strip-canvas", &recent);
+                        } else if !delays.is_empty() {
+                            let delay = delays[0];
+                            let rest = &delays[1..];
+                            leptos::logging::log!("heartbeat: block not in DB yet, retry in {}s", delay);
+                            leptos::prelude::set_timeout(move || {
+                                try_fetch(from, to, rest);
+                            }, std::time::Duration::from_secs(delay));
+                        } else {
+                            leptos::logging::log!("heartbeat: gave up fetching block {}..{}", from, to);
+                        }
+                    });
                 }
-            });
+                // Try now, then retry at 3s, 8s, 15s, 25s
+                try_fetch(from, to, &[3, 8, 15, 25]);
+            }
         }
     });
 
