@@ -3,15 +3,18 @@
 use axum::routing::get;
 use axum::Router;
 use std::sync::{Arc, Mutex};
+use tokio::sync::broadcast;
 
 use super::api::{self, StatsState};
 use super::config::StatsConfig;
 use super::db;
 use super::ingest;
 use super::rpc::BitcoinRpc;
+use super::zmq_subscriber;
 
 /// Initialize the stats module. Returns None if not configured.
-pub async fn init() -> Option<(Arc<StatsState>, Router)> {
+/// Returns (state, router, zmq_tx_url, zmq_block_url).
+pub async fn init() -> Option<(Arc<StatsState>, Router, Option<String>, Option<String>)> {
     let config = StatsConfig::load()?;
 
     tracing::info!("Stats module: connecting to {}", config.rpc_url);
@@ -35,6 +38,9 @@ pub async fn init() -> Option<(Arc<StatsState>, Router)> {
         }
     }
 
+    // Broadcast channel for heartbeat events (ZMQ → SSE). 4096 buffer handles bursts.
+    let (heartbeat_tx, _) = broadcast::channel(4096);
+
     let state = Arc::new(StatsState {
         db: pool,
         rpc,
@@ -48,6 +54,7 @@ pub async fn init() -> Option<(Arc<StatsState>, Router)> {
         signaling_blocks_cache: Mutex::new(None),
         signaling_periods_cache: Mutex::new(None),
         price_history_cache: Mutex::new(None),
+        heartbeat_tx,
     });
 
     // Build the API router
@@ -62,11 +69,15 @@ pub async fn init() -> Option<(Arc<StatsState>, Router)> {
         .route("/signaling/periods", get(api::get_signaling_periods))
         .with_state(Arc::clone(&state));
 
-    Some((state, router))
+    Some((state, router, config.zmq_tx_url, config.zmq_block_url))
 }
 
 /// Spawn background tasks (call after server starts listening).
-pub fn spawn_background_tasks(state: Arc<StatsState>) {
+pub fn spawn_background_tasks(
+    state: Arc<StatsState>,
+    zmq_tx_url: Option<String>,
+    zmq_block_url: Option<String>,
+) {
     // UTXO refresh every 10 minutes
     {
         let state = Arc::clone(&state);
@@ -101,6 +112,27 @@ pub fn spawn_background_tasks(state: Arc<StatsState>) {
             ingest::backfill_extras(&state.rpc, &state.db).await;
             ingest::backfill_backwards(&state.rpc, &state.db).await;
         });
+    }
+
+    // ZMQ subscriber (only if both URLs are configured)
+    if let (Some(tx_url), Some(block_url)) = (zmq_tx_url, zmq_block_url) {
+        zmq_subscriber::spawn(
+            Arc::clone(&state),
+            state.heartbeat_tx.clone(),
+            tx_url,
+            block_url,
+        );
+
+        // Prune old mempool txs daily
+        let prune_state = Arc::clone(&state);
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(86400)).await;
+                zmq_subscriber::prune_old_txs(&prune_state).await;
+            }
+        });
+    } else {
+        tracing::info!("ZMQ subscriber disabled (BITCOIN_STATS_ZMQ_TX / BITCOIN_STATS_ZMQ_BLOCK not set)");
     }
 
     tracing::info!("Connection pool: 16 connections (WAL mode enabled)");
