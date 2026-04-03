@@ -815,6 +815,111 @@
         _hb._jumpBtn = { x: btnX, y: btnY, w: btnW, h: btnH };
     }
 
+    // ── Control bar (bottom center) ──────────────────────────────
+    var CTRL_BTNS = [
+        { id: 'prev',    label: '\u23EE', tip: 'Previous block' },
+        { id: 'pause',   label: '\u23F8', tip: 'Pause' },
+        { id: 'zoomOut', label: '\u2212', tip: 'Zoom out' },
+        { id: 'zoomIn',  label: '+',      tip: 'Zoom in' }
+    ];
+    var CTRL_BTN_SIZE = 32;
+    var CTRL_BTN_GAP = 6;
+
+    function drawControlBar(ctx, w, h) {
+        var totalW = CTRL_BTNS.length * CTRL_BTN_SIZE + (CTRL_BTNS.length - 1) * CTRL_BTN_GAP;
+        var startX = (w - totalW) / 2;
+        var btnY = h - CTRL_BTN_SIZE - 10;
+        _hb._ctrlBtns = [];
+
+        for (var i = 0; i < CTRL_BTNS.length; i++) {
+            var def = CTRL_BTNS[i];
+            var bx = startX + i * (CTRL_BTN_SIZE + CTRL_BTN_GAP);
+
+            // Highlight pause/play based on state
+            var isActive = (def.id === 'pause' && _hb.paused);
+            var bgAlpha = isActive ? 0.25 : 0.12;
+            var borderColor = isActive ? COLORS.elevated : 'rgba(255,255,255,0.3)';
+            var textColor = isActive ? COLORS.elevated : 'rgba(255,255,255,0.7)';
+
+            // Dynamic label for pause/play
+            var label = def.label;
+            if (def.id === 'pause') {
+                label = _hb.paused ? '\u25B6' : '\u23F8';
+            }
+
+            ctx.fillStyle = 'rgba(255,255,255,' + bgAlpha + ')';
+            ctx.beginPath();
+            roundRect(ctx, bx, btnY, CTRL_BTN_SIZE, CTRL_BTN_SIZE, 4);
+            ctx.fill();
+
+            ctx.strokeStyle = borderColor;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            roundRect(ctx, bx, btnY, CTRL_BTN_SIZE, CTRL_BTN_SIZE, 4);
+            ctx.stroke();
+
+            ctx.fillStyle = textColor;
+            ctx.font = 'bold 16px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(label, bx + CTRL_BTN_SIZE / 2, btnY + CTRL_BTN_SIZE / 2 + 6);
+
+            _hb._ctrlBtns.push({
+                id: def.id, tip: def.tip,
+                x: bx, y: btnY, w: CTRL_BTN_SIZE, h: CTRL_BTN_SIZE
+            });
+        }
+        ctx.textAlign = 'left';
+
+        // Draw tooltip if hovering a control button
+        if (_hb._ctrlHover) {
+            ctx.font = '11px monospace';
+            ctx.fillStyle = 'rgba(255,255,255,0.6)';
+            ctx.textAlign = 'center';
+            ctx.fillText(_hb._ctrlHover.tip, _hb._ctrlHover.x + CTRL_BTN_SIZE / 2, btnY - 6);
+            ctx.textAlign = 'left';
+        }
+    }
+
+    function handleControlClick(id) {
+        if (!_hb) return;
+        switch (id) {
+            case 'pause':
+                _hb.paused = !_hb.paused;
+                if (_hb.paused) {
+                    _hb.autoFollow = false;
+                } else {
+                    // Resume: start scrolling from current position (don't jump to head)
+                    _hb._playResumeOffset = _hb.viewOffset;
+                }
+                break;
+            case 'prev':
+                // Scroll to the previous block segment
+                var centerVX = canvasToVirtual(_hb.width / 2);
+                for (var i = _hb.timeline.length - 1; i >= 0; i--) {
+                    var seg = _hb.timeline[i];
+                    if (seg.type === 'block' && seg.startVX + seg.width < centerVX - 10) {
+                        _hb.autoFollow = false;
+                        _hb.viewOffset = seg.startVX + seg.width / 2 - _hb.width / 2 / _hb.zoom;
+                        break;
+                    }
+                }
+                break;
+            case 'zoomIn':
+                var cx = _hb.width / 2;
+                var vx = canvasToVirtual(cx);
+                _hb.zoom = Math.min(_hb.maxZoom, _hb.zoom * 1.4);
+                _hb.viewOffset = vx - cx / _hb.zoom;
+                _hb.autoFollow = false;
+                break;
+            case 'zoomOut':
+                var cx2 = _hb.width / 2;
+                var vx2 = canvasToVirtual(cx2);
+                _hb.zoom = Math.max(_hb.minZoom, _hb.zoom / 1.4);
+                _hb.viewOffset = vx2 - cx2 / _hb.zoom;
+                break;
+        }
+    }
+
     // ── Main draw loop ─────────────────────────────────────────
     function drawFrame(frameTime) {
         if (!_hb) return;
@@ -839,6 +944,9 @@
         // If auto-following, keep viewport pinned to the head (zoom-aware)
         if (_hb.autoFollow) {
             _hb.viewOffset = _hb.virtualX - (w * HEAD_POSITION_FRAC) / _hb.zoom;
+        } else if (!_hb.paused && !_hb.isDragging && !_hb._pinching) {
+            // Play mode: scroll at the same rate as time (don't jump to head)
+            _hb.viewOffset += dt * FLATLINE_PX_PER_SEC;
         }
 
         // ── Compute current color from live state ──────────────
@@ -934,19 +1042,22 @@
             _hb._jumpBtn = null;
         }
 
+        // ── Draw control bar ─────────────────────────────────
+        drawControlBar(ctx, w, h);
+
         // ── Draw block arrival announcement ───────────────────
         if (_hb._announcement && now < _hb._announcement.end) {
             var ann = _hb._announcement;
             var annElapsed = now - ann.start;
             var annDuration = ann.end - ann.start;
-            // Fade in 0-0.4s, hold 0.4-2.2s, fade out 2.2-3.0s
+            // Fade in 0-0.5s, hold, fade out last 1.5s
             var annAlpha;
-            if (annElapsed < 0.4) {
-                annAlpha = annElapsed / 0.4;
-            } else if (annElapsed < annDuration - 0.8) {
+            if (annElapsed < 0.5) {
+                annAlpha = annElapsed / 0.5;
+            } else if (annElapsed < annDuration - 1.5) {
                 annAlpha = 1.0;
             } else {
-                annAlpha = (annDuration - annElapsed) / 0.8;
+                annAlpha = (annDuration - annElapsed) / 1.5;
             }
             annAlpha = Math.max(0, Math.min(1, annAlpha));
 
@@ -1070,39 +1181,54 @@
                     var originCX = virtualToCanvas(blip.absorbOriginX);
                     var blipColor = blip.color || 'rgba(0, 230, 118, ';
 
+                    // Find the spike height at target for converging trajectory
+                    var spikeTop = baseline - 60; // default; overridden if we find the block
+                    for (var si4 = 0; si4 < _hb.timeline.length; si4++) {
+                        var tSeg = _hb.timeline[si4];
+                        if (tSeg.type === 'block' && tSeg.startVX <= blip.absorbTargetX && tSeg.startVX + (tSeg.width || 0) >= blip.absorbTargetX) {
+                            var peakY = 0;
+                            if (tSeg.points) {
+                                for (var pp = 0; pp < tSeg.points.length; pp++) {
+                                    if (tSeg.points[pp] < peakY) peakY = tSeg.points[pp];
+                                }
+                            }
+                            spikeTop = baseline + peakY * zoom * 0.7;
+                            break;
+                        }
+                    }
+
                     for (var pi = 0; pi < blip.particles.length; pi++) {
                         var p = blip.particles[pi];
-                        // Per-particle time (with stagger delay and speed variation)
                         var pDuration = animDuration * (1 / p.speed);
                         var pt = Math.max(0, (fadeDt - p.delay) / pDuration);
                         pt = Math.min(pt, 1.0);
                         if (pt <= 0) continue;
 
-                        // Smooth ease-in-out: accelerate then decelerate into target
-                        var pEase = pt < 0.5
-                            ? 2 * pt * pt
-                            : 1 - Math.pow(-2 * pt + 2, 2) / 2;
+                        // Ease-in: accelerate toward spike (pulled in like gravity)
+                        var pEase = pt * pt * (3 - 2 * pt); // smoothstep
 
-                        // X: lerp from origin to target center (not offset edge)
+                        // X: lerp from origin to target
                         var startX = originCX + p.offsetX;
                         var px = startX + (targetCX - startX) * pEase;
 
-                        // Y: parabolic arc that always lands at baseline
-                        // peaks at t=0.3, returns to baseline at t=1.0
-                        var arcPhase = Math.sin(pt * Math.PI);
-                        var py = baseline - p.offsetY * (1 - pEase) - p.arcHeight * arcPhase;
+                        // Y: rise slightly in first 30%, then dive into the spike
+                        var startY = baseline - p.offsetY;
+                        var targetY = spikeTop + p.arcHeight * 0.3; // converge toward spike tip
+                        var liftPhase = pt < 0.3 ? Math.sin(pt / 0.3 * Math.PI / 2) : 1;
+                        var lift = p.arcHeight * 0.4 * (pt < 0.3 ? liftPhase : (1 - (pt - 0.3) / 0.7));
+                        var py = startY * (1 - pEase) + targetY * pEase - lift;
 
                         // Particle shrinks as it approaches the spike
-                        var pSize = p.size * (1 - pEase * 0.8);
+                        var pSize = p.size * (1 - pEase * 0.9);
 
-                        // Opacity: bright at start, fades as absorbed
-                        var pOpacity = blip.opacity * (1 - pEase * 0.7);
+                        // Opacity: stays bright until final convergence
+                        var pOpacity = blip.opacity * (1 - pEase * pEase * 0.6);
                         pOpacity = Math.max(0, Math.min(1, pOpacity));
 
-                        // Draw particle as a small filled square
+                        // Draw particle with glow
                         ctx.fillStyle = blipColor + pOpacity + ')';
-                        ctx.shadowBlur = 4 + pEase * 8;
-                        ctx.shadowColor = blipColor + (pOpacity * 0.6) + ')';
+                        ctx.shadowBlur = 4 + pEase * 12;
+                        ctx.shadowColor = blipColor + (pOpacity * 0.5) + ')';
                         ctx.fillRect(px - pSize / 2, py - pSize / 2, pSize, pSize);
                         ctx.shadowBlur = 0;
                     }
@@ -1146,27 +1272,30 @@
                         ctx.strokeRect(bx - bw / 2 + gap, baseline - sy - bh + gap, bw - gap * 2, bh - gap * 2);
                     }
 
-                    // At high zoom: show fee rate + value on brick face
+                    // At high zoom: show fee rate + value on brick face (clipped to brick)
                     if (zoom > 8 && bw > 25 && bh > 10) {
-                        var brickLeft = bx - bw / 2 + 3;
+                        var brickLeft = bx - bw / 2;
                         var brickTop = baseline - sy - bh;
+                        ctx.save();
+                        ctx.beginPath();
+                        ctx.rect(brickLeft, brickTop, bw, bh);
+                        ctx.clip();
                         var fs = Math.min(Math.floor(bh * 0.35), 11);
                         ctx.font = 'bold ' + fs + 'px monospace';
                         ctx.fillStyle = 'rgba(255,255,255,0.95)';
-                        // Primary: fee rate
-                        ctx.fillText((blip.feeRate || '?') + ' s/vB', brickLeft, brickTop + fs + 2);
-                        // Secondary: value or size
+                        ctx.fillText((blip.feeRate || '?') + ' s/vB', brickLeft + 3, brickTop + fs + 2);
                         if (bh > 22 && fs > 6) {
                             ctx.font = (fs - 1) + 'px monospace';
                             ctx.fillStyle = 'rgba(255,255,255,0.7)';
                             if (blip.value) {
                                 var btc = blip.value / 1e8;
                                 var valStr = btc >= 0.01 ? btc.toFixed(3) : btc.toFixed(6);
-                                ctx.fillText('\u{20bf}' + valStr, brickLeft, brickTop + fs * 2 + 1);
+                                ctx.fillText('\u{20bf}' + valStr, brickLeft + 3, brickTop + fs * 2 + 1);
                             } else if (blip.vsize) {
-                                ctx.fillText(Math.round(blip.vsize) + ' vB', brickLeft, brickTop + fs * 2 + 1);
+                                ctx.fillText(Math.round(blip.vsize) + ' vB', brickLeft + 3, brickTop + fs * 2 + 1);
                             }
                         }
+                        ctx.restore();
                     }
                 }
                 ctx.shadowBlur = 0;
@@ -1241,6 +1370,30 @@
         return false;
     }
 
+    function tryControlClick(mx, my) {
+        if (!_hb || !_hb._ctrlBtns) return false;
+        for (var i = 0; i < _hb._ctrlBtns.length; i++) {
+            var btn = _hb._ctrlBtns[i];
+            if (mx >= btn.x && mx <= btn.x + btn.w && my >= btn.y && my <= btn.y + btn.h) {
+                handleControlClick(btn.id);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function checkControlHover(mx, my) {
+        if (!_hb || !_hb._ctrlBtns) { _hb._ctrlHover = null; return; }
+        _hb._ctrlHover = null;
+        for (var i = 0; i < _hb._ctrlBtns.length; i++) {
+            var btn = _hb._ctrlBtns[i];
+            if (mx >= btn.x && mx <= btn.x + btn.w && my >= btn.y && my <= btn.y + btn.h) {
+                _hb._ctrlHover = btn;
+                return;
+            }
+        }
+    }
+
     function setupInputHandlers(canvas) {
         // Track listeners for cleanup in destroyHeartbeat
         _hb._listeners = [];
@@ -1283,7 +1436,9 @@
             if (!_hb) return;
 
             var rect = canvas.getBoundingClientRect();
-            if (tryJumpToLive(e.clientX - rect.left, e.clientY - rect.top)) return;
+            var mx = e.clientX - rect.left, my = e.clientY - rect.top;
+            if (tryJumpToLive(mx, my)) return;
+            if (tryControlClick(mx, my)) return;
 
             stopMomentum();
             _hb.isDragging = true;
@@ -1320,6 +1475,7 @@
                 var rect = canvas.getBoundingClientRect();
                 var mx = e.clientX - rect.left;
                 var my = e.clientY - rect.top;
+                checkControlHover(mx, my);
                 if (mx >= 0 && mx <= _hb.width && my >= 0 && my <= _hb.height) {
                     var vx = canvasToVirtual(mx);
                     var baseline = _hb.height * 0.55 + (_hb.viewOffsetY || 0);
@@ -1372,6 +1528,7 @@
             var mx = e.clientX - rect.left;
             var my = e.clientY - rect.top;
             if (tryJumpToLive(mx, my)) return;
+            if (tryControlClick(mx, my)) return;
 
             // Click on a brick -> pin tooltip. If already pinned, unpin (or open mempool)
             if (_hb._pinnedBlip) {
@@ -1396,15 +1553,19 @@
                 // Pinch start
                 _hb._pinching = true;
                 _hb.isDragging = false;
+                _hb._touchLocked = 'pinch';
                 _hb._pinchStartDist = touchDistance(e.touches[0], e.touches[1]);
                 _hb._pinchStartZoom = _hb.zoom;
                 var rect = canvas.getBoundingClientRect();
                 _hb._pinchMid = touchMidpoint(e.touches[0], e.touches[1], rect);
                 _hb._pinchVx = canvasToVirtual(_hb._pinchMid.x);
             } else if (e.touches.length === 1) {
-                // Pan start
+                // Pan start — don't commit to horizontal drag yet
                 _hb._pinching = false;
-                _hb.isDragging = true;
+                _hb.isDragging = false;
+                _hb._touchLocked = null; // null = undecided, 'h' = horizontal, 'v' = vertical
+                _hb._touchStartX = e.touches[0].clientX;
+                _hb._touchStartY = e.touches[0].clientY;
                 _hb.dragStartX = e.touches[0].clientX;
                 _hb.dragStartOffset = _hb.viewOffset;
                 _hb._lastDragX = e.touches[0].clientX;
@@ -1415,18 +1576,27 @@
 
         listen(canvas, 'touchmove', function(e) {
             if (!_hb) return;
-            e.preventDefault();
 
             if (_hb._pinching && e.touches.length === 2) {
+                e.preventDefault();
                 // Pinch zoom
                 var dist = touchDistance(e.touches[0], e.touches[1]);
                 var scale = dist / _hb._pinchStartDist;
                 var newZoom = Math.max(_hb.minZoom, Math.min(_hb.maxZoom, _hb._pinchStartZoom * scale));
-                // Keep the midpoint virtual x stable
                 _hb.zoom = newZoom;
                 _hb.viewOffset = _hb._pinchVx - _hb._pinchMid.x / newZoom;
                 _hb.autoFollow = false;
-            } else if (_hb.isDragging && e.touches.length === 1) {
+            } else if (e.touches.length === 1) {
+                // Decide direction on first significant move
+                if (!_hb._touchLocked) {
+                    var tdx = Math.abs(e.touches[0].clientX - _hb._touchStartX);
+                    var tdy = Math.abs(e.touches[0].clientY - _hb._touchStartY);
+                    if (tdx + tdy < 8) return; // too small to decide
+                    _hb._touchLocked = tdx > tdy ? 'h' : 'v';
+                    if (_hb._touchLocked === 'h') _hb.isDragging = true;
+                }
+                if (_hb._touchLocked === 'v') return; // let browser handle vertical scroll
+                e.preventDefault(); // horizontal pan — block scroll
                 // Pan
                 var dx = e.touches[0].clientX - _hb.dragStartX;
                 _hb.viewOffset = _hb.dragStartOffset - dx / _hb.zoom;
@@ -1535,6 +1705,7 @@
             viewOffset: -w * HEAD_POSITION_FRAC,
             viewOffsetY: 0,       // vertical pan offset (0 = default baseline)
             autoFollow: true,
+            paused: false,
             zoom: 1.9,              // default zoom for brick-level detail
             minZoom: 0.1,
             maxZoom: 50.0,
@@ -1708,7 +1879,7 @@
                         subtitle: feeBtc.toFixed(4) + ' BTC fees \u00b7 ' + (b.tx_count || 0).toLocaleString() + ' txs',
                         color: blockSeg.color || _hb.currentColor || COLORS.healthy,
                         start: nowAnn,
-                        end: nowAnn + 6.0
+                        end: nowAnn + 12.0
                     };
                 }
             }
