@@ -428,6 +428,16 @@
                     _hb._sseTxCount++;
                     if (_hb._txBatchQueue.length > 500) _hb._txBatchQueue.length = 500;
                     _hb._txBatchQueue.push(tx);
+                    // Track rolling median fee rate from own node data
+                    if (tx.fee_rate) {
+                        if (!_hb._recentFeeRates) _hb._recentFeeRates = [];
+                        _hb._recentFeeRates.push(tx.fee_rate);
+                        if (_hb._recentFeeRates.length > 200) _hb._recentFeeRates.shift();
+                        if (_hb._recentFeeRates.length >= 20) {
+                            var sorted = _hb._recentFeeRates.slice().sort(function(a, b) { return a - b; });
+                            _hb._wsMedianFee = Math.max(1, sorted[Math.floor(sorted.length / 2)]);
+                        }
+                    }
                     var now = Date.now();
                     if (now - _hb._txThrottleTime > 200) {
                         _hb._txThrottleTime = now;
