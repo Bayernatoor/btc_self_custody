@@ -329,26 +329,82 @@
             es.addEventListener('history', function(e) {
                 if (!_hb) return;
                 try {
-                    var txs = JSON.parse(e.data);
-                    console.log('[heartbeat] SSE history:', txs.length, 'txs');
-                    if (!Array.isArray(txs) || txs.length === 0) return;
+                    var data = JSON.parse(e.data);
+                    var txs = data.txs || data; // support both {txs, last_block_ts} and raw array
+                    var lastBlockTs = data.last_block_ts || 0;
+                    if (!Array.isArray(txs)) return;
+                    console.log('[heartbeat] SSE history:', txs.length, 'txs, last_block_ts:', lastBlockTs);
+                    if (txs.length === 0) return;
                     _hb._hasTxStream = true;
-                    // Batch history in chunks to avoid UI jank
-                    var chunkSize = 50;
-                    var idx = 0;
-                    function processChunk() {
-                        if (!_hb || idx >= txs.length) return;
-                        var end = Math.min(idx + chunkSize, txs.length);
-                        for (var i = idx; i < end; i++) {
-                            _hb._txBatchQueue.push(txs[i]);
+
+                    // Find the last open flatline segment to place history txs on
+                    var liveSeg = _hb.timeline[_hb.timeline.length - 1];
+                    if (!liveSeg || liveSeg.type !== 'flatline' || liveSeg.x_end !== null) return;
+
+                    var medianFee = _hb._wsMedianFee || 5;
+                    var placed = 0;
+                    var maxBricks = 2000; // cap total history bricks
+
+                    for (var i = 0; i < txs.length && placed < maxBricks; i++) {
+                        var tx = txs[i];
+                        if (!tx.first_seen || !tx.fee || !tx.vsize) continue;
+
+                        // Position on flatline based on timestamp
+                        var secAfterBlock = tx.first_seen - lastBlockTs;
+                        if (secAfterBlock < 0) continue; // tx from before last block
+                        var txVX = liveSeg.x_start + secAfterBlock * FLATLINE_PX_PER_SEC;
+
+                        // Don't place beyond current head
+                        if (txVX > _hb.virtualX) txVX = _hb.virtualX - Math.random() * 5;
+
+                        var feeRate = tx.fee / tx.vsize;
+                        var feeNorm = Math.min(Math.log2(feeRate + 1) / 6, 1.0);
+
+                        // Color based on fee rate
+                        var color;
+                        if (feeRate < medianFee * 0.8) {
+                            color = 'rgba(66, 165, 245, ';
+                        } else if (feeRate < medianFee * 1.5) {
+                            color = 'rgba(0, 230, 118, ';
+                        } else if (feeRate < medianFee * 4) {
+                            color = 'rgba(247, 147, 26, ';
+                        } else {
+                            color = 'rgba(255, 87, 34, ';
                         }
-                        idx = end;
-                        flushTxBatch();
-                        if (idx < txs.length) {
-                            requestAnimationFrame(processChunk);
+
+                        var brickH = 3 + feeNorm * 14 + Math.random() * 3;
+                        var gridX = Math.round(txVX / 5) * 5;
+
+                        // Stack height at this grid position
+                        var stackY = 0;
+                        for (var si = 0; si < liveSeg.blips.length; si++) {
+                            var other = liveSeg.blips[si];
+                            if (other.fadeStart === 0 && other.gridX === gridX) {
+                                stackY += other.brickH || 0;
+                            }
                         }
+                        if (stackY > 150) continue; // cap stack height
+
+                        liveSeg.blips.push({
+                            x: txVX,
+                            gridX: gridX,
+                            height: brickH + stackY,
+                            brickH: brickH,
+                            brickW: 4,
+                            stackY: stackY,
+                            color: color,
+                            opacity: 0.65 + feeNorm * 0.3,
+                            txCount: 1,
+                            txid: tx.txid || null,
+                            feeRate: Math.round(feeRate * 10) / 10,
+                            vsize: tx.vsize || 0,
+                            value: tx.value || 0,
+                            timestamp: tx.first_seen,
+                            fadeStart: 0
+                        });
+                        placed++;
                     }
-                    processChunk();
+                    console.log('[heartbeat] placed', placed, 'history bricks on timeline');
                 } catch (err) { console.log('[heartbeat] SSE history error:', err); }
             });
             es.addEventListener('tx', function(e) {
