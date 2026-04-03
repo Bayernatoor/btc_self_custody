@@ -68,6 +68,7 @@ pub async fn init(
         .route("/aggregates/daily", get(api::get_daily_aggregates))
         .route("/signaling", get(api::get_signaling))
         .route("/signaling/periods", get(api::get_signaling_periods))
+        .route("/heartbeat", get(api::get_heartbeat_sse))
         .with_state(Arc::clone(&state));
 
     Some((state, router, config.zmq_tx_url, config.zmq_block_url))
