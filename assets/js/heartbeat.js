@@ -828,7 +828,7 @@
     function drawControlBar(ctx, w, h) {
         var totalW = CTRL_BTNS.length * CTRL_BTN_SIZE + (CTRL_BTNS.length - 1) * CTRL_BTN_GAP;
         var startX = (w - totalW) / 2;
-        var btnY = h - CTRL_BTN_SIZE - 10;
+        var btnY = h - CTRL_BTN_SIZE - 2;
         _hb._ctrlBtns = [];
 
         for (var i = 0; i < CTRL_BTNS.length; i++) {
@@ -897,9 +897,11 @@
                 var centerVX = canvasToVirtual(_hb.width / 2);
                 for (var i = _hb.timeline.length - 1; i >= 0; i--) {
                     var seg = _hb.timeline[i];
-                    if (seg.type === 'block' && seg.startVX + seg.width < centerVX - 10) {
+                    if (seg.type === 'block' && seg.x_end < centerVX - 10) {
                         _hb.autoFollow = false;
-                        _hb.viewOffset = seg.startVX + seg.width / 2 - _hb.width / 2 / _hb.zoom;
+                        _hb.paused = true;
+                        var mid = (seg.x_start + seg.x_end) / 2;
+                        _hb.viewOffset = mid - _hb.width / 2 / _hb.zoom;
                         break;
                     }
                 }
@@ -1185,7 +1187,7 @@
                     var spikeTop = baseline - 60; // default; overridden if we find the block
                     for (var si4 = 0; si4 < _hb.timeline.length; si4++) {
                         var tSeg = _hb.timeline[si4];
-                        if (tSeg.type === 'block' && tSeg.startVX <= blip.absorbTargetX && tSeg.startVX + (tSeg.width || 0) >= blip.absorbTargetX) {
+                        if (tSeg.type === 'block' && tSeg.x_start <= blip.absorbTargetX && tSeg.x_end >= blip.absorbTargetX) {
                             var peakY = 0;
                             if (tSeg.points) {
                                 for (var pp = 0; pp < tSeg.points.length; pp++) {
