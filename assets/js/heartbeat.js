@@ -2018,10 +2018,11 @@
                     var newSeg = _hb.timeline[_hb.timeline.length - 1];
                     for (var si5 = 0; si5 < survivors.length; si5++) {
                         var surv = survivors[si5];
-                        // Place at the start of the new flatline
+                        // Reset position for new flatline (remove old stack offset)
                         surv.x = _hb.virtualX + Math.random() * 20;
                         surv.gridX = Math.round(surv.x / 5) * 5;
                         surv.stackY = 0;
+                        surv.height = surv.brickH; // reset to brick-only height
                         surv.opacity = Math.max(0.4, surv.opacity - 0.15); // dim slightly
                         newSeg.blips.push(surv);
                     }
