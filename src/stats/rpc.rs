@@ -76,7 +76,7 @@ pub struct PriceInfo {
 /// Minimal mempool entry info from getmempoolentry.
 #[derive(Debug)]
 pub struct MempoolEntryInfo {
-    pub fee: u64,   // sats
+    pub fee: u64, // sats
     pub vsize: u32,
 }
 
@@ -381,7 +381,8 @@ impl BitcoinRpc {
                     input_count += vins.len() as u64;
                     for vin in vins {
                         // Sum input values from prevout
-                        if let Some(val) = vin.get("prevout")
+                        if let Some(val) = vin
+                            .get("prevout")
                             .and_then(|p| p.get("value"))
                             .and_then(|v| v.as_f64())
                         {
@@ -409,22 +410,26 @@ impl BitcoinRpc {
                                         // + content-type marker OP_PUSH1(1) + type length(1) + type bytes(variable)
                                         // + separator OP_0(1) + content-length push(1-3) + OP_ENDIF(1)
                                         // Approximate: find envelope start, subtract from total
-                                        let overhead =
-                                            if let Some(env_pos) = hex.find("0063036f7264") {
-                                                // Bytes before envelope + envelope header (6 bytes = 12 hex chars)
-                                                // + content-type section (scan for 00 separator after header)
-                                                let after_header = env_pos + 12; // past "0063036f7264"
-                                                // Find OP_0 separator (00) after content-type
-                                                let separator_pos = hex[after_header..]
-                                                    .find("00")
-                                                    .map(|p| after_header + p)
-                                                    .unwrap_or(after_header);
-                                                // overhead = header(6) + content-type section + separator(1) + OP_ENDIF(1)
-                                                let ct_bytes = (separator_pos - after_header) / 2;
-                                                (6 + ct_bytes + 2) as u64
-                                            } else {
-                                                10 // fallback
-                                            };
+                                        let overhead = if let Some(env_pos) =
+                                            hex.find("0063036f7264")
+                                        {
+                                            // Bytes before envelope + envelope header (6 bytes = 12 hex chars)
+                                            // + content-type section (scan for 00 separator after header)
+                                            let after_header = env_pos + 12; // past "0063036f7264"
+                                                                             // Find OP_0 separator (00) after content-type
+                                            let separator_pos = hex
+                                                [after_header..]
+                                                .find("00")
+                                                .map(|p| after_header + p)
+                                                .unwrap_or(after_header);
+                                            // overhead = header(6) + content-type section + separator(1) + OP_ENDIF(1)
+                                            let ct_bytes = (separator_pos
+                                                - after_header)
+                                                / 2;
+                                            (6 + ct_bytes + 2) as u64
+                                        } else {
+                                            10 // fallback
+                                        };
                                         inscription_bytes +=
                                             item_bytes.saturating_sub(overhead);
                                         // BRC-20: inscription containing {"p":"brc-20"
@@ -546,17 +551,27 @@ impl BitcoinRpc {
                                 // Stamps: bare multisig with fake pubkeys (data encoding).
                                 // Real compressed pubkeys start with 02 or 03. If the hex
                                 // contains keys that don't, it's likely a Stamps output.
-                                if let Some(hex) = vout["scriptPubKey"]["hex"].as_str() {
+                                if let Some(hex) =
+                                    vout["scriptPubKey"]["hex"].as_str()
+                                {
                                     // Stamps multisig pattern: 1-of-N where N keys contain data.
                                     // The asm starts with "1 <key1> <key2> ... N OP_CHECKMULTISIG"
                                     // Check if any 33-byte "key" doesn't start with 02/03.
-                                    if let Some(asm) = vout["scriptPubKey"]["asm"].as_str() {
-                                        let parts: Vec<&str> = asm.split_whitespace().collect();
+                                    if let Some(asm) =
+                                        vout["scriptPubKey"]["asm"].as_str()
+                                    {
+                                        let parts: Vec<&str> =
+                                            asm.split_whitespace().collect();
                                         // Valid multisig: M key1 key2 ... N OP_CHECKMULTISIG
                                         if parts.len() >= 4 {
-                                            let has_fake_key = parts[1..parts.len() - 2].iter().any(|k| {
-                                                k.len() == 66 && !k.starts_with("02") && !k.starts_with("03")
-                                            });
+                                            let has_fake_key = parts
+                                                [1..parts.len() - 2]
+                                                .iter()
+                                                .any(|k| {
+                                                    k.len() == 66
+                                                        && !k.starts_with("02")
+                                                        && !k.starts_with("03")
+                                                });
                                             if has_fake_key {
                                                 stamps_count += 1;
                                             }
@@ -665,15 +680,17 @@ impl BitcoinRpc {
         &self,
         txid: &str,
     ) -> Result<MempoolEntryInfo, StatsError> {
-        let result =
-            self.call("getmempoolentry", &[json!(txid)]).await?;
+        let result = self.call("getmempoolentry", &[json!(txid)]).await?;
         let fee_btc = result["fees"]["base"]
             .as_f64()
             .or_else(|| result["fee"].as_f64())
             .unwrap_or(0.0);
         let fee_sats = (fee_btc * 100_000_000.0).round() as u64;
         let vsize = result["vsize"].as_u64().unwrap_or(0) as u32;
-        Ok(MempoolEntryInfo { fee: fee_sats, vsize })
+        Ok(MempoolEntryInfo {
+            fee: fee_sats,
+            vsize,
+        })
     }
 
     /// Get the list of txids in a block (verbosity=1, no full tx data).

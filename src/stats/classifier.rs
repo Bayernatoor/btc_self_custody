@@ -332,15 +332,23 @@ mod tests {
     #[test]
     fn miner_ocean_template_234_alberta() {
         // Real OCEAN coinbase pattern: "< OCEAN.XYZ >" + control char + "234 Alberta"
-        let coinbase = b"\x03:c\x0e\x1a< OCEAN.XYZ >\x0f234 Alberta\x07\x11\x10AR";
-        let hex = coinbase.iter().map(|b| format!("{:02x}", b)).collect::<String>();
+        let coinbase =
+            b"\x03:c\x0e\x1a< OCEAN.XYZ >\x0f234 Alberta\x07\x11\x10AR";
+        let hex = coinbase
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<String>();
         assert_eq!(identify_miner(&hex), "OCEAN / 234 Alberta");
     }
 
     #[test]
     fn miner_ocean_template_barefoot() {
-        let coinbase = b"\x03a\x0e\x1e< OCEAN.XYZ >\x0fBarefoot Mining\x07\x11xK";
-        let hex = coinbase.iter().map(|b| format!("{:02x}", b)).collect::<String>();
+        let coinbase =
+            b"\x03a\x0e\x1e< OCEAN.XYZ >\x0fBarefoot Mining\x07\x11xK";
+        let hex = coinbase
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<String>();
         assert_eq!(identify_miner(&hex), "OCEAN / Barefoot Mining");
     }
 
@@ -348,7 +356,10 @@ mod tests {
     fn miner_ocean_no_subminer() {
         // OCEAN tag with no readable sub-miner after ">"
         let coinbase = b"< OCEAN.XYZ >\x01\x02\x03";
-        let hex = coinbase.iter().map(|b| format!("{:02x}", b)).collect::<String>();
+        let hex = coinbase
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<String>();
         assert_eq!(identify_miner(&hex), "OCEAN");
     }
 

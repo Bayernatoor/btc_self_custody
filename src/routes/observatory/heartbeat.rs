@@ -78,24 +78,34 @@ fn update_heartbeat_live(_: &str) {}
 #[cfg(not(feature = "hydrate"))]
 fn destroy_heartbeat() {}
 #[cfg(not(feature = "hydrate"))]
-fn get_heartbeat_vitals() -> String { "{}".to_string() }
+fn get_heartbeat_vitals() -> String {
+    "{}".to_string()
+}
 #[cfg(not(feature = "hydrate"))]
 fn render_rhythm_strip(_: &str, _: &str) {}
 #[cfg(not(feature = "hydrate"))]
-fn get_heartbeat_recent_blocks() -> String { "[]".to_string() }
+fn get_heartbeat_recent_blocks() -> String {
+    "[]".to_string()
+}
 #[cfg(not(feature = "hydrate"))]
 fn heartbeat_pulse() {}
 #[cfg(not(feature = "hydrate"))]
 fn heartbeat_flash() {}
 #[cfg(not(feature = "hydrate"))]
-fn get_organism_status() -> String { "{}".to_string() }
+fn get_organism_status() -> String {
+    "{}".to_string()
+}
 #[cfg(not(feature = "hydrate"))]
 fn heartbeat_center() {}
 #[cfg(not(feature = "hydrate"))]
-fn heartbeat_sound_toggle(_: bool) -> bool { false }
+fn heartbeat_sound_toggle(_: bool) -> bool {
+    false
+}
 #[cfg(not(feature = "hydrate"))]
 #[allow(dead_code)]
-fn heartbeat_sound_is_enabled() -> bool { false }
+fn heartbeat_sound_is_enabled() -> bool {
+    false
+}
 #[cfg(not(feature = "hydrate"))]
 fn heartbeat_play_sound() {}
 #[cfg(not(feature = "hydrate"))]
@@ -150,20 +160,20 @@ pub fn HeartbeatPage() -> impl IntoView {
 
     // Blocks until next difficulty adjustment
     let blocks_until_retarget = Signal::derive(move || {
-        cached_live.get().map(|s| {
-            let height = s.blockchain.blocks;
-            let blocks_in_epoch = height % RETARGET_PERIOD;
-            let remaining = RETARGET_PERIOD - blocks_in_epoch;
-            remaining
-        }).unwrap_or(0)
+        cached_live
+            .get()
+            .map(|s| {
+                let height = s.blockchain.blocks;
+                let blocks_in_epoch = height % RETARGET_PERIOD;
+                RETARGET_PERIOD - blocks_in_epoch
+            })
+            .unwrap_or(0)
     });
 
     // Fetch blocks for initial timeline (current retarget period = 2016 blocks)
     let initial_blocks = LocalResource::new(move || async move {
-        let height = cached_live
-            .get()
-            .map(|s| s.blockchain.blocks)
-            .unwrap_or(0);
+        let height =
+            cached_live.get().map(|s| s.blockchain.blocks).unwrap_or(0);
         if height == 0 {
             return Vec::new();
         }
@@ -203,7 +213,8 @@ pub fn HeartbeatPage() -> impl IntoView {
 
             // Store last height — use the latest from LiveStats (not the last replayed block)
             // to avoid missing blocks that arrived between fetch and now
-            let live_height = cached_live.get_untracked()
+            let live_height = cached_live
+                .get_untracked()
                 .map(|s| s.blockchain.blocks)
                 .unwrap_or(0);
             let replay_height = blocks.last().map(|b| b.height).unwrap_or(0);
@@ -234,7 +245,11 @@ pub fn HeartbeatPage() -> impl IntoView {
                     let span = (current_ts - period_ts) as f64;
                     let avg_secs = span / blocks_in as f64;
                     let avg_u = avg_secs.round() as u64;
-                    set_hr_display.set(format!("{}:{:02}", avg_u / 60, avg_u % 60));
+                    set_hr_display.set(format!(
+                        "{}:{:02}",
+                        avg_u / 60,
+                        avg_u % 60
+                    ));
                     let bpm = 600.0 / avg_secs;
                     set_hr_subtitle.set(format!("{:.2} bpm", bpm));
                     let (label, color) = if bpm < BRADYCARDIA_THRESHOLD {
@@ -250,7 +265,8 @@ pub fn HeartbeatPage() -> impl IntoView {
             }
 
             // Blood Pressure: compute diastolic directly from LiveStats (JS value unreliable)
-            let raw_minfee = cached_live.get_untracked()
+            let raw_minfee = cached_live
+                .get_untracked()
                 .map(|s| s.mempool.mempoolminfee)
                 .unwrap_or(0.0);
             // BTC/kB to sat/vB: raw * 1e8 / 1000
@@ -258,7 +274,11 @@ pub fn HeartbeatPage() -> impl IntoView {
             // Round to nearest 0.1 sat/vB since relay fees are always clean multiples.
             let raw_sat_vb = raw_minfee * 1e8 / 1000.0;
             let diastolic = (raw_sat_vb * 10.0 + 0.5).floor() / 10.0;
-            let diastolic = if diastolic < 0.1 && raw_minfee > 0.0 { 0.1 } else { diastolic };
+            let diastolic = if diastolic < 0.1 && raw_minfee > 0.0 {
+                0.1
+            } else {
+                diastolic
+            };
             // Use 2 decimals if diastolic is < 0.1, otherwise 1
             let dia_fmt = if diastolic < 0.1 && diastolic > 0.0 {
                 format!("{:.2}", diastolic)
@@ -280,22 +300,30 @@ pub fn HeartbeatPage() -> impl IntoView {
             if let Some(live) = cached_live.get_untracked() {
                 let vmb = live.mempool.bytes as f64 / 1_000_000.0;
                 set_temp_display.set(format!("{:.1}", vmb));
-                set_temp_subtitle.set(format!("{:.1}\u{00B0}C \u{00b7} {}", v.temp_c, v.temp_label));
+                set_temp_subtitle.set(format!(
+                    "{:.1}\u{00B0}C \u{00b7} {}",
+                    v.temp_c, v.temp_label
+                ));
             } else {
                 set_temp_display.set(format!("{:.1}", v.temp_c));
                 set_temp_subtitle.set(String::new());
             }
-            set_temp_label.set(format!("{} tx in mempool",
-                cached_live.get_untracked()
+            set_temp_label.set(format!(
+                "{} tx in mempool",
+                cached_live
+                    .get_untracked()
                     .map(|s| super::helpers::format_number(s.mempool.size))
-                    .unwrap_or_else(|| "--".to_string())));
+                    .unwrap_or_else(|| "--".to_string())
+            ));
             set_temp_color.set(v.temp_color);
 
             // Immune System: hashrate + retarget context
             set_immune_display.set(format!("{:.1} EH/s", v.immune_eh));
-            set_immune_label.set(format!("{} \u{00b7} Retarget in ~{} blocks",
+            set_immune_label.set(format!(
+                "{} \u{00b7} Retarget in ~{} blocks",
                 v.immune_label,
-                blocks_until_retarget.get_untracked()));
+                blocks_until_retarget.get_untracked()
+            ));
             set_immune_color.set(v.immune_color);
         }
 
@@ -357,11 +385,17 @@ pub fn HeartbeatPage() -> impl IntoView {
                 let from = prev + 1;
                 let to = current_height;
                 let is_backlog = gap > 1;
-                fn try_fetch(from: u64, to: u64, replay: bool, delays: &'static [u64]) {
+                fn try_fetch(
+                    from: u64,
+                    to: u64,
+                    replay: bool,
+                    delays: &'static [u64],
+                ) {
                     leptos::task::spawn_local(async move {
-                        let blocks = crate::stats::server_fns::fetch_blocks(from, to)
-                            .await
-                            .unwrap_or_default();
+                        let blocks =
+                            crate::stats::server_fns::fetch_blocks(from, to)
+                                .await
+                                .unwrap_or_default();
                         if !blocks.is_empty() {
                             let json = blocks_to_json(&blocks);
                             // Backlog blocks inserted as replay (compressed, no animation)
@@ -371,9 +405,12 @@ pub fn HeartbeatPage() -> impl IntoView {
                         } else if !delays.is_empty() {
                             let delay = delays[0];
                             let rest = &delays[1..];
-                            leptos::prelude::set_timeout(move || {
-                                try_fetch(from, to, replay, rest);
-                            }, std::time::Duration::from_secs(delay));
+                            leptos::prelude::set_timeout(
+                                move || {
+                                    try_fetch(from, to, replay, rest);
+                                },
+                                std::time::Duration::from_secs(delay),
+                            );
                         }
                     });
                 }
@@ -392,7 +429,12 @@ pub fn HeartbeatPage() -> impl IntoView {
     let block_height = Signal::derive(move || {
         cached_live
             .get()
-            .map(|s| format!("#{}", super::helpers::format_number(s.blockchain.blocks)))
+            .map(|s| {
+                format!(
+                    "#{}",
+                    super::helpers::format_number(s.blockchain.blocks)
+                )
+            })
             .unwrap_or_else(|| "---".to_string())
     });
 
@@ -406,7 +448,11 @@ pub fn HeartbeatPage() -> impl IntoView {
             move || set_tick.update(|t| *t += 1),
             std::time::Duration::from_secs(1),
         );
-        on_cleanup(move || { if let Ok(h) = handle { h.clear(); } });
+        on_cleanup(move || {
+            if let Ok(h) = handle {
+                h.clear();
+            }
+        });
     }
 
     // Update stored timestamp when LiveStats refreshes
@@ -432,17 +478,23 @@ pub fn HeartbeatPage() -> impl IntoView {
     });
 
     let mempool_display = Signal::derive(move || {
-        cached_live.get().map(|s| {
-            format!("{} tx ({:.1} vMB)",
-                super::helpers::format_number(s.mempool.size),
-                s.mempool.bytes as f64 / 1_000_000.0)
-        }).unwrap_or_default()
+        cached_live
+            .get()
+            .map(|s| {
+                format!(
+                    "{} tx ({:.1} vMB)",
+                    super::helpers::format_number(s.mempool.size),
+                    s.mempool.bytes as f64 / 1_000_000.0
+                )
+            })
+            .unwrap_or_default()
     });
 
     let fee_display = Signal::derive(move || {
-        cached_live.get().map(|s| {
-            format!("{:.1} sat/vB", s.next_block_fee)
-        }).unwrap_or_default()
+        cached_live
+            .get()
+            .map(|s| format!("{:.1} sat/vB", s.next_block_fee))
+            .unwrap_or_default()
     });
 
     view! {
@@ -714,7 +766,11 @@ fn blocks_to_json(blocks: &[crate::stats::types::BlockSummary]) -> String {
     use std::fmt::Write;
     let mut buf = String::from("[");
     for (i, b) in blocks.iter().enumerate() {
-        let prev_ts = if i > 0 { blocks[i - 1].timestamp } else { b.timestamp.saturating_sub(600) };
+        let prev_ts = if i > 0 {
+            blocks[i - 1].timestamp
+        } else {
+            b.timestamp.saturating_sub(600)
+        };
         let inter = b.timestamp.saturating_sub(prev_ts);
         if i > 0 {
             buf.push(',');
@@ -722,7 +778,13 @@ fn blocks_to_json(blocks: &[crate::stats::types::BlockSummary]) -> String {
         let _ = write!(
             buf,
             r#"{{"height":{},"timestamp":{},"tx_count":{},"total_fees":{},"size":{},"weight":{},"inter_block_seconds":{}}}"#,
-            b.height, b.timestamp, b.tx_count, b.total_fees, b.size, b.weight, inter
+            b.height,
+            b.timestamp,
+            b.tx_count,
+            b.total_fees,
+            b.size,
+            b.weight,
+            inter
         );
     }
     buf.push(']');
@@ -747,7 +809,7 @@ fn extract_json_f64(json: &str, key: &str) -> f64 {
     if let Some(pos) = json.find(&needle) {
         let start = pos + needle.len();
         let rest = &json[start..];
-        let end = rest.find(|c: char| c == ',' || c == '}').unwrap_or(rest.len());
+        let end = rest.find([',', '}']).unwrap_or(rest.len());
         rest[..end].trim().parse().unwrap_or(0.0)
     } else {
         0.0
@@ -767,7 +829,9 @@ fn extract_json_str(json: &str, key: &str) -> String {
 }
 
 fn parse_vitals_json(json: &str) -> Option<Vitals> {
-    if json.len() < 3 { return None; }
+    if json.len() < 3 {
+        return None;
+    }
     Some(Vitals {
         bp_systolic: extract_json_f64(json, "bp_systolic"),
         bp_label: extract_json_str(json, "bp_label"),
@@ -788,7 +852,9 @@ struct OrganismStatus {
 }
 
 fn parse_status_json(json: &str) -> Option<OrganismStatus> {
-    if json.len() < 3 { return None; }
+    if json.len() < 3 {
+        return None;
+    }
     Some(OrganismStatus {
         condition: extract_json_str(json, "condition"),
         description: extract_json_str(json, "description"),

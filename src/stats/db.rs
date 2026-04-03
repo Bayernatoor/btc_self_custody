@@ -765,7 +765,9 @@ pub fn query_cumulative_size_before_ts(
 pub fn query_on_this_day(
     conn: &Connection,
     month_day: &str, // "04-01" format
-) -> rusqlite::Result<Vec<(u32, u64, u64, u64, f64, f64, u64, u64, u64, u64, u64, u64)>> {
+) -> rusqlite::Result<
+    Vec<(u32, u64, u64, u64, f64, f64, u64, u64, u64, u64, u64, u64)>,
+> {
     let mut stmt = conn.prepare(
         "SELECT CAST(strftime('%Y', datetime(timestamp, 'unixepoch')) AS INTEGER) as year,
                 COUNT(*) as block_count,
@@ -781,18 +783,18 @@ pub fn query_on_this_day(
     )?;
     let rows = stmt.query_map(params![month_day], |row| {
         Ok((
-            row.get::<_, u32>(0)?,    // year
-            row.get::<_, u64>(1)?,    // block_count
-            row.get::<_, u64>(2)?,    // total_tx
-            row.get::<_, u64>(3)?,    // total_fees
-            row.get::<_, f64>(4)?,    // avg_size
-            row.get::<_, f64>(5)?,    // avg_weight
-            row.get::<_, u64>(6)?,    // inscriptions
-            row.get::<_, u64>(7)?,    // runes
-            row.get::<_, u64>(8)?,    // segwit_txs
-            row.get::<_, u64>(9)?,    // taproot_outputs
-            row.get::<_, u64>(10)?,   // first_block
-            row.get::<_, u64>(11)?,   // last_block
+            row.get::<_, u32>(0)?,  // year
+            row.get::<_, u64>(1)?,  // block_count
+            row.get::<_, u64>(2)?,  // total_tx
+            row.get::<_, u64>(3)?,  // total_fees
+            row.get::<_, f64>(4)?,  // avg_size
+            row.get::<_, f64>(5)?,  // avg_weight
+            row.get::<_, u64>(6)?,  // inscriptions
+            row.get::<_, u64>(7)?,  // runes
+            row.get::<_, u64>(8)?,  // segwit_txs
+            row.get::<_, u64>(9)?,  // taproot_outputs
+            row.get::<_, u64>(10)?, // first_block
+            row.get::<_, u64>(11)?, // last_block
         ))
     })?;
     rows.collect()
@@ -1374,7 +1376,10 @@ pub fn query_recent_mempool_txs(
 }
 
 /// Prune old confirmed transactions (keep last N days).
-pub fn prune_mempool_txs(conn: &Connection, older_than: u64) -> rusqlite::Result<usize> {
+pub fn prune_mempool_txs(
+    conn: &Connection,
+    older_than: u64,
+) -> rusqlite::Result<usize> {
     conn.execute(
         "DELETE FROM mempool_txs WHERE first_seen < ?1 AND confirmed_height IS NOT NULL",
         params![older_than],

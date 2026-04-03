@@ -212,7 +212,12 @@ pub fn tps_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let ma_data: Vec<serde_json::Value> = blocks
         .iter()
         .zip(ma.iter())
-        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))]))
+        .map(|(b, m)| {
+            json!([
+                ts_ms(b.timestamp),
+                m.map(|v| json!(v)).unwrap_or(json!(null))
+            ])
+        })
         .collect();
 
     let has_ma = show_ma(blocks.len());
@@ -260,7 +265,10 @@ pub fn tps_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     let ma = moving_average(&vals, 7);
     let ma_vals: Vec<serde_json::Value> = ma
         .iter()
-        .map(|v| match v { Some(x) => json!(x), None => json!(null) })
+        .map(|v| match v {
+            Some(x) => json!(x),
+            None => json!(null),
+        })
         .collect();
 
     build_option(json!({
@@ -404,7 +412,9 @@ pub fn block_interval_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 }
 
 /// Block interval from daily aggregates (avg minutes per block = 1440 / blocks_per_day).
-pub fn block_interval_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+pub fn block_interval_chart_daily(
+    days: &[DailyAggregate],
+) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Block Interval (daily)");
     }
@@ -509,7 +519,9 @@ pub fn weight_utilization_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 }
 
 /// Block weight utilization from daily aggregates.
-pub fn weight_utilization_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+pub fn weight_utilization_chart_daily(
+    days: &[DailyAggregate],
+) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Weight Utilization");
     }
@@ -801,7 +813,12 @@ pub fn largest_tx_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let ma_data: Vec<serde_json::Value> = blocks
         .iter()
         .zip(ma.iter())
-        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))]))
+        .map(|(b, m)| {
+            json!([
+                ts_ms(b.timestamp),
+                m.map(|v| json!(v)).unwrap_or(json!(null))
+            ])
+        })
         .collect();
 
     let has_ma = show_ma(blocks.len());

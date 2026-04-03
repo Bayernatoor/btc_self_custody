@@ -661,8 +661,12 @@ pub async fn fetch_signaling(
     *state
         .signaling_blocks_cache
         .lock()
-        .unwrap_or_else(|e| e.into_inner()) =
-        Some((cache_key, signaling_blocks.clone(), period_stats.clone(), Instant::now()));
+        .unwrap_or_else(|e| e.into_inner()) = Some((
+        cache_key,
+        signaling_blocks.clone(),
+        period_stats.clone(),
+        Instant::now(),
+    ));
 
     Ok((signaling_blocks, period_stats))
 }
@@ -946,7 +950,9 @@ pub async fn fetch_mining_price_summary(
     let pool_count = miners.len() as u64;
 
     // Price context — use cached price history
-    let prices = fetch_price_history(0, 4_000_000_000).await.unwrap_or_default();
+    let prices = fetch_price_history(0, 4_000_000_000)
+        .await
+        .unwrap_or_default();
     let from_ms = from_ts * 1000;
     let to_ms = to_ts * 1000;
 
@@ -1000,7 +1006,9 @@ pub async fn fetch_on_this_day(
         .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
 
     // Fetch price history for annotation
-    let prices = fetch_price_history(0, 4_000_000_000).await.unwrap_or_default();
+    let prices = fetch_price_history(0, 4_000_000_000)
+        .await
+        .unwrap_or_default();
 
     // Notable Bitcoin events by (year, MM-DD, description)
     // (year, MM-DD, title, context, optional_block_height)
@@ -1102,96 +1110,117 @@ pub async fn fetch_on_this_day(
 
     let years: Vec<OnThisDayYear> = rows
         .into_iter()
-        .map(|(year, block_count, total_tx, total_fees, avg_size, avg_weight,
-               inscriptions, runes, segwit_txs, taproot_outputs,
-               first_block, last_block)| {
-            // Pre-exchange era prices (before blockchain.info data)
-            // These are well-documented historical prices for early Bitcoin
-            let early_prices: &[(&str, f64)] = &[
-                ("2009", 0.0),       // No market price
-                ("2010-01", 0.0),    // No market
-                ("2010-03", 0.003),  // Early BitcoinMarket.com trades
-                ("2010-05", 0.004),  // Pizza Day era (~$0.0041)
-                ("2010-07", 0.05),   // Mt. Gox opens
-                ("2010-08", 0.06),
-                ("2010-10", 0.10),
-                ("2010-11", 0.25),   // Brief spike
-                ("2010-12", 0.25),
-                ("2011-01", 0.30),
-                ("2011-02", 1.00),   // BTC reaches $1
-            ];
-
-            // Find closest price: try blockchain.info first, fall back to early prices
-            let price_usd = chrono::NaiveDate::from_ymd_opt(year as i32, month, day)
-                .and_then(|d| d.and_hms_opt(12, 0, 0))
-                .map(|dt| {
-                    let target_ms = dt.and_utc().timestamp() as u64 * 1000;
-                    let two_days_ms = 2 * 86_400 * 1000;
-                    // Try blockchain.info data first
-                    let api_price = prices
-                        .iter()
-                        .filter(|p| {
-                            p.timestamp_ms >= target_ms.saturating_sub(two_days_ms)
-                                && p.timestamp_ms <= target_ms + two_days_ms
-                        })
-                        .min_by_key(|p| {
-                            (p.timestamp_ms as i64 - target_ms as i64).unsigned_abs()
-                        })
-                        .map(|p| p.price_usd);
-
-                    if let Some(p) = api_price {
-                        return p;
-                    }
-
-                    // Fall back to early price table
-                    let year_month = format!("{}-{:02}", year, month);
-                    let year_str = year.to_string();
-                    for (prefix, price) in early_prices.iter().rev() {
-                        if year_month.starts_with(prefix) || year_str.starts_with(prefix) {
-                            return *price;
-                        }
-                    }
-                    0.0
-                })
-                .unwrap_or(0.0);
-
-            // Collect events for this date AND year
-            let mut events = Vec::new();
-            for (event_year, date, title, context, block) in &notable_dates {
-                if *date == month_day && *event_year == year {
-                    events.push(NotableEvent {
-                        title: title.to_string(),
-                        context: context.to_string(),
-                        block: *block,
-                    });
-                }
-            }
-
-            let segwit_pct = if total_tx > block_count {
-                segwit_txs as f64 / (total_tx - block_count) as f64 * 100.0
-            } else {
-                0.0
-            };
-
-            let avg_weight_util = avg_weight / 4_000_000.0 * 100.0;
-
-            OnThisDayYear {
+        .map(
+            |(
                 year,
                 block_count,
                 total_tx,
                 total_fees,
-                avg_block_size: avg_size,
-                avg_weight_util,
-                total_inscriptions: inscriptions,
-                total_runes: runes,
-                segwit_pct,
+                avg_size,
+                avg_weight,
+                inscriptions,
+                runes,
+                segwit_txs,
                 taproot_outputs,
-                price_usd,
-                events,
                 first_block,
                 last_block,
-            }
-        })
+            )| {
+                // Pre-exchange era prices (before blockchain.info data)
+                // These are well-documented historical prices for early Bitcoin
+                let early_prices: &[(&str, f64)] = &[
+                    ("2009", 0.0),      // No market price
+                    ("2010-01", 0.0),   // No market
+                    ("2010-03", 0.003), // Early BitcoinMarket.com trades
+                    ("2010-05", 0.004), // Pizza Day era (~$0.0041)
+                    ("2010-07", 0.05),  // Mt. Gox opens
+                    ("2010-08", 0.06),
+                    ("2010-10", 0.10),
+                    ("2010-11", 0.25), // Brief spike
+                    ("2010-12", 0.25),
+                    ("2011-01", 0.30),
+                    ("2011-02", 1.00), // BTC reaches $1
+                ];
+
+                // Find closest price: try blockchain.info first, fall back to early prices
+                let price_usd =
+                    chrono::NaiveDate::from_ymd_opt(year as i32, month, day)
+                        .and_then(|d| d.and_hms_opt(12, 0, 0))
+                        .map(|dt| {
+                            let target_ms =
+                                dt.and_utc().timestamp() as u64 * 1000;
+                            let two_days_ms = 2 * 86_400 * 1000;
+                            // Try blockchain.info data first
+                            let api_price = prices
+                                .iter()
+                                .filter(|p| {
+                                    p.timestamp_ms
+                                        >= target_ms.saturating_sub(two_days_ms)
+                                        && p.timestamp_ms
+                                            <= target_ms + two_days_ms
+                                })
+                                .min_by_key(|p| {
+                                    (p.timestamp_ms as i64 - target_ms as i64)
+                                        .unsigned_abs()
+                                })
+                                .map(|p| p.price_usd);
+
+                            if let Some(p) = api_price {
+                                return p;
+                            }
+
+                            // Fall back to early price table
+                            let year_month = format!("{}-{:02}", year, month);
+                            let year_str = year.to_string();
+                            for (prefix, price) in early_prices.iter().rev() {
+                                if year_month.starts_with(prefix)
+                                    || year_str.starts_with(prefix)
+                                {
+                                    return *price;
+                                }
+                            }
+                            0.0
+                        })
+                        .unwrap_or(0.0);
+
+                // Collect events for this date AND year
+                let mut events = Vec::new();
+                for (event_year, date, title, context, block) in &notable_dates
+                {
+                    if *date == month_day && *event_year == year {
+                        events.push(NotableEvent {
+                            title: title.to_string(),
+                            context: context.to_string(),
+                            block: *block,
+                        });
+                    }
+                }
+
+                let segwit_pct = if total_tx > block_count {
+                    segwit_txs as f64 / (total_tx - block_count) as f64 * 100.0
+                } else {
+                    0.0
+                };
+
+                let avg_weight_util = avg_weight / 4_000_000.0 * 100.0;
+
+                OnThisDayYear {
+                    year,
+                    block_count,
+                    total_tx,
+                    total_fees,
+                    avg_block_size: avg_size,
+                    avg_weight_util,
+                    total_inscriptions: inscriptions,
+                    total_runes: runes,
+                    segwit_pct,
+                    taproot_outputs,
+                    price_usd,
+                    events,
+                    first_block,
+                    last_block,
+                }
+            },
+        )
         .collect();
 
     Ok(OnThisDayData { month, day, years })

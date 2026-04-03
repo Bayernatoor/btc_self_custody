@@ -1007,7 +1007,6 @@ pub fn apply_overlays(
             }
         }
     }
-
 }
 
 #[cfg(test)]
@@ -1039,10 +1038,7 @@ mod tests {
     #[test]
     fn ma_longer_than_window() {
         let result = moving_average(&[1.0, 2.0, 3.0, 4.0, 5.0], 3);
-        assert_eq!(
-            result,
-            vec![None, None, Some(2.0), Some(3.0), Some(4.0)]
-        );
+        assert_eq!(result, vec![None, None, Some(2.0), Some(3.0), Some(4.0)]);
     }
 
     #[test]

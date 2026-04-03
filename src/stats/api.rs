@@ -61,8 +61,14 @@ pub struct StatsState {
     /// Cached block timestamps: height → timestamp. Immutable data, never expires.
     pub block_ts_cache: Mutex<std::collections::HashMap<u64, u64>>,
     /// Cached signaling blocks: (cache_key, blocks, period_stats, fetched_at). 60s TTL.
-    pub signaling_blocks_cache:
-        Mutex<Option<(String, Vec<super::types::SignalingBlock>, super::types::PeriodStats, Instant)>>,
+    pub signaling_blocks_cache: Mutex<
+        Option<(
+            String,
+            Vec<super::types::SignalingBlock>,
+            super::types::PeriodStats,
+            Instant,
+        )>,
+    >,
     /// Cached signaling periods: (cache_key, results, fetched_at). 60s TTL.
     pub signaling_periods_cache:
         Mutex<Option<(String, Vec<super::db::SignalingPeriod>, Instant)>>,

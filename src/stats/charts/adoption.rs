@@ -68,7 +68,9 @@ pub fn segwit_adoption_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 }
 
 /// SegWit adoption % from daily aggregates.
-pub fn segwit_adoption_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+pub fn segwit_adoption_chart_daily(
+    days: &[DailyAggregate],
+) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("SegWit Adoption %");
     }
@@ -259,7 +261,9 @@ pub fn witness_version_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 }
 
 /// SegWit v0 vs Taproot v1 stacked area chart (daily).
-pub fn witness_version_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+pub fn witness_version_chart_daily(
+    days: &[DailyAggregate],
+) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Witness Versions");
     }
@@ -367,7 +371,9 @@ pub fn witness_version_pct_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 }
 
 /// Witness version percentage share (daily).
-pub fn witness_version_pct_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+pub fn witness_version_pct_chart_daily(
+    days: &[DailyAggregate],
+) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Witness Version Share");
     }
@@ -427,7 +433,9 @@ pub fn witness_version_pct_chart_daily(days: &[DailyAggregate]) -> serde_json::V
 }
 
 /// Witness version as percentage of all transactions (per-block).
-pub fn witness_version_tx_pct_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+pub fn witness_version_tx_pct_chart(
+    blocks: &[BlockSummary],
+) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Witness Tx Share");
     }
@@ -513,7 +521,9 @@ pub fn witness_version_tx_pct_chart(blocks: &[BlockSummary]) -> serde_json::Valu
 }
 
 /// Witness version as percentage of all transactions (daily).
-pub fn witness_version_tx_pct_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+pub fn witness_version_tx_pct_chart_daily(
+    days: &[DailyAggregate],
+) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Witness Tx Share");
     }
@@ -613,7 +623,9 @@ pub fn taproot_spend_type_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 }
 
 /// Taproot key-path vs script-path spends (daily).
-pub fn taproot_spend_type_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+pub fn taproot_spend_type_chart_daily(
+    days: &[DailyAggregate],
+) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Taproot Spend Types");
     }

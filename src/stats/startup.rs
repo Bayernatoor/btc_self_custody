@@ -14,7 +14,8 @@ use super::zmq_subscriber;
 
 /// Initialize the stats module. Returns None if not configured.
 /// Returns (state, router, zmq_tx_url, zmq_block_url).
-pub async fn init() -> Option<(Arc<StatsState>, Router, Option<String>, Option<String>)> {
+pub async fn init(
+) -> Option<(Arc<StatsState>, Router, Option<String>, Option<String>)> {
     let config = StatsConfig::load()?;
 
     tracing::info!("Stats module: connecting to {}", config.rpc_url);

@@ -335,7 +335,9 @@ pub fn address_type_pct_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 }
 
 /// Address type as % of total outputs (daily) — 100% stacked area.
-pub fn address_type_pct_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+pub fn address_type_pct_chart_daily(
+    days: &[DailyAggregate],
+) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Address Type Share");
     }
@@ -472,7 +474,8 @@ pub fn rbf_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
         })
         .collect();
     // Extract f64 for MA calculation (nulls become 0)
-    let ma_input: Vec<f64> = vals.iter().map(|v| v.as_f64().unwrap_or(0.0)).collect();
+    let ma_input: Vec<f64> =
+        vals.iter().map(|v| v.as_f64().unwrap_or(0.0)).collect();
     let ma = moving_average(&ma_input, 7);
     let ma_vals: Vec<serde_json::Value> = days
         .iter()
@@ -481,7 +484,10 @@ pub fn rbf_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
             if d.date.as_str() < "2016-02-23" {
                 json!(null)
             } else {
-                match v { Some(x) => json!(x), None => json!(null) }
+                match v {
+                    Some(x) => json!(x),
+                    None => json!(null),
+                }
             }
         })
         .collect();
