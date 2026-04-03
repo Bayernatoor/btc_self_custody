@@ -567,11 +567,11 @@ pub fn HeartbeatPage() -> impl IntoView {
                     </div>
                 </div>
 
-                // Canvas
+                // Canvas — clamp in normal mode, flex-grow in fullscreen
                 <canvas
                     id="heartbeat-canvas"
                     class="w-full"
-                    style="height: clamp(250px, 35vh, 450px)"
+                    style="height: clamp(300px, 45vh, 500px)"
                 ></canvas>
 
                 // Bottom info bar

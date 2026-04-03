@@ -377,3 +377,10 @@ input[type="date"]::-webkit-calendar-picker-indicator {
     display: none;
   }
 }
+
+/* Heartbeat canvas: fill available space in fullscreen mode */
+#heartbeat-card:fullscreen #heartbeat-canvas,
+#heartbeat-card:-webkit-full-screen #heartbeat-canvas {
+  flex: 1;
+  height: auto !important;
+}

@@ -462,11 +462,11 @@ pub async fn get_heartbeat_sse(
                 Phase::History(txs, block_ts) => {
                     if txs.is_empty() {
                         return Some((
-                            Ok(Event::default()
-                                .event("history")
-                                .data(format!(
+                            Ok(Event::default().event("history").data(
+                                format!(
                                 "{{\"txs\":[],\"last_block_ts\":{block_ts}}}"
-                            ))),
+                            ),
+                            )),
                             (Phase::Live, rx),
                         ));
                     }
