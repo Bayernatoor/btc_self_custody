@@ -320,33 +320,39 @@
     // ── Own node SSE feed (primary) ─────────────────────────────
     function connectOwnFeed() {
         if (!_hb) return;
+        console.log('[heartbeat] connecting to SSE /api/stats/heartbeat');
         _hb._txThrottleTime = 0;
         _hb._txBatchQueue = [];
+        _hb._sseTxCount = 0;
         try {
             var es = new EventSource('/api/stats/heartbeat');
             es.addEventListener('history', function(e) {
                 if (!_hb) return;
                 try {
                     var txs = JSON.parse(e.data);
+                    console.log('[heartbeat] SSE history:', txs.length, 'txs');
                     if (!Array.isArray(txs) || txs.length === 0) return;
-                    // Queue history txs as a batch (they have fee, vsize, value)
                     for (var i = 0; i < txs.length; i++) {
                         _hb._txBatchQueue.push(txs[i]);
                     }
                     _hb._hasTxStream = true;
                     flushTxBatch();
-                } catch (err) {}
+                } catch (err) { console.log('[heartbeat] SSE history error:', err); }
             });
             es.addEventListener('tx', function(e) {
                 if (!_hb) return;
                 try {
                     var tx = JSON.parse(e.data);
                     _hb._hasTxStream = true;
+                    _hb._sseTxCount++;
                     _hb._txBatchQueue.push(tx);
                     var now = Date.now();
                     if (now - _hb._txThrottleTime > 200) {
                         _hb._txThrottleTime = now;
                         flushTxBatch();
+                    }
+                    if (_hb._sseTxCount % 100 === 0) {
+                        console.log('[heartbeat] SSE live txs:', _hb._sseTxCount);
                     }
                 } catch (err) {}
             });
@@ -365,15 +371,16 @@
                 console.log('SSE lag:', e.data);
             });
             es.onopen = function() {
+                console.log('[heartbeat] SSE connected');
                 _hb.wsConnected = true;
                 _hb._sseRetryDelay = 5000;
             };
-            es.onerror = function() {
+            es.onerror = function(err) {
                 if (!_hb) return;
+                console.log('[heartbeat] SSE error, readyState:', es.readyState, err);
                 _hb.wsConnected = false;
                 es.close();
-                // Fallback to mempool.space WS
-                console.log('SSE failed, falling back to mempool.space WS');
+                console.log('[heartbeat] falling back to mempool.space WS');
                 connectMempoolFallback();
             };
             _hb._sse = es;
