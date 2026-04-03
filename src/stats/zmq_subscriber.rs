@@ -208,7 +208,8 @@ async fn subscribe_blocks(
             continue;
         }
 
-        // Block hash is 32 bytes, display as hex (reversed for Bitcoin convention)
+        // Block hash is 32 bytes. Bitcoin Core ZMQ already sends in big-endian
+        // (display) order, so we just convert to hex directly — no reversal needed.
         let hash_bytes = &frames[1];
         if hash_bytes.len() != 32 {
             tracing::warn!(
@@ -217,7 +218,7 @@ async fn subscribe_blocks(
             );
             continue;
         }
-        let block_hash = bytes_to_hex_reversed(hash_bytes);
+        let block_hash = bytes_to_hex(hash_bytes);
         tracing::info!("ZMQ: new block {block_hash}");
 
         // Get block height and txid list
@@ -394,9 +395,14 @@ fn sha256d_hex(data: &[u8]) -> String {
     bytes_to_hex_reversed(&second)
 }
 
-/// Convert bytes to hex string in reversed byte order (Bitcoin hash display).
+/// Convert bytes to hex string in reversed byte order (Bitcoin txid convention).
 fn bytes_to_hex_reversed(bytes: &[u8]) -> String {
     bytes.iter().rev().map(|b| format!("{b:02x}")).collect()
+}
+
+/// Convert bytes to hex string in direct order.
+fn bytes_to_hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 /// Read a little-endian u32 from data at cursor position.
