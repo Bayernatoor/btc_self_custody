@@ -1666,6 +1666,7 @@
 
         listen(canvas, 'touchend', function(e) {
             if (!_hb) return;
+            _hb._touchLocked = null; // reset direction lock for next touch
 
             if (_hb._pinching) {
                 _hb._pinching = false;

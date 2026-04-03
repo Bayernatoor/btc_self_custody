@@ -115,6 +115,7 @@ async fn subscribe_transactions(
     let mut tx_count = 0u64;
     let mut parse_fail = 0u64;
     let mut rpc_fail = 0u64;
+    let mut consecutive_fail = 0u32;
     loop {
         let msg = socket.recv().await?;
         let frames: Vec<_> = msg.into_vec();
@@ -143,18 +144,33 @@ async fn subscribe_transactions(
             .as_secs();
 
         // Skip RPC lookups while a block is being processed — ZMQ sends rawtx
-        // for every tx in the block, flooding us with ~5000 already-confirmed txs
-        // that would each fail getmempoolentry and clog the pipeline.
+        // for every tx in the block, flooding us with ~5000 already-confirmed txs.
+        // Two detection methods:
+        // 1. block_processing flag (set by block subscriber after hashblock)
+        // 2. Consecutive failure self-throttle (catches rawtx flood BEFORE hashblock)
         if block_processing.load(Ordering::Relaxed) {
+            consecutive_fail = 0;
+            continue;
+        }
+        if consecutive_fail >= 5 {
+            // Likely a block just arrived — skip and drain the ZMQ queue
+            // Reset after a short pause to let the flood pass
+            tokio::time::sleep(Duration::from_secs(3)).await;
+            consecutive_fail = 0;
+            tracing::debug!("ZMQ: skipped rawtx flood (consecutive failures)");
             continue;
         }
 
         // Look up fee + authoritative vsize from mempool entry
         let (fee, vsize) = match state.rpc.get_mempool_entry(&parsed.txid).await
         {
-            Ok(entry) => (entry.fee, entry.vsize),
+            Ok(entry) => {
+                consecutive_fail = 0;
+                (entry.fee, entry.vsize)
+            }
             Err(_) => {
                 rpc_fail += 1;
+                consecutive_fail += 1;
                 if rpc_fail <= 5 {
                     tracing::debug!(
                         "ZMQ: getmempoolentry failed for {} (may be already confirmed)",
