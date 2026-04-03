@@ -317,14 +317,78 @@
         return null;
     }
 
-    // ── Mempool WebSocket feed ─────────────────────────────────
-    function connectMempoolFeed() {
+    // ── Own node SSE feed (primary) ─────────────────────────────
+    function connectOwnFeed() {
         if (!_hb) return;
-        _hb._lastMempoolTxCount = 0; // for diffing
+        _hb._txThrottleTime = 0;
+        _hb._txBatchQueue = [];
+        try {
+            var es = new EventSource('/api/stats/heartbeat');
+            es.addEventListener('history', function(e) {
+                if (!_hb) return;
+                try {
+                    var txs = JSON.parse(e.data);
+                    if (!Array.isArray(txs) || txs.length === 0) return;
+                    // Queue history txs as a batch (they have fee, vsize, value)
+                    for (var i = 0; i < txs.length; i++) {
+                        _hb._txBatchQueue.push(txs[i]);
+                    }
+                    _hb._hasTxStream = true;
+                    flushTxBatch();
+                } catch (err) {}
+            });
+            es.addEventListener('tx', function(e) {
+                if (!_hb) return;
+                try {
+                    var tx = JSON.parse(e.data);
+                    _hb._hasTxStream = true;
+                    _hb._txBatchQueue.push(tx);
+                    var now = Date.now();
+                    if (now - _hb._txThrottleTime > 200) {
+                        _hb._txThrottleTime = now;
+                        flushTxBatch();
+                    }
+                } catch (err) {}
+            });
+            es.addEventListener('block', function(e) {
+                if (!_hb) return;
+                try {
+                    var block = JSON.parse(e.data);
+                    // Block events are handled by the Rust/LiveStats polling,
+                    // but log for diagnostics
+                    if (block.height) {
+                        console.log('SSE block:', block.height, block.hash);
+                    }
+                } catch (err) {}
+            });
+            es.addEventListener('lag', function(e) {
+                console.log('SSE lag:', e.data);
+            });
+            es.onopen = function() {
+                _hb.wsConnected = true;
+                _hb._sseRetryDelay = 5000;
+            };
+            es.onerror = function() {
+                if (!_hb) return;
+                _hb.wsConnected = false;
+                es.close();
+                // Fallback to mempool.space WS
+                console.log('SSE failed, falling back to mempool.space WS');
+                connectMempoolFallback();
+            };
+            _hb._sse = es;
+        } catch (err) {
+            connectMempoolFallback();
+        }
+    }
+
+    // ── Mempool.space WebSocket fallback ──────────────────────
+    function connectMempoolFallback() {
+        if (!_hb) return;
+        _hb._lastMempoolTxCount = 0;
         try {
             var ws = new WebSocket('wss://mempool.space/api/v1/ws');
             ws.onopen = function() {
-                // Subscribe to both individual txs and projected blocks
                 ws.send(JSON.stringify({ action: 'want', data: ['mempool-blocks', 'stats'] }));
                 _hb.wsConnected = true;
                 _hb._wsRetryDelay = 5000;
@@ -335,11 +399,7 @@
                 if (!_hb) return;
                 try {
                     var data = JSON.parse(e.data);
-
-                    // Individual transactions: try multiple field names
-                    // mempool.space may use 'transactions', 'tx', or 'txs'
                     var txArr = data.transactions || data.txs || null;
-                    // Single tx object
                     if (!txArr && data.tx && data.tx.txid) {
                         txArr = [data.tx];
                     }
@@ -354,24 +414,18 @@
                             flushTxBatch();
                         }
                     }
-
-                    // Projected blocks: vital signs + fallback brick creation
                     if (data['mempool-blocks']) {
                         var mblocks = data['mempool-blocks'];
                         var totalTx = 0;
                         for (var i = 0; i < mblocks.length; i++) {
                             totalTx += mblocks[i].nTx || 0;
                         }
-
-                        // Diff for fallback aggregate bricks
                         var newTx = 0;
                         if (_hb._lastMempoolTxCount > 0) {
                             newTx = Math.max(0, totalTx - _hb._lastMempoolTxCount);
                         }
                         _hb._lastMempoolTxCount = totalTx;
                         _hb._wsMedianFee = Math.max(1, mblocks[0] ? mblocks[0].medianFee || 5 : 5);
-
-                        // Fallback: if individual tx stream isn't working, use aggregate
                         if (!_hb._hasTxStream && newTx > 0) {
                             var topFee = Math.max(2, mblocks[0] ? (mblocks[0].feeRange || [1, 5, 10])[2] || 10 : 5);
                             addMempoolTxs(newTx, _hb._wsMedianFee, topFee);
@@ -382,10 +436,9 @@
             ws.onclose = function() {
                 if (!_hb) return;
                 _hb.wsConnected = false;
-                // Exponential backoff: 5s, 10s, 20s, 40s... max 5min
                 _hb._wsRetryDelay = Math.min((_hb._wsRetryDelay || 5000) * 2, 300000);
                 setTimeout(function() {
-                    if (_hb) connectMempoolFeed();
+                    if (_hb) connectMempoolFallback();
                 }, _hb._wsRetryDelay);
             };
             ws.onerror = function() { ws.close(); };
@@ -1527,8 +1580,8 @@
         // Start animation loop
         _hb.rafId = requestAnimationFrame(drawFrame);
 
-        // Connect mempool WebSocket feed
-        connectMempoolFeed();
+        // Connect to own node SSE feed (falls back to mempool.space WS)
+        connectOwnFeed();
     };
 
     window.pushHeartbeatBlocks = function(json, replay) {
@@ -1719,6 +1772,9 @@
         if (_hb.rafId) cancelAnimationFrame(_hb.rafId);
         if (_hb._flashTimer) clearTimeout(_hb._flashTimer);
         if (_hb.resizeObs) _hb.resizeObs.disconnect();
+        if (_hb._sse) {
+            try { _hb._sse.close(); } catch(e) {}
+        }
         if (_hb.ws) {
             try { _hb.ws.close(); } catch(e) {}
         }
