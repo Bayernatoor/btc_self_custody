@@ -2121,6 +2121,25 @@
         if (window.destroyHeartbeat) window.destroyHeartbeat();
     });
 
+    // When tab regains focus, advance virtualX to catch up with elapsed time
+    // and clear the tx backlog (prevents tall stacks from background queuing)
+    document.addEventListener('visibilitychange', function() {
+        if (!_hb || document.hidden) return;
+        var now = Date.now() / 1000;
+        var elapsed = now - (_hb.lastFrameTime || now);
+        if (elapsed > 2) {
+            // Advance the live flatline to catch up
+            var liveSeg = _hb.timeline[_hb.timeline.length - 1];
+            if (liveSeg && liveSeg.type === 'flatline' && liveSeg.x_end === null) {
+                _hb.virtualX += elapsed * FLATLINE_PX_PER_SEC;
+            }
+            // Update lastFrameTime so the draw loop doesn't also try to catch up
+            _hb.lastFrameTime = now;
+            // Clear queued txs (they'd all stack at one position)
+            _hb._txBatchQueue = [];
+        }
+    });
+
     // ── Phase 2: Vital Signs computation ─────────────────────
 
     // Store recent block timestamps for heart rate calculation
