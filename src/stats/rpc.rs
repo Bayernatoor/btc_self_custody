@@ -684,7 +684,11 @@ impl BitcoinRpc {
         let fee_btc = result["fees"]["base"]
             .as_f64()
             .or_else(|| result["fee"].as_f64())
-            .unwrap_or(0.0);
+            .ok_or_else(|| {
+                StatsError::Rpc(format!(
+                    "No fee field in mempool entry for {txid}"
+                ))
+            })?;
         let fee_sats = (fee_btc * 100_000_000.0).round() as u64;
         let vsize = result["vsize"].as_u64().unwrap_or(0) as u32;
         Ok(MempoolEntryInfo {

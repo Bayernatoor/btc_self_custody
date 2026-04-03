@@ -1375,13 +1375,13 @@ pub fn query_recent_mempool_txs(
     rows.collect()
 }
 
-/// Prune old confirmed transactions (keep last N days).
+/// Prune old transactions (confirmed + stale unconfirmed). Keep last N days.
 pub fn prune_mempool_txs(
     conn: &Connection,
     older_than: u64,
 ) -> rusqlite::Result<usize> {
     conn.execute(
-        "DELETE FROM mempool_txs WHERE first_seen < ?1 AND confirmed_height IS NOT NULL",
+        "DELETE FROM mempool_txs WHERE first_seen < ?1",
         params![older_than],
     )
 }
