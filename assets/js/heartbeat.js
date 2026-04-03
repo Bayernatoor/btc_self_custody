@@ -1934,8 +1934,10 @@
 
     // Prune timeline segments that are far behind the viewport to limit memory
     function pruneTimeline() {
-        if (!_hb || _hb.timeline.length < 200) return;
-        var minX = _hb.viewOffset - _hb.width * 3;
+        // Keep all replay history — only prune when timeline is very large
+        // and segments are far behind the viewport (10x canvas width)
+        if (!_hb || _hb.timeline.length < 5000) return;
+        var minX = _hb.viewOffset - _hb.width * 10 / Math.max(_hb.zoom, 0.1);
         var cutIdx = 0;
         for (var i = 0; i < _hb.timeline.length; i++) {
             var seg = _hb.timeline[i];
