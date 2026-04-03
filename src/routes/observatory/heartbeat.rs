@@ -338,43 +338,47 @@ pub fn HeartbeatPage() -> impl IntoView {
         }
         let prev = last_height2.get();
         if prev > 0 && current_height > prev {
+            let gap = current_height - prev;
             last_height2.set(current_height);
 
-            // Phase 4: flash and pulse on new block
-            heartbeat_flash();
-            heartbeat_pulse();
-
-            // Phase 5: sound on new block
-            if sound_on.get_untracked() {
-                heartbeat_play_sound();
+            // Only animate effects for single block arrivals (not backlog)
+            if gap == 1 {
+                heartbeat_flash();
+                heartbeat_pulse();
+                if sound_on.get_untracked() {
+                    heartbeat_play_sound();
+                }
             }
 
-            // Fetch the new block(s) with retry chain (ingestion can lag 5-20s)
+            // Fetch the new block(s) with retry chain
+            // If multiple blocks (backlog from navigating away), insert as replay
             #[cfg(feature = "hydrate")]
             {
                 let from = prev + 1;
                 let to = current_height;
-                fn try_fetch(from: u64, to: u64, delays: &'static [u64]) {
+                let is_backlog = gap > 1;
+                fn try_fetch(from: u64, to: u64, replay: bool, delays: &'static [u64]) {
                     leptos::task::spawn_local(async move {
                         let blocks = crate::stats::server_fns::fetch_blocks(from, to)
                             .await
                             .unwrap_or_default();
                         if !blocks.is_empty() {
                             let json = blocks_to_json(&blocks);
-                            push_heartbeat_blocks(&json, false);
+                            // Backlog blocks inserted as replay (compressed, no animation)
+                            push_heartbeat_blocks(&json, replay);
                             let recent = get_heartbeat_recent_blocks();
                             render_rhythm_strip("rhythm-strip-canvas", &recent);
                         } else if !delays.is_empty() {
                             let delay = delays[0];
                             let rest = &delays[1..];
                             leptos::prelude::set_timeout(move || {
-                                try_fetch(from, to, rest);
+                                try_fetch(from, to, replay, rest);
                             }, std::time::Duration::from_secs(delay));
                         }
                     });
                 }
-                // Try now, then retry at escalating intervals (ingestion polls every 60s)
-                try_fetch(from, to, &[5, 15, 30, 45, 60, 90]);
+                // Try now, then retry at escalating intervals
+                try_fetch(from, to, is_backlog, &[5, 15, 30, 45, 60, 90]);
             }
         }
     });

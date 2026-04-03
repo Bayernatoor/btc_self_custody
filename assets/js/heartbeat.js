@@ -1635,7 +1635,7 @@
                         subtitle: feeBtc.toFixed(4) + ' BTC fees \u00b7 ' + (b.tx_count || 0).toLocaleString() + ' txs',
                         color: blockSeg.color || _hb.currentColor || COLORS.healthy,
                         start: nowAnn,
-                        end: nowAnn + 3.0
+                        end: nowAnn + 6.0
                     };
                 }
             }
