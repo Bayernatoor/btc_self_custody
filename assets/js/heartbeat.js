@@ -1834,6 +1834,20 @@
             if (!Array.isArray(blocks)) return;
             for (var i = 0; i < blocks.length; i++) {
                 var b = blocks[i];
+
+                // Deduplicate: skip if this block height is already in the timeline
+                // (SSE block handler + LiveStats poll can both push the same block)
+                if (!isReplay && b.height) {
+                    var isDupe = false;
+                    for (var di = _hb.timeline.length - 1; di >= Math.max(0, _hb.timeline.length - 10); di--) {
+                        if (_hb.timeline[di].type === 'block' && _hb.timeline[di].height === b.height) {
+                            isDupe = true;
+                            break;
+                        }
+                    }
+                    if (isDupe) continue;
+                }
+
                 var interBlock = b.inter_block_seconds || 600;
                 // For live blocks, compute real interval from the previous block's timestamp
                 // Use _prevBlockTime (set before LiveStats overwrites lastBlockTime)
