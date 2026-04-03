@@ -8,6 +8,7 @@
 //! Transactions are stored in SQLite (`mempool_txs` table) and broadcast
 //! to SSE clients via a tokio broadcast channel.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -46,15 +47,20 @@ pub fn spawn(
     zmq_tx_url: String,
     zmq_block_url: String,
 ) {
+    // Shared flag: block subscriber sets this during block processing
+    // so the tx subscriber can skip expensive RPC lookups for block txs
+    let block_processing = Arc::new(AtomicBool::new(false));
+
     // Transaction subscriber
     {
         let state = Arc::clone(&state);
         let sender = tx_sender.clone();
         let url = zmq_tx_url.clone();
+        let bp = Arc::clone(&block_processing);
         tokio::spawn(async move {
             loop {
                 tracing::info!("ZMQ: connecting to rawtx at {url}");
-                match subscribe_transactions(&state, &sender, &url).await {
+                match subscribe_transactions(&state, &sender, &url, &bp).await {
                     Ok(()) => tracing::warn!(
                         "ZMQ rawtx stream ended, reconnecting..."
                     ),
@@ -72,10 +78,11 @@ pub fn spawn(
         let state = Arc::clone(&state);
         let sender = tx_sender;
         let url = zmq_block_url.clone();
+        let bp = block_processing;
         tokio::spawn(async move {
             loop {
                 tracing::info!("ZMQ: connecting to hashblock at {url}");
-                match subscribe_blocks(&state, &sender, &url).await {
+                match subscribe_blocks(&state, &sender, &url, &bp).await {
                     Ok(()) => tracing::warn!(
                         "ZMQ hashblock stream ended, reconnecting..."
                     ),
@@ -98,6 +105,7 @@ async fn subscribe_transactions(
     state: &Arc<StatsState>,
     sender: &broadcast::Sender<HeartbeatEvent>,
     url: &str,
+    block_processing: &AtomicBool,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut socket = SubSocket::new();
     socket.connect(url).await?;
@@ -133,6 +141,13 @@ async fn subscribe_transactions(
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
+
+        // Skip RPC lookups while a block is being processed — ZMQ sends rawtx
+        // for every tx in the block, flooding us with ~5000 already-confirmed txs
+        // that would each fail getmempoolentry and clog the pipeline.
+        if block_processing.load(Ordering::Relaxed) {
+            continue;
+        }
 
         // Look up fee + authoritative vsize from mempool entry
         let (fee, vsize) = match state.rpc.get_mempool_entry(&parsed.txid).await
@@ -195,6 +210,7 @@ async fn subscribe_blocks(
     state: &Arc<StatsState>,
     sender: &broadcast::Sender<HeartbeatEvent>,
     url: &str,
+    block_processing: &AtomicBool,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut socket = SubSocket::new();
     socket.connect(url).await?;
@@ -221,10 +237,16 @@ async fn subscribe_blocks(
         let block_hash = bytes_to_hex(hash_bytes);
         tracing::info!("ZMQ: new block {block_hash}");
 
+        // Signal tx subscriber to skip RPC lookups (block txs flood rawtx)
+        block_processing.store(true, Ordering::Relaxed);
+
         // Get block height and txid list
         let (height, txids) = match get_block_info(state, &block_hash).await {
             Some(info) => info,
-            None => continue,
+            None => {
+                block_processing.store(false, Ordering::Relaxed);
+                continue;
+            }
         };
 
         let now = std::time::SystemTime::now()
@@ -250,6 +272,11 @@ async fn subscribe_blocks(
             hash: block_hash,
             confirmed_count,
         });
+
+        // Resume tx processing after a short delay (let the rawtx flood from
+        // the block pass through the ZMQ socket before we start RPC lookups again)
+        tokio::time::sleep(Duration::from_secs(3)).await;
+        block_processing.store(false, Ordering::Relaxed);
     }
 }
 
