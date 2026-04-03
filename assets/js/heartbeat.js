@@ -901,58 +901,45 @@
         return h + 'h ' + m + 'm';
     }
 
-    // ── "Jump to Live" button ──────────────────────────────────
-    function drawJumpToLive(ctx, w, h) {
-        var btnW = 110, btnH = 28;
-        var btnX = w - btnW - 12;
-        var btnY = 12;
-
-        ctx.fillStyle = 'rgba(0, 230, 118, 0.15)';
-        ctx.beginPath();
-        roundRect(ctx, btnX, btnY, btnW, btnH, 4);
-        ctx.fill();
-
-        ctx.strokeStyle = COLORS.healthy;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        roundRect(ctx, btnX, btnY, btnW, btnH, 4);
-        ctx.stroke();
-
-        ctx.fillStyle = COLORS.healthy;
-        ctx.font = 'bold 12px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText('Jump to Live', btnX + btnW / 2, btnY + 18);
-        ctx.textAlign = 'left';
-
-        // Store button bounds for click detection
-        _hb._jumpBtn = { x: btnX, y: btnY, w: btnW, h: btnH };
-    }
+    // Jump to Live is now part of the control bar (drawControlBar)
 
     // ── Control bar (bottom center) ──────────────────────────────
     var CTRL_BTNS = [
         { id: 'prev',    label: '\u23EE', tip: 'Previous block' },
         { id: 'pause',   label: '\u23F8', tip: 'Pause' },
         { id: 'zoomOut', label: '\u2212', tip: 'Zoom out' },
-        { id: 'zoomIn',  label: '+',      tip: 'Zoom in' }
+        { id: 'zoomIn',  label: '+',      tip: 'Zoom in' },
+        { id: 'center',  label: '\u2316', tip: 'Center on live head' },
+        { id: 'live',    label: '\u25C9', tip: 'Jump to Live' }
     ];
     var CTRL_BTN_SIZE = 32;
     var CTRL_BTN_GAP = 6;
 
     function drawControlBar(ctx, w, h) {
-        var totalW = CTRL_BTNS.length * CTRL_BTN_SIZE + (CTRL_BTNS.length - 1) * CTRL_BTN_GAP;
+        // Filter buttons: hide 'live' when already auto-following
+        var btns = [];
+        for (var fi = 0; fi < CTRL_BTNS.length; fi++) {
+            var def = CTRL_BTNS[fi];
+            if (def.id === 'live' && _hb.autoFollow) continue;
+            btns.push(def);
+        }
+        var totalW = btns.length * CTRL_BTN_SIZE + (btns.length - 1) * CTRL_BTN_GAP;
         var startX = (w - totalW) / 2;
         var btnY = h - CTRL_BTN_SIZE - 2;
         _hb._ctrlBtns = [];
 
-        for (var i = 0; i < CTRL_BTNS.length; i++) {
-            var def = CTRL_BTNS[i];
+        for (var i = 0; i < btns.length; i++) {
+            var def = btns[i];
             var bx = startX + i * (CTRL_BTN_SIZE + CTRL_BTN_GAP);
 
-            // Highlight pause/play based on state
-            var isActive = (def.id === 'pause' && _hb.paused);
+            // Highlight based on state
+            var isActive = (def.id === 'pause' && _hb.paused) ||
+                           (def.id === 'live' && !_hb.autoFollow);
             var bgAlpha = isActive ? 0.25 : 0.12;
-            var borderColor = isActive ? COLORS.elevated : 'rgba(255,255,255,0.3)';
-            var textColor = isActive ? COLORS.elevated : 'rgba(255,255,255,0.7)';
+            var borderColor = isActive ? (def.id === 'live' ? COLORS.healthy : COLORS.elevated)
+                                       : 'rgba(255,255,255,0.3)';
+            var textColor = isActive ? (def.id === 'live' ? COLORS.healthy : COLORS.elevated)
+                                     : 'rgba(255,255,255,0.7)';
 
             // Dynamic label for pause/play
             var label = def.label;
@@ -1031,6 +1018,20 @@
                 var vx2 = canvasToVirtual(cx2);
                 _hb.zoom = Math.max(_hb.minZoom, _hb.zoom / 1.4);
                 _hb.viewOffset = vx2 - cx2 / _hb.zoom;
+                break;
+            case 'center':
+                // Center viewport on the live head without changing zoom
+                _hb.viewOffset = _hb.virtualX - (_hb.width * HEAD_POSITION_FRAC) / _hb.zoom;
+                break;
+            case 'live':
+                // Jump to live: snap to head, reset zoom, enable auto-follow
+                _hb.autoFollow = true;
+                _hb.paused = false;
+                _hb.zoom = 1.9;
+                _hb.viewOffsetY = 0;
+                _hb.hoveredBlock = null;
+                _hb.hoveredBlip = null;
+                _hb._pinnedBlip = null;
                 break;
         }
     }
@@ -1150,12 +1151,7 @@
             ctx.fillText(_hb.zoom.toFixed(1) + 'x', 10, h - 10);
         }
 
-        // ── Draw "Jump to Live" if not auto-following ──────────
-        if (!_hb.autoFollow) {
-            drawJumpToLive(ctx, w, h);
-        } else {
-            _hb._jumpBtn = null;
-        }
+        // Jump to Live is now in the control bar
 
         // ── Draw control bar ─────────────────────────────────
         drawControlBar(ctx, w, h);
@@ -1475,21 +1471,8 @@
 
     // ── Input handling ─────────────────────────────────────────
 
-    // Check if (mx, my) hits the "Jump to Live" button; if so, activate auto-follow.
-    function tryJumpToLive(mx, my) {
-        if (!_hb || !_hb._jumpBtn) return false;
-        var btn = _hb._jumpBtn;
-        if (mx >= btn.x && mx <= btn.x + btn.w && my >= btn.y && my <= btn.y + btn.h) {
-            _hb.autoFollow = true;
-            _hb.zoom = 1.9;
-            _hb.viewOffsetY = 0; // reset vertical pan
-            _hb.hoveredBlock = null;
-            _hb.hoveredBlip = null;
-            _hb._pinnedBlip = null;
-            return true;
-        }
-        return false;
-    }
+    // Legacy: tryJumpToLive now handled by control bar
+    function tryJumpToLive() { return false; }
 
     function tryControlClick(mx, my) {
         if (!_hb || !_hb._ctrlBtns) return false;

@@ -530,20 +530,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                     </div>
                     <div class="flex items-center gap-3 text-sm sm:text-base text-[#00e676] font-mono">
                         <span>"Last block: " {time_since}</span>
-                        // Center view button
-                        <button
-                            class="text-white/30 hover:text-[#00e676] transition-colors cursor-pointer"
-                            title="Center on live head"
-                            on:click=move |_| {
-                                heartbeat_center();
-                            }
-                        >
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                                <circle cx="12" cy="12" r="3"/>
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 2v4m0 12v4m10-10h-4M6 12H2"/>
-                            </svg>
-                        </button>
-                        // Fullscreen toggle
+                        // Fullscreen toggle (other controls are in the canvas control bar)
                         <button
                             class="text-white/30 hover:text-[#00e676] transition-colors cursor-pointer"
                             title="Toggle fullscreen"
