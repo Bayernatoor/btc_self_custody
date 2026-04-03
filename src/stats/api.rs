@@ -420,42 +420,61 @@ pub async fn get_heartbeat_sse(
 ) {
     let rx = state.heartbeat_tx.subscribe();
 
-    // Load recent unconfirmed txs from DB (last 2 hours)
-    let history = {
+    // Load recent unconfirmed txs + last block timestamp from DB
+    let (history, last_block_ts) = {
         let two_hours_ago = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs()
             .saturating_sub(7200);
-        state
+        let txs = state
             .db
             .get()
             .ok()
             .and_then(|conn| {
                 db::query_recent_mempool_txs(&conn, two_hours_ago, 5000).ok()
             })
-            .unwrap_or_default()
+            .unwrap_or_default();
+        // Get the latest block timestamp for positioning history txs on the flatline
+        let block_ts = state
+            .db
+            .get()
+            .ok()
+            .and_then(|conn| {
+                db::max_height(&conn).ok().flatten().and_then(|h| {
+                    db::query_block_timestamp(&conn, h).ok().flatten()
+                })
+            })
+            .unwrap_or(0);
+        (txs, block_ts)
     };
 
     // State machine: first emit history, then stream live events
     enum Phase {
-        History(Vec<db::MempoolTxRow>),
+        History(Vec<db::MempoolTxRow>, u64), // txs + last_block_timestamp
         Live,
     }
 
     let stream = futures::stream::unfold(
-        (Phase::History(history), rx),
+        (Phase::History(history, last_block_ts), rx),
         |(phase, mut rx)| async move {
             match phase {
-                Phase::History(txs) => {
+                Phase::History(txs, block_ts) => {
                     if txs.is_empty() {
-                        // No history, go straight to live
                         return Some((
-                            Ok(Event::default().event("history").data("[]")),
+                            Ok(Event::default()
+                                .event("history")
+                                .data(format!(
+                                "{{\"txs\":[],\"last_block_ts\":{block_ts}}}"
+                            ))),
                             (Phase::Live, rx),
                         ));
                     }
-                    let data = serde_json::to_string(&txs).unwrap_or_default();
+                    let txs_json =
+                        serde_json::to_string(&txs).unwrap_or_default();
+                    let data = format!(
+                        "{{\"txs\":{txs_json},\"last_block_ts\":{block_ts}}}"
+                    );
                     Some((
                         Ok(Event::default().event("history").data(data)),
                         (Phase::Live, rx),
