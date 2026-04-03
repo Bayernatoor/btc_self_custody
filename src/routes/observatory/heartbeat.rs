@@ -571,7 +571,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                 <canvas
                     id="heartbeat-canvas"
                     class="w-full"
-                    style="height: clamp(300px, 45vh, 500px)"
+                    style="height: clamp(300px, 55vh, 700px)"
                 ></canvas>
 
                 // Bottom info bar
