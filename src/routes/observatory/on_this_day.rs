@@ -34,11 +34,7 @@ fn fee_color(total_fees: u64, block_count: u64) -> &'static str {
 fn fullness_bar(pct: f64) -> String {
     let filled = ((pct / 10.0).round() as usize).min(10);
     let empty = 10 - filled;
-    format!(
-        "{}{}",
-        "\u{2588}".repeat(filled),
-        "\u{2591}".repeat(empty)
-    )
+    format!("{}{}", "\u{2588}".repeat(filled), "\u{2591}".repeat(empty))
 }
 
 #[component]
@@ -250,9 +246,12 @@ pub fn OnThisDayPage() -> impl IntoView {
                 let window = leptos::prelude::window();
                 let pathname = window.location().pathname().unwrap_or_default();
                 let url = format!("{pathname}?date={new}");
-                let _ = window.history().expect("history").replace_state_with_url(
-                    &wasm_bindgen::JsValue::NULL, "", Some(&url),
-                );
+                let _ =
+                    window.history().expect("history").replace_state_with_url(
+                        &wasm_bindgen::JsValue::NULL,
+                        "",
+                        Some(&url),
+                    );
             }
         }
     };
@@ -270,9 +269,12 @@ pub fn OnThisDayPage() -> impl IntoView {
                 let window = leptos::prelude::window();
                 let pathname = window.location().pathname().unwrap_or_default();
                 let url = format!("{pathname}?date={new}");
-                let _ = window.history().expect("history").replace_state_with_url(
-                    &wasm_bindgen::JsValue::NULL, "", Some(&url),
-                );
+                let _ =
+                    window.history().expect("history").replace_state_with_url(
+                        &wasm_bindgen::JsValue::NULL,
+                        "",
+                        Some(&url),
+                    );
             }
         }
     };
@@ -288,7 +290,9 @@ pub fn OnThisDayPage() -> impl IntoView {
             let pathname = window.location().pathname().unwrap_or_default();
             let url = format!("{pathname}?date={new}");
             let _ = window.history().expect("history").replace_state_with_url(
-                &wasm_bindgen::JsValue::NULL, "", Some(&url),
+                &wasm_bindgen::JsValue::NULL,
+                "",
+                Some(&url),
             );
         }
     };

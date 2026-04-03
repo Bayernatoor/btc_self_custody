@@ -84,11 +84,7 @@ fn sync_url_to_state(
     let _ = leptos::prelude::window()
         .history()
         .expect("history")
-        .replace_state_with_url(
-            &wasm_bindgen::JsValue::NULL,
-            "",
-            Some(&url),
-        );
+        .replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&url));
 }
 
 /// Update just the `section` query param in the current URL.
@@ -116,14 +112,11 @@ pub fn update_section_in_url(section: Option<&str>) {
         format!("?{}", parts.join("&"))
     };
     let url = format!("{pathname}{new_qs}{hash}");
-    let _ = window
-        .history()
-        .expect("history")
-        .replace_state_with_url(
-            &wasm_bindgen::JsValue::NULL,
-            "",
-            Some(&url),
-        );
+    let _ = window.history().expect("history").replace_state_with_url(
+        &wasm_bindgen::JsValue::NULL,
+        "",
+        Some(&url),
+    );
 }
 
 /// Build the full shareable URL for a specific chart, including current state.
@@ -277,14 +270,10 @@ pub fn provide_observatory_state() -> ObservatoryState {
         .map(|s| s.split(',').map(|s| s.to_string()).collect())
         .unwrap_or_default();
 
-    let initial_custom_from = query
-        .read_untracked()
-        .get("from")
-        .filter(|s| !s.is_empty());
-    let initial_custom_to = query
-        .read_untracked()
-        .get("to")
-        .filter(|s| !s.is_empty());
+    let initial_custom_from =
+        query.read_untracked().get("from").filter(|s| !s.is_empty());
+    let initial_custom_to =
+        query.read_untracked().get("to").filter(|s| !s.is_empty());
 
     let (range, set_range) = signal(initial_range);
     let (custom_from, set_custom_from) = signal(initial_custom_from);
@@ -440,7 +429,8 @@ pub fn provide_observatory_state() -> ObservatoryState {
     // Shared dashboard data resource — lives in the parent (ObservatoryPage),
     // stays alive across Outlet navigations. Child pages read it from context
     // so there's no re-fetch or loading flash when switching pages.
-    let dashboard_data = create_dashboard_resource(range, custom_from, custom_to);
+    let dashboard_data =
+        create_dashboard_resource(range, custom_from, custom_to);
 
     // Clear loading when new data arrives
     Effect::new(move |_| {
@@ -487,9 +477,7 @@ pub fn provide_observatory_state() -> ObservatoryState {
     let cached_chain_size_data = {
         let (cached, set_cached) = signal::<Vec<(u64, f64)>>(Vec::new());
         Effect::new(move |_| {
-            let offset_bytes = chain_size_offset
-                .get()
-                .unwrap_or(0);
+            let offset_bytes = chain_size_offset.get().unwrap_or(0);
             let result = dashboard_data
                 .get()
                 .and_then(|r| r.ok())
@@ -659,8 +647,11 @@ macro_rules! chart_memo {
     ($data:expr, $range:expr, $overlays:expr, |$blocks:ident| $per_block:expr, |$days:ident| $daily:expr) => {{
         use $crate::routes::observatory::shared::DashboardData;
         // Generate a unique cache key from the macro call site
-        let cache_key = concat!(file!(), ":", line!(), ":", column!()).to_string();
-        let state = leptos::prelude::expect_context::<$crate::routes::observatory::shared::ObservatoryState>();
+        let cache_key =
+            concat!(file!(), ":", line!(), ":", column!()).to_string();
+        let state = leptos::prelude::expect_context::<
+            $crate::routes::observatory::shared::ObservatoryState,
+        >();
         let cache = state.chart_cache.clone();
         leptos::prelude::Signal::derive(move || {
             let r = $range.get();
@@ -669,11 +660,20 @@ macro_rules! chart_memo {
             // the derive won't re-run when new data arrives after range change.
             let data_opt = $data.get().and_then(|r| r.ok());
             // Include data fingerprint in cache key so stale data never matches
-            let data_fp = data_opt.as_ref().map(|d| match d {
-                DashboardData::PerBlock(ref b) => b.len(),
-                DashboardData::Daily(ref d) => d.len(),
-            }).unwrap_or(0);
-            let full_key = format!("{}:{}:{}:{}", cache_key, r, data_fp, flags.cache_key());
+            let data_fp = data_opt
+                .as_ref()
+                .map(|d| match d {
+                    DashboardData::PerBlock(ref b) => b.len(),
+                    DashboardData::Daily(ref d) => d.len(),
+                })
+                .unwrap_or(0);
+            let full_key = format!(
+                "{}:{}:{}:{}",
+                cache_key,
+                r,
+                data_fp,
+                flags.cache_key()
+            );
             // Check cache
             if let Ok(c) = cache.lock() {
                 if let Some(cached) = c.get(&full_key) {
@@ -730,7 +730,11 @@ pub fn RangeSelector() -> impl IntoView {
             "custom range"
         } else {
             let n = range_to_blocks(&r);
-            if n > 5_000 { "daily averages" } else { "per block" }
+            if n > 5_000 {
+                "daily averages"
+            } else {
+                "per block"
+            }
         }
     };
 
@@ -752,7 +756,9 @@ pub fn RangeSelector() -> impl IntoView {
         set_range.set(r);
     };
 
-    let presets = ["1d", "1w", "1m", "3m", "6m", "ytd", "1y", "2y", "5y", "10y", "all"];
+    let presets = [
+        "1d", "1w", "1m", "3m", "6m", "ytd", "1y", "2y", "5y", "10y", "all",
+    ];
 
     view! {
         <div class="flex flex-col gap-2">
@@ -870,7 +876,10 @@ pub fn OverlayPanel() -> impl IntoView {
     let location = leptos_router::hooks::use_location();
     let hide_overlays = Signal::derive(move || {
         let path = location.pathname.get();
-        path == "/observatory" || path == "/observatory/stats" || path == "/observatory/on-this-day" || path == "/observatory/heartbeat"
+        path == "/observatory"
+            || path == "/observatory/stats"
+            || path == "/observatory/on-this-day"
+            || path == "/observatory/heartbeat"
     });
 
     view! {
@@ -981,7 +990,8 @@ pub fn ObservatoryNav() -> impl IntoView {
 
     // Check if any chart tab is active (to highlight the charts row)
     let on_charts = Signal::derive({
-        let chart_prefixes: Vec<String> = charts.iter().map(|(h, _)| h.to_string()).collect();
+        let chart_prefixes: Vec<String> =
+            charts.iter().map(|(h, _)| h.to_string()).collect();
         move || {
             let path = location.pathname.get();
             chart_prefixes.iter().any(|p| path.starts_with(p))

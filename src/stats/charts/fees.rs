@@ -69,7 +69,10 @@ pub fn fees_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
 }
 
 /// Fees line chart with unit toggle (sats or BTC).
-pub fn fees_chart_unit(blocks: &[BlockSummary], unit: &str) -> serde_json::Value {
+pub fn fees_chart_unit(
+    blocks: &[BlockSummary],
+    unit: &str,
+) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Fees");
     }
@@ -107,7 +110,10 @@ pub fn fees_chart_unit(blocks: &[BlockSummary], unit: &str) -> serde_json::Value
 }
 
 /// Fees from daily aggregates with unit toggle.
-pub fn fees_chart_daily_unit(days: &[DailyAggregate], unit: &str) -> serde_json::Value {
+pub fn fees_chart_daily_unit(
+    days: &[DailyAggregate],
+    unit: &str,
+) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Fees");
     }
@@ -173,7 +179,12 @@ pub fn avg_fee_per_tx_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let ma_data: Vec<serde_json::Value> = blocks
         .iter()
         .zip(ma.iter())
-        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))]))
+        .map(|(b, m)| {
+            json!([
+                ts_ms(b.timestamp),
+                m.map(|v| json!(v)).unwrap_or(json!(null))
+            ])
+        })
         .collect();
 
     let has_ma = show_ma(blocks.len());
@@ -203,7 +214,9 @@ pub fn avg_fee_per_tx_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 }
 
 /// Average fee per transaction (daily).
-pub fn avg_fee_per_tx_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+pub fn avg_fee_per_tx_chart_daily(
+    days: &[DailyAggregate],
+) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Avg Fee per Tx");
     }
@@ -212,7 +225,8 @@ pub fn avg_fee_per_tx_chart_daily(days: &[DailyAggregate]) -> serde_json::Value 
     let vals: Vec<f64> = days
         .iter()
         .map(|d| {
-            let user_tx = (d.avg_tx_count * d.block_count as f64) - d.block_count as f64;
+            let user_tx =
+                (d.avg_tx_count * d.block_count as f64) - d.block_count as f64;
             if user_tx > 0.0 && d.total_fees > 0 {
                 d.total_fees as f64 / user_tx
             } else {
@@ -224,7 +238,10 @@ pub fn avg_fee_per_tx_chart_daily(days: &[DailyAggregate]) -> serde_json::Value 
     let ma = moving_average(&vals, 7);
     let ma_vals: Vec<serde_json::Value> = ma
         .iter()
-        .map(|v| match v { Some(x) => json!(x), None => json!(null) })
+        .map(|v| match v {
+            Some(x) => json!(x),
+            None => json!(null),
+        })
         .collect();
 
     build_option(json!({
@@ -249,7 +266,10 @@ pub fn median_fee_rate_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Median Fee Rate");
     }
 
-    let vals: Vec<f64> = blocks.iter().map(|b| (b.median_fee_rate * 100.0).round() / 100.0).collect();
+    let vals: Vec<f64> = blocks
+        .iter()
+        .map(|b| (b.median_fee_rate * 100.0).round() / 100.0)
+        .collect();
     let raw: Vec<serde_json::Value> = blocks
         .iter()
         .zip(vals.iter())
@@ -260,7 +280,12 @@ pub fn median_fee_rate_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let ma_data: Vec<serde_json::Value> = blocks
         .iter()
         .zip(ma.iter())
-        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))]))
+        .map(|(b, m)| {
+            json!([
+                ts_ms(b.timestamp),
+                m.map(|v| json!(v)).unwrap_or(json!(null))
+            ])
+        })
         .collect();
 
     let has_ma = show_ma(blocks.len());
@@ -293,7 +318,9 @@ pub fn median_fee_rate_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 /// DailyAggregate doesn't store median_fee_rate directly, so we approximate
 /// using total_fees / total_tx / avg_vsize. This is the average fee rate,
 /// not the true median, but it's a reasonable proxy for daily granularity.
-pub fn median_fee_rate_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+pub fn median_fee_rate_chart_daily(
+    days: &[DailyAggregate],
+) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Avg Fee Rate");
     }
@@ -320,7 +347,10 @@ pub fn median_fee_rate_chart_daily(days: &[DailyAggregate]) -> serde_json::Value
     let ma = moving_average(&vals, 7);
     let ma_vals: Vec<serde_json::Value> = ma
         .iter()
-        .map(|v| match v { Some(x) => json!(x), None => json!(null) })
+        .map(|v| match v {
+            Some(x) => json!(x),
+            None => json!(null),
+        })
         .collect();
 
     build_option(json!({
@@ -347,7 +377,9 @@ pub fn fee_rate_band_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     }
 
     // Check if p10/p90 data is available (non-zero)
-    let has_percentiles = blocks.iter().any(|b| b.fee_rate_p10 > 0.0 || b.fee_rate_p90 > 0.0);
+    let has_percentiles = blocks
+        .iter()
+        .any(|b| b.fee_rate_p10 > 0.0 || b.fee_rate_p90 > 0.0);
     if !has_percentiles {
         return no_data_chart("Fee Rate Band");
     }
@@ -400,15 +432,26 @@ pub fn fee_rate_band_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Fee Rate Band");
     }
-    let has_data = days.iter().any(|d| d.avg_fee_rate_p10 > 0.0 || d.avg_fee_rate_p90 > 0.0);
+    let has_data = days
+        .iter()
+        .any(|d| d.avg_fee_rate_p10 > 0.0 || d.avg_fee_rate_p90 > 0.0);
     if !has_data {
         return no_data_chart("Fee Rate Band");
     }
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let p10: Vec<f64> = days.iter().map(|d| (d.avg_fee_rate_p10 * 100.0).round() / 100.0).collect();
-    let median: Vec<f64> = days.iter().map(|d| (d.avg_median_fee_rate * 100.0).round() / 100.0).collect();
-    let p90: Vec<f64> = days.iter().map(|d| (d.avg_fee_rate_p90 * 100.0).round() / 100.0).collect();
+    let p10: Vec<f64> = days
+        .iter()
+        .map(|d| (d.avg_fee_rate_p10 * 100.0).round() / 100.0)
+        .collect();
+    let median: Vec<f64> = days
+        .iter()
+        .map(|d| (d.avg_median_fee_rate * 100.0).round() / 100.0)
+        .collect();
+    let p90: Vec<f64> = days
+        .iter()
+        .map(|d| (d.avg_fee_rate_p90 * 100.0).round() / 100.0)
+        .collect();
 
     build_option(json!({
         "xAxis": x_axis_for(true, &cats),
@@ -479,7 +522,9 @@ pub fn subsidy_vs_fees_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 }
 
 /// Subsidy vs fees from daily aggregates.
-pub fn subsidy_vs_fees_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+pub fn subsidy_vs_fees_chart_daily(
+    days: &[DailyAggregate],
+) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Subsidy vs Fees");
     }

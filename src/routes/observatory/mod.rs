@@ -29,8 +29,8 @@ pub use fees::FeeChartsPage;
 pub use heartbeat::HeartbeatPage;
 pub use mining::MiningChartsPage;
 pub use network::NetworkChartsPage;
-pub use overview::ObservatoryOverview;
 pub use on_this_day::OnThisDayPage;
+pub use overview::ObservatoryOverview;
 pub use signaling::SignalingPage;
 pub use stats::StatsSummaryPage;
 

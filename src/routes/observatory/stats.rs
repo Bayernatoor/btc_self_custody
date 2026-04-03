@@ -63,10 +63,12 @@ pub fn StatsSummaryPage() -> impl IntoView {
         let r = range.get();
         let now = chrono::Utc::now().timestamp() as u64;
         if r == "custom" {
-            let from = custom_from.get()
+            let from = custom_from
+                .get()
                 .and_then(|s| super::shared::date_to_ts(&s))
                 .unwrap_or(0);
-            let to = custom_to.get()
+            let to = custom_to
+                .get()
                 .and_then(|s| super::shared::date_to_ts(&s))
                 .map(|t| t + 86_399)
                 .unwrap_or(now);
@@ -74,7 +76,11 @@ pub fn StatsSummaryPage() -> impl IntoView {
         }
         let n = range_to_blocks(&r);
         let seconds = n * 600;
-        let from = if n >= 999_999 { 0 } else { now.saturating_sub(seconds) };
+        let from = if n >= 999_999 {
+            0
+        } else {
+            now.saturating_sub(seconds)
+        };
         (from, now)
     });
 
@@ -96,12 +102,21 @@ pub fn StatsSummaryPage() -> impl IntoView {
     // Format helper — creates a Signal<String> from a RangeSummary field
     let stat = move |f: fn(&RangeSummary) -> String| -> Signal<String> {
         let d = data;
-        Signal::derive(move || d.get().map(|s| f(&s)).unwrap_or_else(|| "\u{2014}".to_string()))
+        Signal::derive(move || {
+            d.get()
+                .map(|s| f(&s))
+                .unwrap_or_else(|| "\u{2014}".to_string())
+        })
     };
-    let mp_stat = move |f: fn(&MiningPriceSummary) -> String| -> Signal<String> {
-        let d = mp_data;
-        Signal::derive(move || d.get().map(|s| f(&s)).unwrap_or_else(|| "\u{2014}".to_string()))
-    };
+    let mp_stat =
+        move |f: fn(&MiningPriceSummary) -> String| -> Signal<String> {
+            let d = mp_data;
+            Signal::derive(move || {
+                d.get()
+                    .map(|s| f(&s))
+                    .unwrap_or_else(|| "\u{2014}".to_string())
+            })
+        };
 
     // Non-coinbase tx count (for percentages that exclude coinbase)
     let user_tx = move |s: &RangeSummary| -> u64 {
@@ -111,11 +126,18 @@ pub fn StatsSummaryPage() -> impl IntoView {
     // === Network ===
     let blocks = stat(|s| format_number(s.block_count));
     let txs = stat(|s| format_compact(s.total_tx));
-    let txs_sub = stat(|s| format!("{} total (incl. coinbase)", format_number(s.total_tx)));
+    let txs_sub = stat(|s| {
+        format!("{} total (incl. coinbase)", format_number(s.total_tx))
+    });
     let avg_size = stat(|s| {
         if s.block_count > 0 {
-            format!("{:.2} MB", s.total_size as f64 / s.block_count as f64 / 1_000_000.0)
-        } else { "\u{2014}".to_string() }
+            format!(
+                "{:.2} MB",
+                s.total_size as f64 / s.block_count as f64 / 1_000_000.0
+            )
+        } else {
+            "\u{2014}".to_string()
+        }
     });
     let avg_block_time = stat(|s| {
         let total_secs = (s.avg_block_time * 60.0).round() as u64;
@@ -124,12 +146,20 @@ pub fn StatsSummaryPage() -> impl IntoView {
     let avg_tx_per_block = stat(|s| {
         if s.block_count > 0 {
             format_number_f64(s.total_tx as f64 / s.block_count as f64, 1)
-        } else { "\u{2014}".to_string() }
+        } else {
+            "\u{2014}".to_string()
+        }
     });
     let weight_util = stat(|s| {
         if s.block_count > 0 {
-            format!("{:.1}%", s.total_weight as f64 / s.block_count as f64 / 4_000_000.0 * 100.0)
-        } else { "\u{2014}".to_string() }
+            format!(
+                "{:.1}%",
+                s.total_weight as f64 / s.block_count as f64 / 4_000_000.0
+                    * 100.0
+            )
+        } else {
+            "\u{2014}".to_string()
+        }
     });
     let chain_growth = stat(|s| format_data_size(s.total_size));
     let avg_tps = stat(|s| {
@@ -137,78 +167,141 @@ pub fn StatsSummaryPage() -> impl IntoView {
             let secs = s.avg_block_time * 60.0;
             let avg_tx_per_block = s.total_tx as f64 / s.block_count as f64;
             format!("{:.1} tx/s", avg_tx_per_block / secs)
-        } else { "\u{2014}".to_string() }
+        } else {
+            "\u{2014}".to_string()
+        }
     });
 
     // === Fees ===
-    let total_fees_btc = stat(|s| format!("\u{20bf}{}", format_number_f64(s.total_fees as f64 / 100_000_000.0, 2)));
-    let total_fees_sub = stat(|s| format!("{} sats", format_number(s.total_fees)));
+    let total_fees_btc = stat(|s| {
+        format!(
+            "\u{20bf}{}",
+            format_number_f64(s.total_fees as f64 / 100_000_000.0, 2)
+        )
+    });
+    let total_fees_sub =
+        stat(|s| format!("{} sats", format_number(s.total_fees)));
     let avg_fee_rate = stat(|s| format!("{:.1} sat/vB", s.avg_fee_rate));
     let avg_fee_per_tx = {
         let d = data;
-        Signal::derive(move || d.get().map(|s| {
-            let utx = user_tx(&s);
-            if utx > 0 {
-                format!("{} sats", format_number((s.total_fees as f64 / utx as f64).round() as u64))
-            } else { "\u{2014}".to_string() }
-        }).unwrap_or_else(|| "\u{2014}".to_string()))
+        Signal::derive(move || {
+            d.get()
+                .map(|s| {
+                    let utx = user_tx(&s);
+                    if utx > 0 {
+                        format!(
+                            "{} sats",
+                            format_number(
+                                (s.total_fees as f64 / utx as f64).round()
+                                    as u64
+                            )
+                        )
+                    } else {
+                        "\u{2014}".to_string()
+                    }
+                })
+                .unwrap_or_else(|| "\u{2014}".to_string())
+        })
     };
-    let avg_median_fee = stat(|s| format!("{} sats", format_number(s.avg_median_fee.round() as u64)));
+    let avg_median_fee = stat(|s| {
+        format!("{} sats", format_number(s.avg_median_fee.round() as u64))
+    });
 
     // === Adoption ===
     let segwit_pct = {
         let d = data;
-        Signal::derive(move || d.get().map(|s| {
-            let utx = user_tx(&s);
-            if utx > 0 {
-                format!("{:.1}%", s.total_segwit_txs as f64 / utx as f64 * 100.0)
-            } else { "\u{2014}".to_string() }
-        }).unwrap_or_else(|| "\u{2014}".to_string()))
+        Signal::derive(move || {
+            d.get()
+                .map(|s| {
+                    let utx = user_tx(&s);
+                    if utx > 0 {
+                        format!(
+                            "{:.1}%",
+                            s.total_segwit_txs as f64 / utx as f64 * 100.0
+                        )
+                    } else {
+                        "\u{2014}".to_string()
+                    }
+                })
+                .unwrap_or_else(|| "\u{2014}".to_string())
+        })
     };
     let taproot_outputs = stat(|s| format_compact(s.total_taproot_outputs));
     let taproot_sub = stat(|s| {
-        format!("Key-path: {}  |  Script-path: {}",
+        format!(
+            "Key-path: {}  |  Script-path: {}",
             format_compact(s.total_taproot_keypath),
-            format_compact(s.total_taproot_scriptpath))
+            format_compact(s.total_taproot_scriptpath)
+        )
     });
     let witness_pct = stat(|s| format!("{:.1}%", s.witness_pct));
     let total_inputs = stat(|s| format_compact(s.total_inputs));
     let total_outputs = stat(|s| format_compact(s.total_outputs));
     let rbf_pct = {
         let d = data;
-        Signal::derive(move || d.get().map(|s| {
-            let utx = user_tx(&s);
-            if utx > 0 {
-                format!("{:.1}%", s.total_rbf as f64 / utx as f64 * 100.0)
-            } else { "\u{2014}".to_string() }
-        }).unwrap_or_else(|| "\u{2014}".to_string()))
+        Signal::derive(move || {
+            d.get()
+                .map(|s| {
+                    let utx = user_tx(&s);
+                    if utx > 0 {
+                        format!(
+                            "{:.1}%",
+                            s.total_rbf as f64 / utx as f64 * 100.0
+                        )
+                    } else {
+                        "\u{2014}".to_string()
+                    }
+                })
+                .unwrap_or_else(|| "\u{2014}".to_string())
+        })
     };
 
     // === Embedded Data ===
     let inscriptions = stat(|s| format_compact(s.total_inscriptions));
-    let inscriptions_sub = stat(|s| format!("{} data", format_data_size(s.total_inscription_bytes)));
+    let inscriptions_sub = stat(|s| {
+        format!("{} data", format_data_size(s.total_inscription_bytes))
+    });
     let brc20 = stat(|s| format_compact(s.total_brc20));
     let brc20_sub = stat(|s| {
         if s.total_inscriptions > 0 {
-            format!("{:.1}% of inscriptions", s.total_brc20 as f64 / s.total_inscriptions as f64 * 100.0)
-        } else { String::new() }
+            format!(
+                "{:.1}% of inscriptions",
+                s.total_brc20 as f64 / s.total_inscriptions as f64 * 100.0
+            )
+        } else {
+            String::new()
+        }
     });
     let runes = stat(|s| format_compact(s.total_runes));
-    let runes_sub = stat(|s| format!("{} data", format_data_size(s.total_runes_bytes)));
+    let runes_sub =
+        stat(|s| format!("{} data", format_data_size(s.total_runes_bytes)));
     let op_return = stat(|s| format_compact(s.total_op_return_count));
-    let op_return_sub = stat(|s| format!("{} data", format_data_size(s.total_op_return_bytes)));
+    let op_return_sub =
+        stat(|s| format!("{} data", format_data_size(s.total_op_return_bytes)));
     let omni = stat(|s| format_compact(s.total_omni));
     let counterparty = stat(|s| format_compact(s.total_counterparty));
 
     // === Extremes ===
-    let max_block_size = stat(|s| format!("{:.2} MB", s.max_block_size as f64 / 1_000_000.0));
-    let max_block_fees = stat(|s| format!("\u{20bf}{}", format_number_f64(s.max_block_fees as f64 / 100_000_000.0, 4)));
+    let max_block_size =
+        stat(|s| format!("{:.2} MB", s.max_block_size as f64 / 1_000_000.0));
+    let max_block_fees = stat(|s| {
+        format!(
+            "\u{20bf}{}",
+            format_number_f64(s.max_block_fees as f64 / 100_000_000.0, 4)
+        )
+    });
     let max_fee_rate = stat(|s| format!("{:.1} sat/vB", s.max_fee_rate));
 
     // === Volume ===
     let total_btc_transferred = stat(|s| {
         if s.total_output_value > 0 {
-            format!("\u{20bf}{}", format_number_f64(s.total_output_value as f64 / 100_000_000.0, 2))
+            format!(
+                "\u{20bf}{}",
+                format_number_f64(
+                    s.total_output_value as f64 / 100_000_000.0,
+                    2
+                )
+            )
         } else {
             "\u{2014}".to_string()
         }
@@ -216,25 +309,44 @@ pub fn StatsSummaryPage() -> impl IntoView {
 
     // === Mining ===
     let top_pool = mp_stat(|s| s.top_pool_name.clone());
-    let top_pool_sub = mp_stat(|s| format!("{} blocks ({:.1}%)", format_number(s.top_pool_blocks), s.top_pool_pct));
+    let top_pool_sub = mp_stat(|s| {
+        format!(
+            "{} blocks ({:.1}%)",
+            format_number(s.top_pool_blocks),
+            s.top_pool_pct
+        )
+    });
     let pool_count = mp_stat(|s| format_number(s.pool_count));
     let empty_blocks = stat(|s| format_number(s.empty_block_count));
     let empty_sub = stat(|s| {
         if s.block_count > 0 {
-            format!("{:.2}% of blocks", s.empty_block_count as f64 / s.block_count as f64 * 100.0)
-        } else { String::new() }
+            format!(
+                "{:.2}% of blocks",
+                s.empty_block_count as f64 / s.block_count as f64 * 100.0
+            )
+        } else {
+            String::new()
+        }
     });
 
     // === Price ===
     let price_start = mp_stat(|s| {
-        if s.price_start >= 1.0 { format!("${}", format_number_f64(s.price_start, 0)) }
-        else if s.price_start > 0.0 { format!("${:.4}", s.price_start) }
-        else { "$0".to_string() }
+        if s.price_start >= 1.0 {
+            format!("${}", format_number_f64(s.price_start, 0))
+        } else if s.price_start > 0.0 {
+            format!("${:.4}", s.price_start)
+        } else {
+            "$0".to_string()
+        }
     });
     let price_end = mp_stat(|s| {
-        if s.price_end >= 1.0 { format!("${}", format_number_f64(s.price_end, 0)) }
-        else if s.price_end > 0.0 { format!("${:.4}", s.price_end) }
-        else { "\u{2014}".to_string() }
+        if s.price_end >= 1.0 {
+            format!("${}", format_number_f64(s.price_end, 0))
+        } else if s.price_end > 0.0 {
+            format!("${:.4}", s.price_end)
+        } else {
+            "\u{2014}".to_string()
+        }
     });
     let price_change = mp_stat(|s| {
         if s.price_start > 0.0 {

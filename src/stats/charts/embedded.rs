@@ -33,7 +33,9 @@ pub fn op_return_count_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 }
 
 /// OP_RETURN count chart from daily aggregates.
-pub fn op_return_count_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+pub fn op_return_count_chart_daily(
+    days: &[DailyAggregate],
+) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Embedded Data Count (daily)");
     }
@@ -106,7 +108,9 @@ pub fn op_return_bytes_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 }
 
 /// OP_RETURN bytes chart from daily aggregates.
-pub fn op_return_bytes_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+pub fn op_return_bytes_chart_daily(
+    days: &[DailyAggregate],
+) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Embedded Data Volume (daily)");
     }
@@ -263,7 +267,9 @@ pub fn runes_pct_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
 }
 
 /// OP_RETURN bytes as percentage of total block size (per-block).
-pub fn op_return_block_share_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+pub fn op_return_block_share_chart(
+    blocks: &[BlockSummary],
+) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Embedded Data Block Share");
     }
@@ -328,7 +334,9 @@ pub fn op_return_block_share_chart(blocks: &[BlockSummary]) -> serde_json::Value
 }
 
 /// OP_RETURN bytes as percentage of total block size (daily).
-pub fn op_return_block_share_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+pub fn op_return_block_share_chart_daily(
+    days: &[DailyAggregate],
+) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Embedded Data Block Share");
     }
@@ -526,7 +534,9 @@ pub fn inscription_share_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 }
 
 /// Inscription data as % of block size (daily).
-pub fn inscription_share_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+pub fn inscription_share_chart_daily(
+    days: &[DailyAggregate],
+) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Inscription Block Share");
     }
@@ -600,7 +610,13 @@ pub fn all_embedded_share_chart(blocks: &[BlockSummary]) -> serde_json::Value {
             if b.height < 774_000 {
                 json!([ts_ms(b.timestamp), null, b.height])
             } else if b.size > 0 {
-                dp(b, round(b.inscription_bytes as f64 / b.size as f64 * 100.0, 2))
+                dp(
+                    b,
+                    round(
+                        b.inscription_bytes as f64 / b.size as f64 * 100.0,
+                        2,
+                    ),
+                )
             } else {
                 dp(b, 0.0)
             }
@@ -632,7 +648,9 @@ pub fn all_embedded_share_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 }
 
 /// All embedded data as % of block size — stacked (daily).
-pub fn all_embedded_share_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+pub fn all_embedded_share_chart_daily(
+    days: &[DailyAggregate],
+) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("All Embedded Data Share");
     }
@@ -659,7 +677,8 @@ pub fn all_embedded_share_chart_daily(days: &[DailyAggregate]) -> serde_json::Va
                 let total_size = d.avg_size * d.block_count as f64;
                 if total_size > 0.0 {
                     json!(round(
-                        d.avg_inscription_bytes * d.block_count as f64 / total_size
+                        d.avg_inscription_bytes * d.block_count as f64
+                            / total_size
                             * 100.0,
                         2,
                     ))
@@ -698,7 +717,9 @@ const STAMPS_COLOR: &str = "#94a3b8"; // Slate gray for Stamps/multisig
 const BRC20_COLOR: &str = "#e879f9"; // Fuchsia for BRC-20 tokens
 
 /// Unified embedded data count — all protocols + inscriptions + stamps (per-block).
-pub fn unified_embedded_count_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+pub fn unified_embedded_count_chart(
+    blocks: &[BlockSummary],
+) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("All Embedded Data Count");
     }
@@ -738,7 +759,9 @@ pub fn unified_embedded_count_chart(blocks: &[BlockSummary]) -> serde_json::Valu
 }
 
 /// Unified embedded data count (daily).
-pub fn unified_embedded_count_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+pub fn unified_embedded_count_chart_daily(
+    days: &[DailyAggregate],
+) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("All Embedded Data Count");
     }
@@ -769,7 +792,9 @@ pub fn unified_embedded_count_chart_daily(days: &[DailyAggregate]) -> serde_json
     // BRC-20 is a subset of inscriptions — split them to avoid double-counting
     let inscriptions: Vec<f64> = days
         .iter()
-        .map(|d| round((d.avg_inscription_count - d.avg_brc20_count).max(0.0), 1))
+        .map(|d| {
+            round((d.avg_inscription_count - d.avg_brc20_count).max(0.0), 1)
+        })
         .collect();
     let brc20: Vec<f64> =
         days.iter().map(|d| round(d.avg_brc20_count, 1)).collect();
@@ -793,7 +818,9 @@ pub fn unified_embedded_count_chart_daily(days: &[DailyAggregate]) -> serde_json
 }
 
 /// Unified embedded data volume — all protocols by bytes (per-block).
-pub fn unified_embedded_volume_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+pub fn unified_embedded_volume_chart(
+    blocks: &[BlockSummary],
+) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("All Embedded Data Volume");
     }
@@ -826,7 +853,9 @@ pub fn unified_embedded_volume_chart(blocks: &[BlockSummary]) -> serde_json::Val
 }
 
 /// Unified embedded data volume (daily).
-pub fn unified_embedded_volume_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+pub fn unified_embedded_volume_chart_daily(
+    days: &[DailyAggregate],
+) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("All Embedded Data Volume");
     }
@@ -898,7 +927,12 @@ pub fn stamps_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let ma_data: Vec<serde_json::Value> = blocks
         .iter()
         .zip(ma.iter())
-        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))]))
+        .map(|(b, m)| {
+            json!([
+                ts_ms(b.timestamp),
+                m.map(|v| json!(v)).unwrap_or(json!(null))
+            ])
+        })
         .collect();
 
     let has_ma = show_ma(blocks.len());
@@ -939,11 +973,15 @@ pub fn stamps_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     }
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let vals: Vec<f64> = days.iter().map(|d| round(d.avg_stamps_count, 2)).collect();
+    let vals: Vec<f64> =
+        days.iter().map(|d| round(d.avg_stamps_count, 2)).collect();
     let ma = moving_average(&vals, 7);
     let ma_vals: Vec<serde_json::Value> = ma
         .iter()
-        .map(|v| match v { Some(x) => json!(x), None => json!(null) })
+        .map(|v| match v {
+            Some(x) => json!(x),
+            None => json!(null),
+        })
         .collect();
 
     build_option(json!({

@@ -55,8 +55,12 @@ pub fn spawn(
             loop {
                 tracing::info!("ZMQ: connecting to rawtx at {url}");
                 match subscribe_transactions(&state, &sender, &url).await {
-                    Ok(()) => tracing::warn!("ZMQ rawtx stream ended, reconnecting..."),
-                    Err(e) => tracing::error!("ZMQ rawtx error: {e}, reconnecting in 5s..."),
+                    Ok(()) => tracing::warn!(
+                        "ZMQ rawtx stream ended, reconnecting..."
+                    ),
+                    Err(e) => tracing::error!(
+                        "ZMQ rawtx error: {e}, reconnecting in 5s..."
+                    ),
                 }
                 tokio::time::sleep(Duration::from_secs(5)).await;
             }
@@ -72,15 +76,21 @@ pub fn spawn(
             loop {
                 tracing::info!("ZMQ: connecting to hashblock at {url}");
                 match subscribe_blocks(&state, &sender, &url).await {
-                    Ok(()) => tracing::warn!("ZMQ hashblock stream ended, reconnecting..."),
-                    Err(e) => tracing::error!("ZMQ hashblock error: {e}, reconnecting in 5s..."),
+                    Ok(()) => tracing::warn!(
+                        "ZMQ hashblock stream ended, reconnecting..."
+                    ),
+                    Err(e) => tracing::error!(
+                        "ZMQ hashblock error: {e}, reconnecting in 5s..."
+                    ),
                 }
                 tokio::time::sleep(Duration::from_secs(5)).await;
             }
         });
     }
 
-    tracing::info!("ZMQ subscriber spawned (tx: {zmq_tx_url}, block: {zmq_block_url})");
+    tracing::info!(
+        "ZMQ subscriber spawned (tx: {zmq_tx_url}, block: {zmq_block_url})"
+    );
 }
 
 /// Subscribe to raw transactions, decode them, look up fees, store in DB.
@@ -114,7 +124,8 @@ async fn subscribe_transactions(
             .as_secs();
 
         // Look up fee + authoritative vsize from mempool entry
-        let (fee, vsize) = match state.rpc.get_mempool_entry(&parsed.txid).await {
+        let (fee, vsize) = match state.rpc.get_mempool_entry(&parsed.txid).await
+        {
             Ok(entry) => (entry.fee, entry.vsize),
             Err(_) => {
                 // Tx might have been removed from mempool already (confirmed, evicted)
@@ -131,7 +142,14 @@ async fn subscribe_transactions(
 
         // Store in DB
         if let Ok(conn) = state.db.get() {
-            let _ = db::insert_mempool_tx(&conn, &parsed.txid, fee, vsize, parsed.value, now);
+            let _ = db::insert_mempool_tx(
+                &conn,
+                &parsed.txid,
+                fee,
+                vsize,
+                parsed.value,
+                now,
+            );
         }
 
         // Broadcast to SSE clients
@@ -145,7 +163,7 @@ async fn subscribe_transactions(
         });
 
         tx_count += 1;
-        if tx_count % 100 == 0 {
+        if tx_count.is_multiple_of(100) {
             tracing::debug!("ZMQ: processed {tx_count} transactions");
         }
     }
@@ -172,7 +190,10 @@ async fn subscribe_blocks(
         // Block hash is 32 bytes, display as hex (reversed for Bitcoin convention)
         let hash_bytes = &frames[1];
         if hash_bytes.len() != 32 {
-            tracing::warn!("ZMQ: unexpected hashblock size: {}", hash_bytes.len());
+            tracing::warn!(
+                "ZMQ: unexpected hashblock size: {}",
+                hash_bytes.len()
+            );
             continue;
         }
         let block_hash = bytes_to_hex_reversed(hash_bytes);
@@ -257,7 +278,8 @@ fn parse_raw_tx(data: &[u8]) -> Option<ParsedTx> {
     let _version = read_u32_le(data, &mut cursor)?;
 
     // Check for segwit marker (0x00) + flag (0x01)
-    let is_segwit = data.get(cursor) == Some(&0x00) && data.get(cursor + 1) == Some(&0x01);
+    let is_segwit =
+        data.get(cursor) == Some(&0x00) && data.get(cursor + 1) == Some(&0x01);
     if is_segwit {
         cursor += 2;
     }
@@ -329,13 +351,16 @@ fn parse_raw_tx(data: &[u8]) -> Option<ParsedTx> {
         sha256d_hex(data)
     };
 
-    Some(ParsedTx { txid, value: total_value })
+    Some(ParsedTx {
+        txid,
+        value: total_value,
+    })
 }
 
 /// Double SHA256, return as reversed hex (Bitcoin txid convention).
 fn sha256d_hex(data: &[u8]) -> String {
     let first = Sha256::digest(data);
-    let second = Sha256::digest(&first);
+    let second = Sha256::digest(first);
     bytes_to_hex_reversed(&second)
 }
 
@@ -377,7 +402,8 @@ fn read_varint(data: &[u8], cursor: &mut usize) -> Option<u64> {
             if *cursor + 2 > data.len() {
                 return None;
             }
-            let val = u16::from_le_bytes(data[*cursor..*cursor + 2].try_into().ok()?);
+            let val =
+                u16::from_le_bytes(data[*cursor..*cursor + 2].try_into().ok()?);
             *cursor += 2;
             Some(val as u64)
         }
@@ -385,7 +411,8 @@ fn read_varint(data: &[u8], cursor: &mut usize) -> Option<u64> {
             if *cursor + 4 > data.len() {
                 return None;
             }
-            let val = u32::from_le_bytes(data[*cursor..*cursor + 4].try_into().ok()?);
+            let val =
+                u32::from_le_bytes(data[*cursor..*cursor + 4].try_into().ok()?);
             *cursor += 4;
             Some(val as u64)
         }
@@ -393,9 +420,10 @@ fn read_varint(data: &[u8], cursor: &mut usize) -> Option<u64> {
             if *cursor + 8 > data.len() {
                 return None;
             }
-            let val = u64::from_le_bytes(data[*cursor..*cursor + 8].try_into().ok()?);
+            let val =
+                u64::from_le_bytes(data[*cursor..*cursor + 8].try_into().ok()?);
             *cursor += 8;
-            Some(val as u64)
+            Some(val)
         }
     }
 }
@@ -412,7 +440,9 @@ pub async fn prune_old_txs(state: &Arc<StatsState>) {
         match db::prune_mempool_txs(&conn, seven_days_ago) {
             Ok(count) => {
                 if count > 0 {
-                    tracing::info!("ZMQ: pruned {count} old mempool transactions");
+                    tracing::info!(
+                        "ZMQ: pruned {count} old mempool transactions"
+                    );
                 }
             }
             Err(e) => tracing::warn!("ZMQ: prune failed: {e}"),
