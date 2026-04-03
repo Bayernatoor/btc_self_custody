@@ -373,11 +373,36 @@
                 if (!_hb) return;
                 try {
                     var block = JSON.parse(e.data);
-                    // Block events are handled by the Rust/LiveStats polling,
-                    // but log for diagnostics
-                    if (block.height) {
-                        console.log('SSE block:', block.height, block.hash);
-                    }
+                    if (!block.height) return;
+                    console.log('SSE block:', block.height, block.hash);
+                    // Fetch the block data and push to timeline immediately
+                    // (don't wait for 15s LiveStats poll). Small delay for DB ingestion.
+                    setTimeout(function() {
+                    fetch('/api/stats/blocks/' + block.height)
+                        .then(function(r) { return r.ok ? r.json() : null; })
+                        .then(function(data) {
+                            if (!_hb || !data || !data.height) return;
+                            // Compute inter-block time
+                            var inter = 600;
+                            if (_hb.lastBlockTime > 0 && data.timestamp > _hb.lastBlockTime) {
+                                inter = data.timestamp - _hb.lastBlockTime;
+                            }
+                            var blockJson = JSON.stringify([{
+                                height: data.height,
+                                timestamp: data.timestamp,
+                                tx_count: data.tx_count,
+                                total_fees: data.total_fees,
+                                size: data.size,
+                                weight: data.weight,
+                                inter_block_seconds: inter
+                            }]);
+                            window.pushHeartbeatBlocks(blockJson, false);
+                            // Trigger visual effects
+                            if (window.heartbeatFlash) window.heartbeatFlash();
+                            if (window.heartbeatPulse) window.heartbeatPulse();
+                        })
+                        .catch(function() {});
+                    }, 2000); // 2s delay for block ingestion
                 } catch (err) {}
             });
             es.addEventListener('lag', function(e) {
