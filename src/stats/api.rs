@@ -10,15 +10,18 @@
 //! - GET /api/signaling?bit=N or method=locktime -- per-block signaling status
 //! - GET /api/signaling/periods?bit=N   -- signaling % per retarget period
 
+use std::convert::Infallible;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use tokio::sync::broadcast;
 
 use axum::extract::{Path, Query, State};
 use axum::http::header;
+use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::Json;
+use futures::stream::Stream;
 use serde::Deserialize;
 
 /// Helper: wrap a JSON response with Cache-Control header.
@@ -405,4 +408,92 @@ pub async fn get_signaling_periods(
     Ok(Json(serde_json::json!({
         "periods": periods
     })))
+}
+
+/// SSE endpoint for real-time heartbeat events (mempool txs + blocks).
+/// On connect: sends recent tx history from DB, then streams live events.
+pub async fn get_heartbeat_sse(
+    State(state): State<SharedStatsState>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    let rx = state.heartbeat_tx.subscribe();
+
+    // Load recent unconfirmed txs from DB (last 2 hours)
+    let history = {
+        let two_hours_ago = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs()
+            .saturating_sub(7200);
+        state
+            .db
+            .get()
+            .ok()
+            .and_then(|conn| {
+                db::query_recent_mempool_txs(&conn, two_hours_ago, 5000).ok()
+            })
+            .unwrap_or_default()
+    };
+
+    // State machine: first emit history, then stream live events
+    enum Phase {
+        History(Vec<db::MempoolTxRow>),
+        Live,
+        Done,
+    }
+
+    let stream = futures::stream::unfold(
+        (Phase::History(history), rx),
+        |(phase, mut rx)| async move {
+            match phase {
+                Phase::History(txs) => {
+                    if txs.is_empty() {
+                        // No history, go straight to live
+                        return Some((
+                            Ok(Event::default().event("history").data("[]")),
+                            (Phase::Live, rx),
+                        ));
+                    }
+                    let data = serde_json::to_string(&txs).unwrap_or_default();
+                    Some((
+                        Ok(Event::default().event("history").data(data)),
+                        (Phase::Live, rx),
+                    ))
+                }
+                Phase::Live => {
+                    match rx.recv().await {
+                        Ok(event) => {
+                            let event_type = match &event {
+                            super::zmq_subscriber::HeartbeatEvent::Tx { .. } => "tx",
+                            super::zmq_subscriber::HeartbeatEvent::Block { .. } => "block",
+                        };
+                            let data = serde_json::to_string(&event)
+                                .unwrap_or_default();
+                            Some((
+                                Ok(Event::default()
+                                    .event(event_type)
+                                    .data(data)),
+                                (Phase::Live, rx),
+                            ))
+                        }
+                        Err(broadcast::error::RecvError::Lagged(n)) => {
+                            tracing::debug!(
+                                "SSE client lagged, skipped {n} events"
+                            );
+                            Some((
+                                Ok(Event::default()
+                                    .event("lag")
+                                    .data(format!("{{\"skipped\":{n}}}"))),
+                                (Phase::Live, rx),
+                            ))
+                        }
+                        Err(broadcast::error::RecvError::Closed) => None,
+                    }
+                }
+                Phase::Done => None,
+            }
+        },
+    );
+
+    Sse::new(stream)
+        .keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
 }
