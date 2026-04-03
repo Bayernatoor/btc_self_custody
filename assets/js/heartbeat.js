@@ -421,7 +421,7 @@
                 } catch (err) { console.log('[heartbeat] SSE history error:', err); }
             });
             es.addEventListener('tx', function(e) {
-                if (!_hb) return;
+                if (!_hb || document.hidden) return; // skip when tab is hidden
                 try {
                     var tx = JSON.parse(e.data);
                     _hb._hasTxStream = true;
@@ -464,46 +464,24 @@
                     } else {
                         _hb._unconfirmedSet = null;
                     }
-                    // Fetch block data with retry (block may not be ingested yet)
-                    function fetchBlock(height, attempt) {
-                        var delay = attempt === 0 ? 2000 : 5000; // 2s first, 5s retry
-                        setTimeout(function() {
-                            if (!_hb) return;
-                            fetch('/api/stats/blocks/' + height)
-                                .then(function(r) { return r.ok ? r.json() : null; })
-                                .then(function(data) {
-                                    if (!_hb) return;
-                                    if (!data || !data.height) {
-                                        // Block not ingested yet, retry up to 3 times
-                                        if (attempt < 3) {
-                                            console.log('[heartbeat] block', height, 'not in DB yet, retry', attempt + 1);
-                                            fetchBlock(height, attempt + 1);
-                                        }
-                                        return;
-                                    }
-                                    var inter = 600;
-                                    if (_hb.lastBlockTime > 0 && data.timestamp > _hb.lastBlockTime) {
-                                        inter = data.timestamp - _hb.lastBlockTime;
-                                    }
-                                    var blockJson = JSON.stringify([{
-                                        height: data.height,
-                                        timestamp: data.timestamp,
-                                        tx_count: data.tx_count,
-                                        total_fees: data.total_fees,
-                                        size: data.size,
-                                        weight: data.weight,
-                                        inter_block_seconds: inter
-                                    }]);
-                                    window.pushHeartbeatBlocks(blockJson, false);
-                                    if (window.heartbeatFlash) window.heartbeatFlash();
-                                    if (window.heartbeatPulse) window.heartbeatPulse();
-                                })
-                                .catch(function() {
-                                    if (attempt < 3) fetchBlock(height, attempt + 1);
-                                });
-                        }, delay);
+                    // Push block immediately with estimated data (instant feedback)
+                    var nowTs = Math.floor(Date.now() / 1000);
+                    var inter = 600;
+                    if (_hb.lastBlockTime > 0 && nowTs > _hb.lastBlockTime) {
+                        inter = nowTs - _hb.lastBlockTime;
                     }
-                    fetchBlock(block.height, 0);
+                    var blockJson = JSON.stringify([{
+                        height: block.height,
+                        timestamp: nowTs,
+                        tx_count: block.confirmed_count || 3000,
+                        total_fees: 0,
+                        size: 0,
+                        weight: 3000000,
+                        inter_block_seconds: inter
+                    }]);
+                    window.pushHeartbeatBlocks(blockJson, false);
+                    if (window.heartbeatFlash) window.heartbeatFlash();
+                    if (window.heartbeatPulse) window.heartbeatPulse();
                 } catch (err) {}
             });
             es.addEventListener('lag', function(e) {
@@ -1334,6 +1312,9 @@
                         }
                     }
 
+                    // Spread target Y along the spike shape so particles don't all converge
+                    var spikeRange = baseline - spikeTop;
+
                     for (var pi = 0; pi < blip.particles.length; pi++) {
                         var p = blip.particles[pi];
                         var pDuration = animDuration * (1 / p.speed);
@@ -1341,31 +1322,34 @@
                         pt = Math.min(pt, 1.0);
                         if (pt <= 0) continue;
 
-                        // Ease-in: accelerate toward spike (pulled in like gravity)
-                        var pEase = pt * pt * (3 - 2 * pt); // smoothstep
+                        // Ease-in with acceleration (gravity pull toward spike)
+                        var pEase = pt * pt * pt; // cubic ease-in: slow start, fast finish
 
-                        // X: lerp from origin to target
+                        // Each particle targets a different point along the spike
+                        var pTargetY = spikeTop + spikeRange * (p.offsetY / (blip.height || 40));
+                        // Slight X spread along the waveform width
+                        var pTargetX = targetCX + (p.offsetX * 3);
+
+                        // X: lerp from origin to scattered target
                         var startX = originCX + p.offsetX;
-                        var px = startX + (targetCX - startX) * pEase;
+                        var px = startX + (pTargetX - startX) * pEase;
 
-                        // Y: rise slightly in first 30%, then dive into the spike
+                        // Y: lift up slightly, then accelerate down into the spike
                         var startY = baseline - p.offsetY;
-                        var targetY = spikeTop + p.arcHeight * 0.3; // converge toward spike tip
-                        var liftPhase = pt < 0.3 ? Math.sin(pt / 0.3 * Math.PI / 2) : 1;
-                        var lift = p.arcHeight * 0.4 * (pt < 0.3 ? liftPhase : (1 - (pt - 0.3) / 0.7));
-                        var py = startY * (1 - pEase) + targetY * pEase - lift;
+                        var lift = p.arcHeight * 0.3 * Math.sin(pt * Math.PI * 0.7);
+                        var py = startY + (pTargetY - startY) * pEase - lift;
 
-                        // Particle shrinks as it approaches the spike
-                        var pSize = p.size * (1 - pEase * 0.9);
+                        // Particle shrinks in the last 40% (not throughout)
+                        var pSize = pt < 0.6 ? p.size : p.size * (1 - (pt - 0.6) / 0.4 * 0.85);
 
-                        // Opacity: stays bright until final convergence
-                        var pOpacity = blip.opacity * (1 - pEase * pEase * 0.6);
+                        // Opacity: stays bright until last 30%
+                        var pOpacity = pt < 0.7 ? blip.opacity : blip.opacity * (1 - (pt - 0.7) / 0.3 * 0.8);
                         pOpacity = Math.max(0, Math.min(1, pOpacity));
 
                         // Draw particle with glow
                         ctx.fillStyle = blipColor + pOpacity + ')';
-                        ctx.shadowBlur = 4 + pEase * 12;
-                        ctx.shadowColor = blipColor + (pOpacity * 0.5) + ')';
+                        ctx.shadowBlur = 3 + pEase * 10;
+                        ctx.shadowColor = blipColor + (pOpacity * 0.4) + ')';
                         ctx.fillRect(px - pSize / 2, py - pSize / 2, pSize, pSize);
                         ctx.shadowBlur = 0;
                     }
