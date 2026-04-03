@@ -1395,3 +1395,18 @@ pub struct MempoolTxRow {
     pub value: u64,
     pub first_seen: u64,
 }
+
+/// Query txids that are still unconfirmed (survived block confirmation).
+pub fn query_unconfirmed_txids(
+    conn: &Connection,
+    limit: u64,
+) -> rusqlite::Result<Vec<String>> {
+    let mut stmt = conn.prepare_cached(
+        "SELECT txid FROM mempool_txs
+         WHERE confirmed_height IS NULL
+         ORDER BY first_seen DESC
+         LIMIT ?1",
+    )?;
+    let rows = stmt.query_map(params![limit], |row| row.get(0))?;
+    rows.collect()
+}
