@@ -183,6 +183,24 @@ pub async fn get_stats(
     }
 }
 
+/// Serve last cached LiveStats with a stale flag when RPC is unreachable.
+fn serve_stale_live(
+    state: &SharedStatsState,
+) -> Option<Result<CachedResponse, StatsError>> {
+    tracing::warn!("RPC unreachable — serving stale LiveStats");
+    let cached = state
+        .live_cache
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone();
+    cached.map(|(stats, _ts)| {
+        let mut val = serde_json::to_value(&stats)
+            .unwrap_or_else(|_| serde_json::json!({}));
+        val["stale"] = serde_json::json!(true);
+        Ok(cached_json(val, 5))
+    })
+}
+
 pub async fn get_live(
     State(state): State<SharedStatsState>,
 ) -> Result<CachedResponse, StatsError> {
@@ -194,8 +212,19 @@ pub async fn get_live(
         state.rpc.estimate_smart_fee(1),
     );
 
-    let blockchain = blockchain_res?;
-    let mempool = mempool_res?;
+    // If core RPC calls fail, serve last cached LiveStats with stale flag
+    let blockchain = match blockchain_res {
+        Ok(b) => b,
+        Err(e) => {
+            return serve_stale_live(&state).unwrap_or(Err(e));
+        }
+    };
+    let mempool = match mempool_res {
+        Ok(m) => m,
+        Err(e) => {
+            return serve_stale_live(&state).unwrap_or(Err(e));
+        }
+    };
     let hashrate = hashrate_res.unwrap_or_else(|e| {
         tracing::warn!("Failed to fetch hashrate: {e}");
         0.0
