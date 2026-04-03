@@ -330,7 +330,7 @@
                 if (!_hb) return;
                 try {
                     var data = JSON.parse(e.data);
-                    var txs = data.txs || data; // support both {txs, last_block_ts} and raw array
+                    var txs = data.txs || data;
                     var lastBlockTs = data.last_block_ts || 0;
                     if (!Array.isArray(txs)) return;
                     console.log('[heartbeat] SSE history:', txs.length, 'txs, last_block_ts:', lastBlockTs);
@@ -341,6 +341,19 @@
                     var liveSeg = _hb.timeline[_hb.timeline.length - 1];
                     if (!liveSeg || liveSeg.type !== 'flatline' || liveSeg.x_end !== null) return;
 
+                    // Use earliest tx first_seen as baseline (miner timestamp can be
+                    // minutes before the block actually arrived at our node)
+                    var earliestSeen = Infinity;
+                    for (var ei = 0; ei < txs.length; ei++) {
+                        if (txs[ei].first_seen && txs[ei].first_seen < earliestSeen) {
+                            earliestSeen = txs[ei].first_seen;
+                        }
+                    }
+                    // Baseline: earliest tx minus a small buffer (txs arrive ~1-2s after block)
+                    var baseline_ts = earliestSeen < Infinity ? earliestSeen - 2 : lastBlockTs;
+                    // Use the later of miner timestamp and our computed baseline
+                    var effectiveBlockTs = Math.max(lastBlockTs, baseline_ts);
+
                     var medianFee = _hb._wsMedianFee || 5;
                     var placed = 0;
                     var maxBricks = 2000; // cap total history bricks
@@ -350,8 +363,8 @@
                         if (!tx.first_seen || !tx.fee || !tx.vsize) continue;
 
                         // Position on flatline based on timestamp
-                        var secAfterBlock = tx.first_seen - lastBlockTs;
-                        if (secAfterBlock < 0) continue; // tx from before last block
+                        var secAfterBlock = tx.first_seen - effectiveBlockTs;
+                        if (secAfterBlock < 0) secAfterBlock = 0;
                         var txVX = liveSeg.x_start + secAfterBlock * FLATLINE_PX_PER_SEC;
 
                         // Don't place beyond current head
