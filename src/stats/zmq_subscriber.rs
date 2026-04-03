@@ -105,6 +105,8 @@ async fn subscribe_transactions(
     tracing::info!("ZMQ: subscribed to rawtx");
 
     let mut tx_count = 0u64;
+    let mut parse_fail = 0u64;
+    let mut rpc_fail = 0u64;
     loop {
         let msg = socket.recv().await?;
         let frames: Vec<_> = msg.into_vec();
@@ -115,7 +117,16 @@ async fn subscribe_transactions(
         let raw_tx = &frames[1];
         let parsed = match parse_raw_tx(raw_tx) {
             Some(p) => p,
-            None => continue,
+            None => {
+                parse_fail += 1;
+                if parse_fail <= 5 {
+                    tracing::warn!(
+                        "ZMQ: failed to parse raw tx ({} bytes)",
+                        raw_tx.len()
+                    );
+                }
+                continue;
+            }
         };
 
         let now = std::time::SystemTime::now()
@@ -128,8 +139,13 @@ async fn subscribe_transactions(
         {
             Ok(entry) => (entry.fee, entry.vsize),
             Err(_) => {
-                // Tx might have been removed from mempool already (confirmed, evicted)
-                // Use our parsed vsize, skip fee (we can't know it without inputs)
+                rpc_fail += 1;
+                if rpc_fail <= 5 {
+                    tracing::debug!(
+                        "ZMQ: getmempoolentry failed for {} (may be already confirmed)",
+                        parsed.txid
+                    );
+                }
                 continue;
             }
         };
@@ -163,8 +179,13 @@ async fn subscribe_transactions(
         });
 
         tx_count += 1;
+        if tx_count == 1 {
+            tracing::info!(
+                "ZMQ: first tx processed — {fee} sats fee, {vsize} vB"
+            );
+        }
         if tx_count.is_multiple_of(100) {
-            tracing::debug!("ZMQ: processed {tx_count} transactions");
+            tracing::info!("ZMQ: processed {tx_count} transactions (parse_fail={parse_fail}, rpc_fail={rpc_fail})");
         }
     }
 }
@@ -231,30 +252,39 @@ async fn subscribe_blocks(
     }
 }
 
-/// Get block height and txid list from RPC.
+/// Get block height and txid list from RPC, with retry for race condition.
+/// ZMQ fires before the block is fully validated, so the RPC may not be ready yet.
 async fn get_block_info(
     state: &Arc<StatsState>,
     hash: &str,
 ) -> Option<(u64, Vec<String>)> {
-    // Get txids (verbosity=1)
-    let txids = match state.rpc.get_block_txids(hash).await {
-        Ok(t) => t,
-        Err(e) => {
-            tracing::error!("ZMQ: failed to get block txids for {hash}: {e}");
-            return None;
+    for attempt in 0..3 {
+        if attempt > 0 {
+            tokio::time::sleep(Duration::from_secs(1)).await;
         }
-    };
-
-    // Get height from blockchain info or block header
-    let height = match state.rpc.get_blockchain_info().await {
-        Ok(info) => info.blocks,
-        Err(e) => {
-            tracing::error!("ZMQ: failed to get blockchain info: {e}");
-            return None;
+        match state.rpc.get_block_txids(hash).await {
+            Ok(txids) => {
+                let height = match state.rpc.get_blockchain_info().await {
+                    Ok(info) => info.blocks,
+                    Err(e) => {
+                        tracing::error!(
+                            "ZMQ: failed to get blockchain info: {e}"
+                        );
+                        return None;
+                    }
+                };
+                return Some((height, txids));
+            }
+            Err(e) => {
+                if attempt < 2 {
+                    tracing::debug!("ZMQ: block {hash} not ready yet (attempt {}), retrying...", attempt + 1);
+                } else {
+                    tracing::error!("ZMQ: failed to get block txids for {hash} after 3 attempts: {e}");
+                }
+            }
         }
-    };
-
-    Some((height, txids))
+    }
+    None
 }
 
 // === Raw transaction parsing ===
