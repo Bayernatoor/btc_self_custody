@@ -414,7 +414,10 @@ pub async fn get_signaling_periods(
 /// On connect: sends recent tx history from DB, then streams live events.
 pub async fn get_heartbeat_sse(
     State(state): State<SharedStatsState>,
-) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+) -> (
+    [(header::HeaderName, String); 1],
+    Sse<impl Stream<Item = Result<Event, Infallible>>>,
+) {
     let rx = state.heartbeat_tx.subscribe();
 
     // Load recent unconfirmed txs from DB (last 2 hours)
@@ -492,6 +495,13 @@ pub async fn get_heartbeat_sse(
         },
     );
 
-    Sse::new(stream)
-        .keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
+    // X-Accel-Buffering: no tells nginx to not buffer this response (required for SSE)
+    (
+        [(
+            header::HeaderName::from_static("x-accel-buffering"),
+            "no".to_string(),
+        )],
+        Sse::new(stream)
+            .keep_alive(KeepAlive::new().interval(Duration::from_secs(15))),
+    )
 }
