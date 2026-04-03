@@ -203,8 +203,20 @@ pub fn HeartbeatPage() -> impl IntoView {
             initialized.set(true);
 
             // Store period start timestamp for heart rate calculation
-            if let Some(first) = blocks.first() {
-                set_period_start_ts.set(first.timestamp);
+            // Use the block at the retarget boundary, not the first fetched block
+            {
+                let current_height =
+                    blocks.last().map(|b| b.height).unwrap_or(0);
+                let period_start_height =
+                    (current_height / RETARGET_PERIOD) * RETARGET_PERIOD;
+                let period_block =
+                    blocks.iter().find(|b| b.height == period_start_height);
+                if let Some(pb) = period_block {
+                    set_period_start_ts.set(pb.timestamp);
+                } else if let Some(first) = blocks.first() {
+                    // Fallback: first block (shouldn't happen with 2016 blocks)
+                    set_period_start_ts.set(first.timestamp);
+                }
             }
 
             // Build block events with inter-block time (replay=true for compressed history)
