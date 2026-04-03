@@ -264,16 +264,7 @@ async fn get_block_info(
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
         match state.rpc.get_block_txids(hash).await {
-            Ok(txids) => {
-                let height = match state.rpc.get_blockchain_info().await {
-                    Ok(info) => info.blocks,
-                    Err(e) => {
-                        tracing::error!(
-                            "ZMQ: failed to get blockchain info: {e}"
-                        );
-                        return None;
-                    }
-                };
+            Ok((height, txids)) => {
                 return Some((height, txids));
             }
             Err(e) => {

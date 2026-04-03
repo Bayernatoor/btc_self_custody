@@ -694,11 +694,13 @@ impl BitcoinRpc {
     }
 
     /// Get the list of txids in a block (verbosity=1, no full tx data).
+    /// Get the height and list of txids in a block (verbosity=1, no full tx data).
     pub async fn get_block_txids(
         &self,
         hash: &str,
-    ) -> Result<Vec<String>, StatsError> {
+    ) -> Result<(u64, Vec<String>), StatsError> {
         let result = self.call("getblock", &[json!(hash), json!(1)]).await?;
+        let height = result["height"].as_u64().unwrap_or(0);
         let txids = result["tx"]
             .as_array()
             .map(|arr| {
@@ -707,7 +709,7 @@ impl BitcoinRpc {
                     .collect()
             })
             .unwrap_or_default();
-        Ok(txids)
+        Ok((height, txids))
     }
 
     pub async fn get_mempool_info(&self) -> Result<MempoolInfo, StatsError> {
