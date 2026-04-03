@@ -375,34 +375,46 @@
                     var block = JSON.parse(e.data);
                     if (!block.height) return;
                     console.log('SSE block:', block.height, block.hash);
-                    // Fetch the block data and push to timeline immediately
-                    // (don't wait for 15s LiveStats poll). Small delay for DB ingestion.
-                    setTimeout(function() {
-                    fetch('/api/stats/blocks/' + block.height)
-                        .then(function(r) { return r.ok ? r.json() : null; })
-                        .then(function(data) {
-                            if (!_hb || !data || !data.height) return;
-                            // Compute inter-block time
-                            var inter = 600;
-                            if (_hb.lastBlockTime > 0 && data.timestamp > _hb.lastBlockTime) {
-                                inter = data.timestamp - _hb.lastBlockTime;
-                            }
-                            var blockJson = JSON.stringify([{
-                                height: data.height,
-                                timestamp: data.timestamp,
-                                tx_count: data.tx_count,
-                                total_fees: data.total_fees,
-                                size: data.size,
-                                weight: data.weight,
-                                inter_block_seconds: inter
-                            }]);
-                            window.pushHeartbeatBlocks(blockJson, false);
-                            // Trigger visual effects
-                            if (window.heartbeatFlash) window.heartbeatFlash();
-                            if (window.heartbeatPulse) window.heartbeatPulse();
-                        })
-                        .catch(function() {});
-                    }, 2000); // 2s delay for block ingestion
+                    // Fetch block data with retry (block may not be ingested yet)
+                    function fetchBlock(height, attempt) {
+                        var delay = attempt === 0 ? 2000 : 5000; // 2s first, 5s retry
+                        setTimeout(function() {
+                            if (!_hb) return;
+                            fetch('/api/stats/blocks/' + height)
+                                .then(function(r) { return r.ok ? r.json() : null; })
+                                .then(function(data) {
+                                    if (!_hb) return;
+                                    if (!data || !data.height) {
+                                        // Block not ingested yet, retry up to 3 times
+                                        if (attempt < 3) {
+                                            console.log('[heartbeat] block', height, 'not in DB yet, retry', attempt + 1);
+                                            fetchBlock(height, attempt + 1);
+                                        }
+                                        return;
+                                    }
+                                    var inter = 600;
+                                    if (_hb.lastBlockTime > 0 && data.timestamp > _hb.lastBlockTime) {
+                                        inter = data.timestamp - _hb.lastBlockTime;
+                                    }
+                                    var blockJson = JSON.stringify([{
+                                        height: data.height,
+                                        timestamp: data.timestamp,
+                                        tx_count: data.tx_count,
+                                        total_fees: data.total_fees,
+                                        size: data.size,
+                                        weight: data.weight,
+                                        inter_block_seconds: inter
+                                    }]);
+                                    window.pushHeartbeatBlocks(blockJson, false);
+                                    if (window.heartbeatFlash) window.heartbeatFlash();
+                                    if (window.heartbeatPulse) window.heartbeatPulse();
+                                })
+                                .catch(function() {
+                                    if (attempt < 3) fetchBlock(height, attempt + 1);
+                                });
+                        }, delay);
+                    }
+                    fetchBlock(block.height, 0);
                 } catch (err) {}
             });
             es.addEventListener('lag', function(e) {
