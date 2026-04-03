@@ -438,7 +438,6 @@ pub async fn get_heartbeat_sse(
     enum Phase {
         History(Vec<db::MempoolTxRow>),
         Live,
-        Done,
     }
 
     let stream = futures::stream::unfold(
@@ -489,7 +488,6 @@ pub async fn get_heartbeat_sse(
                         Err(broadcast::error::RecvError::Closed) => None,
                     }
                 }
-                Phase::Done => None,
             }
         },
     );
