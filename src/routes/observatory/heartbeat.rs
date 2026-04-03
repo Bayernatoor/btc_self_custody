@@ -177,9 +177,9 @@ pub fn HeartbeatPage() -> impl IntoView {
         if height == 0 {
             return Vec::new();
         }
-        // Fetch from start of current retarget period
-        let period_start = (height / RETARGET_PERIOD) * RETARGET_PERIOD;
-        crate::stats::server_fns::fetch_blocks(period_start, height)
+        // Fetch last 2016 blocks for timeline history
+        let from = height.saturating_sub(RETARGET_PERIOD);
+        crate::stats::server_fns::fetch_blocks(from, height)
             .await
             .unwrap_or_default()
     });
