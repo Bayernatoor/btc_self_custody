@@ -37,6 +37,7 @@ pub enum HeartbeatEvent {
         height: u64,
         hash: String,
         confirmed_count: u64,
+        unconfirmed_txids: Vec<String>,
     },
 }
 
@@ -270,23 +271,30 @@ async fn subscribe_blocks(
             .unwrap_or_default()
             .as_secs();
 
-        // Mark confirmed transactions in DB
-        let confirmed_count = if let Ok(conn) = state.db.get() {
-            db::confirm_mempool_txs(&conn, &txids, height, now).unwrap_or(0)
-        } else {
-            0
-        };
+        // Mark confirmed transactions in DB and get surviving (unconfirmed) txids
+        let (confirmed_count, unconfirmed_txids) =
+            if let Ok(conn) = state.db.get() {
+                let count = db::confirm_mempool_txs(&conn, &txids, height, now)
+                    .unwrap_or(0);
+                // Query txids that are still unconfirmed (survived this block)
+                let survivors = db::query_unconfirmed_txids(&conn, 5000)
+                    .unwrap_or_default();
+                (count, survivors)
+            } else {
+                (0, Vec::new())
+            };
 
         tracing::info!(
             "ZMQ: block {height} ({block_hash}) — {confirmed_count}/{} txs confirmed in our mempool",
             txids.len()
         );
 
-        // Broadcast block event
+        // Broadcast block event with surviving txids
         let _ = sender.send(HeartbeatEvent::Block {
             height,
             hash: block_hash,
             confirmed_count,
+            unconfirmed_txids: unconfirmed_txids,
         });
 
         // Resume tx processing after a short delay (let the rawtx flood from

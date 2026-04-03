@@ -443,7 +443,17 @@
                 try {
                     var block = JSON.parse(e.data);
                     if (!block.height) return;
-                    console.log('SSE block:', block.height, block.hash);
+                    console.log('SSE block:', block.height, block.hash,
+                        'unconfirmed:', (block.unconfirmed_txids || []).length);
+                    // Store unconfirmed txids so pushHeartbeatBlocks can preserve them
+                    if (block.unconfirmed_txids && block.unconfirmed_txids.length > 0) {
+                        _hb._unconfirmedSet = {};
+                        for (var ui = 0; ui < block.unconfirmed_txids.length; ui++) {
+                            _hb._unconfirmedSet[block.unconfirmed_txids[ui]] = true;
+                        }
+                    } else {
+                        _hb._unconfirmedSet = null;
+                    }
                     // Fetch block data with retry (block may not be ingested yet)
                     function fetchBlock(height, attempt) {
                         var delay = attempt === 0 ? 2000 : 5000; // 2s first, 5s retry
@@ -492,15 +502,24 @@
             es.onopen = function() {
                 console.log('[heartbeat] SSE connected');
                 _hb.wsConnected = true;
-                _hb._sseRetryDelay = 5000;
+                _hb._sseRetries = 0; // reset retry count on successful connect
             };
             es.onerror = function(err) {
                 if (!_hb) return;
-                console.log('[heartbeat] SSE error, readyState:', es.readyState, err);
                 _hb.wsConnected = false;
                 es.close();
-                console.log('[heartbeat] falling back to mempool.space WS');
-                connectMempoolFallback();
+                _hb._sseRetries = (_hb._sseRetries || 0) + 1;
+                if (_hb._sseRetries <= 3) {
+                    // Retry SSE with backoff: 3s, 6s, 12s
+                    var delay = 3000 * Math.pow(2, _hb._sseRetries - 1);
+                    console.log('[heartbeat] SSE error, retry', _hb._sseRetries, 'in', delay / 1000 + 's');
+                    setTimeout(function() {
+                        if (_hb) connectOwnFeed();
+                    }, delay);
+                } else {
+                    console.log('[heartbeat] SSE failed after 3 retries, falling back to mempool.space WS');
+                    connectMempoolFallback();
+                }
             };
             _hb._sse = es;
         } catch (err) {
@@ -1946,13 +1965,20 @@
                     if (!isReplay) {
                         lastSeg.color = _hb._preFlashColor || _hb.currentColor || COLORS.healthy;
                     }
-                    // Shatter blips into particles that get sucked into the block
+                    // Shatter confirmed blips into particles; carry unconfirmed forward
                     if (lastSeg.blips) {
                         var absorbX = _hb.virtualX;
                         var absorbNow = Date.now() / 1000;
+                        var uncSet = _hb._unconfirmedSet;
+                        var survivors = [];
                         for (var bi = 0; bi < lastSeg.blips.length; bi++) {
                             var blp = lastSeg.blips[bi];
                             if (blp.fadeStart === 0) {
+                                // Check if this brick survived (unconfirmed)
+                                if (uncSet && blp.txid && uncSet[blp.txid]) {
+                                    survivors.push(blp);
+                                    continue;
+                                }
                                 blp.fadeStart = absorbNow;
                                 blp.absorbTargetX = absorbX;
                                 blp.absorbOriginX = blp.x;
@@ -1992,6 +2018,23 @@
 
                 // Create a new live flatline after this block
                 _hb.timeline.push(createFlatlineSegment(_hb.virtualX, null));
+
+                // Move surviving (unconfirmed) bricks to the new flatline
+                if (survivors && survivors.length > 0) {
+                    var newSeg = _hb.timeline[_hb.timeline.length - 1];
+                    for (var si5 = 0; si5 < survivors.length; si5++) {
+                        var surv = survivors[si5];
+                        // Place at the start of the new flatline
+                        surv.x = _hb.virtualX + Math.random() * 20;
+                        surv.gridX = Math.round(surv.x / 5) * 5;
+                        surv.stackY = 0;
+                        surv.opacity = Math.max(0.4, surv.opacity - 0.15); // dim slightly
+                        newSeg.blips.push(surv);
+                    }
+                    console.log('[heartbeat]', survivors.length, 'unconfirmed txs carried forward');
+                }
+                // Clear unconfirmed set
+                _hb._unconfirmedSet = null;
 
                 // Maintain recentBlocks list (up to 2016 for period history)
                 _hb.recentBlocks.push({
