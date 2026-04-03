@@ -23,3 +23,5 @@ pub mod ingest;
 pub mod rpc;
 #[cfg(feature = "ssr")]
 pub mod startup;
+#[cfg(feature = "ssr")]
+pub mod zmq_subscriber;

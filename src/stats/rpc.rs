@@ -73,6 +73,13 @@ pub struct PriceInfo {
     pub time: u64,
 }
 
+/// Minimal mempool entry info from getmempoolentry.
+#[derive(Debug)]
+pub struct MempoolEntryInfo {
+    pub fee: u64,   // sats
+    pub vsize: u32,
+}
+
 /// Parsed block data from getblock verbosity=2.
 #[derive(Debug)]
 pub struct Block {
@@ -651,6 +658,39 @@ impl BitcoinRpc {
     ) -> Result<Block, StatsError> {
         let hash = self.get_block_hash(height).await?;
         self.get_block(&hash).await
+    }
+
+    /// Get mempool entry for a specific txid. Returns fee (sats) and vsize.
+    pub async fn get_mempool_entry(
+        &self,
+        txid: &str,
+    ) -> Result<MempoolEntryInfo, StatsError> {
+        let result =
+            self.call("getmempoolentry", &[json!(txid)]).await?;
+        let fee_btc = result["fees"]["base"]
+            .as_f64()
+            .or_else(|| result["fee"].as_f64())
+            .unwrap_or(0.0);
+        let fee_sats = (fee_btc * 100_000_000.0).round() as u64;
+        let vsize = result["vsize"].as_u64().unwrap_or(0) as u32;
+        Ok(MempoolEntryInfo { fee: fee_sats, vsize })
+    }
+
+    /// Get the list of txids in a block (verbosity=1, no full tx data).
+    pub async fn get_block_txids(
+        &self,
+        hash: &str,
+    ) -> Result<Vec<String>, StatsError> {
+        let result = self.call("getblock", &[json!(hash), json!(1)]).await?;
+        let txids = result["tx"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
+        Ok(txids)
     }
 
     pub async fn get_mempool_info(&self) -> Result<MempoolInfo, StatsError> {

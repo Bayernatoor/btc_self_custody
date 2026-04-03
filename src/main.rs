@@ -47,13 +47,17 @@ async fn main() {
         .fallback(leptos_axum::file_and_error_handler(shell))
         .with_state(leptos_options);
 
-    if let Some((stats_state, stats_router)) = stats {
+    if let Some((stats_state, stats_router, zmq_tx, zmq_block)) = stats {
         use axum::Extension;
         tracing::info!("Stats module active — API at /api/stats/");
         app = app
             .nest("/api/stats", stats_router)
             .layer(Extension(stats_state.clone()));
-        we_hodl_btc::stats::startup::spawn_background_tasks(stats_state);
+        we_hodl_btc::stats::startup::spawn_background_tasks(
+            stats_state,
+            zmq_tx,
+            zmq_block,
+        );
     } else {
         tracing::info!("Stats module dormant (BITCOIN_STATS_RPC_URL not set)");
     }

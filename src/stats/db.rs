@@ -258,6 +258,22 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
          CREATE INDEX IF NOT EXISTS idx_blocks_month_day ON blocks(strftime('%m-%d', datetime(timestamp, 'unixepoch')));",
     )?;
 
+    // Mempool transactions table for heartbeat ZMQ data
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS mempool_txs (
+            txid            TEXT    PRIMARY KEY,
+            fee             INTEGER NOT NULL,
+            vsize           INTEGER NOT NULL,
+            value           INTEGER NOT NULL,
+            first_seen      INTEGER NOT NULL,
+            confirmed_height INTEGER,
+            confirmed_at    INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_mempool_first_seen ON mempool_txs(first_seen);
+        CREATE INDEX IF NOT EXISTS idx_mempool_unconfirmed ON mempool_txs(confirmed_height)
+            WHERE confirmed_height IS NULL;",
+    )?;
+
     Ok(())
 }
 
@@ -1287,4 +1303,90 @@ pub fn query_block_timestamp(
         |row| row.get(0),
     )
     .optional()
+}
+
+// === Mempool transaction functions ===
+
+/// Insert a mempool transaction (ignore if txid already exists).
+pub fn insert_mempool_tx(
+    conn: &Connection,
+    txid: &str,
+    fee: u64,
+    vsize: u32,
+    value: u64,
+    first_seen: u64,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "INSERT OR IGNORE INTO mempool_txs (txid, fee, vsize, value, first_seen)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![txid, fee, vsize, value, first_seen],
+    )?;
+    Ok(())
+}
+
+/// Mark a list of txids as confirmed in a specific block.
+pub fn confirm_mempool_txs(
+    conn: &Connection,
+    txids: &[String],
+    height: u64,
+    confirmed_at: u64,
+) -> rusqlite::Result<u64> {
+    if txids.is_empty() {
+        return Ok(0);
+    }
+    let tx = conn.unchecked_transaction()?;
+    let mut count = 0u64;
+    let mut stmt = tx.prepare_cached(
+        "UPDATE mempool_txs SET confirmed_height = ?1, confirmed_at = ?2
+         WHERE txid = ?3 AND confirmed_height IS NULL",
+    )?;
+    for txid in txids {
+        count += stmt.execute(params![height, confirmed_at, txid])? as u64;
+    }
+    drop(stmt);
+    tx.commit()?;
+    Ok(count)
+}
+
+/// Query recent unconfirmed mempool transactions (for SSE history).
+pub fn query_recent_mempool_txs(
+    conn: &Connection,
+    since: u64,
+    limit: u64,
+) -> rusqlite::Result<Vec<MempoolTxRow>> {
+    let mut stmt = conn.prepare_cached(
+        "SELECT txid, fee, vsize, value, first_seen
+         FROM mempool_txs
+         WHERE confirmed_height IS NULL AND first_seen >= ?1
+         ORDER BY first_seen DESC
+         LIMIT ?2",
+    )?;
+    let rows = stmt.query_map(params![since, limit], |row| {
+        Ok(MempoolTxRow {
+            txid: row.get(0)?,
+            fee: row.get(1)?,
+            vsize: row.get(2)?,
+            value: row.get(3)?,
+            first_seen: row.get(4)?,
+        })
+    })?;
+    rows.collect()
+}
+
+/// Prune old confirmed transactions (keep last N days).
+pub fn prune_mempool_txs(conn: &Connection, older_than: u64) -> rusqlite::Result<usize> {
+    conn.execute(
+        "DELETE FROM mempool_txs WHERE first_seen < ?1 AND confirmed_height IS NOT NULL",
+        params![older_than],
+    )
+}
+
+/// Row from mempool_txs table.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct MempoolTxRow {
+    pub txid: String,
+    pub fee: u64,
+    pub vsize: u32,
+    pub value: u64,
+    pub first_seen: u64,
 }

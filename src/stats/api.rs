@@ -14,6 +14,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
+use tokio::sync::broadcast;
+
 use axum::extract::{Path, Query, State};
 use axum::http::header;
 use axum::Json;
@@ -66,6 +68,8 @@ pub struct StatsState {
         Mutex<Option<(String, Vec<super::db::SignalingPeriod>, Instant)>>,
     /// Cached price history: (from_ts, to_ts, data, fetched_at).
     pub price_history_cache: RangeCache<PricePoint>,
+    /// Broadcast channel for real-time heartbeat events (ZMQ → SSE).
+    pub heartbeat_tx: broadcast::Sender<super::zmq_subscriber::HeartbeatEvent>,
 }
 
 pub type SharedStatsState = Arc<StatsState>;

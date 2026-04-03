@@ -10,6 +10,10 @@ pub struct StatsConfig {
     pub rpc_password: String,
     pub db_path: PathBuf,
     pub initial_ingest_count: u64,
+    /// ZMQ endpoint for raw transactions (e.g. tcp://192.168.8.131:28333)
+    pub zmq_tx_url: Option<String>,
+    /// ZMQ endpoint for block hashes (e.g. tcp://192.168.8.131:28332)
+    pub zmq_block_url: Option<String>,
 }
 
 impl StatsConfig {
@@ -29,12 +33,17 @@ impl StatsConfig {
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(1_000_000);
 
+        let zmq_tx_url = std::env::var("BITCOIN_STATS_ZMQ_TX").ok();
+        let zmq_block_url = std::env::var("BITCOIN_STATS_ZMQ_BLOCK").ok();
+
         Some(Self {
             rpc_url,
             rpc_user,
             rpc_password,
             db_path,
             initial_ingest_count,
+            zmq_tx_url,
+            zmq_block_url,
         })
     }
 }

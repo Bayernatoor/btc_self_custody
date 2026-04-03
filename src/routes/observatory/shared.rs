@@ -967,7 +967,6 @@ pub fn ObservatoryNav() -> impl IntoView {
         ("/observatory", "Dashboard"),
         ("/observatory/stats", "Overview"),
         ("/observatory/on-this-day", "On This Day"),
-        ("/observatory/heartbeat", "Heartbeat"),
     ];
 
     let charts: Vec<(&'static str, &'static str)> = vec![
