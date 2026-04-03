@@ -354,10 +354,10 @@ fn parse_raw_tx(data: &[u8]) -> Option<ParsedTx> {
             let wit_count = read_varint(data, &mut wit_cursor)?;
             for _ in 0..wit_count {
                 let item_len = read_varint(data, &mut wit_cursor)? as usize;
-                wit_cursor += item_len;
-                if wit_cursor > data.len() {
+                if wit_cursor + item_len > data.len() {
                     return None;
                 }
+                wit_cursor += item_len;
             }
         }
 

@@ -332,11 +332,23 @@
                     var txs = JSON.parse(e.data);
                     console.log('[heartbeat] SSE history:', txs.length, 'txs');
                     if (!Array.isArray(txs) || txs.length === 0) return;
-                    for (var i = 0; i < txs.length; i++) {
-                        _hb._txBatchQueue.push(txs[i]);
-                    }
                     _hb._hasTxStream = true;
-                    flushTxBatch();
+                    // Batch history in chunks to avoid UI jank
+                    var chunkSize = 50;
+                    var idx = 0;
+                    function processChunk() {
+                        if (!_hb || idx >= txs.length) return;
+                        var end = Math.min(idx + chunkSize, txs.length);
+                        for (var i = idx; i < end; i++) {
+                            _hb._txBatchQueue.push(txs[i]);
+                        }
+                        idx = end;
+                        flushTxBatch();
+                        if (idx < txs.length) {
+                            requestAnimationFrame(processChunk);
+                        }
+                    }
+                    processChunk();
                 } catch (err) { console.log('[heartbeat] SSE history error:', err); }
             });
             es.addEventListener('tx', function(e) {
@@ -345,6 +357,7 @@
                     var tx = JSON.parse(e.data);
                     _hb._hasTxStream = true;
                     _hb._sseTxCount++;
+                    if (_hb._txBatchQueue.length > 500) _hb._txBatchQueue.length = 500;
                     _hb._txBatchQueue.push(tx);
                     var now = Date.now();
                     if (now - _hb._txThrottleTime > 200) {
@@ -1794,6 +1807,11 @@
         }
         _hb = null;
     };
+
+    // Clean up SSE connection on page unload
+    window.addEventListener('beforeunload', function() {
+        if (window.destroyHeartbeat) window.destroyHeartbeat();
+    });
 
     // ── Phase 2: Vital Signs computation ─────────────────────
 
