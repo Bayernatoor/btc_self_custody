@@ -519,6 +519,24 @@
     function connectMempoolFallback() {
         if (!_hb) return;
         _hb._lastMempoolTxCount = 0;
+
+        // Periodically try to reconnect to SSE while on WS fallback
+        if (_hb._sseReconnectTimer) clearInterval(_hb._sseReconnectTimer);
+        _hb._sseReconnectTimer = setInterval(function() {
+            if (!_hb) return;
+            // Try SSE silently — if it connects, close WS and cancel this timer
+            var testEs = new EventSource('/api/stats/heartbeat');
+            testEs.onopen = function() {
+                console.log('[heartbeat] SSE recovered, switching back from WS');
+                testEs.close();
+                if (_hb.ws) { try { _hb.ws.close(); } catch(e) {} }
+                if (_hb._sseReconnectTimer) { clearInterval(_hb._sseReconnectTimer); _hb._sseReconnectTimer = null; }
+                _hb._sseRetries = 0;
+                connectOwnFeed();
+            };
+            testEs.onerror = function() { testEs.close(); };
+        }, 60000); // try every 60s
+
         try {
             var ws = new WebSocket('wss://mempool.space/api/v1/ws');
             ws.onopen = function() {
@@ -2141,6 +2159,7 @@
         if (_hb.rafId) cancelAnimationFrame(_hb.rafId);
         if (_hb._flashTimer) clearTimeout(_hb._flashTimer);
         if (_hb.resizeObs) _hb.resizeObs.disconnect();
+        if (_hb._sseReconnectTimer) clearInterval(_hb._sseReconnectTimer);
         if (_hb._sse) {
             try { _hb._sse.close(); } catch(e) {}
         }
