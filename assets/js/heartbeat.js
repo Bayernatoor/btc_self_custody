@@ -27,7 +27,7 @@
     var MAX_FLATLINE_WIDTH = 300;   // max compressed flatline px
     var RETARGET_PERIOD = 2016;     // blocks per difficulty epoch
     var RHYTHM_STRIP_BLOCKS = 144;  // blocks in 24hr strip
-    var MAX_BLIPS_PER_SEGMENT = 2000; // prune threshold
+    var MAX_BLIPS_PER_SEGMENT = 5000; // prune threshold (off-screen only)
 
     // ── PQRST waveform generation ──────────────────────────────
     // Converts block data into an array of y-offset points (from baseline).
@@ -318,6 +318,38 @@
         return null;
     }
 
+    // Process a live block from SSE (shared by live handler + queue replay)
+    function processLiveBlock(block) {
+        if (!_hb) return;
+        // Store unconfirmed txids so pushHeartbeatBlocks can preserve them
+        if (block.unconfirmed_txids && block.unconfirmed_txids.length > 0) {
+            _hb._unconfirmedSet = {};
+            for (var ui = 0; ui < block.unconfirmed_txids.length; ui++) {
+                _hb._unconfirmedSet[block.unconfirmed_txids[ui]] = true;
+            }
+        } else {
+            _hb._unconfirmedSet = null;
+        }
+        // Build block data — SSE now includes real block stats from RPC + mempool fees
+        var blockTs = block.timestamp || Math.floor(Date.now() / 1000);
+        var inter = 600;
+        if (_hb.lastBlockTime > 0 && blockTs > _hb.lastBlockTime) {
+            inter = blockTs - _hb.lastBlockTime;
+        }
+        var blockJson = JSON.stringify([{
+            height: block.height,
+            timestamp: blockTs,
+            tx_count: block.tx_count || block.confirmed_count || 3000,
+            total_fees: block.total_fees || 0,
+            size: block.size || 0,
+            weight: block.weight || 3000000,
+            inter_block_seconds: inter
+        }]);
+        window.pushHeartbeatBlocks(blockJson, false);
+        if (window.heartbeatFlash) window.heartbeatFlash();
+        if (window.heartbeatPulse) window.heartbeatPulse();
+    }
+
     // ── Own node SSE feed (primary) ─────────────────────────────
     function connectOwnFeed() {
         if (!_hb) return;
@@ -467,33 +499,19 @@
                     if (!block.height) return;
                     console.log('SSE block:', block.height, block.hash,
                         'unconfirmed:', (block.unconfirmed_txids || []).length);
-                    // Store unconfirmed txids so pushHeartbeatBlocks can preserve them
-                    if (block.unconfirmed_txids && block.unconfirmed_txids.length > 0) {
-                        _hb._unconfirmedSet = {};
-                        for (var ui = 0; ui < block.unconfirmed_txids.length; ui++) {
-                            _hb._unconfirmedSet[block.unconfirmed_txids[ui]] = true;
-                        }
-                    } else {
-                        _hb._unconfirmedSet = null;
+
+                    // When tab is hidden, queue blocks for replay on return
+                    // instead of processing live (which stacks them at same virtualX)
+                    if (document.hidden) {
+                        if (!_hb._blockQueue) _hb._blockQueue = [];
+                        _hb._blockQueue.push(block);
+                        // Track last block time so inter-block calc stays correct
+                        _hb._queuedBlockTime = Math.floor(Date.now() / 1000);
+                        console.log('[heartbeat] block queued (tab hidden):', block.height);
+                        return;
                     }
-                    // Push block immediately with estimated data (instant feedback)
-                    var nowTs = Math.floor(Date.now() / 1000);
-                    var inter = 600;
-                    if (_hb.lastBlockTime > 0 && nowTs > _hb.lastBlockTime) {
-                        inter = nowTs - _hb.lastBlockTime;
-                    }
-                    var blockJson = JSON.stringify([{
-                        height: block.height,
-                        timestamp: nowTs,
-                        tx_count: block.confirmed_count || 3000,
-                        total_fees: 0,
-                        size: 0,
-                        weight: 3000000,
-                        inter_block_seconds: inter
-                    }]);
-                    window.pushHeartbeatBlocks(blockJson, false);
-                    if (window.heartbeatFlash) window.heartbeatFlash();
-                    if (window.heartbeatPulse) window.heartbeatPulse();
+
+                    processLiveBlock(block);
                 } catch (err) {}
             });
             es.addEventListener('lag', function(e) {
@@ -1681,17 +1699,48 @@
                 ctx.shadowBlur = 0;
             }
 
-            // Only prune confirmed blips that have fully faded (block arrived)
-            if (seg.blips.length > MAX_BLIPS_PER_SEGMENT) {
+            // Prune blips — never prune the live (open) flatline so txs persist
+            // until the next block. Only prune closed (historical) segments.
+            var isLiveSeg = (seg.type === 'flatline' && seg.x_end === null);
+            if (!isLiveSeg && seg.blips.length > MAX_BLIPS_PER_SEGMENT) {
                 var cutoff = nowSec;
+                // Always remove faded absorption particles
                 seg.blips = seg.blips.filter(function(b) {
                     if (b.fadeStart > 0) return (cutoff - b.fadeStart) < 3;
-                    return true; // keep all unconfirmed blips
+                    return true;
                 });
-                // If still over cap after removing faded, drop oldest live blips
+                // If still over cap, only remove blips behind the viewport left edge
                 if (seg.blips.length > MAX_BLIPS_PER_SEGMENT) {
-                    seg.blips.sort(function(a, b) { return (b.timestamp || 0) - (a.timestamp || 0); });
-                    seg.blips = seg.blips.slice(0, MAX_BLIPS_PER_SEGMENT);
+                    var excess = seg.blips.length - MAX_BLIPS_PER_SEGMENT;
+                    var offscreen = [];
+                    var onscreen = [];
+                    for (var pi = 0; pi < seg.blips.length; pi++) {
+                        var bx = seg.blips[pi].gridX || seg.blips[pi].x;
+                        if (bx < viewLeft) {
+                            offscreen.push(seg.blips[pi]);
+                        } else {
+                            onscreen.push(seg.blips[pi]);
+                        }
+                    }
+                    if (offscreen.length >= excess) {
+                        offscreen.sort(function(a, b) { return (b.timestamp || 0) - (a.timestamp || 0); });
+                        seg.blips = onscreen.concat(offscreen.slice(0, offscreen.length - excess));
+                    }
+                }
+            } else if (isLiveSeg) {
+                // Live segment: only clean up faded absorption particles, never prune txs
+                var cutoff2 = nowSec;
+                var hasFaded = false;
+                for (var fi = 0; fi < seg.blips.length; fi++) {
+                    if (seg.blips[fi].fadeStart > 0 && (cutoff2 - seg.blips[fi].fadeStart) >= 3) {
+                        hasFaded = true; break;
+                    }
+                }
+                if (hasFaded) {
+                    seg.blips = seg.blips.filter(function(b) {
+                        if (b.fadeStart > 0) return (cutoff2 - b.fadeStart) < 3;
+                        return true;
+                    });
                 }
             }
         }
@@ -2427,23 +2476,61 @@
         if (window.destroyHeartbeat) window.destroyHeartbeat();
     });
 
-    // When tab regains focus, advance virtualX to catch up with elapsed time
-    // and clear the tx backlog (prevents tall stacks from background queuing)
+    // When tab regains focus, replay queued blocks as compressed history
+    // and advance virtualX to catch up with elapsed time
     document.addEventListener('visibilitychange', function() {
         if (!_hb || document.hidden) return;
         var now = Date.now() / 1000;
         var elapsed = now - (_hb.lastFrameTime || now);
-        if (elapsed > 2) {
-            // Advance the live flatline to catch up
+
+        // Clear queued txs (they'd all stack at one position)
+        _hb._txBatchQueue = [];
+
+        // Replay any blocks that arrived while hidden
+        var queued = _hb._blockQueue || [];
+        _hb._blockQueue = [];
+
+        if (queued.length > 0) {
+            console.log('[heartbeat] replaying', queued.length, 'queued blocks from background');
+            // Build block array with inter-block times and replay as compressed history
+            var replayBlocks = [];
+            var prevTs = _hb.lastBlockTime || (now - 600);
+            for (var qi = 0; qi < queued.length; qi++) {
+                var qb = queued[qi];
+                var blockTs = _hb.lastBlockTime > 0 ? prevTs + 600 : now;
+                // Use confirmed_count if available, else estimate
+                replayBlocks.push({
+                    height: qb.height,
+                    timestamp: blockTs,
+                    tx_count: qb.confirmed_count || 3000,
+                    total_fees: qb.total_fees || 0,
+                    size: qb.size || 0,
+                    weight: qb.weight || 3000000,
+                    inter_block_seconds: 600
+                });
+                prevTs = blockTs;
+            }
+            // Use replay=true so they get compressed flatlines (not live positioning)
+            window.pushHeartbeatBlocks(JSON.stringify(replayBlocks), true);
+
+            // After replay, fast-forward the live flatline to reflect time since last queued block
             var liveSeg = _hb.timeline[_hb.timeline.length - 1];
             if (liveSeg && liveSeg.type === 'flatline' && liveSeg.x_end === null) {
+                var sinceLastBlock = now - (_hb.lastBlockTime || now);
+                if (sinceLastBlock > 0 && sinceLastBlock < 7200) {
+                    _hb.virtualX += sinceLastBlock * FLATLINE_PX_PER_SEC;
+                }
+            }
+        } else if (elapsed > 2) {
+            // No queued blocks — just advance the live flatline to catch up
+            var liveSeg2 = _hb.timeline[_hb.timeline.length - 1];
+            if (liveSeg2 && liveSeg2.type === 'flatline' && liveSeg2.x_end === null) {
                 _hb.virtualX += elapsed * FLATLINE_PX_PER_SEC;
             }
-            // Update lastFrameTime so the draw loop doesn't also try to catch up
-            _hb.lastFrameTime = now;
-            // Clear queued txs (they'd all stack at one position)
-            _hb._txBatchQueue = [];
         }
+
+        // Update lastFrameTime so the draw loop doesn't also try to catch up
+        _hb.lastFrameTime = now;
     });
 
     // ── Phase 2: Vital Signs computation ─────────────────────

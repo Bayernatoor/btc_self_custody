@@ -1329,18 +1329,40 @@ pub fn insert_mempool_tx(
 /// Mark a list of txids as confirmed in a specific block.
 /// Mark a list of txids as confirmed in a specific block.
 /// Uses batched IN clauses (100 per batch) for ~10x faster execution.
+/// Returns (confirmed_count, total_fees_sats) — fees summed from our mempool data.
 pub fn confirm_mempool_txs(
     conn: &Connection,
     txids: &[String],
     height: u64,
     confirmed_at: u64,
-) -> rusqlite::Result<u64> {
+) -> rusqlite::Result<(u64, u64)> {
     if txids.is_empty() {
-        return Ok(0);
+        return Ok((0, 0));
     }
     let tx = conn.unchecked_transaction()?;
+    let mut total_fees = 0u64;
     let mut count = 0u64;
     let chunk_size = 100;
+
+    // Sum fees before confirming (only for txs we have in our mempool)
+    for chunk in txids.chunks(chunk_size) {
+        let placeholders: Vec<&str> = chunk.iter().map(|_| "?").collect();
+        let sql = format!(
+            "SELECT COALESCE(SUM(fee), 0) FROM mempool_txs
+             WHERE txid IN ({}) AND confirmed_height IS NULL",
+            placeholders.join(",")
+        );
+        let mut stmt = tx.prepare(&sql)?;
+        for (i, txid) in chunk.iter().enumerate() {
+            stmt.raw_bind_parameter(i + 1, txid.as_str())?;
+        }
+        let mut rows = stmt.raw_query();
+        if let Some(row) = rows.next()? {
+            total_fees += row.get::<_, i64>(0).unwrap_or(0) as u64;
+        }
+    }
+
+    // Now confirm them
     for chunk in txids.chunks(chunk_size) {
         let placeholders: Vec<&str> = chunk.iter().map(|_| "?").collect();
         let sql = format!(
@@ -1349,7 +1371,6 @@ pub fn confirm_mempool_txs(
             placeholders.join(",")
         );
         let mut stmt = tx.prepare(&sql)?;
-        // Bind height and confirmed_at as first two params, then txids
         let mut param_idx = 1;
         stmt.raw_bind_parameter(param_idx, height as i64)?;
         param_idx += 1;
@@ -1362,7 +1383,7 @@ pub fn confirm_mempool_txs(
         count += stmt.raw_execute()? as u64;
     }
     tx.commit()?;
-    Ok(count)
+    Ok((count, total_fees))
 }
 
 /// Query recent unconfirmed mempool transactions (for SSE history).
@@ -1478,9 +1499,10 @@ mod tests {
         insert_mempool_tx(&conn, "tx3", 300, 350, 700_000, 1700000002).unwrap();
 
         let txids = vec!["tx1".to_string(), "tx2".to_string()];
-        let confirmed =
+        let (confirmed, fees) =
             confirm_mempool_txs(&conn, &txids, 800_000, 1700001000).unwrap();
         assert_eq!(confirmed, 2);
+        assert_eq!(fees, 300); // tx1=100 + tx2=200
 
         // Verify confirmed_height is set
         let height: Option<u64> = conn

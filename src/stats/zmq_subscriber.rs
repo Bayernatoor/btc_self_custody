@@ -36,6 +36,11 @@ pub enum HeartbeatEvent {
     Block {
         height: u64,
         hash: String,
+        timestamp: u64,
+        tx_count: u64,
+        total_fees: u64,
+        size: u64,
+        weight: u64,
         confirmed_count: u64,
         unconfirmed_txids: Vec<String>,
     },
@@ -144,23 +149,11 @@ async fn subscribe_transactions(
             .unwrap_or_default()
             .as_secs();
 
-        // Skip RPC lookups while a block is being processed — ZMQ sends rawtx
-        // for every tx in the block, flooding us with ~5000 already-confirmed txs.
-        // Two detection methods:
-        // 1. block_processing flag (set by block subscriber after hashblock)
-        // 2. Consecutive failure self-throttle (catches rawtx flood BEFORE hashblock)
-        if block_processing.load(Ordering::Acquire) {
-            consecutive_fail = 0;
-            continue;
-        }
-        if consecutive_fail >= 5 {
-            // Likely a block just arrived — skip and drain the ZMQ queue
-            // Reset after a short pause to let the flood pass
-            tokio::time::sleep(Duration::from_secs(3)).await;
-            consecutive_fail = 0;
-            tracing::debug!("ZMQ: skipped rawtx flood (consecutive failures)");
-            continue;
-        }
+        // During block processing, ZMQ sends ~5000 rawtx for block txs.
+        // These fail getmempoolentry (already confirmed). We still attempt
+        // the RPC call so genuine new mempool txs keep flowing — but we
+        // skip quickly on failure instead of sleeping.
+        let is_block_flood = block_processing.load(Ordering::Acquire);
 
         // Look up fee + authoritative vsize from mempool entry
         let (fee, vsize) = match state.rpc.get_mempool_entry(&parsed.txid).await
@@ -171,7 +164,16 @@ async fn subscribe_transactions(
             }
             Err(_) => {
                 rpc_fail += 1;
+                if is_block_flood {
+                    // Block flood: skip silently, don't count consecutive failures
+                    continue;
+                }
                 consecutive_fail += 1;
+                if consecutive_fail >= 5 {
+                    // Likely a block arrived before hashblock — skip remaining flood
+                    consecutive_fail = 0;
+                    tracing::debug!("ZMQ: skipped rawtx (consecutive failures, likely block flood)");
+                }
                 if rpc_fail <= 5 {
                     tracing::debug!(
                         "ZMQ: getmempoolentry failed for {} (may be already confirmed)",
@@ -257,8 +259,8 @@ async fn subscribe_blocks(
         // Signal tx subscriber to skip RPC lookups (block txs flood rawtx)
         block_processing.store(true, Ordering::Release);
 
-        // Get block height and txid list
-        let (height, txids) = match get_block_info(state, &block_hash).await {
+        // Get block metadata and txid list
+        let block_info = match get_block_info(state, &block_hash).await {
             Some(info) => info,
             None => {
                 block_processing.store(false, Ordering::Release);
@@ -272,51 +274,59 @@ async fn subscribe_blocks(
             .as_secs();
 
         // Mark confirmed transactions in DB and get surviving (unconfirmed) txids
-        let (confirmed_count, unconfirmed_txids) =
+        let (confirmed_count, total_fees, unconfirmed_txids) =
             if let Ok(conn) = state.db.get() {
-                let count = db::confirm_mempool_txs(&conn, &txids, height, now)
-                    .unwrap_or(0);
-                // Query txids that are still unconfirmed (survived this block)
+                let (count, fees) = db::confirm_mempool_txs(
+                    &conn, &block_info.txids, block_info.height, now,
+                )
+                .unwrap_or((0, 0));
                 let survivors = db::query_unconfirmed_txids(&conn, 5000)
                     .unwrap_or_default();
-                (count, survivors)
+                (count, fees, survivors)
             } else {
-                (0, Vec::new())
+                (0, 0, Vec::new())
             };
 
         tracing::info!(
-            "ZMQ: block {height} ({block_hash}) — {confirmed_count}/{} txs confirmed in our mempool",
-            txids.len()
+            "ZMQ: block {} ({block_hash}) — {confirmed_count}/{} txs confirmed, {:.4} BTC fees from mempool",
+            block_info.height,
+            block_info.txids.len(),
+            total_fees as f64 / 100_000_000.0,
         );
 
-        // Broadcast block event with surviving txids
+        // Broadcast block event with full block data
         let _ = sender.send(HeartbeatEvent::Block {
-            height,
+            height: block_info.height,
             hash: block_hash,
+            timestamp: block_info.timestamp,
+            tx_count: block_info.tx_count,
+            total_fees,
+            size: block_info.size,
+            weight: block_info.weight,
             confirmed_count,
             unconfirmed_txids,
         });
 
-        // Resume tx processing after a short delay (let the rawtx flood from
-        // the block pass through the ZMQ socket before we start RPC lookups again)
-        tokio::time::sleep(Duration::from_secs(3)).await;
+        // Clear block_processing flag — tx subscriber now handles the flood
+        // gracefully (skips failed lookups silently during flood, still processes
+        // genuine new mempool txs that succeed getmempoolentry)
         block_processing.store(false, Ordering::Release);
     }
 }
 
-/// Get block height and txid list from RPC, with retry for race condition.
+/// Get block metadata and txid list from RPC, with retry for race condition.
 /// ZMQ fires before the block is fully validated, so the RPC may not be ready yet.
 async fn get_block_info(
     state: &Arc<StatsState>,
     hash: &str,
-) -> Option<(u64, Vec<String>)> {
+) -> Option<super::rpc::BlockTxids> {
     for attempt in 0..3 {
         if attempt > 0 {
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
         match state.rpc.get_block_txids(hash).await {
-            Ok((height, txids)) => {
-                return Some((height, txids));
+            Ok(info) => {
+                return Some(info);
             }
             Err(e) => {
                 if attempt < 2 {
