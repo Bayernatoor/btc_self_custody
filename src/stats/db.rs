@@ -1458,12 +1458,9 @@ mod tests {
     #[test]
     fn test_mempool_confirm() {
         let conn = setup_db();
-        insert_mempool_tx(&conn, "tx1", 100, 150, 500_000, 1700000000)
-            .unwrap();
-        insert_mempool_tx(&conn, "tx2", 200, 250, 600_000, 1700000001)
-            .unwrap();
-        insert_mempool_tx(&conn, "tx3", 300, 350, 700_000, 1700000002)
-            .unwrap();
+        insert_mempool_tx(&conn, "tx1", 100, 150, 500_000, 1700000000).unwrap();
+        insert_mempool_tx(&conn, "tx2", 200, 250, 600_000, 1700000001).unwrap();
+        insert_mempool_tx(&conn, "tx3", 300, 350, 700_000, 1700000002).unwrap();
 
         let txids = vec!["tx1".to_string(), "tx2".to_string()];
         let confirmed =
@@ -1484,21 +1481,13 @@ mod tests {
     #[test]
     fn test_mempool_query_unconfirmed_only() {
         let conn = setup_db();
-        insert_mempool_tx(&conn, "tx1", 100, 150, 500_000, 1700000000)
-            .unwrap();
-        insert_mempool_tx(&conn, "tx2", 200, 250, 600_000, 1700000001)
-            .unwrap();
-        insert_mempool_tx(&conn, "tx3", 300, 350, 700_000, 1700000002)
-            .unwrap();
+        insert_mempool_tx(&conn, "tx1", 100, 150, 500_000, 1700000000).unwrap();
+        insert_mempool_tx(&conn, "tx2", 200, 250, 600_000, 1700000001).unwrap();
+        insert_mempool_tx(&conn, "tx3", 300, 350, 700_000, 1700000002).unwrap();
 
         // Confirm tx1
-        confirm_mempool_txs(
-            &conn,
-            &["tx1".to_string()],
-            800_000,
-            1700001000,
-        )
-        .unwrap();
+        confirm_mempool_txs(&conn, &["tx1".to_string()], 800_000, 1700001000)
+            .unwrap();
 
         // query_recent_mempool_txs only returns unconfirmed
         let txs = query_recent_mempool_txs(&conn, 0, 100).unwrap();
@@ -1529,21 +1518,13 @@ mod tests {
     #[test]
     fn test_mempool_query_unconfirmed_txids() {
         let conn = setup_db();
-        insert_mempool_tx(&conn, "tx1", 100, 150, 500_000, 1700000000)
-            .unwrap();
-        insert_mempool_tx(&conn, "tx2", 200, 250, 600_000, 1700000001)
-            .unwrap();
-        insert_mempool_tx(&conn, "tx3", 300, 350, 700_000, 1700000002)
-            .unwrap();
+        insert_mempool_tx(&conn, "tx1", 100, 150, 500_000, 1700000000).unwrap();
+        insert_mempool_tx(&conn, "tx2", 200, 250, 600_000, 1700000001).unwrap();
+        insert_mempool_tx(&conn, "tx3", 300, 350, 700_000, 1700000002).unwrap();
 
         // Confirm tx2
-        confirm_mempool_txs(
-            &conn,
-            &["tx2".to_string()],
-            800_000,
-            1700001000,
-        )
-        .unwrap();
+        confirm_mempool_txs(&conn, &["tx2".to_string()], 800_000, 1700001000)
+            .unwrap();
 
         let unconfirmed = query_unconfirmed_txids(&conn, 100).unwrap();
         assert_eq!(unconfirmed.len(), 2);
