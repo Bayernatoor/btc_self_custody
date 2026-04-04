@@ -50,10 +50,6 @@ extern "C" {
     #[wasm_bindgen(js_name = getOrganismStatus)]
     fn get_organism_status() -> String;
 
-    // Center view
-    #[wasm_bindgen(js_name = heartbeatCenter)]
-    fn heartbeat_center();
-
     // Phase 5: Sound
     #[wasm_bindgen(js_name = heartbeatSoundToggle)]
     fn heartbeat_sound_toggle(enable: bool) -> bool;
@@ -95,8 +91,6 @@ fn heartbeat_flash() {}
 fn get_organism_status() -> String {
     "{}".to_string()
 }
-#[cfg(not(feature = "hydrate"))]
-fn heartbeat_center() {}
 #[cfg(not(feature = "hydrate"))]
 fn heartbeat_sound_toggle(_: bool) -> bool {
     false
