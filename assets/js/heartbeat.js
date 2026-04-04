@@ -342,18 +342,16 @@
                     var liveSeg = _hb.timeline[_hb.timeline.length - 1];
                     if (!liveSeg || liveSeg.type !== 'flatline' || liveSeg.x_end !== null) return;
 
-                    // Use earliest tx first_seen as baseline (miner timestamp can be
-                    // minutes before the block actually arrived at our node)
-                    var earliestSeen = Infinity;
+                    // Find earliest POST-BLOCK tx as baseline (skip carry-forward survivors
+                    // which have first_seen before the block and would skew the baseline)
+                    var earliestPostBlock = Infinity;
                     for (var ei = 0; ei < txs.length; ei++) {
-                        if (txs[ei].first_seen && txs[ei].first_seen < earliestSeen) {
-                            earliestSeen = txs[ei].first_seen;
+                        if (txs[ei].first_seen && txs[ei].first_seen > lastBlockTs && txs[ei].first_seen < earliestPostBlock) {
+                            earliestPostBlock = txs[ei].first_seen;
                         }
                     }
-                    // Baseline: earliest tx minus a small buffer (txs arrive ~1-2s after block)
-                    var baseline_ts = earliestSeen < Infinity ? earliestSeen - 2 : lastBlockTs;
-                    // Use the later of miner timestamp and our computed baseline
-                    var effectiveBlockTs = Math.max(lastBlockTs, baseline_ts);
+                    // Baseline: earliest post-block tx minus small buffer
+                    var effectiveBlockTs = earliestPostBlock < Infinity ? earliestPostBlock - 2 : lastBlockTs;
 
                     var medianFee = _hb._wsMedianFee || 5;
                     var placed = 0;
