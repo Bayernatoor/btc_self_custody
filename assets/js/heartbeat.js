@@ -353,6 +353,17 @@
                     // Baseline: earliest post-block tx minus small buffer
                     var effectiveBlockTs = earliestPostBlock < Infinity ? earliestPostBlock - 2 : lastBlockTs;
 
+                    // Compute median fee from history txs so colors match live bricks
+                    var historyRates = [];
+                    for (var hi = 0; hi < txs.length; hi++) {
+                        if (txs[hi].fee && txs[hi].vsize) {
+                            historyRates.push(txs[hi].fee / txs[hi].vsize);
+                        }
+                    }
+                    if (historyRates.length >= 20) {
+                        historyRates.sort(function(a, b) { return a - b; });
+                        _hb._wsMedianFee = Math.max(1, historyRates[Math.floor(historyRates.length / 2)]);
+                    }
                     var medianFee = _hb._wsMedianFee || 5;
                     var placed = 0;
                     var maxBricks = 2000; // cap total history bricks
