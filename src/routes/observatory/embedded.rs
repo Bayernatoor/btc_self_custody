@@ -69,8 +69,8 @@ pub fn EmbeddedChartsPage() -> impl IntoView {
         >
             // --- Overview sub-section ---
             <Show when=move || section.get() == "overview" fallback=|| ()>
-                {move || {
-                    dashboard_data.get().and_then(|r| r.ok()).map(|_| {
+                {move || match dashboard_data.get() {
+                    Some(Ok(_)) => {
                         let all_embedded_share_option = chart_memo!(dashboard_data, range, overlay_flags,
                             |blocks| crate::stats::charts::all_embedded_share_chart(blocks),
                             |days| crate::stats::charts::all_embedded_share_chart_daily(days)
@@ -91,14 +91,23 @@ pub fn EmbeddedChartsPage() -> impl IntoView {
                                 <ChartCard title="All Embedded Data — Volume" description=chart_desc(range, "Bytes of data embedded per block by protocol", "Daily average bytes of data embedded per block by protocol") chart_id="chart-unified-volume" option=unified_volume_option/>
                             </div>
                         }.into_any()
-                    }).unwrap_or_else(|| view! { <ChartPageSkeleton count=3/> }.into_any())
+                    }
+                    Some(Err(_)) => view! {
+                        <div class="flex flex-col items-center justify-center min-h-[200px] gap-4">
+                            <p class="text-white/50 font-mono text-sm">"Failed to load data"</p>
+                            <button class="px-4 py-2 bg-white/10 hover:bg-white/20 text-white/70 rounded-lg font-mono text-sm cursor-pointer"
+                                on:click=move |_| { dashboard_data.refetch(); }
+                            >"Retry"</button>
+                        </div>
+                    }.into_any(),
+                    None => view! { <ChartPageSkeleton count=3/> }.into_any(),
                 }}
             </Show>
 
             // --- Protocols sub-section ---
             <Show when=move || section.get() == "protocols" fallback=|| ()>
-                {move || {
-                    dashboard_data.get().and_then(|r| r.ok()).map(|_| {
+                {move || match dashboard_data.get() {
+                    Some(Ok(_)) => {
                         let op_count_option = chart_memo!(dashboard_data, range, overlay_flags,
                             |blocks| crate::stats::charts::op_return_count_chart(blocks),
                             |days| crate::stats::charts::op_return_count_chart_daily(days)
@@ -124,14 +133,23 @@ pub fn EmbeddedChartsPage() -> impl IntoView {
                                 <ChartCard title="OP_RETURN Block Share" description=chart_desc(range, "OP_RETURN data as a percentage of each block's size", "Daily average OP_RETURN data as a percentage of block size") chart_id="chart-op-block-share" option=op_block_share_option/>
                             </div>
                         }.into_any()
-                    }).unwrap_or_else(|| view! { <ChartPageSkeleton count=4/> }.into_any())
+                    }
+                    Some(Err(_)) => view! {
+                        <div class="flex flex-col items-center justify-center min-h-[200px] gap-4">
+                            <p class="text-white/50 font-mono text-sm">"Failed to load data"</p>
+                            <button class="px-4 py-2 bg-white/10 hover:bg-white/20 text-white/70 rounded-lg font-mono text-sm cursor-pointer"
+                                on:click=move |_| { dashboard_data.refetch(); }
+                            >"Retry"</button>
+                        </div>
+                    }.into_any(),
+                    None => view! { <ChartPageSkeleton count=4/> }.into_any(),
                 }}
             </Show>
 
             // --- Inscriptions sub-section ---
             <Show when=move || section.get() == "witness" fallback=|| ()>
-                {move || {
-                    dashboard_data.get().and_then(|r| r.ok()).map(|_| {
+                {move || match dashboard_data.get() {
+                    Some(Ok(_)) => {
                         let inscription_option = chart_memo!(dashboard_data, range, overlay_flags,
                             |blocks| crate::stats::charts::inscription_chart(blocks),
                             |days| crate::stats::charts::inscription_chart_daily(days)
@@ -149,7 +167,16 @@ pub fn EmbeddedChartsPage() -> impl IntoView {
                                 <ChartCard title="Inscription Block Share" description=chart_desc(range, "Inscription data as a percentage of each block's size", "Daily average inscription data as a percentage of block size") chart_id="chart-inscription-share" option=inscription_share_option/>
                             </div>
                         }.into_any()
-                    }).unwrap_or_else(|| view! { <ChartPageSkeleton count=2/> }.into_any())
+                    }
+                    Some(Err(_)) => view! {
+                        <div class="flex flex-col items-center justify-center min-h-[200px] gap-4">
+                            <p class="text-white/50 font-mono text-sm">"Failed to load data"</p>
+                            <button class="px-4 py-2 bg-white/10 hover:bg-white/20 text-white/70 rounded-lg font-mono text-sm cursor-pointer"
+                                on:click=move |_| { dashboard_data.refetch(); }
+                            >"Retry"</button>
+                        </div>
+                    }.into_any(),
+                    None => view! { <ChartPageSkeleton count=2/> }.into_any(),
                 }}
             </Show>
         </ChartPageLayout>

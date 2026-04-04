@@ -101,8 +101,8 @@ pub fn MiningChartsPage() -> impl IntoView {
         >
             // --- Difficulty sub-section ---
             <Show when=move || section.get() == "difficulty" fallback=|| ()>
-                {move || {
-                    dashboard_data.get().and_then(|r| r.ok()).map(|_| {
+                {move || match dashboard_data.get() {
+                    Some(Ok(_)) => {
                         let diff_option = chart_memo!(dashboard_data, range, overlay_flags,
                             |blocks| crate::stats::charts::difficulty_chart(blocks),
                             |days| crate::stats::charts::difficulty_chart_daily(days)
@@ -112,14 +112,23 @@ pub fn MiningChartsPage() -> impl IntoView {
                                 <ChartCard title="Difficulty" description=chart_desc(range, "Mining difficulty per block, adjusts every 2,016 blocks (~2 weeks)", "Daily mining difficulty, adjusts every 2,016 blocks (~2 weeks)") chart_id="chart-difficulty" option=diff_option/>
                             </div>
                         }.into_any()
-                    }).unwrap_or_else(|| view! { <ChartPageSkeleton count=1/> }.into_any())
+                    }
+                    Some(Err(_)) => view! {
+                        <div class="flex flex-col items-center justify-center min-h-[200px] gap-4">
+                            <p class="text-white/50 font-mono text-sm">"Failed to load data"</p>
+                            <button class="px-4 py-2 bg-white/10 hover:bg-white/20 text-white/70 rounded-lg font-mono text-sm cursor-pointer"
+                                on:click=move |_| { dashboard_data.refetch(); }
+                            >"Retry"</button>
+                        </div>
+                    }.into_any(),
+                    None => view! { <ChartPageSkeleton count=1/> }.into_any(),
                 }}
             </Show>
 
             // --- Pool Distribution sub-section ---
             <Show when=move || section.get() == "pools" fallback=|| ()>
-                {move || {
-                    mining_data.get().and_then(|r| r.ok()).map(|_| {
+                {move || match mining_data.get() {
+                    Some(Ok(_)) => {
                         let miner_chart_option = Signal::derive(move || {
                             mining_data.get().and_then(|r| r.ok())
                                 .map(|(ref miners, _)| {
@@ -146,7 +155,16 @@ pub fn MiningChartsPage() -> impl IntoView {
                                 <ChartCard title="Empty Blocks" description="Blocks with no user transactions, usually mined before the pool has received the previous block's transactions" chart_id="chart-empty-blocks" option=empty_blocks_option/>
                             </div>
                         }.into_any()
-                    }).unwrap_or_else(|| view! { <ChartPageSkeleton count=2/> }.into_any())
+                    }
+                    Some(Err(_)) => view! {
+                        <div class="flex flex-col items-center justify-center min-h-[200px] gap-4">
+                            <p class="text-white/50 font-mono text-sm">"Failed to load data"</p>
+                            <button class="px-4 py-2 bg-white/10 hover:bg-white/20 text-white/70 rounded-lg font-mono text-sm cursor-pointer"
+                                on:click=move |_| { mining_data.refetch(); }
+                            >"Retry"</button>
+                        </div>
+                    }.into_any(),
+                    None => view! { <ChartPageSkeleton count=2/> }.into_any(),
                 }}
             </Show>
         </ChartPageLayout>

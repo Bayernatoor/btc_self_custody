@@ -87,17 +87,26 @@ pub fn StatsSummaryPage() -> impl IntoView {
     // Fetch summary data
     let summary = LocalResource::new(move || {
         let (from, to) = ts_range.get();
-        async move { fetch_range_summary(from, to).await.ok() }
+        async move {
+            fetch_range_summary(from, to)
+                .await
+                .map_err(|e| e.to_string())
+        }
     });
 
-    let data = Signal::derive(move || summary.get().flatten());
+    let data = Signal::derive(move || summary.get().and_then(|r| r.ok()));
 
     // Fetch mining + price context
     let mining_price = LocalResource::new(move || {
         let (from, to) = ts_range.get();
-        async move { fetch_mining_price_summary(from, to).await.ok() }
+        async move {
+            fetch_mining_price_summary(from, to)
+                .await
+                .map_err(|e| e.to_string())
+        }
     });
-    let mp_data = Signal::derive(move || mining_price.get().flatten());
+    let mp_data =
+        Signal::derive(move || mining_price.get().and_then(|r| r.ok()));
 
     // Format helper — creates a Signal<String> from a RangeSummary field
     let stat = move |f: fn(&RangeSummary) -> String| -> Signal<String> {
@@ -415,6 +424,23 @@ pub fn StatsSummaryPage() -> impl IntoView {
             </div>
             <super::shared::RangeSelector/>
         </div>
+
+        // Error state
+        {move || {
+            let has_error = summary.get().map(|r| r.is_err()).unwrap_or(false);
+            if has_error {
+                view! {
+                    <div class="flex flex-col items-center justify-center min-h-[200px] gap-4 mb-6">
+                        <p class="text-white/50 font-mono text-sm">"Failed to load data"</p>
+                        <button class="px-4 py-2 bg-white/10 hover:bg-white/20 text-white/70 rounded-lg font-mono text-sm cursor-pointer"
+                            on:click=move |_| { summary.refetch(); }
+                        >"Retry"</button>
+                    </div>
+                }.into_any()
+            } else {
+                view! { <div></div> }.into_any()
+            }
+        }}
 
         // Stats grid
         <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
