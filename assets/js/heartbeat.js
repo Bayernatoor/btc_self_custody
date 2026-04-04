@@ -364,8 +364,9 @@
                         if (!tx.first_seen || !tx.fee || !tx.vsize) continue;
 
                         // Position on flatline based on timestamp
+                        // Skip txs from before the block (carry-forward survivors)
                         var secAfterBlock = tx.first_seen - effectiveBlockTs;
-                        if (secAfterBlock < 0) secAfterBlock = 0;
+                        if (secAfterBlock < 0) continue;
                         var txVX = liveSeg.x_start + secAfterBlock * FLATLINE_PX_PER_SEC;
 
                         // Don't place beyond current head
