@@ -80,6 +80,17 @@ pub struct MempoolEntryInfo {
     pub vsize: u32,
 }
 
+/// Block metadata + txid list from getblock verbosity=1.
+#[derive(Debug)]
+pub struct BlockTxids {
+    pub height: u64,
+    pub timestamp: u64,
+    pub size: u64,
+    pub weight: u64,
+    pub tx_count: u64,
+    pub txids: Vec<String>,
+}
+
 /// Parsed block data from getblock verbosity=2.
 #[derive(Debug)]
 pub struct Block {
@@ -697,14 +708,17 @@ impl BitcoinRpc {
         })
     }
 
-    /// Get the list of txids in a block (verbosity=1, no full tx data).
-    /// Get the height and list of txids in a block (verbosity=1, no full tx data).
+    /// Get block metadata + txid list (verbosity=1, no full tx data).
     pub async fn get_block_txids(
         &self,
         hash: &str,
-    ) -> Result<(u64, Vec<String>), StatsError> {
+    ) -> Result<BlockTxids, StatsError> {
         let result = self.call("getblock", &[json!(hash), json!(1)]).await?;
         let height = result["height"].as_u64().unwrap_or(0);
+        let timestamp = result["time"].as_u64().unwrap_or(0);
+        let size = result["size"].as_u64().unwrap_or(0);
+        let weight = result["weight"].as_u64().unwrap_or(0);
+        let tx_count = result["nTx"].as_u64().unwrap_or(0);
         let txids = result["tx"]
             .as_array()
             .map(|arr| {
@@ -713,7 +727,14 @@ impl BitcoinRpc {
                     .collect()
             })
             .unwrap_or_default();
-        Ok((height, txids))
+        Ok(BlockTxids {
+            height,
+            timestamp,
+            size,
+            weight,
+            tx_count,
+            txids,
+        })
     }
 
     pub async fn get_mempool_info(&self) -> Result<MempoolInfo, StatsError> {
