@@ -424,7 +424,10 @@
                             vsize: tx.vsize || 0,
                             value: tx.value || 0,
                             timestamp: tx.first_seen,
-                            fadeStart: 0
+                            fadeStart: 0,
+                            bobPhase: Math.random() * Math.PI * 2,
+                            bobSpeed: 1.2 + feeNorm * 0.8,
+                            lane: Math.floor(Math.random() * 5) - 2
                         });
                         placed++;
                     }
@@ -670,7 +673,10 @@
                 vsize: tx.vsize || 0,
                 value: tx.value || 0,
                 timestamp: Date.now() / 1000,
-                fadeStart: 0
+                fadeStart: 0,
+                bobPhase: Math.random() * Math.PI * 2,
+                bobSpeed: 1.2 + feeNorm * 0.8,
+                lane: Math.floor(Math.random() * 5) - 2
             });
         }
 
@@ -699,7 +705,10 @@
                 height: aggH + aggStackY, brickH: aggH, brickW: 4, stackY: aggStackY,
                 color: aggColor, opacity: 0.5,
                 txCount: remaining, feeRate: Math.round(avgFee * 10) / 10,
-                timestamp: Date.now() / 1000, fadeStart: 0
+                timestamp: Date.now() / 1000, fadeStart: 0,
+                bobPhase: Math.random() * Math.PI * 2,
+                bobSpeed: 1.2 + aggFeeNorm * 0.8,
+                lane: Math.floor(Math.random() * 5) - 2
             });
         }
     }
@@ -777,7 +786,10 @@
                 txCount: txPerBlip,
                 feeRate: Math.round(feeRate * 10) / 10,
                 timestamp: Date.now() / 1000,
-                fadeStart: 0
+                fadeStart: 0,
+                bobPhase: Math.random() * Math.PI * 2,
+                bobSpeed: 1.2 + feeNorm * 0.8,
+                lane: Math.floor(Math.random() * 5) - 2
             });
         }
     }
@@ -934,6 +946,7 @@
 
     // ── Control bar (bottom center) ──────────────────────────────
     var CTRL_BTNS = [
+        { id: 'mode', label: '\u2B24', tip: 'Toggle cell/brick view' },
         { id: 'prev',    label: '\u23EE', tip: 'Previous block' },
         { id: 'pause',   label: '\u23F8', tip: 'Pause' },
         { id: 'zoomOut', label: '\u2212', tip: 'Zoom out' },
@@ -974,6 +987,9 @@
             var label = def.label;
             if (def.id === 'pause') {
                 label = _hb.paused ? '\u25B6' : '\u23F8';
+            }
+            if (def.id === 'mode') {
+                label = _hb.renderMode === 'bloodstream' ? '\u2B24' : '\u25A0'; // circle or square
             }
 
             ctx.fillStyle = 'rgba(255,255,255,' + bgAlpha + ')';
@@ -1051,6 +1067,9 @@
             case 'center':
                 // Center viewport on the live head without changing zoom
                 _hb.viewOffset = _hb.virtualX - (_hb.width * HEAD_POSITION_FRAC) / _hb.zoom;
+                break;
+            case 'mode':
+                _hb.renderMode = _hb.renderMode === 'bloodstream' ? 'bricks' : 'bloodstream';
                 break;
             case 'live':
                 // Jump to live: snap to head, reset zoom, enable auto-follow
@@ -1329,6 +1348,22 @@
         ctx.fillRect(cx1, baseline + 9, cx2 - cx1, 6);
         ctx.globalAlpha = 1;
 
+        // Vessel walls in bloodstream mode
+        if (_hb.renderMode === 'bloodstream') {
+            ctx.globalAlpha = 0.04;
+            ctx.strokeStyle = 'rgba(255, 180, 180, 0.15)';
+            ctx.lineWidth = 0.5;
+            ctx.beginPath();
+            ctx.moveTo(cx1, baseline - 18);
+            ctx.lineTo(cx2, baseline - 18);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(cx1, baseline + 18);
+            ctx.lineTo(cx2, baseline + 18);
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+        }
+
         // Draw blips
         if (seg.blips && seg.blips.length > 0) {
             var zoom = _hb.zoom;
@@ -1437,47 +1472,112 @@
                     bh *= fadeIn;
                     bOpacity *= fadeIn;
 
-                    // Draw filled rectangle with 1px gap for separation
-                    var gap = zoom > 4 ? 1 : 0;
-                    ctx.fillStyle = blipColor + bOpacity + ')';
-                    if (zoom < 4) {
-                        ctx.shadowBlur = 4;
-                        ctx.shadowColor = blipColor + (bOpacity * 0.4) + ')';
-                    }
-                    ctx.fillRect(bx - bw / 2 + gap, baseline - sy - bh + gap, bw - gap * 2, bh - gap * 2);
-                    ctx.shadowBlur = 0;
+                    if (_hb.renderMode === 'bloodstream') {
+                        // Blood cell rendering
+                        var cellRadius = 2 + (blip.vsize ? Math.min(Math.log2(blip.vsize / 100 + 1) * 2.5, 8) : 3);
+                        cellRadius *= Math.max(zoom * 0.5, 0.8); // scale with zoom but not linearly
 
-                    // Dark outline at 4x+ zoom for clear brick separation
-                    if (zoom > 4) {
-                        ctx.strokeStyle = 'rgba(8, 15, 30, 0.7)';
-                        ctx.lineWidth = zoom > 10 ? 2 : 1;
-                        ctx.strokeRect(bx - bw / 2 + gap, baseline - sy - bh + gap, bw - gap * 2, bh - gap * 2);
-                    }
+                        // Bobbing Y offset
+                        var bobPhase = blip.bobPhase || 0;
+                        var bobSpeed = blip.bobSpeed || 1.5;
+                        var bobAmp = 2 + cellRadius * 0.4;
+                        var cellLane = (blip.lane || 0) * 6; // ±12px from baseline
+                        var bobY = Math.sin(nowSec * bobSpeed + bobPhase) * bobAmp + cellLane;
 
-                    // At high zoom: show fee rate + value on brick face (clipped to brick)
-                    if (zoom > 8 && bw > 25 && bh > 10) {
-                        var brickLeft = bx - bw / 2;
-                        var brickTop = baseline - sy - bh;
-                        ctx.save();
-                        ctx.beginPath();
-                        ctx.rect(brickLeft, brickTop, bw, bh);
-                        ctx.clip();
-                        var fs = Math.min(Math.floor(bh * 0.35), 11);
-                        ctx.font = 'bold ' + fs + 'px monospace';
-                        ctx.fillStyle = 'rgba(255,255,255,0.95)';
-                        ctx.fillText((blip.feeRate || '?') + ' s/vB', brickLeft + 3, brickTop + fs + 2);
-                        if (bh > 22 && fs > 6) {
-                            ctx.font = (fs - 1) + 'px monospace';
-                            ctx.fillStyle = 'rgba(255,255,255,0.7)';
-                            if (blip.value) {
-                                var btc = blip.value / 1e8;
-                                var valStr = btc >= 0.01 ? btc.toFixed(3) : btc.toFixed(6);
-                                ctx.fillText('\u{20bf}' + valStr, brickLeft + 3, brickTop + fs * 2 + 1);
-                            } else if (blip.vsize) {
-                                ctx.fillText(Math.round(blip.vsize) + ' vB', brickLeft + 3, brickTop + fs * 2 + 1);
-                            }
+                        // Cell color based on fee rate (warm palette)
+                        var cellColor;
+                        var medianFee = _hb._wsMedianFee || 5;
+                        var feeRatio = (blip.feeRate || 1) / medianFee;
+                        if (feeRatio < 0.5) {
+                            cellColor = 'rgba(139, 34, 82, '; // deep maroon
+                        } else if (feeRatio < 1.0) {
+                            cellColor = 'rgba(220, 53, 69, '; // crimson
+                        } else if (feeRatio < 2.0) {
+                            cellColor = 'rgba(255, 71, 87, '; // bright red
+                        } else if (feeRatio < 4.0) {
+                            cellColor = 'rgba(255, 107, 129, '; // pink
+                        } else {
+                            cellColor = 'rgba(255, 224, 230, '; // pale/white
                         }
-                        ctx.restore();
+
+                        var cellOpacity = bOpacity * fadeIn;
+
+                        // Draw cell
+                        ctx.beginPath();
+                        ctx.arc(bx, baseline - bobY, cellRadius, 0, Math.PI * 2);
+                        ctx.fillStyle = cellColor + cellOpacity + ')';
+                        ctx.fill();
+
+                        // Subtle glow for high-fee cells
+                        if (feeRatio > 2.0) {
+                            ctx.shadowBlur = 6 + feeRatio * 2;
+                            ctx.shadowColor = cellColor + (cellOpacity * 0.4) + ')';
+                            ctx.beginPath();
+                            ctx.arc(bx, baseline - bobY, cellRadius, 0, Math.PI * 2);
+                            ctx.fill();
+                            ctx.shadowBlur = 0;
+                        }
+
+                        // Cell membrane at zoom > 4
+                        if (zoom > 4 && cellRadius > 4) {
+                            ctx.strokeStyle = cellColor + (cellOpacity * 0.4) + ')';
+                            ctx.lineWidth = 0.5;
+                            ctx.beginPath();
+                            ctx.arc(bx, baseline - bobY, cellRadius, 0, Math.PI * 2);
+                            ctx.stroke();
+                        }
+
+                        // Nucleus hint at zoom > 6
+                        if (zoom > 6 && cellRadius > 6) {
+                            ctx.beginPath();
+                            ctx.arc(bx, baseline - bobY, cellRadius * 0.3, 0, Math.PI * 2);
+                            ctx.fillStyle = cellColor + (cellOpacity * 0.6) + ')';
+                            ctx.fill();
+                        }
+                    } else {
+                        // Brick rendering (original)
+                        // Draw filled rectangle with 1px gap for separation
+                        var gap = zoom > 4 ? 1 : 0;
+                        ctx.fillStyle = blipColor + bOpacity + ')';
+                        if (zoom < 4) {
+                            ctx.shadowBlur = 4;
+                            ctx.shadowColor = blipColor + (bOpacity * 0.4) + ')';
+                        }
+                        ctx.fillRect(bx - bw / 2 + gap, baseline - sy - bh + gap, bw - gap * 2, bh - gap * 2);
+                        ctx.shadowBlur = 0;
+
+                        // Dark outline at 4x+ zoom for clear brick separation
+                        if (zoom > 4) {
+                            ctx.strokeStyle = 'rgba(8, 15, 30, 0.7)';
+                            ctx.lineWidth = zoom > 10 ? 2 : 1;
+                            ctx.strokeRect(bx - bw / 2 + gap, baseline - sy - bh + gap, bw - gap * 2, bh - gap * 2);
+                        }
+
+                        // At high zoom: show fee rate + value on brick face (clipped to brick)
+                        if (zoom > 8 && bw > 25 && bh > 10) {
+                            var brickLeft = bx - bw / 2;
+                            var brickTop = baseline - sy - bh;
+                            ctx.save();
+                            ctx.beginPath();
+                            ctx.rect(brickLeft, brickTop, bw, bh);
+                            ctx.clip();
+                            var fs = Math.min(Math.floor(bh * 0.35), 11);
+                            ctx.font = 'bold ' + fs + 'px monospace';
+                            ctx.fillStyle = 'rgba(255,255,255,0.95)';
+                            ctx.fillText((blip.feeRate || '?') + ' s/vB', brickLeft + 3, brickTop + fs + 2);
+                            if (bh > 22 && fs > 6) {
+                                ctx.font = (fs - 1) + 'px monospace';
+                                ctx.fillStyle = 'rgba(255,255,255,0.7)';
+                                if (blip.value) {
+                                    var btc = blip.value / 1e8;
+                                    var valStr = btc >= 0.01 ? btc.toFixed(3) : btc.toFixed(6);
+                                    ctx.fillText('\u{20bf}' + valStr, brickLeft + 3, brickTop + fs * 2 + 1);
+                                } else if (blip.vsize) {
+                                    ctx.fillText(Math.round(blip.vsize) + ' vB', brickLeft + 3, brickTop + fs * 2 + 1);
+                                }
+                            }
+                            ctx.restore();
+                        }
                     }
                 }
                 ctx.shadowBlur = 0;
@@ -1893,6 +1993,7 @@
             viewOffsetY: 0,       // vertical pan offset (0 = default baseline)
             autoFollow: true,
             paused: false,
+            renderMode: 'bloodstream', // 'bricks' or 'bloodstream'
             zoom: 1.9,              // default zoom for brick-level detail
             minZoom: 0.1,
             maxZoom: 50.0,
