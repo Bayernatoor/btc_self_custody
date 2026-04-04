@@ -27,8 +27,8 @@ pub fn FeeChartsPage() -> impl IntoView {
             description="Transaction fees earned by miners and the block reward breakdown"
             seo_text="Track how Bitcoin miners are compensated. Total fees per block show the demand for block space in real time, while the subsidy versus fees breakdown reveals the long-term transition from block reward to fee-based security as each halving cuts the subsidy in half."
         >
-            {move || {
-                dashboard_data.get().and_then(|r| r.ok()).map(|_| {
+            {move || match dashboard_data.get() {
+                Some(Ok(_)) => {
                     let fees_option = Signal::derive(move || {
                         let _r = range.get();
                         let unit = fee_unit.get();
@@ -106,7 +106,16 @@ pub fn FeeChartsPage() -> impl IntoView {
                             />
                         </div>
                     }.into_any()
-                }).unwrap_or_else(|| view! { <ChartPageSkeleton count=2/> }.into_any())
+                }
+                Some(Err(_)) => view! {
+                    <div class="flex flex-col items-center justify-center min-h-[200px] gap-4">
+                        <p class="text-white/50 font-mono text-sm">"Failed to load data"</p>
+                        <button class="px-4 py-2 bg-white/10 hover:bg-white/20 text-white/70 rounded-lg font-mono text-sm cursor-pointer"
+                            on:click=move |_| { dashboard_data.refetch(); }
+                        >"Retry"</button>
+                    </div>
+                }.into_any(),
+                None => view! { <ChartPageSkeleton count=2/> }.into_any(),
             }}
         </ChartPageLayout>
     }

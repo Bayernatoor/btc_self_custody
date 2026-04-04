@@ -68,8 +68,8 @@ pub fn NetworkChartsPage() -> impl IntoView {
 
             // --- Blocks sub-section (default, computes on page load) ---
             <Show when=move || section.get() == "blocks" fallback=|| ()>
-                {move || {
-                    dashboard_data.get().and_then(|r| r.ok()).map(|_| {
+                {move || match dashboard_data.get() {
+                    Some(Ok(_)) => {
                         let size_option = chart_memo!(dashboard_data, range, overlay_flags,
                             |blocks| crate::stats::charts::block_size_chart(blocks),
                             |days| crate::stats::charts::block_size_chart_daily(days)
@@ -141,14 +141,23 @@ pub fn NetworkChartsPage() -> impl IntoView {
                                 <ChartCard title="Chain Size Growth" description="Total blockchain size over time, showing how fast the chain is growing" chart_id="chart-chain-size" option=chain_size_option/>
                             </div>
                         }.into_any()
-                    }).unwrap_or_else(|| view! { <ChartPageSkeleton count=6/> }.into_any())
+                    }
+                    Some(Err(_)) => view! {
+                        <div class="flex flex-col items-center justify-center min-h-[200px] gap-4">
+                            <p class="text-white/50 font-mono text-sm">"Failed to load data"</p>
+                            <button class="px-4 py-2 bg-white/10 hover:bg-white/20 text-white/70 rounded-lg font-mono text-sm cursor-pointer"
+                                on:click=move |_| { dashboard_data.refetch(); }
+                            >"Retry"</button>
+                        </div>
+                    }.into_any(),
+                    None => view! { <ChartPageSkeleton count=6/> }.into_any(),
                 }}
             </Show>
 
             // --- Adoption sub-section (only computed when tab clicked) ---
             <Show when=move || section.get() == "adoption" fallback=|| ()>
-                {move || {
-                    dashboard_data.get().and_then(|r| r.ok()).map(|_| {
+                {move || match dashboard_data.get() {
+                    Some(Ok(_)) => {
                         let segwit_option = chart_memo!(dashboard_data, range, overlay_flags,
                             |blocks| crate::stats::charts::segwit_adoption_chart(blocks),
                             |days| crate::stats::charts::segwit_adoption_chart_daily(days)
@@ -199,14 +208,23 @@ pub fn NetworkChartsPage() -> impl IntoView {
                                 <ChartCard title="Witness Data Share" description="Witness data as percentage of block size. Higher means more SegWit discount savings" chart_id="chart-witness-share" option=witness_share_option/>
                             </div>
                         }.into_any()
-                    }).unwrap_or_else(|| view! { <ChartPageSkeleton count=9/> }.into_any())
+                    }
+                    Some(Err(_)) => view! {
+                        <div class="flex flex-col items-center justify-center min-h-[200px] gap-4">
+                            <p class="text-white/50 font-mono text-sm">"Failed to load data"</p>
+                            <button class="px-4 py-2 bg-white/10 hover:bg-white/20 text-white/70 rounded-lg font-mono text-sm cursor-pointer"
+                                on:click=move |_| { dashboard_data.refetch(); }
+                            >"Retry"</button>
+                        </div>
+                    }.into_any(),
+                    None => view! { <ChartPageSkeleton count=9/> }.into_any(),
                 }}
             </Show>
 
             // --- Transaction Metrics sub-section (only computed when tab clicked) ---
             <Show when=move || section.get() == "tx-metrics" fallback=|| ()>
-                {move || {
-                    dashboard_data.get().and_then(|r| r.ok()).map(|_| {
+                {move || match dashboard_data.get() {
+                    Some(Ok(_)) => {
                         let rbf_option = chart_memo!(dashboard_data, range, overlay_flags,
                             |blocks| crate::stats::charts::rbf_chart(blocks),
                             |days| crate::stats::charts::rbf_chart_daily(days)
@@ -232,7 +250,16 @@ pub fn NetworkChartsPage() -> impl IntoView {
                                 <ChartCard title="Largest Transaction" description=chart_desc(range, "Size of the largest transaction in each block. Large transactions may indicate consolidations or complex scripts", "Largest transaction (per-block ranges only)") chart_id="chart-largest-tx" option=largest_tx_option/>
                             </div>
                         }.into_any()
-                    }).unwrap_or_else(|| view! { <ChartPageSkeleton count=3/> }.into_any())
+                    }
+                    Some(Err(_)) => view! {
+                        <div class="flex flex-col items-center justify-center min-h-[200px] gap-4">
+                            <p class="text-white/50 font-mono text-sm">"Failed to load data"</p>
+                            <button class="px-4 py-2 bg-white/10 hover:bg-white/20 text-white/70 rounded-lg font-mono text-sm cursor-pointer"
+                                on:click=move |_| { dashboard_data.refetch(); }
+                            >"Retry"</button>
+                        </div>
+                    }.into_any(),
+                    None => view! { <ChartPageSkeleton count=3/> }.into_any(),
                 }}
             </Show>
         </ChartPageLayout>
