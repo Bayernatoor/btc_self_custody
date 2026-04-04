@@ -1425,6 +1425,11 @@
                     if (b.fadeStart > 0) return (cutoff - b.fadeStart) < 3;
                     return true; // keep all unconfirmed blips
                 });
+                // If still over cap after removing faded, drop oldest live blips
+                if (seg.blips.length > MAX_BLIPS_PER_SEGMENT) {
+                    seg.blips.sort(function(a, b) { return (b.timestamp || 0) - (a.timestamp || 0); });
+                    seg.blips = seg.blips.slice(0, MAX_BLIPS_PER_SEGMENT);
+                }
             }
         }
     }
@@ -1903,15 +1908,30 @@
 
                 // Deduplicate: skip if this block height is already in the timeline
                 // (SSE block handler + LiveStats poll can both push the same block)
+                // Exception: if existing block was estimated (total_fees=0), replace with real data
                 if (!isReplay && b.height) {
-                    var isDupe = false;
+                    var existingSeg = null;
                     for (var di = _hb.timeline.length - 1; di >= Math.max(0, _hb.timeline.length - 10); di--) {
                         if (_hb.timeline[di].type === 'block' && _hb.timeline[di].height === b.height) {
-                            isDupe = true;
+                            existingSeg = _hb.timeline[di];
                             break;
                         }
                     }
-                    if (isDupe) continue;
+                    if (existingSeg) {
+                        // Replace estimated waveform with real data
+                        if (existingSeg.total_fees === 0 && b.total_fees > 0) {
+                            var replacement = createBlockSegment(b, existingSeg.x_start);
+                            replacement.x_start = existingSeg.x_start;
+                            replacement.x_end = existingSeg.x_end;
+                            existingSeg.points = replacement.points;
+                            existingSeg.color = replacement.color;
+                            existingSeg.tx_count = replacement.tx_count;
+                            existingSeg.total_fees = replacement.total_fees;
+                            existingSeg.weight = replacement.weight;
+                            existingSeg.inter_block_seconds = replacement.inter_block_seconds;
+                        }
+                        continue;
+                    }
                 }
 
                 var interBlock = b.inter_block_seconds || 600;
@@ -1943,11 +1963,11 @@
                         lastSeg.color = _hb._preFlashColor || _hb.currentColor || COLORS.healthy;
                     }
                     // Shatter confirmed blips into particles; carry unconfirmed forward
+                    var survivors = [];
                     if (lastSeg.blips) {
                         var absorbX = _hb.virtualX;
                         var absorbNow = Date.now() / 1000;
                         var uncSet = _hb._unconfirmedSet;
-                        var survivors = [];
                         for (var bi = 0; bi < lastSeg.blips.length; bi++) {
                             var blp = lastSeg.blips[bi];
                             if (blp.fadeStart === 0) {

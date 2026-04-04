@@ -149,7 +149,7 @@ async fn subscribe_transactions(
         // Two detection methods:
         // 1. block_processing flag (set by block subscriber after hashblock)
         // 2. Consecutive failure self-throttle (catches rawtx flood BEFORE hashblock)
-        if block_processing.load(Ordering::Relaxed) {
+        if block_processing.load(Ordering::Acquire) {
             consecutive_fail = 0;
             continue;
         }
@@ -255,13 +255,13 @@ async fn subscribe_blocks(
         tracing::info!("ZMQ: new block {block_hash}");
 
         // Signal tx subscriber to skip RPC lookups (block txs flood rawtx)
-        block_processing.store(true, Ordering::Relaxed);
+        block_processing.store(true, Ordering::Release);
 
         // Get block height and txid list
         let (height, txids) = match get_block_info(state, &block_hash).await {
             Some(info) => info,
             None => {
-                block_processing.store(false, Ordering::Relaxed);
+                block_processing.store(false, Ordering::Release);
                 continue;
             }
         };
@@ -294,13 +294,13 @@ async fn subscribe_blocks(
             height,
             hash: block_hash,
             confirmed_count,
-            unconfirmed_txids: unconfirmed_txids,
+            unconfirmed_txids,
         });
 
         // Resume tx processing after a short delay (let the rawtx flood from
         // the block pass through the ZMQ socket before we start RPC lookups again)
         tokio::time::sleep(Duration::from_secs(3)).await;
-        block_processing.store(false, Ordering::Relaxed);
+        block_processing.store(false, Ordering::Release);
     }
 }
 

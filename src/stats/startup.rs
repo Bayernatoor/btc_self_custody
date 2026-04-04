@@ -125,12 +125,12 @@ pub fn spawn_background_tasks(
             block_url,
         );
 
-        // Prune old mempool txs daily
+        // Prune old mempool txs immediately then daily
         let prune_state = Arc::clone(&state);
         tokio::spawn(async move {
             loop {
-                tokio::time::sleep(std::time::Duration::from_secs(86400)).await;
                 zmq_subscriber::prune_old_txs(&prune_state).await;
+                tokio::time::sleep(std::time::Duration::from_secs(86400)).await;
             }
         });
     } else {
