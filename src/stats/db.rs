@@ -1410,3 +1410,145 @@ pub fn query_unconfirmed_txids(
     let rows = stmt.query_map(params![limit], |row| row.get(0))?;
     rows.collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rusqlite::Connection;
+
+    fn setup_db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        init_schema(&conn).unwrap();
+        conn
+    }
+
+    #[test]
+    fn test_mempool_insert_and_query() {
+        let conn = setup_db();
+        insert_mempool_tx(&conn, "abc123", 500, 200, 1_000_000, 1700000000)
+            .unwrap();
+
+        let txs = query_recent_mempool_txs(&conn, 0, 100).unwrap();
+        assert_eq!(txs.len(), 1);
+        assert_eq!(txs[0].txid, "abc123");
+        assert_eq!(txs[0].fee, 500);
+        assert_eq!(txs[0].vsize, 200);
+        assert_eq!(txs[0].value, 1_000_000);
+        assert_eq!(txs[0].first_seen, 1700000000);
+    }
+
+    #[test]
+    fn test_mempool_insert_duplicate_ignored() {
+        let conn = setup_db();
+        insert_mempool_tx(&conn, "dup_tx", 100, 150, 500_000, 1700000000)
+            .unwrap();
+        insert_mempool_tx(&conn, "dup_tx", 200, 250, 600_000, 1700000001)
+            .unwrap();
+
+        let count: u64 = conn
+            .query_row("SELECT COUNT(*) FROM mempool_txs", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+
+        // Original values preserved (INSERT OR IGNORE)
+        let txs = query_recent_mempool_txs(&conn, 0, 100).unwrap();
+        assert_eq!(txs[0].fee, 100);
+    }
+
+    #[test]
+    fn test_mempool_confirm() {
+        let conn = setup_db();
+        insert_mempool_tx(&conn, "tx1", 100, 150, 500_000, 1700000000)
+            .unwrap();
+        insert_mempool_tx(&conn, "tx2", 200, 250, 600_000, 1700000001)
+            .unwrap();
+        insert_mempool_tx(&conn, "tx3", 300, 350, 700_000, 1700000002)
+            .unwrap();
+
+        let txids = vec!["tx1".to_string(), "tx2".to_string()];
+        let confirmed =
+            confirm_mempool_txs(&conn, &txids, 800_000, 1700001000).unwrap();
+        assert_eq!(confirmed, 2);
+
+        // Verify confirmed_height is set
+        let height: Option<u64> = conn
+            .query_row(
+                "SELECT confirmed_height FROM mempool_txs WHERE txid = 'tx1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(height, Some(800_000));
+    }
+
+    #[test]
+    fn test_mempool_query_unconfirmed_only() {
+        let conn = setup_db();
+        insert_mempool_tx(&conn, "tx1", 100, 150, 500_000, 1700000000)
+            .unwrap();
+        insert_mempool_tx(&conn, "tx2", 200, 250, 600_000, 1700000001)
+            .unwrap();
+        insert_mempool_tx(&conn, "tx3", 300, 350, 700_000, 1700000002)
+            .unwrap();
+
+        // Confirm tx1
+        confirm_mempool_txs(
+            &conn,
+            &["tx1".to_string()],
+            800_000,
+            1700001000,
+        )
+        .unwrap();
+
+        // query_recent_mempool_txs only returns unconfirmed
+        let txs = query_recent_mempool_txs(&conn, 0, 100).unwrap();
+        assert_eq!(txs.len(), 2);
+        let txids: Vec<&str> = txs.iter().map(|t| t.txid.as_str()).collect();
+        assert!(txids.contains(&"tx2"));
+        assert!(txids.contains(&"tx3"));
+        assert!(!txids.contains(&"tx1"));
+    }
+
+    #[test]
+    fn test_mempool_prune() {
+        let conn = setup_db();
+        // Old tx (timestamp 1000)
+        insert_mempool_tx(&conn, "old_tx", 100, 150, 500_000, 1000).unwrap();
+        // Recent tx (timestamp 2000)
+        insert_mempool_tx(&conn, "new_tx", 200, 250, 600_000, 2000).unwrap();
+
+        // Prune anything older than 1500
+        let pruned = prune_mempool_txs(&conn, 1500).unwrap();
+        assert_eq!(pruned, 1);
+
+        let txs = query_recent_mempool_txs(&conn, 0, 100).unwrap();
+        assert_eq!(txs.len(), 1);
+        assert_eq!(txs[0].txid, "new_tx");
+    }
+
+    #[test]
+    fn test_mempool_query_unconfirmed_txids() {
+        let conn = setup_db();
+        insert_mempool_tx(&conn, "tx1", 100, 150, 500_000, 1700000000)
+            .unwrap();
+        insert_mempool_tx(&conn, "tx2", 200, 250, 600_000, 1700000001)
+            .unwrap();
+        insert_mempool_tx(&conn, "tx3", 300, 350, 700_000, 1700000002)
+            .unwrap();
+
+        // Confirm tx2
+        confirm_mempool_txs(
+            &conn,
+            &["tx2".to_string()],
+            800_000,
+            1700001000,
+        )
+        .unwrap();
+
+        let unconfirmed = query_unconfirmed_txids(&conn, 100).unwrap();
+        assert_eq!(unconfirmed.len(), 2);
+        assert!(unconfirmed.contains(&"tx1".to_string()));
+        assert!(unconfirmed.contains(&"tx3".to_string()));
+        assert!(!unconfirmed.contains(&"tx2".to_string()));
+    }
+}

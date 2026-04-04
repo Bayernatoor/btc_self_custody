@@ -506,6 +506,199 @@ fn read_varint(data: &[u8], cursor: &mut usize) -> Option<u64> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Decode hex string to bytes (test helper).
+    fn hex_decode(hex: &str) -> Vec<u8> {
+        (0..hex.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap())
+            .collect()
+    }
+
+    // --- read_varint tests ---
+
+    #[test]
+    fn test_read_varint_single_byte() {
+        let data = [0x05];
+        let mut cursor = 0;
+        assert_eq!(read_varint(&data, &mut cursor), Some(5));
+        assert_eq!(cursor, 1);
+    }
+
+    #[test]
+    fn test_read_varint_fd_prefix() {
+        // 0xFD followed by u16 LE: 0x0100 = 256
+        let data = [0xFD, 0x00, 0x01];
+        let mut cursor = 0;
+        assert_eq!(read_varint(&data, &mut cursor), Some(256));
+        assert_eq!(cursor, 3);
+    }
+
+    #[test]
+    fn test_read_varint_fe_prefix() {
+        // 0xFE followed by u32 LE: 0x00010001 = 65537
+        let data = [0xFE, 0x01, 0x00, 0x01, 0x00];
+        let mut cursor = 0;
+        assert_eq!(read_varint(&data, &mut cursor), Some(65537));
+        assert_eq!(cursor, 5);
+    }
+
+    #[test]
+    fn test_read_varint_ff_prefix() {
+        // 0xFF followed by u64 LE: 0x0000000100000000 = 4294967296
+        let data = [0xFF, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00];
+        let mut cursor = 0;
+        assert_eq!(read_varint(&data, &mut cursor), Some(4294967296));
+        assert_eq!(cursor, 9);
+    }
+
+    #[test]
+    fn test_read_varint_empty_returns_none() {
+        let data: [u8; 0] = [];
+        let mut cursor = 0;
+        assert_eq!(read_varint(&data, &mut cursor), None);
+    }
+
+    #[test]
+    fn test_read_varint_truncated_fd() {
+        // 0xFD but only 1 byte after instead of 2
+        let data = [0xFD, 0x01];
+        let mut cursor = 0;
+        assert_eq!(read_varint(&data, &mut cursor), None);
+    }
+
+    // --- bytes_to_hex tests ---
+
+    #[test]
+    fn test_bytes_to_hex() {
+        assert_eq!(bytes_to_hex(&[0x00, 0xab, 0xff]), "00abff");
+    }
+
+    #[test]
+    fn test_bytes_to_hex_empty() {
+        assert_eq!(bytes_to_hex(&[]), "");
+    }
+
+    // --- bytes_to_hex_reversed tests ---
+
+    #[test]
+    fn test_bytes_to_hex_reversed() {
+        assert_eq!(bytes_to_hex_reversed(&[0x00, 0xab, 0xff]), "ffab00");
+    }
+
+    #[test]
+    fn test_bytes_to_hex_reversed_empty() {
+        assert_eq!(bytes_to_hex_reversed(&[]), "");
+    }
+
+    // --- sha256d_hex tests ---
+
+    #[test]
+    fn test_sha256d_hex_empty() {
+        // SHA256("") = e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+        // SHA256(above) = 5df6e0e2761359d30a8275058e299fcc0381534545f55cf43e41983f5d4c9456
+        // Reversed: 56944c5d3f98413ef45cf54545538103cc9f298e0575820ad3591376e2e0f65d
+        let result = sha256d_hex(&[]);
+        assert_eq!(
+            result,
+            "56944c5d3f98413ef45cf54545538103cc9f298e0575820ad3591376e2e0f65d"
+        );
+    }
+
+    // --- parse_raw_tx tests ---
+
+    #[test]
+    fn test_parse_raw_tx_satoshi_to_finney() {
+        // First Bitcoin transaction: Satoshi -> Hal Finney
+        // txid: f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16
+        let hex = "0100000001c997a5e56e104102fa209c6a852dd90660a20b2d9c352423edce25857fcd3704000000004847304402204e45e16932b8af514961a1d3a1a25fdf3f4f7732e9d624c6c61548ab5fb8cd410220181522ec8eca07de4860a4acdd12909d831cc56cbbac4622082221a8768d1d0901ffffffff0200ca9a3b00000000434104ae1a62fe09c5f51b13905f07f06b99a2f7159b2225f374cd378d71302fa28414e7aab37397f554a7df5f142c21c1b7303b8a0626f1baded5c72a704f7e6cd84cac00286bee0000000043410411db93e1dcdb8a016b49840f8c53bc1eb68a382e97b1482ecad7b148a6909a5cb2e0eaddfb84ccf9744464f82e160bfa9b8b64f9d4c03f999b8643f656b412a3ac00000000";
+        let data = hex_decode(hex);
+
+        let parsed = parse_raw_tx(&data).expect("should parse legacy tx");
+
+        assert_eq!(
+            parsed.txid,
+            "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16"
+        );
+        // Output 0: 10 BTC = 1_000_000_000 sats
+        // Output 1: 40 BTC = 4_000_000_000 sats
+        assert_eq!(parsed.value, 5_000_000_000);
+    }
+
+    #[test]
+    fn test_parse_raw_tx_truncated_returns_none() {
+        // Less than 10 bytes should return None
+        assert!(parse_raw_tx(&[0x01, 0x00, 0x00, 0x00, 0x01]).is_none());
+        assert!(parse_raw_tx(&[]).is_none());
+    }
+
+    #[test]
+    fn test_parse_raw_tx_segwit_detection() {
+        // Construct a minimal segwit tx:
+        // version(4) + marker(0x00) + flag(0x01) + input_count(1) +
+        //   input: prev_txid(32) + prev_vout(4) + scriptSig_len(0) + sequence(4) +
+        // output_count(1) +
+        //   output: value(8) + scriptPubKey_len(1) + scriptPubKey(1) +
+        // witness: 1 item with 1 byte +
+        // locktime(4)
+        let mut tx = Vec::new();
+        // Version
+        tx.extend_from_slice(&1u32.to_le_bytes());
+        // Segwit marker + flag
+        tx.push(0x00);
+        tx.push(0x01);
+        // 1 input
+        tx.push(0x01);
+        // prev txid (32 zeros)
+        tx.extend_from_slice(&[0u8; 32]);
+        // prev vout
+        tx.extend_from_slice(&0u32.to_le_bytes());
+        // scriptSig length = 0
+        tx.push(0x00);
+        // sequence
+        tx.extend_from_slice(&0xFFFFFFFFu32.to_le_bytes());
+        // 1 output
+        tx.push(0x01);
+        // value: 50000 sats
+        tx.extend_from_slice(&50000u64.to_le_bytes());
+        // scriptPubKey: OP_TRUE (1 byte)
+        tx.push(0x01);
+        tx.push(0x51);
+        // Witness for input 0: 1 item
+        tx.push(0x01);
+        // Item: 1 byte (0xAA)
+        tx.push(0x01);
+        tx.push(0xAA);
+        // Locktime
+        tx.extend_from_slice(&0u32.to_le_bytes());
+
+        let parsed = parse_raw_tx(&tx).expect("should parse segwit tx");
+        assert_eq!(parsed.value, 50000);
+        // txid should be a 64-char hex string
+        assert_eq!(parsed.txid.len(), 64);
+    }
+
+    // --- read_u32_le / read_u64_le boundary tests ---
+
+    #[test]
+    fn test_read_u32_le_insufficient_data() {
+        let data = [0x01, 0x02, 0x03];
+        let mut cursor = 0;
+        assert_eq!(read_u32_le(&data, &mut cursor), None);
+    }
+
+    #[test]
+    fn test_read_u64_le_value() {
+        let data = 42u64.to_le_bytes();
+        let mut cursor = 0;
+        assert_eq!(read_u64_le(&data, &mut cursor), Some(42));
+        assert_eq!(cursor, 8);
+    }
+}
+
 /// Prune old mempool transactions (runs periodically).
 pub async fn prune_old_txs(state: &Arc<StatsState>) {
     let seven_days_ago = std::time::SystemTime::now()
