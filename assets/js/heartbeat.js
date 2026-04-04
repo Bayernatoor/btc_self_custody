@@ -378,13 +378,13 @@
                         // Color based on fee rate
                         var color;
                         if (feeRate < medianFee * 0.8) {
-                            color = 'rgba(66, 165, 245, ';
+                            color = 'rgba(33, 150, 243, ';
                         } else if (feeRate < medianFee * 1.5) {
                             color = 'rgba(0, 230, 118, ';
                         } else if (feeRate < medianFee * 4) {
-                            color = 'rgba(247, 147, 26, ';
+                            color = 'rgba(255, 152, 0, ';
                         } else {
-                            color = 'rgba(255, 87, 34, ';
+                            color = 'rgba(244, 67, 54, ';
                         }
 
                         var brickH = 3 + feeNorm * 14 + Math.random() * 3;
@@ -408,7 +408,7 @@
                             brickW: 4,
                             stackY: stackY,
                             color: color,
-                            opacity: 0.65 + feeNorm * 0.3,
+                            opacity: 0.75 + feeNorm * 0.2,
                             txCount: 1,
                             txid: tx.txid || null,
                             feeRate: Math.round(feeRate * 10) / 10,
@@ -622,13 +622,13 @@
             // Color based on fee rate relative to median
             var color;
             if (feeRate < medianFee * 0.8) {
-                color = 'rgba(66, 165, 245, ';
+                color = 'rgba(33, 150, 243, ';
             } else if (feeRate < medianFee * 1.5) {
                 color = 'rgba(0, 230, 118, ';
             } else if (feeRate < medianFee * 4) {
-                color = 'rgba(247, 147, 26, ';
+                color = 'rgba(255, 152, 0, ';
             } else {
-                color = 'rgba(255, 87, 34, ';
+                color = 'rgba(244, 67, 54, ';
             }
 
             // Brick size based on vsize
@@ -654,7 +654,7 @@
                 brickW: brickW,
                 stackY: stackY,
                 color: color,
-                opacity: 0.65 + feeNorm * 0.3,
+                opacity: 0.75 + feeNorm * 0.2,
                 txCount: 1,
                 txid: tx.txid || null,
                 feeRate: Math.round(feeRate * 10) / 10,
@@ -674,7 +674,7 @@
             }
             avgFee /= remaining;
             var aggFeeNorm = Math.min(Math.log2(avgFee + 1) / 6, 1.0);
-            var aggColor = avgFee < medianFee ? 'rgba(0, 230, 118, ' : 'rgba(247, 147, 26, ';
+            var aggColor = avgFee < medianFee ? 'rgba(0, 230, 118, ' : 'rgba(255, 152, 0, ';
             var aggX = _hb.virtualX - Math.random() * 10;
             var aggGridX = Math.round(aggX / 5) * 5;
             var aggStackY = 0;
@@ -729,13 +729,13 @@
             // This ensures color variety even when fees are uniformly low
             var color;
             if (feeRate < medianFeeRate * 0.8) {
-                color = 'rgba(66, 165, 245, '; // blue (below median)
+                color = 'rgba(33, 150, 243, '; // blue (below median)
             } else if (feeRate < medianFeeRate * 1.5) {
                 color = 'rgba(0, 230, 118, ';   // green (around median)
             } else if (feeRate < medianFeeRate * 4) {
-                color = 'rgba(247, 147, 26, ';  // orange (above median)
+                color = 'rgba(255, 152, 0, ';  // orange (above median)
             } else {
-                color = 'rgba(255, 87, 34, ';   // red (outlier/urgent)
+                color = 'rgba(244, 67, 54, ';   // red (outlier/urgent)
             }
 
             // Brick dimensions - consistent width for clean stacking
@@ -1197,14 +1197,24 @@
             ctx.globalAlpha = annAlpha;
 
             // Block number
-            ctx.font = 'bold 18px monospace';
+            ctx.font = 'bold 22px monospace';
             ctx.fillStyle = ann.color;
-            ctx.fillText(ann.title, w / 2, 50);
+            ctx.fillText(ann.title, w / 2, 46);
+
+            // Subtle horizontal accent lines
+            ctx.strokeStyle = ann.color;
+            ctx.lineWidth = 1;
+            ctx.globalAlpha = annAlpha * 0.3;
+            ctx.beginPath();
+            ctx.moveTo(w / 2 - 80, 52);
+            ctx.lineTo(w / 2 + 80, 52);
+            ctx.stroke();
+            ctx.globalAlpha = annAlpha;
 
             // Fee + tx count subtitle
-            ctx.font = '13px monospace';
+            ctx.font = '14px monospace';
             ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-            ctx.fillText(ann.subtitle, w / 2, 72);
+            ctx.fillText(ann.subtitle, w / 2, 70);
 
             ctx.globalAlpha = 1;
             ctx.textAlign = 'left';
@@ -1218,11 +1228,29 @@
             var dotX = virtualToCanvas(_hb.virtualX);
             if (dotX >= 0 && dotX <= w) {
                 var dotPulse = 0.5 + 0.5 * Math.sin(now * 3);
+                // Outer glow ring
                 ctx.beginPath();
-                ctx.arc(dotX, baseline, 3, 0, Math.PI * 2);
+                ctx.arc(dotX, baseline, 8, 0, Math.PI * 2);
                 ctx.fillStyle = liveColor;
-                ctx.globalAlpha = 0.4 + dotPulse * 0.4;
+                ctx.globalAlpha = 0.1 + dotPulse * 0.15;
                 ctx.fill();
+                // Middle ring
+                ctx.beginPath();
+                ctx.arc(dotX, baseline, 5, 0, Math.PI * 2);
+                ctx.globalAlpha = 0.2 + dotPulse * 0.2;
+                ctx.fill();
+                // Inner dot
+                ctx.beginPath();
+                ctx.arc(dotX, baseline, 2.5, 0, Math.PI * 2);
+                ctx.globalAlpha = 0.6 + dotPulse * 0.4;
+                ctx.fill();
+                // Trailing afterglow on the flatline
+                var grad = ctx.createLinearGradient(dotX - 40, 0, dotX, 0);
+                grad.addColorStop(0, 'rgba(0,0,0,0)');
+                grad.addColorStop(1, liveColor);
+                ctx.globalAlpha = 0.15 + dotPulse * 0.1;
+                ctx.fillStyle = grad;
+                ctx.fillRect(dotX - 40, baseline - 1, 40, 2);
                 ctx.globalAlpha = 1;
             }
         }
@@ -1239,13 +1267,13 @@
         ctx.beginPath();
         ctx.strokeStyle = color;
         ctx.lineWidth = 2;
-        ctx.shadowBlur = 10;
+        ctx.shadowBlur = 14;
         ctx.shadowColor = color;
 
         var isHovered = (_hb.hoveredBlock === seg);
         if (isHovered) {
             ctx.lineWidth = 3;
-            ctx.shadowBlur = 18;
+            ctx.shadowBlur = 24;
         }
 
         for (var i = 0; i < pts.length; i++) {
@@ -1283,6 +1311,14 @@
         ctx.shadowColor = color;
         ctx.stroke();
         ctx.shadowBlur = 0;
+
+        // Subtle floor glow below baseline
+        ctx.globalAlpha = 0.06;
+        ctx.fillStyle = color;
+        ctx.fillRect(cx1, baseline + 1, cx2 - cx1, 8);
+        ctx.globalAlpha = 0.03;
+        ctx.fillRect(cx1, baseline + 9, cx2 - cx1, 6);
+        ctx.globalAlpha = 1;
 
         // Draw blips
         if (seg.blips && seg.blips.length > 0) {
