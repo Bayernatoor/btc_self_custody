@@ -422,7 +422,10 @@
                             fadeStart: 0,
                             bobPhase: Math.random() * Math.PI * 2,
                             bobSpeed: 1.2 + feeNorm * 0.8,
-                            lane: Math.floor(Math.random() * 5) - 2
+                            lane: Math.floor(Math.random() * 5) - 2,
+                            notchHeight: 1 + feeNorm * 12,
+                            notchWidth: 2 + Math.min(Math.log2((tx.vsize || 200) / 100 + 1) * 2, 8),
+                            notchDown: Math.random() < 0.25
                         });
                         placed++;
                     }
@@ -671,7 +674,10 @@
                 fadeStart: 0,
                 bobPhase: Math.random() * Math.PI * 2,
                 bobSpeed: 1.2 + feeNorm * 0.8,
-                lane: Math.floor(Math.random() * 5) - 2
+                lane: Math.floor(Math.random() * 5) - 2,
+                notchHeight: 1 + feeNorm * 12,
+                notchWidth: 2 + Math.min(Math.log2((tx.vsize || 200) / 100 + 1) * 2, 8),
+                notchDown: Math.random() < 0.25
             });
         }
 
@@ -703,7 +709,10 @@
                 timestamp: Date.now() / 1000, fadeStart: 0,
                 bobPhase: Math.random() * Math.PI * 2,
                 bobSpeed: 1.2 + aggFeeNorm * 0.8,
-                lane: Math.floor(Math.random() * 5) - 2
+                lane: Math.floor(Math.random() * 5) - 2,
+                notchHeight: 1 + aggFeeNorm * 12,
+                notchWidth: 4,
+                notchDown: Math.random() < 0.25
             });
         }
     }
@@ -784,7 +793,10 @@
                 fadeStart: 0,
                 bobPhase: Math.random() * Math.PI * 2,
                 bobSpeed: 1.2 + feeNorm * 0.8,
-                lane: Math.floor(Math.random() * 5) - 2
+                lane: Math.floor(Math.random() * 5) - 2,
+                notchHeight: 1 + feeNorm * 12,
+                notchWidth: 2 + Math.min(Math.log2(200 / 100 + 1) * 2, 8),
+                notchDown: Math.random() < 0.25
             });
         }
     }
@@ -984,7 +996,9 @@
                 label = _hb.paused ? '\u25B6' : '\u23F8';
             }
             if (def.id === 'mode') {
-                label = _hb.renderMode === 'bloodstream' ? '\u2B24' : '\u25A0'; // circle or square
+                label = _hb.renderMode === 'bricks' ? '\u25A0'      // square
+                      : _hb.renderMode === 'bloodstream' ? '\u2B24'  // circle
+                      : '\u2248';                                     // wave symbol
             }
 
             ctx.fillStyle = 'rgba(255,255,255,' + bgAlpha + ')';
@@ -1064,7 +1078,9 @@
                 _hb.viewOffset = _hb.virtualX - (_hb.width * HEAD_POSITION_FRAC) / _hb.zoom;
                 break;
             case 'mode':
-                _hb.renderMode = _hb.renderMode === 'bloodstream' ? 'bricks' : 'bloodstream';
+                _hb.renderMode = _hb.renderMode === 'bricks' ? 'bloodstream'
+                               : _hb.renderMode === 'bloodstream' ? 'line'
+                               : 'bricks';
                 break;
             case 'live':
                 // Jump to live: snap to head, reset zoom, enable auto-follow
@@ -1325,15 +1341,100 @@
         var cx2 = virtualToCanvas(drawEnd);
         var y = baseline + (isLive ? jitter : 0);
 
-        ctx.beginPath();
-        ctx.moveTo(cx1, y);
-        ctx.lineTo(cx2, y);
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 2;
-        ctx.shadowBlur = 8;
-        ctx.shadowColor = color;
-        ctx.stroke();
-        ctx.shadowBlur = 0;
+        if (_hb.renderMode === 'line' && seg.blips && seg.blips.length > 0) {
+            // Living Line: draw flatline as a path incorporating tx notches
+            var blips = [];
+            for (var lbi = 0; lbi < seg.blips.length; lbi++) {
+                if (seg.blips[lbi].fadeStart === 0) blips.push(seg.blips[lbi]);
+            }
+            blips.sort(function(a, b) { return a.x - b.x; });
+
+            var zoom = _hb.zoom;
+            var segStart = Math.max(seg.x_start, viewLeft);
+            var segEnd2 = Math.min(segEnd, viewRight);
+
+            ctx.beginPath();
+            ctx.moveTo(virtualToCanvas(segStart), y);
+
+            for (var bi = 0; bi < blips.length; bi++) {
+                var blip = blips[bi];
+                if (blip.x < segStart || blip.x > segEnd2) continue;
+
+                var nw = (blip.notchWidth || 3) * zoom;
+                var nh = (blip.notchHeight || 3) * zoom * 0.5;
+                nh = Math.min(nh, 40);
+                var ncx = virtualToCanvas(blip.x);
+                var dir = blip.notchDown ? 1 : -1;
+
+                // Flat line up to notch start
+                ctx.lineTo(ncx - nw / 2, y);
+
+                // Gaussian bump (8 steps for smooth curve)
+                var steps = 8;
+                for (var nsi = 0; nsi <= steps; nsi++) {
+                    var t = (nsi / steps) * 2 - 1;
+                    var gauss = Math.exp(-t * t * 2.5);
+                    ctx.lineTo(
+                        ncx - nw / 2 + (nsi / steps) * nw,
+                        y - dir * nh * gauss
+                    );
+                }
+            }
+
+            // Flat line to end
+            ctx.lineTo(virtualToCanvas(segEnd2), y);
+
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.shadowBlur = 8;
+            ctx.shadowColor = color;
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            // Highlight hovered notch in line mode
+            if (_hb.hoveredBlip) {
+                var hb = _hb.hoveredBlip;
+                // Check if hovered blip belongs to this segment
+                var hbInSeg = false;
+                for (var hci = 0; hci < seg.blips.length; hci++) {
+                    if (seg.blips[hci] === hb) { hbInSeg = true; break; }
+                }
+                if (hbInSeg) {
+                    var hbx = virtualToCanvas(hb.x);
+                    var hnw = (hb.notchWidth || 3) * zoom;
+                    var hnh = (hb.notchHeight || 3) * zoom * 0.5;
+                    hnh = Math.min(hnh, 40);
+                    var hdir = hb.notchDown ? 1 : -1;
+
+                    ctx.beginPath();
+                    var hsteps = 12;
+                    for (var hsi = 0; hsi <= hsteps; hsi++) {
+                        var ht = (hsi / hsteps) * 2 - 1;
+                        var hgauss = Math.exp(-ht * ht * 2.5);
+                        var hpx = hbx - hnw / 2 + (hsi / hsteps) * hnw;
+                        var hpy = y - hdir * hnh * hgauss;
+                        if (hsi === 0) ctx.moveTo(hpx, hpy);
+                        else ctx.lineTo(hpx, hpy);
+                    }
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+                    ctx.lineWidth = 3;
+                    ctx.shadowBlur = 12;
+                    ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
+                    ctx.stroke();
+                    ctx.shadowBlur = 0;
+                }
+            }
+        } else {
+            ctx.beginPath();
+            ctx.moveTo(cx1, y);
+            ctx.lineTo(cx2, y);
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.shadowBlur = 8;
+            ctx.shadowColor = color;
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+        }
 
         // Subtle floor glow below baseline
         ctx.globalAlpha = 0.06;
@@ -1452,6 +1553,8 @@
                 }
 
                 // Draw normal blip as a stacked brick
+                // In line mode, blips are drawn as notches in the flatline path
+                if (!isAbsorbing && _hb.renderMode === 'line') continue;
                 if (!isAbsorbing) {
                     var bx = virtualToCanvas(blip.gridX || blipX);
                     var blipColor = blip.color || 'rgba(0, 230, 118, ';
