@@ -342,16 +342,11 @@
                     var liveSeg = _hb.timeline[_hb.timeline.length - 1];
                     if (!liveSeg || liveSeg.type !== 'flatline' || liveSeg.x_end !== null) return;
 
-                    // Find earliest POST-BLOCK tx as baseline (skip carry-forward survivors
-                    // which have first_seen before the block and would skew the baseline)
-                    var earliestPostBlock = Infinity;
-                    for (var ei = 0; ei < txs.length; ei++) {
-                        if (txs[ei].first_seen && txs[ei].first_seen > lastBlockTs && txs[ei].first_seen < earliestPostBlock) {
-                            earliestPostBlock = txs[ei].first_seen;
-                        }
-                    }
-                    // Baseline: earliest post-block tx minus small buffer
-                    var effectiveBlockTs = earliestPostBlock < Infinity ? earliestPostBlock - 2 : lastBlockTs;
+                    // Use the same time anchor as the flatline fast-forward (_hb.lastBlockTime)
+                    // so brick positions align with the flatline's virtual X coordinates.
+                    // The fast-forward does: virtualX += (now - lastBlockTime) * PX_PER_SEC
+                    // So brick position = liveSeg.x_start + (tx.first_seen - lastBlockTime) * PX_PER_SEC
+                    var effectiveBlockTs = _hb.lastBlockTime || lastBlockTs;
 
                     // Compute median fee from history txs so colors match live bricks
                     var historyRates = [];
