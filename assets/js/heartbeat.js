@@ -1741,18 +1741,44 @@
         ctx.fillRect(cx1, baseline + 9, cx2 - cx1, 6);
         ctx.globalAlpha = 1;
 
-        // Vessel walls in bloodstream mode
+        // Vessel walls + atmosphere in bloodstream mode
         if (_hb.renderMode === 'bloodstream') {
-            ctx.globalAlpha = 0.04;
-            ctx.strokeStyle = 'rgba(255, 180, 180, 0.15)';
+            // Count visible cells for density-based effects
+            var cellCount = 0;
+            if (seg.blips) {
+                for (var vci = 0; vci < seg.blips.length; vci++) {
+                    var vcb = seg.blips[vci];
+                    if (vcb.fadeStart === 0 && vcb.x >= viewLeft && vcb.x <= viewRight) cellCount++;
+                }
+            }
+
+            // Red underglow inside the vessel (intensity scales with cell density)
+            var underglowAlpha = 0.02 + Math.min(cellCount / 500, 0.06);
+            if (isLive) {
+                // Breathing pulse for live vessel
+                underglowAlpha *= 0.8 + 0.2 * Math.sin(nowSec * 1.2);
+            }
+            var grad = ctx.createLinearGradient(0, baseline - 20, 0, baseline + 20);
+            grad.addColorStop(0, 'rgba(220, 50, 70, 0)');
+            grad.addColorStop(0.3, 'rgba(220, 50, 70, ' + underglowAlpha + ')');
+            grad.addColorStop(0.5, 'rgba(220, 50, 70, ' + (underglowAlpha * 1.5) + ')');
+            grad.addColorStop(0.7, 'rgba(220, 50, 70, ' + underglowAlpha + ')');
+            grad.addColorStop(1, 'rgba(220, 50, 70, 0)');
+            ctx.fillStyle = grad;
+            ctx.fillRect(cx1, baseline - 20, cx2 - cx1, 40);
+
+            // Vessel walls — subtle pink lines at ±20px
+            var wallAlpha = 0.03 + Math.min(cellCount / 800, 0.04);
+            ctx.globalAlpha = wallAlpha;
+            ctx.strokeStyle = 'rgba(255, 200, 200, 0.3)';
             ctx.lineWidth = 0.5;
             ctx.beginPath();
-            ctx.moveTo(cx1, baseline - 18);
-            ctx.lineTo(cx2, baseline - 18);
+            ctx.moveTo(cx1, baseline - 20);
+            ctx.lineTo(cx2, baseline - 20);
             ctx.stroke();
             ctx.beginPath();
-            ctx.moveTo(cx1, baseline + 18);
-            ctx.lineTo(cx2, baseline + 18);
+            ctx.moveTo(cx1, baseline + 20);
+            ctx.lineTo(cx2, baseline + 20);
             ctx.stroke();
             ctx.globalAlpha = 1;
         }
@@ -1773,6 +1799,68 @@
 
                 // In line mode, absorption is drawn as sliding notches in drawFlatlineSegment
                 if (_hb.renderMode === 'line' && blip.fadeStart > 0) continue;
+
+                // Bloodstream mode: cells flow toward the waveform with deformation
+                if (_hb.renderMode === 'bloodstream' && blip.fadeStart > 0) {
+                    var bsFadeDt = nowSec - blip.fadeStart;
+                    var bsDist = Math.abs(blip.absorbTargetX - blip.absorbOriginX);
+                    var bsDuration = Math.max(1.5, Math.min(bsDist / 40, 4.0));
+                    var bsT = Math.min(bsFadeDt / bsDuration, 1.0);
+                    if (bsT >= 1.0) continue;
+
+                    // Cubic ease-in: slow start, accelerating rush
+                    var bsEase = bsT * bsT * bsT;
+
+                    // Position: slide from origin toward target
+                    var bsVX = blip.absorbOriginX + (blip.absorbTargetX - blip.absorbOriginX) * bsEase;
+                    var bsCX = virtualToCanvas(bsVX);
+
+                    // Cell sizing
+                    var bsCellR = 2 + (blip.vsize ? Math.min(Math.log2(blip.vsize / 100 + 1) * 2.5, 8) : 3);
+                    bsCellR *= Math.max(zoom * 0.5, 0.8);
+
+                    // Bobbing dampens as cell accelerates
+                    var bsBobPhase = blip.bobPhase || 0;
+                    var bsBobSpeed = blip.bobSpeed || 1.5;
+                    var bsBobAmp = (2 + bsCellR * 0.4) * (1 - bsEase);
+                    var bsLane = (blip.lane || 0) * 6 * (1 - bsEase); // lanes converge to center
+                    var bsBobY = Math.sin(nowSec * bsBobSpeed + bsBobPhase) * bsBobAmp + bsLane;
+
+                    // Deformation: stretch horizontally as cell accelerates
+                    var bsStretchX = 1 + bsEase * 0.6;
+                    var bsStretchY = 1 - bsEase * 0.25;
+
+                    // Color: brighten toward white (oxygenation metaphor)
+                    var bsFeeRatio = (blip.feeRate || 1) / (_hb._wsMedianFee || 5);
+                    var bsBaseColor;
+                    if (bsFeeRatio < 0.5) bsBaseColor = [139, 34, 82];
+                    else if (bsFeeRatio < 1.0) bsBaseColor = [220, 53, 69];
+                    else if (bsFeeRatio < 2.0) bsBaseColor = [255, 71, 87];
+                    else if (bsFeeRatio < 4.0) bsBaseColor = [255, 107, 129];
+                    else bsBaseColor = [255, 224, 230];
+                    var bsBright = Math.min(bsEase * 1.8, 1.0);
+                    var bsR = Math.round(lerp(bsBaseColor[0], 255, bsBright));
+                    var bsG = Math.round(lerp(bsBaseColor[1], 255, bsBright));
+                    var bsB = Math.round(lerp(bsBaseColor[2], 255, bsBright));
+
+                    // Opacity: bright until last 25%
+                    var bsAlpha = bsT < 0.75 ? blip.opacity : blip.opacity * (1 - (bsT - 0.75) / 0.25);
+                    bsAlpha = Math.max(0, bsAlpha);
+
+                    // Draw deformed cell (ellipse)
+                    ctx.save();
+                    ctx.translate(bsCX, baseline - bsBobY);
+                    ctx.scale(bsStretchX, bsStretchY);
+                    ctx.beginPath();
+                    ctx.arc(0, 0, bsCellR, 0, Math.PI * 2);
+                    ctx.fillStyle = 'rgba(' + bsR + ',' + bsG + ',' + bsB + ',' + bsAlpha + ')';
+                    ctx.shadowBlur = 4 + bsEase * 14;
+                    ctx.shadowColor = 'rgba(' + bsR + ',' + bsG + ',' + bsB + ',' + (bsAlpha * 0.5) + ')';
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                    ctx.restore();
+                    continue;
+                }
 
                 // Particle absorption: blip shatters into fragments sucked into the spike
                 if (blip.fadeStart > 0 && blip.particles && blip.particles.length > 0) {
@@ -1871,66 +1959,106 @@
                     bOpacity *= fadeIn;
 
                     if (_hb.renderMode === 'bloodstream') {
-                        // Blood cell rendering
-                        var cellRadius = 2 + (blip.vsize ? Math.min(Math.log2(blip.vsize / 100 + 1) * 2.5, 8) : 3);
-                        cellRadius *= Math.max(zoom * 0.5, 0.8); // scale with zoom but not linearly
+                        // ═══ Blood cell rendering ═══
+                        // Size tiers from design doc
+                        var vs = blip.vsize || 200;
+                        var baseR;
+                        if (vs < 200)       baseR = 2.0;  // platelet
+                        else if (vs < 400)  baseR = 3.0;  // red blood cell
+                        else if (vs < 800)  baseR = 4.5;  // larger cell
+                        else if (vs < 2000) baseR = 6.0;  // white blood cell
+                        else                baseR = 8.0;  // macrophage
+                        var cellRadius = baseR * Math.max(zoom * 0.5, 0.8);
 
-                        // Bobbing Y offset
+                        // Bobbing Y offset — organic floating in fluid
                         var bobPhase = blip.bobPhase || 0;
                         var bobSpeed = blip.bobSpeed || 1.5;
                         var bobAmp = 2 + cellRadius * 0.4;
-                        var cellLane = (blip.lane || 0) * 6; // ±12px from baseline
+                        var cellLane = (blip.lane || 0) * 6;
                         var bobY = Math.sin(nowSec * bobSpeed + bobPhase) * bobAmp + cellLane;
+                        var cellCX = bx;
+                        var cellCY = baseline - bobY;
 
-                        // Cell color based on fee rate (warm palette)
-                        var cellColor;
+                        // Cell color based on fee rate (warm circulatory palette)
                         var medianFee = _hb._wsMedianFee || 5;
                         var feeRatio = (blip.feeRate || 1) / medianFee;
-                        if (feeRatio < 0.5) {
-                            cellColor = 'rgba(139, 34, 82, '; // deep maroon
-                        } else if (feeRatio < 1.0) {
-                            cellColor = 'rgba(220, 53, 69, '; // crimson
-                        } else if (feeRatio < 2.0) {
-                            cellColor = 'rgba(255, 71, 87, '; // bright red
-                        } else if (feeRatio < 4.0) {
-                            cellColor = 'rgba(255, 107, 129, '; // pink
-                        } else {
-                            cellColor = 'rgba(255, 224, 230, '; // pale/white
-                        }
+                        var cellRGB;
+                        if (feeRatio < 0.5)      cellRGB = [139, 34, 82];   // deep maroon
+                        else if (feeRatio < 1.0)  cellRGB = [220, 53, 69];   // crimson
+                        else if (feeRatio < 2.0)  cellRGB = [255, 71, 87];   // bright red
+                        else if (feeRatio < 4.0)  cellRGB = [255, 107, 129]; // pink
+                        else                      cellRGB = [255, 224, 230]; // pale/white
 
                         var cellOpacity = bOpacity * fadeIn;
+                        var cellColorStr = 'rgba(' + cellRGB[0] + ',' + cellRGB[1] + ',' + cellRGB[2] + ',';
 
-                        // Draw cell
-                        ctx.beginPath();
-                        ctx.arc(bx, baseline - bobY, cellRadius, 0, Math.PI * 2);
-                        ctx.fillStyle = cellColor + cellOpacity + ')';
-                        ctx.fill();
-
-                        // Subtle glow for high-fee cells
-                        if (feeRatio > 2.0) {
-                            ctx.shadowBlur = 6 + feeRatio * 2;
-                            ctx.shadowColor = cellColor + (cellOpacity * 0.4) + ')';
+                        // Draw cell body
+                        if (zoom > 6 && cellRadius > 5) {
+                            // High zoom: radial gradient fill (lighter center = oxygenated core)
+                            var cGrad = ctx.createRadialGradient(
+                                cellCX - cellRadius * 0.2, cellCY - cellRadius * 0.2, cellRadius * 0.1,
+                                cellCX, cellCY, cellRadius
+                            );
+                            var coreR = Math.min(cellRGB[0] + 50, 255);
+                            var coreG = Math.min(cellRGB[1] + 40, 255);
+                            var coreB = Math.min(cellRGB[2] + 30, 255);
+                            cGrad.addColorStop(0, 'rgba(' + coreR + ',' + coreG + ',' + coreB + ',' + cellOpacity + ')');
+                            cGrad.addColorStop(0.7, cellColorStr + cellOpacity + ')');
+                            cGrad.addColorStop(1, cellColorStr + (cellOpacity * 0.7) + ')');
                             ctx.beginPath();
-                            ctx.arc(bx, baseline - bobY, cellRadius, 0, Math.PI * 2);
+                            ctx.arc(cellCX, cellCY, cellRadius, 0, Math.PI * 2);
+                            ctx.fillStyle = cGrad;
+                            ctx.fill();
+                        } else {
+                            // Low zoom: simple filled circle
+                            ctx.beginPath();
+                            ctx.arc(cellCX, cellCY, cellRadius, 0, Math.PI * 2);
+                            ctx.fillStyle = cellColorStr + cellOpacity + ')';
+                            ctx.fill();
+                        }
+
+                        // Glow for high-fee cells (white blood cells / platelets)
+                        if (feeRatio > 2.0) {
+                            ctx.shadowBlur = 4 + Math.min(feeRatio, 8) * 2;
+                            ctx.shadowColor = cellColorStr + (cellOpacity * 0.4) + ')';
+                            ctx.beginPath();
+                            ctx.arc(cellCX, cellCY, cellRadius, 0, Math.PI * 2);
                             ctx.fill();
                             ctx.shadowBlur = 0;
                         }
 
-                        // Cell membrane at zoom > 4
+                        // Cell membrane ring at zoom > 4
                         if (zoom > 4 && cellRadius > 4) {
-                            ctx.strokeStyle = cellColor + (cellOpacity * 0.4) + ')';
-                            ctx.lineWidth = 0.5;
+                            ctx.strokeStyle = cellColorStr + (cellOpacity * 0.35) + ')';
+                            ctx.lineWidth = zoom > 10 ? 1.5 : 0.8;
                             ctx.beginPath();
-                            ctx.arc(bx, baseline - bobY, cellRadius, 0, Math.PI * 2);
+                            ctx.arc(cellCX, cellCY, cellRadius, 0, Math.PI * 2);
                             ctx.stroke();
                         }
 
-                        // Nucleus hint at zoom > 6
-                        if (zoom > 6 && cellRadius > 6) {
+                        // Nucleus at zoom > 6 — offset from center for realism
+                        if (zoom > 6 && cellRadius > 5) {
                             ctx.beginPath();
-                            ctx.arc(bx, baseline - bobY, cellRadius * 0.3, 0, Math.PI * 2);
-                            ctx.fillStyle = cellColor + (cellOpacity * 0.6) + ')';
+                            ctx.arc(
+                                cellCX + cellRadius * 0.1,
+                                cellCY - cellRadius * 0.05,
+                                cellRadius * 0.28,
+                                0, Math.PI * 2
+                            );
+                            var nucR = Math.min(cellRGB[0] + 30, 255);
+                            var nucG = Math.min(cellRGB[1] + 20, 255);
+                            var nucB = Math.min(cellRGB[2] + 15, 255);
+                            ctx.fillStyle = 'rgba(' + nucR + ',' + nucG + ',' + nucB + ',' + (cellOpacity * 0.5) + ')';
                             ctx.fill();
+                        }
+
+                        // Fee rate text inside large cells at very high zoom
+                        if (zoom > 12 && cellRadius > 12 && blip.feeRate) {
+                            ctx.font = Math.round(cellRadius * 0.55) + 'px monospace';
+                            ctx.textAlign = 'center';
+                            ctx.textBaseline = 'middle';
+                            ctx.fillStyle = 'rgba(255, 255, 255, ' + (cellOpacity * 0.8) + ')';
+                            ctx.fillText(blip.feeRate.toFixed(1), cellCX, cellCY);
                         }
                     } else {
                         // Brick rendering (original)
