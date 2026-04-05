@@ -346,6 +346,86 @@
         return null;
     }
 
+    // Place SSE history txs on the live flatline
+    function placeHistoryTxs(txs, lastBlockTs) {
+        if (!_hb) return;
+        var liveSeg = _hb.timeline[_hb.timeline.length - 1];
+        if (!liveSeg || liveSeg.type !== 'flatline' || liveSeg.x_end !== null) return;
+
+        var effectiveBlockTs = _hb.lastBlockTime || lastBlockTs;
+
+        // Compute median fee from history txs so colors match live bricks
+        var historyRates = [];
+        for (var hi = 0; hi < txs.length; hi++) {
+            if (txs[hi].fee && txs[hi].vsize) {
+                historyRates.push(txs[hi].fee / txs[hi].vsize);
+            }
+        }
+        if (historyRates.length >= 20) {
+            historyRates.sort(function(a, b) { return a - b; });
+            _hb._wsMedianFee = Math.max(1, historyRates[Math.floor(historyRates.length / 2)]);
+        }
+        var medianFee = _hb._wsMedianFee || 5;
+        var placed = 0;
+        var maxBricks = 2000;
+
+        var flatlineSpan = _hb.virtualX - liveSeg.x_start;
+        var stackMap = {};
+
+        for (var i = 0; i < txs.length && placed < maxBricks; i++) {
+            var tx = txs[i];
+            if (!tx.first_seen || !tx.fee || !tx.vsize) continue;
+
+            var secAfterBlock = tx.first_seen - effectiveBlockTs;
+            var txVX;
+            if (secAfterBlock >= 0) {
+                txVX = liveSeg.x_start + secAfterBlock * FLATLINE_PX_PER_SEC;
+            } else {
+                // Pre-block survivor: spread across the flatline
+                txVX = liveSeg.x_start + Math.random() * flatlineSpan * 0.95;
+            }
+            if (txVX > _hb.virtualX) txVX = _hb.virtualX - Math.random() * 5;
+
+            var feeRate = tx.fee / tx.vsize;
+            var feeNorm = Math.min(Math.log2(feeRate + 1) / 6, 1.0);
+            var _hnp = computeNotchProps(feeRate, tx.vsize, medianFee);
+
+            var color;
+            if (feeRate < medianFee * 0.8) {
+                color = 'rgba(33, 150, 243, ';
+            } else if (feeRate < medianFee * 1.5) {
+                color = 'rgba(0, 230, 118, ';
+            } else if (feeRate < medianFee * 4) {
+                color = 'rgba(255, 152, 0, ';
+            } else {
+                color = 'rgba(244, 67, 54, ';
+            }
+
+            var brickH = 3 + feeNorm * 14 + Math.random() * 3;
+            var gridX = Math.round(txVX / 5) * 5;
+            var stackY = stackMap[gridX] || 0;
+            if (stackY > 150) continue;
+            stackMap[gridX] = stackY + brickH;
+
+            liveSeg.blips.push({
+                x: txVX, gridX: gridX,
+                height: brickH + stackY, brickH: brickH, brickW: 4, stackY: stackY,
+                color: color, opacity: 0.75 + feeNorm * 0.2,
+                txCount: 1, txid: tx.txid || null,
+                feeRate: Math.round(feeRate * 10) / 10,
+                vsize: tx.vsize || 0, value: tx.value || 0,
+                timestamp: tx.first_seen, fadeStart: 0,
+                bobPhase: Math.random() * Math.PI * 2,
+                bobSpeed: 1.2 + feeNorm * 0.8,
+                lane: Math.floor(Math.random() * 5) - 2,
+                notchHeight: _hnp.notchHeight, notchWidth: _hnp.notchWidth,
+                notchDown: _hnp.notchDown, feeRatio: _hnp.feeRatio
+            });
+            placed++;
+        }
+        console.log('[heartbeat] placed', placed, 'history bricks on timeline');
+    }
+
     // Process a live block from SSE (shared by live handler + queue replay)
     function processLiveBlock(block) {
         if (!_hb) return;
@@ -398,105 +478,16 @@
                     if (txs.length === 0) return;
                     _hb._hasTxStream = true;
 
-                    // Find the last open flatline segment to place history txs on
-                    var liveSeg = _hb.timeline[_hb.timeline.length - 1];
-                    if (!liveSeg || liveSeg.type !== 'flatline' || liveSeg.x_end !== null) return;
-
-                    // Use the same time anchor as the flatline fast-forward (_hb.lastBlockTime)
-                    // so brick positions align with the flatline's virtual X coordinates.
-                    // The fast-forward does: virtualX += (now - lastBlockTime) * PX_PER_SEC
-                    // So brick position = liveSeg.x_start + (tx.first_seen - lastBlockTime) * PX_PER_SEC
-                    var effectiveBlockTs = _hb.lastBlockTime || lastBlockTs;
-
-                    // Compute median fee from history txs so colors match live bricks
-                    var historyRates = [];
-                    for (var hi = 0; hi < txs.length; hi++) {
-                        if (txs[hi].fee && txs[hi].vsize) {
-                            historyRates.push(txs[hi].fee / txs[hi].vsize);
-                        }
+                    // Defer history placement until after block replay has fast-forwarded
+                    // the timeline. Without this, flatlineSpan ≈ 0 and all bricks cluster
+                    // at the start, creating a huge gap after the replay blocks.
+                    if (!_hb.lastBlockTime && _hb.virtualX < 100) {
+                        console.log('[heartbeat] deferring history (replay not ready)');
+                        _hb._pendingHistory = { txs: txs, last_block_ts: lastBlockTs };
+                        return;
                     }
-                    if (historyRates.length >= 20) {
-                        historyRates.sort(function(a, b) { return a - b; });
-                        _hb._wsMedianFee = Math.max(1, historyRates[Math.floor(historyRates.length / 2)]);
-                    }
-                    var medianFee = _hb._wsMedianFee || 5;
-                    var placed = 0;
-                    var maxBricks = 2000; // cap total history bricks
 
-                    // Compute the flatline span available for placement
-                    var flatlineSpan = _hb.virtualX - liveSeg.x_start;
-                    // Track stack heights by gridX to avoid O(n²) inner loop
-                    var stackMap = {};
-
-                    for (var i = 0; i < txs.length && placed < maxBricks; i++) {
-                        var tx = txs[i];
-                        if (!tx.first_seen || !tx.fee || !tx.vsize) continue;
-
-                        var secAfterBlock = tx.first_seen - effectiveBlockTs;
-                        var txVX;
-                        if (secAfterBlock >= 0) {
-                            // Post-block tx: place at exact timeline position
-                            txVX = liveSeg.x_start + secAfterBlock * FLATLINE_PX_PER_SEC;
-                        } else {
-                            // Pre-block survivor: spread across the flatline evenly
-                            // These were in the mempool before the block but didn't get confirmed
-                            txVX = liveSeg.x_start + Math.random() * flatlineSpan * 0.95;
-                        }
-
-                        // Don't place beyond current head
-                        if (txVX > _hb.virtualX) txVX = _hb.virtualX - Math.random() * 5;
-
-                        var feeRate = tx.fee / tx.vsize;
-                        var feeNorm = Math.min(Math.log2(feeRate + 1) / 6, 1.0);
-                        var _hnp = computeNotchProps(feeRate, tx.vsize, medianFee);
-
-                        // Color based on fee rate
-                        var color;
-                        if (feeRate < medianFee * 0.8) {
-                            color = 'rgba(33, 150, 243, ';
-                        } else if (feeRate < medianFee * 1.5) {
-                            color = 'rgba(0, 230, 118, ';
-                        } else if (feeRate < medianFee * 4) {
-                            color = 'rgba(255, 152, 0, ';
-                        } else {
-                            color = 'rgba(244, 67, 54, ';
-                        }
-
-                        var brickH = 3 + feeNorm * 14 + Math.random() * 3;
-                        var gridX = Math.round(txVX / 5) * 5;
-
-                        // Stack height at this grid position (O(1) lookup)
-                        var stackY = stackMap[gridX] || 0;
-                        if (stackY > 150) continue; // cap stack height
-                        stackMap[gridX] = stackY + brickH;
-
-                        liveSeg.blips.push({
-                            x: txVX,
-                            gridX: gridX,
-                            height: brickH + stackY,
-                            brickH: brickH,
-                            brickW: 4,
-                            stackY: stackY,
-                            color: color,
-                            opacity: 0.75 + feeNorm * 0.2,
-                            txCount: 1,
-                            txid: tx.txid || null,
-                            feeRate: Math.round(feeRate * 10) / 10,
-                            vsize: tx.vsize || 0,
-                            value: tx.value || 0,
-                            timestamp: tx.first_seen,
-                            fadeStart: 0,
-                            bobPhase: Math.random() * Math.PI * 2,
-                            bobSpeed: 1.2 + feeNorm * 0.8,
-                            lane: Math.floor(Math.random() * 5) - 2,
-                            notchHeight: _hnp.notchHeight,
-                            notchWidth: _hnp.notchWidth,
-                            notchDown: _hnp.notchDown,
-                            feeRatio: _hnp.feeRatio
-                        });
-                        placed++;
-                    }
-                    console.log('[heartbeat] placed', placed, 'history bricks on timeline');
+                    placeHistoryTxs(txs, lastBlockTs);
                 } catch (err) { console.log('[heartbeat] SSE history error:', err); }
             });
             es.addEventListener('tx', function(e) {
@@ -1461,7 +1452,7 @@
                         var tb = liveBlips[txi];
                         var tcx = virtualToCanvas(tb.x);
                         var tnh = (tb.notchHeight || 3) * 0.3;
-                        var tdir = tb.notchDown ? 1 : -1;
+                        var tdir = tb.notchDown ? -1 : 1;
                         ctx.lineTo(tcx, y - tdir * tnh);
                     }
                     ctx.lineTo(virtualToCanvas(segEnd2), y);
@@ -1486,7 +1477,7 @@
                     var maxNh = zoom > 4 ? 40 + (zoom - 4) * 8 : 40;
                     nh = Math.min(nh, maxNh);
                     var ncx = virtualToCanvas(blip.x);
-                    var dir = blip.notchDown ? 1 : -1;
+                    var dir = blip.notchDown ? -1 : 1;
 
                     // Flat line up to notch start
                     ctx.lineTo(ncx - nw / 2, y);
@@ -1523,7 +1514,7 @@
                         var enh = (eb.notchHeight || 3) * zoom * 0.5;
                         enh = Math.min(enh, zoom > 4 ? 40 + (zoom - 4) * 8 : 40);
                         var ecx = virtualToCanvas(eb.x);
-                        var edir = eb.notchDown ? 1 : -1;
+                        var edir = eb.notchDown ? -1 : 1;
 
                         // Intensity: brighter for higher fee ratio
                         var intensity = Math.min((efr - 2.0) / 6.0, 1.0);
@@ -1560,7 +1551,7 @@
                         var fnh = (fb.notchHeight || 3) * zoom * 0.5;
                         fnh = Math.min(fnh, 40 + (zoom - 4) * 8);
                         var fcx = virtualToCanvas(fb.x);
-                        var fdir = fb.notchDown ? 1 : -1;
+                        var fdir = fb.notchDown ? -1 : 1;
                         var peakY = y - fdir * fnh;
 
                         // Fee rate above the peak
@@ -1597,7 +1588,7 @@
                         var cnh = (cb.notchHeight || 3) * zoom * 0.5;
                         cnh = Math.min(cnh, 40);
                         var ccx = virtualToCanvas(cb.x);
-                        var cdir = cb.notchDown ? 1 : -1;
+                        var cdir = cb.notchDown ? -1 : 1;
 
                         // Draw colored overlay notch
                         ctx.beginPath();
@@ -1641,7 +1632,7 @@
                     // Height GROWS as notch compresses (energy building)
                     var abNH = (ab.notchHeight || 3) * zoom * 0.5 * (1 + abEase * 1.5);
                     abNH = Math.min(abNH, 80);
-                    var abDir = ab.notchDown ? 1 : -1;
+                    var abDir = ab.notchDown ? -1 : 1;
 
                     // Opacity: bright through most of animation, fade in last 20%
                     var abAlpha = abT < 0.8 ? 0.9 : 0.9 * (1 - (abT - 0.8) / 0.2);
@@ -1683,7 +1674,7 @@
                     var hnw = (hb.notchWidth || 3) * zoom;
                     var hnh = (hb.notchHeight || 3) * zoom * 0.5;
                     hnh = Math.min(hnh, zoom > 4 ? 40 + (zoom - 4) * 8 : 40);
-                    var hdir = hb.notchDown ? 1 : -1;
+                    var hdir = hb.notchDown ? -1 : 1;
 
                     ctx.beginPath();
                     var hsteps = 12;
@@ -2672,6 +2663,14 @@
                     _hb.autoFollow = true;
                     _hb.viewOffset = _hb.virtualX - (_hb.width * HEAD_POSITION_FRAC);
 
+                }
+
+                // Place any SSE history txs that arrived before the replay
+                if (_hb._pendingHistory) {
+                    var ph = _hb._pendingHistory;
+                    _hb._pendingHistory = null;
+                    console.log('[heartbeat] placing deferred history after replay');
+                    placeHistoryTxs(ph.txs, ph.last_block_ts);
                 }
             }
 
