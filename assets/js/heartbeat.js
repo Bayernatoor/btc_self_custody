@@ -1627,25 +1627,22 @@
                         var cellRadius = baseR * Math.max(zoom * 0.4, 0.8);
                         var cellDiam = cellRadius * 2;
 
-                        // Compact tube packing: cells above/below baseline, tightly packed
-                        var row = sy > 0 ? Math.round(sy / (blip.brickH || cellDiam)) : 0;
-                        var ring = Math.ceil((row + 1) / 2);
-                        var goBelow = (row % 2 === 1);
-                        // Very tight: cells nearly overlapping, tube grows with zoom
-                        var ringStep = Math.max(cellDiam * 0.55, 2);
-                        var tubeMax = 22 + (zoom > 4 ? (zoom - 4) * 2.5 : 0);
-                        var distFromCenter = Math.min(ring * ringStep, tubeMax);
-                        var cellCY = goBelow ? baseline + distFromCenter
-                                             : baseline - distFromCenter;
-                        if (row === 0) cellCY = baseline;
-
-                        // Gentle bobbing: small amplitude so cells can't overlap neighbors
+                        // Tube distribution: each cell gets a unique Y position
+                        // within the tube, determined by its bobPhase (deterministic random)
+                        var tubeMax = 18 + (zoom > 4 ? (zoom - 4) * 2 : 0);
                         var bobPhase = blip.bobPhase || 0;
                         var bobSpeed = blip.bobSpeed || 1.5;
-                        var bobAmpY = Math.min(ringStep * 0.2, 1.5); // ±1.5px max
-                        var bobAmpX = Math.min(cellRadius * 0.15, 1.0);
+                        // Deterministic Y from bobPhase — fills tube naturally
+                        var tubeY = Math.sin(bobPhase * 3.71) * tubeMax;
+                        var cellCY = baseline - tubeY;
+
+                        // Gentle bobbing: cells drift slightly
+                        var bobAmpY = Math.min(cellRadius * 0.3, 2);
+                        var bobAmpX = Math.min(cellRadius * 0.2, 1.5);
                         cellCY += Math.sin(nowSec * bobSpeed + bobPhase) * bobAmpY;
-                        var cellCX = bx + Math.cos(nowSec * bobSpeed * 0.7 + bobPhase) * bobAmpX;
+                        // Small X jitter for organic feel (not grid-locked)
+                        var cellCX = bx + Math.cos(bobPhase * 2.31) * cellRadius * 0.4
+                                       + Math.cos(nowSec * bobSpeed * 0.7 + bobPhase) * bobAmpX;
 
                         // Cell color based on fee rate (warm circulatory palette)
                         var feeRatio = blip.feeRatio || 1;
