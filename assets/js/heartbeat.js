@@ -1453,12 +1453,12 @@
                     // Cell sizing (same tiers as normal rendering)
                     var bsVs = blip.vsize || 200;
                     var bsBaseR;
-                    if (bsVs < 200) bsBaseR = 2.5;
-                    else if (bsVs < 400) bsBaseR = 3.5;
-                    else if (bsVs < 800) bsBaseR = 5.0;
-                    else if (bsVs < 2000) bsBaseR = 6.5;
-                    else bsBaseR = 8.0;
-                    var bsCellR = bsBaseR * Math.max(zoom * 0.5, 0.8);
+                    if (bsVs < 200) bsBaseR = 2.0;
+                    else if (bsVs < 400) bsBaseR = 3.0;
+                    else if (bsVs < 800) bsBaseR = 4.0;
+                    else if (bsVs < 2000) bsBaseR = 5.0;
+                    else bsBaseR = 6.0;
+                    var bsCellR = bsBaseR * (0.8 + Math.min(Math.log2(zoom + 1) * 0.35, 1.5));
 
                     // Start from tube position, converge to baseline as cell approaches spike
                     var bsRow = (blip.stackY || 0) > 0 ? Math.round((blip.stackY || 0) / (blip.brickH || bsCellR * 2)) : 0;
@@ -1602,30 +1602,30 @@
 
                     if (_hb.renderMode === 'bloodstream') {
                         // ═══ Blood cell rendering (vein tube) ═══
-                        // Cells fill a tube centered on the flatline, above AND below
+                        // Cells pack tightly in a tube centered on the flatline
                         var vs = blip.vsize || 200;
                         var baseR;
-                        if (vs < 200)       baseR = 2.5;
-                        else if (vs < 400)  baseR = 3.5;
-                        else if (vs < 800)  baseR = 5.0;
-                        else if (vs < 2000) baseR = 6.5;
-                        else                baseR = 8.0;
-                        var cellRadius = baseR * Math.max(zoom * 0.5, 0.8);
+                        if (vs < 200)       baseR = 2.0;
+                        else if (vs < 400)  baseR = 3.0;
+                        else if (vs < 800)  baseR = 4.0;
+                        else if (vs < 2000) baseR = 5.0;
+                        else                baseR = 6.0;
+                        // Gentle zoom scaling (log-based, not linear)
+                        var cellRadius = baseR * (0.8 + Math.min(Math.log2(zoom + 1) * 0.35, 1.5));
                         var cellDiam = cellRadius * 2;
-                        var cellGap = 1; // tiny gap between cells
 
-                        // Compute row from stackY — distribute above/below baseline
+                        // Compact vertical packing: rows above/below baseline
                         var row = sy > 0 ? Math.round(sy / (blip.brickH || cellDiam)) : 0;
-                        // Row 0: center. Row 1: below. Row 2: above. Row 3: further below...
                         var ring = Math.ceil((row + 1) / 2);
                         var goBelow = (row % 2 === 1);
-                        var distFromCenter = ring * (cellDiam + cellGap);
-                        var cellCY = goBelow ? baseline + distFromCenter - cellRadius
-                                             : baseline - distFromCenter + cellRadius;
-                        if (row === 0) cellCY = baseline; // first cell sits on center
+                        // Tight packing: cells nearly touching (0.85 * diameter spacing)
+                        var distFromCenter = ring * cellDiam * 0.85;
+                        var cellCY = goBelow ? baseline + distFromCenter
+                                             : baseline - distFromCenter;
+                        if (row === 0) cellCY = baseline;
 
-                        // Hex offset: odd rings shift horizontally
-                        var hexOffsetX = (ring % 2 === 1) ? cellRadius * 0.8 : 0;
+                        // Hex offset for tight packing
+                        var hexOffsetX = (ring % 2 === 1) ? cellRadius * 0.7 : 0;
                         var cellCX = bx + hexOffsetX;
 
                         // Cell color based on fee rate (warm circulatory palette)
@@ -1686,7 +1686,7 @@
                         }
 
                         // Fee rate text inside large cells at very high zoom
-                        if (zoom > 10 && cellRadius > 10 && blip.feeRate) {
+                        if (zoom > 14 && cellRadius > 8 && blip.feeRate) {
                             ctx.font = Math.round(cellRadius * 0.5) + 'px monospace';
                             ctx.textAlign = 'center';
                             ctx.textBaseline = 'middle';
