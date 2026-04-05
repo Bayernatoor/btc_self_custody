@@ -2591,8 +2591,8 @@
                     if (!htx.fee || !htx.vsize) continue;
                     var htFeeRate = htx.fee / htx.vsize;
                     var htFeeNorm = Math.min(Math.log2(htFeeRate + 1) / 6, 1.0);
-                    // Spread evenly across the gap
-                    var htVX = gapStart + (hti / cap) * gapSpan * 0.95;
+                    // Random placement across the gap (like live txs)
+                    var htVX = gapStart + Math.random() * gapSpan * 0.95;
                     var htColor;
                     if (htFeeRate < medianFee * 0.8) htColor = 'rgba(33, 150, 243, ';
                     else if (htFeeRate < medianFee * 1.5) htColor = 'rgba(0, 230, 118, ';
