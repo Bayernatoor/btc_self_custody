@@ -423,15 +423,25 @@
                     var placed = 0;
                     var maxBricks = 2000; // cap total history bricks
 
+                    // Compute the flatline span available for placement
+                    var flatlineSpan = _hb.virtualX - liveSeg.x_start;
+                    // Track stack heights by gridX to avoid O(n²) inner loop
+                    var stackMap = {};
+
                     for (var i = 0; i < txs.length && placed < maxBricks; i++) {
                         var tx = txs[i];
                         if (!tx.first_seen || !tx.fee || !tx.vsize) continue;
 
-                        // Position on flatline based on timestamp
-                        // Skip txs from before the block (carry-forward survivors)
                         var secAfterBlock = tx.first_seen - effectiveBlockTs;
-                        if (secAfterBlock < 0) continue;
-                        var txVX = liveSeg.x_start + secAfterBlock * FLATLINE_PX_PER_SEC;
+                        var txVX;
+                        if (secAfterBlock >= 0) {
+                            // Post-block tx: place at exact timeline position
+                            txVX = liveSeg.x_start + secAfterBlock * FLATLINE_PX_PER_SEC;
+                        } else {
+                            // Pre-block survivor: spread across the flatline evenly
+                            // These were in the mempool before the block but didn't get confirmed
+                            txVX = liveSeg.x_start + Math.random() * flatlineSpan * 0.95;
+                        }
 
                         // Don't place beyond current head
                         if (txVX > _hb.virtualX) txVX = _hb.virtualX - Math.random() * 5;
@@ -455,15 +465,10 @@
                         var brickH = 3 + feeNorm * 14 + Math.random() * 3;
                         var gridX = Math.round(txVX / 5) * 5;
 
-                        // Stack height at this grid position
-                        var stackY = 0;
-                        for (var si = 0; si < liveSeg.blips.length; si++) {
-                            var other = liveSeg.blips[si];
-                            if (other.fadeStart === 0 && other.gridX === gridX) {
-                                stackY += other.brickH || 0;
-                            }
-                        }
+                        // Stack height at this grid position (O(1) lookup)
+                        var stackY = stackMap[gridX] || 0;
                         if (stackY > 150) continue; // cap stack height
+                        stackMap[gridX] = stackY + brickH;
 
                         liveSeg.blips.push({
                             x: txVX,
