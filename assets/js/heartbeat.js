@@ -360,8 +360,10 @@
             if (secAfterBlock >= 0) {
                 txVX = liveSeg.x_start + secAfterBlock * FLATLINE_PX_PER_SEC;
             } else {
-                // Pre-block survivor: random placement across the flatline
-                txVX = liveSeg.x_start + Math.random() * flatlineSpan * 0.95;
+                // Pre-block survivor: stratified random — divide span into slots,
+                // place randomly within each slot. Guarantees coverage with no gaps.
+                var slot = flatlineSpan * 0.95 / maxBricks;
+                txVX = liveSeg.x_start + placed * slot + Math.random() * slot;
             }
             if (txVX > _hb.virtualX) txVX = _hb.virtualX - Math.random() * 5;
             if (txVX < liveSeg.x_start) txVX = liveSeg.x_start + Math.random() * 5;
@@ -1614,19 +1616,18 @@
                         var cellRadius = baseR * (0.8 + Math.min(Math.log2(zoom + 1) * 0.35, 1.5));
                         var cellDiam = cellRadius * 2;
 
-                        // Compact vertical packing: rows above/below baseline
+                        // Compact tube packing: cells above/below baseline, tightly packed
                         var row = sy > 0 ? Math.round(sy / (blip.brickH || cellDiam)) : 0;
                         var ring = Math.ceil((row + 1) / 2);
                         var goBelow = (row % 2 === 1);
-                        // Tight packing: cells nearly touching (0.85 * diameter spacing)
-                        var distFromCenter = ring * cellDiam * 0.85;
+                        // Very tight: cells nearly overlapping, capped to tube bounds
+                        var ringStep = Math.max(cellDiam * 0.55, 2);
+                        var distFromCenter = Math.min(ring * ringStep, 22);
                         var cellCY = goBelow ? baseline + distFromCenter
                                              : baseline - distFromCenter;
                         if (row === 0) cellCY = baseline;
 
-                        // Hex offset for tight packing
-                        var hexOffsetX = (ring % 2 === 1) ? cellRadius * 0.7 : 0;
-                        var cellCX = bx + hexOffsetX;
+                        var cellCX = bx;
 
                         // Cell color based on fee rate (warm circulatory palette)
                         var feeRatio = blip.feeRatio || 1;
