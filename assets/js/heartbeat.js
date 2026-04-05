@@ -346,6 +346,11 @@
         var flatlineSpan = _hb.virtualX - liveSeg.x_start;
         var stackMap = {};
 
+        // Cap density: don't cram thousands of bricks into a short flatline
+        // ~3 bricks per grid cell (5px) looks natural, matching live arrival density
+        var maxForSpan = Math.max(Math.floor(flatlineSpan / 5 * 3), 200);
+        if (maxForSpan < maxBricks) maxBricks = maxForSpan;
+
         for (var i = 0; i < txs.length && placed < maxBricks; i++) {
             var tx = txs[i];
             if (!tx.first_seen || !tx.fee || !tx.vsize) continue;
