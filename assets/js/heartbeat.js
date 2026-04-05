@@ -347,9 +347,20 @@
         var stackMap = {};
 
         // Cap density: don't cram thousands of bricks into a short flatline
-        // ~3 bricks per grid cell (5px) looks natural, matching live arrival density
         var maxForSpan = Math.max(Math.floor(flatlineSpan / 5 * 3), 200);
         if (maxForSpan < maxBricks) maxBricks = maxForSpan;
+
+        // Count pre-block survivors for stratified placement
+        var preBlockTotal = 0;
+        for (var pci = 0; pci < txs.length && pci < maxBricks; pci++) {
+            var ptx = txs[pci];
+            if (ptx.first_seen && ptx.fee && ptx.vsize && (ptx.first_seen - effectiveBlockTs < 0)) {
+                preBlockTotal++;
+            }
+        }
+        var preBlockPlaced = 0;
+        // Slot size for pre-block survivors only
+        var preBlockSlot = preBlockTotal > 0 ? (flatlineSpan * 0.95) / preBlockTotal : flatlineSpan;
 
         for (var i = 0; i < txs.length && placed < maxBricks; i++) {
             var tx = txs[i];
@@ -360,10 +371,10 @@
             if (secAfterBlock >= 0) {
                 txVX = liveSeg.x_start + secAfterBlock * FLATLINE_PX_PER_SEC;
             } else {
-                // Pre-block survivor: stratified random — divide span into slots,
-                // place randomly within each slot. Guarantees coverage with no gaps.
-                var slot = flatlineSpan * 0.95 / maxBricks;
-                txVX = liveSeg.x_start + placed * slot + Math.random() * slot;
+                // Pre-block survivor: stratified random with SEPARATE counter
+                // so post-block txs don't consume gap slots
+                txVX = liveSeg.x_start + preBlockPlaced * preBlockSlot + Math.random() * preBlockSlot;
+                preBlockPlaced++;
             }
             if (txVX > _hb.virtualX) txVX = _hb.virtualX - Math.random() * 5;
             if (txVX < liveSeg.x_start) txVX = liveSeg.x_start + Math.random() * 5;
