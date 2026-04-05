@@ -307,9 +307,13 @@ async fn subscribe_blocks(
             unconfirmed_txids,
         });
 
-        // Clear block_processing flag — tx subscriber now handles the flood
-        // gracefully (skips failed lookups silently during flood, still processes
-        // genuine new mempool txs that succeed getmempoolentry)
+        // Give SSE clients time to receive and process the block event
+        // before new txs start flowing. Without this, txs race ahead of the
+        // block and land on the old (pre-block) flatline segment.
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        // Clear block_processing flag — tx subscriber resumes processing
+        // genuine new mempool txs that succeed getmempoolentry
         block_processing.store(false, Ordering::Release);
     }
 }

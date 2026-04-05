@@ -413,12 +413,28 @@
             });
             placed++;
         }
+        // Seed the segment's column height map so live blips stack correctly
+        liveSeg._colHeights = stackMap;
         console.log('[heartbeat] placed', placed, 'history bricks on timeline');
     }
 
     // Process a live block from SSE (shared by live handler + queue replay)
     function processLiveBlock(block) {
         if (!_hb) return;
+        // Guard: prevent flushTxBatch from placing txs on the old flatline
+        // while we process this block. Txs stay queued and flush to the new flatline.
+        _hb._blockProcessing = true;
+
+        // Collapse the dead processing gap: the backend suppresses txs while
+        // building block data (~2-5s), leaving an empty flatline stretch.
+        // Snap virtualX back to where the last tx blip was placed.
+        if (_hb._lastTxBlipTime > 0) {
+            var gapSec = (Date.now() / 1000) - _hb._lastTxBlipTime;
+            if (gapSec > 0.5 && gapSec < 15) {
+                _hb.virtualX -= gapSec * FLATLINE_PX_PER_SEC;
+            }
+        }
+
         // Store unconfirmed txids so pushHeartbeatBlocks can preserve them
         if (block.unconfirmed_txids && block.unconfirmed_txids.length > 0) {
             _hb._unconfirmedSet = {};
@@ -446,6 +462,9 @@
         window.pushHeartbeatBlocks(blockJson, false);
         if (window.heartbeatFlash) window.heartbeatFlash();
         if (window.heartbeatPulse) window.heartbeatPulse();
+
+        // Resume tx flow — new txs will now flush to the new post-block flatline
+        _hb._blockProcessing = false;
     }
 
     // ── Own node SSE feed (primary) ─────────────────────────────
@@ -655,6 +674,8 @@
     // Flush queued individual transactions into visual bricks
     function flushTxBatch() {
         if (!_hb || !_hb._txBatchQueue || _hb._txBatchQueue.length === 0) return;
+        // During block processing, keep txs queued — they'll flush to the new flatline
+        if (_hb._blockProcessing) return;
         var liveSeg = _hb.timeline[_hb.timeline.length - 1];
         if (!liveSeg || liveSeg.type !== 'flatline') return;
 
@@ -687,14 +708,9 @@
             var brickX = _hb.virtualX - Math.random() * 15;
             var gridX = Math.round(brickX / 5) * 5;
 
-            // Stack height
-            var stackY = 0;
-            for (var si2 = 0; si2 < liveSeg.blips.length; si2++) {
-                var other = liveSeg.blips[si2];
-                if (other.fadeStart === 0 && other.gridX === gridX) {
-                    stackY += other.brickH || 0;
-                }
-            }
+            // Stack height via column map (O(1) instead of scanning all blips)
+            if (!liveSeg._colHeights) liveSeg._colHeights = {};
+            var stackY = liveSeg._colHeights[gridX] || 0;
 
             liveSeg.blips.push({
                 x: brickX,
@@ -717,6 +733,7 @@
                 lane: Math.floor(Math.random() * 5) - 2,
                 feeRatio: medianFee > 0 ? feeRate / medianFee : 1
             });
+            liveSeg._colHeights[gridX] = stackY + brickH;
         }
 
         // If there are excess txs beyond maxBricks, create one aggregate brick
@@ -731,13 +748,8 @@
             var aggColor = avgFee < medianFee ? 'rgba(0, 230, 118, ' : 'rgba(255, 152, 0, ';
             var aggX = _hb.virtualX - Math.random() * 10;
             var aggGridX = Math.round(aggX / 5) * 5;
-            var aggStackY = 0;
-            for (var si3 = 0; si3 < liveSeg.blips.length; si3++) {
-                var oth = liveSeg.blips[si3];
-                if (oth.fadeStart === 0 && oth.gridX === aggGridX) {
-                    aggStackY += oth.brickH || 0;
-                }
-            }
+            if (!liveSeg._colHeights) liveSeg._colHeights = {};
+            var aggStackY = liveSeg._colHeights[aggGridX] || 0;
             var aggH = 3 + aggFeeNorm * 10;
             liveSeg.blips.push({
                 x: aggX, gridX: aggGridX,
@@ -750,6 +762,47 @@
                 lane: Math.floor(Math.random() * 5) - 2,
                 feeRatio: medianFee > 0 ? avgFee / medianFee : 1
             });
+            liveSeg._colHeights[aggGridX] = aggStackY + aggH;
+        }
+
+        // Track when we last placed a blip — used to collapse the dead gap on block arrival
+        _hb._lastTxBlipTime = Date.now() / 1000;
+
+        // Priority culling: when too many blips, evict lowest-value ones
+        var CULL_THRESHOLD = 2000;
+        var CULL_TARGET = 1500;
+        if (liveSeg.blips.length > CULL_THRESHOLD) {
+            // Score each active blip: lower score = evict first
+            // Priority: low fee + small vsize evicted first
+            var scored = [];
+            for (var ci = 0; ci < liveSeg.blips.length; ci++) {
+                var cb = liveSeg.blips[ci];
+                if (cb.fadeStart > 0) continue; // already fading, skip
+                var score = (cb.feeRate || 0.1) * Math.log2((cb.vsize || 100) + 1);
+                scored.push({ idx: ci, score: score });
+            }
+            if (scored.length > CULL_TARGET) {
+                scored.sort(function(a, b) { return a.score - b.score; });
+                var toEvict = scored.length - CULL_TARGET;
+                // Mark lowest-scored blips for immediate removal
+                var evictSet = {};
+                for (var ei = 0; ei < toEvict; ei++) {
+                    evictSet[scored[ei].idx] = true;
+                }
+                var kept = [];
+                liveSeg._colHeights = {};
+                for (var ki = 0; ki < liveSeg.blips.length; ki++) {
+                    if (!evictSet[ki]) {
+                        var kb = liveSeg.blips[ki];
+                        kept.push(kb);
+                        // Rebuild column heights for kept blips
+                        if (kb.fadeStart === 0 && kb.gridX !== undefined) {
+                            liveSeg._colHeights[kb.gridX] = (liveSeg._colHeights[kb.gridX] || 0) + (kb.brickH || 0);
+                        }
+                    }
+                }
+                liveSeg.blips = kept;
+            }
         }
     }
 
@@ -804,15 +857,9 @@
             var brickX = _hb.virtualX - Math.random() * 15;
             var gridX = Math.round(brickX / 5) * 5; // snap to 5px grid (matches brick width)
 
-            // Stack: find how high bricks already are at this grid column
-            var stackY = 0;
-            for (var si2 = 0; si2 < liveSeg.blips.length; si2++) {
-                var other = liveSeg.blips[si2];
-                if (other.fadeStart === 0 && other.gridX === gridX) {
-                    stackY += other.brickH || 0;
-                }
-            }
-            stackY = Math.min(stackY, 150); // cap stack height
+            // Stack: O(1) column height lookup
+            if (!liveSeg._colHeights) liveSeg._colHeights = {};
+            var stackY = Math.min(liveSeg._colHeights[gridX] || 0, 150);
 
             liveSeg.blips.push({
                 x: brickX,
@@ -832,6 +879,7 @@
                 lane: Math.floor(Math.random() * 5) - 2,
                 feeRatio: (medianFeeRate || 5) > 0 ? feeRate / (medianFeeRate || 5) : 1
             });
+            liveSeg._colHeights[gridX] = (liveSeg._colHeights[gridX] || 0) + brickH;
         }
     }
 
