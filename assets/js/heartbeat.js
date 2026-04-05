@@ -1541,37 +1541,57 @@
                     }
                 }
 
-                // ── Phase 2: High-zoom detail — fee rate text ──
-                if (zoom >= 8) {
-                    ctx.font = Math.round(9 * Math.min(zoom / 8, 2)) + 'px monospace';
+                // ── Peak dots at medium zoom (visual click targets) ──
+                if (zoom >= 4 && zoom < 20) {
+                    for (var dti = 0; dti < liveBlips.length; dti++) {
+                        var db = liveBlips[dti];
+                        if ((db.feeRatio || 0) < 1.5) continue; // only mark notable notches
+                        var dnh = (db.notchHeight || 3) * zoom * 0.5;
+                        dnh = Math.min(dnh, zoom > 4 ? 40 + (zoom - 4) * 8 : 40);
+                        var dcx = virtualToCanvas(db.x);
+                        var ddir = db.notchDown ? -1 : 1;
+                        var dpy = y - ddir * dnh;
+                        var dotR = Math.min(2 + zoom * 0.15, 4);
+                        ctx.beginPath();
+                        ctx.arc(dcx, dpy, dotR, 0, Math.PI * 2);
+                        ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+                        ctx.fill();
+                    }
+                }
+
+                // ── Fee rate text at very high zoom (spaced to avoid overlap) ──
+                if (zoom >= 20) {
+                    var fontSize = Math.round(9 * Math.min(zoom / 20, 2));
+                    ctx.font = fontSize + 'px monospace';
                     ctx.textAlign = 'center';
+                    var lastLabelX = -999; // track last label position to avoid overlap
+                    var minLabelGap = fontSize * 6; // minimum px between labels
                     for (var fti = 0; fti < liveBlips.length; fti++) {
                         var fb = liveBlips[fti];
-                        var fnw = (fb.notchWidth || 3) * zoom;
+                        var fcx = virtualToCanvas(fb.x);
+                        if (fcx - lastLabelX < minLabelGap) continue; // skip if too close
                         var fnh = (fb.notchHeight || 3) * zoom * 0.5;
                         fnh = Math.min(fnh, 40 + (zoom - 4) * 8);
-                        var fcx = virtualToCanvas(fb.x);
                         var fdir = fb.notchDown ? -1 : 1;
                         var peakY = y - fdir * fnh;
 
-                        // Fee rate above the peak
                         if (fb.feeRate) {
                             ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
                             ctx.fillText(
                                 fb.feeRate.toFixed(1) + ' s/vB',
                                 fcx,
-                                fdir < 0 ? peakY - 6 : peakY + 12
+                                fdir > 0 ? peakY - 6 : peakY + 12
                             );
+                            lastLabelX = fcx;
                         }
-                        // Value below (if available and zoom high enough)
-                        if (fb.value && zoom >= 12) {
+                        if (fb.value && zoom >= 30) {
                             var btcVal = fb.value / 1e8;
                             var valStr = btcVal >= 0.01 ? btcVal.toFixed(3) : btcVal.toFixed(6);
                             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
                             ctx.fillText(
                                 '\u{20bf}' + valStr,
                                 fcx,
-                                fdir < 0 ? peakY - 18 : peakY + 24
+                                fdir > 0 ? peakY - 18 : peakY + 24
                             );
                         }
                     }
