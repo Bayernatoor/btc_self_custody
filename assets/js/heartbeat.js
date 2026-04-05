@@ -1065,7 +1065,8 @@
                 label = _hb.paused ? '\u25B6' : '\u23F8';
             }
             if (def.id === 'mode') {
-                label = _hb.renderMode === 'bricks' ? '\u25A0'      // square
+                label = _hb.renderMode === 'hybrid' ? '\u25A3'       // square with fill (hybrid)
+                      : _hb.renderMode === 'bricks' ? '\u25A0'      // square
                       : _hb.renderMode === 'bloodstream' ? '\u2B24'  // circle
                       : '\u2248';                                     // wave symbol
             }
@@ -1147,9 +1148,10 @@
                 _hb.viewOffset = _hb.virtualX - (_hb.width * HEAD_POSITION_FRAC) / _hb.zoom;
                 break;
             case 'mode':
-                _hb.renderMode = _hb.renderMode === 'line' ? 'bricks'
+                _hb.renderMode = _hb.renderMode === 'hybrid' ? 'bricks'
                                : _hb.renderMode === 'bricks' ? 'bloodstream'
-                               : 'line';
+                               : _hb.renderMode === 'bloodstream' ? 'line'
+                               : 'hybrid';
                 break;
             case 'live':
                 // Jump to live: snap to head, reset zoom, enable auto-follow
@@ -1410,7 +1412,10 @@
         var cx2 = virtualToCanvas(drawEnd);
         var y = baseline + (isLive ? jitter : 0);
 
-        if (_hb.renderMode === 'line' && seg.blips && seg.blips.length > 0) {
+        // Hybrid mode: living line envelope at low zoom, bricks handle detail at higher zoom
+        var isHybridLowZoom = (_hb.renderMode === 'hybrid' && _hb.zoom < 0.8);
+
+        if ((_hb.renderMode === 'line' || isHybridLowZoom) && seg.blips && seg.blips.length > 0) {
             // ═══ LIVING LINE MODE ═══
             // Txs ARE the baseline: each tx is a gaussian notch in the line.
             // The line is never flat when the mempool is active.
@@ -1749,12 +1754,18 @@
                 }
             }
         } else {
+            // Plain flatline (bricks/hybrid at normal zoom)
+            var flatGlow = 8;
+            if (_hb.renderMode === 'hybrid' && isLive) {
+                // Subtle breathing glow on hybrid mode
+                flatGlow = 8 + 3 * Math.sin(nowSec * 1.5);
+            }
             ctx.beginPath();
             ctx.moveTo(cx1, y);
             ctx.lineTo(cx2, y);
             ctx.strokeStyle = color;
             ctx.lineWidth = 2;
-            ctx.shadowBlur = 8;
+            ctx.shadowBlur = flatGlow;
             ctx.shadowColor = color;
             ctx.stroke();
             ctx.shadowBlur = 0;
@@ -1824,8 +1835,9 @@
                 var isAbsorbing = false;
                 var absorbT = 0;
 
-                // In line mode, absorption is drawn as sliding notches in drawFlatlineSegment
-                if (_hb.renderMode === 'line' && blip.fadeStart > 0) continue;
+                // In line mode (or hybrid at low zoom), absorption is drawn as sliding notches
+                var _isLineMode = _hb.renderMode === 'line' || (_hb.renderMode === 'hybrid' && _hb.zoom < 0.8);
+                if (_isLineMode && blip.fadeStart > 0) continue;
 
                 // Bloodstream mode: cells flow toward the waveform with deformation
                 if (_hb.renderMode === 'bloodstream' && blip.fadeStart > 0) {
@@ -1969,7 +1981,7 @@
 
                 // Draw normal blip as a stacked brick
                 // In line mode, blips are drawn as notches in the flatline path
-                if (!isAbsorbing && _hb.renderMode === 'line') continue;
+                if (!isAbsorbing && (_hb.renderMode === 'line' || (_hb.renderMode === 'hybrid' && _hb.zoom < 0.8))) continue;
                 if (!isAbsorbing) {
                     var bx = virtualToCanvas(blip.gridX || blipX);
                     var blipColor = blip.color || 'rgba(0, 230, 118, ';
@@ -2586,7 +2598,7 @@
             viewOffsetY: 0,       // vertical pan offset (0 = default baseline)
             autoFollow: true,
             paused: false,
-            renderMode: 'line', // 'line', 'bricks', or 'bloodstream'
+            renderMode: 'hybrid', // 'hybrid', 'bricks', 'bloodstream', or 'line'
             zoom: 1.9,              // default zoom for brick-level detail
             minZoom: 0.1,
             maxZoom: 50.0,
