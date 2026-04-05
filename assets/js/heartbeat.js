@@ -799,9 +799,12 @@
         // Track when we last placed a blip — used to collapse the dead gap on block arrival
         _hb._lastTxBlipTime = Date.now() / 1000;
 
-        // Priority culling: when too many blips, evict lowest-value ones
-        var CULL_THRESHOLD = 2000;
-        var CULL_TARGET = 1500;
+        // Priority culling: when too many blips, evict lowest-value ones.
+        // Threshold scales with flatline span — longer flatlines can hold more bricks.
+        // Viewport culling already skips off-screen blips, so the segment can hold many.
+        var flatSpan = _hb.virtualX - liveSeg.x_start;
+        var CULL_THRESHOLD = Math.max(5000, Math.floor(flatSpan / 5 * 3));
+        var CULL_TARGET = Math.floor(CULL_THRESHOLD * 0.8);
         if (liveSeg.blips.length > CULL_THRESHOLD) {
             // Score each active blip: lower score = evict first
             // Priority: low fee + small vsize evicted first
@@ -815,6 +818,8 @@
             if (scored.length > CULL_TARGET) {
                 scored.sort(function(a, b) { return a.score - b.score; });
                 var toEvict = scored.length - CULL_TARGET;
+                console.log('[heartbeat] culling:', liveSeg.blips.length, '->', CULL_TARGET,
+                    '(evicting', toEvict, ', threshold=' + CULL_THRESHOLD + ', span=' + Math.round(flatSpan) + 'px)');
                 // Mark lowest-scored blips for immediate removal
                 var evictSet = {};
                 for (var ei = 0; ei < toEvict; ei++) {
