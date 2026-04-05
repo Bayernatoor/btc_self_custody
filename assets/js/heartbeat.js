@@ -132,6 +132,34 @@
         return COLORS.critical;
     }
 
+    // ── Living Line: notch property computation ─────────────────
+    // Design doc tiers for height (1-15px) and width (2-10px)
+    function computeNotchProps(feeRate, vsize, medianFee) {
+        var ratio = feeRate / Math.max(medianFee, 0.1);
+        // Peak height based on fee rate relative to median
+        var nh;
+        if (ratio < 0.5)       nh = 1 + ratio * 2;        // 1-2px (micro-noise)
+        else if (ratio < 1.0)  nh = 2 + (ratio - 0.5) * 4; // 2-4px (small deflection)
+        else if (ratio < 2.0)  nh = 4 + (ratio - 1.0) * 3; // 4-7px (clear notch)
+        else if (ratio < 4.0)  nh = 7 + (ratio - 2.0) * 2; // 7-11px (prominent blip)
+        else                   nh = 11 + Math.min((ratio - 4.0) * 0.5, 4); // 11-15px (spike)
+
+        // Width based on vsize
+        var vs = vsize || 200;
+        var nw;
+        if (vs < 200)       nw = 2;
+        else if (vs < 500)  nw = 2 + (vs - 200) / 300 * 2;  // 2-4px
+        else if (vs < 1000) nw = 4 + (vs - 500) / 500 * 2;  // 4-6px
+        else                nw = 6 + Math.min((vs - 1000) / 1000 * 4, 4); // 6-10px
+
+        // Direction: high-fee always upward, else 25% chance downward
+        var down = (ratio >= 2.0) ? false : (Math.random() < 0.25);
+
+        return { notchHeight: nh, notchWidth: nw, notchDown: down, feeRatio: ratio };
+    }
+
+    function lerp(a, b, t) { return a + (b - a) * t; }
+
     function hexToRgb(hex) {
         var r = parseInt(hex.slice(1, 3), 16);
         var g = parseInt(hex.slice(3, 5), 16);
@@ -410,6 +438,7 @@
 
                         var feeRate = tx.fee / tx.vsize;
                         var feeNorm = Math.min(Math.log2(feeRate + 1) / 6, 1.0);
+                        var _hnp = computeNotchProps(feeRate, tx.vsize, medianFee);
 
                         // Color based on fee rate
                         var color;
@@ -455,9 +484,10 @@
                             bobPhase: Math.random() * Math.PI * 2,
                             bobSpeed: 1.2 + feeNorm * 0.8,
                             lane: Math.floor(Math.random() * 5) - 2,
-                            notchHeight: 1 + feeNorm * 12,
-                            notchWidth: 2 + Math.min(Math.log2((tx.vsize || 200) / 100 + 1) * 2, 8),
-                            notchDown: Math.random() < 0.25
+                            notchHeight: _hnp.notchHeight,
+                            notchWidth: _hnp.notchWidth,
+                            notchDown: _hnp.notchDown,
+                            feeRatio: _hnp.feeRatio
                         });
                         placed++;
                     }
@@ -646,6 +676,7 @@
             var tx = batch[i];
             var feeRate = tx.fee && tx.vsize ? tx.fee / tx.vsize : 1;
             var feeNorm = Math.min(Math.log2(feeRate + 1) / 6, 1.0);
+            var _np = computeNotchProps(feeRate, tx.vsize, medianFee);
 
             // Color based on fee rate relative to median
             var color;
@@ -693,9 +724,10 @@
                 bobPhase: Math.random() * Math.PI * 2,
                 bobSpeed: 1.2 + feeNorm * 0.8,
                 lane: Math.floor(Math.random() * 5) - 2,
-                notchHeight: 1 + feeNorm * 12,
-                notchWidth: 2 + Math.min(Math.log2((tx.vsize || 200) / 100 + 1) * 2, 8),
-                notchDown: Math.random() < 0.25
+                notchHeight: _np.notchHeight,
+                notchWidth: _np.notchWidth,
+                notchDown: _np.notchDown,
+                feeRatio: _np.feeRatio
             });
         }
 
@@ -719,6 +751,7 @@
                 }
             }
             var aggH = 3 + aggFeeNorm * 10;
+            var _anp = computeNotchProps(avgFee, 400, medianFee);
             liveSeg.blips.push({
                 x: aggX, gridX: aggGridX,
                 height: aggH + aggStackY, brickH: aggH, brickW: 4, stackY: aggStackY,
@@ -728,9 +761,10 @@
                 bobPhase: Math.random() * Math.PI * 2,
                 bobSpeed: 1.2 + aggFeeNorm * 0.8,
                 lane: Math.floor(Math.random() * 5) - 2,
-                notchHeight: 1 + aggFeeNorm * 12,
-                notchWidth: 4,
-                notchDown: Math.random() < 0.25
+                notchHeight: _anp.notchHeight,
+                notchWidth: _anp.notchWidth,
+                notchDown: _anp.notchDown,
+                feeRatio: _anp.feeRatio
             });
         }
     }
@@ -764,6 +798,7 @@
 
             // Normalize: use log scale so low-fee differences are visible
             var feeNorm = Math.min(Math.log2(feeRate + 1) / 6, 1.0); // log2(64)=6
+            var _fnp = computeNotchProps(feeRate, 200, medianFeeRate || 5);
 
             // Color: adaptive thresholds based on current median
             // This ensures color variety even when fees are uniformly low
@@ -812,9 +847,10 @@
                 bobPhase: Math.random() * Math.PI * 2,
                 bobSpeed: 1.2 + feeNorm * 0.8,
                 lane: Math.floor(Math.random() * 5) - 2,
-                notchHeight: 1 + feeNorm * 12,
-                notchWidth: 2 + Math.min(Math.log2(200 / 100 + 1) * 2, 8),
-                notchDown: Math.random() < 0.25
+                notchHeight: _fnp.notchHeight,
+                notchWidth: _fnp.notchWidth,
+                notchDown: _fnp.notchDown,
+                feeRatio: _fnp.feeRatio
             });
         }
     }
@@ -1096,9 +1132,9 @@
                 _hb.viewOffset = _hb.virtualX - (_hb.width * HEAD_POSITION_FRAC) / _hb.zoom;
                 break;
             case 'mode':
-                _hb.renderMode = _hb.renderMode === 'bricks' ? 'bloodstream'
-                               : _hb.renderMode === 'bloodstream' ? 'line'
-                               : 'bricks';
+                _hb.renderMode = _hb.renderMode === 'line' ? 'bricks'
+                               : _hb.renderMode === 'bricks' ? 'bloodstream'
+                               : 'line';
                 break;
             case 'live':
                 // Jump to live: snap to head, reset zoom, enable auto-follow
@@ -1360,68 +1396,288 @@
         var y = baseline + (isLive ? jitter : 0);
 
         if (_hb.renderMode === 'line' && seg.blips && seg.blips.length > 0) {
-            // Living Line: draw flatline as a path incorporating tx notches
-            var blips = [];
-            for (var lbi = 0; lbi < seg.blips.length; lbi++) {
-                if (seg.blips[lbi].fadeStart === 0) blips.push(seg.blips[lbi]);
-            }
-            blips.sort(function(a, b) { return a.x - b.x; });
-
+            // ═══ LIVING LINE MODE ═══
+            // Txs ARE the baseline: each tx is a gaussian notch in the line.
+            // The line is never flat when the mempool is active.
             var zoom = _hb.zoom;
             var segStart = Math.max(seg.x_start, viewLeft);
             var segEnd2 = Math.min(segEnd, viewRight);
 
-            ctx.beginPath();
-            ctx.moveTo(virtualToCanvas(segStart), y);
+            // Collect visible, non-fading blips + absorbing blips (for compression anim)
+            var liveBlips = [];
+            var absorbBlips = [];
+            for (var lbi = 0; lbi < seg.blips.length; lbi++) {
+                var lb = seg.blips[lbi];
+                if (lb.x < segStart - 5 || lb.x > segEnd2 + 5) continue;
+                if (lb.fadeStart > 0) {
+                    absorbBlips.push(lb);
+                } else {
+                    liveBlips.push(lb);
+                }
+            }
+            liveBlips.sort(function(a, b) { return a.x - b.x; });
 
-            for (var bi = 0; bi < blips.length; bi++) {
-                var blip = blips[bi];
-                if (blip.x < segStart || blip.x > segEnd2) continue;
+            // ── Phase 3: Dynamic glow (density-based "breathing") ──
+            // Count visible blips to determine glow intensity
+            var visibleDensity = liveBlips.length;
+            var densityGlow;
+            if (visibleDensity < 20)       densityGlow = 6;   // quiet
+            else if (visibleDensity < 100) densityGlow = 8 + (visibleDensity - 20) / 80 * 4;  // 8-12
+            else if (visibleDensity < 300) densityGlow = 12 + (visibleDensity - 100) / 200 * 4; // 12-16
+            else                           densityGlow = 16 + Math.min((visibleDensity - 300) / 200 * 4, 6); // 16-22
+            // Subtle breathing pulse on live segments
+            if (isLive) {
+                var breathe = 0.85 + 0.15 * Math.sin(nowSec * 1.5);
+                densityGlow *= breathe;
+            }
 
-                var nw = (blip.notchWidth || 3) * zoom;
-                var nh = (blip.notchHeight || 3) * zoom * 0.5;
-                nh = Math.min(nh, 40);
-                var ncx = virtualToCanvas(blip.x);
-                var dir = blip.notchDown ? 1 : -1;
+            // ── Phase 2: Zoom-adaptive rendering ──
+            if (zoom < 0.5) {
+                // OVERVIEW: Notches blur into a TEXTURE — line thickness varies with density
+                // Draw a thicker, fuzzier line where tx density is high
+                ctx.beginPath();
+                ctx.moveTo(virtualToCanvas(segStart), y);
+                ctx.lineTo(virtualToCanvas(segEnd2), y);
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2;
+                ctx.shadowBlur = densityGlow;
+                ctx.shadowColor = color;
+                ctx.stroke();
 
-                // Flat line up to notch start
-                ctx.lineTo(ncx - nw / 2, y);
+                // Add texture layer: variable thickness represents tx activity
+                // Subsample at low zoom to avoid thousands of lineTo calls
+                if (liveBlips.length > 0) {
+                    ctx.globalAlpha = 0.15;
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(virtualToCanvas(segStart), y);
+                    var texSkip = Math.max(1, Math.floor(liveBlips.length / 200));
+                    for (var txi = 0; txi < liveBlips.length; txi += texSkip) {
+                        var tb = liveBlips[txi];
+                        var tcx = virtualToCanvas(tb.x);
+                        var tnh = (tb.notchHeight || 3) * 0.3;
+                        var tdir = tb.notchDown ? 1 : -1;
+                        ctx.lineTo(tcx, y - tdir * tnh);
+                    }
+                    ctx.lineTo(virtualToCanvas(segEnd2), y);
+                    ctx.strokeStyle = color;
+                    ctx.stroke();
+                    ctx.globalAlpha = 1;
+                }
+                ctx.shadowBlur = 0;
+            } else {
+                // DETAIL MODES (zoom >= 0.5): Draw individual gaussian notches
+                var steps = zoom > 4 ? 12 : 8; // smoother curves at high zoom
 
-                // Gaussian bump (8 steps for smooth curve)
-                var steps = 8;
-                for (var nsi = 0; nsi <= steps; nsi++) {
-                    var t = (nsi / steps) * 2 - 1;
-                    var gauss = Math.exp(-t * t * 2.5);
-                    ctx.lineTo(
-                        ncx - nw / 2 + (nsi / steps) * nw,
-                        y - dir * nh * gauss
-                    );
+                // ── Main line path with all notches ──
+                ctx.beginPath();
+                ctx.moveTo(virtualToCanvas(segStart), y);
+
+                for (var bi = 0; bi < liveBlips.length; bi++) {
+                    var blip = liveBlips[bi];
+                    var nw = (blip.notchWidth || 3) * zoom;
+                    var nh = (blip.notchHeight || 3) * zoom * 0.5;
+                    // Scale max height with zoom so notches grow meaningfully at high zoom
+                    var maxNh = zoom > 4 ? 40 + (zoom - 4) * 8 : 40;
+                    nh = Math.min(nh, maxNh);
+                    var ncx = virtualToCanvas(blip.x);
+                    var dir = blip.notchDown ? 1 : -1;
+
+                    // Flat line up to notch start
+                    ctx.lineTo(ncx - nw / 2, y);
+
+                    // Gaussian bump
+                    for (var nsi = 0; nsi <= steps; nsi++) {
+                        var t = (nsi / steps) * 2 - 1;
+                        var gauss = Math.exp(-t * t * 2.5);
+                        ctx.lineTo(
+                            ncx - nw / 2 + (nsi / steps) * nw,
+                            y - dir * nh * gauss
+                        );
+                    }
+                }
+
+                // Flat line to end
+                ctx.lineTo(virtualToCanvas(segEnd2), y);
+
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2;
+                ctx.shadowBlur = densityGlow;
+                ctx.shadowColor = color;
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+
+                // ── Phase 5: Extreme fee white-hot tips ──
+                // At zoom > 1x, overlay bright tips on high-fee notches
+                if (zoom > 1.0) {
+                    for (var efi = 0; efi < liveBlips.length; efi++) {
+                        var eb = liveBlips[efi];
+                        var efr = eb.feeRatio || 0;
+                        if (efr < 2.0) continue; // only highlight above-median notches
+                        var enw = (eb.notchWidth || 3) * zoom;
+                        var enh = (eb.notchHeight || 3) * zoom * 0.5;
+                        enh = Math.min(enh, zoom > 4 ? 40 + (zoom - 4) * 8 : 40);
+                        var ecx = virtualToCanvas(eb.x);
+                        var edir = eb.notchDown ? 1 : -1;
+
+                        // Intensity: brighter for higher fee ratio
+                        var intensity = Math.min((efr - 2.0) / 6.0, 1.0);
+                        // Color: from segment color → white at extremes
+                        var tipAlpha = 0.15 + intensity * 0.55;
+
+                        ctx.beginPath();
+                        // Draw just the peak portion (inner 60% of the gaussian)
+                        var peakSteps = 8;
+                        for (var psi = 0; psi <= peakSteps; psi++) {
+                            var pt = (psi / peakSteps) * 1.2 - 0.6; // narrow range
+                            var pgauss = Math.exp(-pt * pt * 2.5);
+                            var ppx = ecx - enw * 0.3 + (psi / peakSteps) * enw * 0.6;
+                            var ppy = y - edir * enh * pgauss;
+                            if (psi === 0) ctx.moveTo(ppx, ppy);
+                            else ctx.lineTo(ppx, ppy);
+                        }
+                        ctx.strokeStyle = 'rgba(255, 255, 255, ' + tipAlpha + ')';
+                        ctx.lineWidth = zoom > 4 ? 2.5 : 1.5;
+                        ctx.shadowBlur = 4 + intensity * 8;
+                        ctx.shadowColor = 'rgba(255, 255, 255, ' + (tipAlpha * 0.5) + ')';
+                        ctx.stroke();
+                        ctx.shadowBlur = 0;
+                    }
+                }
+
+                // ── Phase 2: High-zoom detail — fee rate text ──
+                if (zoom >= 8) {
+                    ctx.font = Math.round(9 * Math.min(zoom / 8, 2)) + 'px monospace';
+                    ctx.textAlign = 'center';
+                    for (var fti = 0; fti < liveBlips.length; fti++) {
+                        var fb = liveBlips[fti];
+                        var fnw = (fb.notchWidth || 3) * zoom;
+                        var fnh = (fb.notchHeight || 3) * zoom * 0.5;
+                        fnh = Math.min(fnh, 40 + (zoom - 4) * 8);
+                        var fcx = virtualToCanvas(fb.x);
+                        var fdir = fb.notchDown ? 1 : -1;
+                        var peakY = y - fdir * fnh;
+
+                        // Fee rate above the peak
+                        if (fb.feeRate) {
+                            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                            ctx.fillText(
+                                fb.feeRate.toFixed(1) + ' s/vB',
+                                fcx,
+                                fdir < 0 ? peakY - 6 : peakY + 12
+                            );
+                        }
+                        // Value below (if available and zoom high enough)
+                        if (fb.value && zoom >= 12) {
+                            var btcVal = fb.value / 1e8;
+                            var valStr = btcVal >= 0.01 ? btcVal.toFixed(3) : btcVal.toFixed(6);
+                            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+                            ctx.fillText(
+                                '\u{20bf}' + valStr,
+                                fcx,
+                                fdir < 0 ? peakY - 18 : peakY + 24
+                            );
+                        }
+                    }
+                }
+
+                // ── Phase 2: Medium-zoom fee color overlay ──
+                // At zoom 3-8x, overlay individual notch colors
+                if (zoom >= 3 && zoom < 8) {
+                    for (var ci = 0; ci < liveBlips.length; ci++) {
+                        var cb = liveBlips[ci];
+                        var cfr = cb.feeRatio || 0;
+                        if (cfr < 1.5) continue; // only color above-normal
+                        var cnw = (cb.notchWidth || 3) * zoom;
+                        var cnh = (cb.notchHeight || 3) * zoom * 0.5;
+                        cnh = Math.min(cnh, 40);
+                        var ccx = virtualToCanvas(cb.x);
+                        var cdir = cb.notchDown ? 1 : -1;
+
+                        // Draw colored overlay notch
+                        ctx.beginPath();
+                        for (var csi = 0; csi <= 8; csi++) {
+                            var ct = (csi / 8) * 2 - 1;
+                            var cgauss = Math.exp(-ct * ct * 2.5);
+                            var cpx = ccx - cnw / 2 + (csi / 8) * cnw;
+                            var cpy = y - cdir * cnh * cgauss;
+                            if (csi === 0) ctx.moveTo(cpx, cpy);
+                            else ctx.lineTo(cpx, cpy);
+                        }
+                        var notchColor = cb.color || 'rgba(0, 230, 118, ';
+                        ctx.strokeStyle = notchColor + '0.4)';
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+                    }
                 }
             }
 
-            // Flat line to end
-            ctx.lineTo(virtualToCanvas(segEnd2), y);
+            // ── Phase 4: Line-specific absorption animation ──
+            // Absorbing notches slide toward the waveform, compressing + brightening
+            // "A wave of electrical activity sweeping into the heartbeat"
+            if (absorbBlips.length > 0) {
+                // Parse segment color for absorption lerp (color → white)
+                var segRGB = hexToRgb(color || COLORS.healthy);
 
-            ctx.strokeStyle = color;
-            ctx.lineWidth = 2;
-            ctx.shadowBlur = 8;
-            ctx.shadowColor = color;
-            ctx.stroke();
-            ctx.shadowBlur = 0;
+                for (var abi = 0; abi < absorbBlips.length; abi++) {
+                    var ab = absorbBlips[abi];
+                    var fadeDt = nowSec - ab.fadeStart;
+                    var abDist = Math.abs(ab.absorbTargetX - ab.absorbOriginX);
+                    var abDuration = Math.max(1.2, Math.min(abDist / 50, 3.0));
+                    var abT = Math.min(fadeDt / abDuration, 1.0);
+                    if (abT >= 1.0) continue;
 
-            // Highlight hovered notch in line mode
+                    // Cubic ease-in: slow start → accelerating rush toward waveform
+                    var abEase = abT * abT * abT;
+                    // X position slides from origin toward target
+                    var abVX = ab.absorbOriginX + (ab.absorbTargetX - ab.absorbOriginX) * abEase;
+                    var abCX = virtualToCanvas(abVX);
+                    var abNW = (ab.notchWidth || 3) * zoom;
+                    // Height GROWS as notch compresses (energy building)
+                    var abNH = (ab.notchHeight || 3) * zoom * 0.5 * (1 + abEase * 1.5);
+                    abNH = Math.min(abNH, 80);
+                    var abDir = ab.notchDown ? 1 : -1;
+
+                    // Opacity: bright through most of animation, fade in last 20%
+                    var abAlpha = abT < 0.8 ? 0.9 : 0.9 * (1 - (abT - 0.8) / 0.2);
+
+                    // Draw the sliding notch
+                    ctx.beginPath();
+                    var abSteps = 8;
+                    for (var absi = 0; absi <= abSteps; absi++) {
+                        var abt = (absi / abSteps) * 2 - 1;
+                        var abGauss = Math.exp(-abt * abt * 2.5);
+                        var abpx = abCX - abNW / 2 + (absi / abSteps) * abNW;
+                        var abpy = y - abDir * abNH * abGauss;
+                        if (absi === 0) ctx.moveTo(abpx, abpy);
+                        else ctx.lineTo(abpx, abpy);
+                    }
+                    // Brighten: segment color → white as it approaches the spike
+                    var abWhite = Math.min(abEase * 1.5, 1.0);
+                    var abR = Math.round(lerp(segRGB[0], 255, abWhite));
+                    var abG = Math.round(lerp(segRGB[1], 255, abWhite));
+                    var abB = Math.round(lerp(segRGB[2], 255, abWhite));
+                    ctx.strokeStyle = 'rgba(' + abR + ',' + abG + ',' + abB + ',' + abAlpha + ')';
+                    ctx.lineWidth = 2 + abEase * 2;
+                    ctx.shadowBlur = 6 + abEase * 16;
+                    ctx.shadowColor = 'rgba(' + abR + ',' + abG + ',' + abB + ',' + (abAlpha * 0.5) + ')';
+                    ctx.stroke();
+                    ctx.shadowBlur = 0;
+                }
+            }
+
+            // ── Highlight hovered notch ──
             if (_hb.hoveredBlip) {
                 var hb = _hb.hoveredBlip;
-                // Check if hovered blip belongs to this segment
                 var hbInSeg = false;
                 for (var hci = 0; hci < seg.blips.length; hci++) {
                     if (seg.blips[hci] === hb) { hbInSeg = true; break; }
                 }
-                if (hbInSeg) {
+                if (hbInSeg && hb.fadeStart === 0) {
                     var hbx = virtualToCanvas(hb.x);
                     var hnw = (hb.notchWidth || 3) * zoom;
                     var hnh = (hb.notchHeight || 3) * zoom * 0.5;
-                    hnh = Math.min(hnh, 40);
+                    hnh = Math.min(hnh, zoom > 4 ? 40 + (zoom - 4) * 8 : 40);
                     var hdir = hb.notchDown ? 1 : -1;
 
                     ctx.beginPath();
@@ -1434,10 +1690,10 @@
                         if (hsi === 0) ctx.moveTo(hpx, hpy);
                         else ctx.lineTo(hpx, hpy);
                     }
-                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
                     ctx.lineWidth = 3;
-                    ctx.shadowBlur = 12;
-                    ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
+                    ctx.shadowBlur = 14;
+                    ctx.shadowColor = 'rgba(255, 255, 255, 0.6)';
                     ctx.stroke();
                     ctx.shadowBlur = 0;
                 }
@@ -1491,6 +1747,9 @@
                 var bOpacity = blip.opacity;
                 var isAbsorbing = false;
                 var absorbT = 0;
+
+                // In line mode, absorption is drawn as sliding notches in drawFlatlineSegment
+                if (_hb.renderMode === 'line' && blip.fadeStart > 0) continue;
 
                 // Particle absorption: blip shatters into fragments sucked into the spike
                 if (blip.fadeStart > 0 && blip.particles && blip.particles.length > 0) {
@@ -1917,13 +2176,22 @@
                     _hb.hoveredFlatline = null;
 
                     if (!_hb.hoveredBlock) {
-                        // Check for blip hover (2D hit test at any zoom above 4x)
-                        if (my < baseline && _hb.zoom >= 4) {
-                            _hb.hoveredBlip = blipAtCanvasXY(mx, my, baseline);
-                        }
-                        // Fallback to x-only match at lower zoom
-                        if (!_hb.hoveredBlip && my < baseline && _hb.zoom >= 1.5) {
-                            _hb.hoveredBlip = blipAtVirtualX(vx, 4 / _hb.zoom);
+                        // Check for blip hover
+                        if (_hb.renderMode === 'line') {
+                            // Line mode: x-only match works at all zoom levels >= 1.5
+                            // (notches are in the baseline, y doesn't help much)
+                            if (_hb.zoom >= 1.5) {
+                                _hb.hoveredBlip = blipAtVirtualX(vx, 4 / _hb.zoom);
+                            }
+                        } else {
+                            // Brick/bloodstream: 2D hit test at zoom >= 4x
+                            if (my < baseline && _hb.zoom >= 4) {
+                                _hb.hoveredBlip = blipAtCanvasXY(mx, my, baseline);
+                            }
+                            // Fallback to x-only match at lower zoom
+                            if (!_hb.hoveredBlip && my < baseline && _hb.zoom >= 1.5) {
+                                _hb.hoveredBlip = blipAtVirtualX(vx, 4 / _hb.zoom);
+                            }
                         }
                         if (!_hb.hoveredBlip && my >= baseline) {
                             // Only show flatline tooltip when cursor is below the baseline
@@ -2140,7 +2408,7 @@
             viewOffsetY: 0,       // vertical pan offset (0 = default baseline)
             autoFollow: true,
             paused: false,
-            renderMode: 'bloodstream', // 'bricks' or 'bloodstream'
+            renderMode: 'line', // 'line', 'bricks', or 'bloodstream'
             zoom: 1.9,              // default zoom for brick-level detail
             minZoom: 0.1,
             maxZoom: 50.0,
