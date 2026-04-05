@@ -367,7 +367,7 @@
         }
         var medianFee = _hb._wsMedianFee || 5;
         var placed = 0;
-        var maxBricks = 2000;
+        var maxBricks = 5000; // match server-side SSE history limit
 
         var flatlineSpan = _hb.virtualX - liveSeg.x_start;
         var stackMap = {};
@@ -491,11 +491,18 @@
                 } catch (err) { console.log('[heartbeat] SSE history error:', err); }
             });
             es.addEventListener('tx', function(e) {
-                if (!_hb || document.hidden) return; // skip when tab is hidden
+                if (!_hb) return;
                 try {
                     var tx = JSON.parse(e.data);
                     _hb._hasTxStream = true;
                     _hb._sseTxCount++;
+                    // When hidden: buffer txs (capped) but don't flush.
+                    // They'll be spread across the gap on tab return.
+                    if (document.hidden) {
+                        if (!_hb._hiddenTxBuffer) _hb._hiddenTxBuffer = [];
+                        if (_hb._hiddenTxBuffer.length < 3000) _hb._hiddenTxBuffer.push(tx);
+                        return;
+                    }
                     if (_hb._txBatchQueue.length > 500) _hb._txBatchQueue.length = 500;
                     _hb._txBatchQueue.push(tx);
                     // Track rolling median fee rate from own node data
@@ -2775,7 +2782,9 @@
         var now = Date.now() / 1000;
         var elapsed = now - (_hb.lastFrameTime || now);
 
-        // Clear queued txs (they'd all stack at one position)
+        // Grab buffered txs and clear queues
+        var hiddenTxs = _hb._hiddenTxBuffer || [];
+        _hb._hiddenTxBuffer = [];
         _hb._txBatchQueue = [];
 
         // Replay any blocks that arrived while hidden
@@ -2818,6 +2827,47 @@
             var liveSeg2 = _hb.timeline[_hb.timeline.length - 1];
             if (liveSeg2 && liveSeg2.type === 'flatline' && liveSeg2.x_end === null) {
                 _hb.virtualX += elapsed * FLATLINE_PX_PER_SEC;
+            }
+        }
+
+        // Spread buffered txs across the gap so the flatline isn't empty
+        if (hiddenTxs.length > 0 && elapsed > 1) {
+            var liveSeg3 = _hb.timeline[_hb.timeline.length - 1];
+            if (liveSeg3 && liveSeg3.type === 'flatline' && liveSeg3.x_end === null) {
+                var gapStart = _hb.virtualX - elapsed * FLATLINE_PX_PER_SEC;
+                var gapSpan = elapsed * FLATLINE_PX_PER_SEC;
+                var medianFee = _hb._wsMedianFee || 5;
+                var cap = Math.min(hiddenTxs.length, 2000);
+                for (var hti = 0; hti < cap; hti++) {
+                    var htx = hiddenTxs[hti];
+                    if (!htx.fee || !htx.vsize) continue;
+                    var htFeeRate = htx.fee / htx.vsize;
+                    var htFeeNorm = Math.min(Math.log2(htFeeRate + 1) / 6, 1.0);
+                    var htNp = computeNotchProps(htFeeRate, htx.vsize, medianFee);
+                    // Spread evenly across the gap
+                    var htVX = gapStart + (hti / cap) * gapSpan * 0.95;
+                    var htColor;
+                    if (htFeeRate < medianFee * 0.8) htColor = 'rgba(33, 150, 243, ';
+                    else if (htFeeRate < medianFee * 1.5) htColor = 'rgba(0, 230, 118, ';
+                    else if (htFeeRate < medianFee * 4) htColor = 'rgba(255, 152, 0, ';
+                    else htColor = 'rgba(244, 67, 54, ';
+                    var htBrickH = 3 + htFeeNorm * 14 + Math.random() * 3;
+                    liveSeg3.blips.push({
+                        x: htVX, gridX: Math.round(htVX / 5) * 5,
+                        height: htBrickH, brickH: htBrickH, brickW: 4, stackY: 0,
+                        color: htColor, opacity: 0.75 + htFeeNorm * 0.2,
+                        txCount: 1, txid: htx.txid || null,
+                        feeRate: Math.round(htFeeRate * 10) / 10,
+                        vsize: htx.vsize || 0, value: htx.value || 0,
+                        timestamp: Date.now() / 1000, fadeStart: 0,
+                        bobPhase: Math.random() * Math.PI * 2,
+                        bobSpeed: 1.2 + htFeeNorm * 0.8,
+                        lane: Math.floor(Math.random() * 5) - 2,
+                        notchHeight: htNp.notchHeight, notchWidth: htNp.notchWidth,
+                        notchDown: htNp.notchDown, feeRatio: htNp.feeRatio
+                    });
+                }
+                console.log('[heartbeat] placed', Math.min(cap, hiddenTxs.length), 'buffered txs across tab-hidden gap');
             }
         }
 
