@@ -346,16 +346,6 @@
         var flatlineSpan = _hb.virtualX - liveSeg.x_start;
         var stackMap = {};
 
-        // Count pre-block survivors for even spacing
-        var preBlockCount = 0;
-        for (var pci = 0; pci < txs.length && pci < maxBricks; pci++) {
-            if (txs[pci].first_seen && txs[pci].fee && txs[pci].vsize) {
-                if (txs[pci].first_seen - effectiveBlockTs < 0) preBlockCount++;
-            }
-        }
-        var preBlockIdx = 0;
-        var preBlockStep = preBlockCount > 0 ? (flatlineSpan * 0.95) / preBlockCount : 1;
-
         for (var i = 0; i < txs.length && placed < maxBricks; i++) {
             var tx = txs[i];
             if (!tx.first_seen || !tx.fee || !tx.vsize) continue;
@@ -365,9 +355,8 @@
             if (secAfterBlock >= 0) {
                 txVX = liveSeg.x_start + secAfterBlock * FLATLINE_PX_PER_SEC;
             } else {
-                // Pre-block survivor: even spacing + small jitter for organic look
-                txVX = liveSeg.x_start + preBlockIdx * preBlockStep + (Math.random() - 0.5) * preBlockStep * 0.5;
-                preBlockIdx++;
+                // Pre-block survivor: random placement across the flatline
+                txVX = liveSeg.x_start + Math.random() * flatlineSpan * 0.95;
             }
             if (txVX > _hb.virtualX) txVX = _hb.virtualX - Math.random() * 5;
             if (txVX < liveSeg.x_start) txVX = liveSeg.x_start + Math.random() * 5;
