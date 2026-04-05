@@ -1460,7 +1460,7 @@
                     else if (bsVs < 800) bsBaseR = 4.0;
                     else if (bsVs < 2000) bsBaseR = 5.0;
                     else bsBaseR = 6.0;
-                    var bsCellR = bsBaseR * (0.8 + Math.min(Math.log2(zoom + 1) * 0.35, 1.5));
+                    var bsCellR = bsBaseR * Math.max(zoom * 0.4, 0.8);
 
                     // Start from tube position, converge to baseline as cell approaches spike
                     var bsRow = (blip.stackY || 0) > 0 ? Math.round((blip.stackY || 0) / (blip.brickH || bsCellR * 2)) : 0;
@@ -1612,17 +1612,18 @@
                         else if (vs < 800)  baseR = 4.0;
                         else if (vs < 2000) baseR = 5.0;
                         else                baseR = 6.0;
-                        // Gentle zoom scaling (log-based, not linear)
-                        var cellRadius = baseR * (0.8 + Math.min(Math.log2(zoom + 1) * 0.35, 1.5));
+                        // Scale with zoom: gentle at low zoom, grows with zoom at high
+                        var cellRadius = baseR * Math.max(zoom * 0.4, 0.8);
                         var cellDiam = cellRadius * 2;
 
                         // Compact tube packing: cells above/below baseline, tightly packed
                         var row = sy > 0 ? Math.round(sy / (blip.brickH || cellDiam)) : 0;
                         var ring = Math.ceil((row + 1) / 2);
                         var goBelow = (row % 2 === 1);
-                        // Very tight: cells nearly overlapping, capped to tube bounds
+                        // Very tight: cells nearly overlapping, tube grows with zoom
                         var ringStep = Math.max(cellDiam * 0.55, 2);
-                        var distFromCenter = Math.min(ring * ringStep, 22);
+                        var tubeMax = 22 + (zoom > 4 ? (zoom - 4) * 2.5 : 0);
+                        var distFromCenter = Math.min(ring * ringStep, tubeMax);
                         var cellCY = goBelow ? baseline + distFromCenter
                                              : baseline - distFromCenter;
                         if (row === 0) cellCY = baseline;
