@@ -2590,13 +2590,15 @@
                 var gapStart = _hb.virtualX - elapsed * FLATLINE_PX_PER_SEC;
                 var gapSpan = elapsed * FLATLINE_PX_PER_SEC;
                 var medianFee = _hb._wsMedianFee || 5;
-                var cap = Math.min(hiddenTxs.length, 2000);
+                // Cap density like history placement
+                var maxForGap = Math.max(Math.floor(gapSpan / 5 * 3), 100);
+                var cap = Math.min(hiddenTxs.length, maxForGap);
+                var htStackMap = {};
                 for (var hti = 0; hti < cap; hti++) {
                     var htx = hiddenTxs[hti];
                     if (!htx.fee || !htx.vsize) continue;
                     var htFeeRate = htx.fee / htx.vsize;
                     var htFeeNorm = Math.min(Math.log2(htFeeRate + 1) / 6, 1.0);
-                    // Random placement across the gap (like live txs)
                     var htVX = gapStart + Math.random() * gapSpan * 0.95;
                     var htColor;
                     if (htFeeRate < medianFee * 0.8) htColor = 'rgba(33, 150, 243, ';
@@ -2604,9 +2606,12 @@
                     else if (htFeeRate < medianFee * 4) htColor = 'rgba(255, 152, 0, ';
                     else htColor = 'rgba(244, 67, 54, ';
                     var htBrickH = 3 + htFeeNorm * 14 + Math.random() * 3;
+                    var htGridX = Math.round(htVX / 5) * 5;
+                    var htStackY = htStackMap[htGridX] || 0;
+                    htStackMap[htGridX] = htStackY + htBrickH;
                     liveSeg3.blips.push({
-                        x: htVX, gridX: Math.round(htVX / 5) * 5,
-                        height: htBrickH, brickH: htBrickH, brickW: 4, stackY: 0,
+                        x: htVX, gridX: htGridX,
+                        height: htBrickH + htStackY, brickH: htBrickH, brickW: 4, stackY: htStackY,
                         color: htColor, opacity: 0.75 + htFeeNorm * 0.2,
                         txCount: 1, txid: htx.txid || null,
                         feeRate: Math.round(htFeeRate * 10) / 10,
