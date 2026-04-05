@@ -938,8 +938,16 @@
         }
         var blipColor = blip.color ? blip.color + '0.6)' : 'rgba(0,230,118,0.6)';
         // Clamp tooltip y to stay within canvas (at least 10px from top)
-        var heightScale = _hb.zoom > 4 ? 1 + (_hb.zoom - 4) * 0.15 : 1;
-        var tipY = baseline - ((blip.stackY || 0) + (blip.brickH || blip.height)) * heightScale - 12;
+        var tipY;
+        if (_hb.renderMode === 'bloodstream') {
+            // Use actual cell position in tube
+            var tubeY = Math.sin((blip.bobPhase || 0) * 3.71) * 18;
+            var cellR = 3 * Math.max(_hb.zoom * 0.4, 0.8);
+            tipY = baseline - tubeY - cellR - 12;
+        } else {
+            var heightScale = _hb.zoom > 4 ? 1 + (_hb.zoom - 4) * 0.15 : 1;
+            tipY = baseline - ((blip.stackY || 0) + (blip.brickH || blip.height)) * heightScale - 12;
+        }
         tipY = Math.max(10, Math.min(tipY, _hb.height - 80));
         drawTooltipBox(ctx, lines, canvasX, tipY, blipColor, {
             padding: 6, lineH: 15, fontSize: '11px monospace', textColor: 'rgba(255, 255, 255, 0.9)'
@@ -1629,7 +1637,8 @@
 
                         // Tube distribution: each cell gets a unique Y position
                         // within the tube, determined by its bobPhase (deterministic random)
-                        var tubeMax = 18 + (zoom > 4 ? (zoom - 4) * 2 : 0);
+                        // Fixed tube bounds so cells don't relocate on zoom
+                        var tubeMax = 18;
                         var bobPhase = blip.bobPhase || 0;
                         var bobSpeed = blip.bobSpeed || 1.5;
                         // Deterministic Y from bobPhase — fills tube naturally
