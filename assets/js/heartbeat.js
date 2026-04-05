@@ -372,6 +372,16 @@
         var flatlineSpan = _hb.virtualX - liveSeg.x_start;
         var stackMap = {};
 
+        // Count pre-block survivors for even spacing
+        var preBlockCount = 0;
+        for (var pci = 0; pci < txs.length && pci < maxBricks; pci++) {
+            if (txs[pci].first_seen && txs[pci].fee && txs[pci].vsize) {
+                if (txs[pci].first_seen - effectiveBlockTs < 0) preBlockCount++;
+            }
+        }
+        var preBlockIdx = 0;
+        var preBlockStep = preBlockCount > 0 ? (flatlineSpan * 0.95) / preBlockCount : 1;
+
         for (var i = 0; i < txs.length && placed < maxBricks; i++) {
             var tx = txs[i];
             if (!tx.first_seen || !tx.fee || !tx.vsize) continue;
@@ -381,10 +391,12 @@
             if (secAfterBlock >= 0) {
                 txVX = liveSeg.x_start + secAfterBlock * FLATLINE_PX_PER_SEC;
             } else {
-                // Pre-block survivor: spread across the flatline
-                txVX = liveSeg.x_start + Math.random() * flatlineSpan * 0.95;
+                // Pre-block survivor: even spacing + small jitter for organic look
+                txVX = liveSeg.x_start + preBlockIdx * preBlockStep + (Math.random() - 0.5) * preBlockStep * 0.5;
+                preBlockIdx++;
             }
             if (txVX > _hb.virtualX) txVX = _hb.virtualX - Math.random() * 5;
+            if (txVX < liveSeg.x_start) txVX = liveSeg.x_start + Math.random() * 5;
 
             var feeRate = tx.fee / tx.vsize;
             var feeNorm = Math.min(Math.log2(feeRate + 1) / 6, 1.0);
@@ -1436,8 +1448,12 @@
 
             // ── Phase 2: Zoom-adaptive rendering ──
             if (zoom < 0.5) {
-                // OVERVIEW: Notches blur into a TEXTURE — line thickness varies with density
-                // Draw a thicker, fuzzier line where tx density is high
+                // OVERVIEW: The line looks "fuzzy" or "thick" during active periods.
+                // At very low zoom, hundreds of blocks visible — individual notches
+                // blur into a TEXTURE on the flatline. You can SEE mempool activity
+                // at a glance from the line thickness.
+
+                // Base line
                 ctx.beginPath();
                 ctx.moveTo(virtualToCanvas(segStart), y);
                 ctx.lineTo(virtualToCanvas(segEnd2), y);
@@ -1446,28 +1462,39 @@
                 ctx.shadowBlur = densityGlow;
                 ctx.shadowColor = color;
                 ctx.stroke();
+                ctx.shadowBlur = 0;
 
-                // Add texture layer: variable thickness represents tx activity
-                // Subsample at low zoom to avoid thousands of lineTo calls
+                // Noise envelope: draw upper and lower boundaries to show activity
                 if (liveBlips.length > 0) {
-                    ctx.globalAlpha = 0.15;
-                    ctx.lineWidth = 1;
+                    var texSkip = Math.max(1, Math.floor(liveBlips.length / 300));
+                    // Upper noise boundary
                     ctx.beginPath();
                     ctx.moveTo(virtualToCanvas(segStart), y);
-                    var texSkip = Math.max(1, Math.floor(liveBlips.length / 200));
                     for (var txi = 0; txi < liveBlips.length; txi += texSkip) {
                         var tb = liveBlips[txi];
                         var tcx = virtualToCanvas(tb.x);
-                        var tnh = (tb.notchHeight || 3) * 0.3;
-                        var tdir = tb.notchDown ? -1 : 1;
-                        ctx.lineTo(tcx, y - tdir * tnh);
+                        var tnh = Math.max((tb.notchHeight || 3) * 0.6, 1.5);
+                        ctx.lineTo(tcx, y - tnh);
                     }
                     ctx.lineTo(virtualToCanvas(segEnd2), y);
-                    ctx.strokeStyle = color;
-                    ctx.stroke();
+                    ctx.closePath();
+                    ctx.fillStyle = color;
+                    ctx.globalAlpha = 0.12;
+                    ctx.fill();
+                    // Lower noise boundary
+                    ctx.beginPath();
+                    ctx.moveTo(virtualToCanvas(segStart), y);
+                    for (var txi2 = 0; txi2 < liveBlips.length; txi2 += texSkip) {
+                        var tb2 = liveBlips[txi2];
+                        var tcx2 = virtualToCanvas(tb2.x);
+                        var tnh2 = Math.max((tb2.notchHeight || 3) * 0.3, 1);
+                        ctx.lineTo(tcx2, y + tnh2);
+                    }
+                    ctx.lineTo(virtualToCanvas(segEnd2), y);
+                    ctx.closePath();
+                    ctx.fill();
                     ctx.globalAlpha = 1;
                 }
-                ctx.shadowBlur = 0;
             } else {
                 // DETAIL MODES (zoom >= 0.5): Draw individual gaussian notches
                 var steps = zoom > 4 ? 12 : 8; // smoother curves at high zoom
