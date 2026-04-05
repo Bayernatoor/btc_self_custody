@@ -1627,7 +1627,13 @@
                                              : baseline - distFromCenter;
                         if (row === 0) cellCY = baseline;
 
-                        var cellCX = bx;
+                        // Gentle bobbing: small amplitude so cells can't overlap neighbors
+                        var bobPhase = blip.bobPhase || 0;
+                        var bobSpeed = blip.bobSpeed || 1.5;
+                        var bobAmpY = Math.min(ringStep * 0.2, 1.5); // ±1.5px max
+                        var bobAmpX = Math.min(cellRadius * 0.15, 1.0);
+                        cellCY += Math.sin(nowSec * bobSpeed + bobPhase) * bobAmpY;
+                        var cellCX = bx + Math.cos(nowSec * bobSpeed * 0.7 + bobPhase) * bobAmpX;
 
                         // Cell color based on fee rate (warm circulatory palette)
                         var feeRatio = blip.feeRatio || 1;
