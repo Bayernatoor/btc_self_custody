@@ -1395,32 +1395,32 @@
                 }
             }
 
-            // Red underglow inside the vessel (wider channel for ball-pit stacking)
-            var vesselH = 40; // ±40px from baseline
+            // Red underglow inside the vessel channel
             var underglowAlpha = 0.02 + Math.min(cellCount / 500, 0.05);
             if (isLive) {
                 underglowAlpha *= 0.85 + 0.15 * Math.sin(nowSec * 1.2);
             }
-            var grad = ctx.createLinearGradient(0, baseline - vesselH, 0, baseline + vesselH * 0.3);
+            var grad = ctx.createLinearGradient(0, baseline - 25, 0, baseline + 25);
             grad.addColorStop(0, 'rgba(180, 30, 50, 0)');
             grad.addColorStop(0.3, 'rgba(180, 30, 50, ' + underglowAlpha + ')');
-            grad.addColorStop(0.6, 'rgba(180, 30, 50, ' + (underglowAlpha * 1.3) + ')');
+            grad.addColorStop(0.5, 'rgba(180, 30, 50, ' + (underglowAlpha * 1.3) + ')');
+            grad.addColorStop(0.7, 'rgba(180, 30, 50, ' + underglowAlpha + ')');
             grad.addColorStop(1, 'rgba(180, 30, 50, 0)');
             ctx.fillStyle = grad;
-            ctx.fillRect(cx1, baseline - vesselH, cx2 - cx1, vesselH + vesselH * 0.3);
+            ctx.fillRect(cx1, baseline - 25, cx2 - cx1, 50);
 
-            // Vessel walls — subtle lines at edges
+            // Vessel walls
             var wallAlpha = 0.04 + Math.min(cellCount / 600, 0.04);
             ctx.globalAlpha = wallAlpha;
             ctx.strokeStyle = 'rgba(255, 180, 180, 0.25)';
             ctx.lineWidth = 0.5;
             ctx.beginPath();
-            ctx.moveTo(cx1, baseline - vesselH);
-            ctx.lineTo(cx2, baseline - vesselH);
+            ctx.moveTo(cx1, baseline - 22);
+            ctx.lineTo(cx2, baseline - 22);
             ctx.stroke();
             ctx.beginPath();
-            ctx.moveTo(cx1, baseline + 4);
-            ctx.lineTo(cx2, baseline + 4);
+            ctx.moveTo(cx1, baseline + 22);
+            ctx.lineTo(cx2, baseline + 22);
             ctx.stroke();
             ctx.globalAlpha = 1;
         }
@@ -1601,8 +1601,8 @@
                     bOpacity *= fadeIn;
 
                     if (_hb.renderMode === 'bloodstream') {
-                        // ═══ Blood cell rendering (ball-pit stacking) ═══
-                        // Cells stack like bricks but render as circles — no overlap
+                        // ═══ Blood cell rendering (hex close-packing) ═══
+                        // Cells pack like balls in a ball pit — hex offset per row
                         var vs = blip.vsize || 200;
                         var baseR;
                         if (vs < 200)       baseR = 2.5;  // platelet
@@ -1612,9 +1612,12 @@
                         else                baseR = 8.0;  // macrophage
                         var cellRadius = baseR * Math.max(zoom * 0.5, 0.8);
 
-                        // Position: same grid stacking as bricks
-                        var cellCX = bx;
-                        var cellCY = baseline - sy - cellRadius; // sit on top of stack
+                        // Hex packing: compute row from stack height, offset odd rows
+                        var rowH = Math.max(cellRadius * 1.73, 4); // sqrt(3) ≈ 1.73
+                        var hexRow = sy > 0 ? Math.round(sy / (blip.brickH || rowH)) : 0;
+                        var hexOffsetX = (hexRow % 2 === 1) ? cellRadius * 0.9 : 0;
+                        var cellCX = bx + hexOffsetX;
+                        var cellCY = baseline - sy - cellRadius;
 
                         // Cell color based on fee rate (warm circulatory palette)
                         var feeRatio = blip.feeRatio || 1;
