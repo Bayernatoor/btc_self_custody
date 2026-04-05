@@ -1384,32 +1384,33 @@
                 }
             }
 
-            // Red underglow inside the vessel channel
-            var underglowAlpha = 0.02 + Math.min(cellCount / 500, 0.05);
+            // Vessel tube — centered on baseline, symmetric above/below
+            var tubeH = 30; // ±30px from baseline (60px total)
+            var underglowAlpha = 0.02 + Math.min(cellCount / 500, 0.04);
             if (isLive) {
                 underglowAlpha *= 0.85 + 0.15 * Math.sin(nowSec * 1.2);
             }
-            var grad = ctx.createLinearGradient(0, baseline - 25, 0, baseline + 25);
+            var grad = ctx.createLinearGradient(0, baseline - tubeH, 0, baseline + tubeH);
             grad.addColorStop(0, 'rgba(180, 30, 50, 0)');
-            grad.addColorStop(0.3, 'rgba(180, 30, 50, ' + underglowAlpha + ')');
-            grad.addColorStop(0.5, 'rgba(180, 30, 50, ' + (underglowAlpha * 1.3) + ')');
-            grad.addColorStop(0.7, 'rgba(180, 30, 50, ' + underglowAlpha + ')');
+            grad.addColorStop(0.15, 'rgba(180, 30, 50, ' + underglowAlpha + ')');
+            grad.addColorStop(0.5, 'rgba(180, 30, 50, ' + (underglowAlpha * 1.2) + ')');
+            grad.addColorStop(0.85, 'rgba(180, 30, 50, ' + underglowAlpha + ')');
             grad.addColorStop(1, 'rgba(180, 30, 50, 0)');
             ctx.fillStyle = grad;
-            ctx.fillRect(cx1, baseline - 25, cx2 - cx1, 50);
+            ctx.fillRect(cx1, baseline - tubeH, cx2 - cx1, tubeH * 2);
 
-            // Vessel walls
+            // Vessel walls — symmetric tube boundary
             var wallAlpha = 0.04 + Math.min(cellCount / 600, 0.04);
             ctx.globalAlpha = wallAlpha;
             ctx.strokeStyle = 'rgba(255, 180, 180, 0.25)';
             ctx.lineWidth = 0.5;
             ctx.beginPath();
-            ctx.moveTo(cx1, baseline - 22);
-            ctx.lineTo(cx2, baseline - 22);
+            ctx.moveTo(cx1, baseline - tubeH);
+            ctx.lineTo(cx2, baseline - tubeH);
             ctx.stroke();
             ctx.beginPath();
-            ctx.moveTo(cx1, baseline + 22);
-            ctx.lineTo(cx2, baseline + 22);
+            ctx.moveTo(cx1, baseline + tubeH);
+            ctx.lineTo(cx2, baseline + tubeH);
             ctx.stroke();
             ctx.globalAlpha = 1;
         }
@@ -1454,9 +1455,14 @@
                     else bsBaseR = 8.0;
                     var bsCellR = bsBaseR * Math.max(zoom * 0.5, 0.8);
 
-                    // Start from stacked position, converge to baseline as it approaches spike
-                    var bsStackY = (blip.stackY || 0) * (1 - bsEase);
-                    var bsCellCY = baseline - bsStackY - bsCellR;
+                    // Start from tube position, converge to baseline as cell approaches spike
+                    var bsRow = (blip.stackY || 0) > 0 ? Math.round((blip.stackY || 0) / (blip.brickH || bsCellR * 2)) : 0;
+                    var bsRing = Math.ceil((bsRow + 1) / 2);
+                    var bsBelow = (bsRow % 2 === 1);
+                    var bsDist = bsRing * (bsCellR * 2 + 1);
+                    var bsStartY = bsRow === 0 ? baseline : (bsBelow ? baseline + bsDist - bsCellR : baseline - bsDist + bsCellR);
+                    // Converge to baseline
+                    var bsCellCY = bsStartY + (baseline - bsStartY) * bsEase;
 
                     // Deformation: stretch horizontally as cell accelerates
                     var bsStretchX = 1 + bsEase * 0.6;
@@ -1590,23 +1596,32 @@
                     bOpacity *= fadeIn;
 
                     if (_hb.renderMode === 'bloodstream') {
-                        // ═══ Blood cell rendering (hex close-packing) ═══
-                        // Cells pack like balls in a ball pit — hex offset per row
+                        // ═══ Blood cell rendering (vein tube) ═══
+                        // Cells fill a tube centered on the flatline, above AND below
                         var vs = blip.vsize || 200;
                         var baseR;
-                        if (vs < 200)       baseR = 2.5;  // platelet
-                        else if (vs < 400)  baseR = 3.5;  // red blood cell
-                        else if (vs < 800)  baseR = 5.0;  // larger cell
-                        else if (vs < 2000) baseR = 6.5;  // white blood cell
-                        else                baseR = 8.0;  // macrophage
+                        if (vs < 200)       baseR = 2.5;
+                        else if (vs < 400)  baseR = 3.5;
+                        else if (vs < 800)  baseR = 5.0;
+                        else if (vs < 2000) baseR = 6.5;
+                        else                baseR = 8.0;
                         var cellRadius = baseR * Math.max(zoom * 0.5, 0.8);
+                        var cellDiam = cellRadius * 2;
+                        var cellGap = 1; // tiny gap between cells
 
-                        // Hex packing: compute row from stack height, offset odd rows
-                        var rowH = Math.max(cellRadius * 1.73, 4); // sqrt(3) ≈ 1.73
-                        var hexRow = sy > 0 ? Math.round(sy / (blip.brickH || rowH)) : 0;
-                        var hexOffsetX = (hexRow % 2 === 1) ? cellRadius * 0.9 : 0;
+                        // Compute row from stackY — distribute above/below baseline
+                        var row = sy > 0 ? Math.round(sy / (blip.brickH || cellDiam)) : 0;
+                        // Row 0: center. Row 1: below. Row 2: above. Row 3: further below...
+                        var ring = Math.ceil((row + 1) / 2);
+                        var goBelow = (row % 2 === 1);
+                        var distFromCenter = ring * (cellDiam + cellGap);
+                        var cellCY = goBelow ? baseline + distFromCenter - cellRadius
+                                             : baseline - distFromCenter + cellRadius;
+                        if (row === 0) cellCY = baseline; // first cell sits on center
+
+                        // Hex offset: odd rings shift horizontally
+                        var hexOffsetX = (ring % 2 === 1) ? cellRadius * 0.8 : 0;
                         var cellCX = bx + hexOffsetX;
-                        var cellCY = baseline - sy - cellRadius;
 
                         // Cell color based on fee rate (warm circulatory palette)
                         var feeRatio = blip.feeRatio || 1;
