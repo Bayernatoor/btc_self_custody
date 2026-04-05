@@ -150,10 +150,19 @@ async fn subscribe_transactions(
             .as_secs();
 
         // During block processing, ZMQ sends ~5000 rawtx for block txs.
-        // These fail getmempoolentry (already confirmed). We still attempt
-        // the RPC call so genuine new mempool txs keep flowing — but we
-        // skip quickly on failure instead of sleeping.
-        let is_block_flood = block_processing.load(Ordering::Acquire);
+        // Skip immediately without RPC to drain the flood as fast as possible.
+        // Real mempool txs resume within ~100ms after the flood clears.
+        if block_processing.load(Ordering::Acquire) {
+            continue;
+        }
+
+        // Self-throttle: if 5+ consecutive RPC failures, a block likely arrived
+        // before the hashblock event. Skip to let the flood drain.
+        if consecutive_fail >= 5 {
+            consecutive_fail = 0;
+            tracing::debug!("ZMQ: skipped rawtx (consecutive failures, likely block flood)");
+            continue;
+        }
 
         // Look up fee + authoritative vsize from mempool entry
         let (fee, vsize) = match state.rpc.get_mempool_entry(&parsed.txid).await
@@ -164,16 +173,7 @@ async fn subscribe_transactions(
             }
             Err(_) => {
                 rpc_fail += 1;
-                if is_block_flood {
-                    // Block flood: skip silently, don't count consecutive failures
-                    continue;
-                }
                 consecutive_fail += 1;
-                if consecutive_fail >= 5 {
-                    // Likely a block arrived before hashblock — skip remaining flood
-                    consecutive_fail = 0;
-                    tracing::debug!("ZMQ: skipped rawtx (consecutive failures, likely block flood)");
-                }
                 if rpc_fail <= 5 {
                     tracing::debug!(
                         "ZMQ: getmempoolentry failed for {} (may be already confirmed)",
