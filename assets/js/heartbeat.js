@@ -328,6 +328,22 @@
 
         var effectiveBlockTs = _hb.lastBlockTime || lastBlockTs;
 
+        // Fast-forward virtualX to match real elapsed time since last block.
+        // On page load, replay creates compressed flatlines, so virtualX is only
+        // a few pixels past the last block. But real time may have passed (e.g. 10min).
+        // Without this, history txs cluster at the head because flatlineSpan is tiny.
+        var nowSec = Date.now() / 1000;
+        var elapsedSinceBlock = effectiveBlockTs > 0 ? nowSec - effectiveBlockTs : 0;
+        if (elapsedSinceBlock > 0) {
+            var neededX = liveSeg.x_start + elapsedSinceBlock * FLATLINE_PX_PER_SEC;
+            if (neededX > _hb.virtualX) {
+                console.log('[heartbeat] fast-forwarding virtualX for history:',
+                    Math.round(_hb.virtualX), '->', Math.round(neededX),
+                    '(' + Math.round(elapsedSinceBlock) + 's since last block)');
+                _hb.virtualX = neededX;
+            }
+        }
+
         // Compute median fee from history txs so colors match live bricks
         var historyRates = [];
         for (var hi = 0; hi < txs.length; hi++) {
@@ -345,6 +361,12 @@
 
         var flatlineSpan = _hb.virtualX - liveSeg.x_start;
         var stackMap = {};
+
+        console.log('[heartbeat] placeHistoryTxs: flatlineSpan=' + Math.round(flatlineSpan) +
+            'px, virtualX=' + Math.round(_hb.virtualX) +
+            ', segStart=' + Math.round(liveSeg.x_start) +
+            ', effectiveBlockTs=' + effectiveBlockTs +
+            ', elapsed=' + Math.round(elapsedSinceBlock) + 's');
 
         // Cap density: don't cram thousands of bricks into a short flatline
         var maxForSpan = Math.max(Math.floor(flatlineSpan / 5 * 3), 200);
@@ -430,9 +452,18 @@
         // Snap virtualX back to where the last tx blip was placed.
         if (_hb._lastTxBlipTime > 0) {
             var gapSec = (Date.now() / 1000) - _hb._lastTxBlipTime;
+            console.log('[heartbeat] processLiveBlock: block=' + block.height +
+                ', gapSec=' + gapSec.toFixed(2) +
+                ', virtualX=' + Math.round(_hb.virtualX) +
+                ', lastTxBlipTime=' + _hb._lastTxBlipTime.toFixed(1));
             if (gapSec > 0.5 && gapSec < 15) {
+                var oldVX = _hb.virtualX;
                 _hb.virtualX -= gapSec * FLATLINE_PX_PER_SEC;
+                console.log('[heartbeat] gap collapse: ' + Math.round(oldVX) + ' -> ' + Math.round(_hb.virtualX) +
+                    ' (' + (gapSec * FLATLINE_PX_PER_SEC).toFixed(0) + 'px removed)');
             }
+        } else {
+            console.log('[heartbeat] processLiveBlock: block=' + block.height + ', no _lastTxBlipTime');
         }
 
         // Store unconfirmed txids so pushHeartbeatBlocks can preserve them
