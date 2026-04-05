@@ -824,13 +824,17 @@
                 liveSeg._colHeights = {};
                 for (var ki = 0; ki < liveSeg.blips.length; ki++) {
                     if (!evictSet[ki]) {
-                        var kb = liveSeg.blips[ki];
-                        kept.push(kb);
-                        // Rebuild column heights for kept blips
-                        if (kb.fadeStart === 0 && kb.gridX !== undefined) {
-                            liveSeg._colHeights[kb.gridX] = (liveSeg._colHeights[kb.gridX] || 0) + (kb.brickH || 0);
-                        }
+                        kept.push(liveSeg.blips[ki]);
                     }
+                }
+                // Restack: recalculate stackY/height for all kept blips
+                for (var ri = 0; ri < kept.length; ri++) {
+                    var rb = kept[ri];
+                    if (rb.fadeStart > 0 || rb.gridX === undefined) continue;
+                    var newStackY = liveSeg._colHeights[rb.gridX] || 0;
+                    rb.stackY = newStackY;
+                    rb.height = (rb.brickH || 0) + newStackY;
+                    liveSeg._colHeights[rb.gridX] = newStackY + (rb.brickH || 0);
                 }
                 liveSeg.blips = kept;
             }
