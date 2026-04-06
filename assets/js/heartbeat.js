@@ -1500,11 +1500,12 @@
                     var bsCellR = bsBaseR * Math.max(zoom * 0.4, 0.8);
 
                     // Start from tube position, converge to baseline as cell approaches spike
-                    var bsRow = (blip.stackY || 0) > 0 ? Math.round((blip.stackY || 0) / (blip.brickH || bsCellR * 2)) : 0;
-                    var bsRing = Math.ceil((bsRow + 1) / 2);
-                    var bsBelow = (bsRow % 2 === 1);
-                    var bsTubeY = bsRing * (bsCellR * 2 + 1);
-                    var bsStartY = bsRow === 0 ? baseline : (bsBelow ? baseline + bsTubeY - bsCellR : baseline - bsTubeY + bsCellR);
+                    // Use bobPhase for deterministic Y (same as normal rendering)
+                    var bsBobPhase = blip.bobPhase || 0;
+                    var bsTubeH = 30;
+                    // Linear mapping from bobPhase [0, 2PI] to [-1, 1] for uniform distribution
+                    var bsTubePos = (bsBobPhase / Math.PI - 1);
+                    var bsStartY = baseline - bsTubePos * bsTubeH;
                     // Converge to baseline
                     var bsCellCY = bsStartY + (baseline - bsStartY) * bsEase;
 
@@ -1667,12 +1668,13 @@
                         // Tube distribution: each cell gets a unique Y position
                         // within the tube, determined by its bobPhase (deterministic random)
                         // Fixed tube bounds so cells don't relocate on zoom
-                        var tubeMax = 18;
+                        var tubeH = 30;
                         var bobPhase = blip.bobPhase || 0;
                         var bobSpeed = blip.bobSpeed || 1.5;
-                        // Deterministic Y from bobPhase — fills tube naturally
-                        var tubeY = Math.sin(bobPhase * 3.71) * tubeMax;
-                        var cellCY = baseline - tubeY;
+                        // Linear mapping from bobPhase [0, 2PI] to [-1, 1] for
+                        // uniform distribution across the tube (sin clusters at edges)
+                        var tubePos = (bobPhase / Math.PI - 1);
+                        var cellCY = baseline - tubePos * tubeH;
 
                         // Gentle bobbing: cells drift slightly
                         var bobAmpY = Math.min(cellRadius * 0.3, 2);
