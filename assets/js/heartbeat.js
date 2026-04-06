@@ -1759,7 +1759,16 @@
                     } else {
                         // Brick rendering (original)
                         // Draw filled rectangle with 1px gap for separation
-                        var gap = zoom > 4 ? 1 : 0;
+                        // Gap scales with zoom so bricks stay visually separated.
+                        // strokeRect bleeds half its lineWidth outside the rect,
+                        // so the gap must exceed that to remain visible.
+                        var lw = zoom > 10 ? 2 : 1;
+                        var gap = zoom > 4 ? Math.ceil(lw) + 1 : 0;
+                        var rx = bx - bw / 2 + gap;
+                        var ry = baseline - sy - bh + gap;
+                        var rw = bw - gap * 2;
+                        var rh = bh - gap * 2;
+
                         ctx.fillStyle = blipColor + bOpacity + ')';
                         // Shadow glow only at mid-zoom where bricks are visible but
                         // not outlined. Skip at low zoom (sub-pixel, too expensive
@@ -1768,14 +1777,16 @@
                             ctx.shadowBlur = 4;
                             ctx.shadowColor = blipColor + (bOpacity * 0.4) + ')';
                         }
-                        ctx.fillRect(bx - bw / 2 + gap, baseline - sy - bh + gap, bw - gap * 2, bh - gap * 2);
+                        ctx.fillRect(rx, ry, rw, rh);
                         ctx.shadowBlur = 0;
 
                         // Dark outline at 4x+ zoom for clear brick separation
                         if (zoom > 4) {
                             ctx.strokeStyle = 'rgba(8, 15, 30, 0.7)';
-                            ctx.lineWidth = zoom > 10 ? 2 : 1;
-                            ctx.strokeRect(bx - bw / 2 + gap, baseline - sy - bh + gap, bw - gap * 2, bh - gap * 2);
+                            ctx.lineWidth = lw;
+                            // Inset by half lineWidth so stroke stays inside the rect
+                            var ins = lw / 2;
+                            ctx.strokeRect(rx + ins, ry + ins, rw - lw, rh - lw);
                         }
 
                         // At high zoom: show fee rate + value on brick face (clipped to brick)
