@@ -508,6 +508,17 @@ pub fn HeartbeatPage() -> impl IntoView {
         <Meta name="description" content="Watch Bitcoin breathe. A live EKG visualization of block arrivals, where every spike tells a story of transactions, fees, and network activity."/>
 
         <div class="space-y-6">
+            // Intro
+            <div class="text-center max-w-2xl mx-auto space-y-2">
+                <h2 class="text-lg sm:text-xl font-mono text-white/80 font-semibold">"Block Heartbeat"</h2>
+                <p class="text-sm text-white/40 leading-relaxed">
+                    "A live EKG of the Bitcoin network. Each spike is a new block \u{2014} its height encodes fees, the dip before it reflects the wait. Between beats, transaction bricks accumulate on the flatline as the mempool fills. Color shifts from green to red with network stress."
+                </p>
+                <p class="text-xs text-white/25">
+                    "Drag to scroll through history \u{00b7} Scroll to zoom \u{00b7} Click bricks to inspect transactions \u{00b7} Toggle between brick and bloodstream views"
+                </p>
+            </div>
+
             // EKG Canvas card
             <div id="heartbeat-card" class="relative bg-[#0d2137] border border-white/10 rounded-2xl overflow-hidden flex flex-col">
                 // Status bar
@@ -609,8 +620,9 @@ pub fn HeartbeatPage() -> impl IntoView {
 
             // ── Phase 3: 24-Hour Rhythm Strip ─────────────────
             <div class="bg-[#0d2137] border border-white/10 rounded-2xl overflow-hidden">
-                <div class="px-4 py-2 border-b border-white/5">
+                <div class="flex items-baseline justify-between px-4 py-2 border-b border-white/5">
                     <span class="text-xs text-white/40 font-mono">"24-HOUR RHYTHM STRIP"</span>
+                    <span class="text-[11px] text-white/20 font-mono">"Last 144 blocks \u{00b7} one full difficulty day"</span>
                 </div>
                 <canvas
                     id="rhythm-strip-canvas"
@@ -620,9 +632,12 @@ pub fn HeartbeatPage() -> impl IntoView {
             </div>
 
             // ── Phase 4: Organism Status ──────────────────────
-            <div class="bg-[#0d2137]/60 border border-white/5 rounded-xl px-5 py-4">
+            <div class="bg-[#0d2137]/60 border border-white/5 rounded-xl px-5 py-4"
+                 data-tip="Overall network health derived from block timing, fee pressure, mempool congestion, and hashrate. Think of Bitcoin as a living organism \u{2014} this is its diagnosis."
+                 tabindex="0"
+            >
                 <div class="flex items-baseline gap-2">
-                    <span class="text-xs text-white/30 font-mono uppercase tracking-wider">"Condition:"</span>
+                    <span class="text-xs text-white/30 font-mono uppercase tracking-wider">"Organism Status:"</span>
                     <span
                         class="text-sm font-mono font-semibold"
                         style=move || format!("color: {}", org_color.get())
@@ -668,33 +683,34 @@ pub fn HeartbeatPage() -> impl IntoView {
             </div>
 
             // Legend
-            <div class="flex flex-wrap justify-center gap-x-5 gap-y-2 text-xs text-white/40">
-                <div class="flex items-center gap-1.5">
-                    <span class="w-2.5 h-2.5 rounded-full bg-[#00e676]"></span>
-                    "Healthy"
+            <div class="space-y-2">
+                <div class="text-center">
+                    <span class="text-xs text-white/30 font-mono uppercase tracking-wider">"Network Stress"</span>
                 </div>
-                <div class="flex items-center gap-1.5">
-                    <span class="w-2.5 h-2.5 rounded-full bg-[#42a5f5]"></span>
-                    "Calm"
+                <div class="flex flex-wrap justify-center gap-x-5 gap-y-2 text-xs text-white/40">
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-2.5 h-2.5 rounded-full bg-[#00e676]"></span>
+                        "Healthy"
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-2.5 h-2.5 rounded-full bg-[#42a5f5]"></span>
+                        "Calm"
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-2.5 h-2.5 rounded-full bg-[#f7931a]"></span>
+                        "Elevated"
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-2.5 h-2.5 rounded-full bg-[#ff5722]"></span>
+                        "Stressed"
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-2.5 h-2.5 rounded-full bg-[#f44336]"></span>
+                        "Critical"
+                    </div>
                 </div>
-                <div class="flex items-center gap-1.5">
-                    <span class="w-2.5 h-2.5 rounded-full bg-[#f7931a]"></span>
-                    "Elevated"
-                </div>
-                <div class="flex items-center gap-1.5">
-                    <span class="w-2.5 h-2.5 rounded-full bg-[#ff5722]"></span>
-                    "Stressed"
-                </div>
-                <div class="flex items-center gap-1.5">
-                    <span class="w-2.5 h-2.5 rounded-full bg-[#f44336]"></span>
-                    "Critical"
-                </div>
-            </div>
-
-            // Explainer
-            <div class="text-center max-w-lg mx-auto">
-                <p class="text-xs text-white/25 leading-relaxed">
-                    "Every spike is a block. Height encodes fees paid. The dip before each spike reflects the wait since the previous block. Color shifts with network stress. The flatline between beats is Bitcoin, breathing."
+                <p class="text-center text-[11px] text-white/20 max-w-md mx-auto">
+                    "Color is derived from time since last block, fee pressure, and mempool congestion. It affects the flatline, waveform, and live indicator."
                 </p>
             </div>
         </div>
