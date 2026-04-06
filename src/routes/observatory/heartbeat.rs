@@ -650,25 +650,8 @@ pub fn HeartbeatPage() -> impl IntoView {
                 </p>
             </div>
 
-            // ── Phase 5: Sound + Capture controls ─────────────
+            // ── Phase 5: Capture controls ────────────────────
             <div class="flex flex-wrap items-center justify-center gap-3">
-                // Sound toggle
-                <button
-                    class="flex items-center gap-2 px-4 py-2 rounded-lg border border-white/10 bg-[#0d2137]/60 text-xs font-mono text-white/50 hover:text-white/80 hover:border-white/20 transition-colors"
-                    on:click=move |_| {
-                        let new_state = !sound_on.get_untracked();
-                        let actual = heartbeat_sound_toggle(new_state);
-                        set_sound_on.set(actual);
-                    }
-                >
-                    <span class="text-base">
-                        {move || if sound_on.get() { "\u{1F50A}" } else { "\u{1F507}" }}
-                    </span>
-                    <span>
-                        {move || if sound_on.get() { "Mute" } else { "Unmute" }}
-                    </span>
-                </button>
-
                 // Capture moment
                 <button
                     class="flex items-center gap-2 px-4 py-2 rounded-lg border border-white/10 bg-[#0d2137]/60 text-xs font-mono text-white/50 hover:text-white/80 hover:border-white/20 transition-colors"
