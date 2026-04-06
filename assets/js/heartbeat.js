@@ -332,6 +332,10 @@
         var liveSeg = _hb.timeline[_hb.timeline.length - 1];
         if (!liveSeg || liveSeg.type !== 'flatline' || liveSeg.x_end !== null) return;
 
+        // Server sends newest-first (ORDER BY first_seen DESC). Sort ascending
+        // so earliest txs (near the spike) get placed first before the density cap.
+        txs.sort(function(a, b) { return (a.first_seen || 0) - (b.first_seen || 0); });
+
         var effectiveBlockTs = _hb.lastBlockTime || lastBlockTs;
 
         // Fast-forward virtualX to match real elapsed time since last block.
