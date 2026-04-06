@@ -453,15 +453,6 @@
                 ', no blips on flatline, virtualX=' + Math.round(_hb.virtualX));
         }
 
-        // Store unconfirmed txids so pushHeartbeatBlocks can preserve them
-        if (block.unconfirmed_txids && block.unconfirmed_txids.length > 0) {
-            _hb._unconfirmedSet = {};
-            for (var ui = 0; ui < block.unconfirmed_txids.length; ui++) {
-                _hb._unconfirmedSet[block.unconfirmed_txids[ui]] = true;
-            }
-        } else {
-            _hb._unconfirmedSet = null;
-        }
         // Build block data — SSE now includes real block stats from RPC + mempool fees
         var blockTs = block.timestamp || Math.floor(Date.now() / 1000);
         var inter = 600;
@@ -2379,38 +2370,25 @@
                     if (!isReplay) {
                         lastSeg.color = _hb._preFlashColor || _hb.currentColor || COLORS.healthy;
                     }
-                    // Shatter confirmed blips into particles; carry unconfirmed forward
-                    var survivors = [];
+                    // Shatter all blips into particles — they get absorbed into the spike
                     if (lastSeg.blips) {
                         var absorbX = _hb.virtualX;
                         var absorbNow = Date.now() / 1000;
-                        var uncSet = _hb._unconfirmedSet;
                         for (var bi = 0; bi < lastSeg.blips.length; bi++) {
                             var blp = lastSeg.blips[bi];
                             if (blp.fadeStart === 0) {
-                                // Check if this brick survived (unconfirmed)
-                                if (uncSet && blp.txid && uncSet[blp.txid]) {
-                                    survivors.push(blp);
-                                    continue;
-                                }
                                 blp.fadeStart = absorbNow;
                                 blp.absorbTargetX = absorbX;
                                 blp.absorbOriginX = blp.x;
-                                // Generate 3-5 particles per blip with unique trajectories
                                 var nParts = 3 + Math.floor(Math.random() * 3);
                                 blp.particles = [];
                                 for (var pi = 0; pi < nParts; pi++) {
                                     blp.particles.push({
-                                        // Random offset from blip origin
                                         offsetX: (Math.random() - 0.5) * 8,
                                         offsetY: Math.random() * blp.height * 0.8,
-                                        // Each particle has slightly different speed (0.7-1.3x)
                                         speed: 0.7 + Math.random() * 0.6,
-                                        // Curve intensity: how much the arc bends upward
                                         arcHeight: 20 + Math.random() * 60,
-                                        // Slight delay before this particle starts moving (stagger)
                                         delay: Math.random() * 0.3,
-                                        // Size: small square
                                         size: 1.5 + Math.random() * 2.5
                                     });
                                 }
@@ -2432,30 +2410,6 @@
 
                 // Create a new live flatline after this block
                 _hb.timeline.push(createFlatlineSegment(_hb.virtualX, null));
-
-                // Move surviving (unconfirmed) bricks to the new flatline
-                if (survivors && survivors.length > 0) {
-                    var newSeg = _hb.timeline[_hb.timeline.length - 1];
-                    var survColHeights = {};
-                    for (var si5 = 0; si5 < survivors.length; si5++) {
-                        var surv = survivors[si5];
-                        // Place at the start of the new flatline, spread across a small window
-                        surv.x = newSeg.x_start + Math.random() * 20;
-                        surv.gridX = Math.round(surv.x / 5) * 5;
-                        // Restack from scratch so survivors don't overlap each other
-                        var survStackY = survColHeights[surv.gridX] || 0;
-                        surv.stackY = survStackY;
-                        surv.height = surv.brickH + survStackY;
-                        survColHeights[surv.gridX] = survStackY + surv.brickH;
-                        surv.opacity = Math.max(0.4, surv.opacity - 0.15);
-                        newSeg.blips.push(surv);
-                    }
-                    // Seed the column height map so new live bricks stack on top
-                    newSeg._colHeights = survColHeights;
-                    console.log('[heartbeat]', survivors.length, 'unconfirmed txs carried forward');
-                }
-                // Clear unconfirmed set
-                _hb._unconfirmedSet = null;
 
                 // Maintain recentBlocks list (up to 2016 for period history)
                 _hb.recentBlocks.push({
