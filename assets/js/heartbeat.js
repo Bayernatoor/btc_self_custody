@@ -378,18 +378,6 @@
         var maxForSpan = Math.max(Math.floor(flatlineSpan / 5 * 3), 200);
         if (maxForSpan < maxBricks) maxBricks = maxForSpan;
 
-        // Count pre-block survivors for stratified placement
-        var preBlockTotal = 0;
-        for (var pci = 0; pci < txs.length && pci < maxBricks; pci++) {
-            var ptx = txs[pci];
-            if (ptx.first_seen && ptx.fee && ptx.vsize && (ptx.first_seen - effectiveBlockTs < 0)) {
-                preBlockTotal++;
-            }
-        }
-        var preBlockPlaced = 0;
-        // Slot size for pre-block survivors only
-        var preBlockSlot = preBlockTotal > 0 ? (flatlineSpan * 0.95) / preBlockTotal : flatlineSpan;
-
         for (var i = 0; i < txs.length && placed < maxBricks; i++) {
             var tx = txs[i];
             if (!tx.first_seen || !tx.fee || !tx.vsize) continue;
@@ -397,12 +385,13 @@
             var secAfterBlock = tx.first_seen - effectiveBlockTs;
             var txVX;
             if (secAfterBlock >= 0) {
+                // Post-block tx: place proportionally by time
                 txVX = liveSeg.x_start + secAfterBlock * FLATLINE_PX_PER_SEC;
             } else {
-                // Pre-block survivor: stratified random with SEPARATE counter
-                // so post-block txs don't consume gap slots
-                txVX = liveSeg.x_start + preBlockPlaced * preBlockSlot + Math.random() * preBlockSlot;
-                preBlockPlaced++;
+                // Pre-block survivor: spread uniformly across the flatline.
+                // These txs were in the mempool before the block — their exact
+                // position doesn't matter, just fill the space evenly.
+                txVX = liveSeg.x_start + Math.random() * flatlineSpan * 0.95;
             }
             if (txVX > _hb.virtualX) txVX = _hb.virtualX - Math.random() * 5;
             if (txVX < liveSeg.x_start) txVX = liveSeg.x_start + Math.random() * 5;
