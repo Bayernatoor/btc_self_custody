@@ -1548,8 +1548,10 @@
                     ctx.beginPath();
                     ctx.arc(0, 0, bsCellR, 0, Math.PI * 2);
                     ctx.fillStyle = 'rgba(' + bsR + ',' + bsG + ',' + bsB + ',' + bsAlpha + ')';
-                    ctx.shadowBlur = 4 + bsEase * 14;
-                    ctx.shadowColor = 'rgba(' + bsR + ',' + bsG + ',' + bsB + ',' + (bsAlpha * 0.5) + ')';
+                    if (zoom >= 1.0) {
+                        ctx.shadowBlur = 4 + bsEase * 14;
+                        ctx.shadowColor = 'rgba(' + bsR + ',' + bsG + ',' + bsB + ',' + (bsAlpha * 0.5) + ')';
+                    }
                     ctx.fill();
                     ctx.shadowBlur = 0;
                     ctx.restore();
@@ -1559,7 +1561,6 @@
                 // Particle absorption: blip shatters into fragments sucked into the spike
                 if (blip.fadeStart > 0 && blip.particles && blip.particles.length > 0) {
                     var fadeDt = nowSec - blip.fadeStart;
-                    // Duration scales with distance so far particles have time to arrive
                     var dist = Math.abs(blip.absorbTargetX - blip.absorbOriginX);
                     var animDuration = Math.max(1.5, Math.min(dist / 40, 4.0));
                     absorbT = Math.min(fadeDt / animDuration, 1.0);
@@ -1570,23 +1571,27 @@
                     var originCX = virtualToCanvas(blip.absorbOriginX);
                     var blipColor = blip.color || 'rgba(0, 230, 118, ';
 
-                    // Find the spike height at target for converging trajectory
-                    var spikeTop = baseline - 60; // default; overridden if we find the block
-                    for (var si4 = 0; si4 < _hb.timeline.length; si4++) {
-                        var tSeg = _hb.timeline[si4];
-                        if (tSeg.type === 'block' && tSeg.x_start <= blip.absorbTargetX && tSeg.x_end >= blip.absorbTargetX) {
-                            var peakY = 0;
-                            if (tSeg.points) {
-                                for (var pp = 0; pp < tSeg.points.length; pp++) {
-                                    if (tSeg.points[pp] < peakY) peakY = tSeg.points[pp];
+                    // Spike height: cached per flatline per frame to avoid re-scanning
+                    // the timeline for every blip (was O(blips * segments) per frame)
+                    if (!seg._spikeTopFrame || seg._spikeTopFrame !== _hb.rafId) {
+                        seg._spikeTopFrame = _hb.rafId;
+                        seg._cachedSpikeTop = baseline - 60;
+                        for (var si4 = 0; si4 < _hb.timeline.length; si4++) {
+                            var tSeg = _hb.timeline[si4];
+                            if (tSeg.type === 'block' && tSeg.x_start <= blip.absorbTargetX && tSeg.x_end >= blip.absorbTargetX) {
+                                var peakY = 0;
+                                if (tSeg.points) {
+                                    for (var pp = 0; pp < tSeg.points.length; pp++) {
+                                        if (tSeg.points[pp] < peakY) peakY = tSeg.points[pp];
+                                    }
                                 }
+                                seg._cachedSpikeTop = baseline + peakY * zoom * 0.7;
+                                break;
                             }
-                            spikeTop = baseline + peakY * zoom * 0.7;
-                            break;
                         }
                     }
+                    var spikeTop = seg._cachedSpikeTop;
 
-                    // Spread target Y along the spike shape so particles don't all converge
                     var spikeRange = baseline - spikeTop;
 
                     for (var pi = 0; pi < blip.particles.length; pi++) {
@@ -1620,10 +1625,12 @@
                         var pOpacity = pt < 0.7 ? blip.opacity : blip.opacity * (1 - (pt - 0.7) / 0.3 * 0.8);
                         pOpacity = Math.max(0, Math.min(1, pOpacity));
 
-                        // Draw particle with glow
+                        // Draw particle — skip expensive shadowBlur at low zoom
                         ctx.fillStyle = blipColor + pOpacity + ')';
-                        ctx.shadowBlur = 3 + pEase * 10;
-                        ctx.shadowColor = blipColor + (pOpacity * 0.4) + ')';
+                        if (zoom >= 1.0) {
+                            ctx.shadowBlur = 3 + pEase * 10;
+                            ctx.shadowColor = blipColor + (pOpacity * 0.4) + ')';
+                        }
                         ctx.fillRect(px - pSize / 2, py - pSize / 2, pSize, pSize);
                         ctx.shadowBlur = 0;
                     }
@@ -1753,7 +1760,10 @@
                         // Draw filled rectangle with 1px gap for separation
                         var gap = zoom > 4 ? 1 : 0;
                         ctx.fillStyle = blipColor + bOpacity + ')';
-                        if (zoom < 4) {
+                        // Shadow glow only at mid-zoom where bricks are visible but
+                        // not outlined. Skip at low zoom (sub-pixel, too expensive
+                        // with thousands of bricks) and high zoom (outlines instead).
+                        if (zoom >= 1.0 && zoom < 4) {
                             ctx.shadowBlur = 4;
                             ctx.shadowColor = blipColor + (bOpacity * 0.4) + ')';
                         }
@@ -2378,13 +2388,26 @@
                     if (lastSeg.blips) {
                         var absorbX = _hb.virtualX;
                         var absorbNow = Date.now() / 1000;
+                        // Scale particle count with zoom: at low zoom particles are
+                        // sub-pixel, so fewer are needed. Also cap total particles to
+                        // avoid lag spikes when thousands of blips absorb at once.
+                        var activeBlips = 0;
+                        for (var ci = 0; ci < lastSeg.blips.length; ci++) {
+                            if (lastSeg.blips[ci].fadeStart === 0) activeBlips++;
+                        }
+                        var zoom = _hb.zoom;
+                        var maxPartsPerBlip;
+                        if (zoom < 0.5 || activeBlips > 1000) maxPartsPerBlip = 1;
+                        else if (zoom < 1.0 || activeBlips > 500) maxPartsPerBlip = 2;
+                        else maxPartsPerBlip = 3 + Math.floor(Math.random() * 3);
+
                         for (var bi = 0; bi < lastSeg.blips.length; bi++) {
                             var blp = lastSeg.blips[bi];
                             if (blp.fadeStart === 0) {
                                 blp.fadeStart = absorbNow;
                                 blp.absorbTargetX = absorbX;
                                 blp.absorbOriginX = blp.x;
-                                var nParts = 3 + Math.floor(Math.random() * 3);
+                                var nParts = maxPartsPerBlip;
                                 blp.particles = [];
                                 for (var pi = 0; pi < nParts; pi++) {
                                     blp.particles.push({
