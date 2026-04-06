@@ -443,27 +443,29 @@
     // Process a live block from SSE (shared by live handler + queue replay)
     function processLiveBlock(block) {
         if (!_hb) return;
-        // Guard: prevent flushTxBatch from placing txs on the old flatline
-        // while we process this block. Txs stay queued and flush to the new flatline.
         _hb._blockProcessing = true;
 
         // Collapse the dead processing gap: the backend suppresses txs while
-        // building block data (~2-5s), leaving an empty flatline stretch.
-        // Snap virtualX back to where the last tx blip was placed.
-        if (_hb._lastTxBlipTime > 0) {
-            var gapSec = (Date.now() / 1000) - _hb._lastTxBlipTime;
-            console.log('[heartbeat] processLiveBlock: block=' + block.height +
-                ', gapSec=' + gapSec.toFixed(2) +
-                ', virtualX=' + Math.round(_hb.virtualX) +
-                ', lastTxBlipTime=' + _hb._lastTxBlipTime.toFixed(1));
-            if (gapSec > 0.5 && gapSec < 15) {
-                var oldVX = _hb.virtualX;
-                _hb.virtualX -= gapSec * FLATLINE_PX_PER_SEC;
-                console.log('[heartbeat] gap collapse: ' + Math.round(oldVX) + ' -> ' + Math.round(_hb.virtualX) +
-                    ' (' + (gapSec * FLATLINE_PX_PER_SEC).toFixed(0) + 'px removed)');
+        // building block data (~2-5s), so virtualX has advanced past the last
+        // brick. Find the rightmost blip and snap virtualX to just past it.
+        // This is exact — no time-based estimation that can overshoot.
+        var liveSeg = _hb.timeline[_hb.timeline.length - 1];
+        if (liveSeg && liveSeg.type === 'flatline' && liveSeg.x_end === null && liveSeg.blips.length > 0) {
+            var rightmost = liveSeg.x_start;
+            for (var ri = 0; ri < liveSeg.blips.length; ri++) {
+                if (liveSeg.blips[ri].fadeStart === 0 && liveSeg.blips[ri].x > rightmost) {
+                    rightmost = liveSeg.blips[ri].x;
+                }
+            }
+            var closeAt = rightmost + 5; // one grid unit past last brick
+            if (closeAt < _hb.virtualX) {
+                console.log('[heartbeat] gap collapse: ' + Math.round(_hb.virtualX) + ' -> ' + Math.round(closeAt) +
+                    ' (' + Math.round(_hb.virtualX - closeAt) + 'px removed, block=' + block.height + ')');
+                _hb.virtualX = closeAt;
             }
         } else {
-            console.log('[heartbeat] processLiveBlock: block=' + block.height + ', no _lastTxBlipTime');
+            console.log('[heartbeat] processLiveBlock: block=' + block.height +
+                ', no blips on flatline, virtualX=' + Math.round(_hb.virtualX));
         }
 
         // Store unconfirmed txids so pushHeartbeatBlocks can preserve them
@@ -795,9 +797,6 @@
             });
             liveSeg._colHeights[aggGridX] = aggStackY + aggH;
         }
-
-        // Track when we last placed a blip — used to collapse the dead gap on block arrival
-        _hb._lastTxBlipTime = Date.now() / 1000;
 
         // Priority culling: when too many blips, evict lowest-value ones.
         // Threshold scales with flatline span — longer flatlines can hold more bricks.
@@ -2489,16 +2488,22 @@
                 // Move surviving (unconfirmed) bricks to the new flatline
                 if (survivors && survivors.length > 0) {
                     var newSeg = _hb.timeline[_hb.timeline.length - 1];
+                    var survColHeights = {};
                     for (var si5 = 0; si5 < survivors.length; si5++) {
                         var surv = survivors[si5];
-                        // Reset position for new flatline (remove old stack offset)
-                        surv.x = _hb.virtualX + Math.random() * 20;
+                        // Place at the start of the new flatline, spread across a small window
+                        surv.x = newSeg.x_start + Math.random() * 20;
                         surv.gridX = Math.round(surv.x / 5) * 5;
-                        surv.stackY = 0;
-                        surv.height = surv.brickH; // reset to brick-only height
-                        surv.opacity = Math.max(0.4, surv.opacity - 0.15); // dim slightly
+                        // Restack from scratch so survivors don't overlap each other
+                        var survStackY = survColHeights[surv.gridX] || 0;
+                        surv.stackY = survStackY;
+                        surv.height = surv.brickH + survStackY;
+                        survColHeights[surv.gridX] = survStackY + surv.brickH;
+                        surv.opacity = Math.max(0.4, surv.opacity - 0.15);
                         newSeg.blips.push(surv);
                     }
+                    // Seed the column height map so new live bricks stack on top
+                    newSeg._colHeights = survColHeights;
                     console.log('[heartbeat]', survivors.length, 'unconfirmed txs carried forward');
                 }
                 // Clear unconfirmed set
@@ -2678,16 +2683,9 @@
                 prevTs = blockTs;
             }
             // Use replay=true so they get compressed flatlines (not live positioning)
+            // pushHeartbeatBlocks(replay=true) already fast-forwards virtualX for
+            // elapsed time since the last block — no additional advance needed here.
             window.pushHeartbeatBlocks(JSON.stringify(replayBlocks), true);
-
-            // After replay, fast-forward the live flatline to reflect time since last queued block
-            var liveSeg = _hb.timeline[_hb.timeline.length - 1];
-            if (liveSeg && liveSeg.type === 'flatline' && liveSeg.x_end === null) {
-                var sinceLastBlock = now - (_hb.lastBlockTime || now);
-                if (sinceLastBlock > 0 && sinceLastBlock < 7200) {
-                    _hb.virtualX += sinceLastBlock * FLATLINE_PX_PER_SEC;
-                }
-            }
         } else if (elapsed > 2) {
             // No queued blocks — just advance the live flatline to catch up
             var liveSeg2 = _hb.timeline[_hb.timeline.length - 1];
@@ -2696,17 +2694,21 @@
             }
         }
 
-        // Spread buffered txs across the gap so the flatline isn't empty
-        if (hiddenTxs.length > 0 && elapsed > 1) {
+        // Spread buffered txs across the current live flatline
+        if (hiddenTxs.length > 0) {
             var liveSeg3 = _hb.timeline[_hb.timeline.length - 1];
             if (liveSeg3 && liveSeg3.type === 'flatline' && liveSeg3.x_end === null) {
-                var gapStart = _hb.virtualX - elapsed * FLATLINE_PX_PER_SEC;
-                var gapSpan = elapsed * FLATLINE_PX_PER_SEC;
+                // Use the actual flatline bounds, not time-based estimation
+                var gapStart = liveSeg3.x_start;
+                var gapSpan = _hb.virtualX - liveSeg3.x_start;
+                if (gapSpan < 10) gapSpan = 0;
                 var medianFee = _hb._wsMedianFee || 5;
                 // Cap density like history placement
-                var maxForGap = Math.max(Math.floor(gapSpan / 5 * 3), 100);
+                var maxForGap = gapSpan > 0 ? Math.max(Math.floor(gapSpan / 5 * 3), 100) : 0;
                 var cap = Math.min(hiddenTxs.length, maxForGap);
-                var htStackMap = {};
+                // Use the segment's column heights so stacking is consistent
+                if (!liveSeg3._colHeights) liveSeg3._colHeights = {};
+                var htStackMap = liveSeg3._colHeights;
                 for (var hti = 0; hti < cap; hti++) {
                     var htx = hiddenTxs[hti];
                     if (!htx.fee || !htx.vsize) continue;
