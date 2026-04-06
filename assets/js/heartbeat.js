@@ -2843,14 +2843,14 @@
         var scale = w / totalPoints;
         if (scale > 3) scale = 3; // cap individual point width
 
-        // Draw each block segment with its own color
+        // Draw each block segment with its own color, store hit regions
         var x = 0;
         var vScale = 0.4; // compress vertically
+        var hitRegions = [];
         for (var wi = 0; wi < waveforms.length; wi++) {
             var wf = waveforms[wi];
             var interBlock = wf.block.inter_block_seconds || 600;
 
-            // Color based on inter-block time and fee pressure
             var feeRate = wf.block.total_fees ? wf.block.total_fees / 100000 : 0;
             var segColor = computeColor(interBlock, feeRate, 0);
 
@@ -2860,6 +2860,8 @@
             // Draw flatline before waveform
             var flatEnd = x + wf.flatline * scale;
             ctx.lineTo(flatEnd, baseline);
+
+            var waveStart = flatEnd;
             x = flatEnd;
 
             // Draw waveform points
@@ -2874,6 +2876,8 @@
             ctx.shadowColor = segColor;
             ctx.stroke();
             ctx.shadowBlur = 0;
+
+            hitRegions.push({ x1: waveStart, x2: x, block: wf.block, color: segColor });
         }
 
         // Draw hour markers at the bottom
@@ -2897,6 +2901,72 @@
                 }
             }
         }
+
+        // ── Rhythm strip interactivity: hover tooltip + click to open ──
+        canvas._rhythmHitRegions = hitRegions;
+
+        // Draw tooltip for hovered block (persists across redraws)
+        if (canvas._rhythmHovered) {
+            var hov = canvas._rhythmHovered;
+            // Re-match against new hit regions (positions may shift on resize)
+            var hovMid = (hov.x1 + hov.x2) / 2;
+            for (var hri = 0; hri < hitRegions.length; hri++) {
+                if (hitRegions[hri].block.height === hov.block.height) {
+                    hov = hitRegions[hri];
+                    canvas._rhythmHovered = hov;
+                    hovMid = (hov.x1 + hov.x2) / 2;
+                    break;
+                }
+            }
+            var lines = [
+                'Block #' + (hov.block.height || 0).toLocaleString(),
+                (hov.block.tx_count || 0).toLocaleString() + ' txs',
+                ((hov.block.total_fees || 0) / 100000000).toFixed(4) + ' BTC fees',
+                formatDuration(hov.block.inter_block_seconds || 600) + ' wait'
+            ];
+            drawTooltipBox(ctx, lines, hovMid, baseline - 20, hov.color);
+        }
+
+        // Only set up event handlers once (skip on tooltip redraws)
+        if (canvas._rhythmHandlersSet) return;
+        canvas._rhythmHandlersSet = true;
+
+        canvas.addEventListener('click', function(e) {
+            var r = canvas.getBoundingClientRect();
+            var mx = e.clientX - r.left;
+            var regions = canvas._rhythmHitRegions;
+            for (var ri = 0; ri < regions.length; ri++) {
+                if (mx >= regions[ri].x1 && mx <= regions[ri].x2 && regions[ri].block.height) {
+                    window.open('https://mempool.space/block/' + regions[ri].block.height, '_blank');
+                    return;
+                }
+            }
+        });
+
+        canvas.addEventListener('mousemove', function(e) {
+            var r = canvas.getBoundingClientRect();
+            var mx = e.clientX - r.left;
+            var regions = canvas._rhythmHitRegions;
+            var found = null;
+            for (var ri = 0; ri < regions.length; ri++) {
+                if (mx >= regions[ri].x1 && mx <= regions[ri].x2) {
+                    found = regions[ri];
+                    break;
+                }
+            }
+            if (found === canvas._rhythmHovered) return;
+            canvas._rhythmHovered = found;
+            canvas.style.cursor = found ? 'pointer' : '';
+            window.renderRhythmStrip(canvasId, blocksJson);
+        });
+
+        canvas.addEventListener('mouseleave', function() {
+            if (canvas._rhythmHovered) {
+                canvas._rhythmHovered = null;
+                canvas.style.cursor = '';
+                window.renderRhythmStrip(canvasId, blocksJson);
+            }
+        });
     };
 
     // ── Center view on live head ─────────────────────────────
