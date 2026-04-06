@@ -149,6 +149,14 @@
         return 'rgb(' + r + ',' + g + ',' + bl + ')';
     }
 
+    // Fee rate to RGBA color prefix (close with opacity + ')')
+    function feeRateColor(feeRate, medianFee) {
+        if (feeRate < medianFee * 0.8) return 'rgba(33, 150, 243, ';
+        if (feeRate < medianFee * 1.5) return 'rgba(0, 230, 118, ';
+        if (feeRate < medianFee * 4)   return 'rgba(255, 152, 0, ';
+        return 'rgba(244, 67, 54, ';
+    }
+
     // Compute flatline width in virtual pixels for a completed (history) flatline
     function historyFlatlineWidth(interBlockSeconds) {
         // Proportional: 1min=15px, 5min=75px, 10min=150px, 30min=300px (capped)
@@ -157,21 +165,19 @@
 
     // ── Grid drawing ───────────────────────────────────────────
     function drawGrid(ctx, w, h) {
+        ctx.beginPath();
         ctx.strokeStyle = GRID_COLOR;
         ctx.lineWidth = 0.5;
         var spacing = 40;
         for (var x = 0; x < w; x += spacing) {
-            ctx.beginPath();
             ctx.moveTo(x, 0);
             ctx.lineTo(x, h);
-            ctx.stroke();
         }
         for (var y = 0; y < h; y += spacing) {
-            ctx.beginPath();
             ctx.moveTo(0, y);
             ctx.lineTo(w, y);
-            ctx.stroke();
         }
+        ctx.stroke();
     }
 
     // ── Timeline segment helpers ───────────────────────────────
@@ -403,16 +409,6 @@
 
             var feeRate = tx.fee / tx.vsize;
             var feeNorm = Math.min(Math.log2(feeRate + 1) / 6, 1.0);
-            var color;
-            if (feeRate < medianFee * 0.8) {
-                color = 'rgba(33, 150, 243, ';
-            } else if (feeRate < medianFee * 1.5) {
-                color = 'rgba(0, 230, 118, ';
-            } else if (feeRate < medianFee * 4) {
-                color = 'rgba(255, 152, 0, ';
-            } else {
-                color = 'rgba(244, 67, 54, ';
-            }
 
             var brickH = 3 + feeNorm * 14 + Math.random() * 3;
             var gridX = Math.round(txVX / 5) * 5;
@@ -423,7 +419,7 @@
             liveSeg.blips.push({
                 x: txVX, gridX: gridX,
                 height: brickH + stackY, brickH: brickH, brickW: 4, stackY: stackY,
-                color: color, opacity: 0.75 + feeNorm * 0.2,
+                color: feeRateColor(feeRate, medianFee), opacity: 0.75 + feeNorm * 0.2,
                 txCount: 1, txid: tx.txid || null,
                 feeRate: Math.round(feeRate * 10) / 10,
                 vsize: tx.vsize || 0, value: tx.value || 0,
@@ -723,19 +719,7 @@
             var tx = batch[i];
             var feeRate = tx.fee && tx.vsize ? tx.fee / tx.vsize : 1;
             var feeNorm = Math.min(Math.log2(feeRate + 1) / 6, 1.0);
-            // Color based on fee rate relative to median
-            var color;
-            if (feeRate < medianFee * 0.8) {
-                color = 'rgba(33, 150, 243, ';
-            } else if (feeRate < medianFee * 1.5) {
-                color = 'rgba(0, 230, 118, ';
-            } else if (feeRate < medianFee * 4) {
-                color = 'rgba(255, 152, 0, ';
-            } else {
-                color = 'rgba(244, 67, 54, ';
-            }
 
-            // Brick size based on vsize
             var brickW = 4;
             var brickH = 3 + feeNorm * 14 + Math.random() * 3;
             var brickX = _hb.virtualX - Math.random() * 15;
@@ -752,7 +736,7 @@
                 brickH: brickH,
                 brickW: brickW,
                 stackY: stackY,
-                color: color,
+                color: feeRateColor(feeRate, medianFee),
                 opacity: 0.75 + feeNorm * 0.2,
                 txCount: 1,
                 txid: tx.txid || null,
@@ -875,21 +859,7 @@
             // Normalize: use log scale so low-fee differences are visible
             var feeNorm = Math.min(Math.log2(feeRate + 1) / 6, 1.0); // log2(64)=6
 
-            // Color: adaptive thresholds based on current median
-            // This ensures color variety even when fees are uniformly low
-            var color;
-            if (feeRate < medianFeeRate * 0.8) {
-                color = 'rgba(33, 150, 243, '; // blue (below median)
-            } else if (feeRate < medianFeeRate * 1.5) {
-                color = 'rgba(0, 230, 118, ';   // green (around median)
-            } else if (feeRate < medianFeeRate * 4) {
-                color = 'rgba(255, 152, 0, ';  // orange (above median)
-            } else {
-                color = 'rgba(244, 67, 54, ';   // red (outlier/urgent)
-            }
-
-            // Brick dimensions - consistent width for clean stacking
-            var brickW = 4;  // fixed width for uniform columns
+            var brickW = 4;
             var brickH = 3 + feeNorm * 14 + Math.random() * 3; // 3-20px tall
 
             // Place at the live head, snap to tight grid for clean columns
@@ -907,7 +877,7 @@
                 brickH: brickH,
                 brickW: brickW,
                 stackY: stackY,
-                color: color,
+                color: feeRateColor(feeRate, medianFeeRate),
                 opacity: 0.6 + feeNorm * 0.3,
                 txCount: txPerBlip,
                 feeRate: Math.round(feeRate * 10) / 10,
@@ -1292,19 +1262,12 @@
 
         for (var si = 0; si < _hb.timeline.length; si++) {
             var seg = _hb.timeline[si];
-
-            // Determine segment x range
             var segStart = seg.x_start;
-            var segEnd;
-            if (seg.type === 'block') {
-                segEnd = seg.x_end;
-            } else {
-                // Flatline: x_end is null for live segment
-                segEnd = (seg.x_end !== null) ? seg.x_end : _hb.virtualX;
-            }
+            var segEnd = seg.type === 'block' ? seg.x_end
+                       : (seg.x_end !== null ? seg.x_end : _hb.virtualX);
 
-            // Skip segments outside visible range
-            if (segEnd < viewLeft || segStart > viewRight) continue;
+            if (segEnd < viewLeft) continue;   // before viewport
+            if (segStart > viewRight) break;   // past viewport — all further segments are too
 
             if (seg.type === 'block') {
                 drawBlockSegment(ctx, seg, viewLeft, baseline, liveColor);
@@ -1315,6 +1278,7 @@
         }
 
         // ── Draw tooltip if hovering ───────────────────────────
+        ctx.globalAlpha = 1;
         if (_hb.hoveredBlock) {
             var hSeg = _hb.hoveredBlock;
             var midX = virtualToCanvas((hSeg.x_start + hSeg.x_end) / 2);
@@ -1429,17 +1393,12 @@
         var color = seg.color || fallbackColor;
         var zoom = _hb.zoom;
 
+        var isHovered = (_hb.hoveredBlock === seg);
         ctx.beginPath();
         ctx.strokeStyle = color;
-        ctx.lineWidth = 2;
-        ctx.shadowBlur = 14;
+        ctx.lineWidth = isHovered ? 3 : 2;
+        ctx.shadowBlur = isHovered ? 24 : 14;
         ctx.shadowColor = color;
-
-        var isHovered = (_hb.hoveredBlock === seg);
-        if (isHovered) {
-            ctx.lineWidth = 3;
-            ctx.shadowBlur = 24;
-        }
 
         for (var i = 0; i < pts.length; i++) {
             var vx = seg.x_start + i * POINT_WIDTH;
@@ -1546,8 +1505,8 @@
                 // Bloodstream mode: cells flow toward the waveform with deformation
                 if (_hb.renderMode === 'bloodstream' && blip.fadeStart > 0) {
                     var bsFadeDt = nowSec - blip.fadeStart;
-                    var bsDist = Math.abs(blip.absorbTargetX - blip.absorbOriginX);
-                    var bsDuration = Math.max(1.5, Math.min(bsDist / 40, 4.0));
+                    var bsAnimDist = Math.abs(blip.absorbTargetX - blip.absorbOriginX);
+                    var bsDuration = Math.max(1.5, Math.min(bsAnimDist / 40, 4.0));
                     var bsT = Math.min(bsFadeDt / bsDuration, 1.0);
                     if (bsT >= 1.0) continue;
 
@@ -1572,8 +1531,8 @@
                     var bsRow = (blip.stackY || 0) > 0 ? Math.round((blip.stackY || 0) / (blip.brickH || bsCellR * 2)) : 0;
                     var bsRing = Math.ceil((bsRow + 1) / 2);
                     var bsBelow = (bsRow % 2 === 1);
-                    var bsDist = bsRing * (bsCellR * 2 + 1);
-                    var bsStartY = bsRow === 0 ? baseline : (bsBelow ? baseline + bsDist - bsCellR : baseline - bsDist + bsCellR);
+                    var bsTubeY = bsRing * (bsCellR * 2 + 1);
+                    var bsStartY = bsRow === 0 ? baseline : (bsBelow ? baseline + bsTubeY - bsCellR : baseline - bsTubeY + bsCellR);
                     // Converge to baseline
                     var bsCellCY = bsStartY + (baseline - bsStartY) * bsEase;
 
@@ -2715,11 +2674,6 @@
                     var htFeeRate = htx.fee / htx.vsize;
                     var htFeeNorm = Math.min(Math.log2(htFeeRate + 1) / 6, 1.0);
                     var htVX = gapStart + Math.random() * gapSpan * 0.95;
-                    var htColor;
-                    if (htFeeRate < medianFee * 0.8) htColor = 'rgba(33, 150, 243, ';
-                    else if (htFeeRate < medianFee * 1.5) htColor = 'rgba(0, 230, 118, ';
-                    else if (htFeeRate < medianFee * 4) htColor = 'rgba(255, 152, 0, ';
-                    else htColor = 'rgba(244, 67, 54, ';
                     var htBrickH = 3 + htFeeNorm * 14 + Math.random() * 3;
                     var htGridX = Math.round(htVX / 5) * 5;
                     var htStackY = htStackMap[htGridX] || 0;
@@ -2727,7 +2681,7 @@
                     liveSeg3.blips.push({
                         x: htVX, gridX: htGridX,
                         height: htBrickH + htStackY, brickH: htBrickH, brickW: 4, stackY: htStackY,
-                        color: htColor, opacity: 0.75 + htFeeNorm * 0.2,
+                        color: feeRateColor(htFeeRate, medianFee), opacity: 0.75 + htFeeNorm * 0.2,
                         txCount: 1, txid: htx.txid || null,
                         feeRate: Math.round(htFeeRate * 10) / 10,
                         vsize: htx.vsize || 0, value: htx.value || 0,
