@@ -11,7 +11,7 @@
     // ── Color palette ──────────────────────────────────────────
     var COLORS = {
         healthy:  '#00e676',
-        calm:     '#42a5f5',
+        normal:   '#42a5f5',
         elevated: '#f7931a',
         stressed: '#ff5722',
         critical: '#f44336'
@@ -126,7 +126,7 @@
         var stress = timeStress * 0.4 + feeStress * 0.35 + mempoolStress * 0.25;
 
         if (stress < 0.2)  return COLORS.healthy;
-        if (stress < 0.4)  return COLORS.calm;
+        if (stress < 0.4)  return COLORS.normal;
         if (stress < 0.6)  return COLORS.elevated;
         if (stress < 0.8)  return COLORS.stressed;
         return COLORS.critical;
@@ -2691,7 +2691,7 @@
         var bpm = ((blocks.length - 1) / spanSec) * 600;
         var label, color;
         if (bpm < 0.7) {
-            label = 'Bradycardia'; color = COLORS.calm;
+            label = 'Bradycardia'; color = COLORS.normal;
         } else if (bpm <= 1.5) {
             label = 'Normal'; color = COLORS.healthy;
         } else {
@@ -2959,9 +2959,9 @@
         } else if (color === COLORS.elevated) {
             condition = 'Elevated';
             description = 'Running warm. Activity is rising.';
-        } else if (color === COLORS.calm) {
-            condition = 'Calm';
-            description = 'Deep, slow breaths. The network rests.';
+        } else if (color === COLORS.normal) {
+            condition = 'Normal';
+            description = 'Steady pace. Nothing unusual.';
         } else {
             condition = 'Healthy';
             description = 'Steady rhythm. The network hums.';
