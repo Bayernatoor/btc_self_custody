@@ -149,6 +149,21 @@ pub fn HeartbeatPage() -> impl IntoView {
     // Sound toggle state
     let (sound_on, set_sound_on) = signal(false);
 
+    // First-visit hint overlay (dismissed on click or after 6s)
+    let (show_hint, set_show_hint) = signal(true);
+    #[cfg(feature = "hydrate")]
+    {
+        let handle = leptos::prelude::set_timeout_with_handle(
+            move || set_show_hint.set(false),
+            std::time::Duration::from_secs(6),
+        );
+        on_cleanup(move || {
+            if let Ok(h) = handle {
+                h.clear();
+            }
+        });
+    }
+
     // Period start timestamp (first block in current retarget period)
     let (period_start_ts, set_period_start_ts) = signal(0u64);
 
@@ -508,15 +523,20 @@ pub fn HeartbeatPage() -> impl IntoView {
         <Meta name="description" content="Watch Bitcoin breathe. A live EKG visualization of block arrivals, where every spike tells a story of transactions, fees, and network activity."/>
 
         <div class="space-y-6">
-            // Intro
-            <div class="text-center max-w-2xl mx-auto space-y-2">
-                <h2 class="text-lg sm:text-xl font-mono text-white/80 font-semibold">"Block Heartbeat"</h2>
-                <p class="text-sm text-white/40 leading-relaxed">
-                    "A live EKG of the Bitcoin network. Each spike is a new block \u{2014} its height encodes fees, the dip before it reflects the wait. Between beats, transaction bricks accumulate on the flatline as the mempool fills. Color shifts from green to red with network stress."
-                </p>
-                <p class="text-xs text-white/25">
-                    "Drag to scroll through history \u{00b7} Scroll to zoom \u{00b7} Click bricks to inspect transactions \u{00b7} Toggle between brick and bloodstream views"
-                </p>
+            // Hero banner
+            <div class="relative rounded-2xl overflow-hidden">
+                <img
+                    src="/img/observatory_hero.png"
+                    alt="Block Heartbeat"
+                    class="w-full h-[100px] sm:h-[120px] lg:h-[140px] object-cover object-center"
+                />
+                <div class="absolute inset-0 bg-gradient-to-t from-[#123c64] via-[#123c64]/60 to-[#123c64]/30"></div>
+                <div class="absolute inset-0 flex flex-col items-center justify-end pb-3 sm:pb-4">
+                    <h1 class="text-lg sm:text-xl lg:text-2xl font-title text-white mb-0.5 drop-shadow-lg">"Block Heartbeat"</h1>
+                    <p class="text-[11px] sm:text-xs text-white/60 max-w-lg mx-auto px-4 text-center drop-shadow">
+                        "A live EKG of the Bitcoin network. Each spike is a block, each brick is a transaction."
+                    </p>
+                </div>
             </div>
 
             // EKG Canvas card
@@ -559,12 +579,32 @@ pub fn HeartbeatPage() -> impl IntoView {
                     </div>
                 </div>
 
-                // Canvas — clamp in normal mode, flex-grow in fullscreen
-                <canvas
-                    id="heartbeat-canvas"
-                    class="w-full"
-                    style="height: clamp(300px, 55vh, 700px)"
-                ></canvas>
+                // Canvas with first-visit hint overlay
+                <div class="relative">
+                    <canvas
+                        id="heartbeat-canvas"
+                        class="w-full"
+                        style="height: clamp(300px, 55vh, 700px)"
+                    ></canvas>
+
+                    // Hint overlay — dismissed on click or after 6s
+                    <Show when=move || show_hint.get()>
+                        <div
+                            class="absolute inset-0 flex items-center justify-center bg-black/40 transition-opacity duration-500 cursor-pointer"
+                            on:click=move |_| set_show_hint.set(false)
+                        >
+                            <div class="text-center space-y-3 px-6 py-5 rounded-xl bg-[#0d2137]/90 border border-white/10 max-w-sm">
+                                <p class="text-sm text-white/70 font-mono leading-relaxed">
+                                    "Drag to scroll \u{00b7} Scroll to zoom \u{00b7} Click bricks to inspect"
+                                </p>
+                                <p class="text-xs text-white/40 font-mono">
+                                    "Use the \u{25A0} / \u{2B24} button to toggle brick and bloodstream views"
+                                </p>
+                                <p class="text-[10px] text-white/30">"Click anywhere to dismiss"</p>
+                            </div>
+                        </div>
+                    </Show>
+                </div>
 
                 // Bottom info bar
                 <div class="flex items-center justify-between px-4 py-2 border-t border-white/5 text-sm sm:text-base text-[#00e676] font-mono">
@@ -622,7 +662,7 @@ pub fn HeartbeatPage() -> impl IntoView {
             <div class="bg-[#0d2137] border border-white/10 rounded-2xl overflow-hidden">
                 <div class="flex items-baseline justify-between px-4 py-2 border-b border-white/5">
                     <span class="text-xs text-white/40 font-mono">"24-HOUR RHYTHM STRIP"</span>
-                    <span class="text-[11px] text-white/20 font-mono">"Last 144 blocks \u{00b7} one full difficulty day"</span>
+                    <span class="text-[11px] text-white/40 font-mono">"Last 144 blocks \u{00b7} one full difficulty day"</span>
                 </div>
                 <canvas
                     id="rhythm-strip-canvas"
@@ -633,11 +673,11 @@ pub fn HeartbeatPage() -> impl IntoView {
 
             // ── Phase 4: Organism Status ──────────────────────
             <div class="bg-[#0d2137]/60 border border-white/5 rounded-xl px-5 py-4"
-                 data-tip="Overall network health derived from block timing, fee pressure, mempool congestion, and hashrate. Think of Bitcoin as a living organism \u{2014} this is its diagnosis."
+                 data-tip="Overall network health derived from block timing, fee pressure, mempool congestion, and hashrate. Bitcoin as a living organism: this is its diagnosis."
                  tabindex="0"
             >
                 <div class="flex items-baseline gap-2">
-                    <span class="text-xs text-white/30 font-mono uppercase tracking-wider">"Organism Status:"</span>
+                    <span class="text-xs text-white/50 font-mono uppercase tracking-wider">"Organism Status:"</span>
                     <span
                         class="text-sm font-mono font-semibold"
                         style=move || format!("color: {}", org_color.get())
@@ -668,9 +708,9 @@ pub fn HeartbeatPage() -> impl IntoView {
             // Legend
             <div class="space-y-2">
                 <div class="text-center">
-                    <span class="text-xs text-white/30 font-mono uppercase tracking-wider">"Network Stress"</span>
+                    <span class="text-xs text-white/50 font-mono uppercase tracking-wider">"Network Stress"</span>
                 </div>
-                <div class="flex flex-wrap justify-center gap-x-5 gap-y-2 text-xs text-white/40">
+                <div class="flex flex-wrap justify-center gap-x-5 gap-y-2 text-xs text-white/50">
                     <div class="flex items-center gap-1.5">
                         <span class="w-2.5 h-2.5 rounded-full bg-[#00e676]"></span>
                         "Healthy"
@@ -692,7 +732,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                         "Critical"
                     </div>
                 </div>
-                <p class="text-center text-[11px] text-white/20 max-w-md mx-auto">
+                <p class="text-center text-[11px] text-white/40 max-w-md mx-auto">
                     "Color is derived from time since last block, fee pressure, and mempool congestion. It affects the flatline, waveform, and live indicator."
                 </p>
             </div>
@@ -720,7 +760,7 @@ fn VitalTile(
             data-tip=tip.unwrap_or("")
             tabindex=if tip.is_some() { "0" } else { "-1" }
         >
-            <span class="text-xs text-white/30 font-mono uppercase tracking-wider">{label}</span>
+            <span class="text-xs text-white/50 font-mono uppercase tracking-wider">{label}</span>
             <div class="flex items-baseline gap-1">
                 <span
                     class="text-2xl sm:text-3xl font-mono font-bold tabular-nums"
