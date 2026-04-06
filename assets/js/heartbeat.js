@@ -1551,7 +1551,11 @@
                     var fadeDt = nowSec - blip.fadeStart;
                     var dist = Math.abs(blip.absorbTargetX - blip.absorbOriginX);
                     var animDuration = Math.max(1.5, Math.min(dist / 40, 4.0));
-                    absorbT = Math.min(fadeDt / animDuration, 1.0);
+                    // The blip's lifetime must cover the slowest particle.
+                    // Each particle has speed (0.7-1.3) and delay (0-0.3s),
+                    // so the slowest needs animDuration/0.7 + 0.3s to finish.
+                    var maxParticleDuration = animDuration / 0.7 + 0.3;
+                    absorbT = Math.min(fadeDt / maxParticleDuration, 1.0);
                     if (absorbT >= 1.0) continue;
                     isAbsorbing = true;
 
