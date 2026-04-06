@@ -332,10 +332,6 @@
         var liveSeg = _hb.timeline[_hb.timeline.length - 1];
         if (!liveSeg || liveSeg.type !== 'flatline' || liveSeg.x_end !== null) return;
 
-        // Server sends newest-first (ORDER BY first_seen DESC). Sort ascending
-        // so earliest txs (near the spike) get placed first before the density cap.
-        txs.sort(function(a, b) { return (a.first_seen || 0) - (b.first_seen || 0); });
-
         var effectiveBlockTs = _hb.lastBlockTime || lastBlockTs;
 
         // Fast-forward virtualX to match real elapsed time since last block.
@@ -384,21 +380,12 @@
 
         for (var i = 0; i < txs.length && placed < maxBricks; i++) {
             var tx = txs[i];
-            if (!tx.first_seen || !tx.fee || !tx.vsize) continue;
+            if (!tx.fee || !tx.vsize) continue;
 
-            var secAfterBlock = tx.first_seen - effectiveBlockTs;
-            var txVX;
-            if (secAfterBlock >= 0) {
-                // Post-block tx: place proportionally by time
-                txVX = liveSeg.x_start + secAfterBlock * FLATLINE_PX_PER_SEC;
-            } else {
-                // Pre-block survivor: spread uniformly across the flatline.
-                // These txs were in the mempool before the block — their exact
-                // position doesn't matter, just fill the space evenly.
-                txVX = liveSeg.x_start + Math.random() * flatlineSpan * 0.95;
-            }
-            if (txVX > _hb.virtualX) txVX = _hb.virtualX - Math.random() * 5;
-            if (txVX < liveSeg.x_start) txVX = liveSeg.x_start + Math.random() * 5;
+            // Spread all history txs uniformly across the flatline. These are
+            // mempool txs shown on initial load — exact timestamp positioning
+            // creates gaps when the tx stream had hiccups (ZMQ reconnects, etc).
+            var txVX = liveSeg.x_start + Math.random() * flatlineSpan * 0.95;
 
             var feeRate = tx.fee / tx.vsize;
             var feeNorm = Math.min(Math.log2(feeRate + 1) / 6, 1.0);
