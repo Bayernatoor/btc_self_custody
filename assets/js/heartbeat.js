@@ -787,11 +787,11 @@
         }
 
         // Priority culling: when too many blips, evict lowest-value ones.
-        // Threshold scales with flatline span — longer flatlines can hold more bricks.
-        // Viewport culling already skips off-screen blips, so the segment can hold many.
+        // Threshold is generous — viewport culling already skips off-screen
+        // blips so holding many in memory is cheap. Only cull when truly excessive.
         var flatSpan = _hb.virtualX - liveSeg.x_start;
-        var CULL_THRESHOLD = Math.max(5000, Math.floor(flatSpan / 5 * 3));
-        var CULL_TARGET = Math.floor(CULL_THRESHOLD * 0.8);
+        var CULL_THRESHOLD = Math.max(8000, Math.floor(flatSpan / 5 * 4));
+        var CULL_TARGET = Math.floor(CULL_THRESHOLD * 0.9);
         if (liveSeg.blips.length > CULL_THRESHOLD) {
             // Score each active blip: lower score = evict first
             // Priority: low fee + small vsize evicted first
