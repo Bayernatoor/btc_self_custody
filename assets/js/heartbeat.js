@@ -416,7 +416,7 @@
                 txCount: 1, txid: tx.txid || null,
                 feeRate: Math.round(feeRate * 10) / 10,
                 vsize: tx.vsize || 0, value: tx.value || 0,
-                timestamp: dropNow + dropDelay, fadeStart: 0,
+                timestamp: dropNow + dropDelay, isDrop: true, fadeStart: 0,
                 bobPhase: Math.random() * Math.PI * 2,
                 bobSpeed: 1.2 + feeNorm * 0.8,
                 lane: Math.floor(Math.random() * 5) - 2,
@@ -1513,11 +1513,11 @@
                     var bsCellR = bsBaseR * Math.max(zoom * 0.4, 0.8);
 
                     // Start from tube position, converge to baseline as cell approaches spike
-                    // Use bobPhase for deterministic Y (same as normal rendering)
+                    // Use bobPhase + gridX hash (same as normal rendering)
                     var bsBobPhase = blip.bobPhase || 0;
                     var bsTubeH = 30;
-                    // Linear mapping from bobPhase [0, 2PI] to [-1, 1] for uniform distribution
-                    var bsTubePos = (bsBobPhase / Math.PI - 1);
+                    var bsColHash = ((blip.gridX || 0) * 0.6180339887) % 1;
+                    var bsTubePos = ((bsBobPhase + bsColHash * Math.PI * 2) % (Math.PI * 2)) / Math.PI - 1;
                     var bsStartY = baseline - bsTubePos * bsTubeH;
                     // Converge to baseline
                     var bsCellCY = bsStartY + (baseline - bsStartY) * bsEase;
@@ -1658,13 +1658,12 @@
                     var bh = (blip.brickH || blipH) * heightScale;
                     var sy = (blip.stackY || 0) * heightScale;
 
-                    // Fade-in animation: bricks drop from above and grow over 0.4s.
-                    // age < 0 means the brick hasn't appeared yet (staggered history).
+                    // Fade-in: grow from 0 over 0.4s. History bricks also drop from above.
                     var age = nowSec - blip.timestamp;
-                    if (age < 0) continue; // not yet visible
+                    if (age < 0) continue; // staggered history brick not yet visible
                     var fadeIn = Math.min(age / 0.4, 1.0);
-                    // Ease-out drop: starts 20px above baseline, settles to 0
-                    var dropOffset = (1 - fadeIn) * (1 - fadeIn) * 20; // quadratic ease-out
+                    // Drop offset only for history bricks (flagged with isDrop)
+                    var dropOffset = blip.isDrop ? (1 - fadeIn) * (1 - fadeIn) * 20 : 0;
                     bh *= fadeIn;
                     bOpacity *= fadeIn;
 
@@ -1683,21 +1682,22 @@
                         var cellDiam = cellRadius * 2;
 
                         // Tube distribution: each cell gets a unique Y position
-                        // within the tube, determined by its bobPhase (deterministic random)
-                        // Fixed tube bounds so cells don't relocate on zoom
+                        // within the tube. Use bobPhase + gridX to spread cells so
+                        // neighbors at the same x don't overlap.
                         var tubeH = 30;
                         var bobPhase = blip.bobPhase || 0;
                         var bobSpeed = blip.bobSpeed || 1.5;
-                        // Linear mapping from bobPhase [0, 2PI] to [-1, 1] for
-                        // uniform distribution across the tube (sin clusters at edges)
-                        var tubePos = (bobPhase / Math.PI - 1);
+                        // Mix bobPhase with gridX to separate cells at the same column.
+                        // Golden ratio offset ensures even distribution across columns.
+                        var colHash = ((blip.gridX || 0) * 0.6180339887) % 1;
+                        var tubePos = ((bobPhase + colHash * Math.PI * 2) % (Math.PI * 2)) / Math.PI - 1;
                         var cellCY = baseline - tubePos * tubeH - dropOffset;
 
-                        // Gentle bobbing: cells drift slightly
-                        var bobAmpY = Math.min(cellRadius * 0.3, 2);
-                        var bobAmpX = Math.min(cellRadius * 0.2, 1.5);
+                        // Bobbing: visible organic drift within the tube
+                        var bobAmpY = Math.min(cellRadius * 0.8, 5);
+                        var bobAmpX = Math.min(cellRadius * 0.5, 3);
                         cellCY += Math.sin(nowSec * bobSpeed + bobPhase) * bobAmpY;
-                        // Small X jitter for organic feel (not grid-locked)
+                        // X jitter for organic feel (not grid-locked)
                         var cellCX = bx + Math.cos(bobPhase * 2.31) * cellRadius * 0.4
                                        + Math.cos(nowSec * bobSpeed * 0.7 + bobPhase) * bobAmpX;
 
