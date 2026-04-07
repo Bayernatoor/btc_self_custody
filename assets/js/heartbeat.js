@@ -404,7 +404,8 @@
             var brickH = 3 + feeNorm * 14 + Math.random() * 3;
             var gridX = Math.round(txVX / 5) * 5;
             var stackY = stackMap[gridX] || 0;
-            if (stackY > 150) continue;
+            var histMaxStack = (_hb.height || 400) * 0.35;
+            if (stackY > histMaxStack) continue;
             stackMap[gridX] = stackY + brickH;
 
             // Stagger: left-most bricks appear first, sweeping right
@@ -711,9 +712,27 @@
             var brickX = _hb.virtualX - Math.random() * 15;
             var gridX = Math.round(brickX / 5) * 5;
 
-            // Stack height via column map (O(1) instead of scanning all blips)
+            // Stack height via column map (O(1) instead of scanning all blips).
+            // If the column is too tall, search backward for a shorter one.
             if (!liveSeg._colHeights) liveSeg._colHeights = {};
+            var maxStack = (_hb.height || 400) * 0.35; // cap at 35% of canvas height
             var stackY = liveSeg._colHeights[gridX] || 0;
+            if (stackY > maxStack) {
+                // Walk backward along the flatline to find a shorter column
+                for (var back = 1; back <= 20; back++) {
+                    var tryX = gridX - back * 5;
+                    if (tryX < liveSeg.x_start) break;
+                    var tryH = liveSeg._colHeights[tryX] || 0;
+                    if (tryH <= maxStack) {
+                        gridX = tryX;
+                        brickX = tryX;
+                        stackY = tryH;
+                        break;
+                    }
+                }
+                // If all backward columns are full, just cap the height
+                if (stackY > maxStack) stackY = maxStack;
+            }
 
             liveSeg.blips.push({
                 x: brickX,
