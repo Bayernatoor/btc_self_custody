@@ -2499,6 +2499,12 @@
         // Setup input handlers
         setupInputHandlers(canvas);
 
+        // Show fullscreen button only if the API is supported (not on iOS)
+        var fsBtn = document.getElementById('heartbeat-fullscreen-btn');
+        if (fsBtn && (document.fullscreenEnabled || document.webkitFullscreenEnabled)) {
+            fsBtn.classList.remove('hidden');
+        }
+
         // Fullscreen: clear container height so flex-1 fills the card.
         // On exit, restore the clamp height. Handle vendor prefixes for mobile.
         var wrap = document.getElementById('heartbeat-canvas-wrap');
@@ -2508,7 +2514,7 @@
             if (fsEl) {
                 wrap.style.height = '';
             } else {
-                wrap.style.height = 'clamp(300px, 55vh, 700px)';
+                wrap.style.cssText = 'height: clamp(300px, 55vh, 700px); height: clamp(300px, 55dvh, 700px)';
             }
         }
         document.addEventListener('fullscreenchange', _hbFullscreenChange);

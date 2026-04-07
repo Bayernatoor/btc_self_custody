@@ -572,9 +572,10 @@ pub fn HeartbeatPage() -> impl IntoView {
                     </div>
                     <div class="flex items-center gap-2 sm:gap-3 text-xs sm:text-base text-[#00e676] font-mono">
                         <span class="truncate">"Last block: " {time_since}</span>
-                        // Fullscreen toggle (other controls are in the canvas control bar)
+                        // Fullscreen toggle — hidden on iOS where the API isn't supported
                         <button
-                            class="text-white/30 hover:text-[#00e676] transition-colors cursor-pointer"
+                            id="heartbeat-fullscreen-btn"
+                            class="text-white/30 hover:text-[#00e676] transition-colors cursor-pointer hidden"
                             title="Toggle fullscreen"
                             on:click=move |_| {
                                 #[cfg(feature = "hydrate")]
@@ -599,7 +600,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                 // Canvas with first-visit hint overlay
                 // Container gets a fixed height normally; in fullscreen, JS clears
                 // it so flex-1 can expand to fill the card.
-                <div id="heartbeat-canvas-wrap" class="relative flex-1 min-h-0" style="height: clamp(300px, 55vh, 700px)">
+                <div id="heartbeat-canvas-wrap" class="relative flex-1 min-h-0" style="height: clamp(300px, 55vh, 700px); height: clamp(300px, 55dvh, 700px)">
                     <canvas
                         id="heartbeat-canvas"
                         class="w-full h-full"
