@@ -1097,7 +1097,8 @@
             ctx.fillStyle = textColor;
             ctx.font = 'bold 16px sans-serif';
             ctx.textAlign = 'center';
-            ctx.fillText(label, bx + CTRL_BTN_SIZE / 2, btnY + CTRL_BTN_SIZE / 2 + 6);
+            ctx.textBaseline = 'middle';
+            ctx.fillText(label, bx + CTRL_BTN_SIZE / 2, btnY + CTRL_BTN_SIZE / 2);
 
             _hb._ctrlBtns.push({
                 id: def.id, tip: def.tip,
@@ -1105,6 +1106,7 @@
             });
         }
         ctx.textAlign = 'left';
+        ctx.textBaseline = 'alphabetic';
 
         // Draw tooltip if hovering a control button
         if (_hb._ctrlHover) {
