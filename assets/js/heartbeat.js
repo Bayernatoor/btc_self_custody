@@ -3211,7 +3211,7 @@
         if (!_hb) return null;
 
         // Create an offscreen canvas for the share card
-        var cardW = 1200, cardH = 630;
+        var cardW = 1200, cardH = 675;
         var offscreen = document.createElement('canvas');
         offscreen.width = cardW;
         offscreen.height = cardH;
@@ -3227,9 +3227,9 @@
         octx.lineWidth = 2;
         octx.strokeRect(8, 8, cardW - 16, cardH - 16);
 
-        // Copy current EKG canvas
+        // Copy current EKG canvas — larger share of the card
         try {
-            var ekgH = 280;
+            var ekgH = 350;
             octx.drawImage(_hb.canvas, 20, 20, cardW - 40, ekgH);
         } catch(e) {}
 
@@ -3237,53 +3237,55 @@
         var vitals;
         try { vitals = JSON.parse(vitalsJson); } catch(e) { vitals = {}; }
 
-        octx.font = 'bold 24px monospace';
+        octx.font = 'bold 22px monospace';
         octx.fillStyle = color;
-        var y = 330;
+        var y = 395;
         var col1 = 40, col2 = 340, col3 = 640, col4 = 940;
 
         // Heart Rate
         octx.fillStyle = vitals.heart_rate_color || color;
         octx.fillText('Heart Rate', col1, y);
-        octx.font = 'bold 36px monospace';
-        octx.fillText((vitals.heart_rate_bpm || '---') + ' bpm', col1, y + 40);
-        octx.font = '18px monospace';
-        octx.fillText(vitals.heart_rate_label || '', col1, y + 65);
+        octx.font = 'bold 32px monospace';
+        var hrBpm = vitals.heart_rate_bpm || 0;
+        var hrPct = typeof hrBpm === 'number' ? Math.round(hrBpm * 100) : hrBpm;
+        octx.fillText(hrPct + '% of target', col1, y + 36);
+        octx.font = '16px monospace';
+        octx.fillText(vitals.heart_rate_label || '', col1, y + 56);
 
         // Blood Pressure
-        octx.font = 'bold 24px monospace';
+        octx.font = 'bold 22px monospace';
         octx.fillStyle = vitals.bp_color || color;
         octx.fillText('Blood Pressure', col2, y);
-        octx.font = 'bold 36px monospace';
-        octx.fillText((vitals.bp_systolic || '0') + ' / ' + (vitals.bp_diastolic || '0'), col2, y + 40);
-        octx.font = '18px monospace';
-        octx.fillText(vitals.bp_label || '', col2, y + 65);
+        octx.font = 'bold 32px monospace';
+        octx.fillText((vitals.bp_systolic || '0') + ' / ' + (vitals.bp_diastolic || '0'), col2, y + 36);
+        octx.font = '16px monospace';
+        octx.fillText(vitals.bp_label || '', col2, y + 56);
 
         // Temperature
-        octx.font = 'bold 24px monospace';
+        octx.font = 'bold 22px monospace';
         octx.fillStyle = vitals.temp_color || color;
         octx.fillText('Temperature', col3, y);
-        octx.font = 'bold 36px monospace';
-        octx.fillText((vitals.temp_c || '36.5') + '\u00B0C', col3, y + 40);
-        octx.font = '18px monospace';
-        octx.fillText(vitals.temp_label || '', col3, y + 65);
+        octx.font = 'bold 32px monospace';
+        octx.fillText((vitals.temp_c || '36.5') + '\u00B0C', col3, y + 36);
+        octx.font = '16px monospace';
+        octx.fillText(vitals.temp_label || '', col3, y + 56);
 
         // Immune System
-        octx.font = 'bold 24px monospace';
+        octx.font = 'bold 22px monospace';
         octx.fillStyle = vitals.immune_color || color;
         octx.fillText('Immune System', col4, y);
-        octx.font = 'bold 36px monospace';
-        octx.fillText((vitals.immune_eh || '0') + ' EH/s', col4, y + 40);
-        octx.font = '18px monospace';
-        octx.fillText(vitals.immune_label || '', col4, y + 65);
+        octx.font = 'bold 32px monospace';
+        octx.fillText((vitals.immune_eh || '0') + ' EH/s', col4, y + 36);
+        octx.font = '16px monospace';
+        octx.fillText(vitals.immune_label || '', col4, y + 56);
 
         // Organism status
         var status;
         try { status = JSON.parse(window.getOrganismStatus()); } catch(e) { status = {}; }
-        octx.font = 'bold 22px monospace';
+        octx.font = 'bold 20px monospace';
         octx.fillStyle = status.color || color;
-        var statusY = 470;
-        octx.fillText('Condition: ' + (status.condition || 'Unknown'), col1, statusY);
+        var statusY = 520;
+        octx.fillText('Organism Status: ' + (status.condition || 'Unknown'), col1, statusY);
         octx.font = 'italic 18px monospace';
         octx.fillStyle = 'rgba(255,255,255,0.6)';
         octx.fillText('"' + (status.description || '') + '"', col1, statusY + 30);
