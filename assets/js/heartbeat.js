@@ -2499,7 +2499,7 @@
             if (fsEl) {
                 wrap.style.height = '';
             } else {
-                wrap.style.height = 'clamp(250px, 45vh, 700px)';
+                wrap.style.height = 'clamp(300px, 55vh, 700px)';
             }
         }
         document.addEventListener('fullscreenchange', _hbFullscreenChange);
