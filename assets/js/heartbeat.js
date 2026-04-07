@@ -3034,32 +3034,35 @@
         // ── Rhythm strip interactivity: hover tooltip + click to open ──
         canvas._rhythmHitRegions = hitRegions;
 
-        // Draw tooltip for hovered block (persists across redraws)
-        if (canvas._rhythmHovered) {
-            var hov = canvas._rhythmHovered;
+        // Draw highlight for slider-selected block (not mouse hover)
+        if (canvas._rhythmSelected) {
+            var sel = canvas._rhythmSelected;
+            var selMid = (sel.x1 + sel.x2) / 2;
             // Re-match against new hit regions (positions may shift on resize)
-            var hovMid = (hov.x1 + hov.x2) / 2;
             for (var hri = 0; hri < hitRegions.length; hri++) {
-                if (hitRegions[hri].block.height === hov.block.height) {
-                    hov = hitRegions[hri];
-                    canvas._rhythmHovered = hov;
-                    hovMid = (hov.x1 + hov.x2) / 2;
+                if (hitRegions[hri].block.height === sel.block.height) {
+                    sel = hitRegions[hri];
+                    canvas._rhythmSelected = sel;
+                    selMid = (sel.x1 + sel.x2) / 2;
                     break;
                 }
             }
-            var lines = [
-                'Block #' + (hov.block.height || 0).toLocaleString(),
-                (hov.block.tx_count || 0).toLocaleString() + ' txs',
-                ((hov.block.total_fees || 0) / 100000000).toFixed(4) + ' BTC fees',
-                formatDuration(hov.block.inter_block_seconds || 600) + ' wait'
-            ];
-            drawTooltipBox(ctx, lines, hovMid, baseline - 20, hov.color);
+            // Subtle highlight line under the selected spike
+            ctx.strokeStyle = sel.color;
+            ctx.lineWidth = 2;
+            ctx.globalAlpha = 0.6;
+            ctx.beginPath();
+            ctx.moveTo(sel.x1, baseline + 4);
+            ctx.lineTo(sel.x2, baseline + 4);
+            ctx.stroke();
+            ctx.globalAlpha = 1;
         }
 
-        // Only set up event handlers once (skip on tooltip redraws)
+        // Only set up event handlers once (skip on redraws)
         if (canvas._rhythmHandlersSet) return;
         canvas._rhythmHandlersSet = true;
 
+        // Click → open block on mempool.space
         canvas.addEventListener('click', function(e) {
             var r = canvas.getBoundingClientRect();
             var mx = e.clientX - r.left;
@@ -3072,29 +3075,23 @@
             }
         });
 
+        // Pointer cursor on hover (no tooltip overlay)
         canvas.addEventListener('mousemove', function(e) {
             var r = canvas.getBoundingClientRect();
             var mx = e.clientX - r.left;
             var regions = canvas._rhythmHitRegions;
-            var found = null;
+            var over = false;
             for (var ri = 0; ri < regions.length; ri++) {
                 if (mx >= regions[ri].x1 && mx <= regions[ri].x2) {
-                    found = regions[ri];
+                    over = true;
                     break;
                 }
             }
-            if (found === canvas._rhythmHovered) return;
-            canvas._rhythmHovered = found;
-            canvas.style.cursor = found ? 'pointer' : '';
-            window.renderRhythmStrip(canvasId, blocksJson);
+            canvas.style.cursor = over ? 'pointer' : '';
         });
 
         canvas.addEventListener('mouseleave', function() {
-            if (canvas._rhythmHovered) {
-                canvas._rhythmHovered = null;
-                canvas.style.cursor = '';
-                window.renderRhythmStrip(canvasId, blocksJson);
-            }
+            canvas.style.cursor = '';
         });
 
         // ── Slider scrubber for block selection ──────────────
@@ -3108,7 +3105,7 @@
                 var regions = canvas._rhythmHitRegions;
                 if (!regions || idx < 0 || idx >= regions.length) {
                     detailEl.innerHTML = '';
-                    canvas._rhythmHovered = null;
+                    canvas._rhythmSelected = null;
                     window.renderRhythmStrip(canvasId, blocksJson);
                     return;
                 }
@@ -3125,7 +3122,7 @@
                     'style="color:' + r.color + ';text-decoration:underline;text-underline-offset:2px">' +
                     'View on mempool.space \u2197</a>';
                 // Highlight on canvas
-                canvas._rhythmHovered = r;
+                canvas._rhythmSelected = r;
                 window.renderRhythmStrip(canvasId, blocksJson);
             }
 
