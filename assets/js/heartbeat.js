@@ -541,24 +541,14 @@
                     var tx = JSON.parse(e.data);
                     _hb._hasTxStream = true;
                     _hb._sseTxCount++;
-                    // When hidden: buffer txs and keep advancing virtualX so
-                    // the flatline grows. Without this, all buffered txs pile
-                    // up at the same virtualX position and create a tall stack.
+                    // When hidden: buffer txs. virtualX is advanced in bulk
+                    // on visibility return (browsers throttle SSE events in
+                    // background tabs, making per-event dt unreliable).
                     if (document.hidden) {
                         if (!_hb._hiddenTxBuffer) _hb._hiddenTxBuffer = [];
                         if (_hb._hiddenTxBuffer.length < 3000) _hb._hiddenTxBuffer.push(tx);
-                        // Advance virtualX based on real elapsed time
-                        var now = Date.now() / 1000;
-                        if (_hb._lastHiddenAdvance > 0) {
-                            var dt = now - _hb._lastHiddenAdvance;
-                            if (dt > 0 && dt < 5) { // clamp to avoid huge jumps
-                                _hb.virtualX += dt * FLATLINE_PX_PER_SEC;
-                            }
-                        }
-                        _hb._lastHiddenAdvance = now;
                         return;
                     }
-                    _hb._lastHiddenAdvance = 0; // reset when visible
                     if (_hb._txBatchQueue.length > 500) _hb._txBatchQueue.length = 500;
                     _hb._txBatchQueue.push(tx);
                     // Track rolling median fee rate from own node data
@@ -2772,9 +2762,25 @@
     // When tab regains focus, replay queued blocks as compressed history
     // and advance virtualX to catch up with elapsed time
     document.addEventListener('visibilitychange', function() {
-        if (!_hb || document.hidden) return;
+        if (!_hb) return;
+        if (document.hidden) {
+            // Record when tab went hidden so we can advance virtualX on return
+            _hb._hiddenSince = Date.now() / 1000;
+            return;
+        }
         var now = Date.now() / 1000;
-        var elapsed = now - (_hb.lastFrameTime || now);
+
+        // Advance virtualX by full elapsed hidden time
+        var preAdvanceX = _hb.virtualX;
+        if (_hb._hiddenSince > 0) {
+            var hiddenDuration = now - _hb._hiddenSince;
+            if (hiddenDuration > 0) {
+                _hb.virtualX += hiddenDuration * FLATLINE_PX_PER_SEC;
+                console.log('[heartbeat] tab return: advanced virtualX by', Math.round(hiddenDuration), 's (',
+                    Math.round(hiddenDuration * FLATLINE_PX_PER_SEC), 'px)');
+            }
+            _hb._hiddenSince = 0;
+        }
 
         // Grab buffered txs and clear queues
         var hiddenTxs = _hb._hiddenTxBuffer || [];
@@ -2784,10 +2790,6 @@
         // Replay any blocks that arrived while hidden
         var queued = _hb._blockQueue || [];
         _hb._blockQueue = [];
-
-        // Remember where virtualX was before advancing — buffered txs
-        // should only go in the NEW section, not overlap with history bricks
-        var preAdvanceX = _hb.virtualX;
 
         if (queued.length > 0) {
             console.log('[heartbeat] replaying', queued.length, 'queued blocks from background');
@@ -2809,9 +2811,6 @@
             }
             window.pushHeartbeatBlocks(JSON.stringify(replayBlocks), true);
         }
-        // Note: virtualX is already advanced by the SSE tx handler while
-        // hidden, so no additional elapsed-time advance is needed here.
-
         // Spread buffered txs across the NEW section of the flatline only.
         // Skip if blocks were replayed — the post-block flatline is too short
         // and cramming buffered txs into it creates a tall stack.
