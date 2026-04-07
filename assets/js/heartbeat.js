@@ -735,8 +735,10 @@
         _hb._txBatchQueue = [];
 
         // Cap visual bricks at 4 per flush (batch the rest into 1 aggregate).
-        // At 5px/sec advance and 5 flushes/sec, 4 bricks spread across 60px
-        // gives ~0.3 bricks per grid column per flush — prevents stacking.
+        // Spread scales with visible virtual width so bricks don't stack
+        // at low zoom. At zoom 1.9 on 1000px canvas: ~80px. At zoom 0.5: ~200px.
+        var visibleVirtW = (_hb.width || 800) / (_hb.zoom || 1);
+        var spread = Math.max(60, Math.min(visibleVirtW * 0.15, 300));
         var maxBricks = 4;
         var medianFee = _hb._wsMedianFee || 5;
 
@@ -747,7 +749,7 @@
 
             var brickW = 4;
             var brickH = 3 + feeNorm * 14 + Math.random() * 3;
-            var brickX = _hb.virtualX - Math.random() * 60;
+            var brickX = _hb.virtualX - Math.random() * spread;
             var gridX = Math.round(brickX / 5) * 5;
             if (gridX < liveSeg.x_start) gridX = Math.round(liveSeg.x_start / 5) * 5;
 
@@ -759,7 +761,8 @@
             if (stackY > maxStack) {
                 // Walk backward along the flatline to find a shorter column
                 var found = false;
-                for (var back = 1; back <= 30; back++) {
+                var maxBack = Math.max(30, Math.floor(spread / 5));
+                for (var back = 1; back <= maxBack; back++) {
                     var tryX = gridX - back * 5;
                     if (tryX < liveSeg.x_start) break;
                     var tryH = liveSeg._colHeights[tryX] || 0;
@@ -809,7 +812,7 @@
             avgFee /= remaining;
             var aggFeeNorm = Math.min(Math.log2(avgFee + 1) / 6, 1.0);
             var aggColor = avgFee < medianFee ? 'rgba(0, 230, 118, ' : 'rgba(255, 152, 0, ';
-            var aggX = _hb.virtualX - Math.random() * 60;
+            var aggX = _hb.virtualX - Math.random() * spread;
             var aggGridX = Math.round(aggX / 5) * 5;
             if (!liveSeg._colHeights) liveSeg._colHeights = {};
             var aggStackY = liveSeg._colHeights[aggGridX] || 0;
