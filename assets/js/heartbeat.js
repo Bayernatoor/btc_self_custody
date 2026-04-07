@@ -1470,6 +1470,8 @@
             // Tube scales with zoom so vessel walls match cell spread
             var avgR = 4.0 * Math.max(zoom * 0.4, 0.8);
             var tubeH = Math.max(30, avgR * 2.5);
+            // Guard against non-finite values (canvas resize race)
+            if (!isFinite(baseline) || !isFinite(tubeH)) return;
             var underglowAlpha = 0.02 + Math.min(cellCount / 500, 0.04);
             if (isLive) {
                 underglowAlpha *= 0.85 + 0.15 * Math.sin(nowSec * 1.2);
