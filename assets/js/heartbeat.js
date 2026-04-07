@@ -2509,17 +2509,34 @@
             fsBtn.classList.remove('hidden');
         }
 
-        // Fullscreen: clear container height so flex-1 fills the card.
-        // On exit, restore the clamp height. Handle vendor prefixes for mobile.
+        // ── Container sizing ─────────────────────────────────
+        // Use window.innerHeight (accounts for browser chrome on all devices)
+        // to set the container height. Targets ~55% of visible viewport,
+        // clamped 300-700px. This replaces CSS vh/dvh which is inconsistent
+        // across mobile browsers.
         var wrap = document.getElementById('heartbeat-canvas-wrap');
-        function _hbFullscreenChange() {
-            if (!_hb || !wrap) return;
+        function sizeWrap() {
+            if (!wrap) return;
             var fsEl = document.fullscreenElement || document.webkitFullscreenElement;
             if (fsEl) {
+                // Fullscreen: clear height so flex-1 fills the card
                 wrap.style.height = '';
             } else {
-                wrap.style.cssText = 'height: clamp(300px, 55vh, 700px); height: clamp(300px, 55dvh, 700px)';
+                var ih = window.innerHeight || 700;
+                var h = Math.max(300, Math.min(Math.round(ih * 0.55), 700));
+                wrap.style.height = h + 'px';
             }
+        }
+        sizeWrap();
+        // Re-measure on resize (orientation change, toolbar show/hide)
+        function _hbResize() { if (_hb) sizeWrap(); }
+        window.addEventListener('resize', _hbResize);
+        _hb._resizeHandler = _hbResize;
+
+        // Fullscreen change: re-run sizing
+        function _hbFullscreenChange() {
+            if (!_hb) return;
+            sizeWrap();
         }
         document.addEventListener('fullscreenchange', _hbFullscreenChange);
         document.addEventListener('webkitfullscreenchange', _hbFullscreenChange);
@@ -2817,6 +2834,9 @@
         // Remove global listeners that aren't tracked via listen()
         window.removeEventListener('beforeunload', _hbBeforeUnload);
         document.removeEventListener('visibilitychange', _hbVisibilityChange);
+        if (_hb._resizeHandler) {
+            window.removeEventListener('resize', _hb._resizeHandler);
+        }
         if (_hb._fullscreenHandler) {
             document.removeEventListener('fullscreenchange', _hb._fullscreenHandler);
             document.removeEventListener('webkitfullscreenchange', _hb._fullscreenHandler);
