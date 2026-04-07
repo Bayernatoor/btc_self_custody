@@ -332,7 +332,13 @@
         var liveSeg = _hb.timeline[_hb.timeline.length - 1];
         if (!liveSeg || liveSeg.type !== 'flatline' || liveSeg.x_end !== null) return;
 
-        var effectiveBlockTs = _hb.lastBlockTime || lastBlockTs;
+        // Prefer the SSE's lastBlockTs (real timestamp from DB) over the replay's
+        // lastBlockTime (synthetic, can drift). Update lastBlockTime so the rest
+        // of the system (color computation, vital signs) uses the real value.
+        var effectiveBlockTs = lastBlockTs || _hb.lastBlockTime;
+        if (effectiveBlockTs > 0 && effectiveBlockTs !== _hb.lastBlockTime) {
+            _hb.lastBlockTime = effectiveBlockTs;
+        }
 
         // Fast-forward virtualX to match real elapsed time since last block.
         // On page load, replay creates compressed flatlines, so virtualX is only
@@ -3098,9 +3104,14 @@
         if (_hb._flashTimer) clearTimeout(_hb._flashTimer);
         _hb._flashTimer = setTimeout(function() {
             if (_hb && _hb._flashColor) {
-                _hb.prevColor = '#ffffff';
+                // Skip the lerp — just snap to the correct color.
+                // The gradual white-to-color fade looked good in theory but
+                // caused the line to stay white when computeColor triggered
+                // a target change mid-lerp (prevColor was still '#ffffff').
+                _hb.currentColor = _hb._flashColor;
+                _hb.prevColor = _hb._flashColor;
                 _hb.targetColor = _hb._flashColor;
-                _hb.colorLerp = 0;
+                _hb.colorLerp = 1;
                 _hb._flashColor = null;
                 _hb._preFlashColor = null;
             }
