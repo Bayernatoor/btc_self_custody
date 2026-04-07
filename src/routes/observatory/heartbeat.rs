@@ -158,7 +158,9 @@ pub fn HeartbeatPage() -> impl IntoView {
     let (sound_on, set_sound_on) = signal(false);
 
     // First-visit hint overlay (dismissed on click or X button)
-    let (show_hint, set_show_hint) = signal(true);
+    // Start hidden — shown only after canvas initializes to avoid
+    // blocking the view before hydration is ready.
+    let (show_hint, set_show_hint) = signal(false);
 
     // Period start timestamp (first block in current retarget period)
     let (period_start_ts, set_period_start_ts) = signal(0u64);
@@ -206,6 +208,7 @@ pub fn HeartbeatPage() -> impl IntoView {
 
             init_heartbeat("heartbeat-canvas");
             initialized.set(true);
+            set_show_hint.set(true);
 
             // Store period start timestamp for heart rate calculation
             // Use the block at the retarget boundary, not the first fetched block
@@ -606,9 +609,10 @@ pub fn HeartbeatPage() -> impl IntoView {
                 </div>
 
                 // Canvas with first-visit hint overlay
-                // JS sizes this container based on window.innerHeight for
-                // consistent cross-device behavior. flex-1 fills fullscreen.
-                <div id="heartbeat-canvas-wrap" class="relative flex-1 min-h-0">
+                // CSS sets an initial height; JS refines it from
+                // window.innerHeight once initHeartbeat runs.
+                // flex-1 fills fullscreen when JS clears the height.
+                <div id="heartbeat-canvas-wrap" class="relative flex-1 min-h-0" style="height: 70vh">
                     <canvas
                         id="heartbeat-canvas"
                         class="w-full h-full"
