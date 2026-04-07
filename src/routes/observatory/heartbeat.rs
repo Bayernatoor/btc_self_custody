@@ -599,7 +599,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                 // Canvas with first-visit hint overlay
                 // Container gets a fixed height normally; in fullscreen, JS clears
                 // it so flex-1 can expand to fill the card.
-                <div id="heartbeat-canvas-wrap" class="relative flex-1 min-h-0" style="height: clamp(250px, 45vh, 700px)">
+                <div id="heartbeat-canvas-wrap" class="relative flex-1 min-h-0" style="height: clamp(300px, 55vh, 700px)">
                     <canvas
                         id="heartbeat-canvas"
                         class="w-full h-full"
