@@ -743,15 +743,13 @@
         var batch = _hb._txBatchQueue;
         _hb._txBatchQueue = [];
 
-        // Cap visual bricks at 4 per flush (batch the rest into 1 aggregate).
-        // Spread scales with visible virtual width so bricks don't stack
-        // at low zoom. At zoom 1.9 on 1000px canvas: ~80px. At zoom 0.5: ~200px.
+        // Place ALL txs as individual bricks so every tx is searchable/inspectable.
+        // Spread scales with visible virtual width to prevent stacking.
         var visibleVirtW = (_hb.width || 800) / (_hb.zoom || 1);
         var spread = Math.max(60, Math.min(visibleVirtW * 0.15, 300));
-        var maxBricks = 4;
         var medianFee = _hb._wsMedianFee || 5;
 
-        for (var i = 0; i < Math.min(batch.length, maxBricks); i++) {
+        for (var i = 0; i < batch.length; i++) {
             var tx = batch[i];
             var feeRate = tx.fee && tx.vsize ? tx.fee / tx.vsize : 1;
             var feeNorm = Math.min(Math.log2(feeRate + 1) / 6, 1.0);
@@ -809,35 +807,6 @@
                 feeRatio: medianFee > 0 ? feeRate / medianFee : 1
             });
             liveSeg._colHeights[gridX] = stackY + brickH;
-        }
-
-        // If there are excess txs beyond maxBricks, create one aggregate brick
-        if (batch.length > maxBricks) {
-            var remaining = batch.length - maxBricks;
-            var avgFee = 0;
-            for (var j = maxBricks; j < batch.length; j++) {
-                avgFee += (batch[j].fee && batch[j].vsize ? batch[j].fee / batch[j].vsize : 1);
-            }
-            avgFee /= remaining;
-            var aggFeeNorm = Math.min(Math.log2(avgFee + 1) / 6, 1.0);
-            var aggColor = avgFee < medianFee ? 'rgba(0, 230, 118, ' : 'rgba(255, 152, 0, ';
-            var aggX = _hb.virtualX - Math.random() * spread;
-            var aggGridX = Math.round(aggX / 5) * 5;
-            if (!liveSeg._colHeights) liveSeg._colHeights = {};
-            var aggStackY = liveSeg._colHeights[aggGridX] || 0;
-            var aggH = 3 + aggFeeNorm * 10;
-            liveSeg.blips.push({
-                x: aggX, gridX: aggGridX,
-                height: aggH + aggStackY, brickH: aggH, brickW: 4, stackY: aggStackY,
-                color: aggColor, opacity: 0.5,
-                txCount: remaining, feeRate: Math.round(avgFee * 10) / 10,
-                timestamp: Date.now() / 1000, fadeStart: 0,
-                bobPhase: Math.random() * Math.PI * 2,
-                bobSpeed: 1.2 + aggFeeNorm * 0.8,
-                lane: Math.floor(Math.random() * 5) - 2,
-                feeRatio: medianFee > 0 ? avgFee / medianFee : 1
-            });
-            liveSeg._colHeights[aggGridX] = aggStackY + aggH;
         }
 
         // Priority culling: only when truly excessive. Viewport culling already
