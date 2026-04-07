@@ -1384,6 +1384,41 @@
 
         // Jump to Live is now in the control bar
 
+        // ── Draw search highlight glow ────────────────────────
+        if (_hb._searchHighlight) {
+            var sh = _hb._searchHighlight;
+            var shElapsed = now - sh.start;
+            if (shElapsed > sh.duration) {
+                _hb._searchHighlight = null;
+            } else {
+                var shCX = (sh.x - _hb.viewOffset) * _hb.zoom;
+                var shCY = h * 0.55 + (_hb.viewOffsetY || 0);
+                // Pulsing glow: alpha fades, radius breathes
+                var shFade = 1.0 - shElapsed / sh.duration;
+                var shPulse = 1.0 + 0.3 * Math.sin(shElapsed * 4);
+                var shRadius = 20 * _hb.zoom * shPulse;
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(shCX, shCY, shRadius, 0, Math.PI * 2);
+                ctx.strokeStyle = 'rgba(0, 230, 118, ' + (shFade * 0.8) + ')';
+                ctx.lineWidth = 2;
+                ctx.shadowColor = '#00e676';
+                ctx.shadowBlur = 15 * shFade;
+                ctx.stroke();
+                // Inner crosshair
+                ctx.beginPath();
+                ctx.moveTo(shCX - shRadius * 0.4, shCY);
+                ctx.lineTo(shCX + shRadius * 0.4, shCY);
+                ctx.moveTo(shCX, shCY - shRadius * 0.4);
+                ctx.lineTo(shCX, shCY + shRadius * 0.4);
+                ctx.strokeStyle = 'rgba(0, 230, 118, ' + (shFade * 0.5) + ')';
+                ctx.lineWidth = 1;
+                ctx.shadowBlur = 0;
+                ctx.stroke();
+                ctx.restore();
+            }
+        }
+
         // ── Draw control bar ─────────────────────────────────
         drawControlBar(ctx, w, h);
 
@@ -3260,6 +3295,39 @@
         _hb.hoveredBlock = null;
         _hb.hoveredBlip = null;
         _hb._pinnedBlip = null;
+    };
+
+    // Search for a txid across all flatline segments. If found, scroll to
+    // it, zoom in, and highlight with a pulsing glow.
+    window.heartbeatSearchTx = function(txid) {
+        if (!_hb || !txid) return false;
+        var needle = txid.trim().toLowerCase();
+        if (needle.length < 8) return false;
+
+        // Scan all flatline segments for a matching blip
+        for (var si = _hb.timeline.length - 1; si >= 0; si--) {
+            var seg = _hb.timeline[si];
+            if (seg.type !== 'flatline' || !seg.blips) continue;
+            for (var bi = 0; bi < seg.blips.length; bi++) {
+                var blip = seg.blips[bi];
+                if (!blip.txid) continue;
+                if (blip.txid.toLowerCase().indexOf(needle) === 0) {
+                    // Found it — scroll viewport to center on this blip
+                    _hb.autoFollow = false;
+                    _hb.zoom = Math.max(_hb.zoom, 3.0); // zoom in enough to see it
+                    _hb.viewOffset = blip.x - (_hb.width * 0.5) / _hb.zoom;
+                    _hb.viewOffsetY = 0;
+
+                    // Highlight: pin the blip and set a glow timer
+                    _hb._pinnedBlip = blip;
+                    _hb._searchHighlight = { x: blip.x, gridX: blip.gridX, start: Date.now() / 1000, duration: 5.0 };
+
+                    console.log('[heartbeat] found tx', blip.txid, 'at virtualX', Math.round(blip.x));
+                    return true;
+                }
+            }
+        }
+        return false;
     };
 
     // ── Phase 4: Polish effects ───────────────────────────────

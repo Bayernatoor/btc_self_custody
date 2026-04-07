@@ -63,6 +63,10 @@ extern "C" {
     // Phase 5: Capture
     #[wasm_bindgen(js_name = heartbeatDownloadCapture)]
     fn heartbeat_download_capture(vitals_json: &str);
+
+    // TX search
+    #[wasm_bindgen(js_name = heartbeatSearchTx)]
+    fn heartbeat_search_tx(txid: &str) -> bool;
 }
 
 #[cfg(not(feature = "hydrate"))]
@@ -104,6 +108,10 @@ fn heartbeat_sound_is_enabled() -> bool {
 fn heartbeat_play_sound() {}
 #[cfg(not(feature = "hydrate"))]
 fn heartbeat_download_capture(_: &str) {}
+#[cfg(not(feature = "hydrate"))]
+fn heartbeat_search_tx(_: &str) -> bool {
+    false
+}
 
 const RETARGET_PERIOD: u64 = 2016;
 const BRADYCARDIA_THRESHOLD: f64 = 0.7;
@@ -631,9 +639,38 @@ pub fn HeartbeatPage() -> impl IntoView {
                     </Show>
                 </div>
 
-                // Bottom info bar
-                <div class="flex flex-col sm:flex-row items-center justify-between px-3 sm:px-4 py-1.5 sm:py-2 gap-0.5 sm:gap-0 border-t border-white/5 text-xs sm:text-base text-[#00e676] font-mono">
+                // Bottom info bar with TX search
+                <div class="flex flex-col sm:flex-row items-center justify-between px-3 sm:px-4 py-1.5 sm:py-2 gap-1 sm:gap-2 border-t border-white/5 text-xs sm:text-base text-[#00e676] font-mono">
                     <span>{mempool_display}</span>
+                    <div class="flex items-center gap-1.5">
+                        <input
+                            id="heartbeat-tx-search"
+                            type="text"
+                            placeholder="Search txid..."
+                            class="w-28 sm:w-48 px-2 py-0.5 rounded bg-white/5 border border-white/10 text-xs font-mono text-white/70 placeholder-white/30 focus:border-[#00e676]/50 focus:outline-none"
+                            on:keydown=move |e: leptos::ev::KeyboardEvent| {
+                                if e.key() == "Enter" {
+                                    #[cfg(feature = "hydrate")]
+                                    {
+                                        use wasm_bindgen::JsCast;
+                                        let input = e.target().unwrap().unchecked_into::<web_sys::HtmlInputElement>();
+                                        let val = input.value();
+                                        if !val.is_empty() {
+                                            let found = heartbeat_search_tx(&val);
+                                            if !found {
+                                                input.set_placeholder("Not found");
+                                                let input2 = input.clone();
+                                                leptos::prelude::set_timeout(move || {
+                                                    input2.set_placeholder("Search txid...");
+                                                }, std::time::Duration::from_secs(2));
+                                            }
+                                            input.set_value("");
+                                        }
+                                    }
+                                }
+                            }
+                        />
+                    </div>
                     <span>"Next block: " {fee_display}</span>
                 </div>
             </div>
