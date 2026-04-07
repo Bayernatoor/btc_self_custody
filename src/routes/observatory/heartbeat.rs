@@ -568,11 +568,12 @@ pub fn HeartbeatPage() -> impl IntoView {
                 </div>
 
                 // Canvas with first-visit hint overlay
-                <div class="relative">
+                // flex-1 + min-h-0 lets the canvas grow to fill fullscreen
+                <div class="relative flex-1 min-h-0">
                     <canvas
                         id="heartbeat-canvas"
-                        class="w-full"
-                        style="height: clamp(300px, 55vh, 700px)"
+                        class="w-full h-full"
+                        style="min-height: clamp(300px, 55vh, 700px)"
                     ></canvas>
 
                     // Hint overlay — dismissed on click anywhere or X button
