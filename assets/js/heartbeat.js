@@ -378,13 +378,16 @@
         var maxForSpan = Math.max(Math.floor(flatlineSpan / 5 * 3), 200);
         if (maxForSpan < maxBricks) maxBricks = maxForSpan;
 
+        // Stagger history bricks so they animate in from left to right over ~1.5s.
+        // Each brick's timestamp is set to now + a delay based on its x position.
+        var dropNow = Date.now() / 1000;
+        var DROP_DURATION = 1.5; // total sweep time in seconds
+
         for (var i = 0; i < txs.length && placed < maxBricks; i++) {
             var tx = txs[i];
             if (!tx.fee || !tx.vsize) continue;
 
-            // Spread all history txs uniformly across the flatline. These are
-            // mempool txs shown on initial load — exact timestamp positioning
-            // creates gaps when the tx stream had hiccups (ZMQ reconnects, etc).
+            // Spread all history txs uniformly across the flatline
             var txVX = liveSeg.x_start + Math.random() * flatlineSpan * 0.95;
 
             var feeRate = tx.fee / tx.vsize;
@@ -396,6 +399,10 @@
             if (stackY > 150) continue;
             stackMap[gridX] = stackY + brickH;
 
+            // Stagger: left-most bricks appear first, sweeping right
+            var xFrac = flatlineSpan > 0 ? (txVX - liveSeg.x_start) / flatlineSpan : 0;
+            var dropDelay = xFrac * DROP_DURATION;
+
             liveSeg.blips.push({
                 x: txVX, gridX: gridX,
                 height: brickH + stackY, brickH: brickH, brickW: 4, stackY: stackY,
@@ -403,7 +410,7 @@
                 txCount: 1, txid: tx.txid || null,
                 feeRate: Math.round(feeRate * 10) / 10,
                 vsize: tx.vsize || 0, value: tx.value || 0,
-                timestamp: tx.first_seen, fadeStart: 0,
+                timestamp: dropNow + dropDelay, fadeStart: 0,
                 bobPhase: Math.random() * Math.PI * 2,
                 bobSpeed: 1.2 + feeNorm * 0.8,
                 lane: Math.floor(Math.random() * 5) - 2,
@@ -1645,9 +1652,13 @@
                     var bh = (blip.brickH || blipH) * heightScale;
                     var sy = (blip.stackY || 0) * heightScale;
 
-                    // Fade-in animation: bricks grow from 0 to full size over 0.4s
+                    // Fade-in animation: bricks drop from above and grow over 0.4s.
+                    // age < 0 means the brick hasn't appeared yet (staggered history).
                     var age = nowSec - blip.timestamp;
+                    if (age < 0) continue; // not yet visible
                     var fadeIn = Math.min(age / 0.4, 1.0);
+                    // Ease-out drop: starts 20px above baseline, settles to 0
+                    var dropOffset = (1 - fadeIn) * (1 - fadeIn) * 20; // quadratic ease-out
                     bh *= fadeIn;
                     bOpacity *= fadeIn;
 
@@ -1674,7 +1685,7 @@
                         // Linear mapping from bobPhase [0, 2PI] to [-1, 1] for
                         // uniform distribution across the tube (sin clusters at edges)
                         var tubePos = (bobPhase / Math.PI - 1);
-                        var cellCY = baseline - tubePos * tubeH;
+                        var cellCY = baseline - tubePos * tubeH - dropOffset;
 
                         // Gentle bobbing: cells drift slightly
                         var bobAmpY = Math.min(cellRadius * 0.3, 2);
@@ -1758,7 +1769,7 @@
                         var lw = zoom > 10 ? 2 : 1;
                         var gap = zoom > 4 ? Math.ceil(lw) + 1 : 0;
                         var rx = bx - bw / 2 + gap;
-                        var ry = baseline - sy - bh + gap;
+                        var ry = baseline - sy - bh + gap - dropOffset;
                         var rw = bw - gap * 2;
                         var rh = bh - gap * 2;
 
