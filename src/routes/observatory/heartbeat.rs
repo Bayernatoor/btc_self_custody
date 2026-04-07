@@ -642,7 +642,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                 // Bottom info bar with TX search
                 <div class="flex flex-col sm:flex-row items-center justify-between px-3 sm:px-4 py-1.5 sm:py-2 gap-1 sm:gap-2 border-t border-white/5 text-xs sm:text-base text-[#00e676] font-mono">
                     <span>{mempool_display}</span>
-                    <div class="flex items-center gap-1.5">
+                    <div class="flex items-center gap-1.5" title="Searches visible txs on the timeline. Only recent mempool transactions that arrived since the last block are shown.">
                         <input
                             id="heartbeat-tx-search"
                             type="text"
