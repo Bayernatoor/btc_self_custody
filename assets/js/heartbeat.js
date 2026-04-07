@@ -811,8 +811,8 @@
 
         // Priority culling: only when truly excessive. Viewport culling already
         // skips off-screen blips during rendering, so memory is the only concern.
-        var CULL_THRESHOLD = 8000;
-        var CULL_TARGET = 6000;
+        var CULL_THRESHOLD = 30000;
+        var CULL_TARGET = 25000;
         if (liveSeg.blips.length > CULL_THRESHOLD) {
             // Score each active blip: lower score = evict first
             // Priority: low fee + small vsize evicted first
