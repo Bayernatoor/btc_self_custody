@@ -159,6 +159,15 @@
         return 'rgba(244, 67, 54, ';
     }
 
+    // Bloodstream cell radius based on transaction vsize
+    function cellRadiusForVsize(vs) {
+        if (vs < 200) return 2.0;
+        if (vs < 400) return 3.0;
+        if (vs < 800) return 4.0;
+        if (vs < 2000) return 5.0;
+        return 6.0;
+    }
+
     // Compute flatline width in virtual pixels for a completed (history) flatline
     function historyFlatlineWidth(interBlockSeconds) {
         // Proportional: 1min=15px, 5min=75px, 10min=150px, 30min=300px (capped)
@@ -313,12 +322,7 @@
                 if (isBs) {
                     // Circle hit test for bloodstream cells
                     var vs = blip.vsize || 200;
-                    var bR;
-                    if (vs < 200) bR = 2.0;
-                    else if (vs < 400) bR = 3.0;
-                    else if (vs < 800) bR = 4.0;
-                    else if (vs < 2000) bR = 5.0;
-                    else bR = 6.0;
+                    var bR = cellRadiusForVsize(vs);
                     var cellR = bR * Math.max(zoom * 0.4, 0.8);
                     var tubeH = Math.max(30, cellR * 2.5);
                     var bobPhase = blip.bobPhase || 0;
@@ -551,19 +555,20 @@
                     }
                     if (_hb._txBatchQueue.length > 500) _hb._txBatchQueue.length = 500;
                     _hb._txBatchQueue.push(tx);
-                    // Track rolling median fee rate from own node data
+                    // Track fee rates for rolling median (computed on flush, not per-tx)
                     if (tx.fee_rate) {
                         if (!_hb._recentFeeRates) _hb._recentFeeRates = [];
                         _hb._recentFeeRates.push(tx.fee_rate);
                         if (_hb._recentFeeRates.length > 200) _hb._recentFeeRates.shift();
-                        if (_hb._recentFeeRates.length >= 20) {
-                            var sorted = _hb._recentFeeRates.slice().sort(function(a, b) { return a - b; });
-                            _hb._wsMedianFee = Math.max(1, sorted[Math.floor(sorted.length / 2)]);
-                        }
                     }
                     var now = Date.now();
                     if (now - _hb._txThrottleTime > 200) {
                         _hb._txThrottleTime = now;
+                        // Recompute median on flush cadence instead of every tx
+                        if (_hb._recentFeeRates && _hb._recentFeeRates.length >= 20) {
+                            var sorted = _hb._recentFeeRates.slice().sort(function(a, b) { return a - b; });
+                            _hb._wsMedianFee = Math.max(1, sorted[Math.floor(sorted.length / 2)]);
+                        }
                         flushTxBatch();
                     }
                     if (_hb._sseTxCount % 100 === 0) {
@@ -841,7 +846,7 @@
                 scored.sort(function(a, b) { return a.score - b.score; });
                 var toEvict = scored.length - CULL_TARGET;
                 console.log('[heartbeat] culling:', liveSeg.blips.length, '->', CULL_TARGET,
-                    '(evicting', toEvict, ', threshold=' + CULL_THRESHOLD + ', span=' + Math.round(flatSpan) + 'px)');
+                    '(evicting', toEvict, ', threshold=' + CULL_THRESHOLD + ')');
                 // Mark lowest-scored blips for immediate removal
                 var evictSet = {};
                 for (var ei = 0; ei < toEvict; ei++) {
@@ -1040,12 +1045,7 @@
             // Match the actual cell rendering position (bobPhase + colHash + tubeH scaling)
             var zoom = _hb.zoom;
             var vs = blip.vsize || 200;
-            var bR;
-            if (vs < 200) bR = 2.0;
-            else if (vs < 400) bR = 3.0;
-            else if (vs < 800) bR = 4.0;
-            else if (vs < 2000) bR = 5.0;
-            else bR = 6.0;
+            var bR = cellRadiusForVsize(vs);
             var cellR = bR * Math.max(zoom * 0.4, 0.8);
             var tubeH = Math.max(30, cellR * 2.5);
             var bobPhase = blip.bobPhase || 0;
@@ -1265,6 +1265,20 @@
         var liveSeg = _hb.timeline.length > 0 ? _hb.timeline[_hb.timeline.length - 1] : null;
         if (liveSeg && liveSeg.type === 'flatline' && liveSeg.x_end === null) {
             _hb.virtualX += dt * FLATLINE_PX_PER_SEC;
+
+            // Prune _colHeights every ~30s to prevent unbounded growth.
+            // Remove entries more than 2000px behind the viewport.
+            if (!_hb._lastColPrune) _hb._lastColPrune = now;
+            if (now - _hb._lastColPrune > 30 && liveSeg._colHeights) {
+                _hb._lastColPrune = now;
+                var pruneThresh = _hb.viewOffset - 2000;
+                var keys = Object.keys(liveSeg._colHeights);
+                for (var pk = 0; pk < keys.length; pk++) {
+                    if (Number(keys[pk]) < pruneThresh) {
+                        delete liveSeg._colHeights[keys[pk]];
+                    }
+                }
+            }
         }
 
         // If auto-following, keep viewport pinned to the head (zoom-aware).
@@ -1747,12 +1761,7 @@
                         // ═══ Blood cell rendering (vein tube) ═══
                         // Cells pack tightly in a tube centered on the flatline
                         var vs = blip.vsize || 200;
-                        var baseR;
-                        if (vs < 200)       baseR = 2.0;
-                        else if (vs < 400)  baseR = 3.0;
-                        else if (vs < 800)  baseR = 4.0;
-                        else if (vs < 2000) baseR = 5.0;
-                        else                baseR = 6.0;
+                        var baseR = cellRadiusForVsize(vs);
                         // Scale with zoom: gentle at low zoom, grows with zoom at high
                         var cellRadius = baseR * Math.max(zoom * 0.4, 0.8);
                         var cellDiam = cellRadius * 2;
@@ -2073,8 +2082,6 @@
 
     // ── Input handling ─────────────────────────────────────────
 
-    // Legacy: tryJumpToLive now handled by control bar
-    function tryJumpToLive() { return false; }
 
     function tryControlClick(mx, my) {
         if (!_hb || !_hb._ctrlBtns) return false;
@@ -2143,7 +2150,6 @@
 
             var rect = canvas.getBoundingClientRect();
             var mx = e.clientX - rect.left, my = e.clientY - rect.top;
-            if (tryJumpToLive(mx, my)) return;
             // Don't start drag if clicking a control button (handled in click event)
             if (_hb._ctrlBtns) {
                 for (var ci = 0; ci < _hb._ctrlBtns.length; ci++) {
@@ -2253,7 +2259,6 @@
             var rect = canvas.getBoundingClientRect();
             var mx = e.clientX - rect.left;
             var my = e.clientY - rect.top;
-            if (tryJumpToLive(mx, my)) return;
             if (tryControlClick(mx, my)) return;
 
             // Click on a brick -> pin tooltip. If already pinned, unpin (or open mempool)
@@ -2372,8 +2377,7 @@
                         var tapped = blockAtVirtualX(vx);
 
                         var my = e.changedTouches[0].clientY - rect.top;
-                        if (tryJumpToLive(mx, my)) return;
-
+            
                         if (tapped) {
                             _hb.hoveredBlock = (_hb.hoveredBlock === tapped) ? null : tapped;
                         } else {
@@ -2467,7 +2471,6 @@
             _pinnedBlip: null,
             hoveredFlatline: null,
             hoverCanvasX: 0,
-            _jumpBtn: null,
             _flashTimer: null,
 
             // Mempool feed
@@ -2767,17 +2770,21 @@
                 l.target.removeEventListener(l.evt, l.fn, l.opts);
             }
         }
+        // Remove global listeners that aren't tracked via listen()
+        window.removeEventListener('beforeunload', _hbBeforeUnload);
+        document.removeEventListener('visibilitychange', _hbVisibilityChange);
         _hb = null;
     };
 
     // Clean up SSE connection on page unload
-    window.addEventListener('beforeunload', function() {
+    function _hbBeforeUnload() {
         if (window.destroyHeartbeat) window.destroyHeartbeat();
-    });
+    }
+    window.addEventListener('beforeunload', _hbBeforeUnload);
 
     // When tab regains focus, replay queued blocks as compressed history
     // and advance virtualX to catch up with elapsed time
-    document.addEventListener('visibilitychange', function() {
+    function _hbVisibilityChange() {
         if (!_hb) return;
         if (document.hidden) {
             // Record when tab went hidden so we can advance virtualX on return
@@ -2846,7 +2853,8 @@
 
         // Update lastFrameTime so the draw loop doesn't also try to catch up
         _hb.lastFrameTime = now;
-    });
+    }
+    document.addEventListener('visibilitychange', _hbVisibilityChange);
 
     // ── Phase 2: Vital Signs computation ─────────────────────
 

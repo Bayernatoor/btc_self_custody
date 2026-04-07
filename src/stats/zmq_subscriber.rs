@@ -723,16 +723,20 @@ pub async fn prune_old_txs(state: &Arc<StatsState>) {
         .as_secs()
         .saturating_sub(7 * 24 * 3600);
 
-    if let Ok(conn) = state.db.get() {
-        match db::prune_mempool_txs(&conn, seven_days_ago) {
-            Ok(count) => {
-                if count > 0 {
-                    tracing::info!(
-                        "ZMQ: pruned {count} old mempool transactions"
-                    );
+    let pool = state.db.clone();
+    let _ = tokio::task::spawn_blocking(move || {
+        if let Ok(conn) = pool.get() {
+            match db::prune_mempool_txs(&conn, seven_days_ago) {
+                Ok(count) => {
+                    if count > 0 {
+                        tracing::info!(
+                            "ZMQ: pruned {count} old mempool transactions"
+                        );
+                    }
                 }
+                Err(e) => tracing::warn!("ZMQ: prune failed: {e}"),
             }
-            Err(e) => tracing::warn!("ZMQ: prune failed: {e}"),
         }
-    }
+    })
+    .await;
 }

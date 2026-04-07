@@ -69,6 +69,10 @@ pub async fn fetch_blocks(
     from: u64,
     to: u64,
 ) -> Result<Vec<BlockSummary>, ServerFnError> {
+    // Limit range to prevent DoS via huge queries
+    if to.saturating_sub(from) > 4032 {
+        return Err(ServerFnError::new("Block range too large (max 4032)"));
+    }
     let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
         leptos_axum::extract().await.map_err(|e| {
             ServerFnError::new(format!("Stats not available: {e}"))
