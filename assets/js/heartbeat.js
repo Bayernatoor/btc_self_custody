@@ -1658,12 +1658,12 @@
                     var bh = (blip.brickH || blipH) * heightScale;
                     var sy = (blip.stackY || 0) * heightScale;
 
-                    // Fade-in: grow from 0 over 0.4s. History bricks also drop from above.
+                    // Fade-in: grow from 0 over 0.4s. Bricks also drop from above.
                     var age = nowSec - blip.timestamp;
                     if (age < 0) continue; // staggered history brick not yet visible
                     var fadeIn = Math.min(age / 0.4, 1.0);
-                    // Drop offset only for history bricks (flagged with isDrop)
-                    var dropOffset = blip.isDrop ? (1 - fadeIn) * (1 - fadeIn) * 20 : 0;
+                    // Drop from above for bricks, not for bloodstream (cells use tube position)
+                    var dropOffset = _hb.renderMode !== 'bloodstream' ? (1 - fadeIn) * (1 - fadeIn) * 20 : 0;
                     bh *= fadeIn;
                     bOpacity *= fadeIn;
 
