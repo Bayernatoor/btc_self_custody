@@ -1760,7 +1760,34 @@
                         var rw = bw - gap * 2;
                         var rh = bh - gap * 2;
 
-                        ctx.fillStyle = blipColor + bOpacity + ')';
+                        var useRound = zoom > 6 && rw > 4 && rh > 4;
+                        var cornerR = useRound ? Math.min(3, rw * 0.12, rh * 0.12) : 0;
+
+                        // At zoom > 8, use a vertical gradient for depth
+                        if (zoom > 8 && rh > 6) {
+                            var rgbMatch = blipColor.match(/(\d+)\D+(\d+)\D+(\d+)/);
+                            if (rgbMatch) {
+                                var bR = parseInt(rgbMatch[1]);
+                                var bG = parseInt(rgbMatch[2]);
+                                var bB = parseInt(rgbMatch[3]);
+                                var topR = Math.min(bR + 25, 255);
+                                var topG = Math.min(bG + 20, 255);
+                                var topB = Math.min(bB + 15, 255);
+                                var botR = Math.max(bR - 30, 0);
+                                var botG = Math.max(bG - 25, 0);
+                                var botB = Math.max(bB - 20, 0);
+                                var bGrad = ctx.createLinearGradient(rx, ry, rx, ry + rh);
+                                bGrad.addColorStop(0, 'rgba(' + topR + ',' + topG + ',' + topB + ',' + bOpacity + ')');
+                                bGrad.addColorStop(0.45, blipColor + bOpacity + ')');
+                                bGrad.addColorStop(1, 'rgba(' + botR + ',' + botG + ',' + botB + ',' + bOpacity + ')');
+                                ctx.fillStyle = bGrad;
+                            } else {
+                                ctx.fillStyle = blipColor + bOpacity + ')';
+                            }
+                        } else {
+                            ctx.fillStyle = blipColor + bOpacity + ')';
+                        }
+
                         // Shadow glow only at mid-zoom where bricks are visible but
                         // not outlined. Skip at low zoom (sub-pixel, too expensive
                         // with thousands of bricks) and high zoom (outlines instead).
@@ -1768,39 +1795,90 @@
                             ctx.shadowBlur = 4;
                             ctx.shadowColor = blipColor + (bOpacity * 0.4) + ')';
                         }
-                        ctx.fillRect(rx, ry, rw, rh);
+                        if (useRound) {
+                            ctx.beginPath();
+                            roundRect(ctx, rx, ry, rw, rh, cornerR);
+                            ctx.fill();
+                        } else {
+                            ctx.fillRect(rx, ry, rw, rh);
+                        }
                         ctx.shadowBlur = 0;
 
                         // Dark outline at 4x+ zoom for clear brick separation
                         if (zoom > 4) {
-                            ctx.strokeStyle = 'rgba(8, 15, 30, 0.7)';
                             ctx.lineWidth = lw;
-                            // Inset by half lineWidth so stroke stays inside the rect
                             var ins = lw / 2;
-                            ctx.strokeRect(rx + ins, ry + ins, rw - lw, rh - lw);
+                            if (useRound) {
+                                ctx.strokeStyle = 'rgba(8, 15, 30, 0.6)';
+                                ctx.beginPath();
+                                roundRect(ctx, rx + ins, ry + ins, rw - lw, rh - lw, Math.max(cornerR - ins, 0));
+                                ctx.stroke();
+                                // Darker bottom edge for shadow depth
+                                if (zoom > 8 && rh > 8) {
+                                    ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
+                                    ctx.lineWidth = Math.min(lw + 0.5, 2.5);
+                                    var botIns = ctx.lineWidth / 2;
+                                    ctx.beginPath();
+                                    ctx.moveTo(rx + cornerR, ry + rh - botIns);
+                                    ctx.lineTo(rx + rw - cornerR, ry + rh - botIns);
+                                    ctx.stroke();
+                                    ctx.lineWidth = lw;
+                                }
+                            } else {
+                                ctx.strokeStyle = 'rgba(8, 15, 30, 0.7)';
+                                // Inset by half lineWidth so stroke stays inside the rect
+                                ctx.strokeRect(rx + ins, ry + ins, rw - lw, rh - lw);
+                            }
                         }
 
                         // At high zoom: show fee rate + value on brick face (clipped to brick)
-                        if (zoom > 8 && bw > 25 && bh > 10) {
-                            var brickLeft = bx - bw / 2;
-                            var brickTop = baseline - sy - bh;
+                        if (zoom > 8 && rw > 22 && rh > 10) {
                             ctx.save();
                             ctx.beginPath();
-                            ctx.rect(brickLeft, brickTop, bw, bh);
+                            if (useRound) {
+                                roundRect(ctx, rx, ry, rw, rh, cornerR);
+                            } else {
+                                ctx.rect(rx, ry, rw, rh);
+                            }
                             ctx.clip();
-                            var fs = Math.min(Math.floor(bh * 0.35), 11);
-                            ctx.font = 'bold ' + fs + 'px monospace';
-                            ctx.fillStyle = 'rgba(255,255,255,0.95)';
-                            ctx.fillText((blip.feeRate || '?') + ' s/vB', brickLeft + 3, brickTop + fs + 2);
-                            if (bh > 22 && fs > 6) {
-                                ctx.font = (fs - 1) + 'px monospace';
-                                ctx.fillStyle = 'rgba(255,255,255,0.7)';
-                                if (blip.value) {
-                                    var btc = blip.value / 1e8;
-                                    var valStr = btc >= 0.01 ? btc.toFixed(3) : btc.toFixed(6);
-                                    ctx.fillText('\u{20bf}' + valStr, brickLeft + 3, brickTop + fs * 2 + 1);
-                                } else if (blip.vsize) {
-                                    ctx.fillText(Math.round(blip.vsize) + ' vB', brickLeft + 3, brickTop + fs * 2 + 1);
+                            var pad = Math.max(4, rw * 0.08);
+                            var fs = Math.min(Math.floor(rh * 0.32), Math.floor(rw * 0.22), 13);
+                            if (fs >= 5) {
+                                // Fee rate text
+                                ctx.font = 'bold ' + fs + 'px monospace';
+                                ctx.textAlign = 'left';
+                                ctx.textBaseline = 'top';
+                                var feeStr = (blip.feeRate ? blip.feeRate.toFixed(1) : '?') + ' s/vB';
+                                var textY = ry + pad;
+                                // Dark text shadow for readability on any color
+                                ctx.fillStyle = 'rgba(0,0,0,0.55)';
+                                ctx.fillText(feeStr, rx + pad + 1, textY + 1);
+                                ctx.fillStyle = 'rgba(255,255,255,0.95)';
+                                ctx.fillText(feeStr, rx + pad, textY);
+
+                                // Value text (second line)
+                                if (rh > 24 && fs > 6) {
+                                    var valFs = fs - 1;
+                                    ctx.font = valFs + 'px monospace';
+                                    var valY = textY + fs + Math.max(2, rh * 0.06);
+                                    var valText = '';
+                                    if (blip.value) {
+                                        var btc = blip.value / 1e8;
+                                        var valStr;
+                                        if (btc >= 1.0)       valStr = btc.toFixed(2);
+                                        else if (btc >= 0.01) valStr = btc.toFixed(4);
+                                        else if (btc >= 0.001) valStr = btc.toFixed(5);
+                                        else                  valStr = btc.toFixed(6);
+                                        valText = '\u{20bf}' + valStr;
+                                    } else if (blip.vsize) {
+                                        valText = Math.round(blip.vsize) + ' vB';
+                                    }
+                                    if (valText) {
+                                        ctx.fillStyle = 'rgba(0,0,0,0.45)';
+                                        ctx.fillText(valText, rx + pad + 1, valY + 1);
+                                        ctx.fillStyle = 'rgba(255,255,255,0.8)';
+                                        ctx.fillText(valText, rx + pad, valY);
+                                    }
                                 }
                             }
                             ctx.restore();
@@ -2696,7 +2774,7 @@
         var label, color;
         if (bpm < 0.7) {
             label = 'Bradycardia'; color = COLORS.steady;
-        } else if (bpm <= 1.5) {
+        } else if (bpm <= 1.3) {
             label = 'Normal'; color = COLORS.healthy;
         } else {
             label = 'Tachycardia'; color = COLORS.elevated;
