@@ -2771,7 +2771,6 @@
         var now = Date.now() / 1000;
 
         // Advance virtualX by full elapsed hidden time
-        var preAdvanceX = _hb.virtualX;
         if (_hb._hiddenSince > 0) {
             var hiddenDuration = now - _hb._hiddenSince;
             if (hiddenDuration > 0) {
@@ -2782,8 +2781,8 @@
             _hb._hiddenSince = 0;
         }
 
-        // Grab buffered txs and clear queues
-        var hiddenTxs = _hb._hiddenTxBuffer || [];
+        // Discard buffered txs and queued blocks — the SSE reconnect below
+        // will send a fresh history dump that fills the gap properly
         _hb._hiddenTxBuffer = [];
         _hb._txBatchQueue = [];
 
@@ -2811,48 +2810,23 @@
             }
             window.pushHeartbeatBlocks(JSON.stringify(replayBlocks), true);
         }
-        // Spread buffered txs across the NEW section of the flatline only.
-        // Skip if blocks were replayed — the post-block flatline is too short
-        // and cramming buffered txs into it creates a tall stack.
-        if (hiddenTxs.length > 0 && queued.length === 0) {
-            var liveSeg3 = _hb.timeline[_hb.timeline.length - 1];
-            if (liveSeg3 && liveSeg3.type === 'flatline' && liveSeg3.x_end === null) {
-                var gapStart = Math.max(preAdvanceX, liveSeg3.x_start);
-                var gapSpan = _hb.virtualX - gapStart;
-                if (gapSpan < 10) gapSpan = 0;
-                var medianFee = _hb._wsMedianFee || 5;
-                // Cap density like history placement
-                var maxForGap = gapSpan > 0 ? Math.max(Math.floor(gapSpan / 5 * 3), 100) : 0;
-                var cap = Math.min(hiddenTxs.length, maxForGap);
-                // Fresh stack map — don't share with history bricks to avoid stacking
-                var htStackMap = {};
-                for (var hti = 0; hti < cap; hti++) {
-                    var htx = hiddenTxs[hti];
-                    if (!htx.fee || !htx.vsize) continue;
-                    var htFeeRate = htx.fee / htx.vsize;
-                    var htFeeNorm = Math.min(Math.log2(htFeeRate + 1) / 6, 1.0);
-                    var htVX = gapStart + Math.random() * Math.max(10, gapSpan - 20);
-                    var htBrickH = 3 + htFeeNorm * 14 + Math.random() * 3;
-                    var htGridX = Math.round(htVX / 5) * 5;
-                    var htStackY = htStackMap[htGridX] || 0;
-                    htStackMap[htGridX] = htStackY + htBrickH;
-                    liveSeg3.blips.push({
-                        x: htVX, gridX: htGridX,
-                        height: htBrickH + htStackY, brickH: htBrickH, brickW: 4, stackY: htStackY,
-                        color: feeRateColor(htFeeRate, medianFee), opacity: 0.75 + htFeeNorm * 0.2,
-                        txCount: 1, txid: htx.txid || null,
-                        feeRate: Math.round(htFeeRate * 10) / 10,
-                        vsize: htx.vsize || 0, value: htx.value || 0,
-                        timestamp: Date.now() / 1000, fadeStart: 0,
-                        bobPhase: Math.random() * Math.PI * 2,
-                        bobSpeed: 1.2 + htFeeNorm * 0.8,
-                        lane: Math.floor(Math.random() * 5) - 2,
-                        feeRatio: medianFee > 0 ? htFeeRate / medianFee : 1
-                    });
-                }
-                console.log('[heartbeat] placed', Math.min(cap, hiddenTxs.length), 'buffered txs across tab-hidden gap');
-            }
+
+        // Clear old blips from the current flatline — the SSE reconnect
+        // will place a fresh set via placeHistoryTxs
+        var liveSeg = _hb.timeline[_hb.timeline.length - 1];
+        if (liveSeg && liveSeg.type === 'flatline' && liveSeg.x_end === null) {
+            liveSeg.blips = [];
+            liveSeg._colHeights = {};
         }
+
+        // Reconnect SSE to get a fresh history dump — this fills the
+        // flatline gap with current mempool txs, just like initial load
+        if (_hb._sse) {
+            _hb._sse.close();
+            _hb._sse = null;
+        }
+        _hb._sseRetries = 0;
+        connectOwnFeed();
 
         // Update lastFrameTime so the draw loop doesn't also try to catch up
         _hb.lastFrameTime = now;
