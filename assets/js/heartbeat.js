@@ -119,11 +119,13 @@
 
     // ── Color computation ──────────────────────────────────────
     function computeColor(elapsedSec, feeRate, mempoolMB) {
-        var timeStress = Math.min(elapsedSec / 1800, 1.0);
+        // Time: normalized over 20min (not 30). A 20min wait = full time stress.
+        // Weight 50% so long waits dominate the color even with low fees.
+        var timeStress = Math.min(elapsedSec / 1200, 1.0);
         var feeStress = Math.min(feeRate / 150, 1.0);
         var mempoolStress = Math.min(mempoolMB / 200, 1.0);
 
-        var stress = timeStress * 0.4 + feeStress * 0.35 + mempoolStress * 0.25;
+        var stress = timeStress * 0.5 + feeStress * 0.3 + mempoolStress * 0.2;
 
         if (stress < 0.2)  return COLORS.healthy;
         if (stress < 0.4)  return COLORS.steady;
