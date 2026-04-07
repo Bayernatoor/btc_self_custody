@@ -277,20 +277,6 @@ async fn subscribe_blocks(
             .unwrap_or_default()
             .as_secs();
 
-        // Debug: compare block txid format with stored mempool txid format
-        if let Ok(conn) = state.db.get() {
-            let sample_block_txid = block_info.txids.get(1).cloned().unwrap_or_default(); // skip coinbase at [0]
-            let sample_db: Option<String> = conn.query_row(
-                "SELECT txid FROM mempool_txs WHERE confirmed_height IS NULL LIMIT 1",
-                [],
-                |row| row.get(0),
-            ).ok();
-            tracing::info!(
-                "ZMQ: txid format check — block_txid={}, db_txid={:?}",
-                sample_block_txid, sample_db
-            );
-        }
-
         // Confirm mempool txs in DB on a blocking thread so we don't
         // starve the async runtime during the SQLite write transaction
         let db = state.db.clone();
