@@ -371,20 +371,21 @@
         }
         var medianFee = _hb._wsMedianFee || 5;
         var placed = 0;
-        var maxBricks = 5000; // match server-side SSE history limit
 
         var flatlineSpan = _hb.virtualX - liveSeg.x_start;
         var stackMap = {};
+
+        // Cap history bricks well below the cull threshold so live + buffered
+        // txs don't trigger culling and create sparse gaps. The cull threshold
+        // is max(8000, span/5*4), so we stay under half of that.
+        var gridCols = Math.max(1, Math.floor(flatlineSpan / 5));
+        var maxBricks = Math.min(3000, gridCols * 2);
 
         console.log('[heartbeat] placeHistoryTxs: flatlineSpan=' + Math.round(flatlineSpan) +
             'px, virtualX=' + Math.round(_hb.virtualX) +
             ', segStart=' + Math.round(liveSeg.x_start) +
             ', effectiveBlockTs=' + effectiveBlockTs +
             ', elapsed=' + Math.round(elapsedSinceBlock) + 's');
-
-        // Cap density: don't cram thousands of bricks into a short flatline
-        var maxForSpan = Math.max(Math.floor(flatlineSpan / 5 * 3), 200);
-        if (maxForSpan < maxBricks) maxBricks = maxForSpan;
 
         // Stagger history bricks so they animate in from left to right over ~1.5s.
         // Each brick's timestamp is set to now + a delay based on its x position.
@@ -788,12 +789,10 @@
             liveSeg._colHeights[aggGridX] = aggStackY + aggH;
         }
 
-        // Priority culling: when too many blips, evict lowest-value ones.
-        // Threshold is generous — viewport culling already skips off-screen
-        // blips so holding many in memory is cheap. Only cull when truly excessive.
-        var flatSpan = _hb.virtualX - liveSeg.x_start;
-        var CULL_THRESHOLD = Math.max(8000, Math.floor(flatSpan / 5 * 4));
-        var CULL_TARGET = Math.floor(CULL_THRESHOLD * 0.9);
+        // Priority culling: only when truly excessive. Viewport culling already
+        // skips off-screen blips during rendering, so memory is the only concern.
+        var CULL_THRESHOLD = 15000;
+        var CULL_TARGET = 12000;
         if (liveSeg.blips.length > CULL_THRESHOLD) {
             // Score each active blip: lower score = evict first
             // Priority: low fee + small vsize evicted first
@@ -2725,15 +2724,17 @@
         var queued = _hb._blockQueue || [];
         _hb._blockQueue = [];
 
+        // Remember where virtualX was before advancing — buffered txs
+        // should only go in the NEW section, not overlap with history bricks
+        var preAdvanceX = _hb.virtualX;
+
         if (queued.length > 0) {
             console.log('[heartbeat] replaying', queued.length, 'queued blocks from background');
-            // Build block array with inter-block times and replay as compressed history
             var replayBlocks = [];
             var prevTs = _hb.lastBlockTime || (now - 600);
             for (var qi = 0; qi < queued.length; qi++) {
                 var qb = queued[qi];
                 var blockTs = _hb.lastBlockTime > 0 ? prevTs + 600 : now;
-                // Use confirmed_count if available, else estimate
                 replayBlocks.push({
                     height: qb.height,
                     timestamp: blockTs,
@@ -2745,33 +2746,29 @@
                 });
                 prevTs = blockTs;
             }
-            // Use replay=true so they get compressed flatlines (not live positioning)
-            // pushHeartbeatBlocks(replay=true) already fast-forwards virtualX for
-            // elapsed time since the last block — no additional advance needed here.
             window.pushHeartbeatBlocks(JSON.stringify(replayBlocks), true);
         } else if (elapsed > 2) {
-            // No queued blocks — just advance the live flatline to catch up
             var liveSeg2 = _hb.timeline[_hb.timeline.length - 1];
             if (liveSeg2 && liveSeg2.type === 'flatline' && liveSeg2.x_end === null) {
                 _hb.virtualX += elapsed * FLATLINE_PX_PER_SEC;
             }
         }
 
-        // Spread buffered txs across the current live flatline
+        // Spread buffered txs across the NEW section of the flatline only
+        // (from preAdvanceX to current virtualX). This avoids stacking on
+        // top of history bricks that fill the earlier section.
         if (hiddenTxs.length > 0) {
             var liveSeg3 = _hb.timeline[_hb.timeline.length - 1];
             if (liveSeg3 && liveSeg3.type === 'flatline' && liveSeg3.x_end === null) {
-                // Use the actual flatline bounds, not time-based estimation
-                var gapStart = liveSeg3.x_start;
-                var gapSpan = _hb.virtualX - liveSeg3.x_start;
+                var gapStart = Math.max(preAdvanceX, liveSeg3.x_start);
+                var gapSpan = _hb.virtualX - gapStart;
                 if (gapSpan < 10) gapSpan = 0;
                 var medianFee = _hb._wsMedianFee || 5;
                 // Cap density like history placement
                 var maxForGap = gapSpan > 0 ? Math.max(Math.floor(gapSpan / 5 * 3), 100) : 0;
                 var cap = Math.min(hiddenTxs.length, maxForGap);
-                // Use the segment's column heights so stacking is consistent
-                if (!liveSeg3._colHeights) liveSeg3._colHeights = {};
-                var htStackMap = liveSeg3._colHeights;
+                // Fresh stack map — don't share with history bricks to avoid stacking
+                var htStackMap = {};
                 for (var hti = 0; hti < cap; hti++) {
                     var htx = hiddenTxs[hti];
                     if (!htx.fee || !htx.vsize) continue;
