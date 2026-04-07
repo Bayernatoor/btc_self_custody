@@ -2755,10 +2755,10 @@
             }
         }
 
-        // Spread buffered txs across the NEW section of the flatline only
-        // (from preAdvanceX to current virtualX). This avoids stacking on
-        // top of history bricks that fill the earlier section.
-        if (hiddenTxs.length > 0) {
+        // Spread buffered txs across the NEW section of the flatline only.
+        // Skip if blocks were replayed — the post-block flatline is too short
+        // and cramming buffered txs into it creates a tall stack.
+        if (hiddenTxs.length > 0 && queued.length === 0) {
             var liveSeg3 = _hb.timeline[_hb.timeline.length - 1];
             if (liveSeg3 && liveSeg3.type === 'flatline' && liveSeg3.x_end === null) {
                 var gapStart = Math.max(preAdvanceX, liveSeg3.x_start);
