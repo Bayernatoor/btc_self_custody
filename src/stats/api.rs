@@ -461,7 +461,7 @@ pub async fn get_heartbeat_sse(
             .get()
             .ok()
             .and_then(|conn| {
-                db::query_recent_mempool_txs(&conn, two_hours_ago, 5000).ok()
+                db::query_recent_mempool_txs(&conn, two_hours_ago, 10000).ok()
             })
             .unwrap_or_default();
         // Get the latest block timestamp for positioning history txs on the flatline

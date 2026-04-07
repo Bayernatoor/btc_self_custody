@@ -396,11 +396,10 @@
         var flatlineSpan = _hb.virtualX - liveSeg.x_start;
         var stackMap = {};
 
-        // Cap history bricks well below the cull threshold so live + buffered
-        // txs don't trigger culling and create sparse gaps. The cull threshold
-        // is max(8000, span/5*4), so we stay under half of that.
+        // Place all history txs — cull threshold is 30K so there's plenty of room.
+        // Only cap by available grid columns to prevent extreme stacking.
         var gridCols = Math.max(1, Math.floor(flatlineSpan / 5));
-        var maxBricks = Math.min(3000, gridCols * 2);
+        var maxBricks = gridCols * 3;
 
         console.log('[heartbeat] placeHistoryTxs: flatlineSpan=' + Math.round(flatlineSpan) +
             'px, virtualX=' + Math.round(_hb.virtualX) +
