@@ -1860,26 +1860,27 @@
                                 ctx.rect(rx, ry, rw, rh);
                             }
                             ctx.clip();
-                            var pad = Math.max(4, rw * 0.08);
-                            var fs = Math.min(Math.floor(rh * 0.32), Math.floor(rw * 0.22), 13);
+                            var padX = Math.max(6, rw * 0.1);
+                            var padY = Math.max(5, rh * 0.12);
+                            var fs = Math.min(Math.floor(rh * 0.28), Math.floor(rw * 0.2), 13);
                             if (fs >= 5) {
                                 // Fee rate text
                                 ctx.font = 'bold ' + fs + 'px monospace';
                                 ctx.textAlign = 'left';
                                 ctx.textBaseline = 'top';
                                 var feeStr = (blip.feeRate ? blip.feeRate.toFixed(1) : '?') + ' s/vB';
-                                var textY = ry + pad;
+                                var textY = ry + padY;
                                 // Dark text shadow for readability on any color
                                 ctx.fillStyle = 'rgba(0,0,0,0.55)';
-                                ctx.fillText(feeStr, rx + pad + 1, textY + 1);
+                                ctx.fillText(feeStr, rx + padX + 1, textY + 1);
                                 ctx.fillStyle = 'rgba(255,255,255,0.95)';
-                                ctx.fillText(feeStr, rx + pad, textY);
+                                ctx.fillText(feeStr, rx + padX, textY);
 
                                 // Value text (second line)
                                 if (rh > 24 && fs > 6) {
                                     var valFs = fs - 1;
                                     ctx.font = valFs + 'px monospace';
-                                    var valY = textY + fs + Math.max(2, rh * 0.06);
+                                    var valY = textY + fs + Math.max(3, rh * 0.08);
                                     var valText = '';
                                     if (blip.value) {
                                         var btc = blip.value / 1e8;
@@ -1894,9 +1895,9 @@
                                     }
                                     if (valText) {
                                         ctx.fillStyle = 'rgba(0,0,0,0.45)';
-                                        ctx.fillText(valText, rx + pad + 1, valY + 1);
+                                        ctx.fillText(valText, rx + padX + 1, valY + 1);
                                         ctx.fillStyle = 'rgba(255,255,255,0.8)';
-                                        ctx.fillText(valText, rx + pad, valY);
+                                        ctx.fillText(valText, rx + padX, valY);
                                     }
                                 }
                             }
