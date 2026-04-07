@@ -718,8 +718,10 @@
         var batch = _hb._txBatchQueue;
         _hb._txBatchQueue = [];
 
-        // Cap visual bricks at 10 per flush (batch the rest into 1 aggregate)
-        var maxBricks = 10;
+        // Cap visual bricks at 4 per flush (batch the rest into 1 aggregate).
+        // At 5px/sec advance and 5 flushes/sec, 4 bricks spread across 60px
+        // gives ~0.3 bricks per grid column per flush — prevents stacking.
+        var maxBricks = 4;
         var medianFee = _hb._wsMedianFee || 5;
 
         for (var i = 0; i < Math.min(batch.length, maxBricks); i++) {
@@ -729,8 +731,9 @@
 
             var brickW = 4;
             var brickH = 3 + feeNorm * 14 + Math.random() * 3;
-            var brickX = _hb.virtualX - Math.random() * 15;
+            var brickX = _hb.virtualX - Math.random() * 60;
             var gridX = Math.round(brickX / 5) * 5;
+            if (gridX < liveSeg.x_start) gridX = Math.round(liveSeg.x_start / 5) * 5;
 
             // Stack height via column map (O(1) instead of scanning all blips).
             // If the column is too tall, search backward for a shorter one.
@@ -739,7 +742,8 @@
             var stackY = liveSeg._colHeights[gridX] || 0;
             if (stackY > maxStack) {
                 // Walk backward along the flatline to find a shorter column
-                for (var back = 1; back <= 20; back++) {
+                var found = false;
+                for (var back = 1; back <= 30; back++) {
                     var tryX = gridX - back * 5;
                     if (tryX < liveSeg.x_start) break;
                     var tryH = liveSeg._colHeights[tryX] || 0;
@@ -747,11 +751,12 @@
                         gridX = tryX;
                         brickX = tryX;
                         stackY = tryH;
+                        found = true;
                         break;
                     }
                 }
-                // If all backward columns are full, just cap the height
-                if (stackY > maxStack) stackY = maxStack;
+                // If all nearby columns are full, skip this brick entirely
+                if (!found) continue;
             }
 
             liveSeg.blips.push({
@@ -788,7 +793,7 @@
             avgFee /= remaining;
             var aggFeeNorm = Math.min(Math.log2(avgFee + 1) / 6, 1.0);
             var aggColor = avgFee < medianFee ? 'rgba(0, 230, 118, ' : 'rgba(255, 152, 0, ';
-            var aggX = _hb.virtualX - Math.random() * 10;
+            var aggX = _hb.virtualX - Math.random() * 60;
             var aggGridX = Math.round(aggX / 5) * 5;
             if (!liveSeg._colHeights) liveSeg._colHeights = {};
             var aggStackY = liveSeg._colHeights[aggGridX] || 0;
@@ -809,8 +814,8 @@
 
         // Priority culling: only when truly excessive. Viewport culling already
         // skips off-screen blips during rendering, so memory is the only concern.
-        var CULL_THRESHOLD = 15000;
-        var CULL_TARGET = 12000;
+        var CULL_THRESHOLD = 8000;
+        var CULL_TARGET = 6000;
         if (liveSeg.blips.length > CULL_THRESHOLD) {
             // Score each active blip: lower score = evict first
             // Priority: low fee + small vsize evicted first
