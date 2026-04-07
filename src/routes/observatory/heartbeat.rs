@@ -353,6 +353,16 @@ pub fn HeartbeatPage() -> impl IntoView {
         };
         let current_height = live.blockchain.blocks;
 
+        // Skip when RPC calls failed (server returns zeroed defaults).
+        // Retaining the previous JS state keeps vital signs + bottom bar
+        // showing the last known good values instead of 0s.
+        let rpc_failed = live.mempool.size == 0
+            && live.network.hashrate == 0.0
+            && live.next_block_fee == 0.0;
+        if rpc_failed {
+            return;
+        }
+
         // Forward live metrics for color + vital signs computation
         let live_json = format!(
             r#"{{"next_block_fee":{},"mempool_mb":{:.1},"block_time":{},"hashrate_eh":{:.1},"mempool_min_fee":{},"difficulty":{},"block_height":{}}}"#,
@@ -419,7 +429,11 @@ pub fn HeartbeatPage() -> impl IntoView {
                             crate::stats::server_fns::fetch_blocks(from, to)
                                 .await
                                 .unwrap_or_default();
-                        if !blocks.is_empty() {
+                        // Check that the target block is actually in the
+                        // results. fetch_blocks(prev, current) may return
+                        // the prev block before the new one is in the DB.
+                        let has_target = blocks.iter().any(|b| b.height == to);
+                        if has_target {
                             let json = blocks_to_json(&blocks);
                             push_heartbeat_blocks(&json, replay);
                             let recent = get_heartbeat_recent_blocks();
@@ -502,6 +516,7 @@ pub fn HeartbeatPage() -> impl IntoView {
     let mempool_display = Signal::derive(move || {
         cached_live
             .get()
+            .filter(|s| s.mempool.size > 0 || s.network.hashrate > 0.0)
             .map(|s| {
                 format!(
                     "{} tx ({:.1} vMB)",
@@ -509,14 +524,15 @@ pub fn HeartbeatPage() -> impl IntoView {
                     s.mempool.bytes as f64 / 1_000_000.0
                 )
             })
-            .unwrap_or_default()
+            .unwrap_or_else(|| "-- tx (-- vMB)".to_string())
     });
 
     let fee_display = Signal::derive(move || {
         cached_live
             .get()
+            .filter(|s| s.mempool.size > 0 || s.next_block_fee > 0.0)
             .map(|s| format!("{:.1} sat/vB", s.next_block_fee))
-            .unwrap_or_default()
+            .unwrap_or_else(|| "-- sat/vB".to_string())
     });
 
     view! {
