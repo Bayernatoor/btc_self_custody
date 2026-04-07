@@ -260,7 +260,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                         avg_u % 60
                     ));
                     let bpm = 600.0 / avg_secs;
-                    set_hr_subtitle.set(format!("{:.2} bpm", bpm));
+                    set_hr_subtitle.set(format!("{:.0}% of target rate", bpm * 100.0));
                     let (label, color) = if bpm < BRADYCARDIA_THRESHOLD {
                         ("Bradycardia", "#42a5f5")
                     } else if bpm <= TACHYCARDIA_THRESHOLD {
@@ -520,8 +520,8 @@ pub fn HeartbeatPage() -> impl IntoView {
                 />
                 <div class="absolute inset-0 bg-gradient-to-t from-[#123c64] via-[#123c64]/60 to-[#123c64]/30"></div>
                 <div class="absolute inset-0 flex flex-col items-center justify-end pb-3 sm:pb-4">
-                    <h1 class="text-lg sm:text-xl lg:text-2xl font-title text-white mb-0.5 drop-shadow-lg">"Block Heartbeat"</h1>
-                    <p class="text-[11px] sm:text-xs text-white/60 max-w-lg mx-auto px-4 text-center drop-shadow">
+                    <h1 class="text-base sm:text-xl lg:text-2xl font-title text-white mb-0.5 drop-shadow-lg">"Block Heartbeat"</h1>
+                    <p class="text-[10px] sm:text-xs text-white/60 max-w-lg mx-auto px-4 text-center drop-shadow">
                         "A live EKG of the Bitcoin network. Each spike is a block, each brick is a transaction."
                     </p>
                 </div>
@@ -530,8 +530,8 @@ pub fn HeartbeatPage() -> impl IntoView {
             // EKG Canvas card
             <div id="heartbeat-card" class="relative bg-[#0d2137] border border-white/10 rounded-2xl overflow-hidden flex flex-col">
                 // Status bar
-                <div class="flex items-center justify-between px-4 py-2.5 border-b border-white/5">
-                    <div class="flex items-center gap-3">
+                <div class="flex flex-wrap items-center justify-between px-3 sm:px-4 py-2 sm:py-2.5 gap-x-3 gap-y-1 border-b border-white/5">
+                    <div class="flex items-center gap-2 sm:gap-3">
                         <div class="flex items-center gap-1.5">
                             <span class="relative flex h-2 w-2">
                                 <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#00e676] opacity-60"></span>
@@ -539,10 +539,10 @@ pub fn HeartbeatPage() -> impl IntoView {
                             </span>
                             <span class="text-xs text-white/50 font-mono">"LIVE"</span>
                         </div>
-                        <span class="text-sm sm:text-base text-[#00e676] font-mono font-semibold">{block_height}</span>
+                        <span class="text-xs sm:text-base text-[#00e676] font-mono font-semibold">{block_height}</span>
                     </div>
-                    <div class="flex items-center gap-3 text-sm sm:text-base text-[#00e676] font-mono">
-                        <span>"Last block: " {time_since}</span>
+                    <div class="flex items-center gap-2 sm:gap-3 text-xs sm:text-base text-[#00e676] font-mono">
+                        <span class="truncate">"Last block: " {time_since}</span>
                         // Fullscreen toggle (other controls are in the canvas control bar)
                         <button
                             class="text-white/30 hover:text-[#00e676] transition-colors cursor-pointer"
@@ -601,7 +601,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                 </div>
 
                 // Bottom info bar
-                <div class="flex items-center justify-between px-4 py-2 border-t border-white/5 text-sm sm:text-base text-[#00e676] font-mono">
+                <div class="flex flex-col sm:flex-row items-center justify-between px-3 sm:px-4 py-1.5 sm:py-2 gap-0.5 sm:gap-0 border-t border-white/5 text-xs sm:text-base text-[#00e676] font-mono">
                     <span>{mempool_display}</span>
                     <span>"Next block: " {fee_display}</span>
                 </div>
@@ -654,9 +654,9 @@ pub fn HeartbeatPage() -> impl IntoView {
 
             // ── Phase 3: 24-Hour Rhythm Strip ─────────────────
             <div class="bg-[#0d2137] border border-white/10 rounded-2xl overflow-hidden">
-                <div class="flex items-baseline justify-between px-4 py-2 border-b border-white/5">
+                <div class="flex flex-col sm:flex-row sm:items-baseline sm:justify-between px-3 sm:px-4 py-2 gap-0.5 sm:gap-0 border-b border-white/5">
                     <span class="text-xs text-white/40 font-mono">"24-HOUR RHYTHM STRIP"</span>
-                    <span class="text-[11px] text-white/40 font-mono">"Last 144 blocks \u{00b7} one full difficulty day"</span>
+                    <span class="text-[10px] sm:text-[11px] text-white/40 font-mono">"Last 144 blocks \u{00b7} one full difficulty day"</span>
                 </div>
                 <canvas
                     id="rhythm-strip-canvas"
@@ -750,14 +750,14 @@ fn VitalTile(
 ) -> impl IntoView {
     view! {
         <div
-            class="bg-[#0d2137] border border-white/10 rounded-xl px-4 py-3 flex flex-col gap-1"
+            class="bg-[#0d2137] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 flex flex-col gap-1 min-w-0"
             data-tip=tip.unwrap_or("")
             tabindex=if tip.is_some() { "0" } else { "-1" }
         >
             <span class="text-xs text-white/50 font-mono uppercase tracking-wider">{label}</span>
             <div class="flex items-baseline gap-1">
                 <span
-                    class="text-2xl sm:text-3xl font-mono font-bold tabular-nums"
+                    class="text-xl sm:text-3xl font-mono font-bold tabular-nums"
                     style=move || format!("color: {}", color.get())
                 >
                     {value}
@@ -770,7 +770,7 @@ fn VitalTile(
                 </span>
             </div>
             <span
-                class="text-xs font-mono"
+                class="text-[10px] sm:text-xs font-mono truncate"
                 style=move || format!("color: {}99", color.get())
             >
                 {status}
