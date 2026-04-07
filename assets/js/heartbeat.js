@@ -541,13 +541,24 @@
                     var tx = JSON.parse(e.data);
                     _hb._hasTxStream = true;
                     _hb._sseTxCount++;
-                    // When hidden: buffer txs (capped) but don't flush.
-                    // They'll be spread across the gap on tab return.
+                    // When hidden: buffer txs and keep advancing virtualX so
+                    // the flatline grows. Without this, all buffered txs pile
+                    // up at the same virtualX position and create a tall stack.
                     if (document.hidden) {
                         if (!_hb._hiddenTxBuffer) _hb._hiddenTxBuffer = [];
                         if (_hb._hiddenTxBuffer.length < 3000) _hb._hiddenTxBuffer.push(tx);
+                        // Advance virtualX based on real elapsed time
+                        var now = Date.now() / 1000;
+                        if (_hb._lastHiddenAdvance > 0) {
+                            var dt = now - _hb._lastHiddenAdvance;
+                            if (dt > 0 && dt < 5) { // clamp to avoid huge jumps
+                                _hb.virtualX += dt * FLATLINE_PX_PER_SEC;
+                            }
+                        }
+                        _hb._lastHiddenAdvance = now;
                         return;
                     }
+                    _hb._lastHiddenAdvance = 0; // reset when visible
                     if (_hb._txBatchQueue.length > 500) _hb._txBatchQueue.length = 500;
                     _hb._txBatchQueue.push(tx);
                     // Track rolling median fee rate from own node data
@@ -2797,12 +2808,9 @@
                 prevTs = blockTs;
             }
             window.pushHeartbeatBlocks(JSON.stringify(replayBlocks), true);
-        } else if (elapsed > 2) {
-            var liveSeg2 = _hb.timeline[_hb.timeline.length - 1];
-            if (liveSeg2 && liveSeg2.type === 'flatline' && liveSeg2.x_end === null) {
-                _hb.virtualX += elapsed * FLATLINE_PX_PER_SEC;
-            }
         }
+        // Note: virtualX is already advanced by the SSE tx handler while
+        // hidden, so no additional elapsed-time advance is needed here.
 
         // Spread buffered txs across the NEW section of the flatline only.
         // Skip if blocks were replayed — the post-block flatline is too short
