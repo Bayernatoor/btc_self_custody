@@ -158,10 +158,6 @@ pub fn HeartbeatPage() -> impl IntoView {
     // Sound toggle state
     let (sound_on, set_sound_on) = signal(false);
 
-    // First-visit hint overlay (dismissed on click or X button)
-    // Start hidden — shown only after canvas initializes to avoid
-    // blocking the view before hydration is ready.
-    let (show_hint, set_show_hint) = signal(false);
 
     // Period start timestamp (first block in current retarget period)
     let (period_start_ts, set_period_start_ts) = signal(0u64);
@@ -210,7 +206,6 @@ pub fn HeartbeatPage() -> impl IntoView {
             init_heartbeat("heartbeat-canvas");
             initialized.set(true);
             set_loading.set(false);
-            set_show_hint.set(true);
 
             // Store period start timestamp for heart rate calculation
             // Use the block at the retarget boundary, not the first fetched block
@@ -635,29 +630,6 @@ pub fn HeartbeatPage() -> impl IntoView {
                         </div>
                     </Show>
 
-                    // Hint overlay — dismissed on click anywhere or X button
-                    <Show when=move || show_hint.get()>
-                        <div
-                            class="absolute inset-0 flex items-center justify-center bg-black/40 cursor-pointer"
-                            on:click=move |_| set_show_hint.set(false)
-                        >
-                            <div class="relative text-center space-y-3 px-6 py-5 rounded-xl bg-[#0d2137]/90 border border-white/10 max-w-sm">
-                                <button
-                                    class="absolute top-2 right-3 text-white/40 hover:text-white/80 text-lg leading-none cursor-pointer"
-                                    on:click=move |e| {
-                                        e.stop_propagation();
-                                        set_show_hint.set(false);
-                                    }
-                                >"\u{2715}"</button>
-                                <p class="text-sm text-white/70 font-mono leading-relaxed">
-                                    "Drag to scroll \u{00b7} Scroll to zoom \u{00b7} Click bricks to inspect"
-                                </p>
-                                <p class="text-xs text-white/40 font-mono">
-                                    "Use the \u{25A0} / \u{2B24} button to toggle brick and bloodstream views"
-                                </p>
-                            </div>
-                        </div>
-                    </Show>
                 </div>
 
                 // Bottom info bar with TX search
