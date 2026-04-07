@@ -8,7 +8,7 @@
 //! Transactions are stored in SQLite (`mempool_txs` table) and broadcast
 //! to SSE clients via a tokio broadcast channel.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -42,7 +42,6 @@ pub enum HeartbeatEvent {
         size: u64,
         weight: u64,
         confirmed_count: u64,
-        unconfirmed_txids: Vec<String>,
     },
 }
 
@@ -53,20 +52,22 @@ pub fn spawn(
     zmq_tx_url: String,
     zmq_block_url: String,
 ) {
-    // Shared flag: block subscriber sets this during block processing
-    // so the tx subscriber can skip expensive RPC lookups for block txs
-    let block_processing = Arc::new(AtomicBool::new(false));
+    // Shared set: block subscriber populates with block txids so the tx
+    // subscriber can skip them (block tx flood) while still processing
+    // genuine new mempool txs.
+    let block_txids: Arc<std::sync::Mutex<HashSet<String>>> =
+        Arc::new(std::sync::Mutex::new(HashSet::new()));
 
     // Transaction subscriber
     {
         let state = Arc::clone(&state);
         let sender = tx_sender.clone();
         let url = zmq_tx_url.clone();
-        let bp = Arc::clone(&block_processing);
+        let bt = Arc::clone(&block_txids);
         tokio::spawn(async move {
             loop {
                 tracing::info!("ZMQ: connecting to rawtx at {url}");
-                match subscribe_transactions(&state, &sender, &url, &bp).await {
+                match subscribe_transactions(&state, &sender, &url, &bt).await {
                     Ok(()) => tracing::warn!(
                         "ZMQ rawtx stream ended, reconnecting..."
                     ),
@@ -84,11 +85,11 @@ pub fn spawn(
         let state = Arc::clone(&state);
         let sender = tx_sender;
         let url = zmq_block_url.clone();
-        let bp = block_processing;
+        let bt = block_txids;
         tokio::spawn(async move {
             loop {
                 tracing::info!("ZMQ: connecting to hashblock at {url}");
-                match subscribe_blocks(&state, &sender, &url, &bp).await {
+                match subscribe_blocks(&state, &sender, &url, &bt).await {
                     Ok(()) => tracing::warn!(
                         "ZMQ hashblock stream ended, reconnecting..."
                     ),
@@ -111,7 +112,7 @@ async fn subscribe_transactions(
     state: &Arc<StatsState>,
     sender: &broadcast::Sender<HeartbeatEvent>,
     url: &str,
-    block_processing: &AtomicBool,
+    block_txids: &std::sync::Mutex<HashSet<String>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut socket = SubSocket::new();
     socket.connect(url).await?;
@@ -149,11 +150,13 @@ async fn subscribe_transactions(
             .unwrap_or_default()
             .as_secs();
 
-        // During block processing, ZMQ sends ~5000 rawtx for block txs.
-        // Skip immediately without RPC to drain the flood as fast as possible.
-        // Real mempool txs resume within ~100ms after the flood clears.
-        if block_processing.load(Ordering::Acquire) {
-            continue;
+        // During block processing, ZMQ re-broadcasts every tx in the block.
+        // Skip those (they're in the block_txids set) but let genuine new
+        // mempool txs through so the SSE stream doesn't go silent.
+        if let Ok(set) = block_txids.lock() {
+            if !set.is_empty() && set.contains(&parsed.txid) {
+                continue;
+            }
         }
 
         // Self-throttle: if 5+ consecutive RPC failures, a block likely arrived
@@ -229,7 +232,7 @@ async fn subscribe_blocks(
     state: &Arc<StatsState>,
     sender: &broadcast::Sender<HeartbeatEvent>,
     url: &str,
-    block_processing: &AtomicBool,
+    block_txids: &std::sync::Mutex<HashSet<String>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut socket = SubSocket::new();
     socket.connect(url).await?;
@@ -243,8 +246,6 @@ async fn subscribe_blocks(
             continue;
         }
 
-        // Block hash is 32 bytes. Bitcoin Core ZMQ already sends in big-endian
-        // (display) order, so we just convert to hex directly — no reversal needed.
         let hash_bytes = &frames[1];
         if hash_bytes.len() != 32 {
             tracing::warn!(
@@ -256,36 +257,42 @@ async fn subscribe_blocks(
         let block_hash = bytes_to_hex(hash_bytes);
         tracing::info!("ZMQ: new block {block_hash}");
 
-        // Signal tx subscriber to skip RPC lookups (block txs flood rawtx)
-        block_processing.store(true, Ordering::Release);
-
         // Get block metadata and txid list
         let block_info = match get_block_info(state, &block_hash).await {
             Some(info) => info,
-            None => {
-                block_processing.store(false, Ordering::Release);
-                continue;
-            }
+            None => continue,
         };
+
+        // Populate the txid filter so the tx subscriber skips block txs
+        // but still processes genuine new mempool txs
+        if let Ok(mut set) = block_txids.lock() {
+            set.clear();
+            for txid in &block_info.txids {
+                set.insert(txid.clone());
+            }
+        }
 
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
 
-        // Mark confirmed transactions in DB and get surviving (unconfirmed) txids
-        let (confirmed_count, total_fees, unconfirmed_txids) =
-            if let Ok(conn) = state.db.get() {
-                let (count, fees) = db::confirm_mempool_txs(
-                    &conn, &block_info.txids, block_info.height, now,
-                )
-                .unwrap_or((0, 0));
-                let survivors = db::query_unconfirmed_txids(&conn, 5000)
-                    .unwrap_or_default();
-                (count, fees, survivors)
-            } else {
-                (0, 0, Vec::new())
-            };
+        // Confirm mempool txs in DB on a blocking thread so we don't
+        // starve the async runtime during the SQLite write transaction
+        let db = state.db.clone();
+        let txids = block_info.txids.clone();
+        let height = block_info.height;
+        let (confirmed_count, total_fees) =
+            tokio::task::spawn_blocking(move || {
+                if let Ok(conn) = db.get() {
+                    db::confirm_mempool_txs(&conn, &txids, height, now)
+                        .unwrap_or((0, 0))
+                } else {
+                    (0, 0)
+                }
+            })
+            .await
+            .unwrap_or((0, 0));
 
         tracing::info!(
             "ZMQ: block {} ({block_hash}) — {confirmed_count}/{} txs confirmed, {:.4} BTC fees from mempool",
@@ -294,7 +301,7 @@ async fn subscribe_blocks(
             total_fees as f64 / 100_000_000.0,
         );
 
-        // Broadcast block event with full block data
+        // Broadcast block event
         let _ = sender.send(HeartbeatEvent::Block {
             height: block_info.height,
             hash: block_hash,
@@ -304,17 +311,12 @@ async fn subscribe_blocks(
             size: block_info.size,
             weight: block_info.weight,
             confirmed_count,
-            unconfirmed_txids,
         });
 
-        // Give SSE clients time to receive and process the block event
-        // before new txs start flowing. Without this, txs race ahead of the
-        // block and land on the old (pre-block) flatline segment.
-        tokio::time::sleep(Duration::from_millis(200)).await;
-
-        // Clear block_processing flag — tx subscriber resumes processing
-        // genuine new mempool txs that succeed getmempoolentry
-        block_processing.store(false, Ordering::Release);
+        // Clear the txid filter — tx subscriber now processes everything
+        if let Ok(mut set) = block_txids.lock() {
+            set.clear();
+        }
     }
 }
 

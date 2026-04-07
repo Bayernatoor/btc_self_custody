@@ -555,8 +555,7 @@
                 try {
                     var block = JSON.parse(e.data);
                     if (!block.height) return;
-                    console.log('SSE block:', block.height, block.hash,
-                        'unconfirmed:', (block.unconfirmed_txids || []).length);
+                    console.log('SSE block:', block.height, block.hash);
 
                     // When tab is hidden, queue blocks for replay on return
                     // instead of processing live (which stacks them at same virtualX)
