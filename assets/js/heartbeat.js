@@ -536,6 +536,15 @@
                         return;
                     }
 
+                    // Clear old blips from the current flatline before placing
+                    // history. On SSE reconnect the old blips are stale and
+                    // would double up with the fresh history dump.
+                    var curSeg = _hb.timeline[_hb.timeline.length - 1];
+                    if (curSeg && curSeg.type === 'flatline' && curSeg.x_end === null) {
+                        curSeg.blips = [];
+                        curSeg._colHeights = {};
+                    }
+
                     placeHistoryTxs(txs, lastBlockTs);
                 } catch (err) { console.log('[heartbeat] SSE history error:', err); }
             });
@@ -2596,7 +2605,13 @@
                         var feeRate = b.total_fees ? b.total_fees / 100000 : 0;
                         lastSeg.color = computeColor(interBlock, feeRate, 0);
                     } else {
-                        // For live, close at current virtual head position
+                        // For live, close at current virtual head position.
+                        // Enforce minimum flatline width so rapid blocks don't
+                        // stack on top of each other with no visual gap.
+                        var minLiveFlatline = 15;
+                        if (_hb.virtualX - lastSeg.x_start < minLiveFlatline) {
+                            _hb.virtualX = lastSeg.x_start + minLiveFlatline;
+                        }
                         lastSeg.x_end = _hb.virtualX;
                     }
                     // Stamp the flatline with its color at close time (only for live, replay sets its own)
