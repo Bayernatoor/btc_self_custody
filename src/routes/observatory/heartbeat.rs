@@ -385,10 +385,21 @@ pub fn HeartbeatPage() -> impl IntoView {
                 if sound_on.get_untracked() {
                     heartbeat_play_sound();
                 }
+
+                // Push an immediate estimated block so the spike appears
+                // right away. If SSE delivered the block already, the dedup
+                // in pushHeartbeatBlocks skips it. If SSE missed the event
+                // (connection drop), this ensures the spike shows without
+                // waiting for the fetch_blocks retry chain.
+                let est_json = format!(
+                    r#"[{{"height":{},"timestamp":{},"tx_count":3000,"total_fees":0,"size":0,"weight":3000000,"inter_block_seconds":600}}]"#,
+                    current_height,
+                    live.blockchain.time,
+                );
+                push_heartbeat_blocks(&est_json, false);
             }
 
-            // Fetch the new block(s) with retry chain
-            // If multiple blocks (backlog from navigating away), insert as replay
+            // Fetch real block data to replace estimated spike
             #[cfg(feature = "hydrate")]
             {
                 let from = prev + 1;
@@ -407,7 +418,6 @@ pub fn HeartbeatPage() -> impl IntoView {
                                 .unwrap_or_default();
                         if !blocks.is_empty() {
                             let json = blocks_to_json(&blocks);
-                            // Backlog blocks inserted as replay (compressed, no animation)
                             push_heartbeat_blocks(&json, replay);
                             let recent = get_heartbeat_recent_blocks();
                             render_rhythm_strip("rhythm-strip-canvas", &recent);
@@ -423,8 +433,8 @@ pub fn HeartbeatPage() -> impl IntoView {
                         }
                     });
                 }
-                // Try now, then retry at escalating intervals
-                try_fetch(from, to, is_backlog, &[5, 15, 30, 45, 60, 90]);
+                // Try now, then retry at shorter intervals
+                try_fetch(from, to, is_backlog, &[2, 5, 10, 20, 30]);
             }
         }
     });
