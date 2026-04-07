@@ -653,7 +653,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                                     #[cfg(feature = "hydrate")]
                                     {
                                         use wasm_bindgen::JsCast;
-                                        let input = e.target().unwrap().unchecked_into::<web_sys::HtmlInputElement>();
+                                        let input = e.target().unwrap().unchecked_into::<leptos::web_sys::HtmlInputElement>();
                                         let val = input.value();
                                         if !val.is_empty() {
                                             let found = heartbeat_search_tx(&val);
