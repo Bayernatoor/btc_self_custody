@@ -129,6 +129,7 @@ pub fn HeartbeatPage() -> impl IntoView {
     // Track last-seen block height to detect new blocks
     let last_height = std::rc::Rc::new(std::cell::Cell::new(0u64));
     let initialized = std::rc::Rc::new(std::cell::Cell::new(false));
+    let (loading, set_loading) = signal(true);
 
     // Signals for vital signs display
     let (hr_display, set_hr_display) = signal("--:--".to_string());
@@ -208,6 +209,7 @@ pub fn HeartbeatPage() -> impl IntoView {
 
             init_heartbeat("heartbeat-canvas");
             initialized.set(true);
+            set_loading.set(false);
             set_show_hint.set(true);
 
             // Store period start timestamp for heart rate calculation
@@ -617,6 +619,21 @@ pub fn HeartbeatPage() -> impl IntoView {
                         id="heartbeat-canvas"
                         class="w-full h-full"
                     ></canvas>
+
+                    // Loading overlay — shows mining animation while blocks load
+                    <Show when=move || loading.get()>
+                        <div class="absolute inset-0 flex flex-col items-center justify-center bg-[#0d2137]/95 z-10">
+                            <div class="relative">
+                                // Pickaxe swinging animation
+                                <div class="text-4xl animate-bounce" style="animation-duration: 0.8s">
+                                    "\u{26CF}\u{FE0F}"
+                                </div>
+                            </div>
+                            <p class="mt-3 text-sm text-white/50 font-mono animate-pulse">
+                                "Mining blocks..."
+                            </p>
+                        </div>
+                    </Show>
 
                     // Hint overlay — dismissed on click anywhere or X button
                     <Show when=move || show_hint.get()>
