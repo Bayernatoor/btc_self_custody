@@ -67,6 +67,27 @@ pub fn Chart(
 }
 
 // ---------------------------------------------------------------------------
+// Data load error with retry
+// ---------------------------------------------------------------------------
+
+/// Shared error state shown when a resource fetch fails.
+/// Displays "Failed to load data" with a retry button.
+#[component]
+pub fn DataLoadError(
+    #[prop(into)] on_retry: Callback<()>,
+) -> impl IntoView {
+    view! {
+        <div class="flex flex-col items-center justify-center min-h-[200px] gap-4">
+            <p class="text-white/50 font-mono text-sm">"Failed to load data"</p>
+            <button
+                class="px-4 py-2 bg-white/10 hover:bg-white/20 text-white/70 rounded-lg font-mono text-sm cursor-pointer"
+                on:click=move |_| { on_retry.run(()); }
+            >"Retry"</button>
+        </div>
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Chart card with expand toggle
 // ---------------------------------------------------------------------------
 

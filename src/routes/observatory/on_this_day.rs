@@ -4,6 +4,7 @@ use leptos::prelude::*;
 use leptos_meta::*;
 use leptos_router::hooks::use_query_map;
 
+use super::components::DataLoadError;
 use super::helpers::*;
 use crate::stats::server_fns::*;
 use crate::stats::types::calc_supply;
@@ -510,12 +511,7 @@ pub fn OnThisDayPage() -> impl IntoView {
                     }
                 }
                 Some(Err(_)) => view! {
-                    <div class="flex flex-col items-center justify-center min-h-[200px] gap-4">
-                        <p class="text-white/50 font-mono text-sm">"Failed to load data"</p>
-                        <button class="px-4 py-2 bg-white/10 hover:bg-white/20 text-white/70 rounded-lg font-mono text-sm cursor-pointer"
-                            on:click=move |_| { data.refetch(); }
-                        >"Retry"</button>
-                    </div>
+                    <DataLoadError on_retry=Callback::new(move |_| data.refetch())/>
                 }.into_any(),
                 None => view! {
                     <div class="flex justify-center py-20">

@@ -93,12 +93,7 @@ pub fn EmbeddedChartsPage() -> impl IntoView {
                         }.into_any()
                     }
                     Some(Err(_)) => view! {
-                        <div class="flex flex-col items-center justify-center min-h-[200px] gap-4">
-                            <p class="text-white/50 font-mono text-sm">"Failed to load data"</p>
-                            <button class="px-4 py-2 bg-white/10 hover:bg-white/20 text-white/70 rounded-lg font-mono text-sm cursor-pointer"
-                                on:click=move |_| { dashboard_data.refetch(); }
-                            >"Retry"</button>
-                        </div>
+                        <DataLoadError on_retry=Callback::new(move |_| dashboard_data.refetch())/>
                     }.into_any(),
                     None => view! { <ChartPageSkeleton count=3/> }.into_any(),
                 }}
@@ -135,12 +130,7 @@ pub fn EmbeddedChartsPage() -> impl IntoView {
                         }.into_any()
                     }
                     Some(Err(_)) => view! {
-                        <div class="flex flex-col items-center justify-center min-h-[200px] gap-4">
-                            <p class="text-white/50 font-mono text-sm">"Failed to load data"</p>
-                            <button class="px-4 py-2 bg-white/10 hover:bg-white/20 text-white/70 rounded-lg font-mono text-sm cursor-pointer"
-                                on:click=move |_| { dashboard_data.refetch(); }
-                            >"Retry"</button>
-                        </div>
+                        <DataLoadError on_retry=Callback::new(move |_| dashboard_data.refetch())/>
                     }.into_any(),
                     None => view! { <ChartPageSkeleton count=4/> }.into_any(),
                 }}
@@ -169,12 +159,7 @@ pub fn EmbeddedChartsPage() -> impl IntoView {
                         }.into_any()
                     }
                     Some(Err(_)) => view! {
-                        <div class="flex flex-col items-center justify-center min-h-[200px] gap-4">
-                            <p class="text-white/50 font-mono text-sm">"Failed to load data"</p>
-                            <button class="px-4 py-2 bg-white/10 hover:bg-white/20 text-white/70 rounded-lg font-mono text-sm cursor-pointer"
-                                on:click=move |_| { dashboard_data.refetch(); }
-                            >"Retry"</button>
-                        </div>
+                        <DataLoadError on_retry=Callback::new(move |_| dashboard_data.refetch())/>
                     }.into_any(),
                     None => view! { <ChartPageSkeleton count=2/> }.into_any(),
                 }}
