@@ -1201,8 +1201,9 @@
             _hb.virtualX += dt * FLATLINE_PX_PER_SEC;
         }
 
-        // If auto-following, keep viewport pinned to the head (zoom-aware)
-        if (_hb.autoFollow) {
+        // If auto-following, keep viewport pinned to the head (zoom-aware).
+        // Skip during drag so the user isn't fighting the snap-back.
+        if (_hb.autoFollow && !_hb.isDragging) {
             _hb.viewOffset = _hb.virtualX - (w * HEAD_POSITION_FRAC) / _hb.zoom;
         } else if (!_hb.paused && !_hb.isDragging && !_hb._pinching) {
             // Play mode: scroll at the same rate as time (don't jump to head)
@@ -2084,6 +2085,7 @@
 
             stopMomentum();
             _hb.isDragging = true;
+            _hb.autoFollow = false; // release immediately so drag isn't fought
             _hb.dragStartX = e.clientX;
             _hb.dragStartY = e.clientY;
             _hb.dragStartOffset = _hb.viewOffset;
@@ -2242,7 +2244,10 @@
                     var tdy = Math.abs(e.touches[0].clientY - _hb._touchStartY);
                     if (tdx + tdy < 8) return; // too small to decide
                     _hb._touchLocked = tdx > tdy ? 'h' : 'v';
-                    if (_hb._touchLocked === 'h') _hb.isDragging = true;
+                    if (_hb._touchLocked === 'h') {
+                        _hb.isDragging = true;
+                        _hb.autoFollow = false;
+                    }
                 }
                 if (_hb._touchLocked === 'v') return; // let browser handle vertical scroll
                 e.preventDefault(); // horizontal pan — block scroll
