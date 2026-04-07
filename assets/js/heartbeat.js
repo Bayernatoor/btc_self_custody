@@ -2488,17 +2488,19 @@
         setupInputHandlers(canvas);
 
         // Fullscreen: clear container height so flex-1 fills the card.
-        // On exit, restore the clamp height.
+        // On exit, restore the clamp height. Handle vendor prefixes for mobile.
         var wrap = document.getElementById('heartbeat-canvas-wrap');
         function _hbFullscreenChange() {
             if (!_hb || !wrap) return;
-            if (document.fullscreenElement) {
+            var fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+            if (fsEl) {
                 wrap.style.height = '';
             } else {
                 wrap.style.height = 'clamp(250px, 45vh, 700px)';
             }
         }
         document.addEventListener('fullscreenchange', _hbFullscreenChange);
+        document.addEventListener('webkitfullscreenchange', _hbFullscreenChange);
         _hb._fullscreenHandler = _hbFullscreenChange;
 
         // ResizeObserver for responsive canvas
@@ -2789,6 +2791,7 @@
         document.removeEventListener('visibilitychange', _hbVisibilityChange);
         if (_hb._fullscreenHandler) {
             document.removeEventListener('fullscreenchange', _hb._fullscreenHandler);
+            document.removeEventListener('webkitfullscreenchange', _hb._fullscreenHandler);
         }
         _hb = null;
     };
