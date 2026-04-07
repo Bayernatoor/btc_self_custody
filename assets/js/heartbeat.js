@@ -393,8 +393,10 @@
             var tx = txs[i];
             if (!tx.fee || !tx.vsize) continue;
 
-            // Spread all history txs uniformly across the flatline
-            var txVX = liveSeg.x_start + Math.random() * flatlineSpan * 0.95;
+            // Spread history txs across the flatline, leaving the last 20px
+            // clear for live txs (they place at virtualX - 0..15). Without this
+            // margin, history and live bricks share grid columns and stack.
+            var txVX = liveSeg.x_start + Math.random() * Math.max(10, flatlineSpan - 20);
 
             var feeRate = tx.fee / tx.vsize;
             var feeNorm = Math.min(Math.log2(feeRate + 1) / 6, 1.0);
@@ -2746,7 +2748,7 @@
                     if (!htx.fee || !htx.vsize) continue;
                     var htFeeRate = htx.fee / htx.vsize;
                     var htFeeNorm = Math.min(Math.log2(htFeeRate + 1) / 6, 1.0);
-                    var htVX = gapStart + Math.random() * gapSpan * 0.95;
+                    var htVX = gapStart + Math.random() * Math.max(10, gapSpan - 20);
                     var htBrickH = 3 + htFeeNorm * 14 + Math.random() * 3;
                     var htGridX = Math.round(htVX / 5) * 5;
                     var htStackY = htStackMap[htGridX] || 0;
