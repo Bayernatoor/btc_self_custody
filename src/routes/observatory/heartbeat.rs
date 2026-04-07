@@ -663,6 +663,18 @@ pub fn HeartbeatPage() -> impl IntoView {
                     class="w-full"
                     style="height: 100px"
                 ></canvas>
+                // Block scrubber + detail panel
+                <div class="px-3 sm:px-4 py-2 border-t border-white/5">
+                    <input
+                        type="range"
+                        id="rhythm-strip-slider"
+                        min="0" max="143" value="143"
+                        class="w-full h-1 accent-[#00e676] cursor-pointer"
+                        style="opacity: 0.6"
+                    />
+                    <div id="rhythm-strip-detail" class="flex flex-wrap items-baseline gap-x-4 gap-y-0.5 mt-1 min-h-[20px] text-xs font-mono text-white/50">
+                    </div>
+                </div>
             </div>
 
             // ── Phase 4: Organism Status ──────────────────────

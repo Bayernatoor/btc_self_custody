@@ -3065,6 +3065,64 @@
                 window.renderRhythmStrip(canvasId, blocksJson);
             }
         });
+
+        // ── Slider scrubber for block selection ──────────────
+        var slider = document.getElementById('rhythm-strip-slider');
+        var detailEl = document.getElementById('rhythm-strip-detail');
+        if (slider && detailEl) {
+            slider.max = Math.max(0, blocks.length - 1);
+            slider.value = blocks.length - 1;
+
+            function updateSliderDetail(idx) {
+                var regions = canvas._rhythmHitRegions;
+                if (!regions || idx < 0 || idx >= regions.length) {
+                    detailEl.innerHTML = '';
+                    canvas._rhythmHovered = null;
+                    window.renderRhythmStrip(canvasId, blocksJson);
+                    return;
+                }
+                var r = regions[idx];
+                var b = r.block;
+                var feeBtc = ((b.total_fees || 0) / 1e8).toFixed(4);
+                var wait = formatDuration(b.inter_block_seconds || 600);
+                detailEl.innerHTML =
+                    '<span style="color:' + r.color + '">Block #' + (b.height || 0).toLocaleString() + '</span>' +
+                    '<span>' + (b.tx_count || 0).toLocaleString() + ' txs</span>' +
+                    '<span>' + feeBtc + ' BTC fees</span>' +
+                    '<span>' + wait + ' wait</span>' +
+                    '<a href="https://mempool.space/block/' + (b.height || 0) + '" target="_blank" ' +
+                    'style="color:' + r.color + ';text-decoration:underline;text-underline-offset:2px">' +
+                    'View on mempool.space \u2197</a>';
+                // Highlight on canvas
+                canvas._rhythmHovered = r;
+                window.renderRhythmStrip(canvasId, blocksJson);
+            }
+
+            slider.oninput = function() {
+                updateSliderDetail(parseInt(slider.value, 10));
+            };
+
+            // On mobile: tap canvas selects nearest block via slider (no redirect)
+            canvas.addEventListener('touchstart', function(e) {
+                var touch = e.touches[0];
+                var rect = canvas.getBoundingClientRect();
+                var mx = touch.clientX - rect.left;
+                var regions = canvas._rhythmHitRegions;
+                if (!regions) return;
+                var bestIdx = 0, bestDist = Infinity;
+                for (var ri = 0; ri < regions.length; ri++) {
+                    var mid = (regions[ri].x1 + regions[ri].x2) / 2;
+                    var d = Math.abs(mx - mid);
+                    if (d < bestDist) { bestDist = d; bestIdx = ri; }
+                }
+                e.preventDefault();
+                slider.value = bestIdx;
+                updateSliderDetail(bestIdx);
+            }, { passive: false });
+
+            // Show the last block by default
+            updateSliderDetail(blocks.length - 1);
+        }
     };
 
     // ── Center view on live head ─────────────────────────────
