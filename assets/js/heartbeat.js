@@ -2522,7 +2522,7 @@
                 wrap.style.height = '';
             } else {
                 var ih = window.innerHeight || 700;
-                var h = Math.max(300, Math.min(Math.round(ih * 0.55), 700));
+                var h = Math.max(300, Math.min(Math.round(ih * 0.7), 800));
                 wrap.style.height = h + 'px';
             }
         }
