@@ -1446,7 +1446,9 @@
             }
 
             // Vessel tube — centered on baseline, symmetric above/below
-            var tubeH = 30; // ±30px from baseline (60px total)
+            // Tube scales with zoom so vessel walls match cell spread
+            var avgR = 4.0 * Math.max(zoom * 0.4, 0.8);
+            var tubeH = Math.max(30, avgR * 2.5);
             var underglowAlpha = 0.02 + Math.min(cellCount / 500, 0.04);
             if (isLive) {
                 underglowAlpha *= 0.85 + 0.15 * Math.sin(nowSec * 1.2);
@@ -1519,7 +1521,7 @@
                     // Start from tube position, converge to baseline as cell approaches spike
                     // Use bobPhase + gridX hash (same as normal rendering)
                     var bsBobPhase = blip.bobPhase || 0;
-                    var bsTubeH = 30;
+                    var bsTubeH = Math.max(30, bsCellR * 2.5);
                     var bsColHash = ((blip.gridX || 0) * 0.6180339887) % 1;
                     var bsTubePos = ((bsBobPhase + bsColHash * Math.PI * 2) % (Math.PI * 2)) / Math.PI - 1;
                     var bsStartY = baseline - bsTubePos * bsTubeH;
@@ -1685,10 +1687,10 @@
                         var cellRadius = baseR * Math.max(zoom * 0.4, 0.8);
                         var cellDiam = cellRadius * 2;
 
-                        // Tube distribution: each cell gets a unique Y position
-                        // within the tube. Use bobPhase + gridX to spread cells so
-                        // neighbors at the same x don't overlap.
-                        var tubeH = 30;
+                        // Tube distribution: each cell gets a unique Y position.
+                        // Tube scales with zoom so cells don't overlap at high zoom
+                        // (cellRadius grows with zoom but tube was fixed at ±30px).
+                        var tubeH = Math.max(30, cellRadius * 2.5);
                         var bobPhase = blip.bobPhase || 0;
                         var bobSpeed = blip.bobSpeed || 1.5;
                         // Mix bobPhase with gridX to separate cells at the same column.
