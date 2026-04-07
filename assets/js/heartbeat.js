@@ -288,10 +288,11 @@
         return best;
     }
 
-    // 2D hit test: find which brick the cursor is inside (canvas coords)
+    // 2D hit test: find which brick/cell the cursor is inside (canvas coords)
     function blipAtCanvasXY(cx, cy, baseline) {
         if (!_hb) return null;
         var zoom = _hb.zoom;
+        var isBs = _hb.renderMode === 'bloodstream';
         var heightScale = zoom > 4 ? 1 + (zoom - 4) * 0.15 : 1;
         var viewLeft = _hb.viewOffset;
         var viewRight = _hb.viewOffset + _hb.width / zoom;
@@ -299,29 +300,45 @@
         for (var i = _hb.timeline.length - 1; i >= 0; i--) {
             var seg = _hb.timeline[i];
             if (seg.type !== 'flatline' || !seg.blips) continue;
-            // Skip segments entirely outside visible range
             var segEnd = seg.x_end !== null ? seg.x_end : _hb.virtualX;
             if (segEnd < viewLeft || seg.x_start > viewRight) continue;
-            // Check blips in reverse order (top of stack first)
             for (var bi = seg.blips.length - 1; bi >= 0; bi--) {
                 var blip = seg.blips[bi];
                 if (blip.fadeStart > 0) continue;
-                // Quick x-range check before computing canvas coords
                 var bvx = blip.gridX || blip.x;
                 if (bvx < viewLeft || bvx > viewRight) continue;
 
                 var bx = virtualToCanvas(bvx);
-                var bw = (blip.brickW || 4) * zoom;
-                var bh = (blip.brickH || 10) * heightScale;
-                var sy = (blip.stackY || 0) * heightScale;
 
-                var left = bx - bw / 2;
-                var top = baseline - sy - bh;
-                var right = left + bw;
-                var bottom = top + bh;
-
-                if (cx >= left && cx <= right && cy >= top && cy <= bottom) {
-                    return blip;
+                if (isBs) {
+                    // Circle hit test for bloodstream cells
+                    var vs = blip.vsize || 200;
+                    var bR;
+                    if (vs < 200) bR = 2.0;
+                    else if (vs < 400) bR = 3.0;
+                    else if (vs < 800) bR = 4.0;
+                    else if (vs < 2000) bR = 5.0;
+                    else bR = 6.0;
+                    var cellR = bR * Math.max(zoom * 0.4, 0.8);
+                    var tubeH = Math.max(30, cellR * 2.5);
+                    var bobPhase = blip.bobPhase || 0;
+                    var colHash = ((blip.gridX || 0) * 0.6180339887) % 1;
+                    var tubePos = ((bobPhase + colHash * Math.PI * 2) % (Math.PI * 2)) / Math.PI - 1;
+                    var cellCY = baseline - tubePos * tubeH;
+                    var dx = cx - bx, dy = cy - cellCY;
+                    if (dx * dx + dy * dy <= cellR * cellR) {
+                        return blip;
+                    }
+                } else {
+                    // Rectangle hit test for bricks
+                    var bw = (blip.brickW || 4) * zoom;
+                    var bh = (blip.brickH || 10) * heightScale;
+                    var sy = (blip.stackY || 0) * heightScale;
+                    var left = bx - bw / 2;
+                    var top = baseline - sy - bh;
+                    if (cx >= left && cx <= left + bw && cy >= top && cy <= top + bh) {
+                        return blip;
+                    }
                 }
             }
         }
@@ -936,7 +953,8 @@
         roundRect(ctx, boxX, boxY, boxW, boxH, 4);
         ctx.stroke();
 
-        // Text
+        // Text — always left-aligned
+        ctx.textAlign = 'left';
         ctx.fillStyle = (opts && opts.textColor) || 'rgba(255, 255, 255, 0.85)';
         ctx.font = fontSize;
         for (var i = 0; i < lines.length; i++) {
@@ -999,13 +1017,25 @@
             lines.push('\u2192 Click again to view on mempool.space');
         }
         var blipColor = blip.color ? blip.color + '0.6)' : 'rgba(0,230,118,0.6)';
-        // Clamp tooltip y to stay within canvas (at least 10px from top)
+        // Position tooltip above the blip
         var tipY;
         if (_hb.renderMode === 'bloodstream') {
-            // Use actual cell position in tube
-            var tubeY = Math.sin((blip.bobPhase || 0) * 3.71) * 18;
-            var cellR = 3 * Math.max(_hb.zoom * 0.4, 0.8);
-            tipY = baseline - tubeY - cellR - 12;
+            // Match the actual cell rendering position (bobPhase + colHash + tubeH scaling)
+            var zoom = _hb.zoom;
+            var vs = blip.vsize || 200;
+            var bR;
+            if (vs < 200) bR = 2.0;
+            else if (vs < 400) bR = 3.0;
+            else if (vs < 800) bR = 4.0;
+            else if (vs < 2000) bR = 5.0;
+            else bR = 6.0;
+            var cellR = bR * Math.max(zoom * 0.4, 0.8);
+            var tubeH = Math.max(30, cellR * 2.5);
+            var bobPhase = blip.bobPhase || 0;
+            var colHash = ((blip.gridX || 0) * 0.6180339887) % 1;
+            var tubePos = ((bobPhase + colHash * Math.PI * 2) % (Math.PI * 2)) / Math.PI - 1;
+            var cellCY = baseline - tubePos * tubeH;
+            tipY = cellCY - cellR - 16;
         } else {
             var heightScale = _hb.zoom > 4 ? 1 + (_hb.zoom - 4) * 0.15 : 1;
             tipY = baseline - ((blip.stackY || 0) + (blip.brickH || blip.height)) * heightScale - 12;
@@ -2156,17 +2186,23 @@
                     _hb.hoveredFlatline = null;
 
                     if (!_hb.hoveredBlock) {
-                        // Check for blip hover
-                        // 2D hit test at zoom >= 4x
-                        if (my < baseline && _hb.zoom >= 4) {
+                        // In bloodstream mode, cells exist above AND below the baseline.
+                        // Check the full tube zone for hits before falling back to flatline.
+                        var isBs = _hb.renderMode === 'bloodstream';
+                        var avgCellR = isBs ? 4.0 * Math.max(_hb.zoom * 0.4, 0.8) : 0;
+                        var tubeZone = isBs ? Math.max(30, avgCellR * 2.5) + avgCellR : 0;
+                        var inTube = isBs && Math.abs(my - baseline) < tubeZone;
+
+                        // 2D hit test at zoom >= 4x (check both sides in bloodstream)
+                        if ((my < baseline || inTube) && _hb.zoom >= 4) {
                             _hb.hoveredBlip = blipAtCanvasXY(mx, my, baseline);
                         }
                         // Fallback to x-only match at lower zoom
-                        if (!_hb.hoveredBlip && my < baseline && _hb.zoom >= 1.5) {
+                        if (!_hb.hoveredBlip && (my < baseline || inTube) && _hb.zoom >= 1.5) {
                             _hb.hoveredBlip = blipAtVirtualX(vx, 4 / _hb.zoom);
                         }
-                        if (!_hb.hoveredBlip && my >= baseline) {
-                            // Only show flatline tooltip when cursor is below the baseline
+                        // Flatline tooltip only when cursor is outside the tube zone
+                        if (!_hb.hoveredBlip && !inTube) {
                             _hb.hoveredFlatline = flatlineAtVirtualX(vx);
                         }
                     }
