@@ -2485,6 +2485,17 @@
                             existingSeg.total_fees = replacement.total_fees;
                             existingSeg.weight = replacement.weight;
                             existingSeg.inter_block_seconds = replacement.inter_block_seconds;
+                            // Now show the announcement with real data
+                            var feeBtc = b.total_fees / 100000000;
+                            var heightStr = b.height.toLocaleString();
+                            var nowAnn = Date.now() / 1000;
+                            _hb._announcement = {
+                                title: 'Block #' + heightStr + ' found',
+                                subtitle: feeBtc.toFixed(4) + ' BTC fees \u00b7 ' + (b.tx_count || 0).toLocaleString() + ' txs',
+                                color: replacement.color || _hb.currentColor || COLORS.healthy,
+                                start: nowAnn,
+                                end: nowAnn + 12.0
+                            };
                         }
                         continue;
                     }
@@ -2583,9 +2594,11 @@
                     inter_block_seconds: b.inter_block_seconds
                 });
 
-                // Show block arrival announcement (live blocks only)
-                if (!isReplay && b.height) {
-                    var feeBtc = (b.total_fees || 0) / 100000000;
+                // Show block arrival announcement (live blocks with real data only)
+                // Skip estimated blocks (total_fees=0) — announcement shows when
+                // real data arrives via the dedup replacement path above.
+                if (!isReplay && b.height && b.total_fees > 0) {
+                    var feeBtc = b.total_fees / 100000000;
                     var heightStr = b.height.toLocaleString();
                     var nowAnn = Date.now() / 1000;
                     _hb._announcement = {
