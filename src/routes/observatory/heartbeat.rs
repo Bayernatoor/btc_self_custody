@@ -402,7 +402,10 @@ pub fn HeartbeatPage() -> impl IntoView {
             // Fetch real block data to replace estimated spike
             #[cfg(feature = "hydrate")]
             {
-                let from = prev + 1;
+                // Fetch from prev (not prev+1) so blocks_to_json has the
+                // prior block for inter_block_seconds calculation. The prior
+                // block gets deduped by pushHeartbeatBlocks on the JS side.
+                let from = prev;
                 let to = current_height;
                 let is_backlog = gap > 1;
                 fn try_fetch(
