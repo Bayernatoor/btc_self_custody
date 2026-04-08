@@ -95,7 +95,7 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 <script defer src="/js/sections.js"></script>
 
                 // Block Heartbeat EKG animation
-                <script defer src="/js/heartbeat.js"></script>
+                <script type="module" src="/js/heartbeat.js"></script>
 
                 // Service Worker registration (PWA) with update detection
                 <script>"
