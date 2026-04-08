@@ -40,27 +40,10 @@ extern "C" {
     #[wasm_bindgen(js_name = getHeartbeatRecentBlocks)]
     fn get_heartbeat_recent_blocks() -> String;
 
-    // Phase 4: Polish
-    #[wasm_bindgen(js_name = heartbeatPulse)]
-    fn heartbeat_pulse();
-
-    #[wasm_bindgen(js_name = heartbeatFlash)]
-    fn heartbeat_flash();
-
     #[wasm_bindgen(js_name = getOrganismStatus)]
     fn get_organism_status() -> String;
 
-    // Phase 5: Sound
-    #[wasm_bindgen(js_name = heartbeatSoundToggle)]
-    fn heartbeat_sound_toggle(enable: bool) -> bool;
-
-    #[wasm_bindgen(js_name = heartbeatSoundIsEnabled)]
-    fn heartbeat_sound_is_enabled() -> bool;
-
-    #[wasm_bindgen(js_name = heartbeatPlaySound)]
-    fn heartbeat_play_sound();
-
-    // Phase 5: Capture
+    // Capture
     #[wasm_bindgen(js_name = heartbeatDownloadCapture)]
     fn heartbeat_download_capture(vitals_json: &str);
 
@@ -88,24 +71,9 @@ fn get_heartbeat_recent_blocks() -> String {
     "[]".to_string()
 }
 #[cfg(not(feature = "hydrate"))]
-fn heartbeat_pulse() {}
-#[cfg(not(feature = "hydrate"))]
-fn heartbeat_flash() {}
-#[cfg(not(feature = "hydrate"))]
 fn get_organism_status() -> String {
     "{}".to_string()
 }
-#[cfg(not(feature = "hydrate"))]
-fn heartbeat_sound_toggle(_: bool) -> bool {
-    false
-}
-#[cfg(not(feature = "hydrate"))]
-#[allow(dead_code)]
-fn heartbeat_sound_is_enabled() -> bool {
-    false
-}
-#[cfg(not(feature = "hydrate"))]
-fn heartbeat_play_sound() {}
 #[cfg(not(feature = "hydrate"))]
 fn heartbeat_download_capture(_: &str) {}
 #[cfg(not(feature = "hydrate"))]
@@ -154,10 +122,6 @@ pub fn HeartbeatPage() -> impl IntoView {
     let (org_condition, set_org_condition) = signal("Initializing".to_string());
     let (org_desc, set_org_desc) = signal("Waiting for data...".to_string());
     let (org_color, set_org_color) = signal("#00e676".to_string());
-
-    // Sound toggle state
-    let (sound_on, set_sound_on) = signal(false);
-
 
     // Period start timestamp (first block in current retarget period)
     let (period_start_ts, set_period_start_ts) = signal(0u64);
@@ -352,14 +316,14 @@ pub fn HeartbeatPage() -> impl IntoView {
         }
     };
 
-    // Watch for new blocks via LiveStats polling
-    let last_height2 = last_height.clone();
-    let initialized2 = initialized.clone();
+    // Forward live metrics to JS for color + vital signs computation.
+    // Block detection is handled entirely by SSE (heartbeat.js connects
+    // to /api/stats/heartbeat which streams real block data from ZMQ).
+    // LiveStats only updates the vital signs panel and network stress color.
     Effect::new(move || {
         let Some(live) = cached_live.get() else {
             return;
         };
-        let current_height = live.blockchain.blocks;
 
         // Skip when RPC calls failed (server returns zeroed defaults).
         // Retaining the previous JS state keeps vital signs + bottom bar
@@ -386,82 +350,6 @@ pub fn HeartbeatPage() -> impl IntoView {
 
         // Refresh vitals display
         refresh_vitals();
-
-        // Check for new blocks (only after init completes)
-        if !initialized2.get() {
-            return;
-        }
-        let prev = last_height2.get();
-        if prev > 0 && current_height > prev {
-            let gap = current_height - prev;
-            last_height2.set(current_height);
-
-            // Only animate effects for single block arrivals (not backlog)
-            if gap == 1 {
-                heartbeat_flash();
-                heartbeat_pulse();
-                if sound_on.get_untracked() {
-                    heartbeat_play_sound();
-                }
-
-                // Push an immediate estimated block so the spike appears
-                // right away. If SSE delivered the block already, the dedup
-                // in pushHeartbeatBlocks skips it. If SSE missed the event
-                // (connection drop), this ensures the spike shows without
-                // waiting for the fetch_blocks retry chain.
-                let est_json = format!(
-                    r#"[{{"height":{},"timestamp":{},"tx_count":3000,"total_fees":0,"size":0,"weight":3000000,"inter_block_seconds":600}}]"#,
-                    current_height,
-                    live.blockchain.time,
-                );
-                push_heartbeat_blocks(&est_json, false);
-            }
-
-            // Fetch real block data to replace estimated spike
-            #[cfg(feature = "hydrate")]
-            {
-                // Fetch from prev (not prev+1) so blocks_to_json has the
-                // prior block for inter_block_seconds calculation. The prior
-                // block gets deduped by pushHeartbeatBlocks on the JS side.
-                let from = prev;
-                let to = current_height;
-                let is_backlog = gap > 1;
-                fn try_fetch(
-                    from: u64,
-                    to: u64,
-                    replay: bool,
-                    delays: &'static [u64],
-                ) {
-                    leptos::task::spawn_local(async move {
-                        let blocks =
-                            crate::stats::server_fns::fetch_blocks(from, to)
-                                .await
-                                .unwrap_or_default();
-                        // Check that the target block is actually in the
-                        // results. fetch_blocks(prev, current) may return
-                        // the prev block before the new one is in the DB.
-                        let has_target = blocks.iter().any(|b| b.height == to);
-                        if has_target {
-                            let json = blocks_to_json(&blocks);
-                            push_heartbeat_blocks(&json, replay);
-                            let recent = get_heartbeat_recent_blocks();
-                            render_rhythm_strip("rhythm-strip-canvas", &recent);
-                        } else if !delays.is_empty() {
-                            let delay = delays[0];
-                            let rest = &delays[1..];
-                            leptos::prelude::set_timeout(
-                                move || {
-                                    try_fetch(from, to, replay, rest);
-                                },
-                                std::time::Duration::from_secs(delay),
-                            );
-                        }
-                    });
-                }
-                // Try now, then retry at shorter intervals
-                try_fetch(from, to, is_backlog, &[2, 5, 10, 20, 30]);
-            }
-        }
     });
 
     // Cleanup animation on navigate away

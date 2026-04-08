@@ -350,7 +350,7 @@
     }
 
     // Place SSE history txs on the live flatline
-    function placeHistoryTxs(txs, lastBlockTs) {
+    function placeHistoryTxs(txs, lastBlockTs, instant) {
         if (!_hb) return;
         var liveSeg = _hb.timeline[_hb.timeline.length - 1];
         if (!liveSeg || liveSeg.type !== 'flatline' || liveSeg.x_end !== null) return;
@@ -408,9 +408,9 @@
             ', elapsed=' + Math.round(elapsedSinceBlock) + 's');
 
         // Stagger history bricks so they animate in from left to right over ~1.5s.
-        // Each brick's timestamp is set to now + a delay based on its x position.
+        // On reconnect (instant=true), place bricks immediately with no animation.
         var dropNow = Date.now() / 1000;
-        var DROP_DURATION = 1.5; // total sweep time in seconds
+        var DROP_DURATION = instant ? 0 : 1.5;
 
         for (var i = 0; i < txs.length && placed < maxBricks; i++) {
             var tx = txs[i];
@@ -433,7 +433,7 @@
 
             // Stagger: left-most bricks appear first, sweeping right
             var xFrac = flatlineSpan > 0 ? (txVX - liveSeg.x_start) / flatlineSpan : 0;
-            var dropDelay = xFrac * DROP_DURATION;
+            var dropDelay = instant ? 0 : xFrac * DROP_DURATION;
 
             liveSeg.blips.push({
                 x: txVX, gridX: gridX,
@@ -442,7 +442,7 @@
                 txCount: 1, txid: tx.txid || null,
                 feeRate: Math.round(feeRate * 10) / 10,
                 vsize: tx.vsize || 0, value: tx.value || 0,
-                timestamp: dropNow + dropDelay, isDrop: true, fadeStart: 0,
+                timestamp: dropNow + dropDelay, isDrop: !instant, fadeStart: 0,
                 bobPhase: Math.random() * Math.PI * 2,
                 bobSpeed: 1.2 + feeNorm * 0.8,
                 lane: Math.floor(Math.random() * 5) - 2,
@@ -483,11 +483,19 @@
                 ', no blips on flatline, virtualX=' + Math.round(_hb.virtualX));
         }
 
-        // Build block data — SSE now includes real block stats from RPC + mempool fees
+        // Build block data — SSE includes real block stats from RPC + mempool fees.
+        // Compute inter-block time from the timeline's last block segment (authoritative)
+        // rather than the mutable lastBlockTime which can be overwritten by LiveStats.
         var blockTs = block.timestamp || Math.floor(Date.now() / 1000);
         var inter = 600;
-        if (_hb.lastBlockTime > 0 && blockTs > _hb.lastBlockTime) {
-            inter = blockTs - _hb.lastBlockTime;
+        for (var pi = _hb.timeline.length - 1; pi >= 0; pi--) {
+            if (_hb.timeline[pi].type === 'block') {
+                var prevTs = _hb.timeline[pi].timestamp;
+                if (prevTs > 0 && blockTs >= prevTs) {
+                    inter = Math.max(1, blockTs - prevTs);
+                }
+                break;
+            }
         }
         var blockJson = JSON.stringify([{
             height: block.height,
@@ -501,6 +509,12 @@
         window.pushHeartbeatBlocks(blockJson, false);
         if (window.heartbeatFlash) window.heartbeatFlash();
         if (window.heartbeatPulse) window.heartbeatPulse();
+        if (window.heartbeatPlaySound) window.heartbeatPlaySound();
+
+        // Update rhythm strip with the new block
+        if (window.renderRhythmStrip && window.getHeartbeatRecentBlocks) {
+            window.renderRhythmStrip('rhythm-strip-canvas', window.getHeartbeatRecentBlocks());
+        }
 
         // Resume tx flow — new txs will now flush to the new post-block flatline
         _hb._blockProcessing = false;
@@ -549,7 +563,10 @@
                         curSeg._colHeights = {};
                     }
 
-                    placeHistoryTxs(txs, lastBlockTs);
+                    // First history = stagger animation, reconnects = instant
+                    var isReconnect = _hb._hasReceivedHistory || false;
+                    placeHistoryTxs(txs, lastBlockTs, isReconnect);
+                    _hb._hasReceivedHistory = true;
                 } catch (err) { console.log('[heartbeat] SSE history error:', err); }
             });
             es.addEventListener('tx', function(e) {
@@ -616,11 +633,17 @@
             es.onopen = function() {
                 console.log('[heartbeat] SSE connected');
                 _hb.wsConnected = true;
+                _hb._sseDisconnected = false;
+                _hb._sseDisconnectedSince = 0;
                 _hb._sseRetries = 0; // reset retry count on successful connect
             };
             es.onerror = function(err) {
                 if (!_hb) return;
                 _hb.wsConnected = false;
+                if (!_hb._sseDisconnected) {
+                    _hb._sseDisconnected = true;
+                    _hb._sseDisconnectedSince = Date.now() / 1000;
+                }
                 es.close();
                 _hb._sseRetries = (_hb._sseRetries || 0) + 1;
                 if (_hb._sseRetries <= 3) {
@@ -668,6 +691,7 @@
             ws.onopen = function() {
                 ws.send(JSON.stringify({ action: 'want', data: ['mempool-blocks', 'stats'] }));
                 _hb.wsConnected = true;
+                _hb._sseDisconnected = false; // WS fallback provides data, clear overlay
                 _hb._wsRetryDelay = 5000;
                 _hb._txThrottleTime = 0;
                 _hb._txBatchQueue = [];
@@ -1076,6 +1100,7 @@
     }
 
     function formatDuration(sec) {
+        if (sec <= 1) return '< 1s';
         if (sec < 60) return sec + 's';
         var m = Math.floor(sec / 60);
         var s = sec % 60;
@@ -1474,7 +1499,73 @@
             }
         }
 
+        // SSE disconnection overlay — semi-transparent with mining animation
+        if (_hb._sseDisconnected) {
+            drawDisconnectedOverlay(ctx, w, h, nowSec);
+        }
+
         _hb.rafId = requestAnimationFrame(drawFrame);
+    }
+
+    // Draw disconnection overlay with animated mining indicator
+    function drawDisconnectedOverlay(ctx, w, h, nowSec) {
+        // Semi-transparent dark overlay
+        ctx.fillStyle = 'rgba(13, 33, 55, 0.55)';
+        ctx.fillRect(0, 0, w, h);
+
+        var cx = w / 2;
+        var cy = h / 2 - 20;
+        var elapsed = _hb._sseDisconnectedSince > 0 ? nowSec - _hb._sseDisconnectedSince : 0;
+
+        // Animated pulsing block icon
+        var pulse = 0.7 + Math.sin(nowSec * 3) * 0.3;
+        var blockSize = 24;
+        var bx = cx - blockSize / 2;
+        var by = cy - blockSize / 2 - 10;
+
+        // Draw a simple block shape (cube-like)
+        ctx.globalAlpha = pulse;
+        ctx.fillStyle = '#f7931a';
+        ctx.fillRect(bx, by, blockSize, blockSize);
+        // Top face
+        ctx.fillStyle = '#ffb74d';
+        ctx.beginPath();
+        ctx.moveTo(bx, by);
+        ctx.lineTo(bx + 8, by - 8);
+        ctx.lineTo(bx + blockSize + 8, by - 8);
+        ctx.lineTo(bx + blockSize, by);
+        ctx.closePath();
+        ctx.fill();
+        // Right face
+        ctx.fillStyle = '#e65100';
+        ctx.beginPath();
+        ctx.moveTo(bx + blockSize, by);
+        ctx.lineTo(bx + blockSize + 8, by - 8);
+        ctx.lineTo(bx + blockSize + 8, by + blockSize - 8);
+        ctx.lineTo(bx + blockSize, by + blockSize);
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalAlpha = 1;
+
+        // Animated dots: "Mining..."
+        var dots = '.'.repeat(Math.floor(nowSec * 2) % 4);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+        ctx.font = '14px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('Mining' + dots, cx, cy + 30);
+
+        // Elapsed time
+        if (elapsed > 3) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.font = '11px monospace';
+            var elapsedStr = elapsed < 60 ? Math.round(elapsed) + 's' :
+                Math.floor(elapsed / 60) + 'm ' + Math.round(elapsed % 60) + 's';
+            ctx.fillText('Reconnecting (' + elapsedStr + ')', cx, cy + 52);
+        }
+
+        ctx.textAlign = 'start';
+        ctx.textBaseline = 'alphabetic';
     }
 
     // Draw a single block waveform segment
@@ -2499,6 +2590,10 @@
             ws: null,
             wsConnected: false,
 
+            // SSE disconnection state (for overlay)
+            _sseDisconnected: false,
+            _sseDisconnectedSince: 0,
+
             // Recent blocks (kept for vital signs / rhythm strip)
             recentBlocks: []
         };
@@ -2874,15 +2969,18 @@
             var prevTs = _hb.lastBlockTime || (now - 600);
             for (var qi = 0; qi < queued.length; qi++) {
                 var qb = queued[qi];
-                var blockTs = _hb.lastBlockTime > 0 ? prevTs + 600 : now;
+                // Use real block timestamps from SSE events (not hardcoded +600s).
+                // Clamp inter-block to min 1s to handle median-time-past rule.
+                var blockTs = qb.timestamp || Math.floor(now);
+                var inter = (prevTs > 0 && blockTs > prevTs) ? Math.max(1, blockTs - prevTs) : 600;
                 replayBlocks.push({
                     height: qb.height,
                     timestamp: blockTs,
-                    tx_count: qb.confirmed_count || 3000,
+                    tx_count: qb.tx_count || qb.confirmed_count || 3000,
                     total_fees: qb.total_fees || 0,
                     size: qb.size || 0,
                     weight: qb.weight || 3000000,
-                    inter_block_seconds: 600
+                    inter_block_seconds: inter
                 });
                 prevTs = blockTs;
             }
