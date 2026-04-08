@@ -6,6 +6,8 @@ use leptos_meta::*;
 pub fn AboutPage() -> impl IntoView {
     view! {
         <Title text="About | WE HODL BTC"/>
+        <Meta name="description" content="WE HODL BTC is an open-source Bitcoin education project. Free self-custody guides, live blockchain analytics, and network monitoring powered by a full Bitcoin Core node."/>
+        <Link rel="canonical" href="https://www.wehodlbtc.com/about"/>
         <div class="max-w-5xl mx-auto mt-10 mb-24 px-6 opacity-0 animate-fadeinone lg:max-w-6xl lg:px-8 md:my-20">
 
             // Header

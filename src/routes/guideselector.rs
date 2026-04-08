@@ -151,7 +151,9 @@ pub fn guide_selector_view(
     });
 
     view! {
-        <Title text="Choose Your Guide | WE HODL BTC"/>
+        <Title text="Choose Your Bitcoin Self-Custody Guide | WE HODL BTC"/>
+        <Meta name="description" content="Choose your Bitcoin self-custody guide: Basic (mobile wallets), Intermediate (hardware wallet + own node), or Advanced (2-of-3 multisig with geographic separation)."/>
+        <Link rel="canonical" href="https://www.wehodlbtc.com/guides"/>
         <div class="flex flex-col items-center justify-center min-h-[70vh] px-6 opacity-0 animate-fadeinone">
             <StepIndicator step=step total_steps=total_steps/>
 

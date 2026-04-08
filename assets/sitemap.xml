@@ -46,6 +46,21 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://www.wehodlbtc.com/observatory/stats</loc>
+    <changefreq>hourly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.wehodlbtc.com/observatory/heartbeat</loc>
+    <changefreq>hourly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://www.wehodlbtc.com/observatory/on-this-day</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://www.wehodlbtc.com/blog</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>

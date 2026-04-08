@@ -212,7 +212,7 @@ pub fn create_dashboard_resource(
                 if let (Some(from_str), Some(to_str)) = (cf, ct) {
                     let from_ts = date_to_ts(&from_str).unwrap_or(0);
                     let to_ts = date_to_ts(&to_str)
-                        .map(|t| t + 86_399) // end of day
+                        .map(|t| t + 86_400) // include entire end day (midnight next day)
                         .unwrap_or(stats.latest_timestamp);
                     let approx_blocks = to_ts.saturating_sub(from_ts) / 600;
                     if approx_blocks > 5_000 {
@@ -699,6 +699,10 @@ macro_rules! chart_memo {
                 .unwrap_or_default();
             if !result.is_empty() {
                 if let Ok(mut c) = cache.lock() {
+                    // Evict oldest entries when cache grows too large (>200 entries)
+                    if c.len() > 200 {
+                        c.clear();
+                    }
                     c.insert(full_key, result.clone());
                 }
             }
@@ -741,12 +745,22 @@ pub fn RangeSelector() -> impl IntoView {
     let apply_custom = move |_| {
         let f = local_from.get();
         let t = local_to.get();
-        if !f.is_empty() && !t.is_empty() {
-            set_custom_from.set(Some(f));
-            set_custom_to.set(Some(t));
-            set_range.set("custom".to_string());
-            set_picker_open.set(false);
+        if f.is_empty() || t.is_empty() {
+            return;
         }
+        // Validate: from <= to, not before genesis, not in the future
+        if f.as_str() > t.as_str() {
+            return;
+        }
+        if f.as_str() < "2009-01-03" {
+            return;
+        }
+        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        let to_clamped = if t.as_str() > today.as_str() { today } else { t };
+        set_custom_from.set(Some(f));
+        set_custom_to.set(Some(to_clamped));
+        set_range.set("custom".to_string());
+        set_picker_open.set(false);
     };
 
     let select_preset = move |r: String| {
