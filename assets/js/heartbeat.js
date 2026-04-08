@@ -509,6 +509,11 @@
     // ── Own node SSE feed (primary) ─────────────────────────────
     function connectOwnFeed() {
         if (!_hb) return;
+        // Close any existing SSE connection to prevent leaking EventSources
+        if (_hb._sse) {
+            try { _hb._sse.close(); } catch(e) {}
+            _hb._sse = null;
+        }
         console.log('[heartbeat] connecting to SSE /api/stats/heartbeat');
         _hb._txThrottleTime = 0;
         _hb._txBatchQueue = [];
@@ -2195,11 +2200,12 @@
                 _hb.viewOffset = _hb.dragStartOffset - dx / _hb.zoom;
                 _hb.viewOffsetY = (_hb.dragStartOffsetY || 0) + dy;
                 _hb.autoFollow = false;
-                // Track velocity for momentum
+                // Track velocity for momentum (clamped to prevent flyaway on tiny dt)
                 var now = Date.now();
                 var dt = now - (_hb._lastDragTime || now);
                 if (dt > 0) {
-                    _hb._dragVelocity = (e.clientX - (_hb._lastDragX || e.clientX)) / dt;
+                    var rawVel = (e.clientX - (_hb._lastDragX || e.clientX)) / dt;
+                    _hb._dragVelocity = Math.max(-500, Math.min(500, rawVel));
                 }
                 _hb._lastDragX = e.clientX;
                 _hb._lastDragTime = now;
@@ -2350,11 +2356,12 @@
                 var dx = e.touches[0].clientX - _hb.dragStartX;
                 _hb.viewOffset = _hb.dragStartOffset - dx / _hb.zoom;
                 _hb.autoFollow = false;
-                // Track velocity
+                // Track velocity (clamped to prevent flyaway on tiny dt)
                 var now = Date.now();
                 var dt = now - (_hb._lastDragTime || now);
                 if (dt > 0) {
-                    _hb._dragVelocity = (e.touches[0].clientX - (_hb._lastDragX || e.touches[0].clientX)) / dt;
+                    var rawVel = (e.touches[0].clientX - (_hb._lastDragX || e.touches[0].clientX)) / dt;
+                    _hb._dragVelocity = Math.max(-500, Math.min(500, rawVel));
                 }
                 _hb._lastDragX = e.touches[0].clientX;
                 _hb._lastDragTime = now;

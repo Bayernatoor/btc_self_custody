@@ -449,33 +449,26 @@ pub async fn get_heartbeat_sse(
 ) {
     let rx = state.heartbeat_tx.subscribe();
 
-    // Load recent unconfirmed txs + last block timestamp from DB
+    // Load recent unconfirmed txs + last block timestamp from DB (single connection)
     let (history, last_block_ts) = {
         let two_hours_ago = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs()
             .saturating_sub(7200);
-        let txs = state
-            .db
-            .get()
-            .ok()
-            .and_then(|conn| {
-                db::query_recent_mempool_txs(&conn, two_hours_ago, 10000).ok()
-            })
-            .unwrap_or_default();
-        // Get the latest block timestamp for positioning history txs on the flatline
-        let block_ts = state
-            .db
-            .get()
-            .ok()
-            .and_then(|conn| {
-                db::max_height(&conn).ok().flatten().and_then(|h| {
-                    db::query_block_timestamp(&conn, h).ok().flatten()
-                })
-            })
-            .unwrap_or(0);
-        (txs, block_ts)
+        match state.db.get() {
+            Ok(conn) => {
+                let txs = db::query_recent_mempool_txs(&conn, two_hours_ago, 10000)
+                    .unwrap_or_default();
+                let block_ts = db::max_height(&conn)
+                    .ok()
+                    .flatten()
+                    .and_then(|h| db::query_block_timestamp(&conn, h).ok().flatten())
+                    .unwrap_or(0);
+                (txs, block_ts)
+            }
+            Err(_) => (vec![], 0),
+        }
     };
 
     // State machine: first emit history, then stream live events

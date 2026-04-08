@@ -258,8 +258,8 @@ pub fn HeartbeatPage() -> impl IntoView {
             if let Some(live) = cached_live.get_untracked() {
                 let current_ts = live.blockchain.time;
                 let blocks_in = live.blockchain.blocks % RETARGET_PERIOD;
-                if period_ts > 0 && current_ts > period_ts && blocks_in > 1 {
-                    let span = (current_ts - period_ts) as f64;
+                let span = current_ts.saturating_sub(period_ts) as f64;
+                if period_ts > 0 && span > 0.0 && blocks_in > 1 {
                     let avg_secs = span / blocks_in as f64;
                     let avg_u = avg_secs.round() as u64;
                     set_hr_display.set(format!(
