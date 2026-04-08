@@ -282,17 +282,38 @@ async fn subscribe_blocks(
         let db = state.db.clone();
         let txids = block_info.txids.clone();
         let height = block_info.height;
-        let (confirmed_count, total_fees) =
-            tokio::task::spawn_blocking(move || {
-                if let Ok(conn) = db.get() {
-                    db::confirm_mempool_txs(&conn, &txids, height, now)
-                        .unwrap_or((0, 0))
-                } else {
-                    (0, 0)
+        let txid_count = txids.len();
+        let (confirmed_count, total_fees) = match tokio::task::spawn_blocking(
+            move || {
+                match db.get() {
+                    Ok(conn) => db::confirm_mempool_txs(&conn, &txids, height, now),
+                    Err(e) => {
+                        tracing::error!(
+                            "ZMQ: failed to get DB connection for block {height} confirmation: {e}"
+                        );
+                        Ok((0, 0))
+                    }
                 }
-            })
-            .await
-            .unwrap_or((0, 0));
+            },
+        )
+        .await
+        {
+            Ok(Ok(result)) => result,
+            Ok(Err(e)) => {
+                tracing::error!(
+                    "ZMQ: DB error confirming {txid_count} txs for block {}: {e}",
+                    block_info.height,
+                );
+                (0, 0)
+            }
+            Err(e) => {
+                tracing::error!(
+                    "ZMQ: spawn_blocking panicked for block {}: {e}",
+                    block_info.height,
+                );
+                (0, 0)
+            }
+        };
 
         tracing::info!(
             "ZMQ: block {} ({block_hash}) — {confirmed_count}/{} txs confirmed, {:.4} BTC fees from mempool",
@@ -313,10 +334,13 @@ async fn subscribe_blocks(
             confirmed_count,
         });
 
-        // Clear the txid filter — tx subscriber now processes everything
-        if let Ok(mut set) = block_txids.lock() {
-            set.clear();
-        }
+        // Don't clear the txid filter here. ZMQ continues re-broadcasting
+        // block txs after we finish processing. If we clear now, those stale
+        // txs pass the filter, fail getmempoolentry, and the consecutive_fail
+        // throttle can drop a genuine new mempool tx. The set is replaced
+        // (clear + repopulate) when the next block arrives at line 268 above.
+        // Between blocks the set harmlessly contains the previous block's
+        // txids — no new mempool tx can collide (txids are unique).
     }
 }
 
