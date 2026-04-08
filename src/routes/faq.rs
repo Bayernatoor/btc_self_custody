@@ -6,7 +6,9 @@ use leptos_meta::*;
 #[component]
 pub fn FaqPage() -> impl IntoView {
     view! {
-        <Title text="Help Desk | WE HODL BTC"/>
+        <Title text="Bitcoin FAQ & Help Desk | WE HODL BTC"/>
+        <Meta name="description" content="Frequently asked questions about Bitcoin, self-custody, wallets, mining, transaction fees, private keys, and The Bitcoin Observatory blockchain analytics."/>
+        <Link rel="canonical" href="https://www.wehodlbtc.com/faq"/>
 
         <div class="max-w-5xl mx-auto px-6 mt-10 mb-24 opacity-0 animate-fadeinone lg:max-w-6xl lg:px-8 md:my-20">
 

@@ -23,11 +23,14 @@
 {"@type":"ListItem","position":1,"name":"Home","item":"https://www.wehodlbtc.com/"},
 {"@type":"ListItem","position":2,"name":"Observatory","item":"https://www.wehodlbtc.com/observatory"},
 {"@type":"ListItem","position":3,"name":"Network Charts","item":"https://www.wehodlbtc.com/observatory/charts/network"},
-{"@type":"ListItem","position":3,"name":"Fee Charts","item":"https://www.wehodlbtc.com/observatory/charts/fees"},
-{"@type":"ListItem","position":3,"name":"Mining Charts","item":"https://www.wehodlbtc.com/observatory/charts/mining"},
-{"@type":"ListItem","position":3,"name":"Embedded Data","item":"https://www.wehodlbtc.com/observatory/charts/embedded"},
-{"@type":"ListItem","position":3,"name":"BIP Signaling","item":"https://www.wehodlbtc.com/observatory/signaling"},
-{"@type":"ListItem","position":3,"name":"Protocol Guide","item":"https://www.wehodlbtc.com/observatory/learn/protocols"}
+{"@type":"ListItem","position":4,"name":"Fee Charts","item":"https://www.wehodlbtc.com/observatory/charts/fees"},
+{"@type":"ListItem","position":5,"name":"Mining Charts","item":"https://www.wehodlbtc.com/observatory/charts/mining"},
+{"@type":"ListItem","position":6,"name":"Embedded Data","item":"https://www.wehodlbtc.com/observatory/charts/embedded"},
+{"@type":"ListItem","position":7,"name":"BIP Signaling","item":"https://www.wehodlbtc.com/observatory/signaling"},
+{"@type":"ListItem","position":8,"name":"Protocol Guide","item":"https://www.wehodlbtc.com/observatory/learn/protocols"},
+{"@type":"ListItem","position":9,"name":"Block Heartbeat","item":"https://www.wehodlbtc.com/observatory/heartbeat"},
+{"@type":"ListItem","position":10,"name":"Stats Summary","item":"https://www.wehodlbtc.com/observatory/stats"},
+{"@type":"ListItem","position":11,"name":"On This Day","item":"https://www.wehodlbtc.com/observatory/on-this-day"}
 ]},
 {"@type":"FAQPage","url":"https://www.wehodlbtc.com/faq","mainEntity":[
 {"@type":"Question","name":"What is Bitcoin?","acceptedAnswer":{"@type":"Answer","text":"Bitcoin is money for the digital age — controlled by no one, accessible to everyone. It's a decentralized store of value and payment network secured by cryptography and proof-of-work mining."}},
