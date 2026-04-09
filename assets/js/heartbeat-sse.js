@@ -66,14 +66,24 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
     var dropNow = Date.now() / 1000;
     var DROP_DURATION = instant ? 0 : 1.5;
 
+    // Compute time range for temporal positioning.
+    // Txs are ordered by first_seen ASC from the server. Map first_seen
+    // to x position proportionally across the flatline — older txs on the
+    // left, newer on the right. This creates a natural build-up pattern
+    // that matches what live viewing looks like.
+    var minTs = txs.length > 0 && txs[0].first_seen ? txs[0].first_seen : 0;
+    var maxTs = txs.length > 0 && txs[txs.length - 1].first_seen ? txs[txs.length - 1].first_seen : 0;
+    var tsSpan = maxTs > minTs ? maxTs - minTs : 1;
+
     for (var i = 0; i < txs.length && placed < maxBricks; i++) {
         var tx = txs[i];
         if (!tx.fee || !tx.vsize) continue;
 
-        // Spread history txs across the flatline, leaving the last 20px
-        // clear for live txs (they place at virtualX - 0..15). Without this
-        // margin, history and live bricks share grid columns and stack.
-        var txVX = liveSeg.x_start + Math.random() * Math.max(10, flatlineSpan - 20);
+        // Position based on arrival time: oldest on left, newest near head.
+        // Leave last 20px clear for live txs arriving at the head.
+        var tFrac = tx.first_seen ? (tx.first_seen - minTs) / tsSpan : Math.random();
+        var usableSpan = Math.max(10, flatlineSpan - 20);
+        var txVX = liveSeg.x_start + tFrac * usableSpan;
 
         var feeRate = tx.fee / tx.vsize;
         var feeNorm = Math.min(Math.log2(feeRate + 1) / 6, 1.0);
@@ -210,13 +220,15 @@ export function connectOwnFeed() {
                     return;
                 }
 
-                // Clear old blips from the current flatline before placing
-                // history. On SSE reconnect the old blips are stale and
-                // would double up with the fresh history dump.
+                // Only place history on an empty flatline (fresh start or SSE error
+                // reconnect). If the flatline already has live bricks, skip —
+                // we don't want to overwrite the real live layout with random
+                // history placement.
                 var curSeg = _hb.timeline[_hb.timeline.length - 1];
-                if (curSeg && curSeg.type === 'flatline' && curSeg.x_end === null) {
-                    curSeg.blips = [];
-                    curSeg._colHeights = {};
+                if (curSeg && curSeg.type === 'flatline' && curSeg.x_end === null
+                    && curSeg.blips && curSeg.blips.length > 0) {
+                    console.log('[heartbeat] SSE history: skipping — flatline already has', curSeg.blips.length, 'bricks');
+                    return;
                 }
 
                 // First history = stagger animation, reconnects = instant

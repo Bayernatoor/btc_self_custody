@@ -419,7 +419,9 @@ function _hbBeforeUnload() {
 }
 window.addEventListener('beforeunload', _hbBeforeUnload);
 
-// When tab regains focus, replay queued blocks and reconnect SSE
+// When tab regains focus, preserve existing timeline and resume live flow.
+// Don't reconnect SSE or clear blips — the live bricks stay where they were,
+// virtualX catches up, queued blocks replay in place, and new txs resume at head.
 function _hbVisibilityChange() {
     var _hb = getState();
     if (!_hb) return;
@@ -440,23 +442,33 @@ function _hbVisibilityChange() {
         _hb._hiddenSince = 0;
     }
 
-    // Discard buffered txs
+    // Discard buffered txs (stale, arrived while hidden with unreliable timing)
     _hb._hiddenTxBuffer = [];
     _hb._txBatchQueue = [];
 
-    // Replay any blocks that arrived while hidden
+    // Replay any blocks that arrived while hidden as LIVE blocks (not compressed
+    // replay). This places them at the correct virtualX positions with proper
+    // inter-block flatlines sized by real timestamps.
     var queued = _hb._blockQueue || [];
     _hb._blockQueue = [];
 
     if (queued.length > 0) {
         console.log('[heartbeat] replaying', queued.length, 'queued blocks from background');
-        var replayBlocks = [];
-        var prevTs = _hb.lastBlockTime || (now - 600);
         for (var qi = 0; qi < queued.length; qi++) {
             var qb = queued[qi];
             var blockTs = qb.timestamp || Math.floor(now);
-            var inter = (prevTs > 0 && blockTs > prevTs) ? Math.max(1, blockTs - prevTs) : 600;
-            replayBlocks.push({
+            // Compute inter-block from timeline's last block (same as processLiveBlock)
+            var inter = 600;
+            for (var pi = _hb.timeline.length - 1; pi >= 0; pi--) {
+                if (_hb.timeline[pi].type === 'block') {
+                    var prevTs = _hb.timeline[pi].timestamp;
+                    if (prevTs > 0 && blockTs >= prevTs) {
+                        inter = Math.max(1, blockTs - prevTs);
+                    }
+                    break;
+                }
+            }
+            var blockJson = JSON.stringify([{
                 height: qb.height,
                 timestamp: blockTs,
                 tx_count: qb.tx_count || qb.confirmed_count || 3000,
@@ -464,27 +476,12 @@ function _hbVisibilityChange() {
                 size: qb.size || 0,
                 weight: qb.weight || 3000000,
                 inter_block_seconds: inter
-            });
-            prevTs = blockTs;
+            }]);
+            window.pushHeartbeatBlocks(blockJson, false);
         }
-        window.pushHeartbeatBlocks(JSON.stringify(replayBlocks), true);
     }
 
-    // Clear old blips — SSE reconnect will place fresh history
-    var liveSeg = _hb.timeline[_hb.timeline.length - 1];
-    if (liveSeg && liveSeg.type === 'flatline' && liveSeg.x_end === null) {
-        liveSeg.blips = [];
-        liveSeg._colHeights = {};
-    }
-
-    // Reconnect SSE for fresh history dump
-    if (_hb._sse) {
-        _hb._sse.close();
-        _hb._sse = null;
-    }
-    _hb._sseRetries = 0;
-    connectOwnFeed();
-
+    // Sync frame timing so the draw loop doesn't try to catch up
     _hb.lastFrameTime = now;
 }
 document.addEventListener('visibilitychange', _hbVisibilityChange);
