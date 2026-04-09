@@ -449,11 +449,17 @@ pub async fn get_heartbeat_sse(
 ) {
     let rx = state.heartbeat_tx.subscribe();
 
-    // Load unconfirmed txs since the last block + block timestamp from DB.
-    // Only txs with first_seen >= block timestamp belong on the current
-    // flatline. Subtract 30s to handle miner timestamp skew (median-time-past
-    // rule means block timestamps can lag wall clock time).
+    // Load unconfirmed txs for the current flatline. The mempool_txs table
+    // is sparsely populated after restarts (ZMQ only records NEW txs), so
+    // many unconfirmed txs have no first_seen entry. Use a generous 2-hour
+    // window to catch as many as possible. The query filters confirmed_height
+    // IS NULL so only genuinely unconfirmed txs are returned.
     let (history, last_block_ts) = {
+        let two_hours_ago = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs()
+            .saturating_sub(7200);
         match state.db.get() {
             Ok(conn) => {
                 let block_ts = db::max_height(&conn)
@@ -461,8 +467,7 @@ pub async fn get_heartbeat_sse(
                     .flatten()
                     .and_then(|h| db::query_block_timestamp(&conn, h).ok().flatten())
                     .unwrap_or(0);
-                let since = block_ts.saturating_sub(30);
-                let txs = db::query_recent_mempool_txs(&conn, since, 10000)
+                let txs = db::query_recent_mempool_txs(&conn, two_hours_ago, 10000)
                     .unwrap_or_default();
                 (txs, block_ts)
             }
