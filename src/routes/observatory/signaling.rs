@@ -51,7 +51,7 @@ pub fn SignalingPage() -> impl IntoView {
         <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/signaling"/>
 
         // Slim hero banner
-        <div class="relative rounded-2xl overflow-hidden mb-5">
+        <div class="relative rounded-2xl overflow-hidden mb-6">
             <img
                 src="/img/observatory_hero.png"
                 alt="BIP Signaling Tracker"
@@ -69,8 +69,9 @@ pub fn SignalingPage() -> impl IntoView {
             "Track miner readiness for proposed Bitcoin protocol upgrades. The block grid shows per-block signaling, while the period chart tracks progress toward activation thresholds across 2,016-block retarget windows."
         </p>
 
-        // BIP selector
-        <div class="flex items-center gap-3 mb-6">
+        // BIP selector + Period navigator in one row
+        <div class="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
+            // BIP selector
             <div class="relative inline-block">
                 <select
                     aria-label="BIP proposal"
@@ -93,111 +94,61 @@ pub fn SignalingPage() -> impl IntoView {
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                 </svg>
             </div>
-        </div>
 
-        // BIP info card
-        <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 mb-6">
-            {move || {
-                if bip_method.get() == "locktime" {
-                    view! {
-                        <div>
-                            <h3 class="text-lg text-white font-semibold mb-2">"BIP-54: Consensus Cleanup"</h3>
-                            <p class="text-sm text-white/60 leading-relaxed mb-3">"Fixes timewarp attack, reduces worst-case validation time (2,500 sigop limit), prevents 64-byte transaction exploits, and eliminates duplicate coinbase issues. After activation, all blocks must set coinbase nLockTime = height - 1 and nSequence != 0xffffffff as a consensus rule."</p>
-                            <p class="text-sm text-white/60 leading-relaxed mb-3">"The chart below tracks miners already complying with the coinbase requirement. This may indicate readiness, not formal BIP-9 signaling."</p>
-                            <p class="text-sm text-[#f7931a]/70 font-mono">"Tracking: Coinbase locktime compliance | Activation threshold: 95%"</p>
-                        </div>
-                    }.into_any()
-                } else {
-                    view! {
-                        <div>
-                            <h3 class="text-lg text-white font-semibold mb-2">"BIP-110: OP_RETURN Data Limits"</h3>
-                            <p class="text-sm text-white/60 leading-relaxed mb-3">"Caps transaction outputs at 34 bytes and OP_RETURN data at 83 bytes. Temporary softfork that expires after 52,416 blocks (~1 year). Modified BIP9: 55% threshold (1,109/2,016). Signaled via version bit 4."</p>
-                            <p class="text-sm text-[#f7931a]/70 font-mono">"Signal: Version bit 4 | Threshold: 55%"</p>
-                        </div>
-                    }.into_any()
-                }
-            }}
-        </div>
-
-        // Period navigator
-        <div class="flex items-center justify-center gap-4 mb-8">
-            <button
-                class=move || {
-                    if period_offset.get() >= 11 {
-                        "inline-flex items-center gap-2 px-4 py-2 text-sm rounded-xl text-white/20 border border-white/5 cursor-not-allowed"
-                    } else {
-                        "inline-flex items-center gap-2 px-4 py-2 text-sm rounded-xl text-white/70 border border-white/10 hover:text-white hover:border-white/25 hover:bg-white/5 transition-all cursor-pointer"
+            // Period navigator
+            <div class="flex items-center gap-3">
+                <button
+                    class=move || {
+                        if period_offset.get() >= 11 {
+                            "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg text-white/20 border border-white/5 cursor-not-allowed"
+                        } else {
+                            "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg text-white/60 border border-white/10 hover:text-white hover:border-white/25 hover:bg-white/5 transition-all cursor-pointer"
+                        }
                     }
-                }
-                on:click=move |_| {
-                    if period_offset.get_untracked() < 11 {
-                        set_period_offset.update(|o| *o += 1);
+                    on:click=move |_| {
+                        if period_offset.get_untracked() < 11 {
+                            set_period_offset.update(|o| *o += 1);
+                        }
                     }
-                }
-            >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-                </svg>
-                "Older"
-            </button>
-            <span class="text-sm text-white/60 font-medium min-w-[140px] text-center">
-                {move || {
-                    let o = period_offset.get();
-                    if o == 0 { "Current Period".to_string() } else { format!("{} periods ago", o) }
-                }}
-            </span>
-            <button
-                class=move || {
-                    if period_offset.get() == 0 {
-                        "inline-flex items-center gap-2 px-4 py-2 text-sm rounded-xl text-white/20 border border-white/5 cursor-not-allowed"
-                    } else {
-                        "inline-flex items-center gap-2 px-4 py-2 text-sm rounded-xl text-white/70 border border-white/10 hover:text-white hover:border-white/25 hover:bg-white/5 transition-all cursor-pointer"
+                >
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                    </svg>
+                    "Older"
+                </button>
+                <span class="text-xs text-white/50 font-medium min-w-[100px] text-center">
+                    {move || {
+                        let o = period_offset.get();
+                        if o == 0 { "Current Period".to_string() } else { format!("{} periods ago", o) }
+                    }}
+                </span>
+                <button
+                    class=move || {
+                        if period_offset.get() == 0 {
+                            "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg text-white/20 border border-white/5 cursor-not-allowed"
+                        } else {
+                            "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg text-white/60 border border-white/10 hover:text-white hover:border-white/25 hover:bg-white/5 transition-all cursor-pointer"
+                        }
                     }
-                }
-                disabled=move || period_offset.get() == 0
-                on:click=move |_| set_period_offset.update(|o| *o = o.saturating_sub(1))
-            >
-                "Newer"
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-                </svg>
-            </button>
+                    disabled=move || period_offset.get() == 0
+                    on:click=move |_| set_period_offset.update(|o| *o = o.saturating_sub(1))
+                >
+                    "Newer"
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                    </svg>
+                </button>
+            </div>
         </div>
 
         <Suspense fallback=move || view! {
-            <div class="space-y-10">
-                // Progress bar skeleton
+            <div class="space-y-6">
                 <div class="bg-[#0d2137] border border-white/10 rounded-xl p-4">
                     <div class="h-3 bg-white/5 rounded-full mb-2"></div>
                     <div class="h-4 w-2/3 mx-auto bg-white/5 rounded mt-2"></div>
                 </div>
-                // Block grid skeleton
-                <div class="bg-[#0d2137] border border-white/10 rounded-xl p-4">
-                    <div class="flex flex-col items-center gap-3">
-                        <div class="animate-pulse">
-                            <div class="w-12 h-12 rounded-lg bg-[#f7931a]/10 border border-[#f7931a]/20 flex items-center justify-center">
-                                <svg class="w-6 h-6 text-[#f7931a]/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                    <rect x="3" y="3" width="18" height="18" rx="2"/>
-                                    <path d="M9 3v18M15 3v18M3 9h18M3 15h18"/>
-                                </svg>
-                            </div>
-                        </div>
-                        <span class="text-xs text-white/30">"Loading signaling data..."</span>
-                    </div>
-                </div>
-                // History chart skeleton
-                <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 h-[400px] flex items-center justify-center">
-                    <div class="flex flex-col items-center gap-3">
-                        <div class="animate-pulse">
-                            <div class="w-12 h-12 rounded-lg bg-[#f7931a]/10 border border-[#f7931a]/20 flex items-center justify-center">
-                                <svg class="w-6 h-6 text-[#f7931a]/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                    <rect x="3" y="3" width="18" height="18" rx="2"/>
-                                    <path d="M9 3v18M15 3v18M3 9h18M3 15h18"/>
-                                </svg>
-                            </div>
-                        </div>
-                        <span class="text-xs text-white/30">"Mining blocks..."</span>
-                    </div>
+                <div class="bg-[#0d2137] border border-white/10 rounded-xl p-4 flex items-center justify-center h-32">
+                    <span class="text-xs text-white/30">"Loading signaling data..."</span>
                 </div>
             </div>
         }>
@@ -211,21 +162,34 @@ pub fn SignalingPage() -> impl IntoView {
                             let remaining = if is_current { 2016u64.saturating_sub(mined) } else { 0 };
                             let pct = period_stats.signaled_pct;
                             let bar_width = format!("{}%", (mined as f64 / 2016.0 * 100.0).min(100.0));
-                            let bar_color = if pct >= threshold { "#2ecc71" } else { "#e74c3c" };
+                            let activated = pct >= threshold;
+                            let bar_color = if activated { "#22c55e" } else if pct >= threshold * 0.7 { "#f7931a" } else { "#ef4444" };
+                            let status_text = if activated { "Threshold reached" } else if is_current { "In progress" } else { "Did not activate" };
+                            let status_color = if activated { "text-green-400" } else if pct >= threshold * 0.7 { "text-[#f7931a]" } else { "text-red-400/70" };
 
-                            let period_text = if is_current {
-                                format!(
-                                    "Period {} \u{2013} {}: {} signaled / {} mined of 2,016 ({:.1}%) | {} remaining | threshold: {}%",
-                                    format_number(p_start), format_number(p_end),
-                                    period_stats.signaled_count, mined, pct, remaining, threshold as u32,
-                                )
+                            // BIP description (compact)
+                            let bip_desc = if bip_method.get() == "locktime" {
+                                ("BIP-54: Consensus Cleanup", "Fixes timewarp attack, reduces worst-case validation time, prevents 64-byte tx exploits. Requires coinbase nLockTime = height\u{2009}\u{2212}\u{2009}1.", "95%")
                             } else {
-                                format!(
-                                    "Period {} \u{2013} {}: {} signaled / {} blocks ({:.1}%) | threshold: {}%",
-                                    format_number(p_start), format_number(p_end),
-                                    period_stats.signaled_count, mined, pct, threshold as u32,
-                                )
+                                ("BIP-110: OP_RETURN Limits", "Caps transaction outputs at 34 bytes and OP_RETURN data at 83 bytes. Modified BIP9: 55% threshold, expires ~1 year.", "55%")
                             };
+
+                            // Aggregate miner signaling data
+                            let mut miner_map: std::collections::BTreeMap<String, (u64, u64)> = std::collections::BTreeMap::new();
+                            for b in blocks.iter() {
+                                let name = if b.miner.is_empty() { "Unknown".to_string() } else { b.miner.clone() };
+                                let entry = miner_map.entry(name).or_insert((0, 0));
+                                entry.1 += 1; // total
+                                if b.signaled {
+                                    entry.0 += 1; // signaled
+                                }
+                            }
+                            // Sort by signaled count descending
+                            let mut miner_list: Vec<(String, u64, u64)> = miner_map
+                                .into_iter()
+                                .map(|(name, (signaled, total))| (name, signaled, total))
+                                .collect();
+                            miner_list.sort_by(|a, b| b.1.cmp(&a.1).then(b.2.cmp(&a.2)));
 
                             let grid_cells = blocks.iter().map(|b| {
                                 let signaled = b.signaled;
@@ -260,23 +224,81 @@ pub fn SignalingPage() -> impl IntoView {
                             let periods_chart = serde_json::to_string(&crate::stats::charts::signaling_periods_chart(&filtered, threshold)).unwrap_or_default();
 
                             view! {
-                                <div class="space-y-10">
-                                    // Progress bar
-                                    <div class="bg-[#0d2137] border border-white/10 rounded-xl p-4">
-                                        <div class="h-3 bg-white/5 rounded-full overflow-hidden mb-2">
-                                            <div
-                                                class="h-full rounded-full transition-all duration-500"
-                                                style=format!("width: {bar_width}; background: {bar_color}")
-                                            ></div>
+                                <div class="space-y-6">
+                                    // Status card: progress + BIP info combined
+                                    <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6">
+                                        <div class="flex flex-col lg:flex-row lg:items-start lg:gap-8">
+                                            // Left: Progress + stats
+                                            <div class="flex-1 mb-4 lg:mb-0">
+                                                <div class="flex items-baseline gap-3 mb-3">
+                                                    <span class="text-3xl font-bold text-white font-mono">{format!("{:.1}%", pct)}</span>
+                                                    <span class=format!("text-sm font-medium {status_color}")>{status_text}</span>
+                                                </div>
+                                                // Progress bar
+                                                <div class="h-2.5 bg-white/5 rounded-full overflow-hidden mb-3">
+                                                    <div
+                                                        class="h-full rounded-full transition-all duration-500"
+                                                        style=format!("width: {bar_width}; background: {bar_color}")
+                                                    ></div>
+                                                </div>
+                                                <div class="flex flex-wrap gap-x-6 gap-y-1 text-xs text-white/50">
+                                                    <span>{format!("{} signaled", format_number(period_stats.signaled_count))}</span>
+                                                    <span>{format!("{} mined", format_number(mined))}</span>
+                                                    {if is_current {
+                                                        Some(view! { <span>{format!("{} remaining", format_number(remaining))}</span> })
+                                                    } else {
+                                                        None
+                                                    }}
+                                                    <span>{format!("threshold: {}%", threshold as u32)}</span>
+                                                </div>
+                                                <p class="text-xs text-white/30 mt-2 font-mono">
+                                                    {format!("Blocks {} \u{2013} {}", format_number(p_start), format_number(p_end))}
+                                                </p>
+                                            </div>
+                                            // Right: BIP description
+                                            <div class="lg:max-w-sm lg:border-l lg:border-white/10 lg:pl-8">
+                                                <h3 class="text-sm text-white font-semibold mb-1.5">{bip_desc.0}</h3>
+                                                <p class="text-xs text-white/50 leading-relaxed">{bip_desc.1}</p>
+                                            </div>
                                         </div>
-                                        <p class="text-sm text-white/60 text-center font-mono">{period_text}</p>
+                                    </div>
+
+                                    // Miner signaling breakdown
+                                    <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6">
+                                        <h3 class="text-sm text-white/70 font-semibold mb-4">"Mining Pool Signaling"</h3>
+                                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                            {miner_list.iter().map(|(name, signaled, total)| {
+                                                let pct = if *total > 0 { *signaled as f64 / *total as f64 * 100.0 } else { 0.0 };
+                                                let bar_w = format!("{}%", pct.min(100.0));
+                                                let color = if pct >= 90.0 { "#22c55e" } else if pct >= 50.0 { "#f7931a" } else if *signaled > 0 { "#ef4444" } else { "#334155" };
+                                                let name_display = if name.len() > 20 { format!("{}...", &name[..18]) } else { name.clone() };
+                                                view! {
+                                                    <div class="bg-white/[0.03] rounded-lg px-3 py-2.5">
+                                                        <div class="flex items-center justify-between mb-1.5">
+                                                            <span class="text-xs text-white/80 font-medium truncate mr-2">{name_display}</span>
+                                                            <span class="text-xs text-white/50 font-mono whitespace-nowrap">{format!("{}/{}", signaled, total)}</span>
+                                                        </div>
+                                                        <div class="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                                                            <div
+                                                                class="h-full rounded-full"
+                                                                style=format!("width: {bar_w}; background: {color}")
+                                                            ></div>
+                                                        </div>
+                                                    </div>
+                                                }
+                                            }).collect::<Vec<_>>()}
+                                        </div>
                                     </div>
 
                                     // Block grid
-                                    <div class="bg-[#0d2137] border border-white/10 rounded-xl p-4">
-                                        <p class="text-sm text-white/50 mb-3">
-                                            {format!("Blocks {} \u{2013} {} (click for details)", format_number(p_start), format_number(p_end))}
-                                        </p>
+                                    <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6">
+                                        <div class="flex items-center justify-between mb-3">
+                                            <h3 class="text-sm text-white/70 font-semibold">"Block Grid"</h3>
+                                            <div class="flex items-center gap-3 text-[10px] text-white/40">
+                                                <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-green-500/70"></span>"Signaled"</span>
+                                                <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-red-500/30"></span>"Not signaled"</span>
+                                            </div>
+                                        </div>
                                         <div class="flex flex-wrap gap-1">
                                             {grid_cells}
                                         </div>
@@ -284,6 +306,7 @@ pub fn SignalingPage() -> impl IntoView {
 
                                     // History chart
                                     <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6">
+                                        <h3 class="text-sm text-white/70 font-semibold mb-4">"Period History"</h3>
                                         <Chart id="chart-signaling-periods" option=Signal::derive(move || periods_chart.clone())/>
                                     </div>
                                 </div>

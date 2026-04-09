@@ -361,8 +361,8 @@ pub fn OnThisDayPage() -> impl IntoView {
                     view! {
                         <input
                             type="date"
-                            class="bg-[#0a1a2e] text-white text-xs border border-white/10 rounded-lg px-2 py-1 cursor-pointer focus:outline-none focus:border-[#f7931a]/40"
-                            style="color-scheme: dark; -webkit-appearance: none;"
+                            class="bg-[#0a1a2e] text-white/80 text-xs border border-white/10 rounded-lg px-3 py-1.5 cursor-pointer focus:outline-none focus:border-[#f7931a]/40 transition-colors"
+                            style="color-scheme: dark;"
                             min=format!("{year}-01-01")
                             max=format!("{year}-12-31")
                             on:change=move |ev| {
