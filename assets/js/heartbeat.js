@@ -220,7 +220,10 @@ window.pushHeartbeatBlocks = function(json, replay) {
                     var feeRate = b.total_fees ? b.total_fees / 100000 : 0;
                     lastSeg.color = computeColor(interBlock, feeRate, 0);
                 } else {
-                    var minLiveFlatline = 15;
+                    // Scale min flatline with zoom so blocks always have a visible gap.
+                    // At zoom 1.9x → 30px virtual = 57px screen.
+                    // At zoom 0.6x → 50px virtual = 30px screen.
+                    var minLiveFlatline = Math.max(30, Math.round(20 / Math.max(_hb.zoom, 0.1)));
                     if (_hb.virtualX - lastSeg.x_start < minLiveFlatline) {
                         _hb.virtualX = lastSeg.x_start + minLiveFlatline;
                     }

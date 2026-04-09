@@ -315,8 +315,35 @@ async fn subscribe_blocks(
             }
         };
 
+        // When mempool_txs table is sparsely populated (after restart),
+        // total_fees from confirm_mempool_txs will be 0. Fall back to
+        // getblockstats RPC which computes fees from the actual block data.
+        let total_fees = if total_fees == 0 {
+            match state.rpc.get_block_total_fee(block_info.height).await {
+                Ok(rpc_fees) => {
+                    if rpc_fees > 0 {
+                        tracing::info!(
+                            "ZMQ: block {} — using RPC fees ({:.4} BTC) instead of mempool (0)",
+                            block_info.height,
+                            rpc_fees as f64 / 100_000_000.0,
+                        );
+                    }
+                    rpc_fees
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "ZMQ: getblockstats failed for block {}: {e}",
+                        block_info.height
+                    );
+                    0
+                }
+            }
+        } else {
+            total_fees
+        };
+
         tracing::info!(
-            "ZMQ: block {} ({block_hash}) — {confirmed_count}/{} txs confirmed, {:.4} BTC fees from mempool",
+            "ZMQ: block {} ({block_hash}) — {confirmed_count}/{} txs confirmed, {:.4} BTC fees",
             block_info.height,
             block_info.txids.len(),
             total_fees as f64 / 100_000_000.0,
