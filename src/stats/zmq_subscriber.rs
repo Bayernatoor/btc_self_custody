@@ -68,7 +68,9 @@ pub fn spawn(
     let block_txids: Arc<std::sync::Mutex<HashSet<String>>> =
         Arc::new(std::sync::Mutex::new(HashSet::new()));
 
-    // Transaction subscriber (rawtx on port 28333)
+    // Transaction + Sequence subscriber (both on port 28333, SAME socket).
+    // Must share a single socket — ZMQ PUB distributes messages across
+    // separate SUB sockets, so two connections would split the stream.
     {
         let state = Arc::clone(&state);
         let sender = tx_sender.clone();
@@ -76,35 +78,13 @@ pub fn spawn(
         let bt = Arc::clone(&block_txids);
         tokio::spawn(async move {
             loop {
-                tracing::info!("ZMQ: connecting to rawtx at {url}");
-                match subscribe_transactions(&state, &sender, &url, &bt).await {
+                tracing::info!("ZMQ: connecting to rawtx+sequence at {url}");
+                match subscribe_tx_and_sequence(&state, &sender, &url, &bt).await {
                     Ok(()) => tracing::warn!(
-                        "ZMQ rawtx stream ended, reconnecting..."
+                        "ZMQ rawtx+sequence stream ended, reconnecting..."
                     ),
                     Err(e) => tracing::error!(
-                        "ZMQ rawtx error: {e}, reconnecting in 5s..."
-                    ),
-                }
-                tokio::time::sleep(Duration::from_secs(5)).await;
-            }
-        });
-    }
-
-    // Sequence subscriber (sequence on port 28333 — same as rawtx).
-    // Detects block processing start from burst of R (tx removed) events.
-    // Sends BlockMining SSE event so JS shows mining overlay.
-    {
-        let sender = tx_sender.clone();
-        let url = zmq_tx_url.clone();
-        tokio::spawn(async move {
-            loop {
-                tracing::info!("ZMQ: connecting to sequence at {url}");
-                match subscribe_sequence(&sender, &url).await {
-                    Ok(()) => tracing::warn!(
-                        "ZMQ sequence stream ended, reconnecting..."
-                    ),
-                    Err(e) => tracing::error!(
-                        "ZMQ sequence error: {e}, reconnecting in 5s..."
+                        "ZMQ rawtx+sequence error: {e}, reconnecting in 5s..."
                     ),
                 }
                 tokio::time::sleep(Duration::from_secs(5)).await;
@@ -139,8 +119,10 @@ pub fn spawn(
     );
 }
 
-/// Subscribe to raw transactions, decode them, look up fees, store in DB.
-async fn subscribe_transactions(
+/// Subscribe to both rawtx and sequence topics on a single socket.
+/// Must share one socket because ZMQ PUB distributes messages across
+/// separate SUB connections, causing each to see only a fraction.
+async fn subscribe_tx_and_sequence(
     state: &Arc<StatsState>,
     sender: &broadcast::Sender<HeartbeatEvent>,
     url: &str,
@@ -149,12 +131,15 @@ async fn subscribe_transactions(
     let mut socket = SubSocket::new();
     socket.connect(url).await?;
     socket.subscribe("rawtx").await?;
-    tracing::info!("ZMQ: subscribed to rawtx");
+    socket.subscribe("sequence").await?;
+    tracing::info!("ZMQ: subscribed to rawtx+sequence");
 
     let mut tx_count = 0u64;
     let mut parse_fail = 0u64;
     let mut rpc_fail = 0u64;
     let mut consecutive_fail = 0u32;
+    let mut seq_state = SequenceState::default();
+
     loop {
         let msg = socket.recv().await?;
         let frames: Vec<_> = msg.into_vec();
@@ -162,6 +147,26 @@ async fn subscribe_transactions(
             continue;
         }
 
+        // First frame is the topic: "rawtx" or "sequence"
+        let topic = std::str::from_utf8(&frames[0]).unwrap_or("");
+
+        // Handle sequence events (block mining detection)
+        if topic == "sequence" {
+            let body = &frames[1];
+            if body.len() >= 33 {
+                let event_type = body[32] as char;
+                if seq_state.process(event_type) {
+                    tracing::info!(
+                        "ZMQ: sequence detected block processing ({}+ R events)",
+                        seq_state.r_count
+                    );
+                    let _ = sender.send(HeartbeatEvent::BlockMining);
+                }
+            }
+            continue;
+        }
+
+        // Handle rawtx events
         let raw_tx = &frames[1];
         let parsed = match parse_raw_tx(raw_tx) {
             Some(p) => p,
@@ -255,49 +260,6 @@ async fn subscribe_transactions(
         }
         if tx_count.is_multiple_of(100) {
             tracing::info!("ZMQ: processed {tx_count} transactions (parse_fail={parse_fail}, rpc_fail={rpc_fail})");
-        }
-    }
-}
-
-/// Subscribe to ZMQ sequence topic to detect block processing start.
-/// When a burst of R (tx removed) events is detected, broadcast a BlockMining
-/// event so JS can show the mining overlay immediately.
-///
-/// Detection logic: a block produces hundreds/thousands of R events in rapid
-/// succession (the entire block's txs removed from mempool). Mempool evictions
-/// (RBF, size limit) also produce R events, but in much smaller bursts.
-/// We require 50+ R events without any A (tx added) events to trigger.
-async fn subscribe_sequence(
-    sender: &broadcast::Sender<HeartbeatEvent>,
-    url: &str,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let mut socket = SubSocket::new();
-    socket.connect(url).await?;
-    socket.subscribe("sequence").await?;
-    tracing::info!("ZMQ: subscribed to sequence");
-
-    let mut state = SequenceState::default();
-
-    loop {
-        let msg = socket.recv().await?;
-        let frames: Vec<_> = msg.into_vec();
-        if frames.len() < 2 {
-            continue;
-        }
-
-        let body = &frames[1];
-        // Sequence message format: 32-byte hash + 1-byte type char + 8-byte LE sequence
-        if body.len() < 33 {
-            continue;
-        }
-
-        let event_type = body[32] as char;
-        if state.process(event_type) {
-            tracing::info!(
-                "ZMQ: sequence detected block processing ({}+ R events)",
-                state.r_count
-            );
-            let _ = sender.send(HeartbeatEvent::BlockMining);
         }
     }
 }
