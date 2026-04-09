@@ -139,6 +139,7 @@ async fn subscribe_tx_and_sequence(
     let mut rpc_fail = 0u64;
     let mut consecutive_fail = 0u32;
     let mut seq_state = SequenceState::default();
+    let mut seq_event_count = 0u64;
 
     loop {
         let msg = socket.recv().await?;
@@ -152,6 +153,10 @@ async fn subscribe_tx_and_sequence(
 
         // Handle sequence events (block mining detection)
         if topic == "sequence" {
+            seq_event_count += 1;
+            if seq_event_count == 1 {
+                tracing::info!("ZMQ: first sequence event received (body len={})", frames[1].len());
+            }
             let body = &frames[1];
             if body.len() >= 33 {
                 let event_type = body[32] as char;
@@ -162,6 +167,14 @@ async fn subscribe_tx_and_sequence(
                     );
                     let _ = sender.send(HeartbeatEvent::BlockMining);
                 }
+            }
+            continue;
+        }
+
+        // Skip non-rawtx topics (e.g. hashtx which shares the port)
+        if topic != "rawtx" {
+            if tx_count == 0 && seq_event_count == 0 {
+                tracing::debug!("ZMQ: unexpected topic '{}' (len={})", topic, frames[0].len());
             }
             continue;
         }
