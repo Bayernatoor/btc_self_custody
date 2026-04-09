@@ -262,6 +262,11 @@ async fn subscribe_transactions(
 /// Subscribe to ZMQ sequence topic to detect block processing start.
 /// When a burst of R (tx removed) events is detected, broadcast a BlockMining
 /// event so JS can show the mining overlay immediately.
+///
+/// Detection logic: a block produces hundreds/thousands of R events in rapid
+/// succession (the entire block's txs removed from mempool). Mempool evictions
+/// (RBF, size limit) also produce R events, but in much smaller bursts.
+/// We require 50+ R events without any A (tx added) events to trigger.
 async fn subscribe_sequence(
     sender: &broadcast::Sender<HeartbeatEvent>,
     url: &str,
@@ -271,8 +276,7 @@ async fn subscribe_sequence(
     socket.subscribe("sequence").await?;
     tracing::info!("ZMQ: subscribed to sequence");
 
-    let mut r_count = 0u32; // consecutive R (tx removed) events
-    let mut mining_sent = false; // whether we've sent BlockMining for this burst
+    let mut state = SequenceState::default();
 
     loop {
         let msg = socket.recv().await?;
@@ -288,43 +292,66 @@ async fn subscribe_sequence(
         }
 
         let event_type = body[32] as char;
+        if state.process(event_type) {
+            tracing::info!(
+                "ZMQ: sequence detected block processing ({}+ R events)",
+                state.r_count
+            );
+            let _ = sender.send(HeartbeatEvent::BlockMining);
+        }
+    }
+}
 
+/// Threshold for R events before we consider it a block (not just evictions).
+const SEQUENCE_R_THRESHOLD: u32 = 50;
+
+/// Pure state machine for ZMQ sequence event processing.
+/// Extracted for testability.
+#[derive(Default)]
+struct SequenceState {
+    r_count: u32,
+    mining_sent: bool,
+}
+
+impl SequenceState {
+    /// Process a sequence event type character. Returns true if BlockMining
+    /// should be broadcast (first time threshold is crossed).
+    fn process(&mut self, event_type: char) -> bool {
         match event_type {
             'R' => {
-                // Tx removed from mempool — block is being processed
-                r_count += 1;
-                if r_count >= 10 && !mining_sent {
-                    tracing::info!(
-                        "ZMQ: sequence detected block processing ({}+ R events)",
-                        r_count
-                    );
-                    let _ = sender.send(HeartbeatEvent::BlockMining);
-                    mining_sent = true;
+                self.r_count += 1;
+                if self.r_count >= SEQUENCE_R_THRESHOLD && !self.mining_sent {
+                    self.mining_sent = true;
+                    return true;
                 }
             }
             'C' => {
-                // Block connected — validation complete
-                tracing::info!(
-                    "ZMQ: sequence block connected ({r_count} txs removed)"
-                );
-                r_count = 0;
-                mining_sent = false;
+                if self.r_count > 0 || self.mining_sent {
+                    tracing::info!(
+                        "ZMQ: sequence block connected ({} txs removed, mining_sent={})",
+                        self.r_count, self.mining_sent
+                    );
+                }
+                self.r_count = 0;
+                self.mining_sent = false;
             }
             'D' => {
-                // Block disconnected (reorg)
                 tracing::warn!("ZMQ: sequence block disconnected (reorg)");
-                r_count = 0;
-                mining_sent = false;
+                self.r_count = 0;
+                self.mining_sent = false;
             }
             'A' => {
-                // Tx added to mempool — normal operation, reset R counter
-                if r_count > 0 && r_count < 10 {
-                    // Small burst of R's followed by A — not a block, just evictions
-                    r_count = 0;
+                // Tx added to mempool — normal operation.
+                // Any A event during an R burst means it's not a block
+                // (during block validation, no txs enter the mempool).
+                // Reset if we haven't crossed the threshold yet.
+                if self.r_count > 0 && !self.mining_sent {
+                    self.r_count = 0;
                 }
             }
             _ => {}
         }
+        false
     }
 }
 
@@ -404,9 +431,22 @@ async fn subscribe_blocks(
 
         let confirmed_count = match confirm_result {
             Ok(Ok((count, _))) => count,
-            _ => 0,
+            Ok(Err(e)) => {
+                tracing::error!("ZMQ: DB error confirming txs for block {}: {e}", block_info.height);
+                0
+            }
+            Err(e) => {
+                tracing::error!("ZMQ: spawn_blocking panicked for block {}: {e}", block_info.height);
+                0
+            }
         };
-        let total_fees = fees_result.unwrap_or(0);
+        let total_fees = match fees_result {
+            Ok(fees) => fees,
+            Err(e) => {
+                tracing::warn!("ZMQ: getblockstats failed for block {}: {e}", block_info.height);
+                0
+            }
+        };
 
         tracing::info!(
             "ZMQ: block {} ({block_hash}) — {confirmed_count}/{txid_count} confirmed, {:.4} BTC fees, size={}, weight={}",
@@ -438,8 +478,8 @@ async fn subscribe_blocks(
     }
 }
 
-/// Get block metadata and txid list from RPC, with retry for race condition.
-/// ZMQ fires before the block is fully validated, so the RPC may not be ready yet.
+/// Get block metadata and txid list from RPC, with retry.
+/// hashblock fires after validation, but RPC may still be briefly busy.
 async fn get_block_info(
     state: &Arc<StatsState>,
     hash: &str,
@@ -830,6 +870,117 @@ mod tests {
         let mut cursor = 0;
         assert_eq!(read_u64_le(&data, &mut cursor), Some(42));
         assert_eq!(cursor, 8);
+    }
+
+    // --- SequenceState tests ---
+
+    #[test]
+    fn test_sequence_block_detection() {
+        let mut state = SequenceState::default();
+        // Send 49 R events — should not trigger
+        for _ in 0..49 {
+            assert!(!state.process('R'));
+        }
+        assert_eq!(state.r_count, 49);
+        assert!(!state.mining_sent);
+        // 50th R triggers
+        assert!(state.process('R'));
+        assert!(state.mining_sent);
+        assert_eq!(state.r_count, 50);
+        // Further R events don't re-trigger
+        assert!(!state.process('R'));
+        assert!(!state.process('R'));
+    }
+
+    #[test]
+    fn test_sequence_c_resets_state() {
+        let mut state = SequenceState::default();
+        for _ in 0..60 {
+            state.process('R');
+        }
+        assert!(state.mining_sent);
+        // C resets everything
+        assert!(!state.process('C'));
+        assert_eq!(state.r_count, 0);
+        assert!(!state.mining_sent);
+    }
+
+    #[test]
+    fn test_sequence_a_resets_r_count_before_threshold() {
+        let mut state = SequenceState::default();
+        // Some R events (evictions)
+        for _ in 0..5 {
+            state.process('R');
+        }
+        assert_eq!(state.r_count, 5);
+        // A event resets since we haven't crossed threshold
+        state.process('A');
+        assert_eq!(state.r_count, 0);
+    }
+
+    #[test]
+    fn test_sequence_a_does_not_reset_after_mining_sent() {
+        let mut state = SequenceState::default();
+        // Cross threshold
+        for _ in 0..50 {
+            state.process('R');
+        }
+        assert!(state.mining_sent);
+        // A event should NOT reset r_count once mining is detected
+        // (block processing continues, the A might be a coinbase)
+        state.process('A');
+        assert!(state.mining_sent);
+        assert_eq!(state.r_count, 50); // unchanged
+    }
+
+    #[test]
+    fn test_sequence_eviction_burst_no_false_positive() {
+        let mut state = SequenceState::default();
+        // 10 evictions then normal tx added — should not trigger
+        for _ in 0..10 {
+            state.process('R');
+        }
+        state.process('A');
+        assert_eq!(state.r_count, 0);
+        assert!(!state.mining_sent);
+    }
+
+    #[test]
+    fn test_sequence_reorg_resets() {
+        let mut state = SequenceState::default();
+        for _ in 0..60 {
+            state.process('R');
+        }
+        assert!(state.mining_sent);
+        // D (disconnect/reorg) resets
+        state.process('D');
+        assert_eq!(state.r_count, 0);
+        assert!(!state.mining_sent);
+    }
+
+    #[test]
+    fn test_sequence_multiple_blocks() {
+        let mut state = SequenceState::default();
+        // First block
+        for _ in 0..100 {
+            state.process('R');
+        }
+        assert!(state.mining_sent);
+        state.process('C');
+        // Normal txs between blocks
+        state.process('A');
+        state.process('A');
+        // Second block
+        let mut triggered = false;
+        for _ in 0..60 {
+            if state.process('R') {
+                triggered = true;
+            }
+        }
+        assert!(triggered);
+        assert!(state.mining_sent);
+        state.process('C');
+        assert!(!state.mining_sent);
     }
 }
 
