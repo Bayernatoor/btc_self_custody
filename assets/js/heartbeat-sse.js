@@ -66,21 +66,13 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
     var dropNow = Date.now() / 1000;
     var DROP_DURATION = instant ? 0 : 1.5;
 
-    // All txs from the DB are unconfirmed (confirmed_height IS NULL).
-    // Note: the DB only contains txs seen via ZMQ since last deploy —
-    // not the full mempool. Spread them uniformly across the flatline,
-    // ordered by first_seen DESC so newest are on the right (near the
-    // live head), oldest on the left.
-    var txCount = txs.length;
-
     for (var i = 0; i < txs.length && placed < maxBricks; i++) {
         var tx = txs[i];
         if (!tx.fee || !tx.vsize) continue;
 
-        // Reverse index: first item (newest) → right side, last item (oldest) → left side
-        var tFrac = txCount > 1 ? (txCount - 1 - i) / (txCount - 1) : 0.5;
+        // Spread randomly across the flatline, leaving last 20px for live txs.
         var usableSpan = Math.max(10, flatlineSpan - 20);
-        var txVX = liveSeg.x_start + tFrac * usableSpan;
+        var txVX = liveSeg.x_start + Math.random() * usableSpan;
 
         var feeRate = tx.fee / tx.vsize;
         var feeNorm = Math.min(Math.log2(feeRate + 1) / 6, 1.0);
