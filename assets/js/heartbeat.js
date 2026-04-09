@@ -371,10 +371,9 @@ window.updateHeartbeatLive = function(json) {
         var data = JSON.parse(json);
         if (data.next_block_fee !== undefined) _hb.nextBlockFee = data.next_block_fee;
         if (data.mempool_mb !== undefined) _hb.mempoolMB = data.mempool_mb;
-        if (data.block_time !== undefined && data.block_time > _hb.lastBlockTime) {
-            _hb._prevBlockTime = _hb.lastBlockTime;
-            _hb.lastBlockTime = data.block_time;
-        }
+        // Don't update lastBlockTime from LiveStats — it resets the "Last block"
+        // timer before the spike appears. lastBlockTime is set exclusively by
+        // pushHeartbeatBlocks when the SSE block event arrives with complete data.
         if (data.hashrate_eh !== undefined) _hb.hashrateEH = data.hashrate_eh;
         if (data.mempool_min_fee !== undefined) _hb.mempoolMinFee = data.mempool_min_fee;
         if (data.difficulty !== undefined) _hb.difficulty = data.difficulty;
