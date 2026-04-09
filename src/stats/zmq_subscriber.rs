@@ -32,6 +32,8 @@ pub enum HeartbeatEvent {
         fee_rate: f64,
         timestamp: u64,
     },
+    /// Block found — complete data (fees, size, weight all populated).
+    /// Sent after node finishes validation and we fetch all metadata.
     #[serde(rename = "block")]
     Block {
         height: u64,
@@ -43,17 +45,17 @@ pub enum HeartbeatEvent {
         weight: u64,
         confirmed_count: u64,
     },
-    /// Block data update (sent after background processing completes).
-    /// JS uses this to replace the initial header-only data with full
-    /// block stats including authoritative fees.
-    #[serde(rename = "block_fee_update")]
-    BlockFeeUpdate {
-        height: u64,
-        total_fees: u64,
-    },
+    /// Block is being mined/validated — node is processing a new block.
+    /// Detected via ZMQ sequence `R` burst (txs being removed from mempool).
+    /// JS shows mining overlay until the complete Block event arrives.
+    #[serde(rename = "block_mining")]
+    BlockMining,
 }
 
-/// Spawn the ZMQ subscriber tasks. Two independent loops: one for txs, one for blocks.
+/// Spawn the ZMQ subscriber tasks:
+/// 1. rawtx (port 28333) — new mempool transactions
+/// 2. hashblock (port 28332) — block hash after validation completes
+/// 3. sequence (port 28333) — mempool events, detects block processing start
 pub fn spawn(
     state: Arc<StatsState>,
     tx_sender: broadcast::Sender<HeartbeatEvent>,
@@ -66,7 +68,7 @@ pub fn spawn(
     let block_txids: Arc<std::sync::Mutex<HashSet<String>>> =
         Arc::new(std::sync::Mutex::new(HashSet::new()));
 
-    // Transaction subscriber
+    // Transaction subscriber (rawtx on port 28333)
     {
         let state = Arc::clone(&state);
         let sender = tx_sender.clone();
@@ -88,7 +90,29 @@ pub fn spawn(
         });
     }
 
-    // Block subscriber
+    // Sequence subscriber (sequence on port 28333 — same as rawtx).
+    // Detects block processing start from burst of R (tx removed) events.
+    // Sends BlockMining SSE event so JS shows mining overlay.
+    {
+        let sender = tx_sender.clone();
+        let url = zmq_tx_url.clone();
+        tokio::spawn(async move {
+            loop {
+                tracing::info!("ZMQ: connecting to sequence at {url}");
+                match subscribe_sequence(&sender, &url).await {
+                    Ok(()) => tracing::warn!(
+                        "ZMQ sequence stream ended, reconnecting..."
+                    ),
+                    Err(e) => tracing::error!(
+                        "ZMQ sequence error: {e}, reconnecting in 5s..."
+                    ),
+                }
+                tokio::time::sleep(Duration::from_secs(5)).await;
+            }
+        });
+    }
+
+    // Block subscriber (hashblock on port 28332)
     {
         let state = Arc::clone(&state);
         let sender = tx_sender;
@@ -235,7 +259,78 @@ async fn subscribe_transactions(
     }
 }
 
-/// Subscribe to block hashes, mark confirmed txs, broadcast block events.
+/// Subscribe to ZMQ sequence topic to detect block processing start.
+/// When a burst of R (tx removed) events is detected, broadcast a BlockMining
+/// event so JS can show the mining overlay immediately.
+async fn subscribe_sequence(
+    sender: &broadcast::Sender<HeartbeatEvent>,
+    url: &str,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut socket = SubSocket::new();
+    socket.connect(url).await?;
+    socket.subscribe("sequence").await?;
+    tracing::info!("ZMQ: subscribed to sequence");
+
+    let mut r_count = 0u32; // consecutive R (tx removed) events
+    let mut mining_sent = false; // whether we've sent BlockMining for this burst
+
+    loop {
+        let msg = socket.recv().await?;
+        let frames: Vec<_> = msg.into_vec();
+        if frames.len() < 2 {
+            continue;
+        }
+
+        let body = &frames[1];
+        // Sequence message format: 32-byte hash + 1-byte type char + 8-byte LE sequence
+        if body.len() < 33 {
+            continue;
+        }
+
+        let event_type = body[32] as char;
+
+        match event_type {
+            'R' => {
+                // Tx removed from mempool — block is being processed
+                r_count += 1;
+                if r_count >= 10 && !mining_sent {
+                    tracing::info!(
+                        "ZMQ: sequence detected block processing ({}+ R events)",
+                        r_count
+                    );
+                    let _ = sender.send(HeartbeatEvent::BlockMining);
+                    mining_sent = true;
+                }
+            }
+            'C' => {
+                // Block connected — validation complete
+                tracing::info!(
+                    "ZMQ: sequence block connected ({r_count} txs removed)"
+                );
+                r_count = 0;
+                mining_sent = false;
+            }
+            'D' => {
+                // Block disconnected (reorg)
+                tracing::warn!("ZMQ: sequence block disconnected (reorg)");
+                r_count = 0;
+                mining_sent = false;
+            }
+            'A' => {
+                // Tx added to mempool — normal operation, reset R counter
+                if r_count > 0 && r_count < 10 {
+                    // Small burst of R's followed by A — not a block, just evictions
+                    r_count = 0;
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Subscribe to block hashes. After hashblock fires (validation complete),
+/// fetch all block data synchronously then broadcast ONE complete event.
+/// The sequence subscriber handles the mining overlay during the wait.
 async fn subscribe_blocks(
     state: &Arc<StatsState>,
     sender: &broadcast::Sender<HeartbeatEvent>,
@@ -263,106 +358,75 @@ async fn subscribe_blocks(
             continue;
         }
         let block_hash = bytes_to_hex(hash_bytes);
-        tracing::info!("ZMQ: new block {block_hash}");
+        tracing::info!("ZMQ: hashblock {block_hash} — fetching full data");
 
-        // FAST PATH: get block header (~1KB) for immediate broadcast.
-        // getblockheader is instant compared to getblock(hash, 1) which
-        // returns all ~4000 txid strings (~300KB over WireGuard).
-        let header = match state.rpc.get_block_header(&block_hash).await {
-            Ok(h) => h,
-            Err(e) => {
-                tracing::error!("ZMQ: getblockheader failed for {block_hash}: {e}");
-                continue;
-            }
+        // Node just finished validation — RPC is available now.
+        // Fetch all data synchronously for a single complete broadcast.
+        let block_info = match get_block_info(state, &block_hash).await {
+            Some(info) => info,
+            None => continue,
         };
 
+        // Populate the txid filter so the tx subscriber skips block txs
+        if let Ok(mut set) = block_txids.lock() {
+            set.clear();
+            for txid in &block_info.txids {
+                set.insert(txid.clone());
+            }
+        }
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        // Confirm mempool txs + get authoritative fees in parallel
+        let db = state.db.clone();
+        let txids = block_info.txids.clone();
+        let height = block_info.height;
+        let txid_count = txids.len();
+
+        let confirm_fut = tokio::task::spawn_blocking(move || {
+            match db.get() {
+                Ok(conn) => db::confirm_mempool_txs(&conn, &txids, height, now),
+                Err(e) => {
+                    tracing::error!(
+                        "ZMQ: DB error for block {height}: {e}"
+                    );
+                    Ok((0, 0))
+                }
+            }
+        });
+        let fees_fut = state.rpc.get_block_total_fee(block_info.height);
+
+        let (confirm_result, fees_result) =
+            tokio::join!(confirm_fut, fees_fut);
+
+        let confirmed_count = match confirm_result {
+            Ok(Ok((count, _))) => count,
+            _ => 0,
+        };
+        let total_fees = fees_result.unwrap_or(0);
+
         tracing::info!(
-            "ZMQ: block {} ({block_hash}) — broadcasting immediately",
-            header.height,
+            "ZMQ: block {} ({block_hash}) — {confirmed_count}/{txid_count} confirmed, {:.4} BTC fees, size={}, weight={}",
+            block_info.height,
+            total_fees as f64 / 100_000_000.0,
+            block_info.size,
+            block_info.weight,
         );
 
-        // Broadcast block event IMMEDIATELY with header data (no fees yet).
-        // The spike appears on the timeline right away.
+        // Broadcast ONE complete block event
         let _ = sender.send(HeartbeatEvent::Block {
-            height: header.height,
-            hash: block_hash.clone(),
-            timestamp: header.timestamp,
-            tx_count: header.tx_count,
-            total_fees: 0, // updated by background task
-            size: 0,       // updated by background task
-            weight: 0,     // updated by background task
-            confirmed_count: 0,
+            height: block_info.height,
+            hash: block_hash,
+            timestamp: block_info.timestamp,
+            tx_count: block_info.tx_count,
+            total_fees,
+            size: block_info.size,
+            weight: block_info.weight,
+            confirmed_count,
         });
-
-        // BACKGROUND: fetch full block data, confirm mempool txs, get real fees.
-        // Sends BlockFeeUpdate when complete so JS updates the spike.
-        {
-            let state = Arc::clone(state);
-            let sender = sender.clone();
-            let bt = Arc::clone(block_txids);
-            let block_hash = block_hash.clone();
-            let height = header.height;
-            tokio::spawn(async move {
-                // Get full block with txid list (slow over WireGuard)
-                let block_info = match get_block_info(&state, &block_hash).await {
-                    Some(info) => info,
-                    None => return,
-                };
-
-                // Populate the txid filter so the tx subscriber skips block txs
-                if let Ok(mut set) = bt.lock() {
-                    set.clear();
-                    for txid in &block_info.txids {
-                        set.insert(txid.clone());
-                    }
-                }
-
-                let now = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs();
-
-                // Confirm mempool txs + get authoritative fees in parallel
-                let db = state.db.clone();
-                let txids = block_info.txids.clone();
-                let txid_count = txids.len();
-
-                let confirm_fut = tokio::task::spawn_blocking(move || {
-                    match db.get() {
-                        Ok(conn) => db::confirm_mempool_txs(&conn, &txids, height, now),
-                        Err(e) => {
-                            tracing::error!(
-                                "ZMQ: DB error for block {height}: {e}"
-                            );
-                            Ok((0, 0))
-                        }
-                    }
-                });
-                let fees_fut = state.rpc.get_block_total_fee(height);
-
-                let (confirm_result, fees_result) =
-                    tokio::join!(confirm_fut, fees_fut);
-
-                let confirmed_count = match confirm_result {
-                    Ok(Ok((count, _))) => count,
-                    _ => 0,
-                };
-                let total_fees = fees_result.unwrap_or(0);
-
-                tracing::info!(
-                    "ZMQ: block {height} background — {confirmed_count}/{txid_count} confirmed, {:.4} BTC fees, size={}, weight={}",
-                    total_fees as f64 / 100_000_000.0,
-                    block_info.size,
-                    block_info.weight,
-                );
-
-                // Send fee + metadata update
-                let _ = sender.send(HeartbeatEvent::BlockFeeUpdate {
-                    height,
-                    total_fees,
-                });
-            });
-        }
 
         // Don't clear the txid filter here. ZMQ continues re-broadcasting
         // block txs after we finish processing. If we clear now, those stale

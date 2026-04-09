@@ -553,21 +553,22 @@ export function drawDisconnectedOverlay(ctx, w, h, nowSec) {
     ctx.fill();
     ctx.globalAlpha = 1;
 
-    // Animated dots: "Mining..."
+    // Show different text for block mining vs SSE disconnect
+    var isMining = _hb._blockMiningOverlay || false;
     var dots = '.'.repeat(Math.floor(nowSec * 2) % 4);
     ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
     ctx.font = '14px monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('Mining' + dots, cx, cy + 30);
+    ctx.fillText(isMining ? 'Mining' + dots : 'Reconnecting' + dots, cx, cy + 30);
 
-    // Elapsed time
-    if (elapsed > 3) {
+    // Elapsed time (only for reconnecting, mining is expected to be brief)
+    if (!isMining && elapsed > 3) {
         ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
         ctx.font = '11px monospace';
         var elapsedStr = elapsed < 60 ? Math.round(elapsed) + 's' :
             Math.floor(elapsed / 60) + 'm ' + Math.round(elapsed % 60) + 's';
-        ctx.fillText('Reconnecting (' + elapsedStr + ')', cx, cy + 52);
+        ctx.fillText('(' + elapsedStr + ')', cx, cy + 52);
     }
 
     ctx.textAlign = 'start';
