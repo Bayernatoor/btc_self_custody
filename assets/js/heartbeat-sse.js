@@ -66,20 +66,19 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
     var dropNow = Date.now() / 1000;
     var DROP_DURATION = instant ? 0 : 1.5;
 
-    // Map first_seen to x position on the flatline. The flatline represents
-    // time from last block (effectiveBlockTs) to now. Txs arriving right after
-    // the block go on the left, recent txs near the head on the right.
-    var timelineStart = effectiveBlockTs > 0 ? effectiveBlockTs : (nowSec - 600);
-    var timelineSpan = nowSec - timelineStart;
-    if (timelineSpan < 1) timelineSpan = 1;
+    // Txs are ordered by first_seen DESC (newest first) from the server.
+    // We want oldest on the left, newest on the right to match the live
+    // build-up pattern. Use the tx's index position for uniform spacing
+    // across the flatline — the ordering gives the temporal gradient,
+    // the uniform spread prevents clustering.
+    var txCount = txs.length;
 
     for (var i = 0; i < txs.length && placed < maxBricks; i++) {
         var tx = txs[i];
         if (!tx.fee || !tx.vsize) continue;
 
-        // Position based on arrival time relative to the flatline's time window.
-        // Leave last 20px clear for live txs arriving at the head.
-        var tFrac = tx.first_seen ? Math.max(0, Math.min(1, (tx.first_seen - timelineStart) / timelineSpan)) : Math.random();
+        // Reverse index: first item (newest) → right side, last item (oldest) → left side
+        var tFrac = txCount > 1 ? (txCount - 1 - i) / (txCount - 1) : 0.5;
         var usableSpan = Math.max(10, flatlineSpan - 20);
         var txVX = liveSeg.x_start + tFrac * usableSpan;
 
