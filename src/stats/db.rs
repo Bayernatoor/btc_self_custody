@@ -1396,7 +1396,7 @@ pub fn query_recent_mempool_txs(
         "SELECT txid, fee, vsize, value, first_seen
          FROM mempool_txs
          WHERE confirmed_height IS NULL AND first_seen >= ?1
-         ORDER BY first_seen DESC
+         ORDER BY first_seen ASC
          LIMIT ?2",
     )?;
     let rows = stmt.query_map(params![since, limit], |row| {
