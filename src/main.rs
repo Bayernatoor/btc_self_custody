@@ -62,6 +62,10 @@ async fn main() {
         tracing::info!("Stats module dormant (BITCOIN_STATS_RPC_URL not set)");
     }
 
+    // Compress all responses (gzip/brotli). ~70% size reduction on API JSON
+    // and HTML. Negotiated via Accept-Encoding header automatically.
+    let app = app.layer(tower_http::compression::CompressionLayer::new());
+
     let listener = TcpListener::bind(&addr).await.unwrap();
     tracing::info!("Server listening on http://{}", addr);
     axum::serve(listener, app.into_make_service())
