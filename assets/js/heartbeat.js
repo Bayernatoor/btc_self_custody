@@ -3,7 +3,7 @@
 // that the Leptos component calls via wasm_bindgen.
 
 import { getState, setState, COLORS, BG_COLOR, FLATLINE_PX_PER_SEC, HEAD_POSITION_FRAC, RETARGET_PERIOD } from './heartbeat-state.js';
-import { drawGrid, createBlockSegment, createFlatlineSegment, computeColor, historyFlatlineWidth } from './heartbeat-timeline.js';
+import { drawGrid, createBlockSegment, createFlatlineSegment, computeColor, historyFlatlineWidth, feeRateColor } from './heartbeat-timeline.js';
 import { setupInputHandlers } from './heartbeat-interaction.js';
 import { stopMomentum } from './heartbeat-interaction.js';
 import { connectOwnFeed, placeHistoryTxs } from './heartbeat-sse.js';
@@ -442,7 +442,63 @@ function _hbVisibilityChange() {
         _hb._hiddenSince = 0;
     }
 
-    // Discard buffered txs (stale, arrived while hidden with unreliable timing)
+    // Place buffered txs across the gap (the region between old bricks and
+    // new virtualX). Timing is unreliable when hidden, but random spread
+    // across the gap gives a natural fill instead of a visible hole.
+    var liveSeg = _hb.timeline[_hb.timeline.length - 1];
+    if (liveSeg && liveSeg.type === 'flatline' && liveSeg.x_end === null) {
+        var buffered = (_hb._hiddenTxBuffer || []).concat(_hb._txBatchQueue || []);
+        if (buffered.length > 0) {
+            // Find where existing bricks end
+            var rightmost = liveSeg.x_start;
+            for (var bi = 0; bi < (liveSeg.blips || []).length; bi++) {
+                if (liveSeg.blips[bi].fadeStart === 0 && liveSeg.blips[bi].x > rightmost) {
+                    rightmost = liveSeg.blips[bi].x;
+                }
+            }
+            var gapStart = rightmost + 5;
+            var gapEnd = _hb.virtualX - 20; // leave 20px for live txs
+            var gapSpan = gapEnd - gapStart;
+
+            if (gapSpan > 10 && buffered.length > 0) {
+                var medianFee = _hb._wsMedianFee || 5;
+                var placed = 0;
+                var maxStack = (_hb.height || 400) * 0.35;
+                if (!liveSeg._colHeights) liveSeg._colHeights = {};
+
+                for (var ti = 0; ti < buffered.length; ti++) {
+                    var tx = buffered[ti];
+                    if (!tx.fee || !tx.vsize) continue;
+                    var feeRate = tx.fee / tx.vsize;
+                    var feeNorm = Math.min(Math.log2(feeRate + 1) / 6, 1.0);
+                    var brickH = 3 + feeNorm * 14 + Math.random() * 3;
+                    var txVX = gapStart + Math.random() * gapSpan;
+                    var gridX = Math.round(txVX / 5) * 5;
+                    var stackY = liveSeg._colHeights[gridX] || 0;
+                    if (stackY > maxStack) continue;
+                    liveSeg._colHeights[gridX] = stackY + brickH;
+
+                    liveSeg.blips.push({
+                        x: txVX, gridX: gridX,
+                        height: brickH + stackY, brickH: brickH, brickW: 4, stackY: stackY,
+                        color: feeRateColor(feeRate, medianFee), opacity: 0.75 + feeNorm * 0.2,
+                        txCount: 1, txid: tx.txid || null,
+                        feeRate: Math.round(feeRate * 10) / 10,
+                        vsize: tx.vsize || 0, value: tx.value || 0,
+                        timestamp: now, isDrop: false, fadeStart: 0,
+                        bobPhase: Math.random() * Math.PI * 2,
+                        bobSpeed: 1.2 + feeNorm * 0.8,
+                        lane: Math.floor(Math.random() * 5) - 2,
+                        feeRatio: medianFee > 0 ? feeRate / medianFee : 1
+                    });
+                    placed++;
+                }
+                if (placed > 0) {
+                    console.log('[heartbeat] tab return: placed', placed, 'buffered txs across gap');
+                }
+            }
+        }
+    }
     _hb._hiddenTxBuffer = [];
     _hb._txBatchQueue = [];
 
