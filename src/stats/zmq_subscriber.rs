@@ -277,69 +277,59 @@ async fn subscribe_blocks(
             .unwrap_or_default()
             .as_secs();
 
-        // Confirm mempool txs in DB on a blocking thread so we don't
-        // starve the async runtime during the SQLite write transaction
+        // Run two tasks in parallel:
+        // 1. Confirm mempool txs in DB (marks them confirmed, for cleanup)
+        // 2. Get authoritative total fees from getblockstats RPC
+        // We always use getblockstats for fees — the mempool sum is unreliable
+        // after restarts when the mempool_txs table is sparsely populated.
         let db = state.db.clone();
         let txids = block_info.txids.clone();
         let height = block_info.height;
         let txid_count = txids.len();
-        let (confirmed_count, total_fees) = match tokio::task::spawn_blocking(
-            move || {
-                match db.get() {
-                    Ok(conn) => db::confirm_mempool_txs(&conn, &txids, height, now),
-                    Err(e) => {
-                        tracing::error!(
-                            "ZMQ: failed to get DB connection for block {height} confirmation: {e}"
-                        );
-                        Ok((0, 0))
-                    }
+
+        let confirm_fut = tokio::task::spawn_blocking(move || {
+            match db.get() {
+                Ok(conn) => db::confirm_mempool_txs(&conn, &txids, height, now),
+                Err(e) => {
+                    tracing::error!(
+                        "ZMQ: failed to get DB connection for block {height} confirmation: {e}"
+                    );
+                    Ok((0, 0))
                 }
-            },
-        )
-        .await
-        {
-            Ok(Ok(result)) => result,
+            }
+        });
+        let fees_fut = state.rpc.get_block_total_fee(block_info.height);
+
+        let (confirm_result, fees_result) =
+            tokio::join!(confirm_fut, fees_fut);
+
+        let confirmed_count = match confirm_result {
+            Ok(Ok((count, _))) => count,
             Ok(Err(e)) => {
                 tracing::error!(
                     "ZMQ: DB error confirming {txid_count} txs for block {}: {e}",
                     block_info.height,
                 );
-                (0, 0)
+                0
             }
             Err(e) => {
                 tracing::error!(
                     "ZMQ: spawn_blocking panicked for block {}: {e}",
                     block_info.height,
                 );
-                (0, 0)
+                0
             }
         };
 
-        // When mempool_txs table is sparsely populated (after restart),
-        // total_fees from confirm_mempool_txs will be 0. Fall back to
-        // getblockstats RPC which computes fees from the actual block data.
-        let total_fees = if total_fees == 0 {
-            match state.rpc.get_block_total_fee(block_info.height).await {
-                Ok(rpc_fees) => {
-                    if rpc_fees > 0 {
-                        tracing::info!(
-                            "ZMQ: block {} — using RPC fees ({:.4} BTC) instead of mempool (0)",
-                            block_info.height,
-                            rpc_fees as f64 / 100_000_000.0,
-                        );
-                    }
-                    rpc_fees
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        "ZMQ: getblockstats failed for block {}: {e}",
-                        block_info.height
-                    );
-                    0
-                }
+        let total_fees = match fees_result {
+            Ok(fees) => fees,
+            Err(e) => {
+                tracing::warn!(
+                    "ZMQ: getblockstats failed for block {}: {e}",
+                    block_info.height,
+                );
+                0
             }
-        } else {
-            total_fees
         };
 
         tracing::info!(
