@@ -66,22 +66,20 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
     var dropNow = Date.now() / 1000;
     var DROP_DURATION = instant ? 0 : 1.5;
 
-    // Compute time range for temporal positioning.
-    // Txs are ordered by first_seen ASC from the server. Map first_seen
-    // to x position proportionally across the flatline — older txs on the
-    // left, newer on the right. This creates a natural build-up pattern
-    // that matches what live viewing looks like.
-    var minTs = txs.length > 0 && txs[0].first_seen ? txs[0].first_seen : 0;
-    var maxTs = txs.length > 0 && txs[txs.length - 1].first_seen ? txs[txs.length - 1].first_seen : 0;
-    var tsSpan = maxTs > minTs ? maxTs - minTs : 1;
+    // Map first_seen to x position on the flatline. The flatline represents
+    // time from last block (effectiveBlockTs) to now. Txs arriving right after
+    // the block go on the left, recent txs near the head on the right.
+    var timelineStart = effectiveBlockTs > 0 ? effectiveBlockTs : (nowSec - 600);
+    var timelineSpan = nowSec - timelineStart;
+    if (timelineSpan < 1) timelineSpan = 1;
 
     for (var i = 0; i < txs.length && placed < maxBricks; i++) {
         var tx = txs[i];
         if (!tx.fee || !tx.vsize) continue;
 
-        // Position based on arrival time: oldest on left, newest near head.
+        // Position based on arrival time relative to the flatline's time window.
         // Leave last 20px clear for live txs arriving at the head.
-        var tFrac = tx.first_seen ? (tx.first_seen - minTs) / tsSpan : Math.random();
+        var tFrac = tx.first_seen ? Math.max(0, Math.min(1, (tx.first_seen - timelineStart) / timelineSpan)) : Math.random();
         var usableSpan = Math.max(10, flatlineSpan - 20);
         var txVX = liveSeg.x_start + tFrac * usableSpan;
 
