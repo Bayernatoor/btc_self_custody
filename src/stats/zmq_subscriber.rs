@@ -160,6 +160,13 @@ async fn subscribe_tx_and_sequence(
             let body = &frames[1];
             if body.len() >= 33 {
                 let event_type = body[32] as char;
+                // Log sequence stats periodically and on state changes
+                if event_type == 'C' || event_type == 'D' {
+                    tracing::info!(
+                        "ZMQ: sequence event '{event_type}' (total={seq_event_count}, r_count={}, mining_sent={})",
+                        seq_state.r_count, seq_state.mining_sent
+                    );
+                }
                 if seq_state.process(event_type) {
                     tracing::info!(
                         "ZMQ: sequence detected block processing ({}+ R events)",
