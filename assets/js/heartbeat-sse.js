@@ -66,23 +66,14 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
     var dropNow = Date.now() / 1000;
     var DROP_DURATION = instant ? 0 : 1.5;
 
-    // Filter to only txs that arrived AFTER the last block. The DB query
-    // returns up to 10K unconfirmed txs from the last 2 hours, but many
-    // predate the latest block. Only txs since the block belong on this flatline.
-    var filteredTxs = [];
-    for (var fi = 0; fi < txs.length; fi++) {
-        if (txs[fi].first_seen && txs[fi].first_seen >= effectiveBlockTs) {
-            filteredTxs.push(txs[fi]);
-        }
-    }
-    console.log('[heartbeat] history txs filtered:', txs.length, '->', filteredTxs.length, '(since block)');
+    // All txs from the DB are unconfirmed (confirmed_height IS NULL).
+    // They represent the current mempool state. Spread them uniformly
+    // across the flatline — ordered by first_seen DESC so newest are
+    // on the right (near the live head), oldest on the left.
+    var txCount = txs.length;
 
-    // Txs are ordered by first_seen DESC (newest first) from the server.
-    // Use index position for uniform spacing — oldest on left, newest on right.
-    var txCount = filteredTxs.length;
-
-    for (var i = 0; i < filteredTxs.length && placed < maxBricks; i++) {
-        var tx = filteredTxs[i];
+    for (var i = 0; i < txs.length && placed < maxBricks; i++) {
+        var tx = txs[i];
         if (!tx.fee || !tx.vsize) continue;
 
         // Reverse index: first item (newest) → right side, last item (oldest) → left side
