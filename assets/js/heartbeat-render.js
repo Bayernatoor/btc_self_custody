@@ -506,7 +506,7 @@ export function drawFrame(frameTime) {
 
     // SSE disconnection overlay — semi-transparent with mining animation
     if (_hb._sseDisconnected) {
-        drawDisconnectedOverlay(ctx, w, h, nowSec);
+        drawDisconnectedOverlay(ctx, w, h, now);
     }
 
     _hb.rafId = requestAnimationFrame(drawFrame);
