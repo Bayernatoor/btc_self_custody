@@ -1,6 +1,6 @@
 // heartbeat-sse.js — SSE connection, tx batching, and mempool fallback
 import { getState, FLATLINE_PX_PER_SEC } from './heartbeat-state.js';
-import { feeRateColor } from './heartbeat-timeline.js';
+import { feeRateColor, createBlockSegment } from './heartbeat-timeline.js';
 
 // Place SSE history txs on the live flatline
 export function placeHistoryTxs(txs, lastBlockTs, instant) {
@@ -291,6 +291,41 @@ export function connectOwnFeed() {
                 }
 
                 processLiveBlock(block);
+            } catch (err) {}
+        });
+        es.addEventListener('block_fee_update', function(e) {
+            if (!_hb) return;
+            try {
+                var update = JSON.parse(e.data);
+                if (!update.height || !update.total_fees) return;
+                // Find the block segment and update its fee data + waveform
+                for (var si = _hb.timeline.length - 1; si >= Math.max(0, _hb.timeline.length - 30); si--) {
+                    var seg = _hb.timeline[si];
+                    if (seg.type === 'block' && seg.height === update.height) {
+                        var oldFees = seg.total_fees;
+                        seg.total_fees = update.total_fees;
+                        // Regenerate PQRST waveform with correct fees
+                        var replacement = createBlockSegment({
+                            height: seg.height,
+                            timestamp: seg.timestamp,
+                            tx_count: seg.tx_count,
+                            total_fees: update.total_fees,
+                            weight: seg.weight,
+                            inter_block_seconds: seg.inter_block_seconds
+                        }, seg.x_start);
+                        seg.points = replacement.points;
+                        seg.color = replacement.color;
+                        // Update announcement if visible
+                        if (_hb._announcement && _hb._announcement.title &&
+                            _hb._announcement.title.indexOf(update.height.toLocaleString()) !== -1) {
+                            var feeBtc = update.total_fees / 100000000;
+                            _hb._announcement.subtitle = feeBtc.toFixed(4) + ' BTC fees \u00b7 ' + (seg.tx_count || 0).toLocaleString() + ' txs';
+                        }
+                        console.log('[heartbeat] fee update: block', update.height,
+                            (oldFees / 100000000).toFixed(4), '->', (update.total_fees / 100000000).toFixed(4), 'BTC');
+                        break;
+                    }
+                }
             } catch (err) {}
         });
         es.addEventListener('lag', function(e) {

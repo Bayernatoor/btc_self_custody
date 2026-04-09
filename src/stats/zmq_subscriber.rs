@@ -43,6 +43,14 @@ pub enum HeartbeatEvent {
         weight: u64,
         confirmed_count: u64,
     },
+    /// Fee update for a block (sent after getblockstats completes).
+    /// JS uses this to replace the initial mempool-derived fee with the
+    /// authoritative fee from the node.
+    #[serde(rename = "block_fee_update")]
+    BlockFeeUpdate {
+        height: u64,
+        total_fees: u64,
+    },
 }
 
 /// Spawn the ZMQ subscriber tasks. Two independent loops: one for txs, one for blocks.
@@ -277,79 +285,96 @@ async fn subscribe_blocks(
             .unwrap_or_default()
             .as_secs();
 
-        // Run two tasks in parallel:
-        // 1. Confirm mempool txs in DB (marks them confirmed, for cleanup)
-        // 2. Get authoritative total fees from getblockstats RPC
-        // We always use getblockstats for fees — the mempool sum is unreliable
-        // after restarts when the mempool_txs table is sparsely populated.
+        // Confirm mempool txs in DB (marks them confirmed + sums fees).
+        // This is fast (DB operation) so we await it before broadcasting.
         let db = state.db.clone();
         let txids = block_info.txids.clone();
         let height = block_info.height;
         let txid_count = txids.len();
 
-        let confirm_fut = tokio::task::spawn_blocking(move || {
-            match db.get() {
-                Ok(conn) => db::confirm_mempool_txs(&conn, &txids, height, now),
-                Err(e) => {
-                    tracing::error!(
-                        "ZMQ: failed to get DB connection for block {height} confirmation: {e}"
-                    );
-                    Ok((0, 0))
+        let (confirmed_count, mempool_fees) = match tokio::task::spawn_blocking(
+            move || {
+                match db.get() {
+                    Ok(conn) => db::confirm_mempool_txs(&conn, &txids, height, now),
+                    Err(e) => {
+                        tracing::error!(
+                            "ZMQ: failed to get DB connection for block {height} confirmation: {e}"
+                        );
+                        Ok((0, 0))
+                    }
                 }
-            }
-        });
-        let fees_fut = state.rpc.get_block_total_fee(block_info.height);
-
-        let (confirm_result, fees_result) =
-            tokio::join!(confirm_fut, fees_fut);
-
-        let confirmed_count = match confirm_result {
-            Ok(Ok((count, _))) => count,
+            },
+        )
+        .await
+        {
+            Ok(Ok(result)) => result,
             Ok(Err(e)) => {
                 tracing::error!(
                     "ZMQ: DB error confirming {txid_count} txs for block {}: {e}",
                     block_info.height,
                 );
-                0
+                (0, 0)
             }
             Err(e) => {
                 tracing::error!(
                     "ZMQ: spawn_blocking panicked for block {}: {e}",
                     block_info.height,
                 );
-                0
-            }
-        };
-
-        let total_fees = match fees_result {
-            Ok(fees) => fees,
-            Err(e) => {
-                tracing::warn!(
-                    "ZMQ: getblockstats failed for block {}: {e}",
-                    block_info.height,
-                );
-                0
+                (0, 0)
             }
         };
 
         tracing::info!(
-            "ZMQ: block {} ({block_hash}) — {confirmed_count}/{} txs confirmed, {:.4} BTC fees",
+            "ZMQ: block {} ({block_hash}) — {confirmed_count}/{} txs confirmed, {:.4} BTC mempool fees",
             block_info.height,
             block_info.txids.len(),
-            total_fees as f64 / 100_000_000.0,
+            mempool_fees as f64 / 100_000_000.0,
         );
 
-        // Broadcast block event
+        // Broadcast block event IMMEDIATELY with mempool-derived fees.
+        // The spike appears on the timeline right away.
         let _ = sender.send(HeartbeatEvent::Block {
             height: block_info.height,
-            hash: block_hash,
+            hash: block_hash.clone(),
             timestamp: block_info.timestamp,
             tx_count: block_info.tx_count,
-            total_fees,
+            total_fees: mempool_fees,
             size: block_info.size,
             weight: block_info.weight,
             confirmed_count,
         });
+
+        // Fetch authoritative fees from getblockstats in the background.
+        // When it completes, send a fee update event so the JS can replace
+        // the mempool-derived fee with the real one (important after restarts
+        // when mempool_txs is sparsely populated and fees show as 0).
+        {
+            let state = Arc::clone(state);
+            let sender = sender.clone();
+            let height = block_info.height;
+            tokio::spawn(async move {
+                match state.rpc.get_block_total_fee(height).await {
+                    Ok(rpc_fees) => {
+                        if rpc_fees != mempool_fees {
+                            tracing::info!(
+                                "ZMQ: block {height} — RPC fees {:.4} BTC (mempool had {:.4})",
+                                rpc_fees as f64 / 100_000_000.0,
+                                mempool_fees as f64 / 100_000_000.0,
+                            );
+                            let _ = sender.send(HeartbeatEvent::BlockFeeUpdate {
+                                height,
+                                total_fees: rpc_fees,
+                            });
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            "ZMQ: getblockstats failed for block {height}: {e}"
+                        );
+                    }
+                }
+            });
+        }
 
         // Don't clear the txid filter here. ZMQ continues re-broadcasting
         // block txs after we finish processing. If we clear now, those stale

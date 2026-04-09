@@ -508,6 +508,7 @@ pub async fn get_heartbeat_sse(
                             let event_type = match &event {
                             super::zmq_subscriber::HeartbeatEvent::Tx { .. } => "tx",
                             super::zmq_subscriber::HeartbeatEvent::Block { .. } => "block",
+                            super::zmq_subscriber::HeartbeatEvent::BlockFeeUpdate { .. } => "block_fee_update",
                         };
                             let data = serde_json::to_string(&event)
                                 .unwrap_or_default();
