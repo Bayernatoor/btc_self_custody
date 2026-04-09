@@ -737,6 +737,21 @@ impl BitcoinRpc {
         })
     }
 
+    /// Get total fee for a block via getblockstats (returns sats).
+    /// Used as fallback when mempool_txs table is sparsely populated.
+    pub async fn get_block_total_fee(
+        &self,
+        height: u64,
+    ) -> Result<u64, StatsError> {
+        let result = self
+            .call(
+                "getblockstats",
+                &[json!(height), json!(["totalfee"])],
+            )
+            .await?;
+        Ok(result["totalfee"].as_u64().unwrap_or(0))
+    }
+
     pub async fn get_mempool_info(&self) -> Result<MempoolInfo, StatsError> {
         let result = self.call("getmempoolinfo", &[]).await?;
         serde_json::from_value(result)

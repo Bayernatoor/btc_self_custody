@@ -429,8 +429,11 @@ export function flushTxBatch() {
 
     // Place ALL txs as individual bricks so every tx is searchable/inspectable.
     // Spread scales with visible virtual width to prevent stacking.
+    // Clamp to actual flatline width so bricks don't all pile at the start
+    // of a narrow flatline (e.g., right after a block).
     var visibleVirtW = (_hb.width || 800) / (_hb.zoom || 1);
-    var spread = Math.max(60, Math.min(visibleVirtW * 0.15, 300));
+    var flatlineWidth = _hb.virtualX - liveSeg.x_start;
+    var spread = Math.max(10, Math.min(flatlineWidth * 0.8, visibleVirtW * 0.15, 300));
     var medianFee = _hb._wsMedianFee || 5;
 
     for (var i = 0; i < batch.length; i++) {
