@@ -116,6 +116,42 @@ pub fn spawn_background_tasks(
         });
     }
 
+    // Seed mempool_txs table with current mempool (getrawmempool verbose).
+    // ZMQ only sends NEW txs, so without this, the table is empty after
+    // restart and the SSE history has no bricks to show.
+    {
+        let state = Arc::clone(&state);
+        tokio::spawn(async move {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            match state.rpc.get_raw_mempool_verbose().await {
+                Ok(entries) => {
+                    let count = entries.len();
+                    if let Ok(conn) = state.db.get() {
+                        let mut inserted = 0u64;
+                        for (txid, fee, vsize) in &entries {
+                            if db::insert_mempool_tx(
+                                &conn, txid, *fee, *vsize, 0, now,
+                            )
+                            .is_ok()
+                            {
+                                inserted += 1;
+                            }
+                        }
+                        tracing::info!(
+                            "Mempool seed: {inserted}/{count} txs inserted from getrawmempool"
+                        );
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Mempool seed failed: {e}");
+                }
+            }
+        });
+    }
+
     // ZMQ subscriber (only if both URLs are configured)
     if let (Some(tx_url), Some(block_url)) = (zmq_tx_url, zmq_block_url) {
         zmq_subscriber::spawn(

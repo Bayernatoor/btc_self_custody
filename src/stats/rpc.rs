@@ -753,6 +753,27 @@ impl BitcoinRpc {
         })
     }
 
+    /// Get all mempool entries with fee/vsize data (verbose=true).
+    /// Used on startup to seed the mempool_txs table for full coverage.
+    pub async fn get_raw_mempool_verbose(
+        &self,
+    ) -> Result<Vec<(String, u64, u32)>, StatsError> {
+        let result = self.call("getrawmempool", &[json!(true)]).await?;
+        let obj = result
+            .as_object()
+            .ok_or_else(|| StatsError::Rpc("expected object".to_string()))?;
+        let mut entries = Vec::with_capacity(obj.len());
+        for (txid, info) in obj {
+            let fee_btc = info["fees"]["base"].as_f64().unwrap_or(0.0);
+            let fee_sats = (fee_btc * 100_000_000.0).round() as u64;
+            let vsize = info["vsize"].as_u64().unwrap_or(0) as u32;
+            if vsize > 0 {
+                entries.push((txid.clone(), fee_sats, vsize));
+            }
+        }
+        Ok(entries)
+    }
+
     /// Get total fee for a block via getblockstats (returns sats).
     /// Used as fallback when mempool_txs table is sparsely populated.
     pub async fn get_block_total_fee(
