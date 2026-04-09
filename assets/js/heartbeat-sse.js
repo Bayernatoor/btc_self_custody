@@ -67,9 +67,10 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
     var DROP_DURATION = instant ? 0 : 1.5;
 
     // All txs from the DB are unconfirmed (confirmed_height IS NULL).
-    // They represent the current mempool state. Spread them uniformly
-    // across the flatline — ordered by first_seen DESC so newest are
-    // on the right (near the live head), oldest on the left.
+    // Note: the DB only contains txs seen via ZMQ since last deploy —
+    // not the full mempool. Spread them uniformly across the flatline,
+    // ordered by first_seen DESC so newest are on the right (near the
+    // live head), oldest on the left.
     var txCount = txs.length;
 
     for (var i = 0; i < txs.length && placed < maxBricks; i++) {
