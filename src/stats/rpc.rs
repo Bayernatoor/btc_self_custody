@@ -708,6 +708,22 @@ impl BitcoinRpc {
         })
     }
 
+    /// Get block header (fast, ~1KB response). Used for immediate block broadcast.
+    pub async fn get_block_header(
+        &self,
+        hash: &str,
+    ) -> Result<BlockTxids, StatsError> {
+        let result = self.call("getblockheader", &[json!(hash)]).await?;
+        Ok(BlockTxids {
+            height: result["height"].as_u64().unwrap_or(0),
+            timestamp: result["time"].as_u64().unwrap_or(0),
+            size: 0,     // not in header
+            weight: 0,   // not in header
+            tx_count: result["nTx"].as_u64().unwrap_or(0),
+            txids: vec![], // not in header
+        })
+    }
+
     /// Get block metadata + txid list (verbosity=1, no full tx data).
     pub async fn get_block_txids(
         &self,
