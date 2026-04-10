@@ -277,14 +277,16 @@ export function renderRhythmStrip(canvasId, blocksJson) {
     if (canvas._rhythmHandlersSet) return;
     canvas._rhythmHandlersSet = true;
 
-    // Click → open block on mempool.space
+    // Click → open block detail modal
     canvas.addEventListener('click', function(e) {
         var r = canvas.getBoundingClientRect();
         var mx = e.clientX - r.left;
         var regions = canvas._rhythmHitRegions;
         for (var ri = 0; ri < regions.length; ri++) {
             if (mx >= regions[ri].x1 && mx <= regions[ri].x2 && regions[ri].block.height) {
-                window.open('https://mempool.space/block/' + regions[ri].block.height, '_blank');
+                if (typeof window.showBlockDetail === 'function') {
+                    window.showBlockDetail(regions[ri].block.height);
+                }
                 return;
             }
         }
@@ -333,9 +335,9 @@ export function renderRhythmStrip(canvasId, blocksJson) {
                 '<span>' + (b.tx_count || 0).toLocaleString() + ' txs</span>' +
                 '<span>' + feeBtc + ' BTC fees</span>' +
                 '<span>' + wait + ' wait</span>' +
-                '<a href="https://mempool.space/block/' + (b.height || 0) + '" target="_blank" ' +
-                'style="color:' + r.color + ';text-decoration:underline;text-underline-offset:2px">' +
-                'View on mempool.space \u2197</a>';
+                '<a onclick="if(window.showBlockDetail)window.showBlockDetail(' + (b.height || 0) + ')" ' +
+                'style="color:' + r.color + ';text-decoration:underline;text-underline-offset:2px;cursor:pointer">' +
+                'View Block Data</a>';
             // Highlight on canvas
             canvas._rhythmSelected = r;
             renderRhythmStrip(canvasId, blocksJson);

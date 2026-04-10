@@ -104,15 +104,13 @@ fn YearCard(year: OnThisDayYear) -> impl IntoView {
                                     </svg>
                                     <span class="text-sm font-semibold text-[#f7931a]">{e.title.clone()}</span>
                                     {e.block.map(|height| view! {
-                                        <a
-                                            href=format!("https://mempool.space/block/{height}")
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            class="text-[10px] text-white/50 hover:text-[#f7931a] transition-colors ml-auto"
+                                        <button
+                                            class="text-[10px] text-white/50 hover:text-[#f7931a] transition-colors ml-auto cursor-pointer"
+                                            on:click=move |_| super::components::show_block_detail(height)
                                         >
                                             {format!("Block #{}", super::helpers::format_number(height))}
                                             " \u{2192}"
-                                        </a>
+                                        </button>
                                     })}
                                 </div>
                                 <p class="text-xs text-white/60 leading-relaxed pl-6" inner_html=e.context.clone()></p>
