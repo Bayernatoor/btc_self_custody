@@ -16,6 +16,8 @@ pub mod shared;
 
 mod embedded;
 mod fees;
+mod hall_of_fame;
+mod hall_of_fame_data;
 mod heartbeat;
 mod mining;
 mod network;
@@ -26,6 +28,7 @@ mod stats;
 
 pub use embedded::EmbeddedChartsPage;
 pub use fees::FeeChartsPage;
+pub use hall_of_fame::HallOfFamePage;
 pub use heartbeat::HeartbeatPage;
 pub use mining::MiningChartsPage;
 pub use network::NetworkChartsPage;

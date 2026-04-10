@@ -202,6 +202,96 @@ pub struct RangeSummary {
     pub witness_pct: f64,
 }
 
+/// A single extreme record: value + the block where it occurred.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct ExtremeRecord {
+    pub value: u64,
+    pub height: u64,
+    pub timestamp: u64,
+    pub miner: String,
+}
+
+/// Float variant for fee rates.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct ExtremeRecordF64 {
+    pub value: f64,
+    pub height: u64,
+    pub timestamp: u64,
+    pub miner: String,
+}
+
+/// Collection of extreme records for a time range, each with the block that holds it.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct ExtremesData {
+    pub largest_block: ExtremeRecord,
+    pub highest_fee_block: ExtremeRecord,
+    pub peak_fee_rate: ExtremeRecordF64,
+    pub peak_p90_fee_rate: ExtremeRecordF64,
+    pub most_txs: ExtremeRecord,
+    pub largest_tx: ExtremeRecord,
+    pub most_inputs: ExtremeRecord,
+    pub most_outputs: ExtremeRecord,
+    pub most_inscriptions: ExtremeRecord,
+    pub most_runes: ExtremeRecord,
+    pub most_op_returns: ExtremeRecord,
+    pub most_rbf: ExtremeRecord,
+    pub most_taproot: ExtremeRecord,
+    pub empty_block_count: u64,
+    pub block_count: u64,
+}
+
+// ---------------------------------------------------------------------------
+// Hall of Fame
+// ---------------------------------------------------------------------------
+
+/// Category for Hall of Fame entries.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum HofCategory {
+    Milestones,
+    Records,
+    Attacks,
+    Protocol,
+    Oddities,
+}
+
+impl HofCategory {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Milestones => "Milestones",
+            Self::Records => "Records",
+            Self::Attacks => "Attacks",
+            Self::Protocol => "Protocol",
+            Self::Oddities => "Oddities",
+        }
+    }
+
+    pub fn color(self) -> &'static str {
+        match self {
+            Self::Milestones => "#f7931a",
+            Self::Records => "#60a5fa",
+            Self::Attacks => "#ef4444",
+            Self::Protocol => "#a78bfa",
+            Self::Oddities => "#34d399",
+        }
+    }
+
+}
+
+/// A curated Hall of Fame entry — compile-time constant.
+#[derive(Clone, Debug)]
+pub struct HallOfFameEntry {
+    pub slug: &'static str,
+    pub title: &'static str,
+    pub description: &'static str,
+    pub category: HofCategory,
+    pub date: &'static str,
+    pub block: Option<u64>,
+    pub txid: Option<&'static str>,
+    pub highlight: bool,
+    /// Optional (label, url) for an external reference article or source.
+    pub source: Option<(&'static str, &'static str)>,
+}
+
 /// A notable event with title and context.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NotableEvent {

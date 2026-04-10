@@ -239,6 +239,9 @@ export function setupInputHandlers(canvas) {
         } else if (_hb.hoveredBlip) {
             // Pin the hovered brick
             _hb._pinnedBlip = _hb.hoveredBlip;
+        } else if (_hb.hoveredBlock && _hb.hoveredBlock.height > 0 && typeof window.showBlockDetail === 'function') {
+            // Clicking a block spike -> open block detail modal
+            window.showBlockDetail(_hb.hoveredBlock.height);
         }
     });
 
@@ -347,7 +350,16 @@ export function setupInputHandlers(canvas) {
                     var my = e.changedTouches[0].clientY - rect.top;
 
                     if (tapped) {
-                        _hb.hoveredBlock = (_hb.hoveredBlock === tapped) ? null : tapped;
+                        if (_hb.hoveredBlock === tapped) {
+                            // Second tap on same spike: open block detail
+                            if (tapped.height > 0 && typeof window.showBlockDetail === 'function') {
+                                window.showBlockDetail(tapped.height);
+                            }
+                            _hb.hoveredBlock = null;
+                        } else {
+                            // First tap: show tooltip
+                            _hb.hoveredBlock = tapped;
+                        }
                     } else {
                         _hb.hoveredBlock = null;
                     }

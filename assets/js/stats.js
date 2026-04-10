@@ -300,6 +300,12 @@
                 var satsToBtc = function(sats) {
                     return (sats / 1e8).toFixed(8) + ' BTC';
                 };
+                var fmtSize = function(bytes) {
+                    if (bytes == null) return '\u2014';
+                    if (bytes >= 1000000) return (bytes / 1e6).toFixed(2) + ' MB';
+                    if (bytes >= 1000) return (bytes / 1e3).toFixed(1) + ' KB';
+                    return bytes + ' B';
+                };
                 var halvings = Math.floor(b.height / 210000);
                 var subsidySats = halvings >= 64 ? 0 : Math.floor(5000000000 / Math.pow(2, halvings));
                 var feesBtc = b.total_fees != null ? satsToBtc(b.total_fees) : '\u2014';
@@ -309,6 +315,7 @@
                 var bip54 = b.coinbase_locktime === b.height - 1 && b.coinbase_sequence !== 4294967295;
                 var versionHex = '0x' + (b.version >>> 0).toString(16).padStart(8, '0');
                 var hashVal = b.hash || 'N/A';
+                var weightUtil = b.weight != null ? ((b.weight / 4000000) * 100).toFixed(1) + '%' : '\u2014';
 
                 var body = document.getElementById('block-detail-body');
                 body.textContent = '';
@@ -318,9 +325,11 @@
                 body.appendChild(bdRow('Time', b.timestamp ? new Date(b.timestamp * 1000).toLocaleString() : '\u2014'));
                 body.appendChild(bdCopyRow('Hash', hashVal.substring(0, 16) + '\u2026' + hashVal.slice(-8), hashVal));
                 body.appendChild(bdRow('Miner', b.miner || 'Unknown'));
-                body.appendChild(bdRow('Size', b.size != null ? (b.size / 1e6).toFixed(2) + ' MB' : '\u2014'));
-                body.appendChild(bdRow('Weight', b.weight != null ? b.weight.toLocaleString() + ' WU' : '\u2014'));
+                body.appendChild(bdRow('Size', fmtSize(b.size)));
+                body.appendChild(bdRow('Weight', b.weight != null ? b.weight.toLocaleString() + ' WU (' + weightUtil + ')' : '\u2014'));
                 body.appendChild(bdRow('Transactions', b.tx_count != null ? b.tx_count.toLocaleString() : '\u2014'));
+                if (b.input_count > 0)
+                    body.appendChild(bdRow('Inputs / Outputs', b.input_count.toLocaleString() + ' / ' + (b.output_count || 0).toLocaleString()));
 
                 // -- Reward & Fees --
                 body.appendChild(bdDivider());
@@ -332,6 +341,17 @@
                 body.appendChild(bdRow('Fee Rate', b.median_fee_rate ? b.median_fee_rate.toFixed(1) + ' sat/vB' : '\u2014'));
                 body.appendChild(bdRow('Difficulty', b.difficulty != null ? (b.difficulty / 1e12).toFixed(2) + ' T' : '\u2014'));
 
+                // -- Adoption --
+                var hasAdoption = (b.segwit_spend_count || 0) > 0 || (b.taproot_spend_count || 0) > 0;
+                if (hasAdoption) {
+                    body.appendChild(bdDivider());
+                    body.appendChild(bdSection('Adoption'));
+                    if (b.segwit_spend_count > 0)
+                        body.appendChild(bdRow('SegWit Txs', b.segwit_spend_count.toLocaleString()));
+                    if (b.taproot_spend_count > 0)
+                        body.appendChild(bdRow('Taproot Spends', b.taproot_spend_count.toLocaleString()));
+                }
+
                 // -- Embedded Data --
                 var hasEmbedded = (b.op_return_count || 0) > 0 || (b.inscription_count || 0) > 0;
                 if (hasEmbedded) {
@@ -340,22 +360,42 @@
                     if (b.op_return_count > 0) {
                         body.appendChild(bdRow('OP_RETURN', (b.op_return_count).toLocaleString() + ' outputs'));
                         if (b.runes_count > 0)
-                            body.appendChild(bdRow('  Runes', b.runes_count.toLocaleString() + ' (' + (b.runes_bytes || 0).toLocaleString() + ' B)'));
+                            body.appendChild(bdRow('  Runes', b.runes_count.toLocaleString() + ' (' + fmtSize(b.runes_bytes || 0) + ')'));
                         if (b.data_carrier_count > 0)
-                            body.appendChild(bdRow('  Data Carrier', b.data_carrier_count.toLocaleString() + ' (' + (b.data_carrier_bytes || 0).toLocaleString() + ' B)'));
+                            body.appendChild(bdRow('  Other OP_RETURN', b.data_carrier_count.toLocaleString() + ' (' + fmtSize(b.data_carrier_bytes || 0) + ')'));
                     }
                     if (b.inscription_count > 0)
-                        body.appendChild(bdRow('Inscriptions', b.inscription_count.toLocaleString() + ' (' + (b.inscription_bytes || 0).toLocaleString() + ' B)'));
+                        body.appendChild(bdRow('Inscriptions', b.inscription_count.toLocaleString() + ' (' + fmtSize(b.inscription_bytes || 0) + ')'));
                 }
 
-                // — Signaling —
+                // -- BIP Signaling (collapsible) --
                 body.appendChild(bdDivider());
-                body.appendChild(bdSection('BIP Signaling'));
-                body.appendChild(bdRow('BIP-110 (bit 4)', bit4 ? '\u2713 Signaled' : '\u2717 No', bit4 ? '' : ''));
-                body.appendChild(bdRow('BIP-54', bip54 ? '\u2713 Compliant' : '\u2717 No', bip54 ? '' : ''));
-                body.appendChild(bdCopyRow('Block Version', versionHex, versionHex));
+                var sigToggle = document.createElement('div');
+                sigToggle.className = 'bd-section';
+                sigToggle.style.cssText = 'cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between';
+                var sigLabel = document.createElement('span');
+                sigLabel.textContent = 'BIP Signaling';
+                var sigArrow = document.createElement('span');
+                sigArrow.textContent = '\u25B6';
+                sigArrow.style.cssText = 'font-size:10px;color:rgba(255,255,255,0.3);transition:transform 0.2s';
+                sigToggle.appendChild(sigLabel);
+                sigToggle.appendChild(sigArrow);
+                body.appendChild(sigToggle);
 
-                // — External link —
+                var sigContent = document.createElement('div');
+                sigContent.style.cssText = 'display:none;overflow:hidden';
+                sigContent.appendChild(bdRow('BIP-110 (bit 4)', bit4 ? '\u2713 Signaled' : '\u2717 No'));
+                sigContent.appendChild(bdRow('BIP-54', bip54 ? '\u2713 Compliant' : '\u2717 No'));
+                sigContent.appendChild(bdCopyRow('Block Version', versionHex, versionHex));
+                body.appendChild(sigContent);
+
+                sigToggle.addEventListener('click', function() {
+                    var open = sigContent.style.display !== 'none';
+                    sigContent.style.display = open ? 'none' : 'block';
+                    sigArrow.style.transform = open ? '' : 'rotate(90deg)';
+                });
+
+                // -- External link --
                 body.appendChild(bdDivider());
                 var link = document.createElement('div');
                 link.style.cssText = 'text-align:center;padding-top:4px';

@@ -893,6 +893,7 @@ pub fn OverlayPanel() -> impl IntoView {
         path == "/observatory"
             || path == "/observatory/stats"
             || path == "/observatory/on-this-day"
+            || path == "/observatory/hall-of-fame"
             || path == "/observatory/heartbeat"
     });
 
@@ -990,6 +991,7 @@ pub fn ObservatoryNav() -> impl IntoView {
         ("/observatory", "Dashboard"),
         ("/observatory/stats", "Overview"),
         ("/observatory/on-this-day", "On This Day"),
+        ("/observatory/hall-of-fame", "Hall of Fame"),
         ("/observatory/heartbeat", "Heartbeat"),
     ];
 

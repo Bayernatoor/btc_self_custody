@@ -168,10 +168,10 @@ pub fn SignalingPage() -> impl IntoView {
                             let status_color = if activated { "text-green-400" } else if pct >= threshold * 0.7 { "text-[#f7931a]" } else { "text-red-400/70" };
 
                             // BIP description (compact)
-                            let bip_desc = if bip_method.get() == "locktime" {
-                                ("BIP-54: Consensus Cleanup", "Fixes timewarp attack, reduces worst-case validation time, prevents 64-byte tx exploits. Requires coinbase nLockTime = height\u{2009}\u{2212}\u{2009}1.", "95%")
+                            let bip_desc: (&str, &str, &str, &str) = if bip_method.get() == "locktime" {
+                                ("BIP-54: Consensus Cleanup", "Fixes timewarp attack, reduces worst-case validation time, prevents 64-byte tx exploits. Requires coinbase nLockTime = height\u{2009}\u{2212}\u{2009}1.", "95%", "https://github.com/bitcoin/bips/blob/master/bip-0054.md")
                             } else {
-                                ("BIP-110: OP_RETURN Limits", "Caps transaction outputs at 34 bytes and OP_RETURN data at 83 bytes. Modified BIP9: 55% threshold, expires ~1 year.", "55%")
+                                ("BIP-110: OP_RETURN Limits", "Caps transaction outputs at 34 bytes and OP_RETURN data at 83 bytes. Modified BIP9: 55% threshold, expires ~1 year.", "55%", "https://github.com/bitcoin/bips/blob/master/bip-0110.mediawiki")
                             };
 
                             // Aggregate miner signaling data
@@ -228,22 +228,39 @@ pub fn SignalingPage() -> impl IntoView {
                                     // Status card: progress + BIP info combined
                                     <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6">
                                         <div class="flex flex-col lg:flex-row lg:items-start lg:gap-8">
-                                            // Left: Progress + stats
+                                            // Left: Signaling stats
                                             <div class="flex-1 mb-4 lg:mb-0">
                                                 <div class="flex items-baseline gap-3 mb-3">
                                                     <span class="text-3xl font-bold text-white font-mono">{format!("{:.1}%", pct)}</span>
                                                     <span class=format!("text-sm font-medium {status_color}")>{status_text}</span>
                                                 </div>
-                                                // Progress bar
-                                                <div class="h-2.5 bg-white/5 rounded-full overflow-hidden mb-3">
-                                                    <div
-                                                        class="h-full rounded-full transition-all duration-500"
-                                                        style=format!("width: {bar_width}; background: {bar_color}")
-                                                    ></div>
+                                                // Signaling bar (percentage of blocks that signaled)
+                                                <div class="mb-1">
+                                                    <div class="flex items-center justify-between mb-1">
+                                                        <span class="text-[10px] text-white/40">"Signaling"</span>
+                                                        <span class="text-[10px] text-white/40 font-mono">{format!("{} / {} blocks", format_number(period_stats.signaled_count), format_number(mined))}</span>
+                                                    </div>
+                                                    <div class="h-2.5 bg-white/5 rounded-full overflow-hidden">
+                                                        <div
+                                                            class="h-full rounded-full transition-all duration-500"
+                                                            style=format!("width: {}%; background: {bar_color}", pct.min(100.0))
+                                                        ></div>
+                                                    </div>
+                                                </div>
+                                                // Period progress bar (how far through the 2016-block window)
+                                                <div class="mb-3">
+                                                    <div class="flex items-center justify-between mb-1">
+                                                        <span class="text-[10px] text-white/40">"Period progress"</span>
+                                                        <span class="text-[10px] text-white/40 font-mono">{format!("{} / 2,016", format_number(mined))}</span>
+                                                    </div>
+                                                    <div class="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                                                        <div
+                                                            class="h-full rounded-full bg-white/20 transition-all duration-500"
+                                                            style=format!("width: {bar_width}")
+                                                        ></div>
+                                                    </div>
                                                 </div>
                                                 <div class="flex flex-wrap gap-x-6 gap-y-1 text-xs text-white/50">
-                                                    <span>{format!("{} signaled", format_number(period_stats.signaled_count))}</span>
-                                                    <span>{format!("{} mined", format_number(mined))}</span>
                                                     {if is_current {
                                                         Some(view! { <span>{format!("{} remaining", format_number(remaining))}</span> })
                                                     } else {
@@ -258,7 +275,18 @@ pub fn SignalingPage() -> impl IntoView {
                                             // Right: BIP description
                                             <div class="lg:max-w-sm lg:border-l lg:border-white/10 lg:pl-8">
                                                 <h3 class="text-sm text-white font-semibold mb-1.5">{bip_desc.0}</h3>
-                                                <p class="text-xs text-white/50 leading-relaxed">{bip_desc.1}</p>
+                                                <p class="text-xs text-white/50 leading-relaxed mb-2">{bip_desc.1}</p>
+                                                <a
+                                                    href=bip_desc.3
+                                                    target="_blank"
+                                                    rel="noopener"
+                                                    class="inline-flex items-center gap-1 text-[11px] text-[#f7931a]/70 hover:text-[#f7931a] transition-colors"
+                                                >
+                                                    "Read BIP specification"
+                                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+                                                    </svg>
+                                                </a>
                                             </div>
                                         </div>
                                     </div>
