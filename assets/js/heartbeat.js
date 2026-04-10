@@ -118,14 +118,20 @@ window.initHeartbeat = function(canvasId) {
 
     // Fullscreen sizing
     var wrap = document.getElementById('heartbeat-canvas-wrap');
+    var card = document.getElementById('heartbeat-card');
     function _hbFullscreenChange() {
         var s = getState();
-        if (!s || !wrap) return;
+        if (!s || !wrap || !card) return;
         var fsEl = document.fullscreenElement || document.webkitFullscreenElement;
         if (fsEl) {
+            // In fullscreen: card fills screen, canvas fills remaining space
+            card.style.height = '100dvh';
             wrap.style.height = '';
+            wrap.style.flex = '1 1 0%';
         } else {
-            wrap.style.height = '70vh';
+            card.style.height = '';
+            wrap.style.flex = '';
+            wrap.style.height = '50vh';
         }
     }
     document.addEventListener('fullscreenchange', _hbFullscreenChange);

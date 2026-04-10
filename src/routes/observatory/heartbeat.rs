@@ -498,26 +498,32 @@ pub fn HeartbeatPage() -> impl IntoView {
                 // CSS sets an initial height; JS refines it from
                 // window.innerHeight once initHeartbeat runs.
                 // flex-1 fills fullscreen when JS clears the height.
-                <div id="heartbeat-canvas-wrap" class="relative flex-1 min-h-0" style="height: 70vh">
+                <div id="heartbeat-canvas-wrap" class="relative flex-1 min-h-0" style="height: 50vh; min-height: 300px">
                     <canvas
                         id="heartbeat-canvas"
                         class="w-full h-full"
                     ></canvas>
 
-                    // Loading overlay — shows mining animation while blocks load
+                    // Loading overlay (initial page load)
                     <Show when=move || loading.get()>
                         <div class="absolute inset-0 flex flex-col items-center justify-center bg-[#0d2137]/95 z-10">
-                            <div class="relative">
-                                // Pickaxe swinging animation
-                                <div class="text-4xl animate-bounce" style="animation-duration: 0.8s">
-                                    "\u{26CF}\u{FE0F}"
-                                </div>
+                            <div class="text-4xl animate-bounce" style="animation-duration: 0.8s">
+                                "\u{26CF}\u{FE0F}"
                             </div>
                             <p class="mt-3 text-sm text-white/50 font-mono animate-pulse">
                                 "Mining blocks..."
                             </p>
                         </div>
                     </Show>
+                    // Mining overlay (block being processed, controlled by JS)
+                    <div id="heartbeat-mining-overlay" class="absolute inset-0 flex flex-col items-center justify-center bg-[#0d2137]/80 z-10 hidden pointer-events-none">
+                        <div class="text-4xl animate-bounce" style="animation-duration: 0.8s">
+                            "\u{26CF}\u{FE0F}"
+                        </div>
+                        <p class="mt-3 text-sm text-white/50 font-mono animate-pulse">
+                            "New block found..."
+                        </p>
+                    </div>
 
                 </div>
 
