@@ -396,6 +396,9 @@ async fn subscribe_blocks(
         let block_hash = bytes_to_hex(hash_bytes);
         tracing::info!("ZMQ: hashblock {block_hash} — fetching full data");
 
+        // Show mining overlay immediately while we fetch block data
+        let _ = sender.send(HeartbeatEvent::BlockMining);
+
         // Node just finished validation — RPC is available now.
         // Fetch all data synchronously for a single complete broadcast.
         let block_info = match get_block_info(state, &block_hash).await {

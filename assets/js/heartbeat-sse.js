@@ -166,6 +166,8 @@ export function processLiveBlock(block) {
     _hb._sseDisconnected = false;
     _hb._sseDisconnectedSince = 0;
     _hb._blockMiningOverlay = false;
+    var miningEl = document.getElementById('heartbeat-mining-overlay');
+    if (miningEl) miningEl.classList.add('hidden');
 
     if (window.heartbeatFlash) window.heartbeatFlash();
     if (window.heartbeatPulse) window.heartbeatPulse();
@@ -294,11 +296,9 @@ export function connectOwnFeed() {
             if (!_hb) return;
             // Node is processing a new block — show mining overlay.
             // The overlay clears when the complete block event arrives.
-            if (!_hb._sseDisconnected) {
-                _hb._sseDisconnected = true;
-                _hb._sseDisconnectedSince = Date.now() / 1000;
-                _hb._blockMiningOverlay = true; // distinguish from SSE disconnect
-            }
+            _hb._blockMiningOverlay = true;
+            var miningEl = document.getElementById('heartbeat-mining-overlay');
+            if (miningEl) miningEl.classList.remove('hidden');
             console.log('[heartbeat] block mining detected via sequence');
         });
         es.addEventListener('lag', function(e) {
