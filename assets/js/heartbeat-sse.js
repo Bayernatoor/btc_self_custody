@@ -555,6 +555,13 @@ export function flushTxBatch() {
                 liveSeg._colHeights[rb.gridX] = newStackY + (rb.brickH || 0);
             }
             liveSeg.blips = kept;
+            // Clear pinned/hovered blip if it was evicted
+            if (_hb._pinnedBlip && kept.indexOf(_hb._pinnedBlip) === -1) {
+                _hb._pinnedBlip = null;
+            }
+            if (_hb.hoveredBlip && kept.indexOf(_hb.hoveredBlip) === -1) {
+                _hb.hoveredBlip = null;
+            }
         }
     }
 }

@@ -55,6 +55,8 @@ pub async fn init(
         signaling_blocks_cache: Mutex::new(None),
         signaling_periods_cache: Mutex::new(None),
         price_history_cache: Mutex::new(None),
+        range_summary_cache: Mutex::new(None),
+        extremes_cache: Mutex::new(None),
         heartbeat_tx,
     });
 

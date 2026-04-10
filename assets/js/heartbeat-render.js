@@ -368,7 +368,7 @@ export function drawFrame(frameTime) {
         var hSeg = _hb.hoveredBlock;
         var midX = virtualToCanvas((hSeg.x_start + hSeg.x_end) / 2);
         drawTooltip(ctx, hSeg, midX, baseline - 30, baseline);
-    } else if (_hb._pinnedBlip) {
+    } else if (_hb._pinnedBlip && _hb._pinnedBlip.x !== undefined) {
         var pbx = virtualToCanvas(_hb._pinnedBlip.x);
         drawBlipTooltip(ctx, _hb._pinnedBlip, pbx, baseline);
     } else if (_hb.hoveredBlip) {

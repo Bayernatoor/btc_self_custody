@@ -18,18 +18,16 @@ export function generatePQRST(block) {
     var waitNorm = Math.min(interBlock / 1800, 1.0); // 30 min cap
     var fullNorm = Math.min(weight / 4000000, 1.0);
 
-    // Fee normalization: power curve for wider visible spread.
-    // pow(x, 0.4) maps: 1M→0.10, 2M→0.15, 5M→0.22, 10M→0.30,
-    //                   20M→0.42, 50M→0.63, 100M→0.83, 200M→1.0
-    // This spreads the typical 1M-50M range across 0.10-0.63 (vs sqrt 0.14-1.0)
-    // giving more dynamic range for the common case while still showing
-    // fee spikes (>50M sats) as dramatically tall spikes.
-    var feeNorm = fees > 0 ? Math.min(Math.pow(fees / 200000000, 0.4), 1.0) : 0;
+    // Fee normalization: shifted log scale so typical fee range (5M-50M sats)
+    // spans the middle of the visual range. log10(5M)=6.7, log10(50M)=7.7
+    // Subtract 5.5 to make low fees small and high fees tall:
+    //   1M sats → 0.17, 5M → 0.40, 20M → 0.63, 50M → 0.73, 200M → 0.90, 1B → 1.0
+    var feeNorm = fees > 0 ? Math.min(Math.max((Math.log10(fees) - 5.5) / 3.5, 0.05), 1.0) : 0;
 
     // Waveform amplitudes (pixels)
     var pAmp   = 6 + txNorm * 28;           // P wave: 6-34px
     var qDepth = 8 + waitNorm * 60;          // Q dip: 8-68px
-    var rHeight = 15 + feeNorm * 235;         // R spike: 15-250px (lower base, wider range)
+    var rHeight = 20 + feeNorm * 280;         // R spike: 20-300px
     var sDepth = rHeight * 0.45;              // S dip: 45% of R
     var tAmp   = 4 + fullNorm * 30;           // T wave: 4-34px
 
@@ -111,6 +109,7 @@ export function computeColor(elapsedSec, feeRate, mempoolMB) {
 export function lerp(a, b, t) { return a + (b - a) * t; }
 
 export function hexToRgb(hex) {
+    if (!hex || typeof hex !== 'string') return [0, 150, 255]; // fallback: blue
     var r = parseInt(hex.slice(1, 3), 16);
     var g = parseInt(hex.slice(3, 5), 16);
     var b = parseInt(hex.slice(5, 7), 16);
@@ -118,7 +117,7 @@ export function hexToRgb(hex) {
 }
 
 export function lerpColor(a, b, t) {
-    var ar = hexToRgb(a), br = hexToRgb(b);
+    var ar = hexToRgb(a || '#0096ff'), br = hexToRgb(b || '#0096ff');
     var r = Math.round(ar[0] + (br[0] - ar[0]) * t);
     var g = Math.round(ar[1] + (br[1] - ar[1]) * t);
     var bl = Math.round(ar[2] + (br[2] - ar[2]) * t);
