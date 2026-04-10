@@ -188,39 +188,37 @@
             }
             applyMobileAdjustments(opts);
             el._chart.setOption(opts, { notMerge: true, lazyUpdate: true });
-            // Click-to-detail: for axis-trigger charts (lines), use zrender click
-            // to find the nearest data point under the cursor. For item-trigger
-            // charts (scatter/pie), use ECharts native click.
+            // Click-to-detail: use zrender click to find nearest data point.
+            // Registered once per chart element. Works for both axis and item tooltips.
             if (!el._clickRegistered) {
                 el._clickRegistered = true;
-                if (opts.tooltip && opts.tooltip.trigger === 'axis') {
-                    el._chart.getZr().on('click', function(zrParams) {
-                        var pointInPixel = [zrParams.offsetX, zrParams.offsetY];
-                        if (!el._chart.containPixel('grid', pointInPixel)) return;
-                        // Find closest series data point at this x position
-                        var xVal = el._chart.convertFromPixel({ seriesIndex: 0 }, pointInPixel)[0];
-                        var model = el._chart.getOption();
-                        if (!model.series || !model.series.length) return;
-                        var data = model.series[0].data;
-                        if (!data || !data.length || !Array.isArray(data[0]) || data[0].length < 3) return;
-                        // Binary search for nearest timestamp
-                        var lo = 0, hi = data.length - 1, best = 0;
-                        while (lo <= hi) {
-                            var mid = (lo + hi) >> 1;
-                            if (data[mid][0] <= xVal) { best = mid; lo = mid + 1; }
-                            else { hi = mid - 1; }
+                el._chart.getZr().on('click', function(zrParams) {
+                    var pointInPixel = [zrParams.offsetX, zrParams.offsetY];
+                    if (!el._chart.containPixel('grid', pointInPixel)) return;
+                    var xVal = el._chart.convertFromPixel({ seriesIndex: 0 }, pointInPixel)[0];
+                    var model = el._chart.getOption();
+                    if (!model.series || !model.series.length) return;
+                    // Find the first series with height data (skip MA series which lack it)
+                    var data = null;
+                    for (var si = 0; si < model.series.length; si++) {
+                        var sd = model.series[si].data;
+                        if (sd && sd.length && Array.isArray(sd[0]) && sd[0].length >= 3) {
+                            data = sd;
+                            break;
                         }
-                        if (best < data.length - 1 && Math.abs(data[best+1][0] - xVal) < Math.abs(data[best][0] - xVal)) best++;
-                        var height = data[best][2];
-                        if (typeof height === 'number') window.showBlockDetail(height);
-                    });
-                } else {
-                    el._chart.on('click', function(params) {
-                        if (params.data && Array.isArray(params.data) && params.data.length >= 3 && typeof params.data[2] === 'number') {
-                            window.showBlockDetail(params.data[2]);
-                        }
-                    });
-                }
+                    }
+                    if (!data) return;
+                    // Binary search for nearest timestamp
+                    var lo = 0, hi = data.length - 1, best = 0;
+                    while (lo <= hi) {
+                        var mid = (lo + hi) >> 1;
+                        if (data[mid][0] <= xVal) { best = mid; lo = mid + 1; }
+                        else { hi = mid - 1; }
+                    }
+                    if (best < data.length - 1 && Math.abs(data[best+1][0] - xVal) < Math.abs(data[best][0] - xVal)) best++;
+                    var height = data[best][2];
+                    if (typeof height === 'number') window.showBlockDetail(height);
+                });
             }
         } catch(e) { console.error('Chart error:', e); }
     };

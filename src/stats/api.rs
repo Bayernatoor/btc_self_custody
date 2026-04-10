@@ -77,6 +77,12 @@ pub struct StatsState {
         Mutex<Option<(String, Vec<super::db::SignalingPeriod>, Instant)>>,
     /// Cached price history: (from_ts, to_ts, data, fetched_at).
     pub price_history_cache: RangeCache<PricePoint>,
+    /// Cached range summary: (from_ts, to_ts, result, fetched_at). 60s TTL.
+    pub range_summary_cache:
+        Mutex<Option<(u64, u64, super::types::RangeSummary, Instant)>>,
+    /// Cached extremes: (from_ts, to_ts, result, fetched_at). 60s TTL.
+    pub extremes_cache:
+        Mutex<Option<(u64, u64, super::types::ExtremesData, Instant)>>,
     /// Broadcast channel for real-time heartbeat events (ZMQ → SSE).
     pub heartbeat_tx: broadcast::Sender<super::zmq_subscriber::HeartbeatEvent>,
 }

@@ -1235,16 +1235,40 @@ pub async fn fetch_range_summary(
     from_ts: u64,
     to_ts: u64,
 ) -> Result<RangeSummary, ServerFnError> {
+    use std::time::Instant;
+
     let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
         leptos_axum::extract().await.map_err(|e| {
             ServerFnError::new(format!("Stats not available: {e}"))
         })?;
+
+    // Check cache (60s TTL, must match same range)
+    {
+        let cached = state
+            .range_summary_cache
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if let Some((cf, ct, ref result, ref ts)) = *cached {
+            if cf == from_ts && ct == to_ts && ts.elapsed().as_secs() < 60 {
+                return Ok(result.clone());
+            }
+        }
+    }
+
     let conn = state
         .db
         .get()
         .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
-    super::db::query_range_summary(&conn, from_ts, to_ts)
-        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))
+    let result = super::db::query_range_summary(&conn, from_ts, to_ts)
+        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+
+    *state
+        .range_summary_cache
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) =
+        Some((from_ts, to_ts, result.clone(), Instant::now()));
+
+    Ok(result)
 }
 
 #[server(prefix = "/api", endpoint = "extremes")]
@@ -1252,14 +1276,38 @@ pub async fn fetch_extremes(
     from_ts: u64,
     to_ts: u64,
 ) -> Result<ExtremesData, ServerFnError> {
+    use std::time::Instant;
+
     let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
         leptos_axum::extract().await.map_err(|e| {
             ServerFnError::new(format!("Stats not available: {e}"))
         })?;
+
+    // Check cache (60s TTL, must match same range)
+    {
+        let cached = state
+            .extremes_cache
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if let Some((cf, ct, ref result, ref ts)) = *cached {
+            if cf == from_ts && ct == to_ts && ts.elapsed().as_secs() < 60 {
+                return Ok(result.clone());
+            }
+        }
+    }
+
     let conn = state
         .db
         .get()
         .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
-    super::db::query_extremes_with_heights(&conn, from_ts, to_ts)
-        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))
+    let result = super::db::query_extremes_with_heights(&conn, from_ts, to_ts)
+        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+
+    *state
+        .extremes_cache
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) =
+        Some((from_ts, to_ts, result.clone(), Instant::now()));
+
+    Ok(result)
 }
