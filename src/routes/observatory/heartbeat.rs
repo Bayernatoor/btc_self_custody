@@ -494,7 +494,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                     </div>
                 </div>
 
-                // Canvas with first-visit hint overlay
+                // Canvas with overlays
                 // CSS sets an initial height; JS refines it from
                 // window.innerHeight once initHeartbeat runs.
                 // flex-1 fills fullscreen when JS clears the height.
@@ -524,6 +524,35 @@ pub fn HeartbeatPage() -> impl IntoView {
                             "New block found..."
                         </p>
                     </div>
+                    // First-visit hint overlay (starts visible, dismissed on click)
+                    {
+                        let (show_hint, set_show_hint) = signal(true);
+                        view! {
+                            <Show when=move || show_hint.get()>
+                                <div
+                                    class="absolute inset-0 z-20 flex items-center justify-center bg-[#0d2137]/90 cursor-pointer"
+                                    on:click=move |_| set_show_hint.set(false)
+                                >
+                                    <div class="max-w-sm mx-4 text-center space-y-4">
+                                        <p class="text-white/80 text-sm leading-relaxed">
+                                            "Each "
+                                            <span class="text-[#f7931a] font-semibold">"spike"</span>
+                                            " is a block. Each "
+                                            <span class="text-[#f7931a] font-semibold">"brick"</span>
+                                            " is a transaction."
+                                        </p>
+                                        <div class="text-white/50 text-xs space-y-1.5">
+                                            <p>"Drag to scroll through history"</p>
+                                            <p>"Scroll wheel or pinch to zoom"</p>
+                                            <p>"Click a spike for block details"</p>
+                                            <p>"Click a brick for transaction info"</p>
+                                        </div>
+                                        <p class="text-white/30 text-[10px] mt-3">"Tap anywhere to dismiss"</p>
+                                    </div>
+                                </div>
+                            </Show>
+                        }
+                    }
 
                 </div>
 
