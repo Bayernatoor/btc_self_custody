@@ -3,11 +3,11 @@
 use leptos::prelude::*;
 use leptos_meta::*;
 
-use super::components::DataLoadError;
+use super::components::{show_block_detail, DataLoadError};
 use super::helpers::*;
 use super::shared::ObservatoryState;
 use crate::stats::server_fns::*;
-use crate::stats::types::{MiningPriceSummary, RangeSummary};
+use crate::stats::types::{ExtremesData, MiningPriceSummary, RangeSummary};
 
 // ---------------------------------------------------------------------------
 // Stat card component
@@ -43,6 +43,239 @@ fn SectionHeader(#[prop(into)] title: &'static str) -> impl IntoView {
     view! {
         <div class="col-span-2 sm:col-span-3 lg:col-span-4 mt-4 first:mt-0">
             <h2 class="text-sm font-semibold text-white/60 uppercase tracking-wider border-b border-white/10 pb-2">{title}</h2>
+        </div>
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Extreme card — clickable, links to mempool.space block
+// ---------------------------------------------------------------------------
+
+/// Format bytes as human-readable size.
+fn fmt_size(bytes: u64) -> String {
+    if bytes >= 1_000_000 {
+        format!("{:.2} MB", bytes as f64 / 1_000_000.0)
+    } else if bytes >= 1_000 {
+        format!("{:.1} KB", bytes as f64 / 1_000.0)
+    } else {
+        format!("{} B", bytes)
+    }
+}
+
+/// Format satoshis as BTC.
+fn fmt_btc(sats: u64) -> String {
+    let btc = sats as f64 / 100_000_000.0;
+    if btc >= 1.0 {
+        format!("{:.4} BTC", btc)
+    } else {
+        format!("{} sats", format_number(sats))
+    }
+}
+
+/// Format a UNIX timestamp as a short date.
+fn fmt_date(ts: u64) -> String {
+    if ts == 0 {
+        return String::new();
+    }
+    chrono::DateTime::from_timestamp(ts as i64, 0)
+        .map(|dt| dt.format("%b %d, %Y").to_string())
+        .unwrap_or_default()
+}
+
+#[component]
+fn ExtremeCard(
+    #[prop(into)] label: &'static str,
+    #[prop(into)] value: String,
+    height: u64,
+    #[prop(into)] miner: String,
+    #[prop(into)] date: String,
+    #[prop(optional, into)] tooltip: Option<&'static str>,
+) -> impl IntoView {
+    let height_str = format_number(height);
+    view! {
+        <div
+            class="bg-[#112d4a] border border-[#f7931a]/15 rounded-xl p-3 sm:p-4 hover:border-[#f7931a]/50 hover:bg-[#153556] transition-all cursor-pointer"
+            data-tip=tooltip.unwrap_or("")
+            tabindex=if tooltip.is_some() { "0" } else { "-1" }
+            on:click=move |_| show_block_detail(height)
+        >
+            <div class="flex items-center justify-between mb-1.5">
+                <p class="text-[10px] sm:text-xs text-[#8899aa] uppercase tracking-wider font-medium">{label}</p>
+            </div>
+            <p class="text-lg sm:text-xl font-bold text-[#f7931a] font-mono truncate mb-2">{value}</p>
+            <div class="flex items-center justify-between gap-2">
+                <span class="text-[11px] text-white/60 font-mono truncate">"Block #"{height_str}</span>
+                <span class="text-[11px] text-[#f7931a]/50 truncate text-right font-medium">{miner}</span>
+            </div>
+            <div class="text-[10px] text-white/40 mt-0.5">{date}</div>
+        </div>
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Extremes hero section
+// ---------------------------------------------------------------------------
+
+#[component]
+fn ExtremesHero(data: ExtremesData) -> impl IntoView {
+    let d = data;
+
+    // Build the card list, filtering out zero-value entries
+    struct Card {
+        label: &'static str,
+        value: String,
+        height: u64,
+        miner: String,
+        date: String,
+        tooltip: &'static str,
+    }
+
+    let mut cards = vec![
+        Card {
+            label: "Largest Block",
+            value: fmt_size(d.largest_block.value),
+            height: d.largest_block.height,
+            miner: d.largest_block.miner.clone(),
+            date: fmt_date(d.largest_block.timestamp),
+            tooltip: "The heaviest single block by raw byte size",
+        },
+        Card {
+            label: "Most Transactions",
+            value: format_number(d.most_txs.value),
+            height: d.most_txs.height,
+            miner: d.most_txs.miner.clone(),
+            date: fmt_date(d.most_txs.timestamp),
+            tooltip: "Block with the most transactions",
+        },
+        Card {
+            label: "Largest Transaction",
+            value: fmt_size(d.largest_tx.value),
+            height: d.largest_tx.height,
+            miner: d.largest_tx.miner.clone(),
+            date: fmt_date(d.largest_tx.timestamp),
+            tooltip: "Single largest transaction by raw byte size",
+        },
+        Card {
+            label: "Most Inputs",
+            value: format_number(d.most_inputs.value),
+            height: d.most_inputs.height,
+            miner: d.most_inputs.miner.clone(),
+            date: fmt_date(d.most_inputs.timestamp),
+            tooltip: "Block that consumed the most UTXOs (inputs)",
+        },
+        Card {
+            label: "Most Outputs",
+            value: format_number(d.most_outputs.value),
+            height: d.most_outputs.height,
+            miner: d.most_outputs.miner.clone(),
+            date: fmt_date(d.most_outputs.timestamp),
+            tooltip: "Block that created the most new UTXOs (outputs)",
+        },
+        Card {
+            label: "Highest Fee Block",
+            value: fmt_btc(d.highest_fee_block.value),
+            height: d.highest_fee_block.height,
+            miner: d.highest_fee_block.miner.clone(),
+            date: fmt_date(d.highest_fee_block.timestamp),
+            tooltip: "Block that collected the most total transaction fees",
+        },
+        Card {
+            label: "Peak Median Fee Rate",
+            value: format!("{:.1} sat/vB", d.peak_fee_rate.value),
+            height: d.peak_fee_rate.height,
+            miner: d.peak_fee_rate.miner.clone(),
+            date: fmt_date(d.peak_fee_rate.timestamp),
+            tooltip: "Highest median fee rate in any single block (half of txs paid more than this)",
+        },
+        Card {
+            label: "Highest Fee Rate (P90)",
+            value: format!("{} sat/vB", format_number(d.peak_p90_fee_rate.value.round() as u64)),
+            height: d.peak_p90_fee_rate.height,
+            miner: d.peak_p90_fee_rate.miner.clone(),
+            date: fmt_date(d.peak_p90_fee_rate.timestamp),
+            tooltip: "Highest 90th-percentile fee rate in any single block (90% of txs paid less than this)",
+        },
+        Card {
+            label: "Most RBF",
+            value: format_number(d.most_rbf.value),
+            height: d.most_rbf.height,
+            miner: d.most_rbf.miner.clone(),
+            date: fmt_date(d.most_rbf.timestamp),
+            tooltip: "Block with the most Replace-By-Fee signaling transactions",
+        },
+        Card {
+            label: "Most Taproot Spends",
+            value: format_number(d.most_taproot.value),
+            height: d.most_taproot.height,
+            miner: d.most_taproot.miner.clone(),
+            date: fmt_date(d.most_taproot.timestamp),
+            tooltip: "Block with the most P2TR (Taproot) spend inputs",
+        },
+        Card {
+            label: "Most OP_RETURNs",
+            value: format_number(d.most_op_returns.value),
+            height: d.most_op_returns.height,
+            miner: d.most_op_returns.miner.clone(),
+            date: fmt_date(d.most_op_returns.timestamp),
+            tooltip: "Block with the most OP_RETURN data outputs",
+        },
+        Card {
+            label: "Most Inscriptions",
+            value: format_number(d.most_inscriptions.value),
+            height: d.most_inscriptions.height,
+            miner: d.most_inscriptions.miner.clone(),
+            date: fmt_date(d.most_inscriptions.timestamp),
+            tooltip: "Block with the most Ordinals inscriptions",
+        },
+        Card {
+            label: "Most Runes",
+            value: format_number(d.most_runes.value),
+            height: d.most_runes.height,
+            miner: d.most_runes.miner.clone(),
+            date: fmt_date(d.most_runes.timestamp),
+            tooltip: "Block with the most Runes protocol outputs",
+        },
+    ];
+
+    // Filter out zero-value cards
+    cards.retain(|c| c.value != "0" && c.value != "0.0 sat/vB" && c.value != "0 B");
+
+    view! {
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 mb-2">
+            {cards.into_iter().map(|c| {
+                view! {
+                    <ExtremeCard
+                        label=c.label
+                        value=c.value
+                        height=c.height
+                        miner=c.miner
+                        date=c.date
+                        tooltip=c.tooltip
+                    />
+                }
+            }).collect::<Vec<_>>()}
+
+            // Empty blocks — not a link, just a stat
+            {if d.empty_block_count > 0 {
+                let pct = format!(
+                    "{:.2}% of {} blocks",
+                    d.empty_block_count as f64 / d.block_count.max(1) as f64 * 100.0,
+                    format_number(d.block_count),
+                );
+                Some(view! {
+                    <div
+                        class="bg-[#112d4a] border border-[#f7931a]/15 rounded-xl p-3 sm:p-4"
+                        data-tip="Blocks with only a coinbase transaction (no user transactions)"
+                        tabindex="0"
+                    >
+                        <p class="text-[10px] sm:text-xs text-[#8899aa] uppercase tracking-wider font-medium mb-1.5">"Empty Blocks"</p>
+                        <p class="text-lg sm:text-xl font-bold text-[#f7931a] font-mono">{format_number(d.empty_block_count)}</p>
+                        <p class="text-[11px] text-white/50 mt-1">{pct}</p>
+                    </div>
+                })
+            } else {
+                None
+            }}
         </div>
     }
 }
@@ -108,6 +341,12 @@ pub fn StatsSummaryPage() -> impl IntoView {
     });
     let mp_data =
         Signal::derive(move || mining_price.get().and_then(|r| r.ok()));
+
+    // Fetch extremes with block heights
+    let extremes_res = LocalResource::new(move || {
+        let (from, to) = ts_range.get();
+        async move { fetch_extremes(from, to).await.ok() }
+    });
 
     // Format helper — creates a Signal<String> from a RangeSummary field
     let stat = move |f: fn(&RangeSummary) -> String| -> Signal<String> {
@@ -291,17 +530,6 @@ pub fn StatsSummaryPage() -> impl IntoView {
     let omni = stat(|s| format_compact(s.total_omni));
     let counterparty = stat(|s| format_compact(s.total_counterparty));
 
-    // === Extremes ===
-    let max_block_size =
-        stat(|s| format!("{:.2} MB", s.max_block_size as f64 / 1_000_000.0));
-    let max_block_fees = stat(|s| {
-        format!(
-            "\u{20bf}{}",
-            format_number_f64(s.max_block_fees as f64 / 100_000_000.0, 4)
-        )
-    });
-    let max_fee_rate = stat(|s| format!("{:.1} sat/vB", s.max_fee_rate));
-
     // === Volume ===
     let total_btc_transferred = stat(|s| {
         if s.total_output_value > 0 {
@@ -327,17 +555,6 @@ pub fn StatsSummaryPage() -> impl IntoView {
         )
     });
     let pool_count = mp_stat(|s| format_number(s.pool_count));
-    let empty_blocks = stat(|s| format_number(s.empty_block_count));
-    let empty_sub = stat(|s| {
-        if s.block_count > 0 {
-            format!(
-                "{:.2}% of blocks",
-                s.empty_block_count as f64 / s.block_count as f64 * 100.0
-            )
-        } else {
-            String::new()
-        }
-    });
 
     // === Price ===
     let price_start = mp_stat(|s| {
@@ -440,7 +657,29 @@ pub fn StatsSummaryPage() -> impl IntoView {
             }
         }}
 
-        // Stats grid
+        // ===================================================================
+        // EXTREMES — Hero section at top, clickable cards with block links
+        // ===================================================================
+        <div class="bg-[#0d2137] border border-[#f7931a]/25 rounded-2xl p-4 sm:p-6 mb-6">
+            <h2 class="text-sm font-bold text-[#f7931a] uppercase tracking-widest border-b border-[#f7931a]/25 pb-2 mb-4">"Records"</h2>
+
+            <Suspense fallback=move || view! {
+                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+                    {(0..8).map(|_| view! {
+                        <div class="bg-[#112d4a] border border-white/5 rounded-xl p-4 h-[88px] animate-pulse"></div>
+                    }).collect::<Vec<_>>()}
+                </div>
+            }>
+                {move || {
+                    let ext = extremes_res.get().flatten();
+                    ext.map(|d| view! { <ExtremesHero data=d/> })
+                }}
+            </Suspense>
+        </div>
+
+        // ===================================================================
+        // REST OF THE STATS — Network, Fees, Adoption, Embedded, Mining, Price
+        // ===================================================================
         <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
             <SectionHeader title="Network"/>
             <StatCard label="Blocks" value=blocks
@@ -505,8 +744,6 @@ pub fn StatsSummaryPage() -> impl IntoView {
                 tooltip="Mining pool that found the most blocks in this range"/>
             <StatCard label="Unique Pools" value=pool_count
                 tooltip="Number of distinct mining pools identified by coinbase signature"/>
-            <StatCard label="Empty Blocks" value=empty_blocks sub=empty_sub
-                tooltip="Blocks with only a coinbase transaction (no user transactions)"/>
 
             <SectionHeader title="Price"/>
             <StatCard label="Start Price" value=price_start
@@ -515,14 +752,6 @@ pub fn StatsSummaryPage() -> impl IntoView {
                 tooltip="BTC/USD price at the end of the selected range"/>
             <StatCard label="Change" value=price_change
                 tooltip="Percentage price change from start to end of range. May show 0% on 1D range due to daily price granularity"/>
-
-            <SectionHeader title="Extremes"/>
-            <StatCard label="Largest Block" value=max_block_size
-                tooltip="Largest single block by raw size (bytes) in this range"/>
-            <StatCard label="Highest Fee Block" value=max_block_fees
-                tooltip="Block with the highest total transaction fees in this range"/>
-            <StatCard label="Peak Fee Rate" value=max_fee_rate
-                tooltip="Highest median fee rate in any single block. Indicates the most expensive block to transact in during this range"/>
         </div>
     }
 }

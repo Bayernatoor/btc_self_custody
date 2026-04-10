@@ -27,9 +27,9 @@ use crate::routes::guideselector::{GuideLevelSelector, GuideSelector};
 use crate::routes::homepage::HomePage;
 use crate::routes::observatory::learn::protocols::ProtocolGuidePage;
 use crate::routes::observatory::{
-    EmbeddedChartsPage, FeeChartsPage, HeartbeatPage, MiningChartsPage,
-    NetworkChartsPage, ObservatoryOverview, ObservatoryPage, OnThisDayPage,
-    SignalingPage, StatsSummaryPage,
+    EmbeddedChartsPage, FeeChartsPage, HallOfFamePage, HeartbeatPage,
+    MiningChartsPage, NetworkChartsPage, ObservatoryOverview, ObservatoryPage,
+    OnThisDayPage, SignalingPage, StatsSummaryPage,
 };
 use leptos::prelude::*;
 use leptos_meta::*;
@@ -180,6 +180,7 @@ pub fn App() -> impl IntoView {
                             <Route path=path!("/signaling") view=SignalingPage/>
                             <Route path=path!("/stats") view=StatsSummaryPage/>
                             <Route path=path!("/on-this-day") view=OnThisDayPage/>
+                            <Route path=path!("/hall-of-fame") view=HallOfFamePage/>
                             <Route path=path!("/heartbeat") view=HeartbeatPage/>
                             <Route path=path!("/learn/protocols") view=ProtocolGuidePage/>
                             <Route path=path!("/*any") view=|| view! {

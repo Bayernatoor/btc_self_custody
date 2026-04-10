@@ -1246,3 +1246,20 @@ pub async fn fetch_range_summary(
     super::db::query_range_summary(&conn, from_ts, to_ts)
         .map_err(|e| ServerFnError::new(format!("DB error: {e}")))
 }
+
+#[server(prefix = "/api", endpoint = "extremes")]
+pub async fn fetch_extremes(
+    from_ts: u64,
+    to_ts: u64,
+) -> Result<ExtremesData, ServerFnError> {
+    let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
+        leptos_axum::extract().await.map_err(|e| {
+            ServerFnError::new(format!("Stats not available: {e}"))
+        })?;
+    let conn = state
+        .db
+        .get()
+        .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+    super::db::query_extremes_with_heights(&conn, from_ts, to_ts)
+        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))
+}

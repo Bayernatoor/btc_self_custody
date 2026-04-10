@@ -1447,6 +1447,100 @@ pub fn query_unconfirmed_txids(
     rows.collect()
 }
 
+/// Query extreme records with the block heights where each MAX occurred.
+/// Uses subqueries to find the specific block for each extreme.
+pub fn query_extremes_with_heights(
+    conn: &Connection,
+    from_ts: u64,
+    to_ts: u64,
+) -> rusqlite::Result<super::types::ExtremesData> {
+    use super::types::{ExtremeRecord, ExtremeRecordF64, ExtremesData};
+
+    // Helper: find the block with the MAX value for a given column
+    fn query_max_block(
+        conn: &Connection,
+        column: &str,
+        from_ts: u64,
+        to_ts: u64,
+    ) -> rusqlite::Result<ExtremeRecord> {
+        let sql = format!(
+            "SELECT {col}, height, timestamp, miner FROM blocks
+             WHERE timestamp >= ?1 AND timestamp <= ?2
+             ORDER BY {col} DESC LIMIT 1",
+            col = column
+        );
+        conn.query_row(&sql, params![from_ts, to_ts], |row| {
+            Ok(ExtremeRecord {
+                value: row.get::<_, Option<u64>>(0)?.unwrap_or(0),
+                height: row.get(1)?,
+                timestamp: row.get(2)?,
+                miner: row.get(3)?,
+            })
+        })
+        .or_else(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => Ok(ExtremeRecord::default()),
+            other => Err(other),
+        })
+    }
+
+    fn query_max_block_f64(
+        conn: &Connection,
+        column: &str,
+        from_ts: u64,
+        to_ts: u64,
+    ) -> rusqlite::Result<ExtremeRecordF64> {
+        let sql = format!(
+            "SELECT {col}, height, timestamp, miner FROM blocks
+             WHERE timestamp >= ?1 AND timestamp <= ?2
+             ORDER BY {col} DESC LIMIT 1",
+            col = column
+        );
+        conn.query_row(&sql, params![from_ts, to_ts], |row| {
+            Ok(ExtremeRecordF64 {
+                value: row.get::<_, Option<f64>>(0)?.unwrap_or(0.0),
+                height: row.get(1)?,
+                timestamp: row.get(2)?,
+                miner: row.get(3)?,
+            })
+        })
+        .or_else(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => Ok(ExtremeRecordF64::default()),
+            other => Err(other),
+        })
+    }
+
+    // Counts query (single pass)
+    let (empty_count, block_count) = conn.query_row(
+        "SELECT SUM(CASE WHEN tx_count <= 1 THEN 1 ELSE 0 END), COUNT(*)
+         FROM blocks WHERE timestamp >= ?1 AND timestamp <= ?2",
+        params![from_ts, to_ts],
+        |row| {
+            Ok((
+                row.get::<_, Option<u64>>(0)?.unwrap_or(0),
+                row.get::<_, Option<u64>>(1)?.unwrap_or(0),
+            ))
+        },
+    )?;
+
+    Ok(ExtremesData {
+        largest_block: query_max_block(conn, "size", from_ts, to_ts)?,
+        highest_fee_block: query_max_block(conn, "total_fees", from_ts, to_ts)?,
+        peak_fee_rate: query_max_block_f64(conn, "median_fee_rate", from_ts, to_ts)?,
+        peak_p90_fee_rate: query_max_block_f64(conn, "fee_rate_p90", from_ts, to_ts)?,
+        most_txs: query_max_block(conn, "tx_count", from_ts, to_ts)?,
+        largest_tx: query_max_block(conn, "largest_tx_size", from_ts, to_ts)?,
+        most_inputs: query_max_block(conn, "input_count", from_ts, to_ts)?,
+        most_outputs: query_max_block(conn, "output_count", from_ts, to_ts)?,
+        most_inscriptions: query_max_block(conn, "inscription_count", from_ts, to_ts)?,
+        most_runes: query_max_block(conn, "runes_count", from_ts, to_ts)?,
+        most_op_returns: query_max_block(conn, "op_return_count", from_ts, to_ts)?,
+        most_rbf: query_max_block(conn, "rbf_count", from_ts, to_ts)?,
+        most_taproot: query_max_block(conn, "taproot_spend_count", from_ts, to_ts)?,
+        empty_block_count: empty_count,
+        block_count,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

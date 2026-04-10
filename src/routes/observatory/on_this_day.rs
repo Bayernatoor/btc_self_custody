@@ -199,6 +199,34 @@ pub fn OnThisDayPage() -> impl IntoView {
 
     let (selected_date, set_selected_date) = signal(initial_date);
 
+    // Scroll to year card on initial load (when linked from Hall of Fame)
+    #[cfg(feature = "hydrate")]
+    if let Some(yr) = query
+        .read_untracked()
+        .get("year")
+        .and_then(|s| s.parse::<u32>().ok())
+    {
+        let target_id = format!("year-{yr}");
+        // Delay to allow data to load and render
+        leptos::prelude::set_timeout(
+            move || {
+                if let Some(el) =
+                    leptos::prelude::document().get_element_by_id(&target_id)
+                {
+                    let rect = el.get_bounding_client_rect();
+                    let offset = leptos::prelude::window()
+                        .scroll_y()
+                        .unwrap_or(0.0)
+                        + rect.top()
+                        - 80.0;
+                    let _ = leptos::prelude::window()
+                        .scroll_to_with_x_and_y(0.0, offset);
+                }
+            },
+            std::time::Duration::from_millis(800),
+        );
+    }
+
     let month_day = Signal::derive(move || {
         let d = selected_date.get();
         let parts: Vec<&str> = d.split('-').collect();
