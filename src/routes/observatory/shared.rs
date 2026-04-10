@@ -1018,7 +1018,7 @@ pub fn ObservatoryNav() -> impl IntoView {
     view! {
         <nav class="flex flex-col items-center mb-6 sm:mb-8 px-1 gap-2 sm:gap-3">
             // Row 1: Pages
-            <div class="flex justify-center gap-x-4 sm:gap-x-8">
+            <div class="flex sm:justify-center gap-x-4 sm:gap-x-8 overflow-x-auto scrollbar-hide w-full px-2">
                 {pages.into_iter().map(|(href, label)| {
                     let href_str = href.to_string();
                     view! {
