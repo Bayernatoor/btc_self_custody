@@ -284,24 +284,54 @@ async fn subscribe_tx_and_sequence(
     }
 }
 
-/// Threshold for R events before we consider it a block (not just evictions).
-const SEQUENCE_R_THRESHOLD: u32 = 50;
+/// Minimum R events within the time window to trigger mining detection.
+const SEQUENCE_R_THRESHOLD: u32 = 5;
+/// Time window in seconds to accumulate R events.
+const SEQUENCE_R_WINDOW_SECS: f64 = 3.0;
 
-/// Pure state machine for ZMQ sequence event processing.
-/// Extracted for testability.
-#[derive(Default)]
+/// Time-window based state machine for ZMQ sequence event processing.
+/// Counts R events within a rolling window. A events are ignored since
+/// they interleave with R events during block processing on slower hardware.
 struct SequenceState {
     r_count: u32,
+    window_start: Option<std::time::Instant>,
     mining_sent: bool,
+}
+
+impl Default for SequenceState {
+    fn default() -> Self {
+        Self {
+            r_count: 0,
+            window_start: None,
+            mining_sent: false,
+        }
+    }
 }
 
 impl SequenceState {
     /// Process a sequence event type character. Returns true if BlockMining
-    /// should be broadcast (first time threshold is crossed).
+    /// should be broadcast (first time threshold is crossed in a time window).
     fn process(&mut self, event_type: char) -> bool {
+        self.process_with_time(event_type, std::time::Instant::now())
+    }
+
+    /// Testable version that accepts an explicit timestamp.
+    fn process_with_time(&mut self, event_type: char, now: std::time::Instant) -> bool {
         match event_type {
             'R' => {
-                self.r_count += 1;
+                match self.window_start {
+                    Some(start)
+                        if now.duration_since(start).as_secs_f64()
+                            <= SEQUENCE_R_WINDOW_SECS =>
+                    {
+                        self.r_count += 1;
+                    }
+                    _ => {
+                        // Start new window
+                        self.window_start = Some(now);
+                        self.r_count = 1;
+                    }
+                }
                 if self.r_count >= SEQUENCE_R_THRESHOLD && !self.mining_sent {
                     self.mining_sent = true;
                     return true;
@@ -310,26 +340,23 @@ impl SequenceState {
             'C' => {
                 if self.r_count > 0 || self.mining_sent {
                     tracing::info!(
-                        "ZMQ: sequence block connected ({} txs removed, mining_sent={})",
+                        "ZMQ: sequence block connected ({} R events in window, mining_sent={})",
                         self.r_count, self.mining_sent
                     );
                 }
                 self.r_count = 0;
+                self.window_start = None;
                 self.mining_sent = false;
             }
             'D' => {
                 tracing::warn!("ZMQ: sequence block disconnected (reorg)");
                 self.r_count = 0;
+                self.window_start = None;
                 self.mining_sent = false;
             }
             'A' => {
-                // Tx added to mempool — normal operation.
-                // Any A event during an R burst means it's not a block
-                // (during block validation, no txs enter the mempool).
-                // Reset if we haven't crossed the threshold yet.
-                if self.r_count > 0 && !self.mining_sent {
-                    self.r_count = 0;
-                }
+                // Ignore. A events interleave with R events during block
+                // processing, so we let the time window handle expiry.
             }
             _ => {}
         }
@@ -854,88 +881,83 @@ mod tests {
         assert_eq!(cursor, 8);
     }
 
-    // --- SequenceState tests ---
+    // --- SequenceState tests (time-window based) ---
+
+    use std::time::{Duration, Instant};
 
     #[test]
-    fn test_sequence_block_detection() {
+    fn test_sequence_block_detection_within_window() {
         let mut state = SequenceState::default();
-        // Send 49 R events — should not trigger
-        for _ in 0..49 {
-            assert!(!state.process('R'));
+        let t0 = Instant::now();
+        // 4 R events within window, should not trigger (threshold=5)
+        for i in 0..4 {
+            let t = t0 + Duration::from_millis(i * 100);
+            assert!(!state.process_with_time('R', t));
         }
-        assert_eq!(state.r_count, 49);
+        assert_eq!(state.r_count, 4);
         assert!(!state.mining_sent);
-        // 50th R triggers
-        assert!(state.process('R'));
+        // 5th R triggers
+        assert!(state.process_with_time('R', t0 + Duration::from_millis(400)));
         assert!(state.mining_sent);
-        assert_eq!(state.r_count, 50);
+        assert_eq!(state.r_count, 5);
         // Further R events don't re-trigger
-        assert!(!state.process('R'));
-        assert!(!state.process('R'));
+        assert!(!state.process_with_time('R', t0 + Duration::from_millis(500)));
+    }
+
+    #[test]
+    fn test_sequence_r_events_outside_window_reset() {
+        let mut state = SequenceState::default();
+        let t0 = Instant::now();
+        // 3 R events
+        for i in 0..3 {
+            state.process_with_time('R', t0 + Duration::from_millis(i * 100));
+        }
+        assert_eq!(state.r_count, 3);
+        // Gap of 5 seconds (outside 3s window), new R starts fresh
+        state.process_with_time('R', t0 + Duration::from_secs(5));
+        assert_eq!(state.r_count, 1);
+    }
+
+    #[test]
+    fn test_sequence_a_does_not_reset_r_count() {
+        let mut state = SequenceState::default();
+        let t0 = Instant::now();
+        // R events interleaved with A events (real-world pattern)
+        state.process_with_time('R', t0);
+        state.process_with_time('R', t0 + Duration::from_millis(50));
+        state.process_with_time('A', t0 + Duration::from_millis(80));
+        state.process_with_time('R', t0 + Duration::from_millis(100));
+        state.process_with_time('A', t0 + Duration::from_millis(130));
+        state.process_with_time('R', t0 + Duration::from_millis(150));
+        assert_eq!(state.r_count, 4);
+        // 5th R triggers even with A interleaving
+        assert!(state.process_with_time('R', t0 + Duration::from_millis(200)));
+        assert!(state.mining_sent);
     }
 
     #[test]
     fn test_sequence_c_resets_state() {
         let mut state = SequenceState::default();
-        for _ in 0..60 {
-            state.process('R');
+        let t0 = Instant::now();
+        for i in 0..10 {
+            state.process_with_time('R', t0 + Duration::from_millis(i * 50));
         }
         assert!(state.mining_sent);
-        // C resets everything
-        assert!(!state.process('C'));
+        assert!(!state.process_with_time('C', t0 + Duration::from_millis(600)));
         assert_eq!(state.r_count, 0);
         assert!(!state.mining_sent);
-    }
-
-    #[test]
-    fn test_sequence_a_resets_r_count_before_threshold() {
-        let mut state = SequenceState::default();
-        // Some R events (evictions)
-        for _ in 0..5 {
-            state.process('R');
-        }
-        assert_eq!(state.r_count, 5);
-        // A event resets since we haven't crossed threshold
-        state.process('A');
-        assert_eq!(state.r_count, 0);
-    }
-
-    #[test]
-    fn test_sequence_a_does_not_reset_after_mining_sent() {
-        let mut state = SequenceState::default();
-        // Cross threshold
-        for _ in 0..50 {
-            state.process('R');
-        }
-        assert!(state.mining_sent);
-        // A event should NOT reset r_count once mining is detected
-        // (block processing continues, the A might be a coinbase)
-        state.process('A');
-        assert!(state.mining_sent);
-        assert_eq!(state.r_count, 50); // unchanged
-    }
-
-    #[test]
-    fn test_sequence_eviction_burst_no_false_positive() {
-        let mut state = SequenceState::default();
-        // 10 evictions then normal tx added — should not trigger
-        for _ in 0..10 {
-            state.process('R');
-        }
-        state.process('A');
-        assert_eq!(state.r_count, 0);
-        assert!(!state.mining_sent);
+        assert!(state.window_start.is_none());
     }
 
     #[test]
     fn test_sequence_reorg_resets() {
         let mut state = SequenceState::default();
-        for _ in 0..60 {
-            state.process('R');
+        let t0 = Instant::now();
+        for i in 0..10 {
+            state.process_with_time('R', t0 + Duration::from_millis(i * 50));
         }
         assert!(state.mining_sent);
-        // D (disconnect/reorg) resets
-        state.process('D');
+        state.process_with_time('D', t0 + Duration::from_millis(600));
         assert_eq!(state.r_count, 0);
         assert!(!state.mining_sent);
     }
@@ -943,26 +965,41 @@ mod tests {
     #[test]
     fn test_sequence_multiple_blocks() {
         let mut state = SequenceState::default();
-        // First block
-        for _ in 0..100 {
-            state.process('R');
+        let t0 = Instant::now();
+        // First block: 10 R events in 500ms
+        for i in 0..10 {
+            state.process_with_time('R', t0 + Duration::from_millis(i * 50));
         }
         assert!(state.mining_sent);
-        state.process('C');
+        state.process_with_time('C', t0 + Duration::from_secs(1));
         // Normal txs between blocks
-        state.process('A');
-        state.process('A');
-        // Second block
+        state.process_with_time('A', t0 + Duration::from_secs(2));
+        state.process_with_time('A', t0 + Duration::from_secs(3));
+        // Second block: 8 R events in 400ms
+        let t1 = t0 + Duration::from_secs(600);
         let mut triggered = false;
-        for _ in 0..60 {
-            if state.process('R') {
+        for i in 0..8 {
+            if state.process_with_time('R', t1 + Duration::from_millis(i * 50)) {
                 triggered = true;
             }
         }
         assert!(triggered);
         assert!(state.mining_sent);
-        state.process('C');
+        state.process_with_time('C', t1 + Duration::from_secs(1));
         assert!(!state.mining_sent);
+    }
+
+    #[test]
+    fn test_sequence_slow_evictions_no_false_positive() {
+        let mut state = SequenceState::default();
+        let t0 = Instant::now();
+        // 10 R events spread over 40 seconds (normal evictions, not a block)
+        for i in 0..10 {
+            state.process_with_time('R', t0 + Duration::from_secs(i * 4));
+        }
+        // Each R starts a new window since the previous one expired (4s > 3s window)
+        assert!(!state.mining_sent);
+        assert_eq!(state.r_count, 1); // only the last one counts
     }
 }
 
