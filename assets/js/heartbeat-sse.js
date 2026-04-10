@@ -299,7 +299,16 @@ export function connectOwnFeed() {
             _hb._blockMiningOverlay = true;
             var miningEl = document.getElementById('heartbeat-mining-overlay');
             if (miningEl) miningEl.classList.remove('hidden');
-            console.log('[heartbeat] block mining detected via sequence');
+            // Auto-dismiss after 120s in case block event never arrives
+            if (_hb._miningTimeout) clearTimeout(_hb._miningTimeout);
+            _hb._miningTimeout = setTimeout(function() {
+                if (_hb && _hb._blockMiningOverlay) {
+                    _hb._blockMiningOverlay = false;
+                    var el = document.getElementById('heartbeat-mining-overlay');
+                    if (el) el.classList.add('hidden');
+                }
+            }, 120000);
+            console.log('[heartbeat] block mining detected');
         });
         es.addEventListener('lag', function(e) {
             console.log('SSE lag:', e.data);
@@ -309,7 +318,11 @@ export function connectOwnFeed() {
             _hb.wsConnected = true;
             _hb._sseDisconnected = false;
             _hb._sseDisconnectedSince = 0;
-            _hb._sseRetries = 0; // reset retry count on successful connect
+            _hb._sseRetries = 0;
+            // Clear mining overlay on reconnect (block may have arrived while disconnected)
+            _hb._blockMiningOverlay = false;
+            var mel = document.getElementById('heartbeat-mining-overlay');
+            if (mel) mel.classList.add('hidden');
         };
         es.onerror = function(err) {
             if (!_hb) return;
