@@ -30,7 +30,20 @@
 {"@type":"ListItem","position":8,"name":"Protocol Guide","item":"https://www.wehodlbtc.com/observatory/learn/protocols"},
 {"@type":"ListItem","position":9,"name":"Block Heartbeat","item":"https://www.wehodlbtc.com/observatory/heartbeat"},
 {"@type":"ListItem","position":10,"name":"Stats Summary","item":"https://www.wehodlbtc.com/observatory/stats"},
-{"@type":"ListItem","position":11,"name":"On This Day","item":"https://www.wehodlbtc.com/observatory/on-this-day"}
+{"@type":"ListItem","position":11,"name":"On This Day","item":"https://www.wehodlbtc.com/observatory/on-this-day"},
+{"@type":"ListItem","position":12,"name":"Hall of Fame","item":"https://www.wehodlbtc.com/observatory/hall-of-fame"}
+]},
+{"@type":"ItemList","name":"Bitcoin Hall of Fame","description":"A curated collection of Bitcoin's most remarkable blocks and transactions. Covers milestones (genesis block, halvings, price ATHs), on-chain records (largest block, highest fees), protocol moments (SegWit, Taproot, Ordinals activations), attacks and stress tests, and oddities.","url":"https://www.wehodlbtc.com/observatory/hall-of-fame","numberOfItems":57,"itemListElement":[
+{"@type":"ListItem","position":1,"name":"Genesis Block","url":"https://www.wehodlbtc.com/observatory/hall-of-fame#genesis-block"},
+{"@type":"ListItem","position":2,"name":"First Bitcoin Transaction","url":"https://www.wehodlbtc.com/observatory/hall-of-fame#first-transaction"},
+{"@type":"ListItem","position":3,"name":"Bitcoin Pizza Day","url":"https://www.wehodlbtc.com/observatory/hall-of-fame#pizza-day"},
+{"@type":"ListItem","position":4,"name":"184 Billion BTC Overflow Bug","url":"https://www.wehodlbtc.com/observatory/hall-of-fame#overflow-bug"},
+{"@type":"ListItem","position":5,"name":"SegWit Activation","url":"https://www.wehodlbtc.com/observatory/hall-of-fame#segwit-activation"},
+{"@type":"ListItem","position":6,"name":"Taproot Activation","url":"https://www.wehodlbtc.com/observatory/hall-of-fame#taproot-activation"},
+{"@type":"ListItem","position":7,"name":"First Ordinals Inscription","url":"https://www.wehodlbtc.com/observatory/hall-of-fame#first-ordinals"},
+{"@type":"ListItem","position":8,"name":"Largest Block Ever Mined","url":"https://www.wehodlbtc.com/observatory/hall-of-fame#largest-block"},
+{"@type":"ListItem","position":9,"name":"Highest Fee Block","url":"https://www.wehodlbtc.com/observatory/hall-of-fame#highest-fee-block"},
+{"@type":"ListItem","position":10,"name":"Duplicate Transaction IDs","url":"https://www.wehodlbtc.com/observatory/hall-of-fame#duplicate-txids"}
 ]},
 {"@type":"FAQPage","url":"https://www.wehodlbtc.com/faq","mainEntity":[
 {"@type":"Question","name":"What is Bitcoin?","acceptedAnswer":{"@type":"Answer","text":"Bitcoin is money for the digital age — controlled by no one, accessible to everyone. It's a decentralized store of value and payment network secured by cryptography and proof-of-work mining."}},
