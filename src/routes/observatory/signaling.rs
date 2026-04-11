@@ -169,7 +169,7 @@ pub fn SignalingPage() -> impl IntoView {
 
                             // BIP description (compact)
                             let bip_desc: (&str, &str, &str, &str) = if bip_method.get() == "locktime" {
-                                ("BIP-54: Consensus Cleanup", "Addresses four protocol vulnerabilities: timewarp attack, worst-case block validation time, 64-byte transaction exploits, and a theoretical edge case in BIP-34's duplicate coinbase txid prevention. Signaling requires coinbase nLockTime = height\u{2009}\u{2212}\u{2009}1 and nSequence != 0xFFFFFFFF (so the timelock is not disabled). Activation threshold: 95% of blocks in a 2,016-block retarget period.", "95%", "https://github.com/bitcoin/bips/blob/master/bip-0054.md")
+                                ("BIP-54: Consensus Cleanup", "Addresses four protocol vulnerabilities: timewarp attack, worst-case block validation time, 64-byte transaction exploits, and a theoretical edge case in BIP-34's duplicate coinbase txid prevention. There is no formal signaling mechanism for BIP-54. This tracker checks compliance: coinbase nLockTime = height\u{2009}\u{2212}\u{2009}1 and nSequence != 0xFFFFFFFF (timelock not disabled). A compliant block meets the requirements for activation at a 95% threshold.", "95%", "https://github.com/bitcoin/bips/blob/master/bip-0054.md")
                             } else {
                                 ("BIP-110: OP_RETURN Limits", "Limits new outputs to 34 bytes (except OP_RETURN, which allows up to 83 bytes). Also caps data pushes and witness elements at 256 bytes, restricts spendable witness versions to v0 and v1 (Taproot), and temporarily limits certain Taproot features. Pre-existing UTXOs are exempt. Signals on bit 4 with a 55% threshold (1,109 of 2,016 blocks). Mandatory lock-in around August 2026, auto-expires ~1 year after activation.", "55%", "https://github.com/bitcoin/bips/blob/master/bip-0110.mediawiki")
                             };
@@ -195,7 +195,8 @@ pub fn SignalingPage() -> impl IntoView {
                                 let signaled = b.signaled;
                                 let color = if signaled { "bg-green-500/70" } else { "bg-red-500/30" };
                                 let marker = if signaled { "\u{2713}" } else { "\u{2717}" };
-                                let label = format!("Block {} by {}, {}", b.height, b.miner, if signaled { "signaled" } else { "not signaled" });
+                                let sig_label = if bip_method.get() == "locktime" { if signaled { "compliant" } else { "not compliant" } } else { if signaled { "signaled" } else { "not signaled" } };
+                                let label = format!("Block {} by {}, {}", b.height, b.miner, sig_label);
                                 let title = format!("#{} | {}{}", b.height, b.miner, if signaled { " \u{2713}" } else { "" });
                                 let h = b.height;
                                 view! {
@@ -237,7 +238,7 @@ pub fn SignalingPage() -> impl IntoView {
                                                 // Signaling bar (percentage of blocks that signaled)
                                                 <div class="mb-1">
                                                     <div class="flex items-center justify-between mb-1">
-                                                        <span class="text-[10px] text-white/40">"Signaling"</span>
+                                                        <span class="text-[10px] text-white/40">{if bip_method.get() == "locktime" { "Compliance" } else { "Signaling" }}</span>
                                                         <span class="text-[10px] text-white/40 font-mono">{format!("{} / {} blocks", format_number(period_stats.signaled_count), format_number(mined))}</span>
                                                     </div>
                                                     <div class="h-2.5 bg-white/5 rounded-full overflow-hidden">
@@ -323,8 +324,8 @@ pub fn SignalingPage() -> impl IntoView {
                                         <div class="flex items-center justify-between mb-3">
                                             <h3 class="text-sm text-white/70 font-semibold">"Block Grid"</h3>
                                             <div class="flex items-center gap-3 text-[10px] text-white/40">
-                                                <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-green-500/70"></span>"Signaled"</span>
-                                                <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-red-500/30"></span>"Not signaled"</span>
+                                                <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-green-500/70"></span>{if bip_method.get() == "locktime" { "Compliant" } else { "Signaled" }}</span>
+                                                <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-red-500/30"></span>{if bip_method.get() == "locktime" { "Not compliant" } else { "Not signaled" }}</span>
                                             </div>
                                         </div>
                                         <div class="flex flex-wrap gap-1">
