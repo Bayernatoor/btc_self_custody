@@ -1096,6 +1096,22 @@ pub fn BlockDetailModal() -> impl IntoView {
             </div>
         </div>
 
+        // Transaction detail modal
+        <div id="tx-detail-modal" class="hidden fixed inset-0 flex items-center justify-center p-4" style="z-index: 10001">
+            <div class="absolute inset-0 bg-black/60" onclick="closeTxDetail()"></div>
+            <div class="relative bg-[#0e2a47] border border-white/15 rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] overflow-y-auto overflow-x-hidden">
+                <div class="flex items-center justify-between px-5 py-3 border-b border-white/10">
+                    <span id="tx-detail-title" class="text-white font-medium">"Transaction"</span>
+                    <button
+                        class="text-white/40 hover:text-white text-lg cursor-pointer"
+                        onclick="closeTxDetail()"
+                    >"\u{2715}"</button>
+                </div>
+                <div id="tx-detail-body" class="px-5 py-4 text-sm text-white/80 space-y-1"
+                    style="--bd-label: rgba(255,255,255,0.5)"
+                ></div>
+            </div>
+        </div>
     }
 }
 
