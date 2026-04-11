@@ -454,7 +454,6 @@
 
         // Show local data immediately (from brick)
         if (localData) {
-            body.appendChild(bdSection('From Mempool'));
             body.appendChild(bdCopyRow('TXID', shortTxid, txid));
             if (localData.fee != null)
                 body.appendChild(bdRow('Fee', localData.fee.toLocaleString() + ' sats'));
