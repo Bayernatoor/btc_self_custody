@@ -1,4 +1,13 @@
-//! "On This Day in Bitcoin" — what happened on today's date across every year.
+//! "On This Day in Bitcoin" - what happened on today's date across every year.
+//!
+//! Fetches per-year data for a given month/day (blocks mined, transactions, fees,
+//! price, supply, weight utilization, SegWit %, Taproot outputs, inscriptions, Runes)
+//! and renders a stack of year cards from most recent to oldest.
+//!
+//! Each year card shows key metrics with color-coded fee intensity, block fullness
+//! bars, and event badges for notable milestones. Users can navigate between days
+//! with prev/next arrows, jump to today, pick any date, or select from a curated
+//! list of notable dates (genesis block, halvings, Pizza Day, etc.).
 
 use leptos::prelude::*;
 use leptos_meta::*;
@@ -11,6 +20,7 @@ use crate::stats::types::calc_supply;
 use crate::stats::types::OnThisDayYear;
 
 /// Color temperature based on fee density (fees per block in BTC).
+/// Returns a CSS color ranging from cold blue (low fees) to hot red (high fees).
 fn fee_color(total_fees: u64, block_count: u64) -> &'static str {
     if block_count == 0 {
         return "#3b82f6"; // cold blue
@@ -31,13 +41,16 @@ fn fee_color(total_fees: u64, block_count: u64) -> &'static str {
     }
 }
 
-/// Weight utilization bar (visual block fullness).
+/// Weight utilization bar (visual block fullness). Returns a 10-char string of
+/// filled and empty block characters representing how full blocks were on average.
 fn fullness_bar(pct: f64) -> String {
     let filled = ((pct / 10.0).round() as usize).min(10);
     let empty = 10 - filled;
     format!("{}{}", "\u{2588}".repeat(filled), "\u{2591}".repeat(empty))
 }
 
+/// Year card showing one year's data for the selected date. Displays block range,
+/// key metrics, event badges, and extra adoption/embedded data metrics.
 #[component]
 fn YearCard(year: OnThisDayYear) -> impl IntoView {
     let color = fee_color(year.total_fees, year.block_count);
@@ -183,6 +196,9 @@ fn YearCard(year: OnThisDayYear) -> impl IntoView {
     }
 }
 
+/// On This Day page. Reads the initial date from the `?date=MM-DD` query param
+/// (defaults to today) and fetches per-year data. Supports day navigation, a date
+/// picker, and a Notable Dates dropdown that scrolls to the relevant year card.
 #[component]
 pub fn OnThisDayPage() -> impl IntoView {
     let query = use_query_map();

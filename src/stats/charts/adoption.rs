@@ -1,3 +1,7 @@
+//! Adoption chart builders: SegWit adoption %, Taproot outputs, witness version
+//! comparison and share, output type breakdown (legacy vs witness vs Taproot),
+//! and Taproot spend types (key-path vs script-path).
+
 use super::*;
 use serde_json::json;
 

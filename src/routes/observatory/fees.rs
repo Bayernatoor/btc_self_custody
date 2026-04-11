@@ -1,4 +1,8 @@
-//! Fee charts: total fees and subsidy vs fees breakdown.
+//! Fee charts: total fees per block, avg fee per tx, median fee rate, fee rate
+//! bands (10th/50th/90th percentiles), and subsidy-vs-fees breakdown.
+//!
+//! Shows how miners are compensated and the long-term transition from block
+//! subsidy to fee-based security as each halving cuts the subsidy in half.
 
 use leptos::prelude::*;
 use leptos_meta::*;
@@ -8,6 +12,7 @@ use super::helpers::chart_desc;
 use super::shared::*;
 use crate::chart_memo;
 
+/// Fee charts page showing miner revenue composition and fee pressure over time.
 #[component]
 pub fn FeeChartsPage() -> impl IntoView {
     let state = expect_context::<ObservatoryState>();

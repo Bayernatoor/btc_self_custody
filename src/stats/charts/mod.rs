@@ -1,6 +1,25 @@
 //! ECharts option JSON builders.
-//! Runs on the client (WASM) — takes typed data and produces JSON strings
-//! that are passed to ECharts via JS interop.
+//!
+//! Runs on the client (WASM) - takes typed data (`BlockSummary`, `DailyAggregate`,
+//! etc.) and produces `serde_json::Value` objects that are serialized to JSON strings
+//! and passed to ECharts via JS interop (`/js/stats.js`).
+//!
+//! Each chart function comes in two variants: per-block (for short ranges under
+//! ~5000 blocks, using time-axis with click-to-detail) and daily (for longer ranges,
+//! using category axis with averaged values).
+//!
+//! Submodules:
+//! - `network`   - Block size, weight utilization, tx count, TPS, intervals, chain size, largest tx
+//! - `adoption`  - SegWit adoption, Taproot outputs, witness versions, address types, spend types
+//! - `fees`      - Total fees, avg fee/tx, median fee rate, fee bands, subsidy vs fees
+//! - `mining`    - Difficulty, miner dominance donut, empty blocks
+//! - `embedded`  - OP_RETURN protocols, inscriptions, combined embedded data
+//! - `signaling` - BIP signaling scatter and period history bar chart
+//! - `gauges`    - Mempool usage gauge
+//! - `tx_metrics` - Address type evolution, witness share, RBF, UTXO flow, batching
+//!
+//! Shared helpers: `chart_defaults()`, `build_option()`, `data_zoom()`, `tooltip_axis()`,
+//! `moving_average()`, `apply_overlays()`, and the `chart_memo!` macro (in `shared.rs`).
 
 use serde_json::json;
 
@@ -56,6 +75,7 @@ pub(crate) const TAPROOT_COLOR: &str = "#f7931a";
 // Helpers
 // ---------------------------------------------------------------------------
 
+/// Base ECharts option with dark theme defaults (transparent bg, dark grid, toolbox, animation).
 pub(crate) fn chart_defaults() -> serde_json::Value {
     json!({
         "backgroundColor": "transparent",
@@ -80,6 +100,7 @@ pub(crate) fn chart_defaults() -> serde_json::Value {
     })
 }
 
+/// Standard data zoom config (inside scroll + bottom slider).
 pub(crate) fn data_zoom() -> serde_json::Value {
     json!([
         { "type": "inside", "start": 0, "end": 100 },
@@ -91,6 +112,7 @@ pub(crate) fn data_zoom() -> serde_json::Value {
     ])
 }
 
+/// Standard axis-trigger tooltip with dark theme styling.
 pub(crate) fn tooltip_axis() -> serde_json::Value {
     json!({
         "trigger": "axis",
@@ -100,6 +122,7 @@ pub(crate) fn tooltip_axis() -> serde_json::Value {
     })
 }
 
+/// X-axis config: time-axis for per-block charts, category-axis for daily charts.
 pub(crate) fn x_axis_for(
     is_daily: bool,
     categories: &[String],
@@ -120,6 +143,7 @@ pub(crate) fn x_axis_for(
     }
 }
 
+/// Y-axis config with name label, dashed grid lines, and dark theme styling.
 pub(crate) fn y_axis(name: &str) -> serde_json::Value {
     json!({
         "type": "value",
@@ -131,6 +155,7 @@ pub(crate) fn y_axis(name: &str) -> serde_json::Value {
     })
 }
 
+/// Fallback chart option showing a centered "No data" message.
 pub(crate) fn no_data_chart(title: &str) -> serde_json::Value {
     let mut opt = chart_defaults();
     let m = opt.as_object_mut().unwrap();
@@ -145,6 +170,8 @@ pub(crate) fn no_data_chart(title: &str) -> serde_json::Value {
     opt
 }
 
+/// Compute a simple moving average with the given window size. Returns `None`
+/// for the first `window-1` elements where insufficient data exists.
 pub(crate) fn moving_average(data: &[f64], window: usize) -> Vec<Option<f64>> {
     let mut result = Vec::with_capacity(data.len());
     for i in 0..data.len() {

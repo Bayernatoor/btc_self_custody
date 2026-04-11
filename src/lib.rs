@@ -1,12 +1,14 @@
-//! WE HODL BTC — Bitcoin self-custody guide website.
+//! WE HODL BTC - Bitcoin self-custody guide website and blockchain analytics observatory.
 //!
 //! Leptos 0.8 fullstack app (SSR + WASM hydration) with Axum backend.
 //!
 //! # Module layout
-//! - `app`    — Router, HTML shell, and meta tags
-//! - `guides` — Static definitions for wallets, levels, platforms, products
-//! - `routes` — Page components (homepage, guide selector, guide pages, FAQ, about, blog)
-//! - `extras` — Reusable UI components (navbar, footer, stepper, accordion, buttons, spinner)
+//! - `app`     - Router, HTML shell, and meta tags
+//! - `guides`  - Static definitions for wallets, levels, platforms, products
+//! - `routes`  - Page components (homepage, guide selector, guide pages, FAQ, about, blog, observatory)
+//! - `extras`  - Reusable UI components (navbar, footer, stepper, accordion, buttons, spinner)
+//! - `stats`   - Server functions, data types, and ECharts JSON builders for the observatory
+//! - `helpers` - Shared utility functions
 
 #![recursion_limit = "512"]
 

@@ -1,18 +1,37 @@
 //! Classification of OP_RETURN outputs and mining pool identification.
 //!
-//! OP_RETURN types:
-//! - SegwitCommit: coinbase segwit commitment (6a24aa21a9ed prefix, excluded from totals)
-//! - Runes: Runes protocol markers (6a5d prefix or ≤6 byte tiny outputs)
-//! - DataCarrier: traditional data embedding (everything else)
+//! ## OP_RETURN Classification
 //!
-//! Miner identification: case-insensitive substring matching on coinbase scriptSig ASCII.
+//! Every OP_RETURN output is classified into one of five types based on its
+//! scriptPubKey hex prefix:
+//!
+//! - **SegwitCommit**: Coinbase SegWit commitment (`6a24aa21a9ed` prefix). These are
+//!   infrastructure outputs required by BIP-141 and are excluded from OP_RETURN totals.
+//! - **Runes**: Runes protocol markers (`6a5d` = OP_RETURN OP_13, or tiny outputs <=6 bytes).
+//!   Only classified as Runes after block 840,000 (4th halving / Runes launch).
+//! - **Omni**: Omni Layer protocol (`6f6d6e69` = "omni" in ASCII after push opcode).
+//! - **Counterparty**: Counterparty protocol (`434e545250525459` = "CNTRPRTY" in ASCII).
+//! - **DataCarrier**: Everything else - generic data embedding.
+//!
+//! ## Miner Identification
+//!
+//! Mining pools are identified by case-insensitive substring matching against the
+//! coinbase scriptSig decoded as ASCII. Patterns are checked in priority order
+//! (more specific first). OCEAN template miners get special handling - the sub-miner
+//! name is extracted from printable ASCII after the `>` in the OCEAN tag.
 
+/// Classification result for a single OP_RETURN output.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum OpReturnType {
+    /// BIP-141 SegWit commitment in coinbase (excluded from stats).
     SegwitCommit,
+    /// Runes protocol marker (only valid at height >= 840,000).
     Runes,
+    /// Omni Layer protocol output.
     Omni,
+    /// Counterparty protocol output.
     Counterparty,
+    /// Generic data carrier (no known protocol prefix matched).
     DataCarrier,
 }
 

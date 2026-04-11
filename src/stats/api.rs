@@ -1,14 +1,31 @@
-//! REST API endpoints.
+//! REST API endpoints for the stats module.
 //!
-//! Endpoints:
-//! - GET /api/blocks?from=&to=          -- raw block data (default: last 144 blocks)
-//! - GET /api/blocks/:height            -- single block detail
-//! - GET /api/stats                     -- DB summary (block count, height range)
-//! - GET /api/live                      -- real-time node + mempool + network stats
-//! - GET /api/op-returns?from=&to=      -- OP_RETURN classification data (default: last 10k blocks)
-//! - GET /api/aggregates/daily?from=&to= -- daily aggregated metrics (timestamps)
-//! - GET /api/signaling?bit=N or method=locktime -- per-block signaling status
-//! - GET /api/signaling/periods?bit=N   -- signaling % per retarget period
+//! These endpoints serve the Axum JSON API (used by external clients).
+//! Leptos frontend components use server functions in `server_fns.rs` instead.
+//!
+//! ## Endpoints
+//!
+//! - `GET /api/blocks?from=&to=` - Block data by height range (default: last 144 blocks)
+//! - `GET /api/blocks/:height` - Single block detail
+//! - `GET /api/stats` - DB summary (block count, height range)
+//! - `GET /api/live` - Real-time node + mempool + network stats (10s cache)
+//! - `GET /api/op-returns?from=&to=` - OP_RETURN protocol breakdown (default: last 10k blocks)
+//! - `GET /api/aggregates/daily?from=&to=` - Daily aggregated metrics by timestamp
+//! - `GET /api/signaling?bit=N` or `?method=locktime` - Per-block signaling status
+//! - `GET /api/signaling/periods?bit=N` - Signaling % per 2016-block retarget period
+//! - `GET /api/heartbeat` - SSE stream for real-time mempool txs and block notifications
+//!
+//! ## Caching Strategy
+//!
+//! Most endpoints use HTTP Cache-Control headers (5-10s max-age). The `/api/live`
+//! endpoint additionally caches the assembled response server-side for 10s. Price
+//! data from mempool.space is cached for 60s with an atomic guard to prevent
+//! concurrent refresh requests.
+//!
+//! ## SSE Connection Limiting
+//!
+//! The heartbeat SSE endpoint is capped at 256 concurrent connections via an
+//! `AtomicUsize` counter with an RAII guard that decrements on drop.
 
 use std::convert::Infallible;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -25,7 +42,7 @@ use futures::stream::Stream;
 use futures::StreamExt;
 use serde::Deserialize;
 
-/// Helper: wrap a JSON response with Cache-Control header.
+/// Wrap a JSON value with a `Cache-Control: public, max-age=N` header.
 fn cached_json(
     value: serde_json::Value,
     max_age: u32,
@@ -44,9 +61,11 @@ use super::error::StatsError;
 use super::rpc::{BitcoinRpc, PriceInfo};
 use super::types::PricePoint;
 
-/// Cached range query: (from, to, results, fetched_at).
+/// Generic cache type for range queries: (from, to, results, fetched_at).
 type RangeCache<T> = Mutex<Option<(u64, u64, Vec<T>, Instant)>>;
 
+/// Shared application state for the stats module. Holds the DB pool, RPC client,
+/// and all in-memory caches. Wrapped in `Arc` and passed to all handlers.
 pub struct StatsState {
     pub db: DbPool,
     pub rpc: BitcoinRpc,
@@ -93,6 +112,7 @@ pub struct StatsState {
 /// Maximum concurrent SSE connections before rejecting new ones.
 const MAX_SSE_CONNECTIONS: usize = 256;
 
+/// Arc-wrapped stats state, used as Axum extractor in all handlers.
 pub type SharedStatsState = Arc<StatsState>;
 
 /// RAII guard that decrements SSE connection count on drop.
@@ -106,32 +126,44 @@ impl Drop for SseConnectionGuard {
 
 const MAX_SUPPLY: f64 = 21_000_000.0;
 
+/// Query parameters for block height range endpoints.
 #[derive(Deserialize)]
 pub struct BlocksQuery {
+    /// Start block height (inclusive). Default: max_height - 144.
     pub from: Option<u64>,
+    /// End block height (inclusive). Default: max_height.
     pub to: Option<u64>,
 }
 
+/// Query parameters for timestamp range endpoints.
 #[derive(Deserialize)]
 pub struct TimestampQuery {
+    /// Start timestamp in unix seconds. Default: 0.
     pub from: Option<u64>,
+    /// End timestamp in unix seconds. Default: u64::MAX.
     pub to: Option<u64>,
 }
 
+/// Query parameters for signaling endpoints.
 #[derive(Deserialize)]
 pub struct SignalingQuery {
+    /// Version bit number (0-28) for BIP9 signaling. Default: 0.
     pub bit: Option<u32>,
-    pub method: Option<String>, // "bit" (default) or "locktime"
+    /// Signaling method: "bit" (default) or "locktime" (BIP-54).
+    pub method: Option<String>,
     pub from: Option<u64>,
     pub to: Option<u64>,
 }
 
+/// Query parameters for signaling periods endpoint.
 #[derive(Deserialize)]
 pub struct SignalingPeriodsQuery {
     pub bit: Option<u32>,
     pub method: Option<String>,
 }
 
+/// GET /api/blocks - query blocks by height range.
+/// Defaults to the last 144 blocks (~1 day) if no range is specified.
 pub async fn get_blocks(
     State(state): State<SharedStatsState>,
     Query(params): Query<BlocksQuery>,
@@ -160,6 +192,7 @@ pub async fn get_blocks(
     Ok(Json(serde_json::json!({ "blocks": blocks })))
 }
 
+/// GET /api/blocks/:height - single block detail with coinbase metadata.
 pub async fn get_block_detail(
     State(state): State<SharedStatsState>,
     Path(height): Path<u64>,
@@ -178,6 +211,7 @@ pub async fn get_block_detail(
     }
 }
 
+/// GET /api/stats - database summary (block count, height range). Cache: 10s.
 pub async fn get_stats(
     State(state): State<SharedStatsState>,
 ) -> Result<CachedResponse, StatsError> {
@@ -222,6 +256,8 @@ fn serve_stale_live(
     })
 }
 
+/// GET /api/live - real-time node, mempool, and network stats. Cache: 10s.
+/// Parallelizes RPC calls and serves stale data with a `stale` flag if RPC is down.
 pub async fn get_live(
     State(state): State<SharedStatsState>,
 ) -> Result<CachedResponse, StatsError> {
@@ -329,6 +365,8 @@ pub async fn get_live(
     ))
 }
 
+/// GET /api/op-returns - OP_RETURN protocol breakdown by height range.
+/// Defaults to the last 10,000 blocks if no range specified.
 pub async fn get_op_returns(
     State(state): State<SharedStatsState>,
     Query(params): Query<BlocksQuery>,
@@ -357,6 +395,7 @@ pub async fn get_op_returns(
     Ok(Json(serde_json::json!({ "blocks": blocks })))
 }
 
+/// GET /api/aggregates/daily - daily aggregated metrics by timestamp range.
 pub async fn get_daily_aggregates(
     State(state): State<SharedStatsState>,
     Query(params): Query<TimestampQuery>,
@@ -373,6 +412,8 @@ pub async fn get_daily_aggregates(
     Ok(Json(serde_json::json!({ "days": days })))
 }
 
+/// GET /api/signaling - per-block signaling status (version bits or BIP-54 locktime).
+/// Also returns period stats for the current 2016-block retarget window.
 pub async fn get_signaling(
     State(state): State<SharedStatsState>,
     Query(params): Query<SignalingQuery>,
@@ -441,6 +482,7 @@ pub async fn get_signaling(
     })))
 }
 
+/// GET /api/signaling/periods - signaling percentage per retarget period (all time).
 pub async fn get_signaling_periods(
     State(state): State<SharedStatsState>,
     Query(params): Query<SignalingPeriodsQuery>,

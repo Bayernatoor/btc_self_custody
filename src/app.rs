@@ -1,19 +1,28 @@
 //! App shell and router.
 //!
-//! `shell()` renders the outer HTML document (head, meta, scripts).
+//! `shell()` renders the outer HTML document (head, meta, scripts, Open Graph tags,
+//! favicon links, ECharts CDN, service worker, and analytics).
 //! `App` sets up the Leptos router with all page routes.
+//!
+//! The observatory uses a `ParentRoute` so all observatory child pages share a
+//! common layout (hero, nav, overlay panel, block detail modal) without remounting.
 //!
 //! Route structure:
 //!   /                                        -> HomePage
 //!   /guides                                  -> GuideSelector
+//!   /guides/:level                           -> GuideLevelSelector
 //!   /guides/:level/:segment                  -> GuideTwoSegment
 //!   /guides/:level/:platform/:wallet         -> GuideWalletPage
-//!   /observatory                             -> Dashboard
-//!   /observatory/charts/network              -> Network charts
-//!   /observatory/charts/fees                 -> Fee charts
-//!   /observatory/charts/mining               -> Mining charts
-//!   /observatory/charts/embedded             -> Embedded data charts
-//!   /observatory/signaling                   -> BIP signaling
+//!   /observatory                             -> Dashboard (live stats, difficulty, halving)
+//!   /observatory/charts/network              -> Network charts (blocks, adoption, tx metrics)
+//!   /observatory/charts/fees                 -> Fee charts (total fees, subsidy breakdown)
+//!   /observatory/charts/mining               -> Mining charts (difficulty, pool distribution)
+//!   /observatory/charts/embedded             -> Embedded data charts (OP_RETURN, inscriptions)
+//!   /observatory/signaling                   -> BIP signaling tracker
+//!   /observatory/stats                       -> Stats overview (at-a-glance counters)
+//!   /observatory/on-this-day                 -> On This Day in Bitcoin
+//!   /observatory/hall-of-fame                -> Hall of Fame (notable blocks/transactions)
+//!   /observatory/heartbeat                   -> Block Heartbeat (live EKG animation)
 //!   /observatory/learn/protocols             -> Protocol guide
 //!   /blog, /faq, /about                      -> Static pages
 
@@ -141,6 +150,8 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
     }
 }
 
+/// Root application component. Provides meta context and renders the router
+/// with NavBar, page routes, and Footer.
 #[component]
 pub fn App() -> impl IntoView {
     provide_meta_context();

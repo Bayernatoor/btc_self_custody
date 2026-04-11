@@ -1,7 +1,27 @@
-//! Server functions that wrap stats DB queries for Leptos.
+//! Leptos server functions bridging frontend components to the backend.
 //!
-//! Each function extracts the shared `StatsState` from the Axum extensions,
-//! queries the database (or RPC), and returns shared types from `super::types`.
+//! Each `#[server]` function is callable from both server-side rendering and
+//! WASM client code. On the server, they extract the shared [`StatsState`] from
+//! Axum extensions, query the database (or RPC), and return shared types from
+//! `super::types`. On the client, Leptos auto-generates HTTP POST calls to
+//! `/api/<endpoint>`.
+//!
+//! ## Error Handling
+//!
+//! All server functions use the [`internal_err`] helper which logs the full error
+//! server-side (including SQL, RPC details) but returns only a generic "Internal
+//! server error" message to the client, preventing information leakage.
+//!
+//! ## Caching
+//!
+//! Several functions implement server-side in-memory caching with TTLs:
+//! - `fetch_stats_summary`: 60s TTL
+//! - `fetch_live_stats`: 10s TTL
+//! - `fetch_daily_aggregates`: 120s TTL (keyed by from/to range)
+//! - `fetch_signaling` / `fetch_signaling_periods`: 60s TTL (keyed by method+range)
+//! - `fetch_price_history`: 1 hour TTL (full dataset cached)
+//! - `fetch_range_summary` / `fetch_extremes`: 60s TTL (keyed by from/to range)
+//! - `fetch_block_timestamp`: cached forever (block timestamps are immutable)
 
 use leptos::prelude::*;
 use leptos::server;

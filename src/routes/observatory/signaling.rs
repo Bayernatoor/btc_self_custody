@@ -1,4 +1,19 @@
-//! BIP signaling tracker: version bit and locktime compliance monitoring.
+//! BIP signaling tracker: version bit signaling and coinbase compliance monitoring.
+//!
+//! Tracks two different types of BIP readiness across 2,016-block retarget periods:
+//!
+//! **BIP-110 (version bit signaling)**: miners signal support by setting bit 4 in
+//! the block header's nVersion field. Uses a 55% activation threshold (1,109 of
+//! 2,016 blocks). This is the standard BIP-9 style signaling mechanism.
+//!
+//! **BIP-54 (coinbase compatibility checking)**: there is no formal signaling
+//! mechanism for BIP-54. This tracker checks compatibility by verifying that
+//! coinbase nLockTime equals height-1 and nSequence is not 0xFFFFFFFF (timelock
+//! not disabled). Uses a 95% threshold.
+//!
+//! The page shows: a status card with progress bars, per-pool signaling breakdown,
+//! a block grid where each cell is a block (green = signaled, red = not), and a
+//! period history bar chart. Users can navigate between retarget periods.
 
 use leptos::prelude::*;
 use leptos_meta::*;
@@ -7,6 +22,8 @@ use super::components::*;
 use super::helpers::*;
 use crate::stats::server_fns::*;
 
+/// BIP signaling tracker page. Fetches per-block signaling data and period-level
+/// aggregates, then renders status card, miner breakdown, block grid, and history chart.
 #[component]
 pub fn SignalingPage() -> impl IntoView {
     let (bip_method, set_bip_method) = signal("bit".to_string());

@@ -1,9 +1,34 @@
 //! ZMQ subscriber: connects to bitcoind's ZMQ interface for real-time
 //! mempool transactions and block notifications.
 //!
-//! Subscribes to:
-//! - `rawtx` on port 28333: new mempool transactions (decoded for fee/size/value)
-//! - `hashblock` on port 28332: instant block detection
+//! ## ZMQ Topics
+//!
+//! - `rawtx` (port 28333): Raw serialized transactions entering the mempool.
+//!   Parsed to extract txid and total output value, then enriched with fee/vsize
+//!   from `getmempoolentry` RPC.
+//! - `hashblock` (port 28332): 32-byte block hash after validation completes.
+//!   Triggers full block data fetch and mempool tx confirmation.
+//! - `sequence` (port 28333): Mempool event stream with single-character type codes:
+//!   - `A` = tx added to mempool
+//!   - `R` = tx removed from mempool (block or conflict)
+//!   - `C` = block connected
+//!   - `D` = block disconnected (reorg)
+//!
+//! ## Mining Detection via Sequence Events
+//!
+//! When a new block arrives, Bitcoin Core removes transactions from the mempool in
+//! a rapid burst of `R` (removed) events. By counting R events within a short time
+//! window (3 seconds), the subscriber detects block processing before the slower
+//! `hashblock` event fires. This triggers the `BlockMining` SSE event, which shows
+//! a mining overlay in the frontend UI.
+//!
+//! ## Heartbeat Event Types
+//!
+//! - `Tx`: New mempool transaction with fee, vsize, value, and fee rate.
+//! - `Block`: Complete block data (height, hash, fees, size, confirmed tx count).
+//!   Sent after full validation and data fetch - all fields populated.
+//! - `BlockMining`: Lightweight signal that block processing has started.
+//!   Detected via R-event burst. Frontend shows mining animation until Block arrives.
 //!
 //! Transactions are stored in SQLite (`mempool_txs` table) and broadcast
 //! to SSE clients via a tokio broadcast channel.
@@ -19,43 +44,55 @@ use zeromq::{Socket, SocketRecv, SubSocket};
 use super::api::StatsState;
 use super::db;
 
-/// Event broadcast to SSE clients.
+/// Event broadcast to SSE clients via the heartbeat endpoint.
+/// Tagged with `type` for JSON serialization so the frontend can dispatch by event kind.
 #[derive(Clone, Debug, serde::Serialize)]
 #[serde(tag = "type")]
 pub enum HeartbeatEvent {
+    /// New mempool transaction with fee and size data.
     #[serde(rename = "tx")]
     Tx {
         txid: String,
+        /// Transaction fee in satoshis.
         fee: u64,
+        /// Virtual size in vbytes.
         vsize: u32,
+        /// Total output value in satoshis.
         value: u64,
+        /// Fee rate in sat/vB.
         fee_rate: f64,
+        /// Unix timestamp when this tx was observed.
         timestamp: u64,
     },
-    /// Block found — complete data (fees, size, weight all populated).
+    /// Block found - complete data (fees, size, weight all populated).
     /// Sent after node finishes validation and we fetch all metadata.
     #[serde(rename = "block")]
     Block {
         height: u64,
         hash: String,
+        /// Block timestamp in unix seconds.
         timestamp: u64,
         tx_count: u64,
+        /// Total fees in satoshis (from getblockstats).
         total_fees: u64,
+        /// Block size in bytes.
         size: u64,
+        /// Block weight in weight units.
         weight: u64,
+        /// Number of mempool txs we had tracked that were confirmed in this block.
         confirmed_count: u64,
     },
-    /// Block is being mined/validated — node is processing a new block.
+    /// Block is being mined/validated - node is processing a new block.
     /// Detected via ZMQ sequence `R` burst (txs being removed from mempool).
-    /// JS shows mining overlay until the complete Block event arrives.
+    /// Frontend shows mining overlay until the complete Block event arrives.
     #[serde(rename = "block_mining")]
     BlockMining,
 }
 
-/// Spawn the ZMQ subscriber tasks:
-/// 1. rawtx (port 28333) — new mempool transactions
-/// 2. hashblock (port 28332) — block hash after validation completes
-/// 3. sequence (port 28333) — mempool events, detects block processing start
+/// Spawn the ZMQ subscriber tasks. Both tx/sequence topics share a single socket
+/// on port 28333 (ZMQ PUB distributes across separate SUB sockets, so splitting
+/// would cause each to see only a fraction of messages). Block notifications use
+/// a separate socket on port 28332.
 pub fn spawn(
     state: Arc<StatsState>,
     tx_sender: broadcast::Sender<HeartbeatEvent>,
@@ -284,17 +321,24 @@ async fn subscribe_tx_and_sequence(
     }
 }
 
-/// Minimum R events within the time window to trigger mining detection.
+/// Minimum R events within the time window to trigger a BlockMining event.
 const SEQUENCE_R_THRESHOLD: u32 = 5;
-/// Time window in seconds to accumulate R events.
+/// Time window in seconds to accumulate R events before resetting.
 const SEQUENCE_R_WINDOW_SECS: f64 = 3.0;
 
-/// Time-window based state machine for ZMQ sequence event processing.
-/// Counts R events within a rolling window. A events are ignored since
-/// they interleave with R events during block processing on slower hardware.
+/// Time-window based state machine for detecting block processing via ZMQ sequence events.
+///
+/// Counts `R` (removed from mempool) events within a rolling window. When the count
+/// crosses `SEQUENCE_R_THRESHOLD`, a `BlockMining` event is emitted once. The state
+/// resets on `C` (block connected) or `D` (block disconnected/reorg). `A` (added)
+/// events are ignored since they interleave with R events during block processing
+/// on slower hardware.
 struct SequenceState {
+    /// Number of R events in the current time window.
     r_count: u32,
+    /// Start of the current time window (None = no active window).
     window_start: Option<std::time::Instant>,
+    /// Whether BlockMining has already been sent for this window.
     mining_sent: bool,
 }
 
@@ -1006,7 +1050,9 @@ mod tests {
     }
 }
 
-/// Prune old mempool transactions (runs periodically).
+/// Delete mempool_txs entries older than 7 days. Runs on startup and then daily.
+/// Keeps the table from growing unbounded since confirmed txs are never cleaned
+/// automatically.
 pub async fn prune_old_txs(state: &Arc<StatsState>) {
     let seven_days_ago = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

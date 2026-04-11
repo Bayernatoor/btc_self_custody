@@ -1,7 +1,11 @@
+//! Transaction metric chart builders: address type evolution (stacked area),
+//! address type share (%), witness data share, transaction batching (avg
+//! inputs/outputs per tx), RBF adoption, and UTXO flow (inputs vs outputs).
+
 use super::*;
 use serde_json::json;
 
-/// Address type evolution — stacked area (per-block).
+/// Address type evolution - stacked area (per-block).
 pub fn address_type_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Address Types");

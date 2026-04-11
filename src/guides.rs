@@ -1,6 +1,10 @@
 //! Guide definitions: all wallet, level, and platform metadata lives here.
 //!
 //! Single source of truth - no guide content is hardcoded in route components.
+//! Three guide levels (Basic, Intermediate, Advanced) map to increasing
+//! self-custody complexity. Each level defines supported platforms, wallets,
+//! products to purchase, and sub-steps. Wallet definitions include download
+//! links filtered by platform (Android, iOS, desktop OS variants).
 
 /// A downloadable wallet application.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -17,6 +21,7 @@ pub struct WalletDef {
     pub downloads: &'static [DownloadLink],
 }
 
+/// A download link for a wallet app, targeting one or more platforms.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DownloadLink {
     pub label: &'static str,
@@ -229,6 +234,7 @@ pub fn platform_display(platform: &str) -> &str {
 pub static ALL_WALLETS: &[&WalletDef] =
     &[&BLUE_WALLET, &GREEN_WALLET, &SPARROW_WALLET];
 
+/// Look up a wallet definition by its short ID (e.g. "blue", "green", "sparrow").
 pub fn find_wallet(id: &str) -> Option<&'static WalletDef> {
     ALL_WALLETS.iter().find(|w| w.id == id).copied()
 }
@@ -366,6 +372,7 @@ pub static ADVANCED_LEVEL: GuideLevelDef = GuideLevelDef {
 pub static ALL_LEVELS: &[&GuideLevelDef] =
     &[&BASIC_LEVEL, &INTERMEDIATE_LEVEL, &ADVANCED_LEVEL];
 
+/// Look up a guide level by its short ID (e.g. "basic", "intermediate", "advanced").
 pub fn find_level(id: &str) -> Option<&'static GuideLevelDef> {
     ALL_LEVELS.iter().find(|l| l.id == id).copied()
 }

@@ -1,4 +1,16 @@
 //! Shared state, URL query params, and reusable components for the Observatory.
+//!
+//! Central module that wires together the observatory's reactive state:
+//! - `ObservatoryState` holds the time range, overlay toggles, dashboard data
+//!   resource, live stats cache, and chart JSON cache. Provided as context by
+//!   the parent `ObservatoryPage` and consumed by all child chart pages.
+//! - `LiveContext` carries the auto-refreshing live stats resource and countdown
+//!   timer, used by the overview dashboard.
+//! - `chart_memo!` macro builds a derived `Signal<String>` that computes ECharts
+//!   JSON from dashboard data, applies overlay mark lines, and caches the result
+//!   so tab switches are instant.
+//! - URL sync helpers keep the browser address bar in sync with range, overlays,
+//!   and section state via `history.replaceState` (no router navigation).
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -129,9 +141,9 @@ pub fn build_share_url(chart_id: &str) -> String {
     format!("{origin}{pathname}{search}#{chart_id}")
 }
 
-/// Client-side chart JSON cache. Persists at the parent level across
-/// Outlet navigations so switching tabs doesn't recompute charts.
-/// Keyed by chart_id; invalidated when range or overlay flags change.
+/// Client-side chart JSON cache keyed by a composite string of chart ID, range,
+/// data fingerprint, and overlay flags. Persists at the parent level across
+/// Outlet navigations so switching tabs does not recompute charts.
 /// Uses Arc<Mutex> for Send+Sync compatibility with SSR.
 pub type ChartCache = Arc<Mutex<HashMap<String, String>>>;
 
@@ -139,6 +151,8 @@ pub type ChartCache = Arc<Mutex<HashMap<String, String>>>;
 // Data enum for dashboard
 // ---------------------------------------------------------------------------
 
+/// Dashboard data payload, either per-block (short ranges, under ~5000 blocks)
+/// or daily aggregates (longer ranges like 1Y+). Chart builders accept both.
 #[derive(Clone)]
 pub enum DashboardData {
     PerBlock(Vec<BlockSummary>),
@@ -149,6 +163,9 @@ pub enum DashboardData {
 // Shared observatory state (provided via context)
 // ---------------------------------------------------------------------------
 
+/// Shared reactive state for the entire observatory, provided via Leptos context.
+/// Holds the selected time range, overlay toggle signals, the dashboard data resource,
+/// cached live node stats, and a chart JSON cache that persists across tab navigations.
 #[derive(Clone)]
 pub struct ObservatoryState {
     pub range: ReadSignal<String>,
@@ -184,8 +201,6 @@ pub struct ObservatoryState {
     pub set_custom_to: WriteSignal<Option<String>>,
 }
 
-/// Create a dashboard data resource. Each chart page calls this to get its own
-/// resource that fires on mount (avoids stale Effect issues with Outlet navigation).
 /// Parse a "YYYY-MM-DD" date string to a Unix timestamp (midnight UTC).
 pub fn date_to_ts(date: &str) -> Option<u64> {
     chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d")
@@ -194,6 +209,9 @@ pub fn date_to_ts(date: &str) -> Option<u64> {
         .map(|dt| dt.and_utc().timestamp() as u64)
 }
 
+/// Create a `LocalResource` that fetches dashboard data for the given range.
+/// Returns `PerBlock` data for short ranges (under ~5000 blocks) or `Daily`
+/// aggregates for longer ranges. Supports custom date ranges via from/to params.
 pub fn create_dashboard_resource(
     range: ReadSignal<String>,
     custom_from: ReadSignal<Option<String>>,

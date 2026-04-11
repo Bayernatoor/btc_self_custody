@@ -1,3 +1,6 @@
+//! Fee chart builders: total fees, avg fee per tx, median fee rate, fee rate
+//! bands (p10/p50/p90), and subsidy-vs-fees stacked area.
+
 use super::*;
 use serde_json::json;
 

@@ -1,3 +1,6 @@
+//! BIP signaling chart builders: per-block scatter chart and retarget period
+//! history bar chart with activation threshold line.
+
 use super::*;
 use serde_json::json;
 

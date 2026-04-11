@@ -1,8 +1,32 @@
 //! SQLite database: schema, migrations, and query functions.
 //!
-//! Schema evolves via ALTER TABLE migrations checked on startup.
-//! Genesis block (height 0) is intentionally excluded from backfill
-//! since its 50 BTC output is unspendable and has no meaningful fee data.
+//! ## Schema
+//!
+//! The primary table is `blocks` with `height` as the primary key and one column
+//! per metric extracted during ingestion. A secondary `mempool_txs` table tracks
+//! unconfirmed transactions for the heartbeat SSE feature.
+//!
+//! ## Migrations
+//!
+//! Schema evolves via ALTER TABLE migrations checked on startup. Each migration
+//! probes for a column's existence with a dummy `SELECT ... LIMIT 0` and adds it
+//! if missing. This is safe to run repeatedly and handles any upgrade path.
+//!
+//! ## Backfill Versioning
+//!
+//! When new metrics are added (new columns), existing blocks need to be re-fetched
+//! from RPC to populate them. The `backfill_version` column tracks which version
+//! each block was last processed at. Blocks with `backfill_version < BACKFILL_VERSION`
+//! are queued for re-processing by the extras backfill task.
+//!
+//! ## WAL Mode
+//!
+//! The database uses WAL (Write-Ahead Logging) journal mode for concurrent
+//! read/write access. This allows API queries to run simultaneously with
+//! background ingestion without blocking.
+//!
+//! Genesis block (height 0) is intentionally excluded from backfill since its
+//! 50 BTC output is unspendable and has no meaningful fee data.
 
 use std::path::Path;
 
@@ -19,7 +43,9 @@ pub const BACKFILL_VERSION: u64 = 9;
 /// Type alias for the connection pool used throughout the stats module.
 pub type DbPool = r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>;
 
-/// Create a connection pool with WAL mode and proper initialization.
+/// Create an r2d2 connection pool with WAL mode, 5s busy timeout, and
+/// foreign keys enabled. Runs all schema migrations on one connection before
+/// returning.
 pub fn open_pool(
     path: &Path,
     pool_size: u32,
@@ -283,18 +309,23 @@ pub fn open(path: &Path) -> rusqlite::Result<Connection> {
     Ok(conn)
 }
 
+/// Return the highest block height in the database, or None if empty.
 pub fn max_height(conn: &Connection) -> rusqlite::Result<Option<u64>> {
     conn.query_row("SELECT MAX(height) FROM blocks", [], |row| {
         row.get::<_, Option<u64>>(0)
     })
 }
 
+/// Return the lowest block height in the database, or None if empty.
 pub fn min_height(conn: &Connection) -> rusqlite::Result<Option<u64>> {
     conn.query_row("SELECT MIN(height) FROM blocks", [], |row| {
         row.get::<_, Option<u64>>(0)
     })
 }
 
+/// Batch insert blocks within a single transaction. Uses INSERT OR IGNORE
+/// so duplicate heights are silently skipped. Sets backfill_version to the
+/// current BACKFILL_VERSION.
 pub fn insert_blocks(
     conn: &Connection,
     blocks: &[Block],
@@ -387,7 +418,7 @@ pub fn count_needs_backfill(conn: &Connection) -> rusqlite::Result<u64> {
     )
 }
 
-/// Get heights of blocks needing backfill
+/// Get heights of blocks needing backfill, ordered by height DESC (newest first).
 pub fn heights_needing_backfill(
     conn: &Connection,
     limit: u64,
@@ -400,7 +431,8 @@ pub fn heights_needing_backfill(
     rows.collect()
 }
 
-/// Update version, total_fees, miner for existing blocks and mark as backfilled
+/// Re-write all computed columns for existing blocks and bump their
+/// backfill_version to BACKFILL_VERSION. Used by the extras backfill task.
 pub fn update_block_extras(
     conn: &Connection,
     blocks: &[Block],
@@ -463,6 +495,7 @@ pub fn update_block_extras(
 
 // === Query types ===
 
+/// Row returned by `query_blocks` and `query_blocks_by_ts` - per-block summary data.
 #[derive(serde::Serialize)]
 pub struct BlockRow {
     pub height: u64,
@@ -512,6 +545,7 @@ pub struct BlockRow {
     pub largest_tx_size: u64,
 }
 
+/// Query blocks by height range [from, to] inclusive, ordered by height ASC.
 pub fn query_blocks(
     conn: &Connection,
     from: u64,
@@ -661,6 +695,8 @@ pub fn query_blocks_by_ts(
     rows.collect()
 }
 
+/// Full block detail row returned by `query_block_by_height`.
+/// Includes coinbase metadata (version, miner, locktime, sequence).
 #[derive(serde::Serialize)]
 pub struct FullBlockRow {
     pub height: u64,
@@ -689,6 +725,7 @@ pub struct FullBlockRow {
     pub taproot_spend_count: u64,
 }
 
+/// Query a single block by height. Returns None if not found.
 pub fn query_block_by_height(
     conn: &Connection,
     height: u64,
@@ -800,6 +837,7 @@ pub fn query_on_this_day(
     rows.collect()
 }
 
+/// Per-block OP_RETURN data returned by `query_op_returns`.
 #[derive(serde::Serialize)]
 pub struct OpReturnRow {
     pub height: u64,
@@ -818,6 +856,7 @@ pub struct OpReturnRow {
     pub data_carrier_bytes: u64,
 }
 
+/// Query OP_RETURN protocol breakdown by height range [from, to] inclusive.
 pub fn query_op_returns(
     conn: &Connection,
     from: u64,
@@ -852,6 +891,8 @@ pub fn query_op_returns(
     rows.collect()
 }
 
+/// Daily aggregated row returned by `query_daily_aggregates`.
+/// avg_ fields are per-block averages; total_ fields are day-wide sums.
 #[derive(serde::Serialize)]
 pub struct DailyRow {
     pub date: String,
@@ -896,6 +937,8 @@ pub struct DailyRow {
     pub avg_median_fee_rate: f64,
 }
 
+/// Aggregate block data by UTC date within a timestamp range.
+/// Groups by `date(datetime(timestamp, 'unixepoch'))` and computes AVG/SUM.
 pub fn query_daily_aggregates(
     conn: &Connection,
     from_ts: u64,
@@ -1070,6 +1113,7 @@ pub fn query_range_summary(
     )
 }
 
+/// Per-block signaling status returned by signaling queries.
 #[derive(serde::Serialize)]
 pub struct SignalingBlock {
     pub height: u64,
@@ -1078,6 +1122,8 @@ pub struct SignalingBlock {
     pub miner: String,
 }
 
+/// Query per-block BIP9 version bit signaling status for a height range.
+/// Checks whether `version & (1 << bit)` is set in each block.
 pub fn query_signaling_bit(
     conn: &Connection,
     bit: u32,
@@ -1123,6 +1169,7 @@ pub fn query_signaling_locktime(
     rows.collect()
 }
 
+/// Per-retarget-period signaling summary.
 #[derive(Clone, serde::Serialize)]
 pub struct SignalingPeriod {
     pub period: u64,
@@ -1133,6 +1180,7 @@ pub struct SignalingPeriod {
     pub signaled_pct: f64,
 }
 
+/// Aggregate BIP9 version bit signaling by 2016-block retarget period.
 pub fn query_signaling_periods_bit(
     conn: &Connection,
     bit: u32,
@@ -1166,6 +1214,8 @@ pub fn query_signaling_periods_bit(
     rows.collect()
 }
 
+/// Aggregate BIP-54 locktime signaling by 2016-block retarget period.
+/// A block signals if coinbase_locktime == height - 1 AND coinbase_sequence != 0xFFFFFFFF.
 pub fn query_signaling_periods_locktime(
     conn: &Connection,
 ) -> rusqlite::Result<Vec<SignalingPeriod>> {
@@ -1197,6 +1247,7 @@ pub fn query_signaling_periods_locktime(
     rows.collect()
 }
 
+/// Database summary stats returned by `query_stats`.
 #[derive(serde::Serialize)]
 pub struct Stats {
     pub block_count: u64,
@@ -1212,6 +1263,7 @@ pub struct MinerCount {
     pub count: u64,
 }
 
+/// Query mining pool block counts for a height range, ordered by count DESC.
 pub fn query_miner_dominance(
     conn: &Connection,
     from: u64,
@@ -1231,7 +1283,7 @@ pub fn query_miner_dominance(
     rows.collect()
 }
 
-/// Daily miner dominance
+/// Query mining pool block counts for a timestamp range, ordered by count DESC.
 pub fn query_miner_dominance_daily(
     conn: &Connection,
     from_ts: u64,
@@ -1268,6 +1320,9 @@ pub fn query_empty_blocks(
     rows.collect()
 }
 
+/// Get database summary (block count, height range, latest timestamp).
+/// Uses MIN/MAX on the primary key (instant B-tree lookup) instead of COUNT(*)
+/// to avoid a full table scan on 900k+ rows.
 pub fn query_stats(conn: &Connection) -> rusqlite::Result<Option<Stats>> {
     // Use MIN/MAX on primary key (instant B-tree lookup) and derive count.
     // Avoids COUNT(*) which forces a full table scan on 900k+ rows.
@@ -1422,13 +1477,17 @@ pub fn prune_mempool_txs(
     )
 }
 
-/// Row from mempool_txs table.
+/// Row from the mempool_txs table, used for SSE history on connect.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct MempoolTxRow {
     pub txid: String,
+    /// Transaction fee in satoshis.
     pub fee: u64,
+    /// Virtual size in vbytes.
     pub vsize: u32,
+    /// Total output value in satoshis.
     pub value: u64,
+    /// Unix timestamp when the transaction was first observed via ZMQ.
     pub first_seen: u64,
 }
 

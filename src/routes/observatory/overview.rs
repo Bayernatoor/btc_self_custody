@@ -1,4 +1,17 @@
-//! Observatory Dashboard: live node stats, difficulty adjustment, halving countdown.
+//! Observatory Dashboard: live node stats, difficulty adjustment predictor, and halving countdown.
+//!
+//! This is the landing page at `/observatory`. It displays real-time data from
+//! the connected Bitcoin node, organized into three panels:
+//! - **Mempool**: unconfirmed tx count, size, next-block fee estimate, usage gauge
+//! - **Mining**: block height, difficulty, hashrate, chain size, avg block time, last retarget
+//! - **Economic**: price, sats/dollar, market cap, total supply, % issued, UTXO count
+//!
+//! Below the live stats, two predictor sections show:
+//! - **Next Difficulty Adjustment**: blocks into the current 2016-block period,
+//!   progress bar, estimated change percentage, and estimated date
+//! - **Next Halving**: blocks remaining to the next 210,000-block epoch boundary,
+//!   estimated date (using measured avg block time from current diff period),
+//!   current and next subsidy values
 
 use leptos::prelude::*;
 use leptos_meta::*;
@@ -8,6 +21,7 @@ use super::helpers::*;
 use super::shared::*;
 use crate::stats::server_fns::*;
 
+/// Observatory dashboard page with live node stats, difficulty predictor, and halving countdown.
 #[component]
 pub fn ObservatoryOverview() -> impl IntoView {
     let state = expect_context::<ObservatoryState>();

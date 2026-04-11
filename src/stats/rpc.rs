@@ -1,12 +1,22 @@
 //! Bitcoin Core JSON-RPC client.
 //!
-//! Thin wrapper over reqwest that handles authentication and JSON-RPC protocol.
-//! Fetches blocks at verbosity=2 (full transaction data) to extract:
+//! Thin wrapper over reqwest that handles HTTP Basic authentication and the
+//! JSON-RPC 1.0 protocol used by Bitcoin Core. The primary data extraction
+//! method is [`BitcoinRpc::get_block`] which fetches a block at verbosity=2
+//! (full transaction data) and computes all metrics in a single pass:
+//!
 //! - Block metadata (size, weight, difficulty, version)
-//! - Fee statistics (total fees, median fee, median fee rate)
-//! - OP_RETURN classification (Runes vs data carriers)
+//! - Fee statistics (total fees, median fee, median/p10/p90 fee rates in sat/vB)
+//! - OP_RETURN classification (Runes, Omni, Counterparty, generic data carriers)
+//! - Output script type counts (P2PKH, P2SH, P2WPKH, P2WSH, P2TR, multisig, etc.)
 //! - Miner identification (from coinbase scriptSig and OP_RETURN outputs)
-//! - BIP-54 signaling (coinbase locktime)
+//! - BIP-54 signaling (coinbase nLockTime and nSequence)
+//! - Taproot key-path vs script-path spend detection
+//! - Ordinals inscription and BRC-20 detection in witness data
+//! - Stamps protocol detection (bare multisig with fake pubkeys)
+//!
+//! Also provides methods for mempool queries, network stats, UTXO set info,
+//! and price data from external APIs.
 
 use reqwest::Client;
 use serde::Deserialize;
@@ -15,7 +25,8 @@ use serde_json::{json, Value};
 use super::classifier::{self, OpReturnType};
 use super::error::StatsError;
 
-/// Bitcoin varint size in bytes for a given value.
+/// Calculate the encoded size of a Bitcoin CompactSize (varint) for a given value.
+/// Used to accurately count witness byte overhead.
 fn varint_size(n: u64) -> u64 {
     if n < 0xFD {
         1
@@ -28,6 +39,8 @@ fn varint_size(n: u64) -> u64 {
     }
 }
 
+/// Bitcoin Core JSON-RPC client. Holds a persistent HTTP client with
+/// connection pooling and configurable timeouts.
 pub struct BitcoinRpc {
     client: Client,
     url: String,
@@ -35,6 +48,7 @@ pub struct BitcoinRpc {
     password: String,
 }
 
+/// Response from `getblockchaininfo` RPC.
 #[derive(Debug, Deserialize, serde::Serialize)]
 pub struct BlockchainInfo {
     pub blocks: u64,
@@ -59,13 +73,17 @@ pub struct MempoolInfo {
     pub mempoolminfee: f64,
 }
 
+/// Response from `gettxoutsetinfo` RPC. Used to get the total UTXO count.
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
 pub struct TxoutSetInfo {
+    /// Total number of unspent transaction outputs.
     pub txouts: u64,
+    /// Total value of all UTXOs in BTC.
     pub total_amount: f64,
 }
 
+/// BTC/USD price from mempool.space `/api/v1/prices` endpoint.
 #[derive(Debug, Clone, Deserialize, serde::Serialize)]
 pub struct PriceInfo {
     #[serde(rename = "USD")]
@@ -73,25 +91,32 @@ pub struct PriceInfo {
     pub time: u64,
 }
 
-/// Minimal mempool entry info from getmempoolentry.
+/// Fee and size data for a single mempool transaction from `getmempoolentry` RPC.
 #[derive(Debug)]
 pub struct MempoolEntryInfo {
-    pub fee: u64, // sats
+    /// Transaction fee in satoshis.
+    pub fee: u64,
+    /// Virtual size in vbytes.
     pub vsize: u32,
 }
 
-/// Block metadata + txid list from getblock verbosity=1.
+/// Block metadata and transaction ID list from `getblock` verbosity=1.
+/// Used by ZMQ block handler for fast block processing without full tx data.
 #[derive(Debug)]
 pub struct BlockTxids {
     pub height: u64,
     pub timestamp: u64,
+    /// Block size in bytes (0 when fetched via getblockheader).
     pub size: u64,
+    /// Block weight in weight units (0 when fetched via getblockheader).
     pub weight: u64,
     pub tx_count: u64,
+    /// All transaction IDs in the block (empty when fetched via getblockheader).
     pub txids: Vec<String>,
 }
 
-/// Parsed block data from getblock verbosity=2.
+/// Fully parsed block data from `getblock` verbosity=2.
+/// Contains all metrics computed in a single pass over the block's transactions.
 #[derive(Debug)]
 pub struct Block {
     pub hash: String,
@@ -157,6 +182,7 @@ pub struct Block {
 }
 
 impl BitcoinRpc {
+    /// Create a new RPC client with 30s request timeout and 10s connect timeout.
     pub fn new(url: String, user: String, password: String) -> Self {
         Self {
             client: Client::builder()
@@ -209,6 +235,7 @@ impl BitcoinRpc {
         Ok(result["result"].take())
     }
 
+    /// Call `getblockchaininfo` - returns chain state, tip height, difficulty.
     pub async fn get_blockchain_info(
         &self,
     ) -> Result<BlockchainInfo, StatsError> {
@@ -236,6 +263,7 @@ impl BitcoinRpc {
         Ok(btc_per_kvb * 100_000.0) // BTC/kvB -> sat/vB
     }
 
+    /// Call `getblockhash` - returns the block hash at a given height.
     pub async fn get_block_hash(
         &self,
         height: u64,
@@ -678,6 +706,7 @@ impl BitcoinRpc {
         })
     }
 
+    /// Convenience method: fetch a block by height (calls getblockhash then getblock).
     pub async fn fetch_block_by_height(
         &self,
         height: u64,
@@ -789,6 +818,7 @@ impl BitcoinRpc {
         Ok(result["totalfee"].as_u64().unwrap_or(0))
     }
 
+    /// Call `getmempoolinfo` - returns mempool size, fee stats, memory usage.
     pub async fn get_mempool_info(&self) -> Result<MempoolInfo, StatsError> {
         let result = self.call("getmempoolinfo", &[]).await?;
         serde_json::from_value(result)

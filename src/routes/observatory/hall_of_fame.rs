@@ -1,4 +1,13 @@
 //! Bitcoin Hall of Fame: curated museum of remarkable blocks and transactions.
+//!
+//! A static collection of notable Bitcoin events defined in `hall_of_fame_data.rs`.
+//! Each entry has a date, title, description, category, optional block height,
+//! optional txid, and optional source link.
+//!
+//! Users can filter by category: Highlights (curated subset), All, Milestones,
+//! Records, Attacks, Protocol, or Oddities. The active filter is synced to the
+//! `?category=` query param. Entries are sorted chronologically. Each card links
+//! to the On This Day page and can open the block detail modal.
 
 use chrono::Datelike;
 use leptos::prelude::*;
@@ -80,6 +89,8 @@ const FILTERS: &[Filter] = &[
 // Page component
 // ---------------------------------------------------------------------------
 
+/// Hall of Fame page. Reads initial filter from `?category=` query param, renders
+/// filter pill bar, entry count, and a responsive card grid sorted chronologically.
 #[component]
 pub fn HallOfFamePage() -> impl IntoView {
     let query = use_query_map();
@@ -209,6 +220,8 @@ pub fn HallOfFamePage() -> impl IntoView {
 // Entry card
 // ---------------------------------------------------------------------------
 
+/// Individual Hall of Fame entry card with category badge, date, title, description,
+/// and links (mempool.space TX, block detail modal, On This Day, source reference).
 #[component]
 fn HofEntryCard(entry: &'static HallOfFameEntry) -> impl IntoView {
     let cat_color = entry.category.color();

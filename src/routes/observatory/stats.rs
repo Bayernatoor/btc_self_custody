@@ -1,4 +1,15 @@
-//! Stats Summary Dashboard — at-a-glance counters for any time range.
+//! Stats Summary Dashboard - at-a-glance counters for any time range.
+//!
+//! Displays aggregate statistics for the selected range, organized into sections:
+//! Network (blocks, txs, avg size, block time, TPS, weight utilization, chain growth),
+//! Fees (total fees, avg rate, avg per tx, median fee),
+//! Adoption (SegWit %, Taproot outputs, witness data %, RBF usage),
+//! Embedded Data (inscriptions, BRC-20, Runes, OP_RETURN, Omni, Counterparty),
+//! Mining (top pool, unique pool count), and Price (start, end, change).
+//!
+//! An "Extremes" hero section at the top shows record-breaking blocks (largest
+//! block, most transactions, highest fees, etc.) as clickable cards that open
+//! the block detail modal.
 
 use leptos::prelude::*;
 use leptos_meta::*;
@@ -13,6 +24,7 @@ use crate::stats::types::{ExtremesData, MiningPriceSummary, RangeSummary};
 // Stat card component
 // ---------------------------------------------------------------------------
 
+/// Single stat card displaying a label, value, optional subtitle, and optional tooltip.
 #[component]
 fn StatCard(
     #[prop(into)] label: &'static str,
@@ -82,6 +94,7 @@ fn fmt_date(ts: u64) -> String {
         .unwrap_or_default()
 }
 
+/// Clickable extreme/record card that opens the block detail modal on click.
 #[component]
 fn ExtremeCard(
     #[prop(into)] label: &'static str,
@@ -116,6 +129,8 @@ fn ExtremeCard(
 // Extremes hero section
 // ---------------------------------------------------------------------------
 
+/// Hero section showing record-breaking blocks as a grid of clickable ExtremeCards.
+/// Filters out zero-value entries and includes empty block count if nonzero.
 #[component]
 fn ExtremesHero(data: ExtremesData) -> impl IntoView {
     let d = data;
@@ -284,6 +299,8 @@ fn ExtremesHero(data: ExtremesData) -> impl IntoView {
 // Stats Summary page
 // ---------------------------------------------------------------------------
 
+/// Stats overview page showing aggregate counters and record-breaking blocks for
+/// the currently selected time range. Fetches summary, extremes, and mining/price data.
 #[component]
 pub fn StatsSummaryPage() -> impl IntoView {
     let state = expect_context::<ObservatoryState>();

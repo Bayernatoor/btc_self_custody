@@ -1,12 +1,21 @@
-//! The Bitcoin Observatory.
+//! The Bitcoin Observatory - live blockchain analytics dashboard.
+//!
+//! This is the parent module for all observatory pages. `ObservatoryPage` is the
+//! parent route component that provides shared state (range, overlays, live stats,
+//! chart cache) via Leptos context and renders a common shell (hero banner,
+//! navigation tabs, overlay panel, block detail modal) around child pages via `Outlet`.
 //!
 //! Routes:
 //!   /observatory                     -> Dashboard (live stats, difficulty, halving)
-//!   /observatory/charts/network      -> Network charts
-//!   /observatory/charts/fees         -> Fee charts
-//!   /observatory/charts/mining       -> Mining charts
-//!   /observatory/charts/embedded     -> Embedded data charts
-//!   /observatory/signaling           -> BIP signaling tracker
+//!   /observatory/charts/network      -> Network charts (blocks, adoption, tx metrics)
+//!   /observatory/charts/fees         -> Fee charts (total fees, subsidy breakdown)
+//!   /observatory/charts/mining       -> Mining charts (difficulty, pool distribution)
+//!   /observatory/charts/embedded     -> Embedded data charts (OP_RETURN, inscriptions)
+//!   /observatory/signaling           -> BIP signaling tracker (version bits + coinbase)
+//!   /observatory/stats               -> Stats overview (at-a-glance counters)
+//!   /observatory/on-this-day         -> On This Day in Bitcoin
+//!   /observatory/hall-of-fame        -> Hall of Fame (notable blocks/transactions)
+//!   /observatory/heartbeat           -> Block Heartbeat (live EKG animation)
 //!   /observatory/learn/protocols     -> Protocol guide
 
 pub mod components;
@@ -46,6 +55,9 @@ use shared::*;
 // child navigation works. Shared state is provided via context here.
 // ---------------------------------------------------------------------------
 
+/// Parent route component for the observatory. Provides `ObservatoryState` and
+/// `LiveContext` via context, renders the hero banner (dashboard only), navigation
+/// tabs, overlay panel, block detail modal, and the child page via `Outlet`.
 #[component]
 pub fn ObservatoryPage() -> impl IntoView {
     let _state = provide_observatory_state();

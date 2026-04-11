@@ -1,18 +1,31 @@
 //! Stats module configuration, loaded from environment variables.
 //!
-//! Returns `None` when `BITCOIN_STATS_RPC_URL` is not set (dormant mode).
+//! The stats module operates in "dormant mode" when `BITCOIN_STATS_RPC_URL` is
+//! not set - the application starts normally but without any block stats features.
+//! This allows the same binary to run in environments without a Bitcoin node
+//! (e.g. local development, staging) without errors.
 
 use std::path::PathBuf;
 
+/// Configuration for connecting to a Bitcoin Core node and storing block data.
+/// All fields are loaded from environment variables via [`StatsConfig::load`].
 pub struct StatsConfig {
+    /// Bitcoin Core JSON-RPC URL. Env: `BITCOIN_STATS_RPC_URL` (required).
     pub rpc_url: String,
+    /// RPC username. Env: `BITCOIN_STATS_RPC_USER` (default: "testnode").
     pub rpc_user: String,
+    /// RPC password. Env: `BITCOIN_STATS_RPC_PASSWORD` (default: empty).
     pub rpc_password: String,
+    /// Path to the SQLite database file. Env: `BITCOIN_STATS_DB_PATH` (default: "./bitcoin_stats.db").
     pub db_path: PathBuf,
+    /// Number of recent blocks to ingest on first run (when DB is empty).
+    /// Env: `BITCOIN_STATS_INITIAL_INGEST` (default: 1,000,000).
     pub initial_ingest_count: u64,
-    /// ZMQ endpoint for raw transactions (e.g. tcp://192.168.8.131:28333)
+    /// ZMQ endpoint for raw transactions (e.g. "tcp://192.168.8.131:28333").
+    /// Env: `BITCOIN_STATS_ZMQ_TX` (optional - disables heartbeat if unset).
     pub zmq_tx_url: Option<String>,
-    /// ZMQ endpoint for block hashes (e.g. tcp://192.168.8.131:28332)
+    /// ZMQ endpoint for block hashes (e.g. "tcp://192.168.8.131:28332").
+    /// Env: `BITCOIN_STATS_ZMQ_BLOCK` (optional - disables heartbeat if unset).
     pub zmq_block_url: Option<String>,
 }
 

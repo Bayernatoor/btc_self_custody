@@ -1,4 +1,12 @@
-//! Mining charts: difficulty, pool distribution, empty blocks.
+//! Mining charts with two sub-sections: Difficulty and Pool Distribution.
+//!
+//! **Difficulty**: difficulty adjustment history per block or daily. Adjusts every
+//! 2,016 blocks to target 10-minute block times.
+//!
+//! **Pool Distribution**: mining pool share donut chart (top 10 + "Other") and
+//! empty blocks scatter chart. Pool identification uses coinbase text signatures.
+//! OCEAN template miners are identified individually. Mining data is fetched
+//! separately from the main dashboard data since it uses different server functions.
 
 use leptos::prelude::*;
 use leptos_meta::*;
@@ -9,6 +17,7 @@ use super::shared::*;
 use crate::chart_memo;
 use crate::stats::server_fns::*;
 
+/// Mining charts page with sub-section tabs for difficulty and pool distribution.
 #[component]
 pub fn MiningChartsPage() -> impl IntoView {
     let state = expect_context::<ObservatoryState>();

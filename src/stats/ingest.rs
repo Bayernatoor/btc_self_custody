@@ -18,12 +18,15 @@ use super::db::DbPool;
 use super::rpc::{BitcoinRpc, Block};
 use super::{db, error::StatsError};
 
+/// Number of concurrent RPC fetch tasks. Env: `BITCOIN_STATS_RPC_CONCURRENCY` (default: 8).
 fn concurrency() -> usize {
     std::env::var("BITCOIN_STATS_RPC_CONCURRENCY")
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(8)
 }
+/// Number of blocks to fetch before writing a batch to the database.
+/// Keeps the DB lock held briefly so API queries are not starved.
 const DB_BATCH_SIZE: usize = 100;
 
 /// Forward ingestion: catch up from max_height+1 to chain tip.

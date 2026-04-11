@@ -1,4 +1,16 @@
-//! Network charts: blocks, adoption, transaction metrics.
+//! Network charts page with three sub-sections: Blocks, Adoption, and Transactions.
+//!
+//! **Blocks**: block size, weight utilization, transaction count, TPS, avg tx size,
+//! block interval, and chain size growth.
+//!
+//! **Adoption**: SegWit adoption %, Taproot outputs, witness version comparison and
+//! share, output type breakdown, address type evolution and share, Taproot spend
+//! types (key-path vs script-path), and witness data share.
+//!
+//! **Transactions**: RBF adoption, UTXO flow (inputs vs outputs), transaction
+//! batching (avg inputs/outputs per tx), and largest transaction per block.
+//!
+//! Each sub-section only computes its charts when active, keeping page load fast.
 
 use leptos::prelude::*;
 use leptos_meta::*;
@@ -8,6 +20,7 @@ use super::helpers::chart_desc;
 use super::shared::*;
 use crate::chart_memo;
 
+/// Network charts page with sub-section tabs for blocks, adoption, and transaction metrics.
 #[component]
 pub fn NetworkChartsPage() -> impl IntoView {
     let state = expect_context::<ObservatoryState>();

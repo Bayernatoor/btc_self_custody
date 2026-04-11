@@ -1,8 +1,11 @@
+//! Gauge chart builders for dashboard widgets.
+
 #[allow(unused_imports)]
 use super::*;
 use serde_json::json;
 
-/// Mempool usage gauge chart.
+/// Mempool usage gauge chart. Shows current mempool memory usage as a percentage
+/// of the configured maxmempool size, with color bands (green/orange/red).
 pub fn mempool_gauge(usage: u64, max: u64) -> String {
     let pct = if max > 0 {
         (usage as f64 / max as f64 * 100.0 * 10.0).round() / 10.0

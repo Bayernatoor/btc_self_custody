@@ -1,3 +1,8 @@
+//! Embedded data chart builders: OP_RETURN count and volume by protocol (Runes,
+//! Omni, Counterparty, other), OP_RETURN protocol share, OP_RETURN block share,
+//! Ordinals inscriptions, inscription block share, combined embedded data overview
+//! (share, count, volume), and Stamps.
+
 use super::*;
 use serde_json::json;
 

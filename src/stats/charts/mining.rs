@@ -1,3 +1,5 @@
+//! Mining chart builders: miner dominance donut chart and empty blocks scatter chart.
+
 use super::*;
 use serde_json::json;
 

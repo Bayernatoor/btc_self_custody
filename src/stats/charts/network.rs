@@ -1,3 +1,6 @@
+//! Network chart builders: block size, tx count, TPS, difficulty, block interval,
+//! weight utilization, avg tx size, chain size growth, and largest transaction.
+
 use super::*;
 use serde_json::json;
 

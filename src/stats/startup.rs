@@ -1,4 +1,22 @@
 //! Stats module initialization and background task spawning.
+//!
+//! ## Initialization Flow
+//!
+//! 1. Load config from environment variables (returns None if dormant)
+//! 2. Create RPC client and open SQLite connection pool (16 connections, WAL mode)
+//! 3. Run forward ingestion to catch up from max_height+1 to chain tip
+//! 4. Build shared state with all caches initialized to None
+//! 5. Build Axum router with all API endpoints
+//!
+//! ## Background Tasks (spawned after server starts listening)
+//!
+//! - **UTXO refresh**: calls `gettxoutsetinfo` every 10 minutes (slow RPC, 60-300s)
+//! - **Block poller**: checks for new blocks every 15 seconds via `getblockchaininfo`
+//! - **Extras backfill**: re-fetches blocks with outdated backfill_version
+//! - **Backward backfill**: fills historical blocks from min_height down to genesis
+//! - **Mempool seed**: loads current mempool via `getrawmempool` on startup
+//! - **ZMQ subscriber**: real-time tx and block notifications (if configured)
+//! - **Mempool pruner**: deletes old mempool_txs entries daily
 
 use axum::routing::get;
 use axum::Router;
@@ -12,8 +30,8 @@ use super::ingest;
 use super::rpc::BitcoinRpc;
 use super::zmq_subscriber;
 
-/// Initialize the stats module. Returns None if not configured.
-/// Returns (state, router, zmq_tx_url, zmq_block_url).
+/// Initialize the stats module. Returns `None` if `BITCOIN_STATS_RPC_URL` is not set
+/// (dormant mode). Otherwise returns (shared_state, router, zmq_tx_url, zmq_block_url).
 pub async fn init(
 ) -> Option<(Arc<StatsState>, Router, Option<String>, Option<String>)> {
     let config = StatsConfig::load()?;
@@ -77,7 +95,8 @@ pub async fn init(
     Some((state, router, config.zmq_tx_url, config.zmq_block_url))
 }
 
-/// Spawn background tasks (call after server starts listening).
+/// Spawn all background tasks. Must be called after the server starts listening
+/// so that RPC connections and ZMQ subscriptions do not block startup.
 pub fn spawn_background_tasks(
     state: Arc<StatsState>,
     zmq_tx_url: Option<String>,

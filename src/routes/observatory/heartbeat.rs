@@ -1,8 +1,20 @@
-//! Block Heartbeat — live EKG visualization of Bitcoin block arrivals.
+//! Block Heartbeat - live EKG visualization of Bitcoin block arrivals.
 //!
 //! Each block produces a PQRST waveform spike on a canvas sweep line,
 //! like a hospital cardiac monitor. The flatline between beats is the
 //! real wait for the next block. Color shifts with network stress.
+//!
+//! Architecture:
+//! - The heavy animation logic lives in `/js/heartbeat.js` (canvas rendering,
+//!   waveform generation, sweep line, glow effects).
+//! - This Rust module handles: JS interop via `wasm_bindgen`, initial data
+//!   loading (last 2016 blocks), live block detection from `cached_live`,
+//!   vital signs display (heart rate, blood pressure, temperature, immune
+//!   system), organism status, rhythm strip, and all HTML controls.
+//! - SSR stubs are provided for all JS functions so the server can render
+//!   the page skeleton without WASM.
+//! - Constants: `RETARGET_PERIOD` (2016 blocks), `BRADYCARDIA_THRESHOLD`
+//!   (0.7x target rate), `TACHYCARDIA_THRESHOLD` (1.3x target rate).
 
 use leptos::prelude::*;
 use leptos_meta::*;
@@ -89,6 +101,8 @@ const TACHYCARDIA_THRESHOLD: f64 = 1.3;
 // Heartbeat page component
 // ---------------------------------------------------------------------------
 
+/// Block Heartbeat page. Initializes the JS canvas animation, feeds it block data,
+/// and renders vital signs, organism status, rhythm strip, and controls.
 #[component]
 pub fn HeartbeatPage() -> impl IntoView {
     let state = expect_context::<super::shared::ObservatoryState>();

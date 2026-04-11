@@ -1,4 +1,13 @@
-//! Embedded Data charts: OP_RETURN protocols, inscriptions.
+//! Embedded Data charts with three sub-sections: Overview, Protocols, and Inscriptions.
+//!
+//! **Overview**: combined block share, count, and volume of all non-financial data
+//! embedded in Bitcoin transactions (OP_RETURN outputs + witness inscriptions).
+//!
+//! **Protocols**: OP_RETURN-specific charts - count and volume by protocol (Runes,
+//! Omni Layer, Counterparty, other), protocol share, and OP_RETURN block share.
+//!
+//! **Inscriptions**: Ordinals inscription count per block and inscription data as
+//! a percentage of block size. BRC-20 is tracked as a subset of inscriptions.
 
 use leptos::prelude::*;
 use leptos_meta::*;
@@ -8,6 +17,7 @@ use super::helpers::chart_desc;
 use super::shared::*;
 use crate::chart_memo;
 
+/// Embedded data charts page with sub-section tabs for overview, protocols, and inscriptions.
 #[component]
 pub fn EmbeddedChartsPage() -> impl IntoView {
     let state = expect_context::<ObservatoryState>();
