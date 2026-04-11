@@ -211,24 +211,16 @@ export function setupInputHandlers(canvas) {
         var rect = canvas.getBoundingClientRect();
         var mx = e.clientX - rect.left;
         var my = e.clientY - rect.top;
-        // Click on a brick -> pin tooltip. If already pinned, unpin (or open tx detail)
-        if (_hb._pinnedBlip) {
-            // If clicking the pinned brick again -> open tx detail modal
-            if (_hb.hoveredBlip && _hb.hoveredBlip === _hb._pinnedBlip && _hb._pinnedBlip.txid) {
-                if (typeof window.showTxDetail === 'function') {
-                    window.showTxDetail(_hb._pinnedBlip.txid, {
-                        fee: _hb._pinnedBlip.fee,
-                        vsize: _hb._pinnedBlip.vsize,
-                        value: _hb._pinnedBlip.value,
-                        feeRate: _hb._pinnedBlip.feeRate
-                    });
-                }
+        // Click on a brick -> open tx detail modal immediately
+        if (_hb.hoveredBlip && _hb.hoveredBlip.txid) {
+            if (typeof window.showTxDetail === 'function') {
+                window.showTxDetail(_hb.hoveredBlip.txid, {
+                    fee: _hb.hoveredBlip.fee,
+                    vsize: _hb.hoveredBlip.vsize,
+                    value: _hb.hoveredBlip.value,
+                    feeRate: _hb.hoveredBlip.feeRate
+                });
             }
-            // Always unpin on any click when pinned
-            _hb._pinnedBlip = null;
-        } else if (_hb.hoveredBlip) {
-            // Pin the hovered brick
-            _hb._pinnedBlip = _hb.hoveredBlip;
         } else if (_hb.hoveredBlock && _hb.hoveredBlock.height > 0 && typeof window.showBlockDetail === 'function') {
             // Clicking a block spike -> open block detail modal
             window.showBlockDetail(_hb.hoveredBlock.height);
