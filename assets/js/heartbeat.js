@@ -131,7 +131,7 @@ window.initHeartbeat = function(canvasId) {
         } else {
             card.style.height = '';
             wrap.style.flex = '';
-            wrap.style.height = '50vh';
+            wrap.style.height = '40vh';
         }
     }
     document.addEventListener('fullscreenchange', _hbFullscreenChange);
