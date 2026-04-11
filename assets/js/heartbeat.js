@@ -4,7 +4,7 @@
 
 import { getState, setState, COLORS, BG_COLOR, FLATLINE_PX_PER_SEC, HEAD_POSITION_FRAC, RETARGET_PERIOD } from './heartbeat-state.js';
 import { drawGrid, createBlockSegment, createFlatlineSegment, computeColor, historyFlatlineWidth, feeRateColor } from './heartbeat-timeline.js';
-import { setupInputHandlers } from './heartbeat-interaction.js';
+import { setupInputHandlers, handleControlClick } from './heartbeat-interaction.js';
 import { stopMomentum } from './heartbeat-interaction.js';
 import { connectOwnFeed, placeHistoryTxs } from './heartbeat-sse.js';
 import { drawFrame } from './heartbeat-render.js';
