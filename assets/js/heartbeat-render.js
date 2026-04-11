@@ -3,7 +3,7 @@
 import { getState, COLORS, BG_COLOR, GRID_COLOR, POINT_WIDTH, FLATLINE_PX_PER_SEC, HEAD_POSITION_FRAC, MAX_BLIPS_PER_SEGMENT } from './heartbeat-state.js';
 import { computeColor, lerpColor, drawGrid, hexToRgb, lerp, feeRateColor, cellRadiusForVsize } from './heartbeat-timeline.js';
 import { canvasToVirtual, virtualToCanvas, blockAtVirtualX, flatlineAtVirtualX, blipAtCanvasXY } from './heartbeat-blips.js';
-import { stopMomentum, checkControlHover } from './heartbeat-interaction.js';
+import { stopMomentum } from './heartbeat-interaction.js';
 import { flushTxBatch } from './heartbeat-sse.js';
 
 // ── Control bar constants ──────────────────────────────────────
@@ -377,13 +377,7 @@ export function drawFrame(frameTime) {
         drawFlatlineTooltip(ctx, _hb.hoveredFlatline, _hb.hoverCanvasX || w / 2, baseline);
     }
 
-    // ── Draw zoom indicator ────────────────────────────────
-    if (_hb.zoom !== 1.0) {
-        ctx.font = '11px monospace';
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-        ctx.textAlign = 'left';
-        ctx.fillText(_hb.zoom.toFixed(1) + 'x', 10, h - 10);
-    }
+    // Zoom indicator is now in HTML control bar
 
     // Jump to Live is now in the control bar
 
@@ -423,7 +417,8 @@ export function drawFrame(frameTime) {
     }
 
     // ── Draw control bar ─────────────────────────────────
-    drawControlBar(ctx, w, h);
+    // Control bar is now HTML (outside canvas). Sync button states.
+    if (_hb._syncControls) _hb._syncControls();
 
     // ── Draw block arrival announcement ───────────────────
     if (_hb._announcement && now < _hb._announcement.end) {

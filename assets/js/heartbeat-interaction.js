@@ -116,14 +116,6 @@ export function setupInputHandlers(canvas) {
 
         var rect = canvas.getBoundingClientRect();
         var mx = e.clientX - rect.left, my = e.clientY - rect.top;
-        // Don't start drag if clicking a control button (handled in click event)
-        if (_hb._ctrlBtns) {
-            for (var ci = 0; ci < _hb._ctrlBtns.length; ci++) {
-                var cb = _hb._ctrlBtns[ci];
-                if (mx >= cb.x && mx <= cb.x + cb.w && my >= cb.y && my <= cb.y + cb.h) return;
-            }
-        }
-
         stopMomentum();
         _hb.isDragging = true;
         _hb.autoFollow = false; // release immediately so drag isn't fought
@@ -161,14 +153,7 @@ export function setupInputHandlers(canvas) {
             var rect = canvas.getBoundingClientRect();
             var mx = e.clientX - rect.left;
             var my = e.clientY - rect.top;
-            checkControlHover(mx, my);
-            // Skip block/flatline hover when over control buttons
-            if (_hb._ctrlHover) {
-                _hb.hoveredBlock = null;
-                _hb.hoveredBlip = null;
-                _hb.hoveredFlatline = null;
-                canvas.style.cursor = 'pointer';
-            } else if (mx >= 0 && mx <= _hb.width && my >= 0 && my <= _hb.height) {
+            if (mx >= 0 && mx <= _hb.width && my >= 0 && my <= _hb.height) {
                 var vx = canvasToVirtual(mx);
                 var baseline = _hb.height * 0.55 + (_hb.viewOffsetY || 0);
                 _hb.hoveredBlock = blockAtVirtualX(vx);
@@ -226,8 +211,6 @@ export function setupInputHandlers(canvas) {
         var rect = canvas.getBoundingClientRect();
         var mx = e.clientX - rect.left;
         var my = e.clientY - rect.top;
-        if (tryControlClick(mx, my)) return;
-
         // Click on a brick -> pin tooltip. If already pinned, unpin (or open mempool)
         if (_hb._pinnedBlip) {
             // If clicking the pinned brick again -> open mempool.space

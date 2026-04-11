@@ -556,6 +556,32 @@ pub fn HeartbeatPage() -> impl IntoView {
 
                 </div>
 
+                // Control bar (HTML, outside canvas)
+                <div class="flex items-center justify-center gap-1.5 px-3 py-1.5 border-t border-white/5">
+                    <span id="heartbeat-zoom-label" class="text-[10px] text-white/30 font-mono mr-2 w-8">"1.9x"</span>
+                    <button class="w-7 h-7 sm:w-8 sm:h-8 rounded bg-white/10 text-white/70 hover:bg-white/20 hover:text-white transition-all text-xs sm:text-sm cursor-pointer flex items-center justify-center" title="Toggle cell/brick view" on:click=move |_| { #[cfg(feature = "hydrate")] { let _ = js_sys::eval("if(window.handleControlClick)window.handleControlClick('mode')"); } }>
+                        <span id="heartbeat-btn-mode">"\u{25A0}"</span>
+                    </button>
+                    <button class="w-7 h-7 sm:w-8 sm:h-8 rounded bg-white/10 text-white/70 hover:bg-white/20 hover:text-white transition-all text-xs sm:text-sm cursor-pointer flex items-center justify-center" title="Previous block" on:click=move |_| { #[cfg(feature = "hydrate")] { let _ = js_sys::eval("if(window.handleControlClick)window.handleControlClick('prev')"); } }>
+                        "\u{23EE}"
+                    </button>
+                    <button id="heartbeat-btn-pause" class="w-7 h-7 sm:w-8 sm:h-8 rounded bg-[#f7931a]/20 text-[#f7931a] hover:bg-[#f7931a]/30 transition-all text-xs sm:text-sm cursor-pointer flex items-center justify-center" title="Pause/Play" on:click=move |_| { #[cfg(feature = "hydrate")] { let _ = js_sys::eval("if(window.handleControlClick)window.handleControlClick('pause')"); } }>
+                        "\u{23F8}"
+                    </button>
+                    <button class="w-7 h-7 sm:w-8 sm:h-8 rounded bg-white/10 text-white/70 hover:bg-white/20 hover:text-white transition-all text-xs sm:text-sm cursor-pointer flex items-center justify-center" title="Zoom out" on:click=move |_| { #[cfg(feature = "hydrate")] { let _ = js_sys::eval("if(window.handleControlClick)window.handleControlClick('zoomOut')"); } }>
+                        "\u{2212}"
+                    </button>
+                    <button class="w-7 h-7 sm:w-8 sm:h-8 rounded bg-white/10 text-white/70 hover:bg-white/20 hover:text-white transition-all text-xs sm:text-sm cursor-pointer flex items-center justify-center" title="Zoom in" on:click=move |_| { #[cfg(feature = "hydrate")] { let _ = js_sys::eval("if(window.handleControlClick)window.handleControlClick('zoomIn')"); } }>
+                        "+"
+                    </button>
+                    <button class="w-7 h-7 sm:w-8 sm:h-8 rounded bg-white/10 text-white/70 hover:bg-white/20 hover:text-white transition-all text-xs sm:text-sm cursor-pointer flex items-center justify-center" title="Center on live" on:click=move |_| { #[cfg(feature = "hydrate")] { let _ = js_sys::eval("if(window.handleControlClick)window.handleControlClick('center')"); } }>
+                        "\u{2316}"
+                    </button>
+                    <button id="heartbeat-btn-live" class="w-7 h-7 sm:w-8 sm:h-8 rounded bg-white/10 text-white/70 hover:bg-white/20 hover:text-white transition-all text-xs sm:text-sm cursor-pointer hidden items-center justify-center" title="Jump to live" on:click=move |_| { #[cfg(feature = "hydrate")] { let _ = js_sys::eval("if(window.handleControlClick)window.handleControlClick('live')"); } }>
+                        "\u{25C9}"
+                    </button>
+                </div>
+
                 // Bottom info bar with TX search
                 <div class="flex flex-col sm:flex-row items-center justify-between px-3 sm:px-4 py-1.5 sm:py-2 gap-1 sm:gap-2 border-t border-white/5 text-xs sm:text-base text-[#00e676] font-mono">
                     <span>{mempool_display}</span>
