@@ -58,6 +58,7 @@ pub async fn init(
         range_summary_cache: Mutex::new(None),
         extremes_cache: Mutex::new(None),
         heartbeat_tx,
+        sse_connections: std::sync::atomic::AtomicUsize::new(0),
     });
 
     // Build the API router

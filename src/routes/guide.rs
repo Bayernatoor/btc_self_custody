@@ -231,9 +231,16 @@ fn render_level_page(
 
     let is_desktop = guides::is_desktop_os(platform);
     let pd = platform_display.to_string();
+    let meta_desc = format!(
+        "Free {} Bitcoin self-custody guide for {}. Learn to secure your own bitcoin with step-by-step wallet setup instructions.",
+        level.name.to_lowercase(), platform_display
+    );
+    let canonical = format!("https://www.wehodlbtc.com/guides/{}/{}", level.id, platform);
 
     view! {
         <Title text=page_title/>
+        <Meta name="description" content=meta_desc/>
+        <Link rel="canonical" href=canonical/>
         <div class=centered_layout()>
             <Breadcrumbs crumbs=crumbs/>
             <PageHeader
@@ -417,8 +424,19 @@ fn render_wallet_page(
         ),
     ];
 
+    let meta_desc = format!(
+        "Set up {} for Bitcoin self-custody. {}",
+        wallet.name, wallet.tagline
+    );
+    let canonical = format!(
+        "https://www.wehodlbtc.com/guides/{}/{}/{}",
+        level_id, platform, wallet.id
+    );
+
     view! {
         <Title text=page_title/>
+        <Meta name="description" content=meta_desc/>
+        <Link rel="canonical" href=canonical/>
         <div class=centered_layout()>
             <Breadcrumbs crumbs=crumbs/>
             <PageHeader
@@ -483,8 +501,19 @@ fn render_step_page(
         ),
     ];
 
+    let meta_desc = format!(
+        "{} - Bitcoin self-custody guide. Step-by-step instructions for {}.",
+        step.title, level_name
+    );
+    let canonical = format!(
+        "https://www.wehodlbtc.com/guides/{}/{}",
+        level_id, step.id
+    );
+
     view! {
         <Title text=page_title/>
+        <Meta name="description" content=meta_desc/>
+        <Link rel="canonical" href=canonical/>
         <div class=centered_layout()>
             <Breadcrumbs crumbs=crumbs/>
             <PageHeader title=step.title.to_string()/>

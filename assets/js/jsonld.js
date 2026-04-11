@@ -33,6 +33,18 @@
 {"@type":"ListItem","position":11,"name":"On This Day","item":"https://www.wehodlbtc.com/observatory/on-this-day"},
 {"@type":"ListItem","position":12,"name":"Hall of Fame","item":"https://www.wehodlbtc.com/observatory/hall-of-fame"}
 ]},
+{"@type":"BreadcrumbList","itemListElement":[
+{"@type":"ListItem","position":1,"name":"Home","item":"https://www.wehodlbtc.com/"},
+{"@type":"ListItem","position":2,"name":"Self-Custody Guides","item":"https://www.wehodlbtc.com/guides"}
+]},
+{"@type":"BreadcrumbList","itemListElement":[
+{"@type":"ListItem","position":1,"name":"Home","item":"https://www.wehodlbtc.com/"},
+{"@type":"ListItem","position":2,"name":"FAQ","item":"https://www.wehodlbtc.com/faq"}
+]},
+{"@type":"BreadcrumbList","itemListElement":[
+{"@type":"ListItem","position":1,"name":"Home","item":"https://www.wehodlbtc.com/"},
+{"@type":"ListItem","position":2,"name":"About","item":"https://www.wehodlbtc.com/about"}
+]},
 {"@type":"ItemList","name":"Bitcoin Hall of Fame","description":"A curated collection of Bitcoin's most remarkable blocks and transactions. Covers milestones (genesis block, halvings, price ATHs), on-chain records (largest block, highest fees), protocol moments (SegWit, Taproot, Ordinals activations), attacks and stress tests, and oddities.","url":"https://www.wehodlbtc.com/observatory/hall-of-fame","numberOfItems":57,"itemListElement":[
 {"@type":"ListItem","position":1,"name":"Genesis Block","url":"https://www.wehodlbtc.com/observatory/hall-of-fame#genesis-block"},
 {"@type":"ListItem","position":2,"name":"First Bitcoin Transaction","url":"https://www.wehodlbtc.com/observatory/hall-of-fame#first-transaction"},
@@ -46,7 +58,7 @@
 {"@type":"ListItem","position":10,"name":"Duplicate Transaction IDs","url":"https://www.wehodlbtc.com/observatory/hall-of-fame#duplicate-txids"}
 ]},
 {"@type":"FAQPage","url":"https://www.wehodlbtc.com/faq","mainEntity":[
-{"@type":"Question","name":"What is Bitcoin?","acceptedAnswer":{"@type":"Answer","text":"Bitcoin is money for the digital age — controlled by no one, accessible to everyone. It's a decentralized store of value and payment network secured by cryptography and proof-of-work mining."}},
+{"@type":"Question","name":"What is Bitcoin?","acceptedAnswer":{"@type":"Answer","text":"Bitcoin is money for the digital age - controlled by no one, accessible to everyone. It's a decentralized store of value and payment network secured by cryptography and proof-of-work mining."}},
 {"@type":"Question","name":"Why Bitcoin?","acceptedAnswer":{"@type":"Answer","text":"Bitcoin is an exit from government-issued fiat currencies that undergo constant inflation. It is the best savings mechanism ever discovered, preserving wealth as everything priced in bitcoin trends towards zero."}},
 {"@type":"Question","name":"Why Bitcoin self-custody?","acceptedAnswer":{"@type":"Answer","text":"Controlling a Bitcoin private key grants absolute control over the associated bitcoin. Self-custody restores independence and self-sovereignty, eliminating reliance on third parties like exchanges that can freeze, lose, or restrict access to your funds."}},
 {"@type":"Question","name":"What is a Bitcoin transaction?","acceptedAnswer":{"@type":"Answer","text":"A Bitcoin transaction represents the transfer of value between participants on the Bitcoin network. It consists of one or more inputs (funds being spent) and one or more outputs (destinations receiving funds)."}},
@@ -54,7 +66,7 @@
 {"@type":"Question","name":"How does Bitcoin mining work?","acceptedAnswer":{"@type":"Answer","text":"Bitcoin mining uses specialized computers (ASICs) to solve proof-of-work puzzles approximately every 10 minutes. When a miner finds a valid solution, they add a new block to the blockchain and earn the block subsidy plus transaction fees."}},
 {"@type":"Question","name":"What are Bitcoin transaction fees?","acceptedAnswer":{"@type":"Answer","text":"Transaction fees compensate miners for including transactions in blocks. Each block has limited space (~4 MB weight), creating a fee market. As demand increases, fees rise. Fees are measured in satoshis per virtual byte (sat/vB)."}},
 {"@type":"Question","name":"What are Bitcoin private and public keys?","acceptedAnswer":{"@type":"Answer","text":"A private key is a secret value (often represented as 12 or 24 words) that grants control over bitcoin. A public key is derived from the private key and used to generate Bitcoin addresses for receiving funds. Never share your private key."}},
-{"@type":"Question","name":"What is a Bitcoin wallet?","acceptedAnswer":{"@type":"Answer","text":"A Bitcoin wallet is software that stores your private keys and enables you to send and receive bitcoin. It does not store actual bitcoins — it stores the cryptographic keys that authorize transactions on the network."}}
+{"@type":"Question","name":"What is a Bitcoin wallet?","acceptedAnswer":{"@type":"Answer","text":"A Bitcoin wallet is software that stores your private keys and enables you to send and receive bitcoin. It does not store actual bitcoins - it stores the cryptographic keys that authorize transactions on the network."}}
 ]},
 {"@type":"ItemList","name":"Bitcoin Self-Custody Guides","itemListElement":[{"@type":"HowTo","position":1,"name":"Basic Bitcoin Self-Custody Guide","description":"Set up a mobile or desktop Bitcoin wallet for self-custody. Covers Blue Wallet, Green Wallet, and Sparrow Wallet with step-by-step instructions."},{"@type":"HowTo","position":2,"name":"Intermediate Bitcoin Self-Custody Guide","description":"Set up a Coldcard hardware wallet and connect it to your own Bitcoin node using Start9, MyNode, or RaspiBlitz for enhanced security and privacy."},{"@type":"HowTo","position":3,"name":"Advanced Bitcoin Self-Custody Guide","description":"Create a 2-of-3 multisig wallet with multiple signing devices, steel seed backups, and geographic separation for maximum Bitcoin security."}]}
 ]
