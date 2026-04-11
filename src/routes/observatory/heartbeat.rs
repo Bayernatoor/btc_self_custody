@@ -498,7 +498,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                 // CSS sets an initial height; JS refines it from
                 // window.innerHeight once initHeartbeat runs.
                 // flex-1 fills fullscreen when JS clears the height.
-                <div id="heartbeat-canvas-wrap" class="relative flex-1 min-h-0" style="height: 50vh; min-height: 300px">
+                <div id="heartbeat-canvas-wrap" class="relative flex-1 min-h-0" style="height: 40vh; min-height: 250px">
                     <canvas
                         id="heartbeat-canvas"
                         class="w-full h-full"

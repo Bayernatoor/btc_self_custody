@@ -268,10 +268,7 @@ export function drawFrame(frameTime) {
     var ctx = _hb.ctx;
     var w = _hb.width;
     var h = _hb.height;
-    // On short canvases (mobile), push baseline higher to reduce gap above controls.
-    // On tall canvases (desktop), keep it at 55%.
-    var baselineFrac = h < 400 ? 0.45 : 0.55;
-    var baseline = h * baselineFrac + (_hb.viewOffsetY || 0);
+    var baseline = h * 0.55 + (_hb.viewOffsetY || 0);
 
     // Compute time delta
     var now = Date.now() / 1000;
