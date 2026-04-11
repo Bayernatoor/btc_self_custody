@@ -169,9 +169,9 @@ pub fn SignalingPage() -> impl IntoView {
 
                             // BIP description (compact)
                             let bip_desc: (&str, &str, &str, &str) = if bip_method.get() == "locktime" {
-                                ("BIP-54: Consensus Cleanup", "Fixes timewarp attack, reduces worst-case validation time, prevents 64-byte tx exploits. Requires coinbase nLockTime = height\u{2009}\u{2212}\u{2009}1.", "95%", "https://github.com/bitcoin/bips/blob/master/bip-0054.md")
+                                ("BIP-54: Consensus Cleanup", "Addresses four protocol vulnerabilities: timewarp attack, worst-case block validation time, 64-byte transaction exploits, and duplicate coinbase txids. Signaling requires coinbase nLockTime = height\u{2009}\u{2212}\u{2009}1 and nSequence != 0xFFFFFFFF (so the timelock is not disabled). Activation threshold: 95% of blocks in a 2,016-block retarget period.", "95%", "https://github.com/bitcoin/bips/blob/master/bip-0054.md")
                             } else {
-                                ("BIP-110: OP_RETURN Limits", "Caps transaction outputs at 34 bytes and OP_RETURN data at 83 bytes. Modified BIP9: 55% threshold, expires ~1 year.", "55%", "https://github.com/bitcoin/bips/blob/master/bip-0110.mediawiki")
+                                ("BIP-110: OP_RETURN Limits", "Proposes standardizing limits on data-carrying outputs: scriptPubKey capped at 34 bytes, OP_RETURN data limited to 83 bytes. Uses a modified BIP-9 deployment with a lower activation threshold of 55% (instead of the usual 95%) and an expiration window of approximately 1 year.", "55%", "https://github.com/bitcoin/bips/blob/master/bip-0110.mediawiki")
                             };
 
                             // Aggregate miner signaling data
