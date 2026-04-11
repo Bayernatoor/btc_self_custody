@@ -124,12 +124,23 @@ window.initHeartbeat = function(canvasId) {
         if (!s || !wrap || !card) return;
         var fsEl = document.fullscreenElement || document.webkitFullscreenElement;
         if (fsEl) {
-            // In fullscreen: card fills screen, canvas fills remaining space
-            card.style.height = '100dvh';
+            card.style.width = '100vw';
+            card.style.height = '100vh';
+            card.style.position = 'fixed';
+            card.style.top = '0';
+            card.style.left = '0';
+            card.style.zIndex = '9999';
+            card.style.borderRadius = '0';
             wrap.style.height = '';
             wrap.style.flex = '1 1 0%';
         } else {
+            card.style.width = '';
             card.style.height = '';
+            card.style.position = '';
+            card.style.top = '';
+            card.style.left = '';
+            card.style.zIndex = '';
+            card.style.borderRadius = '';
             wrap.style.flex = '';
             wrap.style.height = '40vh';
         }
