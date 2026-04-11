@@ -533,21 +533,21 @@ pub fn HeartbeatPage() -> impl IntoView {
                                     class="absolute inset-0 z-20 flex items-center justify-center bg-[#0d2137]/90 cursor-pointer"
                                     on:click=move |_| set_show_hint.set(false)
                                 >
-                                    <div class="max-w-sm mx-4 text-center space-y-4">
-                                        <p class="text-white/80 text-sm leading-relaxed">
+                                    <div class="max-w-sm mx-4 bg-[#0a1a2e] border border-white/15 rounded-xl p-5 sm:p-6 shadow-2xl space-y-4 text-center">
+                                        <p class="text-white/90 text-sm sm:text-base leading-relaxed">
                                             "Each "
                                             <span class="text-[#f7931a] font-semibold">"spike"</span>
                                             " is a block. Each "
                                             <span class="text-[#f7931a] font-semibold">"brick"</span>
                                             " is a transaction."
                                         </p>
-                                        <div class="text-white/50 text-xs space-y-1.5">
+                                        <div class="text-white/50 text-xs sm:text-sm space-y-1.5">
                                             <p>"Drag to scroll through history"</p>
                                             <p>"Scroll wheel or pinch to zoom"</p>
                                             <p>"Click a spike for block details"</p>
                                             <p>"Click a brick for transaction info"</p>
                                         </div>
-                                        <p class="text-white/30 text-[10px] mt-3">"Tap anywhere to dismiss"</p>
+                                        <p class="text-white/30 text-[10px] sm:text-xs pt-2 border-t border-white/10">"Tap anywhere to dismiss"</p>
                                     </div>
                                 </div>
                             </Show>
