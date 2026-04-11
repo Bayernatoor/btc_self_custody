@@ -11,13 +11,20 @@ use super::types::*;
 #[cfg(feature = "ssr")]
 use axum::extract::Extension;
 
+/// Log error details server-side, return generic message to client.
+#[cfg(feature = "ssr")]
+fn internal_err(context: &str, err: impl std::fmt::Display) -> ServerFnError {
+    tracing::error!("{context}: {err}");
+    ServerFnError::new("Internal server error")
+}
+
 #[server(prefix = "/api", endpoint = "stats_summary")]
 pub async fn fetch_stats_summary() -> Result<StatsSummary, ServerFnError> {
     use std::time::Instant;
 
     let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
         leptos_axum::extract().await.map_err(|e| {
-            ServerFnError::new(format!("Stats not available: {e}"))
+            internal_err("Stats unavailable", e)
         })?;
 
     // Return cached result if fresh (< 60 seconds)
@@ -36,9 +43,9 @@ pub async fn fetch_stats_summary() -> Result<StatsSummary, ServerFnError> {
     let conn = state
         .db
         .get()
-        .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+        .map_err(|e| internal_err("DB pool", e))?;
     let stats = super::db::query_stats(&conn)
-        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+        .map_err(|e| internal_err("DB query", e))?;
     let result = match stats {
         Some(s) => StatsSummary {
             block_count: s.block_count,
@@ -75,14 +82,14 @@ pub async fn fetch_blocks(
     }
     let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
         leptos_axum::extract().await.map_err(|e| {
-            ServerFnError::new(format!("Stats not available: {e}"))
+            internal_err("Stats unavailable", e)
         })?;
     let conn = state
         .db
         .get()
-        .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+        .map_err(|e| internal_err("DB pool", e))?;
     let rows = super::db::query_blocks(&conn, from, to)
-        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+        .map_err(|e| internal_err("DB query", e))?;
     Ok(rows
         .into_iter()
         .map(|r| BlockSummary {
@@ -141,16 +148,19 @@ pub async fn fetch_blocks_by_ts(
     from_ts: u64,
     to_ts: u64,
 ) -> Result<Vec<BlockSummary>, ServerFnError> {
+    if from_ts > to_ts {
+        return Err(ServerFnError::new("Invalid timestamp range"));
+    }
     let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
         leptos_axum::extract().await.map_err(|e| {
-            ServerFnError::new(format!("Stats not available: {e}"))
+            internal_err("Stats unavailable", e)
         })?;
     let conn = state
         .db
         .get()
-        .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+        .map_err(|e| internal_err("DB pool", e))?;
     let rows = super::db::query_blocks_by_ts(&conn, from_ts, to_ts)
-        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+        .map_err(|e| internal_err("DB query", e))?;
     Ok(rows
         .into_iter()
         .map(|r| BlockSummary {
@@ -209,14 +219,14 @@ pub async fn fetch_block_detail(
 ) -> Result<Option<BlockDetail>, ServerFnError> {
     let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
         leptos_axum::extract().await.map_err(|e| {
-            ServerFnError::new(format!("Stats not available: {e}"))
+            internal_err("Stats unavailable", e)
         })?;
     let conn = state
         .db
         .get()
-        .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+        .map_err(|e| internal_err("DB pool", e))?;
     let row = super::db::query_block_by_height(&conn, height)
-        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+        .map_err(|e| internal_err("DB query", e))?;
     Ok(row.map(|r| BlockDetail {
         height: r.height,
         hash: r.hash,
@@ -253,14 +263,14 @@ pub async fn fetch_cumulative_size(
 ) -> Result<u64, ServerFnError> {
     let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
         leptos_axum::extract().await.map_err(|e| {
-            ServerFnError::new(format!("Stats not available: {e}"))
+            internal_err("Stats unavailable", e)
         })?;
     let conn = state
         .db
         .get()
-        .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+        .map_err(|e| internal_err("DB pool", e))?;
     let size = super::db::query_cumulative_size(&conn, below_height)
-        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+        .map_err(|e| internal_err("DB query", e))?;
     Ok(size)
 }
 
@@ -272,14 +282,14 @@ pub async fn fetch_cumulative_size_before_ts(
 ) -> Result<u64, ServerFnError> {
     let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
         leptos_axum::extract().await.map_err(|e| {
-            ServerFnError::new(format!("Stats not available: {e}"))
+            internal_err("Stats unavailable", e)
         })?;
     let conn = state
         .db
         .get()
-        .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+        .map_err(|e| internal_err("DB pool", e))?;
     let size = super::db::query_cumulative_size_before_ts(&conn, before_ts)
-        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+        .map_err(|e| internal_err("DB query", e))?;
     Ok(size)
 }
 
@@ -289,7 +299,7 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
 
     let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
         leptos_axum::extract().await.map_err(|e| {
-            ServerFnError::new(format!("Stats not available: {e}"))
+            internal_err("Stats unavailable", e)
         })?;
 
     // Return cached result if fresh (< 10 seconds old)
@@ -308,9 +318,9 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
         let conn = state
             .db
             .get()
-            .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+            .map_err(|e| internal_err("DB pool", e))?;
         super::db::query_stats(&conn)
-            .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?
+            .map_err(|e| internal_err("DB query", e))?
     };
     let db_height = db_stats.as_ref().map(|s| s.max_height).unwrap_or(0);
     let db_timestamp =
@@ -464,14 +474,14 @@ pub async fn fetch_op_returns(
 ) -> Result<Vec<OpReturnBlock>, ServerFnError> {
     let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
         leptos_axum::extract().await.map_err(|e| {
-            ServerFnError::new(format!("Stats not available: {e}"))
+            internal_err("Stats unavailable", e)
         })?;
     let conn = state
         .db
         .get()
-        .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+        .map_err(|e| internal_err("DB pool", e))?;
     let rows = super::db::query_op_returns(&conn, from, to)
-        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+        .map_err(|e| internal_err("DB query", e))?;
     Ok(rows
         .into_iter()
         .map(|r| OpReturnBlock {
@@ -500,9 +510,13 @@ pub async fn fetch_daily_aggregates(
 ) -> Result<Vec<DailyAggregate>, ServerFnError> {
     use std::time::Instant;
 
+    if from_ts > to_ts {
+        return Err(ServerFnError::new("Invalid timestamp range"));
+    }
+
     let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
         leptos_axum::extract().await.map_err(|e| {
-            ServerFnError::new(format!("Stats not available: {e}"))
+            internal_err("Stats unavailable", e)
         })?;
 
     // Return cached result if same range requested within 30s
@@ -519,9 +533,9 @@ pub async fn fetch_daily_aggregates(
     let conn = state
         .db
         .get()
-        .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+        .map_err(|e| internal_err("DB pool", e))?;
     let rows = super::db::query_daily_aggregates(&conn, from_ts, to_ts)
-        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+        .map_err(|e| internal_err("DB query", e))?;
     let result: Vec<DailyAggregate> = rows
         .into_iter()
         .map(|r| DailyAggregate {
@@ -586,7 +600,7 @@ pub async fn fetch_signaling(
 
     let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
         leptos_axum::extract().await.map_err(|e| {
-            ServerFnError::new(format!("Stats not available: {e}"))
+            internal_err("Stats unavailable", e)
         })?;
 
     // Cache key includes method, bit, and range
@@ -612,7 +626,7 @@ pub async fn fetch_signaling(
     let conn = state
         .db
         .get()
-        .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+        .map_err(|e| internal_err("DB pool", e))?;
     let use_locktime = method == "locktime";
 
     let blocks = if use_locktime {
@@ -620,7 +634,7 @@ pub async fn fetch_signaling(
     } else {
         super::db::query_signaling_bit(&conn, bit, from, to)
     }
-    .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+    .map_err(|e| internal_err("DB query", e))?;
 
     // Period stats: retarget block boundary
     let period_start = (to / 2016) * 2016;
@@ -630,7 +644,7 @@ pub async fn fetch_signaling(
     } else {
         super::db::query_signaling_bit(&conn, bit, period_start, period_end)
     }
-    .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+    .map_err(|e| internal_err("DB query", e))?;
 
     let signaled_count =
         period_blocks.iter().filter(|b| b.signaled).count() as u64;
@@ -684,7 +698,7 @@ pub async fn fetch_signaling_periods(
 
     let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
         leptos_axum::extract().await.map_err(|e| {
-            ServerFnError::new(format!("Stats not available: {e}"))
+            internal_err("Stats unavailable", e)
         })?;
 
     // Cache key: "bit:4" or "locktime"
@@ -719,7 +733,7 @@ pub async fn fetch_signaling_periods(
     let conn = state
         .db
         .get()
-        .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+        .map_err(|e| internal_err("DB pool", e))?;
     let use_locktime = method == "locktime";
 
     let periods = if use_locktime {
@@ -727,7 +741,7 @@ pub async fn fetch_signaling_periods(
     } else {
         super::db::query_signaling_periods_bit(&conn, bit)
     }
-    .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+    .map_err(|e| internal_err("DB query", e))?;
 
     // Cache the result
     *state
@@ -755,14 +769,14 @@ pub async fn fetch_miner_dominance(
 ) -> Result<Vec<MinerShare>, ServerFnError> {
     let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
         leptos_axum::extract().await.map_err(|e| {
-            ServerFnError::new(format!("Stats not available: {e}"))
+            internal_err("Stats unavailable", e)
         })?;
     let conn = state
         .db
         .get()
-        .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+        .map_err(|e| internal_err("DB pool", e))?;
     let rows = super::db::query_miner_dominance(&conn, from, to)
-        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+        .map_err(|e| internal_err("DB query", e))?;
     let total: u64 = rows.iter().map(|r| r.count).sum();
     Ok(rows
         .into_iter()
@@ -785,14 +799,14 @@ pub async fn fetch_miner_dominance_daily(
 ) -> Result<Vec<MinerShare>, ServerFnError> {
     let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
         leptos_axum::extract().await.map_err(|e| {
-            ServerFnError::new(format!("Stats not available: {e}"))
+            internal_err("Stats unavailable", e)
         })?;
     let conn = state
         .db
         .get()
-        .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+        .map_err(|e| internal_err("DB pool", e))?;
     let rows = super::db::query_miner_dominance_daily(&conn, from_ts, to_ts)
-        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+        .map_err(|e| internal_err("DB query", e))?;
     let total: u64 = rows.iter().map(|r| r.count).sum();
     Ok(rows
         .into_iter()
@@ -815,14 +829,14 @@ pub async fn fetch_empty_blocks(
 ) -> Result<Vec<EmptyBlock>, ServerFnError> {
     let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
         leptos_axum::extract().await.map_err(|e| {
-            ServerFnError::new(format!("Stats not available: {e}"))
+            internal_err("Stats unavailable", e)
         })?;
     let conn = state
         .db
         .get()
-        .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+        .map_err(|e| internal_err("DB pool", e))?;
     let rows = super::db::query_empty_blocks(&conn, from, to)
-        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+        .map_err(|e| internal_err("DB query", e))?;
     Ok(rows
         .into_iter()
         .map(|(height, timestamp, miner)| EmptyBlock {
@@ -845,7 +859,7 @@ pub async fn fetch_price_history(
 
     let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
         leptos_axum::extract().await.map_err(|e| {
-            ServerFnError::new(format!("Stats not available: {e}"))
+            internal_err("Stats unavailable", e)
         })?;
 
     // Return cached full dataset if fresh (< 1 hour old)
@@ -864,7 +878,7 @@ pub async fn fetch_price_history(
     // Fetch full history from blockchain.info (daily granularity, all time)
     let prices =
         state.rpc.fetch_price_history_all().await.map_err(|e| {
-            ServerFnError::new(format!("Price history error: {e}"))
+            internal_err("Price history", e)
         })?;
 
     let all_points: Vec<PricePoint> = prices
@@ -891,7 +905,7 @@ pub async fn fetch_block_timestamp(
 ) -> Result<Option<u64>, ServerFnError> {
     let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
         leptos_axum::extract().await.map_err(|e| {
-            ServerFnError::new(format!("Stats not available: {e}"))
+            internal_err("Stats unavailable", e)
         })?;
 
     // Block timestamps are immutable — cache forever
@@ -908,9 +922,9 @@ pub async fn fetch_block_timestamp(
     let conn = state
         .db
         .get()
-        .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+        .map_err(|e| internal_err("DB pool", e))?;
     let result = super::db::query_block_timestamp(&conn, height)
-        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+        .map_err(|e| internal_err("DB query", e))?;
 
     // Cache if found
     if let Some(ts) = result {
@@ -931,16 +945,16 @@ pub async fn fetch_mining_price_summary(
 ) -> Result<MiningPriceSummary, ServerFnError> {
     let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
         leptos_axum::extract().await.map_err(|e| {
-            ServerFnError::new(format!("Stats not available: {e}"))
+            internal_err("Stats unavailable", e)
         })?;
     let conn = state
         .db
         .get()
-        .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+        .map_err(|e| internal_err("DB pool", e))?;
 
     // Mining dominance
     let miners = super::db::query_miner_dominance_daily(&conn, from_ts, to_ts)
-        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+        .map_err(|e| internal_err("DB query", e))?;
     let total_mined: u64 = miners.iter().map(|m| m.count).sum();
     let (top_name, top_blocks) = miners
         .first()
@@ -998,16 +1012,19 @@ pub async fn fetch_on_this_day(
 ) -> Result<OnThisDayData, ServerFnError> {
     let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
         leptos_axum::extract().await.map_err(|e| {
-            ServerFnError::new(format!("Stats not available: {e}"))
+            internal_err("Stats unavailable", e)
         })?;
     let conn = state
         .db
         .get()
-        .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+        .map_err(|e| internal_err("DB pool", e))?;
 
+    if month < 1 || month > 12 || day < 1 || day > 31 {
+        return Err(ServerFnError::new("Invalid date"));
+    }
     let month_day = format!("{:02}-{:02}", month, day);
     let rows = super::db::query_on_this_day(&conn, &month_day)
-        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+        .map_err(|e| internal_err("DB query", e))?;
 
     // Fetch price history for annotation
     let prices = fetch_price_history(0, 4_000_000_000)
@@ -1237,9 +1254,13 @@ pub async fn fetch_range_summary(
 ) -> Result<RangeSummary, ServerFnError> {
     use std::time::Instant;
 
+    if from_ts > to_ts {
+        return Err(ServerFnError::new("Invalid timestamp range"));
+    }
+
     let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
         leptos_axum::extract().await.map_err(|e| {
-            ServerFnError::new(format!("Stats not available: {e}"))
+            internal_err("Stats unavailable", e)
         })?;
 
     // Check cache (60s TTL, must match same range)
@@ -1258,9 +1279,9 @@ pub async fn fetch_range_summary(
     let conn = state
         .db
         .get()
-        .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+        .map_err(|e| internal_err("DB pool", e))?;
     let result = super::db::query_range_summary(&conn, from_ts, to_ts)
-        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+        .map_err(|e| internal_err("DB query", e))?;
 
     *state
         .range_summary_cache
@@ -1278,9 +1299,13 @@ pub async fn fetch_extremes(
 ) -> Result<ExtremesData, ServerFnError> {
     use std::time::Instant;
 
+    if from_ts > to_ts {
+        return Err(ServerFnError::new("Invalid timestamp range"));
+    }
+
     let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
         leptos_axum::extract().await.map_err(|e| {
-            ServerFnError::new(format!("Stats not available: {e}"))
+            internal_err("Stats unavailable", e)
         })?;
 
     // Check cache (60s TTL, must match same range)
@@ -1299,9 +1324,9 @@ pub async fn fetch_extremes(
     let conn = state
         .db
         .get()
-        .map_err(|e| ServerFnError::new(format!("DB pool: {e}")))?;
+        .map_err(|e| internal_err("DB pool", e))?;
     let result = super::db::query_extremes_with_heights(&conn, from_ts, to_ts)
-        .map_err(|e| ServerFnError::new(format!("DB error: {e}")))?;
+        .map_err(|e| internal_err("DB query", e))?;
 
     *state
         .extremes_cache

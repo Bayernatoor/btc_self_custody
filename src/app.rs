@@ -79,7 +79,9 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 <meta name="theme-color" content="#123c64"/>
 
                 // ECharts for stats dashboard
-                <script defer src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+                <script defer src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"
+                    integrity="sha384-pPi0zxBAoDu6+JXW/C68UZLvBUUtU+7zonhif43rqj7pxsGyqyqzcian2Rj37Rss"
+                    crossorigin="anonymous"></script>
                 <script defer src="/js/stats.js"></script>
 
                 // Fallback for browsers without WebAssembly (e.g. Vanadium)

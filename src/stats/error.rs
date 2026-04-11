@@ -27,7 +27,8 @@ pub enum StatsError {
 impl IntoResponse for StatsError {
     fn into_response(self) -> Response {
         tracing::error!("{self}");
-        let body = json!({ "error": self.to_string() });
+        // Return generic message to avoid leaking internal details (IPs, paths, SQL errors)
+        let body = json!({ "error": "Internal server error" });
         (StatusCode::INTERNAL_SERVER_ERROR, body.to_string()).into_response()
     }
 }

@@ -5,6 +5,32 @@
 /// When BITCOIN_STATS_RPC_URL is set, the stats module activates
 /// and serves blockchain analytics at /api/stats/ and /observatory.
 #[cfg(feature = "ssr")]
+async fn security_headers(
+    req: axum::http::Request<axum::body::Body>,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let mut res = next.run(req).await;
+    let h = res.headers_mut();
+    h.insert(
+        axum::http::header::X_FRAME_OPTIONS,
+        "DENY".parse().unwrap(),
+    );
+    h.insert(
+        axum::http::header::X_CONTENT_TYPE_OPTIONS,
+        "nosniff".parse().unwrap(),
+    );
+    h.insert(
+        axum::http::header::REFERRER_POLICY,
+        "strict-origin-when-cross-origin".parse().unwrap(),
+    );
+    h.insert(
+        axum::http::header::HeaderName::from_static("permissions-policy"),
+        "camera=(), microphone=(), geolocation=()".parse().unwrap(),
+    );
+    res
+}
+
+#[cfg(feature = "ssr")]
 #[tokio::main]
 async fn main() {
     use axum::{response::Redirect, routing::get, Router};
@@ -61,6 +87,9 @@ async fn main() {
     } else {
         tracing::info!("Stats module dormant (BITCOIN_STATS_RPC_URL not set)");
     }
+
+    // Security headers
+    let app = app.layer(axum::middleware::from_fn(security_headers));
 
     // Compress all responses (gzip/brotli). ~70% size reduction on API JSON
     // and HTML. Negotiated via Accept-Encoding header automatically.

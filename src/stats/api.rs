@@ -11,7 +11,7 @@
 //! - GET /api/signaling/periods?bit=N   -- signaling % per retarget period
 
 use std::convert::Infallible;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -22,6 +22,7 @@ use axum::http::header;
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::Json;
 use futures::stream::Stream;
+use futures::StreamExt;
 use serde::Deserialize;
 
 /// Helper: wrap a JSON response with Cache-Control header.
@@ -85,9 +86,23 @@ pub struct StatsState {
         Mutex<Option<(u64, u64, super::types::ExtremesData, Instant)>>,
     /// Broadcast channel for real-time heartbeat events (ZMQ → SSE).
     pub heartbeat_tx: broadcast::Sender<super::zmq_subscriber::HeartbeatEvent>,
+    /// Active SSE connection count (guard against connection exhaustion).
+    pub sse_connections: AtomicUsize,
 }
 
+/// Maximum concurrent SSE connections before rejecting new ones.
+const MAX_SSE_CONNECTIONS: usize = 256;
+
 pub type SharedStatsState = Arc<StatsState>;
+
+/// RAII guard that decrements SSE connection count on drop.
+struct SseConnectionGuard(Arc<StatsState>);
+
+impl Drop for SseConnectionGuard {
+    fn drop(&mut self) {
+        self.0.sse_connections.fetch_sub(1, Ordering::Relaxed);
+    }
+}
 
 const MAX_SUPPLY: f64 = 21_000_000.0;
 
@@ -449,10 +464,25 @@ pub async fn get_signaling_periods(
 /// On connect: sends recent tx history from DB, then streams live events.
 pub async fn get_heartbeat_sse(
     State(state): State<SharedStatsState>,
-) -> (
-    [(header::HeaderName, String); 1],
-    Sse<impl Stream<Item = Result<Event, Infallible>>>,
-) {
+) -> Result<
+    (
+        [(header::HeaderName, String); 1],
+        Sse<impl Stream<Item = Result<Event, Infallible>>>,
+    ),
+    (axum::http::StatusCode, &'static str),
+> {
+    // Reject if too many concurrent SSE connections
+    let prev = state.sse_connections.fetch_add(1, Ordering::Relaxed);
+    if prev >= MAX_SSE_CONNECTIONS {
+        state.sse_connections.fetch_sub(1, Ordering::Relaxed);
+        return Err((
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            "Too many connections",
+        ));
+    }
+    // Guard decrements connection count on drop (panic safety + client disconnect)
+    let guard = SseConnectionGuard(Arc::clone(&state));
+
     let rx = state.heartbeat_tx.subscribe();
 
     // Load unconfirmed txs for the current flatline. The mempool_txs table
@@ -547,13 +577,18 @@ pub async fn get_heartbeat_sse(
         },
     );
 
+    let guarded_stream = stream.chain(futures::stream::once(async move {
+        drop(guard);
+        Ok(Event::default().comment(""))
+    }));
+
     // X-Accel-Buffering: no tells nginx to not buffer this response (required for SSE)
-    (
+    Ok((
         [(
             header::HeaderName::from_static("x-accel-buffering"),
             "no".to_string(),
         )],
-        Sse::new(stream)
+        Sse::new(guarded_stream)
             .keep_alive(KeepAlive::new().interval(Duration::from_secs(15))),
-    )
+    ))
 }
