@@ -157,6 +157,32 @@ window.initHeartbeat = function(canvasId) {
     // Start animation loop
     _hb.rafId = requestAnimationFrame(drawFrame);
 
+    // Sync HTML control button states periodically (every frame via RAF)
+    _hb._syncControls = function() {
+        var s = getState();
+        if (!s) return;
+        // Zoom label
+        var zl = document.getElementById('heartbeat-zoom-label');
+        if (zl) zl.textContent = s.zoom.toFixed(1) + 'x';
+        // Pause button
+        var pb = document.getElementById('heartbeat-btn-pause');
+        if (pb) pb.textContent = s.paused ? '\u25B6' : '\u23F8';
+        // Mode button
+        var mb = document.getElementById('heartbeat-btn-mode');
+        if (mb) mb.textContent = s.renderMode === 'bricks' ? '\u25A0' : '\u2B24';
+        // Live button visibility
+        var lb = document.getElementById('heartbeat-btn-live');
+        if (lb) {
+            if (s.autoFollow) {
+                lb.classList.add('hidden');
+                lb.classList.remove('flex');
+            } else {
+                lb.classList.remove('hidden');
+                lb.classList.add('flex');
+            }
+        }
+    };
+
     // Connect to own node SSE feed (falls back to mempool.space WS)
     connectOwnFeed();
 };
@@ -388,6 +414,9 @@ window.updateHeartbeatLive = function(json) {
         // silently ignore malformed live JSON
     }
 };
+
+// Expose handleControlClick for HTML buttons
+window.handleControlClick = handleControlClick;
 
 window.destroyHeartbeat = function() {
     var _hb = getState();
