@@ -211,11 +211,18 @@ export function setupInputHandlers(canvas) {
         var rect = canvas.getBoundingClientRect();
         var mx = e.clientX - rect.left;
         var my = e.clientY - rect.top;
-        // Click on a brick -> pin tooltip. If already pinned, unpin (or open mempool)
+        // Click on a brick -> pin tooltip. If already pinned, unpin (or open tx detail)
         if (_hb._pinnedBlip) {
-            // If clicking the pinned brick again -> open mempool.space
+            // If clicking the pinned brick again -> open tx detail modal
             if (_hb.hoveredBlip && _hb.hoveredBlip === _hb._pinnedBlip && _hb._pinnedBlip.txid) {
-                window.open('https://mempool.space/tx/' + _hb._pinnedBlip.txid, '_blank');
+                if (typeof window.showTxDetail === 'function') {
+                    window.showTxDetail(_hb._pinnedBlip.txid, {
+                        fee: _hb._pinnedBlip.fee,
+                        vsize: _hb._pinnedBlip.vsize,
+                        value: _hb._pinnedBlip.value,
+                        feeRate: _hb._pinnedBlip.feeRate
+                    });
+                }
             }
             // Always unpin on any click when pinned
             _hb._pinnedBlip = null;

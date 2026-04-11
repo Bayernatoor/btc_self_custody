@@ -432,6 +432,145 @@
         if (modal) modal.classList.add('hidden');
     };
 
+    // ── Transaction detail modal ────────────────────────────
+    window.showTxDetail = function(txid, localData) {
+        var modal = document.getElementById('tx-detail-modal');
+        if (!modal) return;
+
+        var body = document.getElementById('tx-detail-body');
+        body.textContent = '';
+
+        var fmtSize = function(bytes) {
+            if (bytes == null) return '\u2014';
+            if (bytes >= 1000000) return (bytes / 1e6).toFixed(2) + ' MB';
+            if (bytes >= 1000) return (bytes / 1e3).toFixed(1) + ' KB';
+            return bytes + ' B';
+        };
+
+        var titleEl = document.getElementById('tx-detail-title');
+        var shortTxid = txid.substring(0, 10) + '\u2026' + txid.slice(-8);
+        titleEl.textContent = 'Transaction';
+        titleEl.className = 'text-white font-medium';
+
+        // Show local data immediately (from brick)
+        if (localData) {
+            body.appendChild(bdSection('From Mempool'));
+            body.appendChild(bdCopyRow('TXID', shortTxid, txid));
+            if (localData.fee != null)
+                body.appendChild(bdRow('Fee', localData.fee.toLocaleString() + ' sats'));
+            if (localData.vsize != null)
+                body.appendChild(bdRow('Size', fmtSize(localData.vsize)));
+            if (localData.feeRate != null)
+                body.appendChild(bdRow('Fee Rate', localData.feeRate.toFixed(1) + ' sat/vB'));
+            if (localData.value != null && localData.value > 0)
+                body.appendChild(bdRow('Value', (localData.value / 1e8).toFixed(8) + ' BTC'));
+        } else {
+            body.appendChild(bdCopyRow('TXID', shortTxid, txid));
+        }
+
+        // Loading indicator for API fetch
+        var loadingRow = bdRow('', 'Loading details...');
+        body.appendChild(bdDivider());
+        body.appendChild(loadingRow);
+
+        // External link
+        body.appendChild(bdDivider());
+        var link = document.createElement('div');
+        link.style.cssText = 'text-align:center;padding-top:4px';
+        var a = document.createElement('a');
+        a.href = 'https://mempool.space/tx/' + txid;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.style.cssText = 'color:#f7931a;font-size:12px;opacity:0.7;transition:opacity 0.15s';
+        a.textContent = 'View on mempool.space \u2192';
+        a.addEventListener('mouseenter', function() { a.style.opacity = '1'; });
+        a.addEventListener('mouseleave', function() { a.style.opacity = '0.7'; });
+        link.appendChild(a);
+        body.appendChild(link);
+
+        modal.classList.remove('hidden');
+
+        // Fetch full details from mempool.space API
+        fetch('https://mempool.space/api/tx/' + txid)
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(tx) {
+                if (!tx) {
+                    loadingRow.lastChild.textContent = 'Details unavailable';
+                    return;
+                }
+                // Remove loading row and rebuild with full data
+                if (loadingRow.parentNode) loadingRow.parentNode.removeChild(loadingRow);
+
+                // Find the divider before the link and insert details there
+                var dividers = body.querySelectorAll('.bd-divider');
+                var insertBefore = dividers.length > 1 ? dividers[dividers.length - 1] : link;
+
+                var details = document.createDocumentFragment();
+                details.appendChild(bdSection('Transaction Details'));
+
+                // Inputs & outputs
+                if (tx.vin) details.appendChild(bdRow('Inputs', tx.vin.length.toLocaleString()));
+                if (tx.vout) details.appendChild(bdRow('Outputs', tx.vout.length.toLocaleString()));
+
+                // Size & weight
+                if (tx.size) details.appendChild(bdRow('Size', fmtSize(tx.size)));
+                if (tx.weight) details.appendChild(bdRow('Weight', tx.weight.toLocaleString() + ' WU'));
+
+                // Fee (from API, more accurate)
+                if (tx.fee != null) {
+                    details.appendChild(bdRow('Fee', tx.fee.toLocaleString() + ' sats'));
+                    if (tx.weight) {
+                        var vsize = Math.ceil(tx.weight / 4);
+                        details.appendChild(bdRow('Fee Rate', (tx.fee / vsize).toFixed(1) + ' sat/vB'));
+                    }
+                }
+
+                // Total output value
+                if (tx.vout) {
+                    var totalOut = 0;
+                    for (var i = 0; i < tx.vout.length; i++) {
+                        totalOut += tx.vout[i].value || 0;
+                    }
+                    if (totalOut > 0) {
+                        details.appendChild(bdRow('Total Output', (totalOut / 1e8).toFixed(8) + ' BTC'));
+                    }
+                }
+
+                // Confirmation status
+                if (tx.status) {
+                    if (tx.status.confirmed) {
+                        details.appendChild(bdRow('Status', 'Confirmed'));
+                        if (tx.status.block_height)
+                            details.appendChild(bdRow('Block', '#' + tx.status.block_height.toLocaleString()));
+                    } else {
+                        details.appendChild(bdRow('Status', 'Unconfirmed'));
+                    }
+                }
+
+                // Features
+                var features = [];
+                if (tx.vin && tx.vin.some(function(v) { return v.is_coinbase; })) features.push('Coinbase');
+                if (tx.vin && tx.vin.some(function(v) { return v.witness && v.witness.length > 0; })) features.push('SegWit');
+                if (tx.vin && tx.vin.some(function(v) { return v.prevout && v.prevout.scriptpubkey_type === 'v1_p2tr'; })) features.push('Taproot');
+                var isRbf = tx.vin && tx.vin.some(function(v) { return v.sequence != null && v.sequence < 0xFFFFFFFE; });
+                if (isRbf) features.push('RBF');
+                if (features.length > 0) {
+                    details.appendChild(bdRow('Features', features.join(', ')));
+                }
+
+                details.appendChild(bdDivider());
+                body.insertBefore(details, insertBefore);
+            })
+            .catch(function() {
+                if (loadingRow.parentNode) loadingRow.lastChild.textContent = 'Details unavailable';
+            });
+    };
+
+    window.closeTxDetail = function() {
+        var modal = document.getElementById('tx-detail-modal');
+        if (modal) modal.classList.add('hidden');
+    };
+
     // Global Escape key handler for modals
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
@@ -439,6 +578,11 @@
             var modal = document.getElementById('block-detail-modal');
             if (modal && !modal.classList.contains('hidden')) {
                 modal.classList.add('hidden');
+            }
+            // Close tx detail modal if open
+            var txModal = document.getElementById('tx-detail-modal');
+            if (txModal && !txModal.classList.contains('hidden')) {
+                txModal.classList.add('hidden');
             }
         }
     });
