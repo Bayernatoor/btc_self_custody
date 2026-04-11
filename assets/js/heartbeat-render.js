@@ -268,7 +268,7 @@ export function drawFrame(frameTime) {
     var ctx = _hb.ctx;
     var w = _hb.width;
     var h = _hb.height;
-    var baseline = h * 0.5 + (_hb.viewOffsetY || 0);
+    var baseline = h * 0.62 + (_hb.viewOffsetY || 0);
 
     // Compute time delta
     var now = Date.now() / 1000;
@@ -389,7 +389,7 @@ export function drawFrame(frameTime) {
             _hb._searchHighlight = null;
         } else {
             var shCX = (sh.x - _hb.viewOffset) * _hb.zoom;
-            var shCY = h * 0.5 + (_hb.viewOffsetY || 0);
+            var shCY = h * 0.62 + (_hb.viewOffsetY || 0);
             // Pulsing glow: alpha fades, radius breathes
             var shFade = 1.0 - shElapsed / sh.duration;
             var shPulse = 1.0 + 0.3 * Math.sin(shElapsed * 4);
