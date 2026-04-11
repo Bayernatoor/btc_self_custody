@@ -155,7 +155,7 @@ export function setupInputHandlers(canvas) {
             var my = e.clientY - rect.top;
             if (mx >= 0 && mx <= _hb.width && my >= 0 && my <= _hb.height) {
                 var vx = canvasToVirtual(mx);
-                var baseline = _hb.height * 0.72 + (_hb.viewOffsetY || 0);
+                var baseline = _hb.height * 0.78 + (_hb.viewOffsetY || 0);
                 _hb.hoveredBlock = blockAtVirtualX(vx);
                 _hb.hoveredBlip = null;
                 _hb.hoveredFlatline = null;
