@@ -835,6 +835,9 @@ pub fn fee_spike_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Fee Spike Detector");
     }
+    if blocks.len() < 300 {
+        return no_data_chart_with_hint("Fee Spike Detector", "Select a longer range (1W+) for enough data to detect fee spikes");
+    }
 
     let rates: Vec<f64> = blocks.iter().map(|b| round(b.median_fee_rate, 2)).collect();
     let ma = moving_average(&rates, 144);
