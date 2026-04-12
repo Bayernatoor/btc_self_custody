@@ -1191,16 +1191,53 @@ pub fn ChartPageLayout(
         {seo_text.map(|text| view! {
             <p class="sr-only">{text}</p>
         })}
-        // Compact toolbar: section selector (left) + range (right). Sticky so it
-        // stays visible while scrolling through charts.
-        <div class="sticky top-[48px] z-20 bg-[#123c64]/95 backdrop-blur-sm -mx-4 px-4 sm:-mx-6 sm:px-6 py-3 mb-4 border-b border-white/5">
-            <div class="flex flex-col sm:flex-row sm:items-start gap-3">
-                {header.map(|h| view! { <div class="flex items-center gap-3 flex-shrink-0">{h.run()}</div> })}
-                <div class="sm:ml-auto">
-                    <RangeSelector/>
-                </div>
+        // Compact toolbar: section selector (left) + range (right)
+        <div class="flex flex-col sm:flex-row sm:items-start gap-3 mb-6">
+            {header.map(|h| view! { <div class="flex items-center gap-3 flex-shrink-0">{h.run()}</div> })}
+            <div class="sm:ml-auto">
+                <RangeSelector/>
             </div>
         </div>
         {children()}
+        <FloatingRangePicker/>
+    }
+}
+
+/// Floating range picker button in the bottom-left corner.
+/// Opens a popover with the full range selector when clicked.
+#[component]
+fn FloatingRangePicker() -> impl IntoView {
+    let (open, set_open) = signal(false);
+
+    view! {
+        <div class="fixed bottom-6 left-6 z-40">
+            // Toggle button
+            <button
+                class="w-11 h-11 rounded-full bg-[#0d2137] border border-[#f7931a]/30 shadow-lg shadow-black/30 flex items-center justify-center cursor-pointer hover:border-[#f7931a]/60 hover:scale-105 active:scale-95 transition-all"
+                on:click=move |_| set_open.update(|v| *v = !*v)
+                title="Change time range"
+            >
+                <svg class="w-5 h-5 text-[#f7931a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                </svg>
+            </button>
+            // Popover
+            <Show when=move || open.get()>
+                <div class="absolute bottom-14 left-0 bg-[#0d2137] border border-white/10 rounded-2xl shadow-2xl shadow-black/50 p-3 min-w-[280px]">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs text-white/50 font-medium">"Time Range"</span>
+                        <button
+                            class="text-white/30 hover:text-white/60 cursor-pointer"
+                            on:click=move |_| set_open.set(false)
+                        >
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <RangeSelector/>
+                </div>
+            </Show>
+        </div>
     }
 }
