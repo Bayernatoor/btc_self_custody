@@ -163,7 +163,7 @@ pub fn FeeChartsPage() -> impl IntoView {
                             />
                             <ChartCard
                                 title="BTC Transferred Volume"
-                                description=chart_desc(range, "Total non-coinbase output value per block in BTC", "BTC transferred volume is only available in per-block mode")
+                                description=chart_desc(range, "Total non-coinbase output value per block in BTC", "Daily total non-coinbase output value in BTC")
                                 chart_id="chart-btc-volume"
                                 option=btc_volume_option
                             />
