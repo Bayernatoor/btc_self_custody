@@ -655,3 +655,233 @@ pub fn taproot_spend_type_chart_daily(
         ]
     }))
 }
+
+/// Taproot adoption velocity (per-block).
+/// Computes a 144-block moving average of Taproot output %, then derives
+/// the rate of change (velocity) as the difference from 144 blocks ago.
+/// Positive values indicate accelerating adoption, negative values indicate slowing.
+pub fn taproot_velocity_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+    if blocks.is_empty() {
+        return no_data_chart("Taproot Velocity");
+    }
+
+    // Compute Taproot output % per block
+    let pct: Vec<f64> = blocks
+        .iter()
+        .map(|b| {
+            let total = b.p2pk_count + b.p2pkh_count + b.p2sh_count
+                + b.p2wpkh_count + b.p2wsh_count + b.p2tr_count
+                + b.multisig_count + b.unknown_script_count;
+            if total > 0 {
+                b.p2tr_count as f64 / total as f64 * 100.0
+            } else {
+                0.0
+            }
+        })
+        .collect();
+
+    // 144-block moving average
+    let ma = moving_average(&pct, 144);
+
+    // Velocity: ma[i] - ma[i-144]
+    let velocity: Vec<Option<f64>> = (0..ma.len())
+        .map(|i| {
+            if i >= 144 {
+                match (ma[i], ma[i - 144]) {
+                    (Some(cur), Some(prev)) => Some(round(cur - prev, 4)),
+                    _ => None,
+                }
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let data: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(velocity.iter())
+        .map(|(b, v)| match v {
+            Some(val) => dp(b, *val),
+            None => json!([ts_ms(b.timestamp), null]),
+        })
+        .collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("Taproot % Change (144-block)"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "series": [
+            {
+                "name": "Velocity", "type": "line", "data": data,
+                "lineStyle": { "width": 1.5, "color": P2TR_COLOR },
+                "itemStyle": { "color": P2TR_COLOR }, "symbol": "none",
+                "markLine": {
+                    "silent": true,
+                    "data": [{ "yAxis": 0 }],
+                    "lineStyle": { "color": "#aaa", "type": "dashed" },
+                    "label": { "show": false }
+                }
+            }
+        ]
+    }))
+}
+
+/// Taproot adoption velocity from daily aggregates.
+/// Same concept as per-block but using 30-day moving average and daily velocity.
+pub fn taproot_velocity_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+    if days.is_empty() {
+        return no_data_chart("Taproot Velocity");
+    }
+
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+
+    // Compute Taproot % from avg counts
+    let pct: Vec<f64> = days
+        .iter()
+        .map(|d| {
+            let total = d.avg_p2pk_count + d.avg_p2pkh_count + d.avg_p2sh_count
+                + d.avg_p2wpkh_count + d.avg_p2wsh_count + d.avg_p2tr_count
+                + d.avg_multisig_count + d.avg_unknown_script_count;
+            if total > 0.0 {
+                d.avg_p2tr_count / total * 100.0
+            } else {
+                0.0
+            }
+        })
+        .collect();
+
+    // 30-day moving average
+    let ma = moving_average(&pct, 30);
+
+    // Velocity: ma[i] - ma[i-30]
+    let velocity: Vec<serde_json::Value> = (0..ma.len())
+        .map(|i| {
+            if i >= 30 {
+                match (ma[i], ma[i - 30]) {
+                    (Some(cur), Some(prev)) => json!(round(cur - prev, 4)),
+                    _ => json!(null),
+                }
+            } else {
+                json!(null)
+            }
+        })
+        .collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": y_axis("Taproot % Change (30-day)"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "series": [
+            {
+                "name": "Velocity", "type": "line", "data": velocity,
+                "lineStyle": { "width": 1.5, "color": P2TR_COLOR },
+                "itemStyle": { "color": P2TR_COLOR }, "symbol": "none",
+                "markLine": {
+                    "silent": true,
+                    "data": [{ "yAxis": 0 }],
+                    "lineStyle": { "color": "#aaa", "type": "dashed" },
+                    "label": { "show": false }
+                }
+            }
+        ]
+    }))
+}
+
+/// Cumulative SegWit and Taproot transaction count over time.
+pub fn cumulative_adoption_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+    if blocks.is_empty() {
+        return no_data_chart("Cumulative Adoption");
+    }
+
+    let mut segwit_total: u64 = 0;
+    let mut taproot_total: u64 = 0;
+
+    let segwit_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .map(|b| {
+            segwit_total += b.segwit_spend_count;
+            dp(b, segwit_total)
+        })
+        .collect();
+
+    let taproot_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .map(|b| {
+            taproot_total += b.taproot_spend_count;
+            dp(b, taproot_total)
+        })
+        .collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("Cumulative Count"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            {
+                "name": "SegWit Transactions", "type": "line", "data": segwit_data,
+                "lineStyle": { "width": 1.5, "color": P2WPKH_COLOR },
+                "itemStyle": { "color": P2WPKH_COLOR }, "symbol": "none",
+                "areaStyle": { "color": "rgba(59,130,246,0.08)" }
+            },
+            {
+                "name": "Taproot Outputs", "type": "line", "data": taproot_data,
+                "lineStyle": { "width": 1.5, "color": P2TR_COLOR },
+                "itemStyle": { "color": P2TR_COLOR }, "symbol": "none",
+                "areaStyle": { "color": "rgba(34,197,94,0.08)" }
+            }
+        ]
+    }))
+}
+
+/// Cumulative adoption from daily aggregates.
+pub fn cumulative_adoption_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+    if days.is_empty() {
+        return no_data_chart("Cumulative Adoption");
+    }
+
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+
+    let mut segwit_total: f64 = 0.0;
+    let segwit_data: Vec<f64> = days
+        .iter()
+        .map(|d| {
+            segwit_total += d.avg_segwit_spend_count * d.block_count as f64;
+            round(segwit_total, 0)
+        })
+        .collect();
+
+    let mut taproot_total: f64 = 0.0;
+    let taproot_data: Vec<f64> = days
+        .iter()
+        .map(|d| {
+            taproot_total += d.avg_taproot_spend_count * d.block_count as f64;
+            round(taproot_total, 0)
+        })
+        .collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": y_axis("Cumulative Count"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            {
+                "name": "SegWit Transactions", "type": "line", "data": segwit_data,
+                "lineStyle": { "width": 1.5, "color": P2WPKH_COLOR },
+                "itemStyle": { "color": P2WPKH_COLOR }, "symbol": "none",
+                "areaStyle": { "color": "rgba(59,130,246,0.08)" }
+            },
+            {
+                "name": "Taproot Outputs", "type": "line", "data": taproot_data,
+                "lineStyle": { "width": 1.5, "color": P2TR_COLOR },
+                "itemStyle": { "color": P2TR_COLOR }, "symbol": "none",
+                "areaStyle": { "color": "rgba(34,197,94,0.08)" }
+            }
+        ]
+    }))
+}

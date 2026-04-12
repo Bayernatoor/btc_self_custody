@@ -742,3 +742,86 @@ pub fn btc_volume_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 pub fn btc_volume_chart_daily(_days: &[DailyAggregate]) -> serde_json::Value {
     no_data_chart("BTC Volume (daily view coming soon)")
 }
+
+/// Fee pressure scatter: weight utilization % vs median fee rate.
+/// Each point represents one block, with height available in tooltip.
+pub fn fee_pressure_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+    if blocks.is_empty() {
+        return no_data_chart("Fee Pressure");
+    }
+
+    let data: Vec<serde_json::Value> = blocks
+        .iter()
+        .map(|b| {
+            let weight_util_pct = b.weight as f64 / 4_000_000.0 * 100.0;
+            let median_fee_rate = (b.median_fee_rate * 100.0).round() / 100.0;
+            json!([round(weight_util_pct, 2), median_fee_rate, b.height])
+        })
+        .collect();
+
+    build_option(json!({
+        "xAxis": {
+            "type": "value",
+            "name": "Weight Utilization (%)",
+            "nameTextStyle": { "color": "#aaa" },
+            "axisLabel": { "color": "#aaa" },
+            "axisLine": { "lineStyle": { "color": "#555" } },
+            "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.20)", "type": "dashed" } }
+        },
+        "yAxis": y_axis("Median Fee Rate (sat/vB)"),
+        "dataZoom": data_zoom(),
+        "tooltip": { "trigger": "item" },
+        "series": [
+            {
+                "name": "Fee Pressure", "type": "scatter", "data": data,
+                "symbolSize": 3,
+                "itemStyle": { "color": DATA_COLOR, "opacity": 0.4 }
+            }
+        ]
+    }))
+}
+
+/// Input vs output value flow per block. The gap between the two lines is fees.
+pub fn value_flow_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+    if blocks.is_empty() {
+        return no_data_chart("Value Flow");
+    }
+
+    let input_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .map(|b| dp(b, round(b.total_input_value as f64 / 100_000_000.0, 3)))
+        .collect();
+
+    let output_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .map(|b| dp(b, round(b.total_output_value as f64 / 100_000_000.0, 3)))
+        .collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("BTC"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            {
+                "name": "Input Value", "type": "line", "data": input_data,
+                "lineStyle": { "width": 1, "color": "#ef4444" },
+                "itemStyle": { "color": "#ef4444" }, "symbol": "none",
+                "areaStyle": { "color": "rgba(239,68,68,0.08)" }
+            },
+            {
+                "name": "Output Value", "type": "line", "data": output_data,
+                "lineStyle": { "width": 1, "color": "#22c55e" },
+                "itemStyle": { "color": "#22c55e" }, "symbol": "none",
+                "areaStyle": { "color": "rgba(34,197,94,0.08)" }
+            }
+        ]
+    }))
+}
+
+/// Input vs output value flow from daily aggregates.
+/// Note: daily_blocks doesn't store value sums yet; per-block only for now.
+pub fn value_flow_chart_daily(_days: &[DailyAggregate]) -> serde_json::Value {
+    no_data_chart("Value Flow")
+}

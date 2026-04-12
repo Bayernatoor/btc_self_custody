@@ -854,3 +854,148 @@ pub fn largest_tx_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 pub fn largest_tx_chart_daily(_days: &[DailyAggregate]) -> serde_json::Value {
     no_data_chart("Largest Transaction (per-block ranges only)")
 }
+
+/// Histogram of block weight utilization in 10% buckets.
+pub fn block_fullness_distribution_chart(
+    blocks: &[BlockSummary],
+) -> serde_json::Value {
+    if blocks.is_empty() {
+        return no_data_chart("Block Fullness Distribution");
+    }
+
+    let labels: Vec<&str> = vec![
+        "0-10%", "10-20%", "20-30%", "30-40%", "40-50%",
+        "50-60%", "60-70%", "70-80%", "80-90%", "90-100%",
+    ];
+    let mut counts = [0u64; 10];
+
+    for b in blocks {
+        let pct = b.weight as f64 / 4_000_000.0 * 100.0;
+        let idx = if pct >= 100.0 {
+            9
+        } else {
+            (pct / 10.0) as usize
+        };
+        counts[idx] += 1;
+    }
+
+    let data: Vec<u64> = counts.to_vec();
+
+    build_option(json!({
+        "xAxis": {
+            "type": "category",
+            "data": labels,
+            "axisLabel": { "color": "rgba(255,255,255,0.6)" },
+            "axisLine": { "lineStyle": { "color": "rgba(255,255,255,0.15)" } }
+        },
+        "yAxis": y_axis("Block Count"),
+        "tooltip": {
+            "trigger": "axis",
+            "backgroundColor": "rgba(13,33,55,0.95)",
+            "borderColor": "rgba(255,255,255,0.1)",
+            "textStyle": { "color": "rgba(255,255,255,0.85)", "fontSize": 12 }
+        },
+        "series": [{
+            "name": "Block Count", "type": "bar", "data": data,
+            "itemStyle": { "color": DATA_COLOR }
+        }]
+    }))
+}
+
+/// Histogram of inter-block times in 1-minute buckets (0-60+ min).
+pub fn block_time_distribution_chart(
+    blocks: &[BlockSummary],
+) -> serde_json::Value {
+    if blocks.is_empty() {
+        return no_data_chart("Block Time Distribution");
+    }
+
+    // 61 buckets: 0-1, 1-2, ..., 59-60, 60+
+    let mut counts = vec![0u64; 61];
+    let mut labels: Vec<String> = (0..60)
+        .map(|i| format!("{}-{}", i, i + 1))
+        .collect();
+    labels.push("60+".to_string());
+
+    for i in 1..blocks.len() {
+        let interval = blocks[i].timestamp.saturating_sub(blocks[i - 1].timestamp);
+        let mins = interval as f64 / 60.0;
+        let idx = if mins >= 60.0 {
+            60
+        } else {
+            mins as usize
+        };
+        counts[idx] += 1;
+    }
+
+    build_option(json!({
+        "xAxis": {
+            "type": "category",
+            "data": labels,
+            "axisLabel": { "color": "rgba(255,255,255,0.6)" },
+            "axisLine": { "lineStyle": { "color": "rgba(255,255,255,0.15)" } }
+        },
+        "yAxis": y_axis("Block Count"),
+        "tooltip": {
+            "trigger": "axis",
+            "backgroundColor": "rgba(13,33,55,0.95)",
+            "borderColor": "rgba(255,255,255,0.1)",
+            "textStyle": { "color": "rgba(255,255,255,0.85)", "fontSize": 12 }
+        },
+        "series": [{
+            "name": "Block Count", "type": "bar", "data": counts,
+            "itemStyle": { "color": DATA_COLOR },
+            "markLine": {
+                "silent": true, "symbol": "none",
+                "lineStyle": { "type": "dashed", "color": TARGET_COLOR, "width": 2 },
+                "data": [{ "xAxis": "9-10", "label": { "formatter": "Target", "color": TARGET_COLOR } }]
+            }
+        }]
+    }))
+}
+
+/// Scatter plot of rapid consecutive blocks (interval < 60 seconds).
+pub fn block_propagation_chart(
+    blocks: &[BlockSummary],
+) -> serde_json::Value {
+    if blocks.is_empty() {
+        return no_data_chart("Rapid Blocks");
+    }
+
+    let mut dots: Vec<serde_json::Value> = Vec::new();
+
+    for i in 1..blocks.len() {
+        let interval = blocks[i].timestamp.saturating_sub(blocks[i - 1].timestamp);
+        if interval < 60 {
+            dots.push(dp(&blocks[i], interval));
+        }
+    }
+
+    if dots.is_empty() {
+        return no_data_chart("Rapid Blocks (none found)");
+    }
+
+    let count = dots.len();
+
+    build_option(json!({
+        "title": {
+            "text": format!("Rapid Blocks ({} found)", count),
+            "textStyle": { "color": "rgba(255,255,255,0.85)", "fontSize": 14 },
+            "left": "center"
+        },
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("Seconds"),
+        "dataZoom": data_zoom(),
+        "tooltip": {
+            "trigger": "item",
+            "backgroundColor": "rgba(13,33,55,0.95)",
+            "borderColor": "rgba(255,255,255,0.1)",
+            "textStyle": { "color": "rgba(255,255,255,0.85)", "fontSize": 12 }
+        },
+        "series": [{
+            "name": "Interval", "type": "scatter", "data": dots,
+            "symbolSize": 5,
+            "itemStyle": { "color": TARGET_COLOR }
+        }]
+    }))
+}
