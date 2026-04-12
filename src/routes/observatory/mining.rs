@@ -116,9 +116,14 @@ pub fn MiningChartsPage() -> impl IntoView {
                             |blocks| crate::stats::charts::difficulty_chart(blocks),
                             |days| crate::stats::charts::difficulty_chart_daily(days)
                         );
+                        let diff_ribbon_option = chart_memo!(dashboard_data, range, overlay_flags,
+                            |blocks| crate::stats::charts::difficulty_ribbon_chart(blocks),
+                            |days| crate::stats::charts::difficulty_ribbon_chart_daily(days)
+                        );
                         view! {
                             <div class="space-y-10">
                                 <ChartCard title="Difficulty" description=chart_desc(range, "Mining difficulty per block, adjusts every 2,016 blocks (~2 weeks)", "Daily mining difficulty, adjusts every 2,016 blocks (~2 weeks)") chart_id="chart-difficulty" option=diff_option/>
+                                <ChartCard title="Difficulty Ribbon" description=chart_desc(range, "Multiple moving averages of mining difficulty. When short MAs cross below long MAs, it may indicate miner capitulation", "Daily difficulty ribbon showing 7 moving averages from 7-day to 128-day") chart_id="chart-diff-ribbon" option=diff_ribbon_option/>
                             </div>
                         }.into_any()
                     }

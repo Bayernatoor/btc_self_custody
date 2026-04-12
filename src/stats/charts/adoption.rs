@@ -805,3 +805,67 @@ pub fn cumulative_adoption_chart_daily(days: &[DailyAggregate]) -> serde_json::V
         ]
     }))
 }
+
+/// P2PKH address type sunset tracker (daily). Shows the declining share of
+/// legacy P2PKH outputs with a 90-day MA and threshold markers at 10% and 5%.
+pub fn address_sunset_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+    if days.is_empty() {
+        return no_data_chart("Address Type Sunset");
+    }
+
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    let vals: Vec<f64> = days
+        .iter()
+        .map(|d| {
+            let total = d.avg_p2pkh_count + d.avg_p2sh_count + d.avg_p2wpkh_count
+                + d.avg_p2wsh_count + d.avg_p2tr_count + d.avg_p2pk_count
+                + d.avg_multisig_count + d.avg_unknown_script_count;
+            if total > 0.0 {
+                round(d.avg_p2pkh_count / total * 100.0, 2)
+            } else {
+                0.0
+            }
+        })
+        .collect();
+
+    let ma = moving_average(&vals, 90);
+    let ma_vals: Vec<serde_json::Value> = ma
+        .iter()
+        .map(|v| match v {
+            Some(x) => json!(x),
+            None => json!(null),
+        })
+        .collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": y_axis("P2PKH Share (%)"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            {
+                "name": "P2PKH %", "type": "line", "data": vals,
+                "lineStyle": { "width": 1, "color": P2PKH_COLOR },
+                "itemStyle": { "color": P2PKH_COLOR }, "symbol": "none",
+                "opacity": 0.4
+            },
+            {
+                "name": "90-day MA", "type": "line", "data": ma_vals,
+                "lineStyle": { "width": 2, "color": MA_COLOR },
+                "itemStyle": { "color": MA_COLOR }, "symbol": "none"
+            },
+            {
+                "name": "Thresholds", "type": "line", "data": [],
+                "markLine": {
+                    "silent": true, "symbol": "none",
+                    "lineStyle": { "type": "dashed", "color": TARGET_COLOR, "width": 1 },
+                    "data": [
+                        { "yAxis": 10, "label": { "formatter": "10%", "color": TARGET_COLOR } },
+                        { "yAxis": 5, "label": { "formatter": "5%", "color": TARGET_COLOR } }
+                    ]
+                }
+            }
+        ]
+    }))
+}

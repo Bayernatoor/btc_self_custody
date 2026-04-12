@@ -828,3 +828,126 @@ pub fn value_flow_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
         ]
     }))
 }
+
+/// Fee spike detector: scatter plot of fee rate spikes (>5x the 144-block trailing
+/// average) overlaid on the trailing average line.
+pub fn fee_spike_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+    if blocks.is_empty() {
+        return no_data_chart("Fee Spike Detector");
+    }
+
+    let rates: Vec<f64> = blocks.iter().map(|b| round(b.median_fee_rate, 2)).collect();
+    let ma = moving_average(&rates, 144);
+    let ma_str = build_ma_array(blocks, &ma);
+    let ma_data = data_array_value(&ma_str);
+
+    // Build spike scatter: only points where rate > 5x trailing average
+    let mut spike_buf = String::with_capacity(blocks.len() * 10);
+    spike_buf.push('[');
+    let mut first = true;
+    for (i, b) in blocks.iter().enumerate() {
+        if let Some(avg) = ma[i] {
+            if avg > 0.0 && rates[i] > avg * 5.0 {
+                if !first { spike_buf.push(','); }
+                first = false;
+                let _ = write!(spike_buf, "[{},{},{}]", ts_ms(b.timestamp), rates[i], b.height);
+            }
+        }
+    }
+    spike_buf.push(']');
+    let spike_data = data_array_value(&spike_buf);
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("sat/vB"),
+        "dataZoom": data_zoom(),
+        "tooltip": {
+            "trigger": "item",
+            "backgroundColor": "rgba(13,33,55,0.95)",
+            "borderColor": "rgba(255,255,255,0.1)",
+            "textStyle": { "color": "rgba(255,255,255,0.85)", "fontSize": 12 }
+        },
+        "legend": { "show": true },
+        "series": [
+            {
+                "name": "144-block Avg", "type": "line", "data": ma_data,
+                "lineStyle": { "width": 2, "color": DATA_COLOR },
+                "itemStyle": { "color": DATA_COLOR }, "symbol": "none"
+            },
+            {
+                "name": "Spike (>5x avg)", "type": "scatter", "data": spike_data,
+                "symbolSize": 6,
+                "itemStyle": { "color": TARGET_COLOR }
+            }
+        ]
+    }))
+}
+
+/// Halving era comparison: grouped bar chart comparing average block size, tx count,
+/// total fees (BTC), and fee revenue percentage across halving eras.
+pub fn halving_era_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+    if blocks.is_empty() {
+        return no_data_chart("Halving Era Comparison");
+    }
+
+    // Group blocks by halving era (210,000 blocks each)
+    let mut era_data: std::collections::BTreeMap<u64, (f64, f64, f64, f64, u64)> =
+        std::collections::BTreeMap::new();
+
+    for b in blocks {
+        let era = b.height / 210_000;
+        let entry = era_data.entry(era).or_insert((0.0, 0.0, 0.0, 0.0, 0));
+        entry.0 += b.size as f64 / 1_000_000.0;     // size in MB
+        entry.1 += b.tx_count as f64;                // tx count
+        entry.2 += b.total_fees as f64 / 100_000_000.0; // fees in BTC
+        let subsidy = block_subsidy(b.height) as f64;
+        let fees = b.total_fees as f64;
+        if subsidy + fees > 0.0 {
+            entry.3 += fees / (subsidy + fees) * 100.0; // fee revenue %
+        }
+        entry.4 += 1;
+    }
+
+    let subsidy_labels = ["50 BTC", "25 BTC", "12.5 BTC", "6.25 BTC", "3.125 BTC"];
+    let era_colors = ["#fbbf24", "#f59e0b", "#d97706", "#b45309", "#92400e"];
+    let metrics = ["Avg Size (MB)", "Avg Tx Count", "Avg Fees (BTC)", "Fee Revenue %"];
+
+    let eras: Vec<u64> = era_data.keys().copied().collect();
+    let mut series = Vec::new();
+
+    for &era in &eras {
+        let (size_sum, tx_sum, fee_sum, pct_sum, count) = era_data[&era];
+        let c = count as f64;
+        let vals = vec![
+            round(size_sum / c, 3),
+            round(tx_sum / c, 1),
+            round(fee_sum / c, 4),
+            round(pct_sum / c, 2),
+        ];
+        let label = if (era as usize) < subsidy_labels.len() {
+            format!("Era {} ({})", era, subsidy_labels[era as usize])
+        } else {
+            format!("Era {}", era)
+        };
+        let color = era_colors.get(era as usize).unwrap_or(&"#78350f");
+        series.push(json!({
+            "name": label,
+            "type": "bar",
+            "data": vals,
+            "itemStyle": { "color": color }
+        }));
+    }
+
+    build_option(json!({
+        "xAxis": {
+            "type": "category",
+            "data": metrics,
+            "axisLabel": { "color": "#aaa" },
+            "axisLine": { "lineStyle": { "color": "#555" } }
+        },
+        "yAxis": y_axis(""),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": series
+    }))
+}

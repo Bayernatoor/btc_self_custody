@@ -217,6 +217,19 @@ pub fn NetworkChartsPage() -> impl IntoView {
                             }).unwrap_or_default()
                         });
 
+                        let weekday_option = Signal::derive(move || {
+                            let _r = range.get();
+                            dashboard_data.get().and_then(|r| r.ok()).map(|data| {
+                                let value = match data {
+                                    DashboardData::PerBlock(ref blocks) =>
+                                        crate::stats::charts::weekday_activity_chart(blocks),
+                                    DashboardData::Daily(_) =>
+                                        crate::stats::charts::no_data_chart("Weekday Activity"),
+                                };
+                                serde_json::to_string(&value).unwrap_or_default()
+                            }).unwrap_or_default()
+                        });
+
                         view! {
                             <div class="space-y-10">
                                 <ChartCard title="Block Size" description=chart_desc(range, "How large each block is in megabytes", "Average block size per day in megabytes") chart_id="chart-size" option=size_option/>
@@ -229,6 +242,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
                                 <ChartCard title="Block Fullness Distribution" description="Distribution of blocks by weight utilization percentage. Shows how many blocks are nearly full vs partially empty" chart_id="chart-fullness-dist" option=fullness_combined/>
                                 <ChartCard title="Block Time Distribution" description="Distribution of time between consecutive blocks. Most cluster near the 10-minute target" chart_id="chart-time-dist" option=time_combined/>
                                 <ChartCard title="Rapid Consecutive Blocks" description="Blocks arriving within 60 seconds of each other, indicating fast mining luck or potential stale block races" chart_id="chart-propagation" option=propagation_option/>
+                                <ChartCard title="Weekday Activity" description="Average transaction count and fees by day of week. Reveals patterns between weekday and weekend network usage" chart_id="chart-weekday" option=weekday_option/>
                             </div>
                         }.into_any()
                     }
@@ -289,6 +303,19 @@ pub fn NetworkChartsPage() -> impl IntoView {
                             |days| crate::stats::charts::cumulative_adoption_chart_daily(days)
                         );
 
+                        let sunset_option = Signal::derive(move || {
+                            let _r = range.get();
+                            dashboard_data.get().and_then(|r| r.ok()).map(|data| {
+                                let value = match data {
+                                    DashboardData::Daily(ref days) =>
+                                        crate::stats::charts::address_sunset_chart_daily(days),
+                                    DashboardData::PerBlock(_) =>
+                                        crate::stats::charts::no_data_chart("P2PKH Sunset Tracker"),
+                                };
+                                serde_json::to_string(&value).unwrap_or_default()
+                            }).unwrap_or_default()
+                        });
+
                         view! {
                             <div class="space-y-10">
                                 <ChartCard title="SegWit Adoption" description=chart_desc(range, "Percentage of transactions using Segregated Witness", "Daily average SegWit adoption percentage") chart_id="chart-segwit" option=segwit_option/>
@@ -302,6 +329,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
                                 <ChartCard title="Witness Data Share" description="Witness data as percentage of block size. Higher means more SegWit discount savings" chart_id="chart-witness-share" option=witness_share_option/>
                                 <ChartCard title="Taproot Adoption Velocity" description=chart_desc(range, "Rate of change in Taproot output percentage. Positive values indicate accelerating adoption", "Daily rate of change in Taproot adoption percentage") chart_id="chart-taproot-velocity" option=taproot_velocity_option/>
                                 <ChartCard title="Cumulative Adoption" description=chart_desc(range, "Running total of SegWit transactions and Taproot outputs within this range. Select ALL for lifetime totals", "Cumulative SegWit and Taproot counts within this range. Select ALL for lifetime totals") chart_id="chart-cumulative-adoption" option=cumulative_adoption_option/>
+                                <ChartCard title="P2PKH Sunset Tracker" description="Decline of legacy P2PKH address usage over time. Horizontal lines mark 10% and 5% thresholds" chart_id="chart-p2pkh-sunset" option=sunset_option/>
                             </div>
                         }.into_any()
                     }

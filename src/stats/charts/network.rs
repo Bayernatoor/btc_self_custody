@@ -992,3 +992,166 @@ pub fn block_time_histogram_from_buckets(
         }]
     }))
 }
+
+/// Difficulty ribbon chart: 7 moving averages of difficulty at different windows.
+/// When short MAs cross below long MAs, it signals miner capitulation.
+pub fn difficulty_ribbon_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+    if blocks.is_empty() {
+        return no_data_chart("Difficulty Ribbon");
+    }
+
+    let windows = [9, 14, 25, 40, 60, 90, 128];
+    let colors = [
+        "rgba(173,216,255,0.7)",  // lightest blue
+        "rgba(135,190,255,0.7)",
+        "rgba(100,165,255,0.7)",
+        "rgba(70,140,240,0.7)",
+        "rgba(45,115,220,0.7)",
+        "rgba(25,90,200,0.7)",
+        "rgba(10,60,170,0.7)",    // darkest blue
+    ];
+
+    let diff_vals: Vec<f64> = blocks.iter().map(|b| b.difficulty / 1e12).collect();
+
+    let mut series = Vec::with_capacity(windows.len());
+    for (i, &w) in windows.iter().enumerate() {
+        let ma = moving_average(&diff_vals, w);
+        let ma_str = build_ma_array(blocks, &ma);
+        let ma_data = data_array_value(&ma_str);
+        series.push(json!({
+            "name": format!("{}-block MA", w),
+            "type": "line",
+            "data": ma_data,
+            "lineStyle": { "width": 1.5, "color": colors[i] },
+            "itemStyle": { "color": colors[i] },
+            "symbol": "none"
+        }));
+    }
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("Difficulty (T)"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": series
+    }))
+}
+
+/// Difficulty ribbon chart from daily aggregates.
+pub fn difficulty_ribbon_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+    if days.is_empty() {
+        return no_data_chart("Difficulty Ribbon");
+    }
+
+    let windows = [7, 14, 25, 40, 60, 90, 128];
+    let colors = [
+        "rgba(173,216,255,0.7)",
+        "rgba(135,190,255,0.7)",
+        "rgba(100,165,255,0.7)",
+        "rgba(70,140,240,0.7)",
+        "rgba(45,115,220,0.7)",
+        "rgba(25,90,200,0.7)",
+        "rgba(10,60,170,0.7)",
+    ];
+
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    let diff_vals: Vec<f64> = days.iter().map(|d| d.avg_difficulty / 1e12).collect();
+
+    let mut series = Vec::with_capacity(windows.len());
+    for (i, &w) in windows.iter().enumerate() {
+        let ma = moving_average(&diff_vals, w);
+        let ma_vals: Vec<serde_json::Value> = ma
+            .iter()
+            .map(|v| match v {
+                Some(x) => json!(x),
+                None => json!(null),
+            })
+            .collect();
+        series.push(json!({
+            "name": format!("{}-day MA", w),
+            "type": "line",
+            "data": ma_vals,
+            "lineStyle": { "width": 1.5, "color": colors[i] },
+            "itemStyle": { "color": colors[i] },
+            "symbol": "none"
+        }));
+    }
+
+    build_option(json!({
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": y_axis("Difficulty (T)"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": series
+    }))
+}
+
+/// Weekend vs weekday activity: grouped bar chart showing average tx count
+/// and average fees (BTC) by day of week.
+pub fn weekday_activity_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+    if blocks.is_empty() {
+        return no_data_chart("Weekday Activity");
+    }
+
+    // Accumulate per-day-of-week totals
+    // (timestamp / 86400 + 4) % 7 gives 0=Mon..6=Sun
+    let mut tx_sums = [0.0f64; 7];
+    let mut fee_sums = [0.0f64; 7];
+    let mut counts = [0u64; 7];
+
+    for b in blocks {
+        let dow = ((b.timestamp / 86400 + 4) % 7) as usize;
+        tx_sums[dow] += b.tx_count as f64;
+        fee_sums[dow] += b.total_fees as f64 / 100_000_000.0;
+        counts[dow] += 1;
+    }
+
+    let day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    let avg_tx: Vec<f64> = (0..7)
+        .map(|i| if counts[i] > 0 { round(tx_sums[i] / counts[i] as f64, 1) } else { 0.0 })
+        .collect();
+    let avg_fees: Vec<f64> = (0..7)
+        .map(|i| if counts[i] > 0 { round(fee_sums[i] / counts[i] as f64, 4) } else { 0.0 })
+        .collect();
+
+    build_option(json!({
+        "xAxis": {
+            "type": "category",
+            "data": day_names,
+            "axisLabel": { "color": "#aaa" },
+            "axisLine": { "lineStyle": { "color": "#555" } }
+        },
+        "yAxis": [
+            {
+                "type": "value", "name": "Avg Tx Count",
+                "nameTextStyle": { "color": "#aaa" },
+                "axisLabel": { "color": "#aaa" },
+                "axisLine": { "lineStyle": { "color": "#555" } },
+                "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.10)", "type": "dashed" } }
+            },
+            {
+                "type": "value", "name": "Avg Fees (BTC)",
+                "nameTextStyle": { "color": "#aaa" },
+                "axisLabel": { "color": "#aaa" },
+                "axisLine": { "lineStyle": { "color": "#555" } },
+                "splitLine": { "show": false }
+            }
+        ],
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            {
+                "name": "Avg Tx Count", "type": "bar", "data": avg_tx,
+                "yAxisIndex": 0,
+                "itemStyle": { "color": DATA_COLOR }
+            },
+            {
+                "name": "Avg Fees (BTC)", "type": "bar", "data": avg_fees,
+                "yAxisIndex": 1,
+                "itemStyle": { "color": "#3b82f6" }
+            }
+        ]
+    }))
+}
