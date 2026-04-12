@@ -278,10 +278,17 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
         )?;
     }
 
-    // Ensure indexes exist (safe to run every startup)
+    // Ensure indexes exist (safe to run every startup).
+    // Extremes indexes accelerate ORDER BY col DESC LIMIT 1 queries.
     conn.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_blocks_backfill ON blocks(backfill_version);
-         CREATE INDEX IF NOT EXISTS idx_blocks_month_day ON blocks(strftime('%m-%d', datetime(timestamp, 'unixepoch')));",
+         CREATE INDEX IF NOT EXISTS idx_blocks_month_day ON blocks(strftime('%m-%d', datetime(timestamp, 'unixepoch')));
+         CREATE INDEX IF NOT EXISTS idx_blocks_size ON blocks(size);
+         CREATE INDEX IF NOT EXISTS idx_blocks_total_fees ON blocks(total_fees);
+         CREATE INDEX IF NOT EXISTS idx_blocks_tx_count ON blocks(tx_count);
+         CREATE INDEX IF NOT EXISTS idx_blocks_median_fee_rate ON blocks(median_fee_rate);
+         CREATE INDEX IF NOT EXISTS idx_blocks_input_count ON blocks(input_count);
+         CREATE INDEX IF NOT EXISTS idx_blocks_output_count ON blocks(output_count);",
     )?;
 
     // Mempool transactions table for heartbeat ZMQ data
@@ -1508,6 +1515,11 @@ pub fn query_unconfirmed_txids(
 
 /// Query extreme records with the block heights where each MAX occurred.
 /// Uses subqueries to find the specific block for each extreme.
+/// Query extreme records for a time range.
+///
+/// Uses a two-pass approach: one scan to find all MAX values, then individual
+/// lookups by (column = max_value) to retrieve the block details. With the
+/// column indexes, the second pass lookups are near-instant.
 pub fn query_extremes_with_heights(
     conn: &Connection,
     from_ts: u64,
@@ -1515,25 +1527,55 @@ pub fn query_extremes_with_heights(
 ) -> rusqlite::Result<super::types::ExtremesData> {
     use super::types::{ExtremeRecord, ExtremeRecordF64, ExtremesData};
 
-    // Helper: find the block with the MAX value for a given column
-    fn query_max_block(
-        conn: &Connection,
-        column: &str,
-        from_ts: u64,
-        to_ts: u64,
+    // Pass 1: single scan to get all MAX values + counts
+    let row = conn.query_row(
+        "SELECT
+            MAX(size), MAX(total_fees), MAX(median_fee_rate), MAX(fee_rate_p90),
+            MAX(tx_count), MAX(largest_tx_size), MAX(input_count), MAX(output_count),
+            MAX(inscription_count), MAX(runes_count), MAX(op_return_count),
+            MAX(rbf_count), MAX(taproot_spend_count),
+            SUM(CASE WHEN tx_count <= 1 THEN 1 ELSE 0 END), COUNT(*)
+         FROM blocks WHERE timestamp >= ?1 AND timestamp <= ?2",
+        params![from_ts, to_ts],
+        |row| {
+            Ok((
+                row.get::<_, Option<u64>>(0)?.unwrap_or(0),   // max_size
+                row.get::<_, Option<u64>>(1)?.unwrap_or(0),   // max_fees
+                row.get::<_, Option<f64>>(2)?.unwrap_or(0.0), // max_median_fee_rate
+                row.get::<_, Option<f64>>(3)?.unwrap_or(0.0), // max_p90_fee_rate
+                row.get::<_, Option<u64>>(4)?.unwrap_or(0),   // max_tx_count
+                row.get::<_, Option<u64>>(5)?.unwrap_or(0),   // max_largest_tx
+                row.get::<_, Option<u64>>(6)?.unwrap_or(0),   // max_inputs
+                row.get::<_, Option<u64>>(7)?.unwrap_or(0),   // max_outputs
+                row.get::<_, Option<u64>>(8)?.unwrap_or(0),   // max_inscriptions
+                row.get::<_, Option<u64>>(9)?.unwrap_or(0),   // max_runes
+                row.get::<_, Option<u64>>(10)?.unwrap_or(0),  // max_op_returns
+                row.get::<_, Option<u64>>(11)?.unwrap_or(0),  // max_rbf
+                row.get::<_, Option<u64>>(12)?.unwrap_or(0),  // max_taproot
+                row.get::<_, Option<u64>>(13)?.unwrap_or(0),  // empty_count
+                row.get::<_, Option<u64>>(14)?.unwrap_or(0),  // block_count
+            ))
+        },
+    )?;
+
+    let (max_size, max_fees, max_mfr, max_p90, max_txs, max_ltx, max_in,
+         max_out, max_ins, max_run, max_opr, max_rbf, max_tap,
+         empty_count, block_count) = row;
+
+    // Pass 2: look up the block that holds each maximum (index-assisted)
+    fn lookup_u64(
+        conn: &Connection, col: &str, val: u64, from_ts: u64, to_ts: u64,
     ) -> rusqlite::Result<ExtremeRecord> {
         let sql = format!(
             "SELECT {col}, height, timestamp, miner FROM blocks
-             WHERE timestamp >= ?1 AND timestamp <= ?2
-             ORDER BY {col} DESC LIMIT 1",
-            col = column
+             WHERE {col} = ?1 AND timestamp >= ?2 AND timestamp <= ?3
+             LIMIT 1",
+            col = col
         );
-        conn.query_row(&sql, params![from_ts, to_ts], |row| {
+        conn.query_row(&sql, params![val, from_ts, to_ts], |r| {
             Ok(ExtremeRecord {
-                value: row.get::<_, Option<u64>>(0)?.unwrap_or(0),
-                height: row.get(1)?,
-                timestamp: row.get(2)?,
-                miner: row.get(3)?,
+                value: r.get::<_, Option<u64>>(0)?.unwrap_or(0),
+                height: r.get(1)?, timestamp: r.get(2)?, miner: r.get(3)?,
             })
         })
         .or_else(|e| match e {
@@ -1542,24 +1584,19 @@ pub fn query_extremes_with_heights(
         })
     }
 
-    fn query_max_block_f64(
-        conn: &Connection,
-        column: &str,
-        from_ts: u64,
-        to_ts: u64,
+    fn lookup_f64(
+        conn: &Connection, col: &str, val: f64, from_ts: u64, to_ts: u64,
     ) -> rusqlite::Result<ExtremeRecordF64> {
         let sql = format!(
             "SELECT {col}, height, timestamp, miner FROM blocks
-             WHERE timestamp >= ?1 AND timestamp <= ?2
-             ORDER BY {col} DESC LIMIT 1",
-            col = column
+             WHERE {col} = ?1 AND timestamp >= ?2 AND timestamp <= ?3
+             LIMIT 1",
+            col = col
         );
-        conn.query_row(&sql, params![from_ts, to_ts], |row| {
+        conn.query_row(&sql, params![val, from_ts, to_ts], |r| {
             Ok(ExtremeRecordF64 {
-                value: row.get::<_, Option<f64>>(0)?.unwrap_or(0.0),
-                height: row.get(1)?,
-                timestamp: row.get(2)?,
-                miner: row.get(3)?,
+                value: r.get::<_, Option<f64>>(0)?.unwrap_or(0.0),
+                height: r.get(1)?, timestamp: r.get(2)?, miner: r.get(3)?,
             })
         })
         .or_else(|e| match e {
@@ -1568,33 +1605,20 @@ pub fn query_extremes_with_heights(
         })
     }
 
-    // Counts query (single pass)
-    let (empty_count, block_count) = conn.query_row(
-        "SELECT SUM(CASE WHEN tx_count <= 1 THEN 1 ELSE 0 END), COUNT(*)
-         FROM blocks WHERE timestamp >= ?1 AND timestamp <= ?2",
-        params![from_ts, to_ts],
-        |row| {
-            Ok((
-                row.get::<_, Option<u64>>(0)?.unwrap_or(0),
-                row.get::<_, Option<u64>>(1)?.unwrap_or(0),
-            ))
-        },
-    )?;
-
     Ok(ExtremesData {
-        largest_block: query_max_block(conn, "size", from_ts, to_ts)?,
-        highest_fee_block: query_max_block(conn, "total_fees", from_ts, to_ts)?,
-        peak_fee_rate: query_max_block_f64(conn, "median_fee_rate", from_ts, to_ts)?,
-        peak_p90_fee_rate: query_max_block_f64(conn, "fee_rate_p90", from_ts, to_ts)?,
-        most_txs: query_max_block(conn, "tx_count", from_ts, to_ts)?,
-        largest_tx: query_max_block(conn, "largest_tx_size", from_ts, to_ts)?,
-        most_inputs: query_max_block(conn, "input_count", from_ts, to_ts)?,
-        most_outputs: query_max_block(conn, "output_count", from_ts, to_ts)?,
-        most_inscriptions: query_max_block(conn, "inscription_count", from_ts, to_ts)?,
-        most_runes: query_max_block(conn, "runes_count", from_ts, to_ts)?,
-        most_op_returns: query_max_block(conn, "op_return_count", from_ts, to_ts)?,
-        most_rbf: query_max_block(conn, "rbf_count", from_ts, to_ts)?,
-        most_taproot: query_max_block(conn, "taproot_spend_count", from_ts, to_ts)?,
+        largest_block: lookup_u64(conn, "size", max_size, from_ts, to_ts)?,
+        highest_fee_block: lookup_u64(conn, "total_fees", max_fees, from_ts, to_ts)?,
+        peak_fee_rate: lookup_f64(conn, "median_fee_rate", max_mfr, from_ts, to_ts)?,
+        peak_p90_fee_rate: lookup_f64(conn, "fee_rate_p90", max_p90, from_ts, to_ts)?,
+        most_txs: lookup_u64(conn, "tx_count", max_txs, from_ts, to_ts)?,
+        largest_tx: lookup_u64(conn, "largest_tx_size", max_ltx, from_ts, to_ts)?,
+        most_inputs: lookup_u64(conn, "input_count", max_in, from_ts, to_ts)?,
+        most_outputs: lookup_u64(conn, "output_count", max_out, from_ts, to_ts)?,
+        most_inscriptions: lookup_u64(conn, "inscription_count", max_ins, from_ts, to_ts)?,
+        most_runes: lookup_u64(conn, "runes_count", max_run, from_ts, to_ts)?,
+        most_op_returns: lookup_u64(conn, "op_return_count", max_opr, from_ts, to_ts)?,
+        most_rbf: lookup_u64(conn, "rbf_count", max_rbf, from_ts, to_ts)?,
+        most_taproot: lookup_u64(conn, "taproot_spend_count", max_tap, from_ts, to_ts)?,
         empty_block_count: empty_count,
         block_count,
     })

@@ -118,13 +118,30 @@ pub fn spawn_background_tasks(
         });
     }
 
-    // Poll for new blocks every 60 seconds
+    // Poll for new blocks every 15 seconds, invalidate caches on new data
     {
         let state = Arc::clone(&state);
         tokio::spawn(async move {
+            let mut last_height = {
+                state.db.get().ok()
+                    .and_then(|c| db::max_height(&c).ok().flatten())
+                    .unwrap_or(0)
+            };
             loop {
                 tokio::time::sleep(std::time::Duration::from_secs(15)).await;
                 ingest::poll_new_blocks(&state.rpc, &state.db).await;
+
+                // Check if new blocks were added; if so, clear stale caches
+                let new_height = state.db.get().ok()
+                    .and_then(|c| db::max_height(&c).ok().flatten())
+                    .unwrap_or(0);
+                if new_height > last_height {
+                    last_height = new_height;
+                    state.range_summary_cache.lock().unwrap_or_else(|e| e.into_inner()).take();
+                    state.extremes_cache.lock().unwrap_or_else(|e| e.into_inner()).take();
+                    state.stats_summary_cache.lock().unwrap_or_else(|e| e.into_inner()).take();
+                    state.daily_cache.lock().unwrap_or_else(|e| e.into_inner()).take();
+                }
             }
         });
     }
