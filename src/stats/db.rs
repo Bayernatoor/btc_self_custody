@@ -645,6 +645,16 @@ pub struct BlockRow {
     pub fee_rate_p90: f64,
     pub stamps_count: u64,
     pub largest_tx_size: u64,
+    // --- Backfill v10 fields ---
+    pub max_tx_fee: u64,
+    pub inscription_fees: u64,
+    pub runes_fees: u64,
+    pub legacy_tx_count: u64,
+    pub segwit_tx_count: u64,
+    pub taproot_tx_count: u64,
+    pub coinbase_text: String,
+    pub fee_rate_p25: f64,
+    pub fee_rate_p75: f64,
 }
 
 /// Query blocks by height range [from, to] inclusive, ordered by height ASC.
@@ -667,7 +677,10 @@ pub fn query_blocks(
                 data_carrier_count, data_carrier_bytes,
                 taproot_keypath_count, taproot_scriptpath_count,
                 total_output_value, total_input_value,
-                fee_rate_p10, fee_rate_p90, stamps_count, largest_tx_size
+                fee_rate_p10, fee_rate_p90, stamps_count, largest_tx_size,
+                max_tx_fee, inscription_fees, runes_fees,
+                legacy_tx_count, segwit_tx_count, taproot_tx_count,
+                coinbase_text, fee_rate_p25, fee_rate_p75
          FROM blocks WHERE height >= ?1 AND height <= ?2 ORDER BY height ASC",
     )?;
     let rows = stmt.query_map(params![from, to], |row| {
@@ -717,6 +730,15 @@ pub fn query_blocks(
             fee_rate_p90: row.get(42)?,
             stamps_count: row.get(43)?,
             largest_tx_size: row.get(44)?,
+            max_tx_fee: row.get(45)?,
+            inscription_fees: row.get(46)?,
+            runes_fees: row.get(47)?,
+            legacy_tx_count: row.get(48)?,
+            segwit_tx_count: row.get(49)?,
+            taproot_tx_count: row.get(50)?,
+            coinbase_text: row.get(51)?,
+            fee_rate_p25: row.get(52)?,
+            fee_rate_p75: row.get(53)?,
         })
     })?;
     rows.collect()
@@ -742,7 +764,10 @@ pub fn query_blocks_by_ts(
                 data_carrier_count, data_carrier_bytes,
                 taproot_keypath_count, taproot_scriptpath_count,
                 total_output_value, total_input_value,
-                fee_rate_p10, fee_rate_p90, stamps_count, largest_tx_size
+                fee_rate_p10, fee_rate_p90, stamps_count, largest_tx_size,
+                max_tx_fee, inscription_fees, runes_fees,
+                legacy_tx_count, segwit_tx_count, taproot_tx_count,
+                coinbase_text, fee_rate_p25, fee_rate_p75
          FROM blocks WHERE timestamp >= ?1 AND timestamp <= ?2 ORDER BY height ASC",
     )?;
     let rows = stmt.query_map(params![from_ts, to_ts], |row| {
@@ -792,6 +817,15 @@ pub fn query_blocks_by_ts(
             fee_rate_p90: row.get(42)?,
             stamps_count: row.get(43)?,
             largest_tx_size: row.get(44)?,
+            max_tx_fee: row.get(45)?,
+            inscription_fees: row.get(46)?,
+            runes_fees: row.get(47)?,
+            legacy_tx_count: row.get(48)?,
+            segwit_tx_count: row.get(49)?,
+            taproot_tx_count: row.get(50)?,
+            coinbase_text: row.get(51)?,
+            fee_rate_p25: row.get(52)?,
+            fee_rate_p75: row.get(53)?,
         })
     })?;
     rows.collect()
@@ -1839,7 +1873,7 @@ pub fn query_extremes_with_heights(
             MAX(size), MAX(total_fees), MAX(median_fee_rate), MAX(fee_rate_p90),
             MAX(tx_count), MAX(largest_tx_size), MAX(input_count), MAX(output_count),
             MAX(inscription_count), MAX(runes_count), MAX(op_return_count),
-            MAX(rbf_count), MAX(taproot_spend_count),
+            MAX(rbf_count), MAX(taproot_spend_count), MAX(total_output_value),
             SUM(CASE WHEN tx_count <= 1 THEN 1 ELSE 0 END), COUNT(*)
          FROM blocks WHERE timestamp >= ?1 AND timestamp <= ?2",
         params![from_ts, to_ts],
@@ -1858,14 +1892,15 @@ pub fn query_extremes_with_heights(
                 row.get::<_, Option<u64>>(10)?.unwrap_or(0),  // max_op_returns
                 row.get::<_, Option<u64>>(11)?.unwrap_or(0),  // max_rbf
                 row.get::<_, Option<u64>>(12)?.unwrap_or(0),  // max_taproot
-                row.get::<_, Option<u64>>(13)?.unwrap_or(0),  // empty_count
-                row.get::<_, Option<u64>>(14)?.unwrap_or(0),  // block_count
+                row.get::<_, Option<u64>>(13)?.unwrap_or(0),  // max_output_value
+                row.get::<_, Option<u64>>(14)?.unwrap_or(0),  // empty_count
+                row.get::<_, Option<u64>>(15)?.unwrap_or(0),  // block_count
             ))
         },
     )?;
 
     let (max_size, max_fees, max_mfr, max_p90, max_txs, max_ltx, max_in,
-         max_out, max_ins, max_run, max_opr, max_rbf, max_tap,
+         max_out, max_ins, max_run, max_opr, max_rbf, max_tap, max_val,
          empty_count, block_count) = row;
 
     // Pass 2: look up the block that holds each maximum (index-assisted)
@@ -1925,6 +1960,7 @@ pub fn query_extremes_with_heights(
         most_op_returns: lookup_u64(conn, "op_return_count", max_opr, from_ts, to_ts)?,
         most_rbf: lookup_u64(conn, "rbf_count", max_rbf, from_ts, to_ts)?,
         most_taproot: lookup_u64(conn, "taproot_spend_count", max_tap, from_ts, to_ts)?,
+        highest_value: lookup_u64(conn, "total_output_value", max_val, from_ts, to_ts)?,
         empty_block_count: empty_count,
         block_count,
     })

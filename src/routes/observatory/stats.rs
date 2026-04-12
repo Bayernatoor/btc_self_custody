@@ -250,6 +250,14 @@ fn ExtremesHero(data: ExtremesData) -> impl IntoView {
             date: fmt_date(d.most_runes.timestamp),
             tooltip: "Block with the most Runes protocol outputs",
         },
+        Card {
+            label: "Highest Value Block",
+            value: format!("{} BTC", format_number(d.highest_value.value / 100_000_000)),
+            height: d.highest_value.height,
+            miner: d.highest_value.miner.clone(),
+            date: fmt_date(d.highest_value.timestamp),
+            tooltip: "Block with the highest total output value (settlement volume)",
+        },
     ];
 
     // Filter out zero-value cards

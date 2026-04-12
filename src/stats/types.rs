@@ -115,6 +115,25 @@ pub struct BlockSummary {
     pub stamps_count: u64,
     /// Size of the largest transaction in bytes.
     pub largest_tx_size: u64,
+    // --- Backfill v10 fields (0 for historical blocks until backfill completes) ---
+    /// Largest individual transaction fee in satoshis.
+    pub max_tx_fee: u64,
+    /// Total fees from inscription transactions in satoshis.
+    pub inscription_fees: u64,
+    /// Total fees from Runes transactions in satoshis.
+    pub runes_fees: u64,
+    /// Number of transactions with only legacy inputs.
+    pub legacy_tx_count: u64,
+    /// Number of transactions with any SegWit v0 input (no Taproot).
+    pub segwit_tx_count: u64,
+    /// Number of transactions with any Taproot input.
+    pub taproot_tx_count: u64,
+    /// Decoded ASCII text from the coinbase transaction.
+    pub coinbase_text: String,
+    /// 25th percentile fee rate in sat/vB.
+    pub fee_rate_p25: f64,
+    /// 75th percentile fee rate in sat/vB.
+    pub fee_rate_p75: f64,
 }
 
 /// Full block detail for the single-block detail page. Includes coinbase
@@ -384,6 +403,8 @@ pub struct ExtremesData {
     pub most_rbf: ExtremeRecord,
     /// Block with the most taproot outputs.
     pub most_taproot: ExtremeRecord,
+    /// Block with the highest total output value (largest settlement volume).
+    pub highest_value: ExtremeRecord,
     /// Total empty blocks (coinbase-only) in the range.
     pub empty_block_count: u64,
     /// Total blocks in the range.
