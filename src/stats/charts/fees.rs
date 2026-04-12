@@ -744,8 +744,8 @@ pub fn fee_pressure_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         "series": [
             {
                 "name": "Fee Pressure", "type": "scatter", "data": data,
-                "symbolSize": 3,
-                "itemStyle": { "color": DATA_COLOR, "opacity": 0.4 }
+                "symbolSize": 7,
+                "itemStyle": { "color": DATA_COLOR, "opacity": 0.7 }
             }
         ]
     }))
