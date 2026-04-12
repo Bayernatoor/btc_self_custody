@@ -913,17 +913,34 @@ pub fn halving_era_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let metrics = ["Avg Size (MB)", "Avg Tx Count", "Avg Fees (BTC)", "Fee Revenue %"];
 
     let eras: Vec<u64> = era_data.keys().copied().collect();
-    let mut series = Vec::new();
 
+    // Compute per-era averages for each metric
+    let mut era_avgs: Vec<[f64; 4]> = Vec::new();
     for &era in &eras {
         let (size_sum, tx_sum, fee_sum, pct_sum, count) = era_data[&era];
         let c = count as f64;
-        let vals = vec![
+        era_avgs.push([
             round(size_sum / c, 3),
             round(tx_sum / c, 1),
             round(fee_sum / c, 4),
             round(pct_sum / c, 2),
-        ];
+        ]);
+    }
+
+    // Normalize each metric to 0-100% relative to its max across eras.
+    // Tooltip shows the actual value.
+    let mut maxes = [0.0f64; 4];
+    for avgs in &era_avgs {
+        for i in 0..4 {
+            if avgs[i] > maxes[i] { maxes[i] = avgs[i]; }
+        }
+    }
+
+    let mut series = Vec::new();
+    for (ei, &era) in eras.iter().enumerate() {
+        let normalized: Vec<f64> = (0..4).map(|i| {
+            if maxes[i] > 0.0 { round(era_avgs[ei][i] / maxes[i] * 100.0, 1) } else { 0.0 }
+        }).collect();
         let label = if (era as usize) < subsidy_labels.len() {
             format!("Era {} ({})", era, subsidy_labels[era as usize])
         } else {
@@ -933,8 +950,9 @@ pub fn halving_era_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         series.push(json!({
             "name": label,
             "type": "bar",
-            "data": vals,
-            "itemStyle": { "color": color }
+            "data": normalized,
+            "itemStyle": { "color": color },
+            "_rawValues": era_avgs[ei].to_vec()
         }));
     }
 
@@ -945,7 +963,7 @@ pub fn halving_era_chart(blocks: &[BlockSummary]) -> serde_json::Value {
             "axisLabel": { "color": "#aaa" },
             "axisLine": { "lineStyle": { "color": "#555" } }
         },
-        "yAxis": y_axis(""),
+        "yAxis": y_axis("% of max"),
         "tooltip": tooltip_axis(),
         "legend": { "show": true },
         "series": series
