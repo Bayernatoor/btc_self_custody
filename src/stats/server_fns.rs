@@ -554,7 +554,7 @@ pub async fn fetch_daily_aggregates(
         .db
         .get()
         .map_err(|e| internal_err("DB pool", e))?;
-    let rows = super::db::query_daily_aggregates(&conn, from_ts, to_ts)
+    let rows = super::db::query_daily_aggregates_fast(&conn, from_ts, to_ts)
         .map_err(|e| internal_err("DB query", e))?;
     let result: Vec<DailyAggregate> = rows
         .into_iter()

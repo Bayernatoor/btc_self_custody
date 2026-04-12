@@ -307,6 +307,53 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
             WHERE confirmed_height IS NULL;",
     )?;
 
+    // Pre-computed daily aggregates table. Populated incrementally on new
+    // blocks so queries read directly instead of re-aggregating 940k+ rows.
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS daily_blocks (
+            day                        TEXT PRIMARY KEY,
+            block_count                INTEGER NOT NULL,
+            avg_size                   REAL NOT NULL,
+            avg_weight                 REAL NOT NULL,
+            avg_tx_count               REAL NOT NULL,
+            avg_difficulty             REAL NOT NULL,
+            total_op_return_count      INTEGER NOT NULL DEFAULT 0,
+            total_runes_count          INTEGER NOT NULL DEFAULT 0,
+            total_omni_count           INTEGER NOT NULL DEFAULT 0,
+            total_counterparty_count   INTEGER NOT NULL DEFAULT 0,
+            total_data_carrier_count   INTEGER NOT NULL DEFAULT 0,
+            total_op_return_bytes      INTEGER NOT NULL DEFAULT 0,
+            total_runes_bytes          INTEGER NOT NULL DEFAULT 0,
+            total_omni_bytes           INTEGER NOT NULL DEFAULT 0,
+            total_counterparty_bytes   INTEGER NOT NULL DEFAULT 0,
+            total_data_carrier_bytes   INTEGER NOT NULL DEFAULT 0,
+            total_fees                 INTEGER NOT NULL DEFAULT 0,
+            avg_segwit_spend_count     REAL NOT NULL DEFAULT 0,
+            avg_taproot_spend_count    REAL NOT NULL DEFAULT 0,
+            avg_p2pk_count             REAL NOT NULL DEFAULT 0,
+            avg_p2pkh_count            REAL NOT NULL DEFAULT 0,
+            avg_p2sh_count             REAL NOT NULL DEFAULT 0,
+            avg_p2wpkh_count           REAL NOT NULL DEFAULT 0,
+            avg_p2wsh_count            REAL NOT NULL DEFAULT 0,
+            avg_p2tr_count             REAL NOT NULL DEFAULT 0,
+            avg_multisig_count         REAL NOT NULL DEFAULT 0,
+            avg_unknown_script_count   REAL NOT NULL DEFAULT 0,
+            avg_input_count            REAL NOT NULL DEFAULT 0,
+            avg_output_count           REAL NOT NULL DEFAULT 0,
+            avg_rbf_count              REAL NOT NULL DEFAULT 0,
+            avg_witness_bytes          REAL NOT NULL DEFAULT 0,
+            avg_inscription_count      REAL NOT NULL DEFAULT 0,
+            avg_inscription_bytes      REAL NOT NULL DEFAULT 0,
+            avg_brc20_count            REAL NOT NULL DEFAULT 0,
+            avg_taproot_keypath_count  REAL NOT NULL DEFAULT 0,
+            avg_taproot_scriptpath_count REAL NOT NULL DEFAULT 0,
+            avg_fee_rate_p10           REAL NOT NULL DEFAULT 0,
+            avg_fee_rate_p90           REAL NOT NULL DEFAULT 0,
+            avg_stamps_count           REAL NOT NULL DEFAULT 0,
+            avg_median_fee_rate        REAL NOT NULL DEFAULT 0
+        );",
+    )?;
+
     Ok(())
 }
 
@@ -944,8 +991,207 @@ pub struct DailyRow {
     pub avg_median_fee_rate: f64,
 }
 
-/// Aggregate block data by UTC date within a timestamp range.
+/// Rebuild a single day's row in the daily_blocks table by re-aggregating
+/// from the raw blocks table. Called after new block ingestion.
+pub fn refresh_daily_block(conn: &Connection, day: &str) -> rusqlite::Result<()> {
+    conn.execute(
+        "INSERT OR REPLACE INTO daily_blocks
+            (day, block_count, avg_size, avg_weight, avg_tx_count, avg_difficulty,
+             total_op_return_count, total_runes_count, total_omni_count,
+             total_counterparty_count, total_data_carrier_count,
+             total_op_return_bytes, total_runes_bytes, total_omni_bytes,
+             total_counterparty_bytes, total_data_carrier_bytes,
+             total_fees, avg_segwit_spend_count, avg_taproot_spend_count,
+             avg_p2pk_count, avg_p2pkh_count, avg_p2sh_count,
+             avg_p2wpkh_count, avg_p2wsh_count, avg_p2tr_count,
+             avg_multisig_count, avg_unknown_script_count,
+             avg_input_count, avg_output_count, avg_rbf_count, avg_witness_bytes,
+             avg_inscription_count, avg_inscription_bytes, avg_brc20_count,
+             avg_taproot_keypath_count, avg_taproot_scriptpath_count,
+             avg_fee_rate_p10, avg_fee_rate_p90, avg_stamps_count, avg_median_fee_rate)
+         SELECT date(datetime(timestamp, 'unixepoch')),
+                COUNT(*), AVG(size), AVG(weight), AVG(tx_count), AVG(difficulty),
+                SUM(op_return_count), SUM(runes_count), SUM(omni_count),
+                SUM(counterparty_count), SUM(data_carrier_count),
+                SUM(op_return_bytes), SUM(runes_bytes), SUM(omni_bytes),
+                SUM(counterparty_bytes), SUM(data_carrier_bytes),
+                SUM(total_fees),
+                AVG(segwit_spend_count), AVG(taproot_spend_count),
+                AVG(p2pk_count), AVG(p2pkh_count), AVG(p2sh_count),
+                AVG(p2wpkh_count), AVG(p2wsh_count), AVG(p2tr_count),
+                AVG(multisig_count), AVG(unknown_script_count),
+                AVG(input_count), AVG(output_count), AVG(rbf_count), AVG(witness_bytes),
+                AVG(inscription_count), AVG(inscription_bytes), AVG(brc20_count),
+                AVG(taproot_keypath_count), AVG(taproot_scriptpath_count),
+                AVG(fee_rate_p10), AVG(fee_rate_p90), AVG(stamps_count), AVG(median_fee_rate)
+         FROM blocks
+         WHERE date(datetime(timestamp, 'unixepoch')) = ?1",
+        params![day],
+    )?;
+    Ok(())
+}
+
+/// Populate the entire daily_blocks table from scratch. Used on first run
+/// when the table is empty but blocks already exist.
+pub fn rebuild_all_daily_blocks(conn: &Connection) -> rusqlite::Result<u64> {
+    let count: u64 = conn.query_row(
+        "SELECT COUNT(*) FROM daily_blocks", [], |r| r.get(0),
+    )?;
+    let block_count: u64 = conn.query_row(
+        "SELECT COUNT(*) FROM blocks", [], |r| r.get(0),
+    )?;
+
+    // Only rebuild if blocks exist but daily_blocks is empty
+    if count > 0 || block_count == 0 {
+        return Ok(count);
+    }
+
+    tracing::info!("Building daily_blocks table from {} blocks...", block_count);
+    conn.execute_batch(
+        "INSERT OR REPLACE INTO daily_blocks
+            (day, block_count, avg_size, avg_weight, avg_tx_count, avg_difficulty,
+             total_op_return_count, total_runes_count, total_omni_count,
+             total_counterparty_count, total_data_carrier_count,
+             total_op_return_bytes, total_runes_bytes, total_omni_bytes,
+             total_counterparty_bytes, total_data_carrier_bytes,
+             total_fees, avg_segwit_spend_count, avg_taproot_spend_count,
+             avg_p2pk_count, avg_p2pkh_count, avg_p2sh_count,
+             avg_p2wpkh_count, avg_p2wsh_count, avg_p2tr_count,
+             avg_multisig_count, avg_unknown_script_count,
+             avg_input_count, avg_output_count, avg_rbf_count, avg_witness_bytes,
+             avg_inscription_count, avg_inscription_bytes, avg_brc20_count,
+             avg_taproot_keypath_count, avg_taproot_scriptpath_count,
+             avg_fee_rate_p10, avg_fee_rate_p90, avg_stamps_count, avg_median_fee_rate)
+         SELECT date(datetime(timestamp, 'unixepoch')),
+                COUNT(*), AVG(size), AVG(weight), AVG(tx_count), AVG(difficulty),
+                SUM(op_return_count), SUM(runes_count), SUM(omni_count),
+                SUM(counterparty_count), SUM(data_carrier_count),
+                SUM(op_return_bytes), SUM(runes_bytes), SUM(omni_bytes),
+                SUM(counterparty_bytes), SUM(data_carrier_bytes),
+                SUM(total_fees),
+                AVG(segwit_spend_count), AVG(taproot_spend_count),
+                AVG(p2pk_count), AVG(p2pkh_count), AVG(p2sh_count),
+                AVG(p2wpkh_count), AVG(p2wsh_count), AVG(p2tr_count),
+                AVG(multisig_count), AVG(unknown_script_count),
+                AVG(input_count), AVG(output_count), AVG(rbf_count), AVG(witness_bytes),
+                AVG(inscription_count), AVG(inscription_bytes), AVG(brc20_count),
+                AVG(taproot_keypath_count), AVG(taproot_scriptpath_count),
+                AVG(fee_rate_p10), AVG(fee_rate_p90), AVG(stamps_count), AVG(median_fee_rate)
+         FROM blocks
+         GROUP BY date(datetime(timestamp, 'unixepoch'))"
+    )?;
+    let new_count: u64 = conn.query_row(
+        "SELECT COUNT(*) FROM daily_blocks", [], |r| r.get(0),
+    )?;
+    tracing::info!("Built {} daily_blocks rows", new_count);
+    Ok(new_count)
+}
+
+/// Query pre-computed daily aggregates from the daily_blocks table.
+/// Falls back to raw aggregation if the table is empty.
+pub fn query_daily_aggregates_fast(
+    conn: &Connection,
+    from_ts: u64,
+    to_ts: u64,
+) -> rusqlite::Result<Vec<DailyRow>> {
+    // Convert timestamps to date strings for the pre-computed table
+    let from_day = timestamp_to_date(from_ts);
+    let to_day = timestamp_to_date(to_ts);
+
+    let mut stmt = conn.prepare(
+        "SELECT day, block_count, avg_size, avg_weight, avg_tx_count, avg_difficulty,
+                total_op_return_count, total_runes_count, total_omni_count,
+                total_counterparty_count, total_data_carrier_count,
+                total_op_return_bytes, total_runes_bytes, total_omni_bytes,
+                total_counterparty_bytes, total_data_carrier_bytes,
+                total_fees, avg_segwit_spend_count, avg_taproot_spend_count,
+                avg_p2pk_count, avg_p2pkh_count, avg_p2sh_count,
+                avg_p2wpkh_count, avg_p2wsh_count, avg_p2tr_count,
+                avg_multisig_count, avg_unknown_script_count,
+                avg_input_count, avg_output_count, avg_rbf_count, avg_witness_bytes,
+                avg_inscription_count, avg_inscription_bytes, avg_brc20_count,
+                avg_taproot_keypath_count, avg_taproot_scriptpath_count,
+                avg_fee_rate_p10, avg_fee_rate_p90, avg_stamps_count, avg_median_fee_rate
+         FROM daily_blocks
+         WHERE day >= ?1 AND day <= ?2
+         ORDER BY day ASC",
+    )?;
+    let rows = stmt.query_map(params![from_day, to_day], |row| {
+        Ok(DailyRow {
+            date: row.get(0)?,
+            block_count: row.get(1)?,
+            avg_size: row.get(2)?,
+            avg_weight: row.get(3)?,
+            avg_tx_count: row.get(4)?,
+            avg_difficulty: row.get(5)?,
+            total_op_return_count: row.get(6)?,
+            total_runes_count: row.get(7)?,
+            total_omni_count: row.get(8)?,
+            total_counterparty_count: row.get(9)?,
+            total_data_carrier_count: row.get(10)?,
+            total_op_return_bytes: row.get(11)?,
+            total_runes_bytes: row.get(12)?,
+            total_omni_bytes: row.get(13)?,
+            total_counterparty_bytes: row.get(14)?,
+            total_data_carrier_bytes: row.get(15)?,
+            total_fees: row.get(16)?,
+            avg_segwit_spend_count: row.get(17)?,
+            avg_taproot_spend_count: row.get(18)?,
+            avg_p2pk_count: row.get(19)?,
+            avg_p2pkh_count: row.get(20)?,
+            avg_p2sh_count: row.get(21)?,
+            avg_p2wpkh_count: row.get(22)?,
+            avg_p2wsh_count: row.get(23)?,
+            avg_p2tr_count: row.get(24)?,
+            avg_multisig_count: row.get(25)?,
+            avg_unknown_script_count: row.get(26)?,
+            avg_input_count: row.get(27)?,
+            avg_output_count: row.get(28)?,
+            avg_rbf_count: row.get(29)?,
+            avg_witness_bytes: row.get(30)?,
+            avg_inscription_count: row.get(31)?,
+            avg_inscription_bytes: row.get(32)?,
+            avg_brc20_count: row.get(33)?,
+            avg_taproot_keypath_count: row.get(34)?,
+            avg_taproot_scriptpath_count: row.get(35)?,
+            avg_fee_rate_p10: row.get(36)?,
+            avg_fee_rate_p90: row.get(37)?,
+            avg_stamps_count: row.get(38)?,
+            avg_median_fee_rate: row.get(39)?,
+        })
+    })?;
+
+    let result: Vec<DailyRow> = rows.filter_map(|r| r.ok()).collect();
+
+    // Fallback to raw aggregation if pre-computed table has no data
+    if result.is_empty() {
+        return query_daily_aggregates(conn, from_ts, to_ts);
+    }
+
+    Ok(result)
+}
+
+/// Convert a unix timestamp to a "YYYY-MM-DD" date string (UTC).
+pub fn timestamp_to_date(ts: u64) -> String {
+    let secs = ts as i64;
+    let days = secs / 86400;
+    // Compute date from days since epoch using civil calendar algorithm
+    let z = days + 719468;
+    let era = if z >= 0 { z } else { z - 146096 } / 146097;
+    let doe = z - era * 146097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    format!("{:04}-{:02}-{:02}", y, m, d)
+}
+
+/// Aggregate block data by UTC date within a timestamp range (raw scan).
 /// Groups by `date(datetime(timestamp, 'unixepoch'))` and computes AVG/SUM.
+/// Prefer `query_daily_aggregates_fast` which reads from the pre-computed table.
 pub fn query_daily_aggregates(
     conn: &Connection,
     from_ts: u64,
