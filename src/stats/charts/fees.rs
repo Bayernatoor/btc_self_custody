@@ -770,7 +770,12 @@ pub fn fee_pressure_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         },
         "yAxis": y_axis("Median Fee Rate (sat/vB)"),
         "dataZoom": data_zoom(),
-        "tooltip": { "trigger": "item" },
+        "tooltip": {
+            "trigger": "item",
+            "backgroundColor": "rgba(13,33,55,0.95)",
+            "borderColor": "rgba(255,255,255,0.1)",
+            "textStyle": { "color": "rgba(255,255,255,0.85)", "fontSize": 12 }
+        },
         "series": [
             {
                 "name": "Fee Pressure", "type": "scatter", "data": data,
