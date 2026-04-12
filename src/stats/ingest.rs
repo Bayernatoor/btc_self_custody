@@ -109,6 +109,65 @@ pub async fn poll_new_blocks(rpc: &BitcoinRpc, pool: &DbPool) {
     tracing::info!("Poll: ingested {} blocks up to {tip}", blocks.len());
 }
 
+/// Verify the last `depth` blocks in the DB match the canonical chain.
+/// If a mismatch is found (stale block from a reorg), delete and re-fetch it.
+/// Returns the number of blocks corrected.
+pub async fn verify_recent_blocks(rpc: &BitcoinRpc, pool: &DbPool, depth: u64) -> u64 {
+    let conn = match pool.get() {
+        Ok(c) => c,
+        Err(_) => return 0,
+    };
+
+    let db_max = db::max_height(&conn).unwrap_or(None).unwrap_or(0);
+    if db_max == 0 { return 0; }
+
+    let check_from = db_max.saturating_sub(depth);
+    let mut corrected = 0u64;
+
+    for height in check_from..=db_max {
+        let stored_hash = match db::query_block_hash(&conn, height) {
+            Ok(Some(h)) => h,
+            _ => continue, // block not in DB, will be fetched by poller
+        };
+
+        let canonical_hash = match rpc.get_block_hash(height).await {
+            Ok(h) => h,
+            Err(_) => continue,
+        };
+
+        if stored_hash != canonical_hash {
+            tracing::warn!(
+                "Reorg detected at height {height}: stored={} canonical={}",
+                &stored_hash[..16], &canonical_hash[..16]
+            );
+
+            // Log the reorg
+            let _ = db::insert_reorg(&conn, height, &stored_hash, &canonical_hash);
+
+            // Delete the stale block
+            let _ = db::delete_block(&conn, height);
+
+            // Re-fetch the canonical block
+            match rpc.fetch_block_by_height(height).await {
+                Ok(block) => {
+                    if let Err(e) = db::insert_blocks(&conn, &[block]) {
+                        tracing::error!("Failed to insert canonical block at {height}: {e}");
+                    } else {
+                        tracing::info!("Replaced stale block at height {height} with canonical version");
+                        corrected += 1;
+                    }
+                }
+                Err(e) => tracing::error!("Failed to fetch canonical block at {height}: {e}"),
+            }
+        }
+    }
+
+    if corrected > 0 {
+        tracing::info!("Reorg correction: replaced {corrected} stale blocks");
+    }
+    corrected
+}
+
 /// Background: backfill blocks with backfill_version < BACKFILL_VERSION.
 pub async fn backfill_extras(rpc: &BitcoinRpc, pool: &DbPool) {
     let needs_backfill = {

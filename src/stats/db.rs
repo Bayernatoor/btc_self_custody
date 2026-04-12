@@ -356,6 +356,9 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
         );",
     )?;
 
+    // Reorgs log table
+    init_reorgs_table(conn)?;
+
     // Migration: add value columns to daily_blocks if missing
     let has_daily_value: bool = conn
         .prepare("SELECT total_output_value FROM daily_blocks LIMIT 0")
@@ -1896,6 +1899,53 @@ pub fn query_extremes_with_heights(
     })
 }
 
+/// Get the stored hash for a block at a given height. Returns None if not found.
+pub fn query_block_hash(conn: &Connection, height: u64) -> rusqlite::Result<Option<String>> {
+    conn.query_row(
+        "SELECT hash FROM blocks WHERE height = ?1",
+        params![height],
+        |row| row.get(0),
+    )
+    .optional()
+}
+
+/// Delete a block at a specific height (for reorg correction).
+pub fn delete_block(conn: &Connection, height: u64) -> rusqlite::Result<usize> {
+    conn.execute("DELETE FROM blocks WHERE height = ?1", params![height])
+}
+
+/// Create the reorgs table to log detected chain reorganizations.
+pub fn init_reorgs_table(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS reorgs (
+            height          INTEGER NOT NULL,
+            stale_hash      TEXT NOT NULL,
+            canonical_hash  TEXT NOT NULL,
+            detected_at     INTEGER NOT NULL,
+            PRIMARY KEY (height, stale_hash)
+        );"
+    )
+}
+
+/// Log a detected reorg (stale block replaced by canonical block).
+pub fn insert_reorg(
+    conn: &Connection,
+    height: u64,
+    stale_hash: &str,
+    canonical_hash: &str,
+) -> rusqlite::Result<()> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    conn.execute(
+        "INSERT OR IGNORE INTO reorgs (height, stale_hash, canonical_hash, detected_at)
+         VALUES (?1, ?2, ?3, ?4)",
+        params![height, stale_hash, canonical_hash, now],
+    )?;
+    Ok(())
+}
+
 /// Bucket counts for block weight fullness distribution (10 buckets: 0-10% .. 90-100%).
 /// Computed server-side so ALL range doesn't send 940k rows to the client.
 pub fn query_fullness_histogram(
@@ -2203,6 +2253,32 @@ mod tests {
         // Each block has total_output_value=50000000, so day total = 100000000
         assert_eq!(rows[0].total_output_value, 100_000_000);
         assert_eq!(rows[0].total_input_value, 100_200_000);
+    }
+
+    #[test]
+    fn test_reorg_detection_functions() {
+        let conn = setup_db();
+        insert_test_block(&conn, 100, 1700000000, 3_000_000, 100, 1000);
+
+        // Verify stored hash
+        let hash = query_block_hash(&conn, 100).unwrap();
+        assert_eq!(hash, Some("hash_100".to_string()));
+
+        // Non-existent block returns None
+        let missing = query_block_hash(&conn, 999).unwrap();
+        assert!(missing.is_none());
+
+        // Delete block
+        let deleted = delete_block(&conn, 100).unwrap();
+        assert_eq!(deleted, 1);
+        assert!(query_block_hash(&conn, 100).unwrap().is_none());
+
+        // Insert reorg record
+        insert_reorg(&conn, 100, "stale_hash", "canonical_hash").unwrap();
+        let reorg_count: u64 = conn.query_row(
+            "SELECT COUNT(*) FROM reorgs", [], |r| r.get(0),
+        ).unwrap();
+        assert_eq!(reorg_count, 1);
     }
 
     #[test]

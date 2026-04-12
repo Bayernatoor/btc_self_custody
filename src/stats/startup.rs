@@ -181,6 +181,9 @@ pub fn spawn_background_tasks(
                 tokio::time::sleep(std::time::Duration::from_secs(15)).await;
                 ingest::poll_new_blocks(&state.rpc, &state.db).await;
 
+                // Verify last 6 blocks match canonical chain (detect reorgs)
+                ingest::verify_recent_blocks(&state.rpc, &state.db, 6).await;
+
                 // Check if new blocks were added; if so, clear stale caches
                 let new_height = state.db.get().ok()
                     .and_then(|c| db::max_height(&c).ok().flatten())
