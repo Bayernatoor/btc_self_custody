@@ -305,6 +305,7 @@ fn ExtremesHero(data: ExtremesData) -> impl IntoView {
 pub fn StatsSummaryPage() -> impl IntoView {
     let state = expect_context::<ObservatoryState>();
     let range = state.range;
+    let loading = state.data_loading;
 
     let custom_from = state.custom_from;
     let custom_to = state.custom_to;
@@ -680,7 +681,10 @@ pub fn StatsSummaryPage() -> impl IntoView {
         // ===================================================================
         // EXTREMES — Hero section at top, clickable cards with block links
         // ===================================================================
-        <div class="bg-[#0d2137] border border-[#f7931a]/25 rounded-2xl p-4 sm:p-6 mb-6">
+        <div class=move || format!(
+            "bg-[#0d2137] border border-[#f7931a]/25 rounded-2xl p-4 sm:p-6 mb-6 transition-opacity duration-200 {}",
+            if loading.get() { "opacity-40" } else { "opacity-100" }
+        )>
             <h2 class="text-sm font-bold text-[#f7931a] uppercase tracking-widest border-b border-[#f7931a]/25 pb-2 mb-4">"Records"</h2>
 
             <Suspense fallback=move || view! {
@@ -700,7 +704,10 @@ pub fn StatsSummaryPage() -> impl IntoView {
         // ===================================================================
         // REST OF THE STATS — Network, Fees, Adoption, Embedded, Mining, Price
         // ===================================================================
-        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div class=move || format!(
+            "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 transition-opacity duration-200 {}",
+            if loading.get() { "opacity-40" } else { "opacity-100" }
+        )>
             <SectionHeader title="Network"/>
             <StatCard label="Blocks" value=blocks
                 tooltip="Total number of blocks mined in this range"/>

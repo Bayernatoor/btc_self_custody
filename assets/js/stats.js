@@ -118,6 +118,11 @@
         if (el._lastOptionJson === optionJson) return;
         el._lastOptionJson = optionJson;
         el._storedOptionJson = optionJson; // keep a copy for resize re-apply
+
+        // Smooth transition: brief fade on data change
+        if (!el.style.transition) el.style.transition = 'opacity 0.15s ease';
+        el.style.opacity = '0.3';
+
         try {
             var opts = JSON.parse(optionJson);
             opts.animation = false;
@@ -188,6 +193,8 @@
             }
             applyMobileAdjustments(opts);
             el._chart.setOption(opts, { notMerge: true, lazyUpdate: true });
+            // Fade back in after data update
+            requestAnimationFrame(function() { el.style.opacity = '1'; });
             // Click-to-detail: use zrender click to find nearest data point.
             // Registered once per chart element. Works for both axis and item tooltips.
             if (!el._clickRegistered) {
