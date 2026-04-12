@@ -555,3 +555,162 @@ pub fn utxo_flow_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
         ]
     }))
 }
+
+/// Net UTXO set change per block (outputs minus inputs).
+/// Positive = UTXO set growing, negative = consolidation.
+pub fn utxo_growth_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+    if blocks.is_empty() {
+        return no_data_chart("UTXO Growth Rate");
+    }
+
+    let raw: Vec<f64> = blocks
+        .iter()
+        .map(|b| b.output_count as f64 - b.input_count as f64)
+        .collect();
+    let ma = moving_average(&raw, 144);
+
+    let data: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(raw.iter())
+        .map(|(b, &v)| dp(b, v as i64))
+        .collect();
+
+    let ma_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(ma.iter())
+        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))]))
+        .collect();
+
+    let mut series = vec![json!({
+        "name": "Net UTXO Change", "type": "bar", "data": data,
+        "itemStyle": { "color": DATA_COLOR }, "barMaxWidth": 3
+    })];
+
+    if show_ma(blocks.len()) {
+        series.push(json!({
+            "name": "144-block MA", "type": "line", "data": ma_data,
+            "lineStyle": { "width": 2, "color": MA_COLOR },
+            "itemStyle": { "color": MA_COLOR }, "symbol": "none"
+        }));
+    }
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("Net UTXOs"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "series": series
+    }))
+}
+
+/// Net UTXO growth from daily aggregates.
+pub fn utxo_growth_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+    if days.is_empty() {
+        return no_data_chart("UTXO Growth Rate");
+    }
+
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    let data: Vec<f64> = days
+        .iter()
+        .map(|d| {
+            let net = (d.avg_output_count - d.avg_input_count) * d.block_count as f64;
+            round(net, 0)
+        })
+        .collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": y_axis("Net UTXOs / day"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "series": [{
+            "name": "Net UTXO Change", "type": "bar", "data": data,
+            "itemStyle": { "color": DATA_COLOR }
+        }]
+    }))
+}
+
+/// Transaction density: transactions per kilobyte of block space.
+/// Higher = smaller, more efficient transactions. Lower = larger txs.
+pub fn tx_density_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+    if blocks.is_empty() {
+        return no_data_chart("Transaction Density");
+    }
+
+    let raw: Vec<f64> = blocks
+        .iter()
+        .map(|b| {
+            if b.size > 0 {
+                b.tx_count as f64 / (b.size as f64 / 1000.0)
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    let ma = moving_average(&raw, 144);
+
+    let data: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(raw.iter())
+        .map(|(b, &v)| dp(b, round(v, 2)))
+        .collect();
+
+    let ma_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(ma.iter())
+        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))]))
+        .collect();
+
+    let mut series = vec![json!({
+        "name": "TX/KB", "type": "line", "data": data,
+        "lineStyle": { "width": 1, "color": DATA_COLOR },
+        "itemStyle": { "color": DATA_COLOR }, "symbol": "none"
+    })];
+
+    if show_ma(blocks.len()) {
+        series.push(json!({
+            "name": "144-block MA", "type": "line", "data": ma_data,
+            "lineStyle": { "width": 2, "color": MA_COLOR },
+            "itemStyle": { "color": MA_COLOR }, "symbol": "none"
+        }));
+    }
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("TX/KB"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "series": series
+    }))
+}
+
+/// Transaction density from daily aggregates.
+pub fn tx_density_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+    if days.is_empty() {
+        return no_data_chart("Transaction Density");
+    }
+
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    let data: Vec<f64> = days
+        .iter()
+        .map(|d| {
+            if d.avg_size > 0.0 {
+                round(d.avg_tx_count / (d.avg_size / 1000.0), 2)
+            } else {
+                0.0
+            }
+        })
+        .collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": y_axis("TX/KB"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "series": [{
+            "name": "TX Density", "type": "line", "data": data,
+            "lineStyle": { "width": 1.5, "color": DATA_COLOR },
+            "itemStyle": { "color": DATA_COLOR }, "symbol": "none"
+        }]
+    }))
+}

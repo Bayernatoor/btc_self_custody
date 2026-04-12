@@ -586,3 +586,159 @@ pub fn subsidy_vs_fees_chart_daily(
         ]
     }))
 }
+
+/// Fee revenue as percentage of total block reward (subsidy + fees).
+/// Shows the long-term transition from subsidy-era to fee-era mining.
+pub fn fee_revenue_share_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+    if blocks.is_empty() {
+        return no_data_chart("Fee Revenue Share");
+    }
+
+    let raw_data: Vec<f64> = blocks
+        .iter()
+        .map(|b| {
+            let subsidy = block_subsidy(b.height) as f64;
+            let fees = b.total_fees as f64;
+            if subsidy + fees > 0.0 {
+                fees / (subsidy + fees) * 100.0
+            } else {
+                0.0
+            }
+        })
+        .collect();
+
+    let ma = moving_average(&raw_data, 144);
+
+    let data: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(raw_data.iter())
+        .map(|(b, &v)| dp(b, round(v, 2)))
+        .collect();
+
+    let ma_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(ma.iter())
+        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))]))
+        .collect();
+
+    let mut series = vec![json!({
+        "name": "Fee Share", "type": "line", "data": data,
+        "lineStyle": { "width": 1, "color": DATA_COLOR },
+        "itemStyle": { "color": DATA_COLOR }, "symbol": "none",
+        "areaStyle": { "color": DATA_COLOR_FADED }
+    })];
+
+    if show_ma(blocks.len()) {
+        series.push(json!({
+            "name": "144-block MA", "type": "line", "data": ma_data,
+            "lineStyle": { "width": 2, "color": MA_COLOR },
+            "itemStyle": { "color": MA_COLOR }, "symbol": "none"
+        }));
+    }
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("Fee Share (%)"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "series": series
+    }))
+}
+
+/// Fee revenue share from daily aggregates.
+pub fn fee_revenue_share_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+    if days.is_empty() {
+        return no_data_chart("Fee Revenue Share");
+    }
+
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+
+    let data: Vec<f64> = days
+        .iter()
+        .map(|d| {
+            let subsidy_per_block = if d.date.as_str() >= "2024-04-20" {
+                3.125
+            } else if d.date.as_str() >= "2020-05-11" {
+                6.25
+            } else if d.date.as_str() >= "2016-07-09" {
+                12.5
+            } else if d.date.as_str() >= "2012-11-28" {
+                25.0
+            } else {
+                50.0
+            };
+            let total_subsidy = subsidy_per_block * d.block_count as f64 * 100_000_000.0;
+            let fees = d.total_fees as f64;
+            if total_subsidy + fees > 0.0 {
+                round(fees / (total_subsidy + fees) * 100.0, 2)
+            } else {
+                0.0
+            }
+        })
+        .collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": y_axis("Fee Share (%)"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "series": [{
+            "name": "Fee Revenue %", "type": "line", "data": data,
+            "lineStyle": { "width": 1.5, "color": DATA_COLOR },
+            "itemStyle": { "color": DATA_COLOR }, "symbol": "none",
+            "areaStyle": { "color": DATA_COLOR_FADED }
+        }]
+    }))
+}
+
+/// Total BTC transferred per block (non-coinbase output value).
+pub fn btc_volume_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+    if blocks.is_empty() {
+        return no_data_chart("BTC Transferred Volume");
+    }
+
+    let raw: Vec<f64> = blocks
+        .iter()
+        .map(|b| b.total_output_value as f64 / 100_000_000.0)
+        .collect();
+    let ma = moving_average(&raw, 144);
+
+    let data: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(raw.iter())
+        .map(|(b, &v)| dp(b, round(v, 2)))
+        .collect();
+
+    let ma_data: Vec<serde_json::Value> = blocks
+        .iter()
+        .zip(ma.iter())
+        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))]))
+        .collect();
+
+    let mut series = vec![json!({
+        "name": "BTC Volume", "type": "bar", "data": data,
+        "itemStyle": { "color": DATA_COLOR }, "barMaxWidth": 3
+    })];
+
+    if show_ma(blocks.len()) {
+        series.push(json!({
+            "name": "144-block MA", "type": "line", "data": ma_data,
+            "lineStyle": { "width": 2, "color": MA_COLOR },
+            "itemStyle": { "color": MA_COLOR }, "symbol": "none"
+        }));
+    }
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("BTC"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "series": series
+    }))
+}
+
+/// BTC transferred volume from daily aggregates.
+/// Note: daily_blocks doesn't store total_output_value sum yet.
+pub fn btc_volume_chart_daily(_days: &[DailyAggregate]) -> serde_json::Value {
+    no_data_chart("BTC Volume (daily view coming soon)")
+}
