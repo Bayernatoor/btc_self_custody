@@ -1210,7 +1210,7 @@ fn FloatingRangePicker() -> impl IntoView {
     let (open, set_open) = signal(false);
 
     view! {
-        <div class="fixed bottom-6 left-6 z-40">
+        <div class="fixed bottom-6 right-6 z-40">
             // Toggle button
             <button
                 class="w-11 h-11 rounded-full bg-[#0d2137] border border-[#f7931a]/30 shadow-lg shadow-black/30 flex items-center justify-center cursor-pointer hover:border-[#f7931a]/60 hover:scale-105 active:scale-95 transition-all"
@@ -1223,7 +1223,7 @@ fn FloatingRangePicker() -> impl IntoView {
             </button>
             // Popover
             <Show when=move || open.get()>
-                <div class="absolute bottom-14 left-0 bg-[#0d2137] border border-white/10 rounded-2xl shadow-2xl shadow-black/50 p-3 min-w-[280px]">
+                <div class="absolute bottom-14 right-0 bg-[#0d2137] border border-white/10 rounded-2xl shadow-2xl shadow-black/50 p-3 min-w-[280px]">
                     <div class="flex items-center justify-between mb-2">
                         <span class="text-xs text-white/50 font-medium">"Time Range"</span>
                         <button
