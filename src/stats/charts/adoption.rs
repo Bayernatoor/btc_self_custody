@@ -869,3 +869,81 @@ pub fn address_sunset_chart_daily(days: &[DailyAggregate]) -> serde_json::Value 
         ]
     }))
 }
+
+/// Multi-type adoption velocity from daily aggregates. Shows rate of change
+/// for all major address types: P2PKH (declining), P2SH, P2WPKH, P2TR (growing).
+pub fn multi_velocity_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+    if days.is_empty() {
+        return no_data_chart("Adoption Velocity");
+    }
+    if days.len() < 60 {
+        return no_data_chart_with_hint("Adoption Velocity", "Select a longer range (3M+) for meaningful velocity data");
+    }
+
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+
+    // Compute percentage for each type
+    let compute_pct = |days: &[DailyAggregate], extract: fn(&DailyAggregate) -> f64| -> Vec<f64> {
+        days.iter().map(|d| {
+            let total = d.avg_p2pkh_count + d.avg_p2sh_count + d.avg_p2wpkh_count
+                + d.avg_p2wsh_count + d.avg_p2tr_count + d.avg_p2pk_count
+                + d.avg_multisig_count + d.avg_unknown_script_count;
+            if total > 0.0 { extract(d) / total * 100.0 } else { 0.0 }
+        }).collect()
+    };
+
+    let p2pkh_pct = compute_pct(days, |d| d.avg_p2pkh_count);
+    let p2sh_pct = compute_pct(days, |d| d.avg_p2sh_count);
+    let p2wpkh_pct = compute_pct(days, |d| d.avg_p2wpkh_count);
+    let p2tr_pct = compute_pct(days, |d| d.avg_p2tr_count);
+
+    // 30-day MA then velocity (diff from 30 days ago)
+    let make_velocity = |pct: &[f64]| -> Vec<serde_json::Value> {
+        let ma = moving_average(pct, 30);
+        (0..ma.len()).map(|i| {
+            if i >= 30 {
+                match (ma[i], ma[i - 30]) {
+                    (Some(cur), Some(prev)) => json!(round(cur - prev, 3)),
+                    _ => json!(null),
+                }
+            } else {
+                json!(null)
+            }
+        }).collect()
+    };
+
+    let v_p2pkh = make_velocity(&p2pkh_pct);
+    let v_p2sh = make_velocity(&p2sh_pct);
+    let v_p2wpkh = make_velocity(&p2wpkh_pct);
+    let v_p2tr = make_velocity(&p2tr_pct);
+
+    build_option(json!({
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": y_axis("% Change (30-day)"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            {
+                "name": "P2PKH", "type": "line", "data": v_p2pkh,
+                "lineStyle": { "width": 1.5, "color": P2PKH_COLOR },
+                "itemStyle": { "color": P2PKH_COLOR }, "symbol": "none"
+            },
+            {
+                "name": "P2SH", "type": "line", "data": v_p2sh,
+                "lineStyle": { "width": 1.5, "color": P2SH_COLOR },
+                "itemStyle": { "color": P2SH_COLOR }, "symbol": "none"
+            },
+            {
+                "name": "P2WPKH", "type": "line", "data": v_p2wpkh,
+                "lineStyle": { "width": 1.5, "color": P2WPKH_COLOR },
+                "itemStyle": { "color": P2WPKH_COLOR }, "symbol": "none"
+            },
+            {
+                "name": "P2TR", "type": "line", "data": v_p2tr,
+                "lineStyle": { "width": 1.5, "color": P2TR_COLOR },
+                "itemStyle": { "color": P2TR_COLOR }, "symbol": "none"
+            }
+        ]
+    }))
+}

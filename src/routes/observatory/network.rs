@@ -295,6 +295,19 @@ pub fn NetworkChartsPage() -> impl IntoView {
                             |days| crate::stats::charts::cumulative_adoption_chart_daily(days)
                         );
 
+                        let multi_velocity_option = Signal::derive(move || {
+                            let _r = range.get();
+                            dashboard_data.get().and_then(|r| r.ok()).map(|data| {
+                                let value = match data {
+                                    DashboardData::Daily(ref days) =>
+                                        crate::stats::charts::multi_velocity_chart_daily(days),
+                                    DashboardData::PerBlock(_) =>
+                                        crate::stats::charts::no_data_chart_with_hint("Adoption Velocity", "Select a longer range (3M+) for velocity data"),
+                                };
+                                serde_json::to_string(&value).unwrap_or_default()
+                            }).unwrap_or_default()
+                        });
+
                         let sunset_option = Signal::derive(move || {
                             let _r = range.get();
                             dashboard_data.get().and_then(|r| r.ok()).map(|data| {
@@ -322,6 +335,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
                                 <ChartCard title="Taproot Adoption Velocity" description=chart_desc(range, "Rate of change in Taproot output percentage. Positive values indicate accelerating adoption", "Daily rate of change in Taproot adoption percentage") chart_id="chart-taproot-velocity" option=taproot_velocity_option/>
                                 <ChartCard title="Cumulative Adoption" description=chart_desc(range, "Running total of SegWit transactions and Taproot outputs within this range. Select ALL for lifetime totals", "Cumulative SegWit and Taproot counts within this range. Select ALL for lifetime totals") chart_id="chart-cumulative-adoption" option=cumulative_adoption_option/>
                                 <ChartCard title="P2PKH Sunset Tracker" description="Decline of legacy P2PKH address usage over time. Horizontal lines mark 10% and 5% thresholds" chart_id="chart-p2pkh-sunset" option=sunset_option/>
+                                <ChartCard title="Adoption Velocity (All Types)" description="Rate of change for all address types. P2PKH declining, P2WPKH flattening, P2TR growing. Shows the transition between eras" chart_id="chart-multi-velocity" option=multi_velocity_option/>
                             </div>
                         }.into_any()
                     }
