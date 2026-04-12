@@ -975,7 +975,7 @@ pub fn halving_era_chart(blocks: &[BlockSummary]) -> serde_json::Value {
             "axisLabel": { "color": "#aaa" },
             "axisLine": { "lineStyle": { "color": "#555" } }
         },
-        "yAxis": y_axis("Relative (% of peak era)"),
+        "yAxis": y_axis("% of peak"),
         "tooltip": {
             "trigger": "axis",
             "backgroundColor": "rgba(13,33,55,0.95)",
@@ -1075,7 +1075,7 @@ pub fn halving_era_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
             "axisLabel": { "color": "#aaa" },
             "axisLine": { "lineStyle": { "color": "#555" } }
         },
-        "yAxis": y_axis("Relative (% of peak era)"),
+        "yAxis": y_axis("% of peak"),
         "tooltip": {
             "trigger": "axis",
             "backgroundColor": "rgba(13,33,55,0.95)",

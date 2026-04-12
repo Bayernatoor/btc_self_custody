@@ -80,7 +80,7 @@ pub(crate) fn chart_defaults() -> serde_json::Value {
     json!({
         "backgroundColor": "transparent",
         "textStyle": { "color": "#aaa", "fontFamily": "Inter, system-ui, sans-serif" },
-        "grid": { "left": 55, "right": 20, "top": 50, "bottom": 65 },
+        "grid": { "left": 55, "right": 20, "top": 50, "bottom": 65, "containLabel": true },
         "legend": { "textStyle": { "color": "#ccc", "fontSize": 11 }, "top": 25, "left": "center", "type": "scroll" },
         "toolbox": {
             "feature": {
