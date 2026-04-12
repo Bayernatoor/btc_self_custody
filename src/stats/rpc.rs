@@ -179,6 +179,25 @@ pub struct Block {
     pub stamps_count: u64,
     // Largest transaction in the block (bytes)
     pub largest_tx_size: u64,
+    // --- Backfill v10 fields ---
+    /// Largest individual transaction fee in satoshis.
+    pub max_tx_fee: u64,
+    /// Total fees from transactions containing Ordinals inscriptions (sats).
+    pub inscription_fees: u64,
+    /// Total fees from transactions containing Runes protocol outputs (sats).
+    pub runes_fees: u64,
+    /// Number of transactions with only legacy (non-witness) inputs.
+    pub legacy_tx_count: u64,
+    /// Number of transactions with any SegWit v0 input (but no Taproot).
+    pub segwit_tx_count: u64,
+    /// Number of transactions with any Taproot (v1) input.
+    pub taproot_tx_count: u64,
+    /// Decoded ASCII text from the coinbase scriptSig.
+    pub coinbase_text: String,
+    /// 25th percentile fee rate in sat/vB.
+    pub fee_rate_p25: f64,
+    /// 75th percentile fee rate in sat/vB.
+    pub fee_rate_p75: f64,
 }
 
 impl BitcoinRpc {
@@ -289,8 +308,9 @@ impl BitcoinRpc {
         let difficulty = result["difficulty"].as_f64().unwrap_or(0.0);
         let version = result["version"].as_u64().unwrap_or(0) as u32;
 
-        // === Coinbase extraction: fees, miner ID, locktime ===
+        // === Coinbase extraction: fees, miner ID, locktime, text ===
         let mut total_fees = 0u64;
+        let mut coinbase_text = String::new();
         let mut coinbase_locktime = 0u64;
         let mut coinbase_sequence = 0xFFFF_FFFFu64;
         let mut miner = String::from("Unknown");
@@ -327,6 +347,20 @@ impl BitcoinRpc {
                             first_vin["coinbase"].as_str()
                         {
                             miner = classifier::identify_miner(coinbase_hex);
+                            // Extract printable ASCII from coinbase for graffiti
+                            let cb_bytes: Vec<u8> = (0..coinbase_hex.len())
+                                .step_by(2)
+                                .filter_map(|i| coinbase_hex.get(i..i+2)
+                                    .and_then(|s| u8::from_str_radix(s, 16).ok()))
+                                .collect();
+                            coinbase_text = cb_bytes.iter()
+                                .filter(|&&b| b >= 0x20 && b <= 0x7e)
+                                .map(|&b| b as char)
+                                .collect::<String>()
+                                .trim()
+                                .chars()
+                                .take(200) // cap at 200 chars
+                                .collect();
                         }
                     }
                 }
@@ -392,19 +426,33 @@ impl BitcoinRpc {
         let mut total_input_value = 0u64;
         let mut stamps_count = 0u64;
         let mut largest_tx_size = 0u64;
+        let mut max_tx_fee = 0u64;
+        let mut inscription_fees = 0u64;
+        let mut runes_fees = 0u64;
+        let mut legacy_tx_count = 0u64;
+        let mut segwit_tx_count = 0u64;
+        let mut taproot_tx_count = 0u64;
 
         if let Some(txs) = result["tx"].as_array() {
             for tx in txs.iter().skip(1) {
                 // --- Fees ---
+                let mut this_fee_sats = 0u64;
                 if let Some(fee_btc) = tx["fee"].as_f64() {
-                    let fee_sats = (fee_btc * 100_000_000.0).round() as u64;
-                    tx_fees.push(fee_sats);
+                    this_fee_sats = (fee_btc * 100_000_000.0).round() as u64;
+                    tx_fees.push(this_fee_sats);
+                    if this_fee_sats > max_tx_fee {
+                        max_tx_fee = this_fee_sats;
+                    }
                     if let Some(vsize) = tx["vsize"].as_u64() {
                         if vsize > 0 {
-                            tx_fee_rates.push(fee_sats as f64 / vsize as f64);
+                            tx_fee_rates.push(this_fee_sats as f64 / vsize as f64);
                         }
                     }
                 }
+                // Per-tx protocol flags (set during output scan, used for fee attribution)
+                let mut tx_has_inscription = false;
+                let mut tx_has_runes = false;
+                let mut tx_has_taproot_input = false;
 
                 // --- Inputs: counting, SegWit detection, RBF, witness bytes ---
                 // Track largest tx
@@ -444,6 +492,7 @@ impl BitcoinRpc {
                                     // OP_FALSE(00) OP_IF(63) OP_PUSH3(03) "ord"(6f7264)
                                     if hex.contains("0063036f7264") {
                                         inscription_count += 1;
+                                        tx_has_inscription = true;
                                         // Calculate actual envelope overhead instead of fixed estimate.
                                         // Envelope: OP_FALSE(1) OP_IF(1) OP_PUSH3(1) "ord"(3) = 6 bytes header
                                         // + content-type marker OP_PUSH1(1) + type length(1) + type bytes(variable)
@@ -486,15 +535,14 @@ impl BitcoinRpc {
                             //              (taproot control block version byte)
                             let wit_len = wit.len();
                             if wit_len == 1 {
-                                // Likely key-path: single element should be 64-65 bytes (128-130 hex chars)
                                 if let Some(hex) = wit[0].as_str() {
                                     let byte_len = hex.len() / 2;
                                     if byte_len == 64 || byte_len == 65 {
                                         taproot_keypath_count += 1;
+                                        tx_has_taproot_input = true;
                                     }
                                 }
                             } else if wit_len >= 2 {
-                                // Check if last element is a taproot control block (starts with c0 or c1)
                                 if let Some(last) =
                                     wit.last().and_then(|v| v.as_str())
                                 {
@@ -502,6 +550,7 @@ impl BitcoinRpc {
                                         || last.starts_with("c1")
                                     {
                                         taproot_scriptpath_count += 1;
+                                        tx_has_taproot_input = true;
                                     }
                                 }
                             }
@@ -567,6 +616,7 @@ impl BitcoinRpc {
                                         OpReturnType::Runes => {
                                             runes_count += 1;
                                             runes_bytes += bytes;
+                                            tx_has_runes = true;
                                         }
                                         OpReturnType::Omni => {
                                             omni_count += 1;
@@ -625,6 +675,19 @@ impl BitcoinRpc {
                         }
                     }
                 }
+
+                // Per-tx fee attribution by protocol
+                if tx_has_inscription { inscription_fees += this_fee_sats; }
+                if tx_has_runes { runes_fees += this_fee_sats; }
+
+                // Classify tx by input type (taproot > segwit > legacy)
+                if tx_has_taproot_input {
+                    taproot_tx_count += 1;
+                } else if has_witness {
+                    segwit_tx_count += 1;
+                } else {
+                    legacy_tx_count += 1;
+                }
             }
         }
 
@@ -644,6 +707,16 @@ impl BitcoinRpc {
         };
         let fee_rate_p10 = if tx_fee_rates.len() >= 10 {
             tx_fee_rates[tx_fee_rates.len() / 10]
+        } else {
+            0.0
+        };
+        let fee_rate_p25 = if tx_fee_rates.len() >= 4 {
+            tx_fee_rates[tx_fee_rates.len() / 4]
+        } else {
+            0.0
+        };
+        let fee_rate_p75 = if tx_fee_rates.len() >= 4 {
+            tx_fee_rates[tx_fee_rates.len() * 3 / 4]
         } else {
             0.0
         };
@@ -703,6 +776,15 @@ impl BitcoinRpc {
             fee_rate_p90,
             stamps_count,
             largest_tx_size,
+            max_tx_fee,
+            inscription_fees,
+            runes_fees,
+            legacy_tx_count,
+            segwit_tx_count,
+            taproot_tx_count,
+            coinbase_text,
+            fee_rate_p25,
+            fee_rate_p75,
         })
     }
 

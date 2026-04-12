@@ -38,7 +38,7 @@ use super::rpc::Block;
 /// The backfill loop processes all blocks with backfill_version < BACKFILL_VERSION.
 /// v8: OCEAN sub-miners, RBF excludes CSV, witness byte overhead, inscription byte
 ///     overhead, Runes height-gated to 840k+
-pub const BACKFILL_VERSION: u64 = 9;
+pub const BACKFILL_VERSION: u64 = 10;
 
 /// Type alias for the connection pool used throughout the stats module.
 pub type DbPool = r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>;
@@ -371,6 +371,25 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
         )?;
     }
 
+    // Migration: add backfill v10 columns if missing
+    let has_max_tx_fee: bool = conn
+        .prepare("SELECT max_tx_fee FROM blocks LIMIT 0")
+        .is_ok();
+    if !has_max_tx_fee {
+        tracing::info!("Migrating: adding v10 columns (max_tx_fee, protocol fees, tx types, coinbase_text, fee percentiles)");
+        conn.execute_batch(
+            "ALTER TABLE blocks ADD COLUMN max_tx_fee INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE blocks ADD COLUMN inscription_fees INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE blocks ADD COLUMN runes_fees INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE blocks ADD COLUMN legacy_tx_count INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE blocks ADD COLUMN segwit_tx_count INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE blocks ADD COLUMN taproot_tx_count INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE blocks ADD COLUMN coinbase_text TEXT NOT NULL DEFAULT '';
+             ALTER TABLE blocks ADD COLUMN fee_rate_p25 REAL NOT NULL DEFAULT 0.0;
+             ALTER TABLE blocks ADD COLUMN fee_rate_p75 REAL NOT NULL DEFAULT 0.0;",
+        )?;
+    }
+
     Ok(())
 }
 
@@ -418,8 +437,11 @@ pub fn insert_blocks(
               inscription_count, inscription_bytes, brc20_count,
               total_output_value, total_input_value,
               fee_rate_p10, fee_rate_p90, stamps_count, largest_tx_size,
+              max_tx_fee, inscription_fees, runes_fees,
+              legacy_tx_count, segwit_tx_count, taproot_tx_count,
+              coinbase_text, fee_rate_p25, fee_rate_p75,
               backfill_version)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36,?37,?38,?39,?40,?41,?42,?43,?44,?45,?46,?47,?48,?49,?50)",
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36,?37,?38,?39,?40,?41,?42,?43,?44,?45,?46,?47,?48,?49,?50,?51,?52,?53,?54,?55,?56,?57,?58,?59)",
         )?;
         for block in blocks {
             stmt.execute(params![
@@ -472,6 +494,15 @@ pub fn insert_blocks(
                 block.fee_rate_p90,
                 block.stamps_count,
                 block.largest_tx_size,
+                block.max_tx_fee,
+                block.inscription_fees,
+                block.runes_fees,
+                block.legacy_tx_count,
+                block.segwit_tx_count,
+                block.taproot_tx_count,
+                block.coinbase_text,
+                block.fee_rate_p25,
+                block.fee_rate_p75,
                 BACKFILL_VERSION,
             ])?;
         }
