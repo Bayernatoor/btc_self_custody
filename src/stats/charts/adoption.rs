@@ -846,9 +846,9 @@ pub fn address_sunset_chart_daily(days: &[DailyAggregate]) -> serde_json::Value 
         "series": [
             {
                 "name": "P2PKH %", "type": "line", "data": vals,
-                "lineStyle": { "width": 1, "color": P2PKH_COLOR },
+                "lineStyle": { "width": 0.5, "color": P2PKH_COLOR },
                 "itemStyle": { "color": P2PKH_COLOR }, "symbol": "none",
-                "opacity": 0.4
+                "opacity": 0.15
             },
             {
                 "name": "90-day MA", "type": "line", "data": ma_vals,
