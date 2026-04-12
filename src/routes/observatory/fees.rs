@@ -118,18 +118,10 @@ pub fn FeeChartsPage() -> impl IntoView {
                         }).unwrap_or_default()
                     });
 
-                    let halving_era_option = Signal::derive(move || {
-                        let _r = range.get();
-                        dashboard_data.get().and_then(|r| r.ok()).map(|data| {
-                            let value = match data {
-                                DashboardData::PerBlock(ref blocks) =>
-                                    crate::stats::charts::halving_era_chart(blocks),
-                                DashboardData::Daily(_) =>
-                                    crate::stats::charts::no_data_chart("Halving Era Comparison"),
-                            };
-                            serde_json::to_string(&value).unwrap_or_default()
-                        }).unwrap_or_default()
-                    });
+                    let halving_era_option = chart_memo!(dashboard_data, range, overlay_flags,
+                        |blocks| crate::stats::charts::halving_era_chart(blocks),
+                        |days| crate::stats::charts::halving_era_chart_daily(days)
+                    );
 
                     view! {
                         <div class="space-y-10">

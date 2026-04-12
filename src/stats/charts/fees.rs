@@ -977,3 +977,95 @@ pub fn halving_era_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         "series": series
     }))
 }
+
+/// Halving era comparison from daily aggregates. Uses halving dates to determine era.
+pub fn halving_era_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+    if days.is_empty() {
+        return no_data_chart("Halving Era Comparison");
+    }
+
+    fn date_to_era(date: &str) -> u64 {
+        if date >= "2024-04-20" { 4 }
+        else if date >= "2020-05-11" { 3 }
+        else if date >= "2016-07-09" { 2 }
+        else if date >= "2012-11-28" { 1 }
+        else { 0 }
+    }
+
+    let subsidy_btc = [50.0, 25.0, 12.5, 6.25, 3.125];
+    let mut era_data: std::collections::BTreeMap<u64, (f64, f64, f64, f64, u64)> =
+        std::collections::BTreeMap::new();
+
+    for d in days {
+        let era = date_to_era(&d.date);
+        let entry = era_data.entry(era).or_insert((0.0, 0.0, 0.0, 0.0, 0));
+        let bc = d.block_count as f64;
+        entry.0 += d.avg_size / 1_000_000.0 * bc;
+        entry.1 += d.avg_tx_count * bc;
+        entry.2 += d.total_fees as f64 / 100_000_000.0;
+        let sub = subsidy_btc.get(era as usize).copied().unwrap_or(3.125);
+        let total_subsidy = sub * bc * 100_000_000.0;
+        let fees = d.total_fees as f64;
+        if total_subsidy + fees > 0.0 {
+            entry.3 += fees / (total_subsidy + fees) * 100.0 * bc;
+        }
+        entry.4 += d.block_count;
+    }
+
+    let eras: Vec<u64> = era_data.keys().copied().collect();
+    if eras.len() < 2 {
+        return no_data_chart_with_hint("Halving Era Comparison", "Select a range spanning multiple halving eras (try ALL range)");
+    }
+
+    let subsidy_labels = ["50 BTC", "25 BTC", "12.5 BTC", "6.25 BTC", "3.125 BTC"];
+    let era_colors = ["#fbbf24", "#f59e0b", "#d97706", "#b45309", "#92400e"];
+    let metrics = ["Avg Size (MB)", "Avg Tx Count", "Avg Fees (BTC)", "Fee Revenue %"];
+
+    let mut era_avgs: Vec<[f64; 4]> = Vec::new();
+    for &era in &eras {
+        let (size_sum, tx_sum, fee_sum, pct_sum, count) = era_data[&era];
+        let c = count as f64;
+        era_avgs.push([
+            round(size_sum / c, 3),
+            round(tx_sum / c, 1),
+            round(fee_sum / c, 4),
+            round(pct_sum / c, 2),
+        ]);
+    }
+
+    let mut maxes = [0.0f64; 4];
+    for avgs in &era_avgs {
+        for i in 0..4 {
+            if avgs[i] > maxes[i] { maxes[i] = avgs[i]; }
+        }
+    }
+
+    let mut series = Vec::new();
+    for (ei, &era) in eras.iter().enumerate() {
+        let normalized: Vec<f64> = (0..4).map(|i| {
+            if maxes[i] > 0.0 { round(era_avgs[ei][i] / maxes[i] * 100.0, 1) } else { 0.0 }
+        }).collect();
+        let label = if (era as usize) < subsidy_labels.len() {
+            format!("Era {} ({})", era, subsidy_labels[era as usize])
+        } else {
+            format!("Era {}", era)
+        };
+        let color = era_colors.get(era as usize).unwrap_or(&"#78350f");
+        series.push(json!({
+            "name": label, "type": "bar", "data": normalized,
+            "itemStyle": { "color": color }
+        }));
+    }
+
+    build_option(json!({
+        "xAxis": {
+            "type": "category", "data": metrics,
+            "axisLabel": { "color": "#aaa" },
+            "axisLine": { "lineStyle": { "color": "#555" } }
+        },
+        "yAxis": y_axis("% of max"),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": series
+    }))
+}
