@@ -3,6 +3,7 @@
 
 use super::*;
 use serde_json::json;
+use std::fmt::Write;
 
 /// Fees line chart (per-block: total fees in sats).
 pub fn fees_chart(blocks: &[BlockSummary]) -> serde_json::Value {
@@ -10,16 +11,18 @@ pub fn fees_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Fees");
     }
 
-    let raw: Vec<serde_json::Value> = blocks
-        .iter()
-        .map(|b| {
-            if b.total_fees > 0 {
-                dp(b, b.total_fees)
-            } else {
-                json!([ts_ms(b.timestamp), null])
-            }
-        })
-        .collect();
+    let mut raw_buf = String::with_capacity(blocks.len() * 30);
+    raw_buf.push('[');
+    for (i, b) in blocks.iter().enumerate() {
+        if i > 0 { raw_buf.push(','); }
+        if b.total_fees > 0 {
+            let _ = write!(raw_buf, "[{},{},{}]", ts_ms(b.timestamp), b.total_fees, b.height);
+        } else {
+            let _ = write!(raw_buf, "[{},null]", ts_ms(b.timestamp));
+        }
+    }
+    raw_buf.push(']');
+    let raw = data_array_value(&raw_buf);
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
@@ -83,18 +86,19 @@ pub fn fees_chart_unit(
     let divisor = if unit == "btc" { 100_000_000.0 } else { 1.0 };
     let y_name = if unit == "btc" { "BTC" } else { "sats" };
 
-    let raw: Vec<serde_json::Value> = blocks
-        .iter()
-        .map(|b| {
-            if b.total_fees > 0 {
-                let v = b.total_fees as f64 / divisor;
-                let rounded = (v * 1000.0).round() / 1000.0;
-                dp(b, rounded)
-            } else {
-                json!([ts_ms(b.timestamp), null])
-            }
-        })
-        .collect();
+    let mut raw_buf = String::with_capacity(blocks.len() * 30);
+    raw_buf.push('[');
+    for (i, b) in blocks.iter().enumerate() {
+        if i > 0 { raw_buf.push(','); }
+        if b.total_fees > 0 {
+            let v = (b.total_fees as f64 / divisor * 1000.0).round() / 1000.0;
+            let _ = write!(raw_buf, "[{},{},{}]", ts_ms(b.timestamp), v, b.height);
+        } else {
+            let _ = write!(raw_buf, "[{},null]", ts_ms(b.timestamp));
+        }
+    }
+    raw_buf.push(']');
+    let raw = data_array_value(&raw_buf);
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
@@ -160,35 +164,21 @@ pub fn avg_fee_per_tx_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Avg Fee per Tx");
     }
 
-    let vals: Vec<f64> = blocks
-        .iter()
-        .map(|b| {
-            let user_tx = b.tx_count.saturating_sub(1); // exclude coinbase
-            if user_tx > 0 {
-                b.total_fees as f64 / user_tx as f64
-            } else {
-                0.0
-            }
-        })
-        .collect();
+    let fee_fn = |b: &BlockSummary| {
+        let user_tx = b.tx_count.saturating_sub(1); // exclude coinbase
+        if user_tx > 0 {
+            b.total_fees as f64 / user_tx as f64
+        } else {
+            0.0
+        }
+    };
+    let raw_str = build_data_array_f64(blocks, fee_fn);
+    let raw = data_array_value(&raw_str);
 
-    let raw: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(vals.iter())
-        .map(|(b, v)| dp(b, *v))
-        .collect();
-
+    let vals: Vec<f64> = blocks.iter().map(|b| fee_fn(b)).collect();
     let ma = moving_average(&vals, 144);
-    let ma_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(ma.iter())
-        .map(|(b, m)| {
-            json!([
-                ts_ms(b.timestamp),
-                m.map(|v| json!(v)).unwrap_or(json!(null))
-            ])
-        })
-        .collect();
+    let ma_str = build_ma_array(blocks, &ma);
+    let ma_data = data_array_value(&ma_str);
 
     let has_ma = show_ma(blocks.len());
 
@@ -269,27 +259,14 @@ pub fn median_fee_rate_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Median Fee Rate");
     }
 
-    let vals: Vec<f64> = blocks
-        .iter()
-        .map(|b| (b.median_fee_rate * 100.0).round() / 100.0)
-        .collect();
-    let raw: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(vals.iter())
-        .map(|(b, v)| dp(b, *v))
-        .collect();
+    let rate_fn = |b: &BlockSummary| (b.median_fee_rate * 100.0).round() / 100.0;
+    let raw_str = build_data_array_f64(blocks, rate_fn);
+    let raw = data_array_value(&raw_str);
 
+    let vals: Vec<f64> = blocks.iter().map(|b| rate_fn(b)).collect();
     let ma = moving_average(&vals, 144);
-    let ma_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(ma.iter())
-        .map(|(b, m)| {
-            json!([
-                ts_ms(b.timestamp),
-                m.map(|v| json!(v)).unwrap_or(json!(null))
-            ])
-        })
-        .collect();
+    let ma_str = build_ma_array(blocks, &ma);
+    let ma_data = data_array_value(&ma_str);
 
     let has_ma = show_ma(blocks.len());
 
@@ -387,20 +364,14 @@ pub fn fee_rate_band_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Fee Rate Band");
     }
 
-    let p10_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .map(|b| dp(b, (b.fee_rate_p10 * 100.0).round() / 100.0))
-        .collect();
+    let p10_str = build_data_array_f64(blocks, |b| (b.fee_rate_p10 * 100.0).round() / 100.0);
+    let p10_data = data_array_value(&p10_str);
 
-    let median_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .map(|b| dp(b, (b.median_fee_rate * 100.0).round() / 100.0))
-        .collect();
+    let median_str = build_data_array_f64(blocks, |b| (b.median_fee_rate * 100.0).round() / 100.0);
+    let median_data = data_array_value(&median_str);
 
-    let p90_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .map(|b| dp(b, (b.fee_rate_p90 * 100.0).round() / 100.0))
-        .collect();
+    let p90_str = build_data_array_f64(blocks, |b| (b.fee_rate_p90 * 100.0).round() / 100.0);
+    let p90_data = data_array_value(&p90_str);
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
@@ -484,23 +455,17 @@ pub fn subsidy_vs_fees_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Subsidy vs Fees");
     }
 
-    let subsidy_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .map(|b| {
-            let sub = block_subsidy(b.height) as f64 / 100_000_000.0;
-            let rounded = (sub * 1000.0).round() / 1000.0;
-            dp(b, rounded)
-        })
-        .collect();
+    let subsidy_str = build_data_array_f64(blocks, |b| {
+        let sub = block_subsidy(b.height) as f64 / 100_000_000.0;
+        (sub * 1000.0).round() / 1000.0
+    });
+    let subsidy_data = data_array_value(&subsidy_str);
 
-    let fee_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .map(|b| {
-            let fee = b.total_fees as f64 / 100_000_000.0;
-            let rounded = (fee * 1000.0).round() / 1000.0;
-            dp(b, rounded)
-        })
-        .collect();
+    let fee_str = build_data_array_f64(blocks, |b| {
+        let fee = b.total_fees as f64 / 100_000_000.0;
+        (fee * 1000.0).round() / 1000.0
+    });
+    let fee_data = data_array_value(&fee_str);
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
@@ -594,32 +559,22 @@ pub fn fee_revenue_share_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Fee Revenue Share");
     }
 
-    let raw_data: Vec<f64> = blocks
-        .iter()
-        .map(|b| {
-            let subsidy = block_subsidy(b.height) as f64;
-            let fees = b.total_fees as f64;
-            if subsidy + fees > 0.0 {
-                fees / (subsidy + fees) * 100.0
-            } else {
-                0.0
-            }
-        })
-        .collect();
+    let share_fn = |b: &BlockSummary| {
+        let subsidy = block_subsidy(b.height) as f64;
+        let fees = b.total_fees as f64;
+        if subsidy + fees > 0.0 {
+            round(fees / (subsidy + fees) * 100.0, 2)
+        } else {
+            0.0
+        }
+    };
+    let data_str = build_data_array_f64(blocks, share_fn);
+    let data = data_array_value(&data_str);
 
+    let raw_data: Vec<f64> = blocks.iter().map(|b| share_fn(b)).collect();
     let ma = moving_average(&raw_data, 144);
-
-    let data: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(raw_data.iter())
-        .map(|(b, &v)| dp(b, round(v, 2)))
-        .collect();
-
-    let ma_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(ma.iter())
-        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))]))
-        .collect();
+    let ma_str = build_ma_array(blocks, &ma);
+    let ma_data = data_array_value(&ma_str);
 
     let mut series = vec![json!({
         "name": "Fee Share", "type": "line", "data": data,
@@ -697,23 +652,14 @@ pub fn btc_volume_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("BTC Transferred Volume");
     }
 
-    let raw: Vec<f64> = blocks
-        .iter()
-        .map(|b| b.total_output_value as f64 / 100_000_000.0)
-        .collect();
+    let vol_fn = |b: &BlockSummary| round(b.total_output_value as f64 / 100_000_000.0, 2);
+    let data_str = build_data_array_f64(blocks, vol_fn);
+    let data = data_array_value(&data_str);
+
+    let raw: Vec<f64> = blocks.iter().map(|b| vol_fn(b)).collect();
     let ma = moving_average(&raw, 144);
-
-    let data: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(raw.iter())
-        .map(|(b, &v)| dp(b, round(v, 2)))
-        .collect();
-
-    let ma_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(ma.iter())
-        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))]))
-        .collect();
+    let ma_str = build_ma_array(blocks, &ma);
+    let ma_data = data_array_value(&ma_str);
 
     let mut series = vec![json!({
         "name": "BTC Volume", "type": "bar", "data": data,

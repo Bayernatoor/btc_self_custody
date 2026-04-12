@@ -4,6 +4,7 @@
 
 use super::*;
 use serde_json::json;
+use std::fmt::Write;
 
 /// Address type evolution - stacked area (per-block).
 pub fn address_type_chart(blocks: &[BlockSummary]) -> serde_json::Value {
@@ -11,8 +12,9 @@ pub fn address_type_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Address Types");
     }
 
-    let make_data = |f: fn(&BlockSummary) -> u64| -> Vec<serde_json::Value> {
-        blocks.iter().map(|b| dp(b, f(b))).collect()
+    let make_data = |f: fn(&BlockSummary) -> u64| -> serde_json::Value {
+        let s = build_data_array_i64(blocks, |b| f(b) as i64);
+        data_array_value(&s)
     };
 
     build_option(json!({
@@ -64,33 +66,20 @@ pub fn witness_share_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Witness Data Share");
     }
 
-    let vals: Vec<f64> = blocks
-        .iter()
-        .map(|b| {
-            if b.size > 0 {
-                (b.witness_bytes as f64 / b.size as f64 * 100.0 * 100.0).round()
-                    / 100.0
-            } else {
-                0.0
-            }
-        })
-        .collect();
-    let raw: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(vals.iter())
-        .map(|(b, v)| dp(b, v))
-        .collect();
+    let witness_fn = |b: &BlockSummary| {
+        if b.size > 0 {
+            (b.witness_bytes as f64 / b.size as f64 * 100.0 * 100.0).round()
+                / 100.0
+        } else {
+            0.0
+        }
+    };
+    let raw_str = build_data_array_f64(blocks, witness_fn);
+    let raw = data_array_value(&raw_str);
+    let vals: Vec<f64> = blocks.iter().map(|b| witness_fn(b)).collect();
     let ma = moving_average(&vals, 144);
-    let ma_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(ma.iter())
-        .map(|(b, m)| {
-            json!([
-                ts_ms(b.timestamp),
-                m.map(|v| json!(v)).unwrap_or(json!(null))
-            ])
-        })
-        .collect();
+    let ma_str = build_ma_array(blocks, &ma);
+    let ma_data = data_array_value(&ma_str);
     let has_ma = show_ma(blocks.len());
 
     let mut series = vec![json!({
@@ -162,58 +151,25 @@ pub fn batching_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Transaction Batching");
     }
 
-    let out_per_tx: Vec<f64> = blocks
-        .iter()
-        .map(|b| {
-            if b.tx_count > 0 {
-                round(b.output_count as f64 / b.tx_count as f64, 2)
-            } else {
-                0.0
-            }
-        })
-        .collect();
-    let in_per_tx: Vec<f64> = blocks
-        .iter()
-        .map(|b| {
-            if b.tx_count > 0 {
-                round(b.input_count as f64 / b.tx_count as f64, 2)
-            } else {
-                0.0
-            }
-        })
-        .collect();
-    let out_raw: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(out_per_tx.iter())
-        .map(|(b, v)| dp(b, v))
-        .collect();
-    let in_raw: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(in_per_tx.iter())
-        .map(|(b, v)| dp(b, v))
-        .collect();
+    let out_fn = |b: &BlockSummary| {
+        if b.tx_count > 0 { round(b.output_count as f64 / b.tx_count as f64, 2) } else { 0.0 }
+    };
+    let in_fn = |b: &BlockSummary| {
+        if b.tx_count > 0 { round(b.input_count as f64 / b.tx_count as f64, 2) } else { 0.0 }
+    };
+    let out_raw_str = build_data_array_f64(blocks, out_fn);
+    let out_raw = data_array_value(&out_raw_str);
+    let in_raw_str = build_data_array_f64(blocks, in_fn);
+    let in_raw = data_array_value(&in_raw_str);
+
+    let out_per_tx: Vec<f64> = blocks.iter().map(|b| out_fn(b)).collect();
+    let in_per_tx: Vec<f64> = blocks.iter().map(|b| in_fn(b)).collect();
     let out_ma = moving_average(&out_per_tx, 144);
     let in_ma = moving_average(&in_per_tx, 144);
-    let out_ma_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(out_ma.iter())
-        .map(|(b, m)| {
-            json!([
-                ts_ms(b.timestamp),
-                m.map(|v| json!(v)).unwrap_or(json!(null))
-            ])
-        })
-        .collect();
-    let in_ma_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(in_ma.iter())
-        .map(|(b, m)| {
-            json!([
-                ts_ms(b.timestamp),
-                m.map(|v| json!(v)).unwrap_or(json!(null))
-            ])
-        })
-        .collect();
+    let out_ma_str = build_ma_array(blocks, &out_ma);
+    let out_ma_data = data_array_value(&out_ma_str);
+    let in_ma_str = build_ma_array(blocks, &in_ma);
+    let in_ma_data = data_array_value(&in_ma_str);
     let has_ma = show_ma(blocks.len());
 
     let mut series = vec![
@@ -299,26 +255,21 @@ pub fn address_type_pct_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Address Type Share");
     }
 
-    let pct = |count: u64, total: u64| -> f64 {
-        if total > 0 {
-            round(count as f64 / total as f64 * 100.0, 2)
-        } else {
-            0.0
-        }
-    };
-    let make_pct = |f: fn(&BlockSummary) -> u64| -> Vec<serde_json::Value> {
-        blocks
-            .iter()
-            .map(|b| {
-                let total = b.p2pkh_count
-                    + b.p2sh_count
-                    + b.p2wpkh_count
-                    + b.p2wsh_count
-                    + b.p2tr_count
-                    + b.p2pk_count;
-                dp(b, pct(f(b), total))
-            })
-            .collect()
+    let make_pct = |f: fn(&BlockSummary) -> u64| -> serde_json::Value {
+        let s = build_data_array_f64(blocks, |b| {
+            let total = b.p2pkh_count
+                + b.p2sh_count
+                + b.p2wpkh_count
+                + b.p2wsh_count
+                + b.p2tr_count
+                + b.p2pk_count;
+            if total > 0 {
+                round(f(b) as f64 / total as f64 * 100.0, 2)
+            } else {
+                0.0
+            }
+        });
+        data_array_value(&s)
     };
 
     build_option(json!({
@@ -408,28 +359,21 @@ pub fn rbf_chart(blocks: &[BlockSummary]) -> serde_json::Value {
             }
         })
         .collect();
-    let raw: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(vals.iter())
-        .map(|(b, v)| {
-            if b.timestamp < BIP125_TIMESTAMP {
-                json!([ts_ms(b.timestamp), null])
-            } else {
-                dp(b, v)
-            }
-        })
-        .collect();
+    let mut raw_buf = String::with_capacity(blocks.len() * 30);
+    raw_buf.push('[');
+    for (i, (b, v)) in blocks.iter().zip(vals.iter()).enumerate() {
+        if i > 0 { raw_buf.push(','); }
+        if b.timestamp < BIP125_TIMESTAMP {
+            let _ = write!(raw_buf, "[{},null]", ts_ms(b.timestamp));
+        } else {
+            let _ = write!(raw_buf, "[{},{},{}]", ts_ms(b.timestamp), v, b.height);
+        }
+    }
+    raw_buf.push(']');
+    let raw = data_array_value(&raw_buf);
     let ma = moving_average(&vals, 144);
-    let ma_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(ma.iter())
-        .map(|(b, m)| {
-            json!([
-                ts_ms(b.timestamp),
-                m.map(|v| json!(v)).unwrap_or(json!(null))
-            ])
-        })
-        .collect();
+    let ma_str = build_ma_array(blocks, &ma);
+    let ma_data = data_array_value(&ma_str);
     let has_ma = show_ma(blocks.len());
 
     let mut series = vec![json!({
@@ -514,10 +458,10 @@ pub fn utxo_flow_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("UTXO Flow");
     }
 
-    let inputs: Vec<serde_json::Value> =
-        blocks.iter().map(|b| dp(b, b.input_count)).collect();
-    let outputs: Vec<serde_json::Value> =
-        blocks.iter().map(|b| dp(b, b.output_count)).collect();
+    let inputs_str = build_data_array_i64(blocks, |b| b.input_count as i64);
+    let inputs = data_array_value(&inputs_str);
+    let outputs_str = build_data_array_i64(blocks, |b| b.output_count as i64);
+    let outputs = data_array_value(&outputs_str);
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
@@ -563,23 +507,13 @@ pub fn utxo_growth_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("UTXO Growth Rate");
     }
 
-    let raw: Vec<f64> = blocks
-        .iter()
-        .map(|b| b.output_count as f64 - b.input_count as f64)
-        .collect();
+    let data_str = build_data_array_i64(blocks, |b| b.output_count as i64 - b.input_count as i64);
+    let data = data_array_value(&data_str);
+
+    let raw: Vec<f64> = blocks.iter().map(|b| b.output_count as f64 - b.input_count as f64).collect();
     let ma = moving_average(&raw, 144);
-
-    let data: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(raw.iter())
-        .map(|(b, &v)| dp(b, v as i64))
-        .collect();
-
-    let ma_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(ma.iter())
-        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))]))
-        .collect();
+    let ma_str = build_ma_array(blocks, &ma);
+    let ma_data = data_array_value(&ma_str);
 
     let mut series = vec![json!({
         "name": "Net UTXO Change", "type": "bar", "data": data,
@@ -637,29 +571,20 @@ pub fn tx_density_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Transaction Density");
     }
 
-    let raw: Vec<f64> = blocks
-        .iter()
-        .map(|b| {
-            if b.size > 0 {
-                b.tx_count as f64 / (b.size as f64 / 1000.0)
-            } else {
-                0.0
-            }
-        })
-        .collect();
+    let density_fn = |b: &BlockSummary| {
+        if b.size > 0 {
+            round(b.tx_count as f64 / (b.size as f64 / 1000.0), 2)
+        } else {
+            0.0
+        }
+    };
+    let data_str = build_data_array_f64(blocks, density_fn);
+    let data = data_array_value(&data_str);
+
+    let raw: Vec<f64> = blocks.iter().map(|b| density_fn(b)).collect();
     let ma = moving_average(&raw, 144);
-
-    let data: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(raw.iter())
-        .map(|(b, &v)| dp(b, round(v, 2)))
-        .collect();
-
-    let ma_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(ma.iter())
-        .map(|(b, m)| json!([ts_ms(b.timestamp), m.map(|v| json!(v)).unwrap_or(json!(null))]))
-        .collect();
+    let ma_str = build_ma_array(blocks, &ma);
+    let ma_data = data_array_value(&ma_str);
 
     let mut series = vec![json!({
         "name": "TX/KB", "type": "line", "data": data,

@@ -3,6 +3,7 @@
 
 use super::*;
 use serde_json::json;
+use std::fmt::Write;
 
 /// Block size line chart with moving average.
 pub fn block_size_chart(blocks: &[BlockSummary]) -> serde_json::Value {
@@ -10,27 +11,15 @@ pub fn block_size_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Block Size");
     }
 
-    let raw_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .map(|b| dp(b, round(b.size as f64 / 1_000_000.0, 3)))
-        .collect();
-    let vals: Vec<f64> = blocks
-        .iter()
-        .map(|b| round(b.size as f64 / 1_000_000.0, 3))
-        .collect();
-    let ma = moving_average(&vals, 144);
-    let ma_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(ma.iter())
-        .map(|(b, m)| {
-            json!([
-                ts_ms(b.timestamp),
-                m.map(|v| json!(v)).unwrap_or(json!(null))
-            ])
-        })
-        .collect();
+    let size_fn = |b: &BlockSummary| round(b.size as f64 / 1_000_000.0, 3);
+    let raw_str = build_data_array_f64(blocks, size_fn);
+    let raw_data = data_array_value(&raw_str);
 
-    let x_axis = x_axis_for(false, &[]);
+    let vals: Vec<f64> = blocks.iter().map(|b| size_fn(b)).collect();
+    let ma = moving_average(&vals, 144);
+    let ma_str = build_ma_array(blocks, &ma);
+    let ma_data = data_array_value(&ma_str);
+
     let has_ma = show_ma(blocks.len());
 
     let mut series = vec![json!({
@@ -48,7 +37,7 @@ pub fn block_size_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     }
 
     build_option(json!({
-        "xAxis": x_axis,
+        "xAxis": x_axis_for(false, &[]),
         "yAxis": y_axis("MB"),
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
@@ -103,20 +92,12 @@ pub fn tx_count_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Transaction Count");
     }
 
-    let raw: Vec<serde_json::Value> =
-        blocks.iter().map(|b| dp(b, b.tx_count)).collect();
+    let raw_str = build_data_array_i64(blocks, |b| b.tx_count as i64);
+    let raw = data_array_value(&raw_str);
     let vals: Vec<f64> = blocks.iter().map(|b| b.tx_count as f64).collect();
     let ma = moving_average(&vals, 144);
-    let ma_series: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(ma.iter())
-        .map(|(b, m)| {
-            json!([
-                ts_ms(b.timestamp),
-                m.map(|v| json!(v)).unwrap_or(json!(null))
-            ])
-        })
-        .collect();
+    let ma_str = build_ma_array(blocks, &ma);
+    let ma_series = data_array_value(&ma_str);
 
     let has_ma = show_ma(blocks.len());
 
@@ -205,23 +186,18 @@ pub fn tps_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let mut all_vals = vec![0.0];
     all_vals.extend_from_slice(&vals);
 
-    let raw: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(all_vals.iter())
-        .map(|(b, v)| dp(b, *v))
-        .collect();
+    let mut raw_buf = String::with_capacity(blocks.len() * 30);
+    raw_buf.push('[');
+    for (i, (b, v)) in blocks.iter().zip(all_vals.iter()).enumerate() {
+        if i > 0 { raw_buf.push(','); }
+        let _ = write!(raw_buf, "[{},{},{}]", ts_ms(b.timestamp), v, b.height);
+    }
+    raw_buf.push(']');
+    let raw = data_array_value(&raw_buf);
 
     let ma = moving_average(&all_vals, 144);
-    let ma_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(ma.iter())
-        .map(|(b, m)| {
-            json!([
-                ts_ms(b.timestamp),
-                m.map(|v| json!(v)).unwrap_or(json!(null))
-            ])
-        })
-        .collect();
+    let ma_str = build_ma_array(blocks, &ma);
+    let ma_data = data_array_value(&ma_str);
 
     let has_ma = show_ma(blocks.len());
 
@@ -296,8 +272,8 @@ pub fn difficulty_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Difficulty");
     }
 
-    let raw: Vec<serde_json::Value> =
-        blocks.iter().map(|b| dp(b, b.difficulty / 1e12)).collect();
+    let raw_str = build_data_array_f64(blocks, |b| b.difficulty / 1e12);
+    let raw = data_array_value(&raw_str);
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
@@ -347,9 +323,9 @@ pub fn block_interval_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Block Interval");
     }
 
-    let mut dots: Vec<serde_json::Value> = Vec::with_capacity(blocks.len() - 1);
     let mut interval_vals: Vec<f64> = Vec::with_capacity(blocks.len() - 1);
-
+    let mut dots_buf = String::with_capacity((blocks.len() - 1) * 30);
+    dots_buf.push('[');
     for i in 1..blocks.len() {
         let mins = ((blocks[i].timestamp as f64
             - blocks[i - 1].timestamp as f64)
@@ -357,21 +333,16 @@ pub fn block_interval_chart(blocks: &[BlockSummary]) -> serde_json::Value {
             * 100.0)
             .round()
             / 100.0;
-        dots.push(json!([ts_ms(blocks[i].timestamp), mins, blocks[i].height]));
+        if i > 1 { dots_buf.push(','); }
+        let _ = write!(dots_buf, "[{},{},{}]", ts_ms(blocks[i].timestamp), mins, blocks[i].height);
         interval_vals.push(mins);
     }
+    dots_buf.push(']');
+    let dots = data_array_value(&dots_buf);
 
     let ma = moving_average(&interval_vals, 144);
-    let ma_series: Vec<serde_json::Value> = blocks[1..]
-        .iter()
-        .zip(ma.iter())
-        .map(|(b, m)| {
-            json!([
-                ts_ms(b.timestamp),
-                m.map(|v| json!(v)).unwrap_or(json!(null))
-            ])
-        })
-        .collect();
+    let ma_str = build_ma_array(&blocks[1..], &ma);
+    let ma_series = data_array_value(&ma_str);
 
     let has_ma = show_ma(interval_vals.len());
 
@@ -470,30 +441,14 @@ pub fn weight_utilization_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Weight Utilization");
     }
 
-    let vals: Vec<f64> = blocks
-        .iter()
-        .map(|b| {
-            (b.weight as f64 / 4_000_000.0 * 100.0 * 1000.0).round() / 1000.0
-        })
-        .collect();
+    let weight_fn = |b: &BlockSummary| (b.weight as f64 / 4_000_000.0 * 100.0 * 1000.0).round() / 1000.0;
+    let raw_str = build_data_array_f64(blocks, weight_fn);
+    let raw = data_array_value(&raw_str);
 
-    let raw: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(vals.iter())
-        .map(|(b, v)| dp(b, v))
-        .collect();
-
+    let vals: Vec<f64> = blocks.iter().map(|b| weight_fn(b)).collect();
     let ma = moving_average(&vals, 144);
-    let ma_series: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(ma.iter())
-        .map(|(b, m)| {
-            json!([
-                ts_ms(b.timestamp),
-                m.map(|v| json!(v)).unwrap_or(json!(null))
-            ])
-        })
-        .collect();
+    let ma_str = build_ma_array(blocks, &ma);
+    let ma_series = data_array_value(&ma_str);
 
     let has_ma = show_ma(blocks.len());
 
@@ -569,34 +524,20 @@ pub fn avg_tx_size_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Avg Transaction Size");
     }
 
-    let vals: Vec<f64> = blocks
-        .iter()
-        .map(|b| {
-            if b.tx_count > 0 {
-                (b.size as f64 / b.tx_count as f64 * 1000.0).round() / 1000.0
-            } else {
-                0.0
-            }
-        })
-        .collect();
+    let avg_fn = |b: &BlockSummary| {
+        if b.tx_count > 0 {
+            (b.size as f64 / b.tx_count as f64 * 1000.0).round() / 1000.0
+        } else {
+            0.0
+        }
+    };
+    let raw_str = build_data_array_f64(blocks, avg_fn);
+    let raw = data_array_value(&raw_str);
 
-    let raw: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(vals.iter())
-        .map(|(b, v)| dp(b, v))
-        .collect();
-
+    let vals: Vec<f64> = blocks.iter().map(|b| avg_fn(b)).collect();
     let ma = moving_average(&vals, 144);
-    let ma_series: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(ma.iter())
-        .map(|(b, m)| {
-            json!([
-                ts_ms(b.timestamp),
-                m.map(|v| json!(v)).unwrap_or(json!(null))
-            ])
-        })
-        .collect();
+    let ma_str = build_ma_array(blocks, &ma);
+    let ma_series = data_array_value(&ma_str);
 
     let has_ma = show_ma(blocks.len());
 
@@ -801,28 +742,14 @@ pub fn largest_tx_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Largest Transaction");
     }
 
-    let vals: Vec<f64> = blocks
-        .iter()
-        .map(|b| b.largest_tx_size as f64 / 1_000.0) // KB
-        .collect();
+    let size_fn = |b: &BlockSummary| b.largest_tx_size as f64 / 1_000.0;
+    let raw_str = build_data_array_f64(blocks, size_fn);
+    let raw = data_array_value(&raw_str);
 
-    let raw: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(vals.iter())
-        .map(|(b, v)| dp(b, *v))
-        .collect();
-
+    let vals: Vec<f64> = blocks.iter().map(|b| size_fn(b)).collect();
     let ma = moving_average(&vals, 144);
-    let ma_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(ma.iter())
-        .map(|(b, m)| {
-            json!([
-                ts_ms(b.timestamp),
-                m.map(|v| json!(v)).unwrap_or(json!(null))
-            ])
-        })
-        .collect();
+    let ma_str = build_ma_array(blocks, &ma);
+    let ma_data = data_array_value(&ma_str);
 
     let has_ma = show_ma(blocks.len());
 

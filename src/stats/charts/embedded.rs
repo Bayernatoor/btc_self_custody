@@ -5,6 +5,7 @@
 
 use super::*;
 use serde_json::json;
+use std::fmt::Write;
 
 const INSCRIPTION_COLOR: &str = "#06b6d4"; // Cyan for inscriptions
 
@@ -14,14 +15,14 @@ pub fn op_return_count_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Embedded Data Count");
     }
 
-    let runes: Vec<serde_json::Value> =
-        blocks.iter().map(|b| dp(b, b.runes_count)).collect();
-    let omni: Vec<serde_json::Value> =
-        blocks.iter().map(|b| dp(b, b.omni_count)).collect();
-    let xcp: Vec<serde_json::Value> =
-        blocks.iter().map(|b| dp(b, b.counterparty_count)).collect();
-    let other: Vec<serde_json::Value> =
-        blocks.iter().map(|b| dp(b, b.data_carrier_count)).collect();
+    let runes_str = build_data_array_i64(blocks, |b| b.runes_count as i64);
+    let runes = data_array_value(&runes_str);
+    let omni_str = build_data_array_i64(blocks, |b| b.omni_count as i64);
+    let omni = data_array_value(&omni_str);
+    let xcp_str = build_data_array_i64(blocks, |b| b.counterparty_count as i64);
+    let xcp = data_array_value(&xcp_str);
+    let other_str = build_data_array_i64(blocks, |b| b.data_carrier_count as i64);
+    let other = data_array_value(&other_str);
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
@@ -89,14 +90,14 @@ pub fn op_return_bytes_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Embedded Data Volume");
     }
 
-    let runes: Vec<serde_json::Value> =
-        blocks.iter().map(|b| dp(b, b.runes_bytes)).collect();
-    let omni: Vec<serde_json::Value> =
-        blocks.iter().map(|b| dp(b, b.omni_bytes)).collect();
-    let xcp: Vec<serde_json::Value> =
-        blocks.iter().map(|b| dp(b, b.counterparty_bytes)).collect();
-    let other: Vec<serde_json::Value> =
-        blocks.iter().map(|b| dp(b, b.data_carrier_bytes)).collect();
+    let runes_str = build_data_array_i64(blocks, |b| b.runes_bytes as i64);
+    let runes = data_array_value(&runes_str);
+    let omni_str = build_data_array_i64(blocks, |b| b.omni_bytes as i64);
+    let omni = data_array_value(&omni_str);
+    let xcp_str = build_data_array_i64(blocks, |b| b.counterparty_bytes as i64);
+    let xcp = data_array_value(&xcp_str);
+    let other_str = build_data_array_i64(blocks, |b| b.data_carrier_bytes as i64);
+    let other = data_array_value(&other_str);
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
@@ -172,34 +173,14 @@ pub fn runes_pct_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         }
     };
 
-    let runes_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .map(|b| {
-            let total = b.op_return_count;
-            dp(b, pct(b.runes_count, total))
-        })
-        .collect();
-    let omni_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .map(|b| {
-            let total = b.op_return_count;
-            dp(b, pct(b.omni_count, total))
-        })
-        .collect();
-    let xcp_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .map(|b| {
-            let total = b.op_return_count;
-            dp(b, pct(b.counterparty_count, total))
-        })
-        .collect();
-    let other_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .map(|b| {
-            let total = b.op_return_count;
-            dp(b, pct(b.data_carrier_count, total))
-        })
-        .collect();
+    let runes_str = build_data_array_f64(blocks, |b| pct(b.runes_count, b.op_return_count));
+    let runes_data = data_array_value(&runes_str);
+    let omni_str = build_data_array_f64(blocks, |b| pct(b.omni_count, b.op_return_count));
+    let omni_data = data_array_value(&omni_str);
+    let xcp_str = build_data_array_f64(blocks, |b| pct(b.counterparty_count, b.op_return_count));
+    let xcp_data = data_array_value(&xcp_str);
+    let other_str = build_data_array_f64(blocks, |b| pct(b.data_carrier_count, b.op_return_count));
+    let other_data = data_array_value(&other_str);
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
@@ -279,37 +260,23 @@ pub fn op_return_block_share_chart(
         return no_data_chart("Embedded Data Block Share");
     }
 
-    let vals: Vec<f64> = blocks
-        .iter()
-        .map(|b| {
-            if b.size > 0 {
-                ((b.op_return_bytes as f64 / b.size as f64 * 100.0 * 100.0)
-                    .round()
-                    / 100.0)
-                    .min(100.0)
-            } else {
-                0.0
-            }
-        })
-        .collect();
+    let share_fn = |b: &BlockSummary| {
+        if b.size > 0 {
+            ((b.op_return_bytes as f64 / b.size as f64 * 100.0 * 100.0)
+                .round()
+                / 100.0)
+                .min(100.0)
+        } else {
+            0.0
+        }
+    };
+    let raw_str = build_data_array_f64(blocks, share_fn);
+    let raw = data_array_value(&raw_str);
 
-    let raw: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(vals.iter())
-        .map(|(b, v)| dp(b, v))
-        .collect();
-
+    let vals: Vec<f64> = blocks.iter().map(|b| share_fn(b)).collect();
     let ma = moving_average(&vals, 144);
-    let ma_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(ma.iter())
-        .map(|(b, m)| {
-            json!([
-                ts_ms(b.timestamp),
-                m.map(|v| json!(v)).unwrap_or(json!(null))
-            ])
-        })
-        .collect();
+    let ma_str = build_ma_array(blocks, &ma);
+    let ma_data = data_array_value(&ma_str);
 
     let has_ma = show_ma(blocks.len());
 
@@ -397,24 +364,12 @@ pub fn inscription_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Inscriptions");
     }
 
-    let vals: Vec<f64> =
-        blocks.iter().map(|b| b.inscription_count as f64).collect();
-    let raw: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(vals.iter())
-        .map(|(b, v)| dp(b, v))
-        .collect();
+    let raw_str = build_data_array_f64(blocks, |b| b.inscription_count as f64);
+    let raw = data_array_value(&raw_str);
+    let vals: Vec<f64> = blocks.iter().map(|b| b.inscription_count as f64).collect();
     let ma = moving_average(&vals, 144);
-    let ma_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(ma.iter())
-        .map(|(b, m)| {
-            json!([
-                ts_ms(b.timestamp),
-                m.map(|v| json!(v)).unwrap_or(json!(null))
-            ])
-        })
-        .collect();
+    let ma_str = build_ma_array(blocks, &ma);
+    let ma_data = data_array_value(&ma_str);
     let has_ma = show_ma(blocks.len());
 
     let mut series = vec![json!({
@@ -482,35 +437,22 @@ pub fn inscription_share_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Inscription Block Share");
     }
 
-    let vals: Vec<f64> = blocks
-        .iter()
-        .map(|b| {
-            if b.size > 0 {
-                ((b.inscription_bytes as f64 / b.size as f64 * 100.0 * 100.0)
-                    .round()
-                    / 100.0)
-                    .min(100.0)
-            } else {
-                0.0
-            }
-        })
-        .collect();
-    let raw: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(vals.iter())
-        .map(|(b, v)| dp(b, v))
-        .collect();
+    let insc_fn = |b: &BlockSummary| {
+        if b.size > 0 {
+            ((b.inscription_bytes as f64 / b.size as f64 * 100.0 * 100.0)
+                .round()
+                / 100.0)
+                .min(100.0)
+        } else {
+            0.0
+        }
+    };
+    let raw_str = build_data_array_f64(blocks, insc_fn);
+    let raw = data_array_value(&raw_str);
+    let vals: Vec<f64> = blocks.iter().map(|b| insc_fn(b)).collect();
     let ma = moving_average(&vals, 144);
-    let ma_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(ma.iter())
-        .map(|(b, m)| {
-            json!([
-                ts_ms(b.timestamp),
-                m.map(|v| json!(v)).unwrap_or(json!(null))
-            ])
-        })
-        .collect();
+    let ma_str = build_ma_array(blocks, &ma);
+    let ma_data = data_array_value(&ma_str);
     let has_ma = show_ma(blocks.len());
 
     let mut series = vec![json!({
@@ -596,37 +538,31 @@ pub fn all_embedded_share_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("All Embedded Data Share");
     }
 
-    let op_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .map(|b| {
-            let v = if b.size > 0 {
-                round(b.op_return_bytes as f64 / b.size as f64 * 100.0, 2)
-            } else {
-                0.0
-            };
-            dp(b, v)
-        })
-        .collect();
+    let op_str = build_data_array_f64(blocks, |b| {
+        if b.size > 0 {
+            round(b.op_return_bytes as f64 / b.size as f64 * 100.0, 2)
+        } else {
+            0.0
+        }
+    });
+    let op_data = data_array_value(&op_str);
     // Inscriptions launched ~block 774,000 (Jan 2023). Emit null before that to avoid
     // ECharts rendering a ghost area fill at the zero baseline across years of no data.
-    let insc_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .map(|b| {
-            if b.height < 774_000 {
-                json!([ts_ms(b.timestamp), null, b.height])
-            } else if b.size > 0 {
-                dp(
-                    b,
-                    round(
-                        b.inscription_bytes as f64 / b.size as f64 * 100.0,
-                        2,
-                    ),
-                )
-            } else {
-                dp(b, 0.0)
-            }
-        })
-        .collect();
+    let mut insc_buf = String::with_capacity(blocks.len() * 30);
+    insc_buf.push('[');
+    for (i, b) in blocks.iter().enumerate() {
+        if i > 0 { insc_buf.push(','); }
+        if b.height < 774_000 {
+            let _ = write!(insc_buf, "[{},null,{}]", ts_ms(b.timestamp), b.height);
+        } else if b.size > 0 {
+            let _ = write!(insc_buf, "[{},{},{}]", ts_ms(b.timestamp),
+                round(b.inscription_bytes as f64 / b.size as f64 * 100.0, 2), b.height);
+        } else {
+            let _ = write!(insc_buf, "[{},0,{}]", ts_ms(b.timestamp), b.height);
+        }
+    }
+    insc_buf.push(']');
+    let insc_data = data_array_value(&insc_buf);
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
@@ -729,21 +665,19 @@ pub fn unified_embedded_count_chart(
         return no_data_chart("All Embedded Data Count");
     }
 
-    let runes: Vec<serde_json::Value> =
-        blocks.iter().map(|b| dp(b, b.runes_count)).collect();
-    let omni: Vec<serde_json::Value> =
-        blocks.iter().map(|b| dp(b, b.omni_count)).collect();
-    let xcp: Vec<serde_json::Value> =
-        blocks.iter().map(|b| dp(b, b.counterparty_count)).collect();
-    let other_op: Vec<serde_json::Value> =
-        blocks.iter().map(|b| dp(b, b.data_carrier_count)).collect();
-    // BRC-20 is a subset of inscriptions — split them to avoid double-counting
-    let inscriptions: Vec<serde_json::Value> = blocks
-        .iter()
-        .map(|b| dp(b, b.inscription_count.saturating_sub(b.brc20_count)))
-        .collect();
-    let brc20: Vec<serde_json::Value> =
-        blocks.iter().map(|b| dp(b, b.brc20_count)).collect();
+    let runes_str = build_data_array_i64(blocks, |b| b.runes_count as i64);
+    let runes = data_array_value(&runes_str);
+    let omni_str = build_data_array_i64(blocks, |b| b.omni_count as i64);
+    let omni = data_array_value(&omni_str);
+    let xcp_str = build_data_array_i64(blocks, |b| b.counterparty_count as i64);
+    let xcp = data_array_value(&xcp_str);
+    let other_op_str = build_data_array_i64(blocks, |b| b.data_carrier_count as i64);
+    let other_op = data_array_value(&other_op_str);
+    // BRC-20 is a subset of inscriptions -- split them to avoid double-counting
+    let inscriptions_str = build_data_array_i64(blocks, |b| b.inscription_count.saturating_sub(b.brc20_count) as i64);
+    let inscriptions = data_array_value(&inscriptions_str);
+    let brc20_str = build_data_array_i64(blocks, |b| b.brc20_count as i64);
+    let brc20 = data_array_value(&brc20_str);
     // Stamps removed — detection requires Counterparty protocol decoding (TODO)
 
     build_option(json!({
@@ -830,16 +764,16 @@ pub fn unified_embedded_volume_chart(
         return no_data_chart("All Embedded Data Volume");
     }
 
-    let runes: Vec<serde_json::Value> =
-        blocks.iter().map(|b| dp(b, b.runes_bytes)).collect();
-    let omni: Vec<serde_json::Value> =
-        blocks.iter().map(|b| dp(b, b.omni_bytes)).collect();
-    let xcp: Vec<serde_json::Value> =
-        blocks.iter().map(|b| dp(b, b.counterparty_bytes)).collect();
-    let other_op: Vec<serde_json::Value> =
-        blocks.iter().map(|b| dp(b, b.data_carrier_bytes)).collect();
-    let inscriptions: Vec<serde_json::Value> =
-        blocks.iter().map(|b| dp(b, b.inscription_bytes)).collect();
+    let runes_str = build_data_array_i64(blocks, |b| b.runes_bytes as i64);
+    let runes = data_array_value(&runes_str);
+    let omni_str = build_data_array_i64(blocks, |b| b.omni_bytes as i64);
+    let omni = data_array_value(&omni_str);
+    let xcp_str = build_data_array_i64(blocks, |b| b.counterparty_bytes as i64);
+    let xcp = data_array_value(&xcp_str);
+    let other_op_str = build_data_array_i64(blocks, |b| b.data_carrier_bytes as i64);
+    let other_op = data_array_value(&other_op_str);
+    let inscriptions_str = build_data_array_i64(blocks, |b| b.inscription_bytes as i64);
+    let inscriptions = data_array_value(&inscriptions_str);
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
@@ -921,24 +855,13 @@ pub fn stamps_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Stamps");
     }
 
-    let vals: Vec<f64> = blocks.iter().map(|b| b.stamps_count as f64).collect();
-    let raw: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(vals.iter())
-        .map(|(b, v)| dp(b, *v))
-        .collect();
+    let raw_str = build_data_array_f64(blocks, |b| b.stamps_count as f64);
+    let raw = data_array_value(&raw_str);
 
+    let vals: Vec<f64> = blocks.iter().map(|b| b.stamps_count as f64).collect();
     let ma = moving_average(&vals, 144);
-    let ma_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(ma.iter())
-        .map(|(b, m)| {
-            json!([
-                ts_ms(b.timestamp),
-                m.map(|v| json!(v)).unwrap_or(json!(null))
-            ])
-        })
-        .collect();
+    let ma_str = build_ma_array(blocks, &ma);
+    let ma_data = data_array_value(&ma_str);
 
     let has_ma = show_ma(blocks.len());
 

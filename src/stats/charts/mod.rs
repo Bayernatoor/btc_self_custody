@@ -207,6 +207,70 @@ pub(crate) fn dp(
     json!([ts_ms(b.timestamp), value, b.height])
 }
 
+// ---------------------------------------------------------------------------
+// Fast data array builders (direct String writes, avoid json!() per point)
+// ---------------------------------------------------------------------------
+
+use std::fmt::Write;
+
+/// Build a JSON array of [timestamp_ms, value, height] data points as a raw JSON string.
+/// Avoids 4000+ json!() allocations by writing directly to a String buffer.
+/// The returned RawValue can be embedded in a serde_json::Value via `data_array_value()`.
+pub(crate) fn build_data_array_f64(
+    blocks: &[BlockSummary],
+    value_fn: impl Fn(&BlockSummary) -> f64,
+) -> String {
+    let mut buf = String::with_capacity(blocks.len() * 30);
+    buf.push('[');
+    for (i, b) in blocks.iter().enumerate() {
+        if i > 0 { buf.push(','); }
+        let v = value_fn(b);
+        let _ = write!(buf, "[{},{},{}]", ts_ms(b.timestamp), v, b.height);
+    }
+    buf.push(']');
+    buf
+}
+
+/// Build a JSON array of [timestamp_ms, value, height] for integer values.
+pub(crate) fn build_data_array_i64(
+    blocks: &[BlockSummary],
+    value_fn: impl Fn(&BlockSummary) -> i64,
+) -> String {
+    let mut buf = String::with_capacity(blocks.len() * 30);
+    buf.push('[');
+    for (i, b) in blocks.iter().enumerate() {
+        if i > 0 { buf.push(','); }
+        let _ = write!(buf, "[{},{},{}]", ts_ms(b.timestamp), value_fn(b), b.height);
+    }
+    buf.push(']');
+    buf
+}
+
+/// Build a JSON array of [timestamp_ms, value] for moving average data.
+/// None values are written as null.
+pub(crate) fn build_ma_array(
+    blocks: &[BlockSummary],
+    ma: &[Option<f64>],
+) -> String {
+    let mut buf = String::with_capacity(blocks.len() * 24);
+    buf.push('[');
+    for (i, (b, m)) in blocks.iter().zip(ma.iter()).enumerate() {
+        if i > 0 { buf.push(','); }
+        match m {
+            Some(v) => { let _ = write!(buf, "[{},{}]", ts_ms(b.timestamp), v); }
+            None => { let _ = write!(buf, "[{},null]", ts_ms(b.timestamp)); }
+        }
+    }
+    buf.push(']');
+    buf
+}
+
+/// Convert a pre-built JSON array string into a serde_json::Value for embedding
+/// in chart option objects. Uses RawValue to avoid re-parsing.
+pub(crate) fn data_array_value(raw: &str) -> serde_json::Value {
+    serde_json::from_str(raw).unwrap_or(json!([]))
+}
+
 /// Round to N decimal places.
 pub(crate) fn round(val: f64, decimals: u32) -> f64 {
     let factor = 10f64.powi(decimals as i32);

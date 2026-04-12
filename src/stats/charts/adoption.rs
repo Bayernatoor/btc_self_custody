@@ -4,6 +4,7 @@
 
 use super::*;
 use serde_json::json;
+use std::fmt::Write;
 
 const SEGWIT_V0_COLOR: &str = "#3b82f6"; // Blue for SegWit v0
 const SEGWIT_V1_COLOR: &str = "#22c55e"; // Green for Taproot v1
@@ -14,36 +15,22 @@ pub fn segwit_adoption_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("SegWit Adoption %");
     }
 
-    let vals: Vec<f64> = blocks
-        .iter()
-        .map(|b| {
-            if b.tx_count > 1 {
-                let pct = b.segwit_spend_count as f64 / (b.tx_count - 1) as f64
-                    * 100.0;
-                (pct * 100.0).round() / 100.0
-            } else {
-                0.0
-            }
-        })
-        .collect();
+    let segwit_fn = |b: &BlockSummary| {
+        if b.tx_count > 1 {
+            let pct = b.segwit_spend_count as f64 / (b.tx_count - 1) as f64
+                * 100.0;
+            (pct * 100.0).round() / 100.0
+        } else {
+            0.0
+        }
+    };
+    let raw_str = build_data_array_f64(blocks, segwit_fn);
+    let raw = data_array_value(&raw_str);
 
-    let raw: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(vals.iter())
-        .map(|(b, v)| dp(b, v))
-        .collect();
-
+    let vals: Vec<f64> = blocks.iter().map(|b| segwit_fn(b)).collect();
     let ma = moving_average(&vals, 144);
-    let ma_series: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(ma.iter())
-        .map(|(b, m)| {
-            json!([
-                ts_ms(b.timestamp),
-                m.map(|v| json!(v)).unwrap_or(json!(null))
-            ])
-        })
-        .collect();
+    let ma_str = build_ma_array(blocks, &ma);
+    let ma_series = data_array_value(&ma_str);
 
     let has_ma = show_ma(blocks.len());
 
@@ -127,28 +114,13 @@ pub fn taproot_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Taproot Outputs");
     }
 
-    let vals: Vec<f64> = blocks
-        .iter()
-        .map(|b| b.taproot_spend_count as f64)
-        .collect();
+    let raw_str = build_data_array_f64(blocks, |b| b.taproot_spend_count as f64);
+    let raw = data_array_value(&raw_str);
 
-    let raw: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(vals.iter())
-        .map(|(b, v)| dp(b, v))
-        .collect();
-
+    let vals: Vec<f64> = blocks.iter().map(|b| b.taproot_spend_count as f64).collect();
     let ma = moving_average(&vals, 144);
-    let ma_series: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(ma.iter())
-        .map(|(b, m)| {
-            json!([
-                ts_ms(b.timestamp),
-                m.map(|v| json!(v)).unwrap_or(json!(null))
-            ])
-        })
-        .collect();
+    let ma_str = build_ma_array(blocks, &ma);
+    let ma_series = data_array_value(&ma_str);
 
     let has_ma = show_ma(blocks.len());
 
@@ -223,23 +195,10 @@ pub fn witness_version_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     }
 
     // v0 outputs = P2WPKH + P2WSH, v1 outputs = P2TR
-    let v0_vals: Vec<f64> = blocks
-        .iter()
-        .map(|b| (b.p2wpkh_count + b.p2wsh_count) as f64)
-        .collect();
-    let v1_vals: Vec<f64> =
-        blocks.iter().map(|b| b.p2tr_count as f64).collect();
-
-    let v0_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(v0_vals.iter())
-        .map(|(b, v)| dp(b, v))
-        .collect();
-    let v1_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(v1_vals.iter())
-        .map(|(b, v)| dp(b, v))
-        .collect();
+    let v0_str = build_data_array_f64(blocks, |b| (b.p2wpkh_count + b.p2wsh_count) as f64);
+    let v0_data = data_array_value(&v0_str);
+    let v1_str = build_data_array_f64(blocks, |b| b.p2tr_count as f64);
+    let v1_data = data_array_value(&v1_str);
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
@@ -309,42 +268,27 @@ pub fn witness_version_pct_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Witness Version Share");
     }
 
-    let v0_pct: Vec<f64> = blocks
-        .iter()
-        .map(|b| {
-            let v0 = b.p2wpkh_count + b.p2wsh_count;
-            let total = v0 + b.p2tr_count;
-            if total > 0 {
-                (v0 as f64 / total as f64 * 100.0 * 100.0).round() / 100.0
-            } else {
-                0.0
-            }
-        })
-        .collect();
-    let v1_pct: Vec<f64> = blocks
-        .iter()
-        .map(|b| {
-            let v0 = b.p2wpkh_count + b.p2wsh_count;
-            let total = v0 + b.p2tr_count;
-            if total > 0 {
-                (b.p2tr_count as f64 / total as f64 * 100.0 * 100.0).round()
-                    / 100.0
-            } else {
-                0.0
-            }
-        })
-        .collect();
-
-    let v0_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(v0_pct.iter())
-        .map(|(b, v)| dp(b, v))
-        .collect();
-    let v1_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(v1_pct.iter())
-        .map(|(b, v)| dp(b, v))
-        .collect();
+    let v0_str = build_data_array_f64(blocks, |b| {
+        let v0 = b.p2wpkh_count + b.p2wsh_count;
+        let total = v0 + b.p2tr_count;
+        if total > 0 {
+            (v0 as f64 / total as f64 * 100.0 * 100.0).round() / 100.0
+        } else {
+            0.0
+        }
+    });
+    let v0_data = data_array_value(&v0_str);
+    let v1_str = build_data_array_f64(blocks, |b| {
+        let v0 = b.p2wpkh_count + b.p2wsh_count;
+        let total = v0 + b.p2tr_count;
+        if total > 0 {
+            (b.p2tr_count as f64 / total as f64 * 100.0 * 100.0).round()
+                / 100.0
+        } else {
+            0.0
+        }
+    });
+    let v1_data = data_array_value(&v1_str);
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
@@ -444,51 +388,30 @@ pub fn witness_version_tx_pct_chart(
         return no_data_chart("Witness Tx Share");
     }
 
-    let v0_pct: Vec<f64> = blocks
-        .iter()
-        .map(|b| {
-            if b.output_count > 0 {
-                let v0 = b.p2wpkh_count + b.p2wsh_count;
-                (v0 as f64 / b.output_count as f64 * 100.0 * 100.0).round()
-                    / 100.0
-            } else {
-                0.0
-            }
-        })
-        .collect();
-    let v1_pct: Vec<f64> = blocks
-        .iter()
-        .map(|b| {
-            if b.output_count > 0 {
-                (b.p2tr_count as f64 / b.output_count as f64 * 100.0 * 100.0)
-                    .round()
-                    / 100.0
-            } else {
-                0.0
-            }
-        })
-        .collect();
-    let legacy_pct: Vec<f64> = v0_pct
-        .iter()
-        .zip(v1_pct.iter())
-        .map(|(v0, v1)| (100.0 - v0 - v1).max(0.0))
-        .collect();
-
-    let v0_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(v0_pct.iter())
-        .map(|(b, v)| dp(b, v))
-        .collect();
-    let v1_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(v1_pct.iter())
-        .map(|(b, v)| dp(b, v))
-        .collect();
-    let legacy_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(legacy_pct.iter())
-        .map(|(b, v)| dp(b, v))
-        .collect();
+    let pct_fn = |count: u64, total: u64| -> f64 {
+        if total > 0 {
+            (count as f64 / total as f64 * 100.0 * 100.0).round() / 100.0
+        } else {
+            0.0
+        }
+    };
+    let mut v0_buf = String::with_capacity(blocks.len() * 30);
+    let mut v1_buf = String::with_capacity(blocks.len() * 30);
+    let mut leg_buf = String::with_capacity(blocks.len() * 30);
+    v0_buf.push('['); v1_buf.push('['); leg_buf.push('[');
+    for (i, b) in blocks.iter().enumerate() {
+        if i > 0 { v0_buf.push(','); v1_buf.push(','); leg_buf.push(','); }
+        let v0 = pct_fn(b.p2wpkh_count + b.p2wsh_count, b.output_count);
+        let v1 = pct_fn(b.p2tr_count, b.output_count);
+        let leg = (100.0 - v0 - v1).max(0.0);
+        let _ = write!(v0_buf, "[{},{},{}]", ts_ms(b.timestamp), v0, b.height);
+        let _ = write!(v1_buf, "[{},{},{}]", ts_ms(b.timestamp), v1, b.height);
+        let _ = write!(leg_buf, "[{},{},{}]", ts_ms(b.timestamp), leg, b.height);
+    }
+    v0_buf.push(']'); v1_buf.push(']'); leg_buf.push(']');
+    let v0_data = data_array_value(&v0_buf);
+    let v1_data = data_array_value(&v1_buf);
+    let legacy_data = data_array_value(&leg_buf);
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
@@ -604,14 +527,10 @@ pub fn taproot_spend_type_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Taproot Spend Types");
     }
 
-    let keypath: Vec<serde_json::Value> = blocks
-        .iter()
-        .map(|b| dp(b, b.taproot_keypath_count))
-        .collect();
-    let scriptpath: Vec<serde_json::Value> = blocks
-        .iter()
-        .map(|b| dp(b, b.taproot_scriptpath_count))
-        .collect();
+    let keypath_str = build_data_array_i64(blocks, |b| b.taproot_keypath_count as i64);
+    let keypath = data_array_value(&keypath_str);
+    let scriptpath_str = build_data_array_i64(blocks, |b| b.taproot_scriptpath_count as i64);
+    let scriptpath = data_array_value(&scriptpath_str);
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
@@ -697,14 +616,17 @@ pub fn taproot_velocity_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         })
         .collect();
 
-    let data: Vec<serde_json::Value> = blocks
-        .iter()
-        .zip(velocity.iter())
-        .map(|(b, v)| match v {
-            Some(val) => dp(b, *val),
-            None => json!([ts_ms(b.timestamp), null]),
-        })
-        .collect();
+    let mut data_buf = String::with_capacity(blocks.len() * 30);
+    data_buf.push('[');
+    for (i, (b, v)) in blocks.iter().zip(velocity.iter()).enumerate() {
+        if i > 0 { data_buf.push(','); }
+        match v {
+            Some(val) => { let _ = write!(data_buf, "[{},{},{}]", ts_ms(b.timestamp), val, b.height); }
+            None => { let _ = write!(data_buf, "[{},null]", ts_ms(b.timestamp)); }
+        }
+    }
+    data_buf.push(']');
+    let data = data_array_value(&data_buf);
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
@@ -798,21 +720,19 @@ pub fn cumulative_adoption_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let mut segwit_total: u64 = 0;
     let mut taproot_total: u64 = 0;
 
-    let segwit_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .map(|b| {
-            segwit_total += b.segwit_spend_count;
-            dp(b, segwit_total)
-        })
-        .collect();
-
-    let taproot_data: Vec<serde_json::Value> = blocks
-        .iter()
-        .map(|b| {
-            taproot_total += b.taproot_spend_count;
-            dp(b, taproot_total)
-        })
-        .collect();
+    let mut segwit_buf = String::with_capacity(blocks.len() * 30);
+    let mut taproot_buf = String::with_capacity(blocks.len() * 30);
+    segwit_buf.push('['); taproot_buf.push('[');
+    for (i, b) in blocks.iter().enumerate() {
+        if i > 0 { segwit_buf.push(','); taproot_buf.push(','); }
+        segwit_total += b.segwit_spend_count;
+        taproot_total += b.taproot_spend_count;
+        let _ = write!(segwit_buf, "[{},{},{}]", ts_ms(b.timestamp), segwit_total, b.height);
+        let _ = write!(taproot_buf, "[{},{},{}]", ts_ms(b.timestamp), taproot_total, b.height);
+    }
+    segwit_buf.push(']'); taproot_buf.push(']');
+    let segwit_data = data_array_value(&segwit_buf);
+    let taproot_data = data_array_value(&taproot_buf);
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
