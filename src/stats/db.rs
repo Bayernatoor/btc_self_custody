@@ -350,9 +350,23 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
             avg_fee_rate_p10           REAL NOT NULL DEFAULT 0,
             avg_fee_rate_p90           REAL NOT NULL DEFAULT 0,
             avg_stamps_count           REAL NOT NULL DEFAULT 0,
-            avg_median_fee_rate        REAL NOT NULL DEFAULT 0
+            avg_median_fee_rate        REAL NOT NULL DEFAULT 0,
+            total_output_value         INTEGER NOT NULL DEFAULT 0,
+            total_input_value          INTEGER NOT NULL DEFAULT 0
         );",
     )?;
+
+    // Migration: add value columns to daily_blocks if missing
+    let has_daily_value: bool = conn
+        .prepare("SELECT total_output_value FROM daily_blocks LIMIT 0")
+        .is_ok();
+    if !has_daily_value {
+        tracing::info!("Migrating daily_blocks: adding value columns");
+        conn.execute_batch(
+            "ALTER TABLE daily_blocks ADD COLUMN total_output_value INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE daily_blocks ADD COLUMN total_input_value INTEGER NOT NULL DEFAULT 0;",
+        )?;
+    }
 
     Ok(())
 }
@@ -989,6 +1003,8 @@ pub struct DailyRow {
     pub avg_fee_rate_p90: f64,
     pub avg_stamps_count: f64,
     pub avg_median_fee_rate: f64,
+    pub total_output_value: u64,
+    pub total_input_value: u64,
 }
 
 /// Rebuild a single day's row in the daily_blocks table by re-aggregating
@@ -1008,7 +1024,8 @@ pub fn refresh_daily_block(conn: &Connection, day: &str) -> rusqlite::Result<()>
              avg_input_count, avg_output_count, avg_rbf_count, avg_witness_bytes,
              avg_inscription_count, avg_inscription_bytes, avg_brc20_count,
              avg_taproot_keypath_count, avg_taproot_scriptpath_count,
-             avg_fee_rate_p10, avg_fee_rate_p90, avg_stamps_count, avg_median_fee_rate)
+             avg_fee_rate_p10, avg_fee_rate_p90, avg_stamps_count, avg_median_fee_rate,
+             total_output_value, total_input_value)
          SELECT date(datetime(timestamp, 'unixepoch')),
                 COUNT(*), AVG(size), AVG(weight), AVG(tx_count), AVG(difficulty),
                 SUM(op_return_count), SUM(runes_count), SUM(omni_count),
@@ -1023,7 +1040,8 @@ pub fn refresh_daily_block(conn: &Connection, day: &str) -> rusqlite::Result<()>
                 AVG(input_count), AVG(output_count), AVG(rbf_count), AVG(witness_bytes),
                 AVG(inscription_count), AVG(inscription_bytes), AVG(brc20_count),
                 AVG(taproot_keypath_count), AVG(taproot_scriptpath_count),
-                AVG(fee_rate_p10), AVG(fee_rate_p90), AVG(stamps_count), AVG(median_fee_rate)
+                AVG(fee_rate_p10), AVG(fee_rate_p90), AVG(stamps_count), AVG(median_fee_rate),
+                SUM(total_output_value), SUM(total_input_value)
          FROM blocks
          WHERE date(datetime(timestamp, 'unixepoch')) = ?1",
         params![day],
@@ -1061,7 +1079,8 @@ pub fn rebuild_all_daily_blocks(conn: &Connection) -> rusqlite::Result<u64> {
              avg_input_count, avg_output_count, avg_rbf_count, avg_witness_bytes,
              avg_inscription_count, avg_inscription_bytes, avg_brc20_count,
              avg_taproot_keypath_count, avg_taproot_scriptpath_count,
-             avg_fee_rate_p10, avg_fee_rate_p90, avg_stamps_count, avg_median_fee_rate)
+             avg_fee_rate_p10, avg_fee_rate_p90, avg_stamps_count, avg_median_fee_rate,
+             total_output_value, total_input_value)
          SELECT date(datetime(timestamp, 'unixepoch')),
                 COUNT(*), AVG(size), AVG(weight), AVG(tx_count), AVG(difficulty),
                 SUM(op_return_count), SUM(runes_count), SUM(omni_count),
@@ -1076,7 +1095,8 @@ pub fn rebuild_all_daily_blocks(conn: &Connection) -> rusqlite::Result<u64> {
                 AVG(input_count), AVG(output_count), AVG(rbf_count), AVG(witness_bytes),
                 AVG(inscription_count), AVG(inscription_bytes), AVG(brc20_count),
                 AVG(taproot_keypath_count), AVG(taproot_scriptpath_count),
-                AVG(fee_rate_p10), AVG(fee_rate_p90), AVG(stamps_count), AVG(median_fee_rate)
+                AVG(fee_rate_p10), AVG(fee_rate_p90), AVG(stamps_count), AVG(median_fee_rate),
+                SUM(total_output_value), SUM(total_input_value)
          FROM blocks
          GROUP BY date(datetime(timestamp, 'unixepoch'))"
     )?;
@@ -1111,7 +1131,8 @@ pub fn query_daily_aggregates_fast(
                 avg_input_count, avg_output_count, avg_rbf_count, avg_witness_bytes,
                 avg_inscription_count, avg_inscription_bytes, avg_brc20_count,
                 avg_taproot_keypath_count, avg_taproot_scriptpath_count,
-                avg_fee_rate_p10, avg_fee_rate_p90, avg_stamps_count, avg_median_fee_rate
+                avg_fee_rate_p10, avg_fee_rate_p90, avg_stamps_count, avg_median_fee_rate,
+                total_output_value, total_input_value
          FROM daily_blocks
          WHERE day >= ?1 AND day <= ?2
          ORDER BY day ASC",
@@ -1158,6 +1179,8 @@ pub fn query_daily_aggregates_fast(
             avg_fee_rate_p90: row.get(37)?,
             avg_stamps_count: row.get(38)?,
             avg_median_fee_rate: row.get(39)?,
+            total_output_value: row.get::<_, Option<u64>>(40)?.unwrap_or(0),
+            total_input_value: row.get::<_, Option<u64>>(41)?.unwrap_or(0),
         })
     })?;
 
@@ -1216,7 +1239,8 @@ pub fn query_daily_aggregates(
                 AVG(brc20_count),
                 AVG(taproot_keypath_count), AVG(taproot_scriptpath_count),
                 AVG(fee_rate_p10), AVG(fee_rate_p90), AVG(stamps_count),
-                AVG(median_fee_rate)
+                AVG(median_fee_rate),
+                SUM(total_output_value), SUM(total_input_value)
          FROM blocks
          WHERE timestamp >= ?1 AND timestamp <= ?2
          GROUP BY day
@@ -1264,6 +1288,8 @@ pub fn query_daily_aggregates(
             avg_fee_rate_p90: row.get(37)?,
             avg_stamps_count: row.get(38)?,
             avg_median_fee_rate: row.get(39)?,
+            total_output_value: row.get::<_, Option<u64>>(40)?.unwrap_or(0),
+            total_input_value: row.get::<_, Option<u64>>(41)?.unwrap_or(0),
         })
     })?;
     rows.collect()
@@ -1868,6 +1894,80 @@ pub fn query_extremes_with_heights(
         empty_block_count: empty_count,
         block_count,
     })
+}
+
+/// Bucket counts for block weight fullness distribution (10 buckets: 0-10% .. 90-100%).
+/// Computed server-side so ALL range doesn't send 940k rows to the client.
+pub fn query_fullness_histogram(
+    conn: &Connection,
+    from_ts: u64,
+    to_ts: u64,
+) -> rusqlite::Result<Vec<(String, u64)>> {
+    let mut stmt = conn.prepare(
+        "SELECT CAST(CASE
+            WHEN weight * 100.0 / 4000000.0 >= 100 THEN 9
+            ELSE weight * 100.0 / 4000000.0 / 10
+         END AS INT) AS bucket, COUNT(*)
+         FROM blocks
+         WHERE timestamp >= ?1 AND timestamp <= ?2
+         GROUP BY bucket
+         ORDER BY bucket ASC",
+    )?;
+    let labels = [
+        "0-10%", "10-20%", "20-30%", "30-40%", "40-50%",
+        "50-60%", "60-70%", "70-80%", "80-90%", "90-100%",
+    ];
+    let mut result = vec![0u64; 10];
+    let rows = stmt.query_map(params![from_ts, to_ts], |row| {
+        Ok((row.get::<_, i64>(0)?, row.get::<_, u64>(1)?))
+    })?;
+    for r in rows {
+        if let Ok((bucket, count)) = r {
+            let idx = (bucket as usize).min(9);
+            result[idx] = count;
+        }
+    }
+    Ok(labels.iter().zip(result.iter()).map(|(l, c)| (l.to_string(), *c)).collect())
+}
+
+/// Bucket counts for inter-block time distribution (61 buckets: 0-1min .. 59-60min, 60+).
+/// Uses LAG window function so the entire computation runs in SQL.
+pub fn query_block_time_histogram(
+    conn: &Connection,
+    from_ts: u64,
+    to_ts: u64,
+) -> rusqlite::Result<Vec<(String, u64)>> {
+    let mut stmt = conn.prepare(
+        "WITH intervals AS (
+            SELECT timestamp - LAG(timestamp) OVER (ORDER BY height) AS gap
+            FROM blocks
+            WHERE timestamp >= ?1 AND timestamp <= ?2
+        )
+        SELECT CAST(CASE
+            WHEN gap IS NULL THEN -1
+            WHEN gap / 60 >= 60 THEN 60
+            ELSE gap / 60
+        END AS INT) AS bucket, COUNT(*)
+        FROM intervals
+        WHERE gap IS NOT NULL AND gap >= 0
+        GROUP BY bucket
+        ORDER BY bucket ASC",
+    )?;
+    let mut labels: Vec<String> = (0..60).map(|i| format!("{}-{}", i, i + 1)).collect();
+    labels.push("60+".to_string());
+    let mut result = vec![0u64; 61];
+    let rows = stmt.query_map(params![from_ts, to_ts], |row| {
+        Ok((row.get::<_, i64>(0)?, row.get::<_, u64>(1)?))
+    })?;
+    for r in rows {
+        if let Ok((bucket, count)) = r {
+            if bucket >= 0 {
+                let idx = (bucket as usize).min(60);
+                result[idx] = count;
+            }
+        }
+    }
+    Ok(labels.into_iter().zip(result.into_iter()).map(|(l, c)| (l, c)).collect())
 }
 
 #[cfg(test)]

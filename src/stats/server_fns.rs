@@ -599,6 +599,8 @@ pub async fn fetch_daily_aggregates(
             avg_fee_rate_p90: r.avg_fee_rate_p90,
             avg_stamps_count: r.avg_stamps_count,
             avg_median_fee_rate: r.avg_median_fee_rate,
+            total_output_value: r.total_output_value,
+            total_input_value: r.total_input_value,
         })
         .collect();
 
@@ -1023,6 +1025,41 @@ pub async fn fetch_mining_price_summary(
         price_end,
         price_change_pct,
     })
+}
+
+/// Fetch block fullness histogram (10 buckets) for a timestamp range.
+/// Computed server-side so ALL range works without sending 940k rows.
+#[server(prefix = "/api", endpoint = "fullness_histogram")]
+pub async fn fetch_fullness_histogram(
+    from_ts: u64,
+    to_ts: u64,
+) -> Result<Vec<HistogramBucket>, ServerFnError> {
+    if from_ts > to_ts {
+        return Err(ServerFnError::new("Invalid timestamp range"));
+    }
+    let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
+        leptos_axum::extract().await.map_err(|e| internal_err("Stats unavailable", e))?;
+    let conn = state.db.get().map_err(|e| internal_err("DB pool", e))?;
+    let buckets = super::db::query_fullness_histogram(&conn, from_ts, to_ts)
+        .map_err(|e| internal_err("DB query", e))?;
+    Ok(buckets.into_iter().map(|(label, count)| HistogramBucket { label, count }).collect())
+}
+
+/// Fetch block time distribution histogram (61 buckets) for a timestamp range.
+#[server(prefix = "/api", endpoint = "block_time_histogram")]
+pub async fn fetch_block_time_histogram(
+    from_ts: u64,
+    to_ts: u64,
+) -> Result<Vec<HistogramBucket>, ServerFnError> {
+    if from_ts > to_ts {
+        return Err(ServerFnError::new("Invalid timestamp range"));
+    }
+    let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
+        leptos_axum::extract().await.map_err(|e| internal_err("Stats unavailable", e))?;
+    let conn = state.db.get().map_err(|e| internal_err("DB pool", e))?;
+    let buckets = super::db::query_block_time_histogram(&conn, from_ts, to_ts)
+        .map_err(|e| internal_err("DB query", e))?;
+    Ok(buckets.into_iter().map(|(label, count)| HistogramBucket { label, count }).collect())
 }
 
 #[server(prefix = "/api", endpoint = "on_this_day")]

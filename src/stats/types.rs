@@ -253,6 +253,10 @@ pub struct DailyAggregate {
     pub avg_stamps_count: f64,
     /// Average median fee rate in sat/vB per block.
     pub avg_median_fee_rate: f64,
+    /// Total non-coinbase output value in satoshis for the day.
+    pub total_output_value: u64,
+    /// Total input value in satoshis for the day.
+    pub total_input_value: u64,
 }
 
 /// Single-row aggregate summary for an arbitrary timestamp range, used by the
@@ -428,6 +432,13 @@ impl HofCategory {
         }
     }
 
+}
+
+/// Pre-computed histogram bucket: label + count.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct HistogramBucket {
+    pub label: String,
+    pub count: u64,
 }
 
 /// A curated Hall of Fame entry - compile-time constant.

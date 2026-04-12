@@ -143,17 +143,36 @@ pub fn NetworkChartsPage() -> impl IntoView {
                             }).unwrap_or_default()
                         });
 
+                        // Histograms use server-side computation so they work on ALL range.
+                        // On per-block ranges: compute from local data (faster).
+                        // On daily ranges: fetch from server SQL query.
                         let fullness_dist_option = Signal::derive(move || {
                             let _r = range.get();
                             dashboard_data.get().and_then(|r| r.ok()).map(|data| {
                                 let value = match data {
                                     DashboardData::PerBlock(ref blocks) =>
                                         crate::stats::charts::block_fullness_distribution_chart(blocks),
-                                    DashboardData::Daily(_) =>
-                                        crate::stats::charts::no_data_chart("Block Fullness Distribution"),
+                                    DashboardData::Daily(_) => return String::new(),
                                 };
                                 serde_json::to_string(&value).unwrap_or_default()
                             }).unwrap_or_default()
+                        });
+                        let fullness_server = LocalResource::new(move || {
+                            let r = range.get();
+                            async move {
+                                let n = crate::routes::observatory::helpers::range_to_blocks(&r);
+                                if n <= 5_000 { return None; }
+                                let stats = crate::stats::server_fns::fetch_stats_summary().await.ok()?;
+                                let from_ts = stats.latest_timestamp.saturating_sub(n * 600);
+                                let buckets = crate::stats::server_fns::fetch_fullness_histogram(from_ts, stats.latest_timestamp).await.ok()?;
+                                let value = crate::stats::charts::block_fullness_histogram_from_buckets(&buckets);
+                                Some(serde_json::to_string(&value).unwrap_or_default())
+                            }
+                        });
+                        let fullness_combined = Signal::derive(move || {
+                            let local = fullness_dist_option.get();
+                            if !local.is_empty() { return local; }
+                            fullness_server.get().flatten().unwrap_or_default()
                         });
 
                         let time_dist_option = Signal::derive(move || {
@@ -162,11 +181,27 @@ pub fn NetworkChartsPage() -> impl IntoView {
                                 let value = match data {
                                     DashboardData::PerBlock(ref blocks) =>
                                         crate::stats::charts::block_time_distribution_chart(blocks),
-                                    DashboardData::Daily(_) =>
-                                        crate::stats::charts::no_data_chart("Block Time Distribution"),
+                                    DashboardData::Daily(_) => return String::new(),
                                 };
                                 serde_json::to_string(&value).unwrap_or_default()
                             }).unwrap_or_default()
+                        });
+                        let time_server = LocalResource::new(move || {
+                            let r = range.get();
+                            async move {
+                                let n = crate::routes::observatory::helpers::range_to_blocks(&r);
+                                if n <= 5_000 { return None; }
+                                let stats = crate::stats::server_fns::fetch_stats_summary().await.ok()?;
+                                let from_ts = stats.latest_timestamp.saturating_sub(n * 600);
+                                let buckets = crate::stats::server_fns::fetch_block_time_histogram(from_ts, stats.latest_timestamp).await.ok()?;
+                                let value = crate::stats::charts::block_time_histogram_from_buckets(&buckets);
+                                Some(serde_json::to_string(&value).unwrap_or_default())
+                            }
+                        });
+                        let time_combined = Signal::derive(move || {
+                            let local = time_dist_option.get();
+                            if !local.is_empty() { return local; }
+                            time_server.get().flatten().unwrap_or_default()
                         });
 
                         let propagation_option = Signal::derive(move || {
@@ -191,8 +226,8 @@ pub fn NetworkChartsPage() -> impl IntoView {
                                 <ChartCard title="Avg Transaction Size" description=chart_desc(range, "Average size of a transaction in bytes. Smaller means more efficient use of block space", "Daily average transaction size in bytes. Smaller means more efficient use of block space") chart_id="chart-avg-tx-size" option=avg_tx_size_option/>
                                 <ChartCard title="Block Interval" description=chart_desc(range, "Minutes between consecutive blocks. Target is 10 minutes", "Average daily block interval in minutes. Target is 10 minutes") chart_id="chart-interval" option=interval_option/>
                                 <ChartCard title="Chain Size Growth" description="Total blockchain size over time, showing how fast the chain is growing" chart_id="chart-chain-size" option=chain_size_option/>
-                                <ChartCard title="Block Fullness Distribution" description="Distribution of blocks by weight utilization percentage. Shows how many blocks are nearly full vs partially empty" chart_id="chart-fullness-dist" option=fullness_dist_option/>
-                                <ChartCard title="Block Time Distribution" description="Distribution of time between consecutive blocks. Most cluster near the 10-minute target" chart_id="chart-time-dist" option=time_dist_option/>
+                                <ChartCard title="Block Fullness Distribution" description="Distribution of blocks by weight utilization percentage. Shows how many blocks are nearly full vs partially empty" chart_id="chart-fullness-dist" option=fullness_combined/>
+                                <ChartCard title="Block Time Distribution" description="Distribution of time between consecutive blocks. Most cluster near the 10-minute target" chart_id="chart-time-dist" option=time_combined/>
                                 <ChartCard title="Rapid Consecutive Blocks" description="Blocks arriving within 60 seconds of each other, indicating fast mining luck or potential stale block races" chart_id="chart-propagation" option=propagation_option/>
                             </div>
                         }.into_any()

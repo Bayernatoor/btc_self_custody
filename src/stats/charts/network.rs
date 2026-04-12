@@ -999,3 +999,69 @@ pub fn block_propagation_chart(
         }]
     }))
 }
+
+/// Block fullness histogram from pre-computed server-side buckets.
+/// Works on any range including ALL (data is already aggregated).
+pub fn block_fullness_histogram_from_buckets(
+    buckets: &[super::HistogramBucket],
+) -> serde_json::Value {
+    if buckets.is_empty() {
+        return no_data_chart("Block Fullness Distribution");
+    }
+    let labels: Vec<&str> = buckets.iter().map(|b| b.label.as_str()).collect();
+    let counts: Vec<u64> = buckets.iter().map(|b| b.count).collect();
+
+    build_option(json!({
+        "xAxis": {
+            "type": "category", "data": labels,
+            "axisLabel": { "color": "rgba(255,255,255,0.6)" },
+            "axisLine": { "lineStyle": { "color": "rgba(255,255,255,0.15)" } }
+        },
+        "yAxis": y_axis("Block Count"),
+        "tooltip": {
+            "trigger": "axis",
+            "backgroundColor": "rgba(13,33,55,0.95)",
+            "borderColor": "rgba(255,255,255,0.1)",
+            "textStyle": { "color": "rgba(255,255,255,0.85)", "fontSize": 12 }
+        },
+        "series": [{
+            "name": "Block Count", "type": "bar", "data": counts,
+            "itemStyle": { "color": DATA_COLOR }
+        }]
+    }))
+}
+
+/// Block time histogram from pre-computed server-side buckets.
+pub fn block_time_histogram_from_buckets(
+    buckets: &[super::HistogramBucket],
+) -> serde_json::Value {
+    if buckets.is_empty() {
+        return no_data_chart("Block Time Distribution");
+    }
+    let labels: Vec<&str> = buckets.iter().map(|b| b.label.as_str()).collect();
+    let counts: Vec<u64> = buckets.iter().map(|b| b.count).collect();
+
+    build_option(json!({
+        "xAxis": {
+            "type": "category", "data": labels,
+            "axisLabel": { "color": "rgba(255,255,255,0.6)" },
+            "axisLine": { "lineStyle": { "color": "rgba(255,255,255,0.15)" } }
+        },
+        "yAxis": y_axis("Block Count"),
+        "tooltip": {
+            "trigger": "axis",
+            "backgroundColor": "rgba(13,33,55,0.95)",
+            "borderColor": "rgba(255,255,255,0.1)",
+            "textStyle": { "color": "rgba(255,255,255,0.85)", "fontSize": 12 }
+        },
+        "series": [{
+            "name": "Block Count", "type": "bar", "data": counts,
+            "itemStyle": { "color": DATA_COLOR },
+            "markLine": {
+                "silent": true, "symbol": "none",
+                "lineStyle": { "type": "dashed", "color": TARGET_COLOR, "width": 2 },
+                "data": [{ "xAxis": "9-10", "label": { "formatter": "Target", "color": TARGET_COLOR } }]
+            }
+        }]
+    }))
+}

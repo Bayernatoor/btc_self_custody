@@ -738,9 +738,27 @@ pub fn btc_volume_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 }
 
 /// BTC transferred volume from daily aggregates.
-/// Note: daily_blocks doesn't store total_output_value sum yet.
-pub fn btc_volume_chart_daily(_days: &[DailyAggregate]) -> serde_json::Value {
-    no_data_chart("BTC Volume (daily view coming soon)")
+pub fn btc_volume_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+    if days.is_empty() {
+        return no_data_chart("BTC Transferred Volume");
+    }
+
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    let data: Vec<f64> = days
+        .iter()
+        .map(|d| round(d.total_output_value as f64 / 100_000_000.0, 2))
+        .collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": y_axis("BTC"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "series": [{
+            "name": "BTC Volume", "type": "bar", "data": data,
+            "itemStyle": { "color": DATA_COLOR }
+        }]
+    }))
 }
 
 /// Fee pressure scatter: weight utilization % vs median fee rate.
@@ -827,7 +845,40 @@ pub fn value_flow_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 }
 
 /// Input vs output value flow from daily aggregates.
-/// Note: daily_blocks doesn't store value sums yet; per-block only for now.
-pub fn value_flow_chart_daily(_days: &[DailyAggregate]) -> serde_json::Value {
-    no_data_chart("Value Flow")
+pub fn value_flow_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+    if days.is_empty() {
+        return no_data_chart("Value Flow");
+    }
+
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    let input_data: Vec<f64> = days
+        .iter()
+        .map(|d| round(d.total_input_value as f64 / 100_000_000.0, 2))
+        .collect();
+    let output_data: Vec<f64> = days
+        .iter()
+        .map(|d| round(d.total_output_value as f64 / 100_000_000.0, 2))
+        .collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": y_axis("BTC"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            {
+                "name": "Input Value", "type": "line", "data": input_data,
+                "lineStyle": { "width": 1, "color": "#ef4444" },
+                "itemStyle": { "color": "#ef4444" }, "symbol": "none",
+                "areaStyle": { "color": "rgba(239,68,68,0.08)" }
+            },
+            {
+                "name": "Output Value", "type": "line", "data": output_data,
+                "lineStyle": { "width": 1, "color": "#22c55e" },
+                "itemStyle": { "color": "#22c55e" }, "symbol": "none",
+                "areaStyle": { "color": "rgba(34,197,94,0.08)" }
+            }
+        ]
+    }))
 }
