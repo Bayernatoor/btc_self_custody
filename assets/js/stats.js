@@ -171,10 +171,21 @@
             }
             // Item tooltips (scatter/pie): show block height + value
             if (opts.tooltip && opts.tooltip.trigger === 'item' && !opts.tooltip.formatter) {
+                var noTime = opts.tooltip._noTimeFormat;
+                delete opts.tooltip._noTimeFormat;
                 opts.tooltip.formatter = function(p) {
                     if (!p.data || !Array.isArray(p.data)) return p.name || '';
                     var d = p.data;
                     var height = d.length >= 3 && typeof d[2] === 'number' ? 'Block #' + d[2].toLocaleString() : '';
+                    if (noTime) {
+                        // Non-time scatter: show x and y values directly
+                        var xVal = typeof d[0] === 'number' ? d[0].toFixed(1) : d[0];
+                        var yVal = typeof d[1] === 'number' ? d[1].toFixed(1) : d[1];
+                        var lines = '';
+                        if (height) lines += '<span style="color:#f7931a;font-size:11px">' + height + '</span><br>';
+                        lines += (p.marker || '') + ' ' + xVal + '% / ' + yVal + ' sat/vB';
+                        return lines;
+                    }
                     var time = new Date(d[0]).toLocaleString();
                     var val = typeof d[1] === 'number' ? d[1].toFixed(2) : d[1];
                     var header = '<div style="color:rgba(255,255,255,0.5);font-size:12px;margin-bottom:4px">' + time;

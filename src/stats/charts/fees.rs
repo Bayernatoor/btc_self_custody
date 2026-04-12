@@ -774,7 +774,8 @@ pub fn fee_pressure_chart(blocks: &[BlockSummary]) -> serde_json::Value {
             "trigger": "item",
             "backgroundColor": "rgba(13,33,55,0.95)",
             "borderColor": "rgba(255,255,255,0.1)",
-            "textStyle": { "color": "rgba(255,255,255,0.85)", "fontSize": 12 }
+            "textStyle": { "color": "rgba(255,255,255,0.85)", "fontSize": 12 },
+            "_noTimeFormat": true
         },
         "series": [
             {
