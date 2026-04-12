@@ -266,7 +266,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
                                 <ChartCard title="Taproot Spend Types" description=chart_desc(range, "Key-path vs script-path spends per block. How Taproot is actually being used", "Daily average key-path vs script-path spends. How Taproot is actually being used") chart_id="chart-taproot-spend-types" option=taproot_spend_type_option/>
                                 <ChartCard title="Witness Data Share" description="Witness data as percentage of block size. Higher means more SegWit discount savings" chart_id="chart-witness-share" option=witness_share_option/>
                                 <ChartCard title="Taproot Adoption Velocity" description=chart_desc(range, "Rate of change in Taproot output percentage. Positive values indicate accelerating adoption", "Daily rate of change in Taproot adoption percentage") chart_id="chart-taproot-velocity" option=taproot_velocity_option/>
-                                <ChartCard title="Cumulative Adoption" description=chart_desc(range, "Running total of SegWit transactions and Taproot outputs since their respective activations", "Cumulative SegWit and Taproot counts over time") chart_id="chart-cumulative-adoption" option=cumulative_adoption_option/>
+                                <ChartCard title="Cumulative Adoption" description=chart_desc(range, "Running total of SegWit transactions and Taproot outputs within this range. Select ALL for lifetime totals", "Cumulative SegWit and Taproot counts within this range. Select ALL for lifetime totals") chart_id="chart-cumulative-adoption" option=cumulative_adoption_option/>
                             </div>
                         }.into_any()
                     }
