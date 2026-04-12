@@ -999,6 +999,10 @@ pub fn difficulty_ribbon_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Difficulty Ribbon");
     }
+    // Need enough blocks for the longest MA (128) to produce meaningful spread
+    if blocks.len() < 500 {
+        return no_data_chart_with_hint("Difficulty Ribbon", "Select a longer range (3M+) to see the ribbon spread across difficulty adjustments");
+    }
 
     let windows = [9, 14, 25, 40, 60, 90, 128];
     let colors = [
