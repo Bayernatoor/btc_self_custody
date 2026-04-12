@@ -180,12 +180,15 @@ pub fn mining_diversity_chart(miners: &[MinerShare]) -> serde_json::Value {
         return no_data_chart("Mining Diversity");
     }
 
-    let total: u64 = miners.iter().map(|m| m.count).sum();
+    // Exclude "Unknown" miners from HHI - early blocks have unidentifiable
+    // miners lumped under one label, which inflates concentration artificially.
+    let known: Vec<&MinerShare> = miners.iter().filter(|m| m.miner != "Unknown").collect();
+    let total: u64 = known.iter().map(|m| m.count).sum();
     if total == 0 {
         return no_data_chart("Mining Diversity");
     }
 
-    let hhi: f64 = miners
+    let hhi: f64 = known
         .iter()
         .map(|m| {
             let share = m.count as f64 / total as f64 * 100.0;
@@ -204,7 +207,7 @@ pub fn mining_diversity_chart(miners: &[MinerShare]) -> serde_json::Value {
         ("Concentrated", "#ef4444")
     };
 
-    let pool_count = miners.len();
+    let pool_count = known.len();
 
     json!({
         "backgroundColor": "transparent",
