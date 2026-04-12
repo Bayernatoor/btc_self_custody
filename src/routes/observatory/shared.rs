@@ -1210,14 +1210,14 @@ fn FloatingRangePicker() -> impl IntoView {
     let (open, set_open) = signal(false);
 
     view! {
-        <div class="fixed bottom-6 right-6 z-40">
+        <div style="z-index: 10000" class="fixed bottom-6 right-6">
             // Toggle button
             <button
-                class="w-11 h-11 rounded-full bg-[#0d2137] border border-[#f7931a]/30 shadow-lg shadow-black/30 flex items-center justify-center cursor-pointer hover:border-[#f7931a]/60 hover:scale-105 active:scale-95 transition-all"
+                class="w-11 h-11 sm:w-14 sm:h-14 rounded-full bg-[#0d2137] border border-[#f7931a]/30 shadow-lg shadow-black/30 flex items-center justify-center cursor-pointer hover:border-[#f7931a]/60 hover:scale-105 active:scale-95 transition-all"
                 on:click=move |_| set_open.update(|v| *v = !*v)
                 title="Change time range"
             >
-                <svg class="w-5 h-5 text-[#f7931a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-5 h-5 sm:w-6 sm:h-6 text-[#f7931a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                 </svg>
             </button>
