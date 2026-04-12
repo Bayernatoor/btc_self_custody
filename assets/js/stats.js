@@ -122,6 +122,26 @@
         try {
             var opts = JSON.parse(optionJson);
             opts.animation = false;
+            // Halving era chart: show actual values in tooltip
+            if (opts.tooltip && opts.tooltip._useRawValues) {
+                delete opts.tooltip._useRawValues;
+                opts.tooltip.formatter = function(params) {
+                    if (!params || !params.length) return '';
+                    var header = '<div style="color:rgba(255,255,255,0.5);font-size:12px;margin-bottom:4px">' + (params[0].axisValueLabel || params[0].name || '') + '</div>';
+                    var lines = '';
+                    for (var i = 0; i < params.length; i++) {
+                        var p = params[i];
+                        var raw = p.data && p.data._raw !== undefined ? p.data._raw : p.value;
+                        var unit = p.data && p.data._unit ? ' ' + p.data._unit : '';
+                        var formatted = typeof raw === 'number' ? (raw < 1 && raw > 0 ? raw.toFixed(4) : raw.toLocaleString(undefined, {maximumFractionDigits: 2})) : raw;
+                        lines += '<div style="display:flex;justify-content:space-between;gap:12px;line-height:1.6">';
+                        lines += (p.marker || '') + '<span style="flex:1;color:rgba(255,255,255,0.7)">' + (p.seriesName || '') + '</span>';
+                        lines += '<span style="font-weight:600;color:rgba(255,255,255,0.9)">' + formatted + unit + '</span>';
+                        lines += '</div>';
+                    }
+                    return header + lines;
+                };
+            }
             // Custom tooltip: show block height in per-block mode, format values
             if (opts.tooltip && opts.tooltip.trigger === 'axis' && !opts.tooltip.formatter) {
                 var yName = '';

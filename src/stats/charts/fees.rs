@@ -944,10 +944,15 @@ pub fn halving_era_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         }
     }
 
+    // Build one series per era. Each data point is [normalized%, rawValue]
+    // so the tooltip can show actual values while bars are scaled.
+    let units = ["MB", "txs", "BTC", "%"];
     let mut series = Vec::new();
     for (ei, &era) in eras.iter().enumerate() {
-        let normalized: Vec<f64> = (0..4).map(|i| {
-            if maxes[i] > 0.0 { round(era_avgs[ei][i] / maxes[i] * 100.0, 1) } else { 0.0 }
+        let data: Vec<serde_json::Value> = (0..4).map(|i| {
+            let norm = if maxes[i] > 0.0 { round(era_avgs[ei][i] / maxes[i] * 100.0, 1) } else { 0.0 };
+            let raw = era_avgs[ei][i];
+            json!({ "value": norm, "_raw": raw, "_unit": units[i] })
         }).collect();
         let label = if (era as usize) < subsidy_labels.len() {
             format!("Era {} ({})", era, subsidy_labels[era as usize])
@@ -958,9 +963,8 @@ pub fn halving_era_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         series.push(json!({
             "name": label,
             "type": "bar",
-            "data": normalized,
-            "itemStyle": { "color": color },
-            "_rawValues": era_avgs[ei].to_vec()
+            "data": data,
+            "itemStyle": { "color": color }
         }));
     }
 
@@ -971,8 +975,14 @@ pub fn halving_era_chart(blocks: &[BlockSummary]) -> serde_json::Value {
             "axisLabel": { "color": "#aaa" },
             "axisLine": { "lineStyle": { "color": "#555" } }
         },
-        "yAxis": y_axis("% of max"),
-        "tooltip": tooltip_axis(),
+        "yAxis": y_axis("Relative (% of peak era)"),
+        "tooltip": {
+            "trigger": "axis",
+            "backgroundColor": "rgba(13,33,55,0.95)",
+            "borderColor": "rgba(255,255,255,0.1)",
+            "textStyle": { "color": "rgba(255,255,255,0.85)", "fontSize": 12 },
+            "_useRawValues": true
+        },
         "legend": { "show": true },
         "series": series
     }))
@@ -1040,10 +1050,12 @@ pub fn halving_era_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
         }
     }
 
+    let units = ["MB", "txs", "BTC", "%"];
     let mut series = Vec::new();
     for (ei, &era) in eras.iter().enumerate() {
-        let normalized: Vec<f64> = (0..4).map(|i| {
-            if maxes[i] > 0.0 { round(era_avgs[ei][i] / maxes[i] * 100.0, 1) } else { 0.0 }
+        let data: Vec<serde_json::Value> = (0..4).map(|i| {
+            let norm = if maxes[i] > 0.0 { round(era_avgs[ei][i] / maxes[i] * 100.0, 1) } else { 0.0 };
+            json!({ "value": norm, "_raw": era_avgs[ei][i], "_unit": units[i] })
         }).collect();
         let label = if (era as usize) < subsidy_labels.len() {
             format!("Era {} ({})", era, subsidy_labels[era as usize])
@@ -1052,7 +1064,7 @@ pub fn halving_era_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
         };
         let color = era_colors.get(era as usize).unwrap_or(&"#78350f");
         series.push(json!({
-            "name": label, "type": "bar", "data": normalized,
+            "name": label, "type": "bar", "data": data,
             "itemStyle": { "color": color }
         }));
     }
@@ -1063,8 +1075,14 @@ pub fn halving_era_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
             "axisLabel": { "color": "#aaa" },
             "axisLine": { "lineStyle": { "color": "#555" } }
         },
-        "yAxis": y_axis("% of max"),
-        "tooltip": tooltip_axis(),
+        "yAxis": y_axis("Relative (% of peak era)"),
+        "tooltip": {
+            "trigger": "axis",
+            "backgroundColor": "rgba(13,33,55,0.95)",
+            "borderColor": "rgba(255,255,255,0.1)",
+            "textStyle": { "color": "rgba(255,255,255,0.85)", "fontSize": 12 },
+            "_useRawValues": true
+        },
         "legend": { "show": true },
         "series": series
     }))
