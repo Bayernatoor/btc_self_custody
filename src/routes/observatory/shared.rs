@@ -872,6 +872,8 @@ pub fn RangeSelector() -> impl IntoView {
                 <div class="flex items-center gap-2 bg-[#0a1a2e] rounded-xl p-2 border border-white/10">
                     <input
                         type="date"
+                        min="2009-01-03"
+                        max=move || chrono::Utc::now().format("%Y-%m-%d").to_string()
                         class="bg-[#0d2137] text-white text-xs border border-white/10 rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#f7931a]/40"
                         style="color-scheme: dark"
                         prop:value=move || local_from.get()
@@ -882,6 +884,8 @@ pub fn RangeSelector() -> impl IntoView {
                     <span class="text-white/30 text-xs">"to"</span>
                     <input
                         type="date"
+                        min="2009-01-03"
+                        max=move || chrono::Utc::now().format("%Y-%m-%d").to_string()
                         class="bg-[#0d2137] text-white text-xs border border-white/10 rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#f7931a]/40"
                         style="color-scheme: dark"
                         prop:value=move || local_to.get()
