@@ -106,6 +106,52 @@ pub fn spawn_background_tasks(
     zmq_tx_url: Option<String>,
     zmq_block_url: Option<String>,
 ) {
+    // Pre-warm caches for ALL range (the slowest queries).
+    // Runs in background so it doesn't block server startup.
+    {
+        let state = Arc::clone(&state);
+        tokio::spawn(async move {
+            let (from_ts, to_ts) = match state.db.get() {
+                Ok(conn) => {
+                    let max_ts = db::query_stats(&conn)
+                        .ok()
+                        .flatten()
+                        .map(|s| s.latest_timestamp)
+                        .unwrap_or(0);
+                    (0u64, max_ts)
+                }
+                Err(_) => return,
+            };
+            if to_ts == 0 {
+                return;
+            }
+            tracing::info!("Pre-warming caches for ALL range...");
+            // Warm extremes cache
+            if let Ok(conn) = state.db.get() {
+                if let Ok(extremes) =
+                    db::query_extremes_with_heights(&conn, from_ts, to_ts)
+                {
+                    *state
+                        .extremes_cache
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner()) =
+                        Some((from_ts, to_ts, extremes, std::time::Instant::now()));
+                }
+                // Warm range summary cache
+                if let Ok(summary) =
+                    db::query_range_summary(&conn, from_ts, to_ts)
+                {
+                    *state
+                        .range_summary_cache
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner()) =
+                        Some((from_ts, to_ts, summary, std::time::Instant::now()));
+                }
+                tracing::info!("Cache pre-warm complete");
+            }
+        });
+    }
+
     // UTXO refresh every 10 minutes
     {
         let state = Arc::clone(&state);
