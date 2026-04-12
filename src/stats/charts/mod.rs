@@ -155,16 +155,19 @@ pub(crate) fn y_axis(name: &str) -> serde_json::Value {
     })
 }
 
-/// Fallback chart option showing a centered "No data" message.
+/// Fallback chart option when no data is available for the current range.
 pub(crate) fn no_data_chart(title: &str) -> serde_json::Value {
     let mut opt = chart_defaults();
     let m = opt.as_object_mut().unwrap();
     m.insert(
         "title".into(),
         json!({
-            "text": format!("{} — No data", title),
-            "textStyle": { "color": "#aaa", "fontSize": 14 },
-            "left": "center", "top": "middle"
+            "text": title,
+            "subtext": "Select a shorter range (1M or less) to view per-block data",
+            "textStyle": { "color": "rgba(255,255,255,0.4)", "fontSize": 14 },
+            "subtextStyle": { "color": "rgba(255,255,255,0.25)", "fontSize": 12 },
+            "left": "center", "top": "middle",
+            "itemGap": 8
         }),
     );
     opt
@@ -1227,7 +1230,8 @@ mod tests {
         let title = opt.get("title").unwrap();
         let text = title.get("text").unwrap().as_str().unwrap();
         assert!(text.contains("Test Chart"));
-        assert!(text.contains("No data"));
+        let subtext = title.get("subtext").unwrap().as_str().unwrap();
+        assert!(subtext.contains("shorter range"));
     }
 
     // -----------------------------------------------------------------------
