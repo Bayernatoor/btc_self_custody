@@ -725,8 +725,8 @@ pub fn cumulative_adoption_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     segwit_buf.push('['); taproot_buf.push('[');
     for (i, b) in blocks.iter().enumerate() {
         if i > 0 { segwit_buf.push(','); taproot_buf.push(','); }
-        segwit_total += b.segwit_spend_count;
-        taproot_total += b.taproot_spend_count;
+        segwit_total += b.p2wpkh_count + b.p2wsh_count;
+        taproot_total += b.p2tr_count;
         let _ = write!(segwit_buf, "[{},{},{}]", ts_ms(b.timestamp), segwit_total, b.height);
         let _ = write!(taproot_buf, "[{},{},{}]", ts_ms(b.timestamp), taproot_total, b.height);
     }
@@ -742,7 +742,7 @@ pub fn cumulative_adoption_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         "legend": { "show": true },
         "series": [
             {
-                "name": "SegWit Transactions", "type": "line", "data": segwit_data,
+                "name": "SegWit v0 Outputs", "type": "line", "data": segwit_data,
                 "lineStyle": { "width": 1.5, "color": P2WPKH_COLOR },
                 "itemStyle": { "color": P2WPKH_COLOR }, "symbol": "none",
                 "areaStyle": { "color": "rgba(59,130,246,0.08)" }
@@ -769,7 +769,7 @@ pub fn cumulative_adoption_chart_daily(days: &[DailyAggregate]) -> serde_json::V
     let segwit_data: Vec<f64> = days
         .iter()
         .map(|d| {
-            segwit_total += d.avg_segwit_spend_count * d.block_count as f64;
+            segwit_total += (d.avg_p2wpkh_count + d.avg_p2wsh_count) * d.block_count as f64;
             round(segwit_total, 0)
         })
         .collect();
@@ -778,7 +778,7 @@ pub fn cumulative_adoption_chart_daily(days: &[DailyAggregate]) -> serde_json::V
     let taproot_data: Vec<f64> = days
         .iter()
         .map(|d| {
-            taproot_total += d.avg_taproot_spend_count * d.block_count as f64;
+            taproot_total += d.avg_p2tr_count * d.block_count as f64;
             round(taproot_total, 0)
         })
         .collect();
@@ -791,7 +791,7 @@ pub fn cumulative_adoption_chart_daily(days: &[DailyAggregate]) -> serde_json::V
         "legend": { "show": true },
         "series": [
             {
-                "name": "SegWit Transactions", "type": "line", "data": segwit_data,
+                "name": "SegWit v0 Outputs", "type": "line", "data": segwit_data,
                 "lineStyle": { "width": 1.5, "color": P2WPKH_COLOR },
                 "itemStyle": { "color": P2WPKH_COLOR }, "symbol": "none",
                 "areaStyle": { "color": "rgba(59,130,246,0.08)" }
