@@ -1,4 +1,5 @@
-//! Mining chart builders: miner dominance donut chart and empty blocks scatter chart.
+//! Mining chart builders: miner dominance donut, empty blocks by month,
+//! empty blocks by pool, and mining diversity index (HHI).
 
 use super::*;
 use serde_json::json;
@@ -122,4 +123,127 @@ pub fn empty_blocks_chart(blocks: &[EmptyBlock]) -> serde_json::Value {
             "barMaxWidth": 20
         }]
     }))
+}
+
+/// Empty blocks grouped by mining pool. Shows which pools mine the most
+/// coinbase-only blocks as a horizontal bar chart.
+pub fn empty_blocks_by_pool_chart(blocks: &[EmptyBlock]) -> serde_json::Value {
+    if blocks.is_empty() {
+        return no_data_chart("No empty blocks in this range");
+    }
+
+    let mut pool_counts: std::collections::BTreeMap<&str, u64> =
+        std::collections::BTreeMap::new();
+    for b in blocks {
+        *pool_counts.entry(&b.miner).or_default() += 1;
+    }
+
+    // Sort by count descending
+    let mut sorted: Vec<(&str, u64)> = pool_counts.into_iter().collect();
+    sorted.sort_by(|a, b| b.1.cmp(&a.1));
+
+    let pools: Vec<&str> = sorted.iter().map(|(name, _)| *name).collect();
+    let counts: Vec<u64> = sorted.iter().map(|(_, count)| *count).collect();
+
+    build_option(json!({
+        "xAxis": {
+            "type": "value",
+            "name": "Empty Blocks",
+            "nameTextStyle": { "color": "#aaa" },
+            "axisLabel": { "color": "#aaa" },
+            "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.1)" } }
+        },
+        "yAxis": {
+            "type": "category",
+            "data": pools,
+            "inverse": true,
+            "axisLabel": { "color": "#ccc", "fontSize": 11 },
+            "axisLine": { "lineStyle": { "color": "#555" } }
+        },
+        "grid": { "left": 120, "right": 30, "top": 25, "bottom": 30 },
+        "tooltip": tooltip_axis(),
+        "series": [{
+            "name": "Empty Blocks",
+            "type": "bar",
+            "data": counts,
+            "itemStyle": { "color": DATA_COLOR },
+            "barMaxWidth": 24
+        }]
+    }))
+}
+
+/// Mining diversity index (Herfindahl-Hirschman Index) computed from pool shares.
+/// HHI ranges from 0 (perfectly distributed) to 10,000 (single miner).
+/// Lower = more decentralized mining. Displayed as a single gauge-style value.
+pub fn mining_diversity_chart(miners: &[MinerShare]) -> serde_json::Value {
+    if miners.is_empty() {
+        return no_data_chart("Mining Diversity");
+    }
+
+    let total: u64 = miners.iter().map(|m| m.count).sum();
+    if total == 0 {
+        return no_data_chart("Mining Diversity");
+    }
+
+    let hhi: f64 = miners
+        .iter()
+        .map(|m| {
+            let share = m.count as f64 / total as f64 * 100.0;
+            share * share
+        })
+        .sum();
+
+    let hhi_rounded = (hhi * 10.0).round() / 10.0;
+
+    // Interpret: <1000 = competitive, 1000-1800 = moderate, >1800 = concentrated
+    let (label, color) = if hhi < 1000.0 {
+        ("Competitive", "#22c55e")
+    } else if hhi < 1800.0 {
+        ("Moderate", "#f59e0b")
+    } else {
+        ("Concentrated", "#ef4444")
+    };
+
+    let pool_count = miners.len();
+
+    json!({
+        "backgroundColor": "transparent",
+        "series": [{
+            "type": "gauge",
+            "startAngle": 200,
+            "endAngle": -20,
+            "min": 0,
+            "max": 5000,
+            "splitNumber": 5,
+            "center": ["50%", "60%"],
+            "radius": "85%",
+            "progress": { "show": true, "roundCap": true, "width": 12 },
+            "pointer": { "show": false },
+            "axisLine": {
+                "roundCap": true,
+                "lineStyle": { "width": 12, "color": [[0.2, "#22c55e"], [0.36, "#f59e0b"], [1.0, "#ef4444"]] }
+            },
+            "axisTick": { "show": false },
+            "splitLine": { "show": false },
+            "axisLabel": { "show": false },
+            "title": {
+                "show": true,
+                "offsetCenter": [0, "75%"],
+                "fontSize": 13,
+                "color": color
+            },
+            "detail": {
+                "valueAnimation": false,
+                "fontSize": 28,
+                "fontWeight": "bold",
+                "offsetCenter": [0, "40%"],
+                "color": "#fff",
+                "formatter": format!("{{value}}\n{pool_count} pools")
+            },
+            "data": [{
+                "value": hhi_rounded,
+                "name": label
+            }]
+        }]
+    })
 }

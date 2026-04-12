@@ -153,10 +153,29 @@ pub fn MiningChartsPage() -> impl IntoView {
                                 .unwrap_or_default()
                         });
 
+                        let empty_by_pool_option = Signal::derive(move || {
+                            mining_data.get().and_then(|r| r.ok())
+                                .map(|(_, ref empty)| {
+                                    let value = crate::stats::charts::empty_blocks_by_pool_chart(empty);
+                                    serde_json::to_string(&value).unwrap_or_default()
+                                })
+                                .unwrap_or_default()
+                        });
+                        let diversity_option = Signal::derive(move || {
+                            mining_data.get().and_then(|r| r.ok())
+                                .map(|(ref miners, _)| {
+                                    let value = crate::stats::charts::mining_diversity_chart(miners);
+                                    serde_json::to_string(&value).unwrap_or_default()
+                                })
+                                .unwrap_or_default()
+                        });
+
                         view! {
                             <div class="space-y-10">
                                 <ChartCard title="Mining Pool Share" description="Which mining pools are finding the most blocks. More distributed is healthier for the network" chart_id="chart-miner-dominance" option=miner_chart_option/>
+                                <ChartCard title="Mining Diversity Index" description="Herfindahl-Hirschman Index (HHI) measuring mining concentration. Below 1000 is competitive, above 1800 is concentrated" chart_id="chart-diversity" option=diversity_option/>
                                 <ChartCard title="Empty Blocks" description="Blocks with no user transactions, usually mined before the pool has received the previous block's transactions" chart_id="chart-empty-blocks" option=empty_blocks_option/>
+                                <ChartCard title="Empty Blocks by Pool" description="Which mining pools produce the most coinbase-only blocks" chart_id="chart-empty-by-pool" option=empty_by_pool_option/>
                             </div>
                         }.into_any()
                     }
