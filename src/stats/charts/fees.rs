@@ -727,6 +727,8 @@ pub fn fee_pressure_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         "xAxis": {
             "type": "value",
             "name": "Weight Utilization (%)",
+            "nameLocation": "center",
+            "nameGap": 30,
             "nameTextStyle": { "color": "#aaa" },
             "axisLabel": { "color": "#aaa" },
             "axisLine": { "lineStyle": { "color": "#555" } },
