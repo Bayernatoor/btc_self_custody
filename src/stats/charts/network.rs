@@ -2,6 +2,7 @@
 //! weight utilization, avg tx size, chain size growth, and largest transaction.
 
 use super::*;
+use chrono::Datelike;
 use serde_json::json;
 use std::fmt::Write;
 
@@ -1110,6 +1111,74 @@ pub fn weekday_activity_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         tx_sums[dow] += b.tx_count as f64;
         fee_sums[dow] += b.total_fees as f64 / 100_000_000.0;
         counts[dow] += 1;
+    }
+
+    let day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    let avg_tx: Vec<f64> = (0..7)
+        .map(|i| if counts[i] > 0 { round(tx_sums[i] / counts[i] as f64, 1) } else { 0.0 })
+        .collect();
+    let avg_fees: Vec<f64> = (0..7)
+        .map(|i| if counts[i] > 0 { round(fee_sums[i] / counts[i] as f64, 4) } else { 0.0 })
+        .collect();
+
+    build_option(json!({
+        "xAxis": {
+            "type": "category",
+            "data": day_names,
+            "axisLabel": { "color": "#aaa" },
+            "axisLine": { "lineStyle": { "color": "#555" } }
+        },
+        "yAxis": [
+            {
+                "type": "value", "name": "Avg Tx Count",
+                "nameTextStyle": { "color": "#aaa" },
+                "axisLabel": { "color": "#aaa" },
+                "axisLine": { "lineStyle": { "color": "#555" } },
+                "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.10)", "type": "dashed" } }
+            },
+            {
+                "type": "value", "name": "Avg Fees (BTC)",
+                "nameTextStyle": { "color": "#aaa" },
+                "axisLabel": { "color": "#aaa" },
+                "axisLine": { "lineStyle": { "color": "#555" } },
+                "splitLine": { "show": false }
+            }
+        ],
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            {
+                "name": "Avg Tx Count", "type": "bar", "data": avg_tx,
+                "yAxisIndex": 0,
+                "itemStyle": { "color": DATA_COLOR }
+            },
+            {
+                "name": "Avg Fees (BTC)", "type": "bar", "data": avg_fees,
+                "yAxisIndex": 1,
+                "itemStyle": { "color": "#3b82f6" }
+            }
+        ]
+    }))
+}
+
+/// Weekday activity from daily aggregates. Groups by day-of-week using the date string.
+pub fn weekday_activity_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+    if days.is_empty() {
+        return no_data_chart("Weekday Activity");
+    }
+
+    let mut tx_sums = [0.0f64; 7];
+    let mut fee_sums = [0.0f64; 7];
+    let mut counts = [0u64; 7];
+
+    for d in days {
+        // Parse date to get day of week
+        if let Ok(date) = chrono::NaiveDate::parse_from_str(&d.date, "%Y-%m-%d") {
+            let dow = date.weekday().num_days_from_monday() as usize;
+            tx_sums[dow] += d.avg_tx_count * d.block_count as f64;
+            fee_sums[dow] += d.total_fees as f64 / 100_000_000.0;
+            counts[dow] += d.block_count;
+        }
     }
 
     let day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];

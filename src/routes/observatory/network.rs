@@ -217,18 +217,10 @@ pub fn NetworkChartsPage() -> impl IntoView {
                             }).unwrap_or_default()
                         });
 
-                        let weekday_option = Signal::derive(move || {
-                            let _r = range.get();
-                            dashboard_data.get().and_then(|r| r.ok()).map(|data| {
-                                let value = match data {
-                                    DashboardData::PerBlock(ref blocks) =>
-                                        crate::stats::charts::weekday_activity_chart(blocks),
-                                    DashboardData::Daily(_) =>
-                                        crate::stats::charts::no_data_chart("Weekday Activity"),
-                                };
-                                serde_json::to_string(&value).unwrap_or_default()
-                            }).unwrap_or_default()
-                        });
+                        let weekday_option = chart_memo!(dashboard_data, range, overlay_flags,
+                            |blocks| crate::stats::charts::weekday_activity_chart(blocks),
+                            |days| crate::stats::charts::weekday_activity_chart_daily(days)
+                        );
 
                         view! {
                             <div class="space-y-10">
