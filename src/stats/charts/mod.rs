@@ -1266,4 +1266,132 @@ mod tests {
         // Should still have default textStyle from chart_defaults
         assert!(legend.get("textStyle").is_some());
     }
+
+    // -----------------------------------------------------------------------
+    // New chart function tests
+    // -----------------------------------------------------------------------
+
+    fn test_block(height: u64, timestamp: u64) -> BlockSummary {
+        BlockSummary {
+            height,
+            hash: format!("h{}", height),
+            timestamp,
+            tx_count: 2000,
+            size: 1_000_000,
+            weight: 3_800_000,
+            difficulty: 50_000_000_000_000.0,
+            total_fees: 50_000_000,
+            median_fee: 5000,
+            median_fee_rate: 10.5,
+            segwit_spend_count: 1500,
+            taproot_spend_count: 200,
+            p2pk_count: 0,
+            p2pkh_count: 500,
+            p2sh_count: 300,
+            p2wpkh_count: 2000,
+            p2wsh_count: 100,
+            p2tr_count: 400,
+            multisig_count: 10,
+            unknown_script_count: 5,
+            input_count: 4000,
+            output_count: 5000,
+            rbf_count: 800,
+            witness_bytes: 600_000,
+            inscription_count: 50,
+            inscription_bytes: 200_000,
+            brc20_count: 5,
+            op_return_count: 100,
+            op_return_bytes: 10_000,
+            runes_count: 30,
+            runes_bytes: 3_000,
+            omni_count: 2,
+            omni_bytes: 200,
+            counterparty_count: 1,
+            counterparty_bytes: 100,
+            data_carrier_count: 67,
+            data_carrier_bytes: 6_700,
+            taproot_keypath_count: 150,
+            taproot_scriptpath_count: 50,
+            total_output_value: 500_000_000_000,
+            total_input_value: 500_050_000_000,
+            fee_rate_p10: 2.0,
+            fee_rate_p90: 50.0,
+            stamps_count: 0,
+            largest_tx_size: 50_000,
+        }
+    }
+
+    #[test]
+    fn fee_revenue_share_produces_valid_percentage() {
+        let blocks = vec![test_block(840_000, 1713571200)]; // 4th halving block
+        let chart = fees::fee_revenue_share_chart(&blocks);
+        let series = chart.get("series").unwrap().as_array().unwrap();
+        assert!(!series.is_empty());
+        // At height 840k: subsidy = 312,500,000 sats, fees = 50,000,000
+        // Fee share = 50M / (312.5M + 50M) * 100 = 13.79%
+        let data = series[0].get("data").unwrap().as_array().unwrap();
+        let val = data[0].as_array().unwrap()[1].as_f64().unwrap();
+        assert!(val > 13.0 && val < 14.0, "Expected ~13.79%, got {}", val);
+    }
+
+    #[test]
+    fn utxo_growth_computes_net_change() {
+        let blocks = vec![test_block(100, 1700000000)];
+        let chart = tx_metrics::utxo_growth_chart(&blocks);
+        let series = chart.get("series").unwrap().as_array().unwrap();
+        let data = series[0].get("data").unwrap().as_array().unwrap();
+        // output_count(5000) - input_count(4000) = 1000
+        let val = data[0].as_array().unwrap()[1].as_i64().unwrap();
+        assert_eq!(val, 1000);
+    }
+
+    #[test]
+    fn tx_density_computes_tx_per_kb() {
+        let blocks = vec![test_block(100, 1700000000)];
+        let chart = tx_metrics::tx_density_chart(&blocks);
+        let series = chart.get("series").unwrap().as_array().unwrap();
+        let data = series[0].get("data").unwrap().as_array().unwrap();
+        // tx_count(2000) / (size(1000000) / 1000) = 2.0
+        let val = data[0].as_array().unwrap()[1].as_f64().unwrap();
+        assert!((val - 2.0).abs() < 0.01, "Expected 2.0, got {}", val);
+    }
+
+    #[test]
+    fn btc_volume_converts_sats_to_btc() {
+        let blocks = vec![test_block(100, 1700000000)];
+        let chart = fees::btc_volume_chart(&blocks);
+        let series = chart.get("series").unwrap().as_array().unwrap();
+        let data = series[0].get("data").unwrap().as_array().unwrap();
+        // total_output_value = 500_000_000_000 sats = 5000.0 BTC
+        let val = data[0].as_array().unwrap()[1].as_f64().unwrap();
+        assert_eq!(val, 5000.0);
+    }
+
+    #[test]
+    fn block_subsidy_at_halvings() {
+        assert_eq!(block_subsidy(0), 5_000_000_000);          // 50 BTC
+        assert_eq!(block_subsidy(209_999), 5_000_000_000);    // last block era 0
+        assert_eq!(block_subsidy(210_000), 2_500_000_000);    // 25 BTC
+        assert_eq!(block_subsidy(420_000), 1_250_000_000);    // 12.5 BTC
+        assert_eq!(block_subsidy(630_000), 625_000_000);      // 6.25 BTC
+        assert_eq!(block_subsidy(840_000), 312_500_000);      // 3.125 BTC
+    }
+
+    #[test]
+    fn no_data_chart_with_hint_custom_message() {
+        let opt = no_data_chart_with_hint("Test", "Custom hint");
+        let title = opt.get("title").unwrap();
+        assert_eq!(title.get("subtext").unwrap().as_str().unwrap(), "Custom hint");
+    }
+
+    #[test]
+    fn histogram_from_buckets_produces_chart() {
+        let buckets = vec![
+            HistogramBucket { label: "0-10%".into(), count: 100 },
+            HistogramBucket { label: "90-100%".into(), count: 5000 },
+        ];
+        let chart = network::block_fullness_histogram_from_buckets(&buckets);
+        let series = chart.get("series").unwrap().as_array().unwrap();
+        assert!(!series.is_empty());
+    }
 }

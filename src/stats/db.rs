@@ -2092,4 +2092,132 @@ mod tests {
         assert!(unconfirmed.contains(&"tx3".to_string()));
         assert!(!unconfirmed.contains(&"tx2".to_string()));
     }
+
+    /// Helper: insert a minimal test block with key fields.
+    fn insert_test_block(conn: &Connection, height: u64, timestamp: u64, weight: u64, tx_count: u64, total_fees: u64) {
+        let size = weight / 4;
+        conn.execute(
+            "INSERT OR REPLACE INTO blocks (
+                height, hash, timestamp, tx_count, size, weight, difficulty,
+                op_return_count, op_return_bytes, runes_count, runes_bytes,
+                data_carrier_count, data_carrier_bytes,
+                total_fees, median_fee_rate, segwit_spend_count, taproot_spend_count,
+                input_count, output_count, total_output_value, total_input_value
+            ) VALUES (
+                ?1, ?2, ?3, ?4, ?5, ?6, 1.0,
+                0, 0, 0, 0, 0, 0,
+                ?7, 1.0, ?8, 0, ?9, ?10, 50000000, 50100000
+            )",
+            rusqlite::params![
+                height as i64,
+                format!("hash_{}", height),
+                timestamp as i64,
+                tx_count as i64,
+                size as i64,
+                weight as i64,
+                total_fees as i64,
+                (tx_count / 2) as i64,
+                (tx_count * 2) as i64,
+                (tx_count * 3) as i64,
+            ],
+        ).unwrap();
+    }
+
+    #[test]
+    fn test_timestamp_to_date() {
+        assert_eq!(timestamp_to_date(0), "1970-01-01");
+        assert_eq!(timestamp_to_date(1231006505), "2009-01-03"); // genesis block
+        assert_eq!(timestamp_to_date(1713571200), "2024-04-20"); // 4th halving
+    }
+
+    #[test]
+    fn test_fullness_histogram() {
+        let conn = setup_db();
+        // Block at 50% weight (2M of 4M)
+        insert_test_block(&conn, 1, 1700000000, 2_000_000, 100, 1000);
+        // Block at 99% weight (3.96M of 4M)
+        insert_test_block(&conn, 2, 1700000600, 3_960_000, 200, 2000);
+        // Block at 10% weight
+        insert_test_block(&conn, 3, 1700001200, 400_000, 50, 500);
+
+        let hist = query_fullness_histogram(&conn, 0, 9_999_999_999).unwrap();
+        assert_eq!(hist.len(), 10);
+        // 10% block should be in bucket "10-20%"  (index 1)
+        assert_eq!(hist[1].1, 1);
+        // 50% block should be in bucket "50-60%" (index 5)
+        assert_eq!(hist[5].1, 1);
+        // 99% block should be in bucket "90-100%" (index 9)
+        assert_eq!(hist[9].1, 1);
+        // Other buckets should be 0
+        assert_eq!(hist[0].1, 0);
+    }
+
+    #[test]
+    fn test_block_time_histogram() {
+        let conn = setup_db();
+        // 3 blocks: 10 min apart, then 30 sec apart
+        insert_test_block(&conn, 1, 1700000000, 3_900_000, 100, 1000);
+        insert_test_block(&conn, 2, 1700000600, 3_900_000, 100, 1000); // +600s = 10 min
+        insert_test_block(&conn, 3, 1700000630, 3_900_000, 100, 1000); // +30s = 0.5 min
+
+        let hist = query_block_time_histogram(&conn, 0, 9_999_999_999).unwrap();
+        assert_eq!(hist.len(), 61);
+        // 30s interval -> bucket "0-1" (index 0)
+        assert_eq!(hist[0].1, 1);
+        // 600s interval -> bucket "9-10" (index 9, since 600/60 = 10, but integer division gives 10 which maps to "10-11")
+        // Actually 600/60 = 10, CAST(10 AS INT) = 10 -> bucket index 10
+        assert_eq!(hist[10].1, 1);
+    }
+
+    #[test]
+    fn test_daily_blocks_rebuild_and_query() {
+        let conn = setup_db();
+        // Two blocks on same day
+        insert_test_block(&conn, 1, 1700000000, 3_000_000, 100, 1000);
+        insert_test_block(&conn, 2, 1700000600, 3_500_000, 200, 2000);
+        // One block on next day
+        insert_test_block(&conn, 3, 1700086400, 2_000_000, 50, 500);
+
+        let count = rebuild_all_daily_blocks(&conn).unwrap();
+        assert_eq!(count, 2); // 2 distinct days
+
+        let rows = query_daily_aggregates_fast(&conn, 0, 9_999_999_999).unwrap();
+        assert_eq!(rows.len(), 2);
+        // First day: 2 blocks
+        assert_eq!(rows[0].block_count, 2);
+        assert_eq!(rows[0].total_fees, 3000); // 1000 + 2000
+        // Second day: 1 block
+        assert_eq!(rows[1].block_count, 1);
+        assert_eq!(rows[1].total_fees, 500);
+    }
+
+    #[test]
+    fn test_daily_blocks_value_columns() {
+        let conn = setup_db();
+        insert_test_block(&conn, 1, 1700000000, 3_000_000, 100, 1000);
+        insert_test_block(&conn, 2, 1700000600, 3_000_000, 200, 2000);
+
+        rebuild_all_daily_blocks(&conn).unwrap();
+        let rows = query_daily_aggregates_fast(&conn, 0, 9_999_999_999).unwrap();
+        assert_eq!(rows.len(), 1);
+        // Each block has total_output_value=50000000, so day total = 100000000
+        assert_eq!(rows[0].total_output_value, 100_000_000);
+        assert_eq!(rows[0].total_input_value, 100_200_000);
+    }
+
+    #[test]
+    fn test_refresh_daily_block() {
+        let conn = setup_db();
+        insert_test_block(&conn, 1, 1700000000, 3_000_000, 100, 1000);
+        rebuild_all_daily_blocks(&conn).unwrap();
+
+        // Add another block on the same day
+        insert_test_block(&conn, 2, 1700000600, 3_500_000, 200, 5000);
+        let day = timestamp_to_date(1700000000);
+        refresh_daily_block(&conn, &day).unwrap();
+
+        let rows = query_daily_aggregates_fast(&conn, 0, 9_999_999_999).unwrap();
+        assert_eq!(rows[0].block_count, 2);
+        assert_eq!(rows[0].total_fees, 6000); // 1000 + 5000
+    }
 }
