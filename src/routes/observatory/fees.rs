@@ -169,7 +169,7 @@ pub fn FeeChartsPage() -> impl IntoView {
                             />
                             <ChartCard
                                 title="Input vs Output Value"
-                                description=chart_desc(range, "Total input value vs output value per block in BTC. The gap between the lines represents fees extracted by miners", "Value flow is only available in per-block mode")
+                                description=chart_desc(range, "Total input value vs output value per block in BTC. The gap between the lines represents fees extracted by miners", "Daily total input and output value in BTC. The gap represents fees extracted by miners")
                                 chart_id="chart-value-flow"
                                 option=value_flow_option
                             />
