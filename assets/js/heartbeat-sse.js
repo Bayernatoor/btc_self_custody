@@ -162,10 +162,12 @@ export function processLiveBlock(block) {
     }]);
     window.pushHeartbeatBlocks(blockJson, false);
 
-    // Clear mining overlay (block arrived with complete data)
+    // Clear mining overlay and cancel pending delay (block arrived)
     _hb._sseDisconnected = false;
     _hb._sseDisconnectedSince = 0;
     _hb._blockMiningOverlay = false;
+    if (_hb._miningDelayTimeout) { clearTimeout(_hb._miningDelayTimeout); _hb._miningDelayTimeout = null; }
+    if (_hb._miningTimeout) { clearTimeout(_hb._miningTimeout); _hb._miningTimeout = null; }
     var miningEl = document.getElementById('heartbeat-mining-overlay');
     if (miningEl) miningEl.classList.add('hidden');
 
@@ -294,13 +296,19 @@ export function connectOwnFeed() {
         });
         es.addEventListener('block_mining', function(e) {
             if (!_hb) return;
-            // Node is processing a new block — show mining overlay.
-            // The overlay clears when the complete block event arrives.
-            _hb._blockMiningOverlay = true;
-            var miningEl = document.getElementById('heartbeat-mining-overlay');
-            if (miningEl) miningEl.classList.remove('hidden');
-            // Auto-dismiss after 120s in case block event never arrives
+            // Node is processing a new block. Delay showing the overlay by
+            // 90 seconds so it only appears for longer-than-usual processing.
+            // Most blocks process in under 2 minutes, so the overlay only
+            // shows for the tail end instead of the full duration.
+            if (_hb._miningDelayTimeout) clearTimeout(_hb._miningDelayTimeout);
             if (_hb._miningTimeout) clearTimeout(_hb._miningTimeout);
+            _hb._miningDelayTimeout = setTimeout(function() {
+                if (!_hb) return;
+                _hb._blockMiningOverlay = true;
+                var miningEl = document.getElementById('heartbeat-mining-overlay');
+                if (miningEl) miningEl.classList.remove('hidden');
+            }, 90000); // 90 second delay before showing
+            // Auto-dismiss after 120s from mining event (30s after overlay appears)
             _hb._miningTimeout = setTimeout(function() {
                 if (_hb && _hb._blockMiningOverlay) {
                     _hb._blockMiningOverlay = false;
@@ -319,8 +327,10 @@ export function connectOwnFeed() {
             _hb._sseDisconnected = false;
             _hb._sseDisconnectedSince = 0;
             _hb._sseRetries = 0;
-            // Clear mining overlay on reconnect (block may have arrived while disconnected)
+            // Clear mining overlay and delay on reconnect
             _hb._blockMiningOverlay = false;
+            if (_hb._miningDelayTimeout) { clearTimeout(_hb._miningDelayTimeout); _hb._miningDelayTimeout = null; }
+            if (_hb._miningTimeout) { clearTimeout(_hb._miningTimeout); _hb._miningTimeout = null; }
             var mel = document.getElementById('heartbeat-mining-overlay');
             if (mel) mel.classList.add('hidden');
         };

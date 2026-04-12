@@ -465,8 +465,8 @@ function _hbBeforeUnload() {
 window.addEventListener('beforeunload', _hbBeforeUnload);
 
 // When tab regains focus, preserve existing timeline and resume live flow.
-// Don't reconnect SSE or clear blips — the live bricks stay where they were,
-// virtualX catches up, queued blocks replay in place, and new txs resume at head.
+// If hidden for > 5 minutes, do a full reset instead of trying to reconcile
+// stale timeline state (blocks bunched up, flatline position wrong).
 function _hbVisibilityChange() {
     var _hb = getState();
     if (!_hb) return;
@@ -475,6 +475,17 @@ function _hbVisibilityChange() {
         return;
     }
     var now = Date.now() / 1000;
+
+    // Full reset if hidden for more than 5 minutes
+    if (_hb._hiddenSince > 0 && (now - _hb._hiddenSince) > 300) {
+        var canvasId = _hb.canvas ? _hb.canvas.id : null;
+        console.log('[heartbeat] tab return after', Math.round(now - _hb._hiddenSince), 's - full reset');
+        if (canvasId) {
+            window.destroyHeartbeat();
+            window.initHeartbeat(canvasId);
+        }
+        return;
+    }
 
     // Advance virtualX by full elapsed hidden time
     if (_hb._hiddenSince > 0) {
