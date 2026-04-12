@@ -157,13 +157,18 @@ pub(crate) fn y_axis(name: &str) -> serde_json::Value {
 
 /// Fallback chart option when no data is available for the current range.
 pub(crate) fn no_data_chart(title: &str) -> serde_json::Value {
+    no_data_chart_with_hint(title, "Select a shorter range (1M or less) to view per-block data")
+}
+
+/// Fallback chart with a custom hint message.
+pub(crate) fn no_data_chart_with_hint(title: &str, hint: &str) -> serde_json::Value {
     let mut opt = chart_defaults();
     let m = opt.as_object_mut().unwrap();
     m.insert(
         "title".into(),
         json!({
             "text": title,
-            "subtext": "Select a shorter range (1M or less) to view per-block data",
+            "subtext": hint,
             "textStyle": { "color": "rgba(255,255,255,0.4)", "fontSize": 14 },
             "subtextStyle": { "color": "rgba(255,255,255,0.45)", "fontSize": 12 },
             "left": "center", "top": "middle",

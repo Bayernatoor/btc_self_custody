@@ -972,7 +972,7 @@ pub fn block_propagation_chart(
     }
 
     if dots.is_empty() {
-        return no_data_chart("Rapid Blocks (none found)");
+        return no_data_chart_with_hint("No rapid consecutive blocks found", "No blocks arrived within 60 seconds of each other in this range");
     }
 
     let count = dots.len();
