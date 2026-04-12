@@ -145,40 +145,40 @@ pub fn NetworkChartsPage() -> impl IntoView {
 
                         let fullness_dist_option = Signal::derive(move || {
                             let _r = range.get();
-                            dashboard_data.get().and_then(|r| r.ok()).and_then(|data| {
-                                match data {
-                                    DashboardData::PerBlock(ref blocks) => {
-                                        let value = crate::stats::charts::block_fullness_distribution_chart(blocks);
-                                        Some(serde_json::to_string(&value).unwrap_or_default())
-                                    }
-                                    DashboardData::Daily(_) => None,
-                                }
+                            dashboard_data.get().and_then(|r| r.ok()).map(|data| {
+                                let value = match data {
+                                    DashboardData::PerBlock(ref blocks) =>
+                                        crate::stats::charts::block_fullness_distribution_chart(blocks),
+                                    DashboardData::Daily(_) =>
+                                        crate::stats::charts::no_data_chart("Block Fullness Distribution"),
+                                };
+                                serde_json::to_string(&value).unwrap_or_default()
                             }).unwrap_or_default()
                         });
 
                         let time_dist_option = Signal::derive(move || {
                             let _r = range.get();
-                            dashboard_data.get().and_then(|r| r.ok()).and_then(|data| {
-                                match data {
-                                    DashboardData::PerBlock(ref blocks) => {
-                                        let value = crate::stats::charts::block_time_distribution_chart(blocks);
-                                        Some(serde_json::to_string(&value).unwrap_or_default())
-                                    }
-                                    DashboardData::Daily(_) => None,
-                                }
+                            dashboard_data.get().and_then(|r| r.ok()).map(|data| {
+                                let value = match data {
+                                    DashboardData::PerBlock(ref blocks) =>
+                                        crate::stats::charts::block_time_distribution_chart(blocks),
+                                    DashboardData::Daily(_) =>
+                                        crate::stats::charts::no_data_chart("Block Time Distribution"),
+                                };
+                                serde_json::to_string(&value).unwrap_or_default()
                             }).unwrap_or_default()
                         });
 
                         let propagation_option = Signal::derive(move || {
                             let _r = range.get();
-                            dashboard_data.get().and_then(|r| r.ok()).and_then(|data| {
-                                match data {
-                                    DashboardData::PerBlock(ref blocks) => {
-                                        let value = crate::stats::charts::block_propagation_chart(blocks);
-                                        Some(serde_json::to_string(&value).unwrap_or_default())
-                                    }
-                                    DashboardData::Daily(_) => None,
-                                }
+                            dashboard_data.get().and_then(|r| r.ok()).map(|data| {
+                                let value = match data {
+                                    DashboardData::PerBlock(ref blocks) =>
+                                        crate::stats::charts::block_propagation_chart(blocks),
+                                    DashboardData::Daily(_) =>
+                                        crate::stats::charts::no_data_chart("Rapid Consecutive Blocks"),
+                                };
+                                serde_json::to_string(&value).unwrap_or_default()
                             }).unwrap_or_default()
                         });
 

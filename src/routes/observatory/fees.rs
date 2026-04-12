@@ -94,14 +94,14 @@ pub fn FeeChartsPage() -> impl IntoView {
 
                     let fee_pressure_option = Signal::derive(move || {
                         let _r = range.get();
-                        dashboard_data.get().and_then(|r| r.ok()).and_then(|data| {
-                            match data {
-                                DashboardData::PerBlock(ref blocks) => {
-                                    let value = crate::stats::charts::fee_pressure_chart(blocks);
-                                    Some(serde_json::to_string(&value).unwrap_or_default())
-                                }
-                                DashboardData::Daily(_) => None,
-                            }
+                        dashboard_data.get().and_then(|r| r.ok()).map(|data| {
+                            let value = match data {
+                                DashboardData::PerBlock(ref blocks) =>
+                                    crate::stats::charts::fee_pressure_chart(blocks),
+                                DashboardData::Daily(_) =>
+                                    crate::stats::charts::no_data_chart("Fee Pressure vs Block Space"),
+                            };
+                            serde_json::to_string(&value).unwrap_or_default()
                         }).unwrap_or_default()
                     });
 
