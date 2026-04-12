@@ -68,7 +68,7 @@ pub fn ObservatoryPage() -> impl IntoView {
 
     view! {
         // Title and meta description are set per sub-page for SEO
-        <section class="max-w-[1750px] mx-auto px-3 sm:px-4 lg:px-8 pt-6 sm:pt-10 pb-28 opacity-0 animate-fadeinone overflow-x-hidden">
+        <section class="max-w-[1750px] mx-auto px-3 sm:px-4 lg:px-8 pt-6 sm:pt-10 pb-28 opacity-0 animate-fadeinone">
             // Hero branding — only on dashboard
             <Show when=move || on_dashboard.get()>
                 <div class="relative rounded-2xl overflow-hidden mb-6 sm:mb-8">

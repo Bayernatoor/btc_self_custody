@@ -914,6 +914,11 @@ pub fn halving_era_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 
     let eras: Vec<u64> = era_data.keys().copied().collect();
 
+    // Need at least 2 eras to compare
+    if eras.len() < 2 {
+        return no_data_chart_with_hint("Halving Era Comparison", "Select a range spanning multiple halving eras (try ALL range)");
+    }
+
     // Compute per-era averages for each metric
     let mut era_avgs: Vec<[f64; 4]> = Vec::new();
     for &era in &eras {

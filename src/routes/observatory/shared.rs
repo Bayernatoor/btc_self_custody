@@ -1193,7 +1193,7 @@ pub fn ChartPageLayout(
         })}
         // Compact toolbar: section selector (left) + range (right). Sticky so it
         // stays visible while scrolling through charts.
-        <div class="sticky top-0 z-30 bg-[#123c64]/95 backdrop-blur-sm -mx-4 px-4 sm:-mx-6 sm:px-6 py-3 mb-4 border-b border-white/5">
+        <div class="sticky top-[48px] z-20 bg-[#123c64]/95 backdrop-blur-sm -mx-4 px-4 sm:-mx-6 sm:px-6 py-3 mb-4 border-b border-white/5">
             <div class="flex flex-col sm:flex-row sm:items-start gap-3">
                 {header.map(|h| view! { <div class="flex items-center gap-3 flex-shrink-0">{h.run()}</div> })}
                 <div class="sm:ml-auto">
