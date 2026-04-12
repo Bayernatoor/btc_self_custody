@@ -165,7 +165,7 @@ pub(crate) fn no_data_chart(title: &str) -> serde_json::Value {
             "text": title,
             "subtext": "Select a shorter range (1M or less) to view per-block data",
             "textStyle": { "color": "rgba(255,255,255,0.4)", "fontSize": 14 },
-            "subtextStyle": { "color": "rgba(255,255,255,0.25)", "fontSize": 12 },
+            "subtextStyle": { "color": "rgba(255,255,255,0.45)", "fontSize": 12 },
             "left": "center", "top": "middle",
             "itemGap": 8
         }),
