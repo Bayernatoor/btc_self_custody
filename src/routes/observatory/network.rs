@@ -143,6 +143,45 @@ pub fn NetworkChartsPage() -> impl IntoView {
                             }).unwrap_or_default()
                         });
 
+                        let fullness_dist_option = Signal::derive(move || {
+                            let _r = range.get();
+                            dashboard_data.get().and_then(|r| r.ok()).and_then(|data| {
+                                match data {
+                                    DashboardData::PerBlock(ref blocks) => {
+                                        let value = crate::stats::charts::block_fullness_distribution_chart(blocks);
+                                        Some(serde_json::to_string(&value).unwrap_or_default())
+                                    }
+                                    DashboardData::Daily(_) => None,
+                                }
+                            }).unwrap_or_default()
+                        });
+
+                        let time_dist_option = Signal::derive(move || {
+                            let _r = range.get();
+                            dashboard_data.get().and_then(|r| r.ok()).and_then(|data| {
+                                match data {
+                                    DashboardData::PerBlock(ref blocks) => {
+                                        let value = crate::stats::charts::block_time_distribution_chart(blocks);
+                                        Some(serde_json::to_string(&value).unwrap_or_default())
+                                    }
+                                    DashboardData::Daily(_) => None,
+                                }
+                            }).unwrap_or_default()
+                        });
+
+                        let propagation_option = Signal::derive(move || {
+                            let _r = range.get();
+                            dashboard_data.get().and_then(|r| r.ok()).and_then(|data| {
+                                match data {
+                                    DashboardData::PerBlock(ref blocks) => {
+                                        let value = crate::stats::charts::block_propagation_chart(blocks);
+                                        Some(serde_json::to_string(&value).unwrap_or_default())
+                                    }
+                                    DashboardData::Daily(_) => None,
+                                }
+                            }).unwrap_or_default()
+                        });
+
                         view! {
                             <div class="space-y-10">
                                 <ChartCard title="Block Size" description=chart_desc(range, "How large each block is in megabytes", "Average block size per day in megabytes") chart_id="chart-size" option=size_option/>
@@ -152,6 +191,9 @@ pub fn NetworkChartsPage() -> impl IntoView {
                                 <ChartCard title="Avg Transaction Size" description=chart_desc(range, "Average size of a transaction in bytes. Smaller means more efficient use of block space", "Daily average transaction size in bytes. Smaller means more efficient use of block space") chart_id="chart-avg-tx-size" option=avg_tx_size_option/>
                                 <ChartCard title="Block Interval" description=chart_desc(range, "Minutes between consecutive blocks. Target is 10 minutes", "Average daily block interval in minutes. Target is 10 minutes") chart_id="chart-interval" option=interval_option/>
                                 <ChartCard title="Chain Size Growth" description="Total blockchain size over time, showing how fast the chain is growing" chart_id="chart-chain-size" option=chain_size_option/>
+                                <ChartCard title="Block Fullness Distribution" description="Distribution of blocks by weight utilization percentage. Shows how many blocks are nearly full vs partially empty" chart_id="chart-fullness-dist" option=fullness_dist_option/>
+                                <ChartCard title="Block Time Distribution" description="Distribution of time between consecutive blocks. Most cluster near the 10-minute target" chart_id="chart-time-dist" option=time_dist_option/>
+                                <ChartCard title="Rapid Consecutive Blocks" description="Blocks arriving within 60 seconds of each other, indicating fast mining luck or potential stale block races" chart_id="chart-propagation" option=propagation_option/>
                             </div>
                         }.into_any()
                     }
@@ -203,6 +245,15 @@ pub fn NetworkChartsPage() -> impl IntoView {
                             |days| crate::stats::charts::witness_share_chart_daily(days)
                         );
 
+                        let taproot_velocity_option = chart_memo!(dashboard_data, range, overlay_flags,
+                            |blocks| crate::stats::charts::taproot_velocity_chart(blocks),
+                            |days| crate::stats::charts::taproot_velocity_chart_daily(days)
+                        );
+                        let cumulative_adoption_option = chart_memo!(dashboard_data, range, overlay_flags,
+                            |blocks| crate::stats::charts::cumulative_adoption_chart(blocks),
+                            |days| crate::stats::charts::cumulative_adoption_chart_daily(days)
+                        );
+
                         view! {
                             <div class="space-y-10">
                                 <ChartCard title="SegWit Adoption" description=chart_desc(range, "Percentage of transactions using Segregated Witness", "Daily average SegWit adoption percentage") chart_id="chart-segwit" option=segwit_option/>
@@ -214,6 +265,8 @@ pub fn NetworkChartsPage() -> impl IntoView {
                                 <ChartCard title="Address Type Share" description="Each output type as a percentage of total, showing the shift from legacy to SegWit to Taproot" chart_id="chart-address-types-pct" option=address_type_pct_option/>
                                 <ChartCard title="Taproot Spend Types" description=chart_desc(range, "Key-path vs script-path spends per block. How Taproot is actually being used", "Daily average key-path vs script-path spends. How Taproot is actually being used") chart_id="chart-taproot-spend-types" option=taproot_spend_type_option/>
                                 <ChartCard title="Witness Data Share" description="Witness data as percentage of block size. Higher means more SegWit discount savings" chart_id="chart-witness-share" option=witness_share_option/>
+                                <ChartCard title="Taproot Adoption Velocity" description=chart_desc(range, "Rate of change in Taproot output percentage. Positive values indicate accelerating adoption", "Daily rate of change in Taproot adoption percentage") chart_id="chart-taproot-velocity" option=taproot_velocity_option/>
+                                <ChartCard title="Cumulative Adoption" description=chart_desc(range, "Running total of SegWit transactions and Taproot outputs since their respective activations", "Cumulative SegWit and Taproot counts over time") chart_id="chart-cumulative-adoption" option=cumulative_adoption_option/>
                             </div>
                         }.into_any()
                     }
@@ -245,12 +298,23 @@ pub fn NetworkChartsPage() -> impl IntoView {
                             |days| crate::stats::charts::largest_tx_chart_daily(days)
                         );
 
+                        let tx_density_option = chart_memo!(dashboard_data, range, overlay_flags,
+                            |blocks| crate::stats::charts::tx_density_chart(blocks),
+                            |days| crate::stats::charts::tx_density_chart_daily(days)
+                        );
+                        let utxo_growth_option = chart_memo!(dashboard_data, range, overlay_flags,
+                            |blocks| crate::stats::charts::utxo_growth_chart(blocks),
+                            |days| crate::stats::charts::utxo_growth_chart_daily(days)
+                        );
+
                         view! {
                             <div class="space-y-10">
                                 <ChartCard title="RBF Adoption" description=chart_desc(range, "Percentage of transactions opting into Replace-By-Fee per block", "Daily average RBF adoption percentage") chart_id="chart-rbf" option=rbf_option/>
                                 <ChartCard title="UTXO Flow" description=chart_desc(range, "Inputs spent vs outputs created per block. When outputs exceed inputs, the UTXO set grows", "Daily average inputs spent vs outputs created. When outputs exceed inputs, the UTXO set grows") chart_id="chart-utxo-flow" option=utxo_flow_option/>
                                 <ChartCard title="Transaction Batching" description=chart_desc(range, "Average inputs and outputs per transaction in each block", "Daily average inputs and outputs per transaction") chart_id="chart-batching" option=batching_option/>
                                 <ChartCard title="Largest Transaction" description=chart_desc(range, "Size of the largest transaction in each block. Large transactions may indicate consolidations or complex scripts", "Largest transaction (per-block ranges only)") chart_id="chart-largest-tx" option=largest_tx_option/>
+                                <ChartCard title="Transaction Density" description=chart_desc(range, "Transactions per kilobyte of block space. Higher values indicate smaller, more efficient transactions", "Daily average transaction density (transactions per KB)") chart_id="chart-tx-density" option=tx_density_option/>
+                                <ChartCard title="UTXO Growth Rate" description=chart_desc(range, "Net UTXO set change per block (outputs created minus inputs consumed). Positive means the UTXO set is growing, negative means consolidation", "Daily net UTXO change across all blocks") chart_id="chart-utxo-growth" option=utxo_growth_option/>
                             </div>
                         }.into_any()
                     }

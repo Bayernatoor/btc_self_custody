@@ -77,6 +77,34 @@ pub fn FeeChartsPage() -> impl IntoView {
                         |days| crate::stats::charts::fee_rate_band_chart_daily(days)
                     );
 
+                    let fee_revenue_share_option = chart_memo!(dashboard_data, range, overlay_flags,
+                        |blocks| crate::stats::charts::fee_revenue_share_chart(blocks),
+                        |days| crate::stats::charts::fee_revenue_share_chart_daily(days)
+                    );
+
+                    let btc_volume_option = chart_memo!(dashboard_data, range, overlay_flags,
+                        |blocks| crate::stats::charts::btc_volume_chart(blocks),
+                        |days| crate::stats::charts::btc_volume_chart_daily(days)
+                    );
+
+                    let value_flow_option = chart_memo!(dashboard_data, range, overlay_flags,
+                        |blocks| crate::stats::charts::value_flow_chart(blocks),
+                        |days| crate::stats::charts::value_flow_chart_daily(days)
+                    );
+
+                    let fee_pressure_option = Signal::derive(move || {
+                        let _r = range.get();
+                        dashboard_data.get().and_then(|r| r.ok()).and_then(|data| {
+                            match data {
+                                DashboardData::PerBlock(ref blocks) => {
+                                    let value = crate::stats::charts::fee_pressure_chart(blocks);
+                                    Some(serde_json::to_string(&value).unwrap_or_default())
+                                }
+                                DashboardData::Daily(_) => None,
+                            }
+                        }).unwrap_or_default()
+                    });
+
                     view! {
                         <div class="space-y-10">
                             <ChartCard
@@ -108,6 +136,30 @@ pub fn FeeChartsPage() -> impl IntoView {
                                 description=chart_desc(range, "Block reward breakdown per block. The subsidy halves every 4 years while fees must eventually replace it", "Daily average block reward breakdown. The subsidy halves every 4 years while fees must eventually replace it")
                                 chart_id="chart-subsidy-fees"
                                 option=subsidy_fees_option
+                            />
+                            <ChartCard
+                                title="Fee Revenue Share"
+                                description=chart_desc(range, "Percentage of total block reward that comes from fees rather than subsidy", "Daily average fee revenue as a percentage of total block reward")
+                                chart_id="chart-fee-revenue-share"
+                                option=fee_revenue_share_option
+                            />
+                            <ChartCard
+                                title="BTC Transferred Volume"
+                                description=chart_desc(range, "Total non-coinbase output value per block in BTC", "BTC transferred volume is only available in per-block mode")
+                                chart_id="chart-btc-volume"
+                                option=btc_volume_option
+                            />
+                            <ChartCard
+                                title="Input vs Output Value"
+                                description=chart_desc(range, "Total input value vs output value per block in BTC. The gap between the lines represents fees extracted by miners", "Value flow is only available in per-block mode")
+                                chart_id="chart-value-flow"
+                                option=value_flow_option
+                            />
+                            <ChartCard
+                                title="Fee Pressure vs Block Space"
+                                description="Scatter plot showing the relationship between block fullness and fee rates. Clusters in the top-right indicate high-demand periods"
+                                chart_id="chart-fee-pressure"
+                                option=fee_pressure_option
                             />
                         </div>
                     }.into_any()
