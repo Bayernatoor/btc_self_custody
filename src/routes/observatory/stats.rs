@@ -309,10 +309,13 @@ pub fn StatsSummaryPage() -> impl IntoView {
     let custom_from = state.custom_from;
     let custom_to = state.custom_to;
 
-    // Compute timestamp range from the selected preset or custom dates
+    // Compute timestamp range from the selected preset or custom dates.
+    // Round `now` to the nearest hour so cache keys stay stable across
+    // range switches (otherwise every second produces a new key).
     let ts_range = Signal::derive(move || {
         let r = range.get();
         let now = chrono::Utc::now().timestamp() as u64;
+        let now_rounded = now / 3600 * 3600; // snap to hour boundary
         if r == "custom" {
             let from = custom_from
                 .get()
@@ -322,7 +325,7 @@ pub fn StatsSummaryPage() -> impl IntoView {
                 .get()
                 .and_then(|s| super::shared::date_to_ts(&s))
                 .map(|t| t + 86_399)
-                .unwrap_or(now);
+                .unwrap_or(now_rounded);
             return (from, to);
         }
         let n = range_to_blocks(&r);
@@ -330,9 +333,9 @@ pub fn StatsSummaryPage() -> impl IntoView {
         let from = if n >= 999_999 {
             0
         } else {
-            now.saturating_sub(seconds)
+            now_rounded.saturating_sub(seconds)
         };
-        (from, now)
+        (from, now_rounded)
     });
 
     // Fetch summary data
