@@ -88,6 +88,20 @@ pub fn DataLoadError(
 }
 
 // ---------------------------------------------------------------------------
+// Section heading (anchor target for drawer navigation)
+// ---------------------------------------------------------------------------
+
+#[component]
+pub fn SectionHeading(
+    #[prop(into)] id: String,
+    #[prop(into)] title: String,
+) -> impl IntoView {
+    view! {
+        <h2 id=id class="text-lg text-white/60 font-semibold pt-4 first:pt-0">{title}</h2>
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Chart card with expand toggle
 // ---------------------------------------------------------------------------
 
