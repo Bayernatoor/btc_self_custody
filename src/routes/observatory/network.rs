@@ -330,7 +330,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
                                 <ChartCard title="Witness Data Share" description="Witness data as percentage of block size. Higher means more SegWit discount savings" chart_id="chart-witness-share" option=witness_share_option/>
                                 <ChartCard title="Cumulative Adoption" description=chart_desc(range, "Running total of SegWit transactions and Taproot outputs within this range. Select ALL for lifetime totals", "Cumulative SegWit and Taproot counts within this range. Select ALL for lifetime totals") chart_id="chart-cumulative-adoption" option=cumulative_adoption_option/>
                                 <ChartCard title="P2PKH Sunset Tracker" description="Decline of legacy P2PKH address usage over time. Horizontal lines mark 10% and 5% thresholds" chart_id="chart-p2pkh-sunset" option=sunset_option/>
-                                <ChartCard title="Adoption Velocity (All Types)" description="Rate of change for all address types. P2PKH declining, P2WPKH flattening, P2TR growing. Shows the transition between eras" chart_id="chart-multi-velocity" option=multi_velocity_option/>
+                                <ChartCard title="Adoption Velocity" description="Rate of change for major address types. P2PKH declining, P2WPKH flattening, P2TR growing. Shows the transition between eras" chart_id="chart-multi-velocity" option=multi_velocity_option/>
                             </div>
                         }.into_any()
                     }
