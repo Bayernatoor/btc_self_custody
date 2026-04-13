@@ -1341,14 +1341,14 @@ pub async fn fetch_range_summary(
             internal_err("Stats unavailable", e)
         })?;
 
-    // Check cache (60s TTL). Cached range that covers the request is a hit.
+    // Check cache (60s TTL). Exact range match only - summaries are range-specific.
     {
         let cached = state
             .range_summary_cache
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         if let Some((cf, ct, ref result, ref ts)) = *cached {
-            if cf <= from_ts && ct >= to_ts && ts.elapsed().as_secs() < 60 {
+            if cf == from_ts && ct == to_ts && ts.elapsed().as_secs() < 60 {
                 return Ok(result.clone());
             }
         }
@@ -1386,15 +1386,15 @@ pub async fn fetch_extremes(
             internal_err("Stats unavailable", e)
         })?;
 
-    // Check cache (60s TTL). Use cached result if the cached range covers
-    // the requested range (handles ALL range where to_ts varies by the second).
+    // Check cache (60s TTL). Exact range match only - extremes are range-specific
+    // (the largest block in 1M is different from the largest block in ALL).
     {
         let cached = state
             .extremes_cache
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         if let Some((cf, ct, ref result, ref ts)) = *cached {
-            if cf <= from_ts && ct >= to_ts && ts.elapsed().as_secs() < 60 {
+            if cf == from_ts && ct == to_ts && ts.elapsed().as_secs() < 60 {
                 return Ok(result.clone());
             }
         }
