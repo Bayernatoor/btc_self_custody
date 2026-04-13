@@ -192,7 +192,7 @@
                         } else if (allSeries.length > 0) {
                             // Series not in params (zero value) — read directly
                             var s = allSeries[si];
-                            if (!s || !s.data || !s.data[dataIndex]) continue;
+                            if (!s || !s.data || !Array.isArray(s.data) || dataIndex >= s.data.length || !s.data[dataIndex]) continue;
                             var d = s.data[dataIndex];
                             val = Array.isArray(d) ? d[1] : d;
                             name = s.name || '';
