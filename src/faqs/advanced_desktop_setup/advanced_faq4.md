@@ -7,15 +7,15 @@ send bitcoin to it ourselves.
 
 Click on **Receive**, add a **Label** to track source of funds (only known to you), and **copy** the address.
 
-<a href="./../../../receiving_to_multisig.png" target="_blank">
-    <img id="sparrow_wallet_multisig_receive" src="./../../../receiving_to_multisig.png" alt="sparrow_wallet_multisig_receive" width="600"/> 
+<a href="/guide-images/multisig/receiving_to_multisig.png" target="_blank">
+    <img id="sparrow_wallet_multisig_receive" src="/guide-images/multisig/receiving_to_multisig.png" alt="sparrow_wallet_multisig_receive" width="600"/> 
 </a>
 
 When your Bitcoin node detects the transaction, Sparrow will display it under the **Transactions** tab. Once it receives at least 1 confirmation, it can be 
 considered received and protected by your Multisig setup. However, it's recommended to wait for 6 confirmations, before considering it to be settled and irreversible.
 
-<a href="./../../../transaction_received.png" target="_blank">
-    <img id="sparrow_wallet_multisig_received" src="./../../../transaction_received.png" alt="sparrow_wallet_multisig_received" width="600"/> 
+<a href="/guide-images/multisig/transaction_received.png" target="_blank">
+    <img id="sparrow_wallet_multisig_received" src="/guide-images/multisig/transaction_received.png" alt="sparrow_wallet_multisig_received" width="600"/> 
 </a>
 
 <h4>Sending from a Multisig Wallet</h4>
@@ -30,23 +30,23 @@ The steps for creating the transaction are the same as any other. First, click o
 **Label** to identify the transaction. Fourth, set the **Amount** you want to send. Fifth, set your **Feerate** (I am in no rush so I set it low). After verifying everything,
 click on **Create Transaction**.
 
-<a href="./../../../sending_multisig_transaction.png" target="_blank">
-    <img id="sparrow_wallet_multisig_send" src="./../../../sending_multisig_transaction.png" alt="sparrow_wallet_multisig_send" width="600"/> 
+<a href="/guide-images/multisig/sending_multisig_transaction.png" target="_blank">
+    <img id="sparrow_wallet_multisig_send" src="/guide-images/multisig/sending_multisig_transaction.png" alt="sparrow_wallet_multisig_send" width="600"/> 
 </a>
 
 **2\.** On the next screen you'll have the opportunity to verify your transaction. Feel free to review the inputs and outputs on the left hand side. Confirm that the 
         receiving address is correct. Click on **Details** to view specific/technical details about the transaction. Under **Signatures** you'll find the wallet 
         responsible for signing, in this case it's our Multisig wallet. When you're ready, click on **Finalize Transaction for Signing**.
 
-<a href="./../../../verify_the_transaction.png" target="_blank">
-    <img id="sparrow_wallet_multisig_send_verify" src="./../../../verify_the_transaction.png" alt="sparrow_wallet_multisig_verfy" width="600"/> 
+<a href="/guide-images/multisig/verify_the_transaction.png" target="_blank">
+    <img id="sparrow_wallet_multisig_send_verify" src="/guide-images/multisig/verify_the_transaction.png" alt="sparrow_wallet_multisig_verfy" width="600"/> 
 </a>
 
 **3\.** It's now time to save this **PSBT** onto a MicroSD card and import it into the Coldcards for signing. Click on **Save Transaction**, you'll be prompted to save a file with
         a **.psbt** extension.
 
-<a href="./../../../save_the_transaction.png" target="_blank">
-    <img id="sparrow_wallet_multisig_send_save" src="./../../../save_the_transaction.png" alt="sparrow_wallet_multisig_save" width="600"/> 
+<a href="/guide-images/multisig/save_the_transaction.png" target="_blank">
+    <img id="sparrow_wallet_multisig_send_save" src="/guide-images/multisig/save_the_transaction.png" alt="sparrow_wallet_multisig_save" width="600"/> 
 </a>
 
 **4\.** You'll need to sign this transaction using 2 of the 3 Coldcards. Make sure to have your Coldcard's Passphrase ready,
@@ -74,14 +74,14 @@ click on **Create Transaction**.
 **13\.** After loading the **PSBT**, 2 signatures will appear, one for each Coldcard or signing device. The blue **Broadcast Transaction** button will become clickable,
          click it to broadcast your transaction. 
 
-<a href="./../../../signed_ready_to_broadcast.png" target="_blank">
-    <img id="sparrow_wallet_multisig_signed_broadcast" src="./../../../signed_ready_to_broadcast.png" alt="sparrow_wallet_multisig_signed_broadcast" width="600"/> 
+<a href="/guide-images/multisig/signed_ready_to_broadcast.png" target="_blank">
+    <img id="sparrow_wallet_multisig_signed_broadcast" src="/guide-images/multisig/signed_ready_to_broadcast.png" alt="sparrow_wallet_multisig_signed_broadcast" width="600"/> 
 </a>
 
 **14\.** Sparrow will broadcast your transaction to the network, once complete you'll see a page similar to the one below. 
 
-<a href="./../../../transaction_sent.png" target="_blank">
-    <img id="sparrow_wallet_multisig_transaction_sent" src="./../../../transaction_sent.png" alt="sparrow_wallet_multisig_transaction_sent" width="600"/> 
+<a href="/guide-images/multisig/transaction_sent.png" target="_blank">
+    <img id="sparrow_wallet_multisig_transaction_sent" src="/guide-images/multisig/transaction_sent.png" alt="sparrow_wallet_multisig_transaction_sent" width="600"/> 
 </a>
 
 **Congrats, you've sent a bitcoin transaction using multiple co-signers.**

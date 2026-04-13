@@ -22,32 +22,32 @@ you can go ahead and slide the fee to a lower amount. Be careful not to set the 
 
 **6\.** Once you've confirmed that all the information is correct (**triple check the sending address**), click on **Create Transaction**.
 
-<a href="./../../../sparrow_wallet_send_details.png" target="_blank">
-    <img id="sparrow wallet send details" src="./../../../sparrow_wallet_send_details.png" alt="sparrow wallet send details" width="800"/> 
+<a href="/guide-images/sparrow/sparrow_wallet_send_details.png" target="_blank">
+    <img id="sparrow wallet send details" src="/guide-images/sparrow/sparrow_wallet_send_details.png" alt="sparrow wallet send details" width="800"/> 
 </a>
 
 **7\.** On the next page, transaction details will be displayed. Review them, then click on the big blue button labeled **Finalize Transaction for Signing.**
 
-<a href="./../../../sparrow_wallet_send_finalization.png" target="_blank">
-    <img id="sparrow wallet send finalization" src="./../../../sparrow_wallet_send_finalization.png" alt="sparrow wallet send finalization" width="800"/> 
+<a href="/guide-images/sparrow/sparrow_wallet_send_finalization.png" target="_blank">
+    <img id="sparrow wallet send finalization" src="/guide-images/sparrow/sparrow_wallet_send_finalization.png" alt="sparrow wallet send finalization" width="800"/> 
 </a>
 
 **8\.** Click on **Sign**. 
 
-<a href="./../../../sparrow_wallet_send_signing.png" target="_blank">
-    <img id="sparrow wallet send signing" src="./../../../sparrow_wallet_send_signing.png" alt="sparrow wallet sending signing" width="800"/> 
+<a href="/guide-images/sparrow/sparrow_wallet_send_signing.png" target="_blank">
+    <img id="sparrow wallet send signing" src="/guide-images/sparrow/sparrow_wallet_send_signing.png" alt="sparrow wallet sending signing" width="800"/> 
 </a>
 
 **9\.** The final step! To send the transaction click on **Broadcast Transaction**.
 
-<a href="./../../../sparrow_wallet_send_broadcasting.png" target="_blank">
-    <img id="sparrow wallet send broadcasting" src="./../../../sparrow_wallet_send_broadcasting.png" alt="sparrow wallet send broadcasting" width="800"/> 
+<a href="/guide-images/sparrow/sparrow_wallet_send_broadcasting.png" target="_blank">
+    <img id="sparrow wallet send broadcasting" src="/guide-images/sparrow/sparrow_wallet_send_broadcasting.png" alt="sparrow wallet send broadcasting" width="800"/> 
 </a>
 
 **9\.** After broadcasting the transacton, click on **Transactions** in the top left corner to view its status.  
 
-<a href="./../../../sparrow_wallet_send_pending.png" target="_blank">
-    <img id="sparrow wallet send pending" src="./../../../sparrow_wallet_send_pending.png" alt="sparrow wallet send pending" width="800"/> 
+<a href="/guide-images/sparrow/sparrow_wallet_send_pending.png" target="_blank">
+    <img id="sparrow wallet send pending" src="/guide-images/sparrow/sparrow_wallet_send_pending.png" alt="sparrow wallet send pending" width="800"/> 
 </a>
 
 Congrats, you’ve just sent your first Bitcoin transaction from your very own self-custodial wallet. 

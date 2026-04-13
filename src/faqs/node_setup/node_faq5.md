@@ -5,8 +5,8 @@
 RaspiBlitz is the Do-It-Yourselfers wet dream. One of the original DIY Bitcoin and Lightning node implementations.
 For those who want to get their hands dirty with a Raspiberry Pi. You can't go wrong with RaspiBlitz.
 
-<a href="./../../../raspiblitz_graphics.jpg" target="_blank">
-    <img id="raspiblitz" src="./../../../raspiblitz_graphics.jpg" alt="raspiblitz graphics" width="600"/> 
+<a href="/guide-images/raspiblitz/raspiblitz_graphics.jpg" target="_blank">
+    <img id="raspiblitz" src="/guide-images/raspiblitz/raspiblitz_graphics.jpg" alt="raspiblitz graphics" width="600"/> 
 </a>
 
 <h4>Features</h4>

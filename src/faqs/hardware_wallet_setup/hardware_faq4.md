@@ -5,7 +5,7 @@
 You've setup your Coldcard and backed up your seed words, Passphrase and Extended Fingerprint. Now's the time to get it connected to Sparrow Wallet so that 
 we can easily receive and transfer bitcoin, all without our seed words being exposed to the internet.
 
-This guide assumes that you've already installed the Sparrow Desktop Wallet. If not, you can find a <a href="/guides/basic/desktop">quick guide here</a>.
+This guide assumes that you've already installed the Sparrow Desktop Wallet. If not, you can find a <a href="/guide-images/basic/desktop">quick guide here</a>.
 Once installed come back to this guide, no need to create a wallet within Sparrow.
 
 To eliminate the need for you to trust me and since Sparrow's documentation is excellent, I will refer you to their guide for this step. This guide also covers, receiving and sending

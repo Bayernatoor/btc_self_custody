@@ -25,7 +25,7 @@ in the foot...as the old adage goes, Keep It Simple Stupid.
 <h4>Preparing your Coldcards</h4>
 
 **1\.** Prepare each of the N Coldcards (signing devices) that will be used in the Multisig quorum. If you've forgotten the steps, please read **Setting up the Coldcard** in the 
-        **<a href="/guides/intermediate/hardware-wallet#setting-up-the-coldcard" target="_blank">Intermediate Guide</a>**. 
+        **<a href="/guide-images/intermediate/hardware-wallet#setting-up-the-coldcard" target="_blank">Intermediate Guide</a>**. 
         Remember to write down the Seed Words, Passphrase and XFP (Extended/Master Fingerprint) of each wallet you create. 
 
 **Note:** *The Coldcard does not remember your Passphrase, you must enter it everytime you turn on the device. To do so enter your PIN, insert the MicroSD card that stores your encrypted Passphrase
@@ -39,16 +39,16 @@ in the foot...as the old adage goes, Keep It Simple Stupid.
 **3\.** There's no need to do the above step on the final Coldcard. Instead, after inserting the MicroSD card select ***Settings --> Multisig Wallets --> Create Airgapped***.
         You'll be presented with the screen below, press **Ok**.
 
-<a href="./../../../coldcard_air_gapped.png" target="_blank">
-    <img id="coldcard_air_gapped" src="./../../../coldcard_air_gapped.png" alt="coldcard_air_gapped_screen" width="400"/> 
+<a href="/guide-images/coldcard/coldcard_air_gapped.png" target="_blank">
+    <img id="coldcard_air_gapped" src="/guide-images/coldcard/coldcard_air_gapped.png" alt="coldcard_air_gapped_screen" width="400"/> 
 </a>
 
 **4\.** You'll now select the **M** value, which is the number of co-signers required to approve a signature. 
         The **N** value is the number of **ccxp** files present on the MicroSD card (Total # of Signing Devices being used). 
         Press ***7 or 9*** to change the M value. 
 
-<a href="./../../../coldcard_m_of_n.png" target="_blank">
-    <img id="coldcard_m_of_n" src="./../../../coldcard_m_of_n.png" alt="coldcard_m_of_n_screen" width="400"/> 
+<a href="/guide-images/coldcard/coldcard_m_of_n.png" target="_blank">
+    <img id="coldcard_m_of_n" src="/guide-images/coldcard/coldcard_m_of_n.png" alt="coldcard_m_of_n_screen" width="400"/> 
 </a>
 
 **5\.** Press OK, you'll be presented with the new wallet information. Confirm it and 2 new files will be exported to your MicroSD card. 
@@ -63,8 +63,8 @@ in the foot...as the old adage goes, Keep It Simple Stupid.
 
 **1\.** From the Sparrow toolbar click on ***File --> New Wallet***. Add a name for your wallet and press **Create Wallet**.
 
-<a href="./../../../sparrow_wallet_multisig_new_wallet.png" target="_blank">
-    <img id="sparrow_wallet_multisig_name" src="./../../../sparrow_wallet_multisig_new_wallet.png" alt="sparrow_wallet_multisig_name" width="600"/> 
+<a href="/guide-images/multisig/sparrow_wallet_multisig_new_wallet.png" target="_blank">
+    <img id="sparrow_wallet_multisig_name" src="/guide-images/multisig/sparrow_wallet_multisig_new_wallet.png" alt="sparrow_wallet_multisig_name" width="600"/> 
 </a>
 
 **2\.** Set the **Policy Type** to **Multi Signature**.
@@ -77,8 +77,8 @@ in the foot...as the old adage goes, Keep It Simple Stupid.
         ways to add wallet information, if you are using hardware other then Coldcards you'll want to check their documentation on how to connect
         to Sparrow. 
 
-<a href="./../../../sparrow_new_wallet_multisig.png" target="_blank">
-    <img id="sparrow_multisig" src="./../../../sparrow_new_wallet_multisig.png" alt="sparrow_Wallet_multisig" width="600"/> 
+<a href="/guide-images/multisig/sparrow_new_wallet_multisig.png" target="_blank">
+    <img id="sparrow_multisig" src="/guide-images/multisig/sparrow_new_wallet_multisig.png" alt="sparrow_Wallet_multisig" width="600"/> 
 </a>
 
 **6\.** Insert the MicroSD card with the **ccxp** wallet files into your computer. Each **ccxp** file corresponds to one Coldcard. To import them into Sparrow
@@ -87,30 +87,30 @@ in the foot...as the old adage goes, Keep It Simple Stupid.
 
 <p>Importing the Coldcard ccxp file</p>
 
-<a href="./../../../sparrow_multisig_import.png" target="_blank">
-    <img id="sparrow_multisig_import" src="./../../../sparrow_multisig_import.png" alt="sparrow_multisig_import" width="600"/> 
+<a href="/guide-images/multisig/sparrow_multisig_import.png" target="_blank">
+    <img id="sparrow_multisig_import" src="/guide-images/multisig/sparrow_multisig_import.png" alt="sparrow_multisig_import" width="600"/> 
 </a>
 
 <p>1 of 3 Keystores imported</p>
 
-<a href="./../../../sparrow_multisig_keystore.png" target="_blank">
-    <img id="sparrow_multisig_keystore" src="./../../../sparrow_multisig_keystore.png" alt="sparrow_multisig_keystore" width="600"/> 
+<a href="/guide-images/multisig/sparrow_multisig_keystore.png" target="_blank">
+    <img id="sparrow_multisig_keystore" src="/guide-images/multisig/sparrow_multisig_keystore.png" alt="sparrow_multisig_keystore" width="600"/> 
 </a>
 
 **7\.** When you're done importing all the **Keystores**, press **Apply**. 
         You can add a password to your Sparrow Wallet if you wish. 
         This would prevent someone with access to your computer from opening your wallet on Sparrow.
 
-<a href="./../../../sparrow_multisig_ready_to_import.png" target="_blank">  
-    <img id="sparrow_multisig_ready_to_import" src="./../../../sparrow_multisig_ready_to_import.png" alt="sparrow_multisig_ready_to_import" width="600"/> 
+<a href="/guide-images/multisig/sparrow_multisig_ready_to_import.png" target="_blank">  
+    <img id="sparrow_multisig_ready_to_import" src="/guide-images/multisig/sparrow_multisig_ready_to_import.png" alt="sparrow_multisig_ready_to_import" width="600"/> 
 </a>
 
 **8\.** You'll be prompted to backup your Multisig Wallet. I highly recommend that you **Save PDF**. 
         This PDF contains the necessary information (Wallet Output Descriptor) to reconstruct your Multisig wallet in Sparrow (or other software). 
         It does not contain any private key information but should still be kept in a private and secure location.  
 
-<a href="./../../../sparrow_multisig_backup.png" target="_blank">
-    <img id="sparrow_multisig_backup" src="./../../../sparrow_multisig_backup.png" alt="sparrow_multisig_backup" width="600"/> 
+<a href="/guide-images/multisig/sparrow_multisig_backup.png" target="_blank">
+    <img id="sparrow_multisig_backup" src="/guide-images/multisig/sparrow_multisig_backup.png" alt="sparrow_multisig_backup" width="600"/> 
 </a>
 
 **9\.** Once you've saved the PDF, click on "Ok" to finish the setup process, the tabs on the left should become accessible. 

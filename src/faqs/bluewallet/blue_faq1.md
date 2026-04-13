@@ -4,14 +4,14 @@
 
 **1\.** After downloading and opening the app tap on **Add now**.  
 
-<a href="./../../../bluewallet_new_wallet.jpg" target="_blank">
-    <img id="bluewallet add wallet" src="./../../../bluewallet_new_wallet.jpg" alt="bluewallet add wallet" width="400"/> 
+<a href="/guide-images/bluewallet/bluewallet_new_wallet.jpg" target="_blank">
+    <img id="bluewallet add wallet" src="/guide-images/bluewallet/bluewallet_new_wallet.jpg" alt="bluewallet add wallet" width="400"/> 
 </a>
 
 **2\.** Enter a name for your wallet, under **Type** tap **Bitcoin** then tap **Create**.
 
-<a href="./../../../bluewallet_wallet_creation.jpg" target="_blank">
-    <img id="bluewallet wallet type selection" src="./../../../bluewallet_wallet_creation.jpg" alt="bluewallet wallet type selection" width="400"/> 
+<a href="/guide-images/bluewallet/bluewallet_wallet_creation.jpg" target="_blank">
+    <img id="bluewallet wallet type selection" src="/guide-images/bluewallet/bluewallet_wallet_creation.jpg" alt="bluewallet wallet type selection" width="400"/> 
 </a>
 
 **3\.** You'll be presented with 12 words - **WRITE THEM DOWN**. Do not take a digital photo of them, write them down on paper and never share them. 

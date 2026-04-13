@@ -17,6 +17,8 @@ use std::sync::{Arc, Mutex};
 
 use leptos::prelude::*;
 use leptos_router::hooks::{use_location, use_query_map};
+#[cfg(feature = "hydrate")]
+use wasm_bindgen::JsCast;
 
 use super::helpers::*;
 use crate::stats::charts::OverlayFlags;

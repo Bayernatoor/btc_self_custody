@@ -28,14 +28,14 @@ To recover the funds locked in a Multisig wallet you will need **M** private key
     <li>When finalizing the Multisig wallet setup in Sparrow, save the <strong>Wallet Output descriptor</strong> as a PDF and keep this file safe. Funds cannot be stolen with this file but it's required to re-create the Multisig wallet. You may also export a text file containing the XPUBS and Extended Fingerprints of the Multisig wallet.</li>
 </ul>
 
-<a href="./../../../sparrow_wallet_export.png" target="_blank">
-    <img id="sparrow_wallet_export" src="./../../../sparrow_wallet_export.png" alt="sparrow_wallet_export" width="600"/> 
+<a href="/guide-images/sparrow/sparrow_wallet_export.png" target="_blank">
+    <img id="sparrow_wallet_export" src="/guide-images/sparrow/sparrow_wallet_export.png" alt="sparrow_wallet_export" width="600"/> 
 </a>
 
 <p>Exported Multisig File</p>
 
-<a href="./../../../wehodlbtc_xpub_backup.png" target="_blank">
-    <img id="xpub_backup" src="./../../../wehodlbtc_xpub_backup.png" alt="xpub_backup" width="800"/> 
+<a href="/guide-images/multisig/wehodlbtc_xpub_backup.png" target="_blank">
+    <img id="xpub_backup" src="/guide-images/multisig/wehodlbtc_xpub_backup.png" alt="xpub_backup" width="800"/> 
 </a>
 
 Listen to this amazing podcast on 10Xing your Bitcoin security by <a href="https://stephanlivera.com/episode/215/" target="_blank" rel="noopener noreferrer">Stephan Livera with Michael Flaxman</a>.

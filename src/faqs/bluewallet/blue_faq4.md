@@ -6,8 +6,8 @@
 
 **2\.** On the bottom of the screen tap on **Send**.
 
-<a href="./../../../bluewallet_send.png" target="_blank">
-    <img id="bluewallet send" src="./../../../bluewallet_send.png" alt="bluewallet send" width="400"/> 
+<a href="/guide-images/bluewallet/bluewallet_send.png" target="_blank">
+    <img id="bluewallet send" src="/guide-images/bluewallet/bluewallet_send.png" alt="bluewallet send" width="400"/> 
 </a>
 
 **3\.** Fill in the details of your transaction.
@@ -20,20 +20,20 @@
 
 </ul>
 
-<a href="./../../../bluewallet_sending_page.png" target="_blank">
-    <img id="bluewallet sending page" src="./../../../bluewallet_sending_page.png" alt="bluewallet sending page" width="400"/> 
+<a href="/guide-images/bluewallet/bluewallet_sending_page.png" target="_blank">
+    <img id="bluewallet sending page" src="/guide-images/bluewallet/bluewallet_sending_page.png" alt="bluewallet sending page" width="400"/> 
 </a>
 
 **4\.** Tap **Send now** to broadcast the transaction. 
 
-<a href="./../../../bluewallet_send_details.png" target="_blank">
-    <img id="bluewallet send details" src="./../../../bluewallet_send_details.png" alt="bluewallet send details" width="400"/> 
+<a href="/guide-images/bluewallet/bluewallet_send_details.png" target="_blank">
+    <img id="bluewallet send details" src="/guide-images/bluewallet/bluewallet_send_details.png" alt="bluewallet send details" width="400"/> 
 </a>
 
 **5\.** The transaction will be broadcasted to the network and a confirmation page will be shown.
 
-<a href="./../../../bluewallet_send_complete.png" target="_blank">
-    <img id="bluewallet send complete" src="./../../../bluewallet_send_complete.png" alt="bluewallet send complete" width="400"/> 
+<a href="/guide-images/bluewallet/bluewallet_send_complete.png" target="_blank">
+    <img id="bluewallet send complete" src="/guide-images/bluewallet/bluewallet_send_complete.png" alt="bluewallet send complete" width="400"/> 
 </a>
 
 ***A note on fees:*** *Bitcoin blocks have limited space which naturally creates a fee market. Fees will go up as demand for block space increases. Although
@@ -46,7 +46,7 @@ The transaction will appear as ***Pending*** below ***Transactions***. You'll no
 is now owned by the recipient. It is typically recommended to wait for 6 confirmations before the transaction is considered entirely settled. 
 1 confirmation typically takes 10 minutes (on average). 
 
-<a href="./../../../bluewallet_pending_send.png" target="_blank">
-    <img id="bluewallet pending send" src="./../../../bluewallet_pending_send.png" alt="bluewallet pending send" width="400"/> 
+<a href="/guide-images/bluewallet/bluewallet_pending_send.png" target="_blank">
+    <img id="bluewallet pending send" src="/guide-images/bluewallet/bluewallet_pending_send.png" alt="bluewallet pending send" width="400"/> 
 </a>
 

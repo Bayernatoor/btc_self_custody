@@ -9,8 +9,8 @@ software and hardware.
 
 <p>Start9's Home Page</p>
 
-<a href="./../../../start9_home.png" target="_blank">
-    <img id="start9_home" src="./../../../start9_home.png" alt="start9_home" width="600"/> 
+<a href="/guide-images/start9/start9_home.png" target="_blank">
+    <img id="start9_home" src="/guide-images/start9/start9_home.png" alt="start9_home" width="600"/> 
 </a>
 
 <h4>Features</h4>
@@ -26,8 +26,8 @@ software and hardware.
 
 <p>Start9's App Marketplace</p>
 
-<a href="./../../../start9_marketplace.png" target="_blank">
-    <img id="marketplace" src="./../../../start9_marketplace.png" alt="start9_marketplace" width="600"/> 
+<a href="/guide-images/start9/start9_marketplace.png" target="_blank">
+    <img id="marketplace" src="/guide-images/start9/start9_marketplace.png" alt="start9_marketplace" width="600"/> 
 </a>
 
 <h4>Considerations</h4>

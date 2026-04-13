@@ -7,8 +7,8 @@ has never been easier.
 
 <p>MyNode's App Marketplace</p>
 
-<a href="./../../../mynode_ui.png" target="_blank">
-    <img id="mynode_ui" src="./../../../mynode_ui.png" alt="mynode ui" width="500"/> 
+<a href="/guide-images/mynode/mynode_ui.png" target="_blank">
+    <img id="mynode_ui" src="/guide-images/mynode/mynode_ui.png" alt="mynode ui" width="500"/> 
 </a>
 
 <h4>Features</h4>
@@ -22,8 +22,8 @@ has never been easier.
 
 <h4>MyNode's App Marketplace</h4>
 
-<a href="./../../../mynode_marketplace.png" target="_blank">
-    <img id="mynode_marketplace" src="./../../../mynode_marketplace.png" alt="mynode_marketplace" width="400"/> 
+<a href="/guide-images/mynode/mynode_marketplace.png" target="_blank">
+    <img id="mynode_marketplace" src="/guide-images/mynode/mynode_marketplace.png" alt="mynode_marketplace" width="400"/> 
 </a>
 
 <h4>Considerations</h4>

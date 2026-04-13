@@ -10,14 +10,14 @@ If you've lost your phone or accidentally deleted the Green wallet app you can e
 
 **3\.** After re-installing and making it through the start up steps. Tap on the first option **On This Device**.
 
-<a href="./../../../green_wallet_type.jpg" target="_blank">
-    <img id="green wallet new wallet recovery" src="./../../../green_wallet_type.jpg" alt="green wallet new wallet recovery" width="400"/> 
+<a href="/guide-images/greenwallet/green_wallet_type.jpg" target="_blank">
+    <img id="green wallet new wallet recovery" src="/guide-images/greenwallet/green_wallet_type.jpg" alt="green wallet new wallet recovery" width="400"/> 
 </a>
 
 **4\.** Tap on **Restore Wallet** at the bottom of the screen.
 
-<a href="./../../../green_wallet_import_wallet.png" target="_blank">
-    <img id="green wallet import wallet" src="./../../../green_wallet_import_wallet.png" alt="green wallet import wallet" width="400"/> 
+<a href="/guide-images/greenwallet/green_wallet_import_wallet.png" target="_blank">
+    <img id="green wallet import wallet" src="/guide-images/greenwallet/green_wallet_import_wallet.png" alt="green wallet import wallet" width="400"/> 
 </a>
 
 **5\.** Enter all 12 or 24 words in the correct order, then press **Continue**. 

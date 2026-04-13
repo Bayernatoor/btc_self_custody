@@ -208,6 +208,7 @@ export function setupInputHandlers(canvas) {
 
     listen(canvas, 'click', function(e) {
         if (!_hb) return;
+        if (_hb._touchTapped) { _hb._touchTapped = false; return; }
         var rect = canvas.getBoundingClientRect();
         var mx = e.clientX - rect.left;
         var my = e.clientY - rect.top;
@@ -303,6 +304,7 @@ export function setupInputHandlers(canvas) {
     listen(canvas, 'touchend', function(e) {
         if (!_hb) return;
         _hb._touchLocked = null; // reset direction lock for next touch
+        _hb._touchTapped = false; // reset per touchend
 
         if (_hb._pinching) {
             _hb._pinching = false;
@@ -342,6 +344,7 @@ export function setupInputHandlers(canvas) {
                             // First tap: show tooltip
                             _hb.hoveredBlock = tapped;
                         }
+                        _hb._touchTapped = true; // suppress click event
                     } else {
                         _hb.hoveredBlock = null;
                     }

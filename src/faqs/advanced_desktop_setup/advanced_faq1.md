@@ -9,8 +9,8 @@ If you've followed the basic and intermediate guides so far, and you're happy wi
 Otherwise, if you're new here and have yet to take self-custody of your bitcoin and intend to follow this advanced guide then we'll need to get a few things setup before.
 
 <ul>
-    <li>Follow the <a href="/guides/basic">Basic guide</a> to set up Sparrow Wallet. Download the latest version of Sparrow Wallet and follow the first 2 items "Quick word.." and "Verifying the downloaded binary..".</li>
-    <li>Next, follow part 2 of the <a href="/guides/intermediate/node">Intermediate guide</a> to select and set up a node implementation.</li>
+    <li>Follow the <a href="/guide-images/basic">Basic guide</a> to set up Sparrow Wallet. Download the latest version of Sparrow Wallet and follow the first 2 items "Quick word.." and "Verifying the downloaded binary..".</li>
+    <li>Next, follow part 2 of the <a href="/guide-images/intermediate/node">Intermediate guide</a> to select and set up a node implementation.</li>
 </ul>
 
 **Note: A personal bitcoin node is NOT mandatory but proceeding without your personal node will reduce your privacy, therefore it is highly recommended and a vital part of a proper self-custody setup**

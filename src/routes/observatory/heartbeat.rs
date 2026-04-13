@@ -468,7 +468,9 @@ pub fn HeartbeatPage() -> impl IntoView {
             </div>
 
             // EKG Canvas card
-            <div id="heartbeat-card" class="relative bg-[#0d2137] border border-white/10 rounded-2xl overflow-hidden flex flex-col">
+            // Mobile (<640px): viewport-filling so canvas stretches to just above controls.
+            // Desktop: no height constraint; canvas wrap uses fixed 40vh instead.
+            <div id="heartbeat-card" class="relative bg-[#0d2137] border border-white/10 rounded-2xl overflow-hidden flex flex-col max-sm:h-[calc(100vh-180px)] max-sm:min-h-[350px]">
                 // Status bar
                 <div class="flex flex-wrap items-center justify-between px-3 sm:px-4 py-2 sm:py-2.5 gap-x-3 gap-y-1 border-b border-white/5">
                     <div class="flex items-center gap-2 sm:gap-3">
@@ -491,7 +493,6 @@ pub fn HeartbeatPage() -> impl IntoView {
                             on:click=move |_| {
                                 #[cfg(feature = "hydrate")]
                                 {
-                                    use wasm_bindgen::JsCast;
                                     let doc = leptos::prelude::document();
                                     if doc.fullscreen_element().is_some() {
                                         doc.exit_fullscreen();
@@ -509,10 +510,11 @@ pub fn HeartbeatPage() -> impl IntoView {
                 </div>
 
                 // Canvas with overlays
-                // CSS sets an initial height; JS refines it from
-                // window.innerHeight once initHeartbeat runs.
-                // flex-1 fills fullscreen when JS clears the height.
-                <div id="heartbeat-canvas-wrap" class="relative flex-1 min-h-0" style="height: 40vh; min-height: 250px">
+                // Mobile (<640px): flex-1 fills remaining card space above controls
+                // (card is viewport-height, so flex-1 absorbs all leftover space).
+                // Desktop: fixed h-[40vh] with min-h-[250px]. flex-1 kicks in during
+                // fullscreen when JS sets card to 100vh.
+                <div id="heartbeat-canvas-wrap" class="relative flex-1 min-h-0 sm:h-[40vh] sm:min-h-[250px]">
                     <canvas
                         id="heartbeat-canvas"
                         class="w-full h-full"

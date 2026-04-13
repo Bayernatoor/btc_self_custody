@@ -131,8 +131,9 @@ window.initHeartbeat = function(canvasId) {
             card.style.left = '0';
             card.style.zIndex = '9999';
             card.style.borderRadius = '0';
-            wrap.style.height = '';
-            wrap.style.flex = '1 1 0%';
+            // Override Tailwind's sm:h-[40vh] so flex-1 fills fullscreen
+            wrap.style.height = 'auto';
+            wrap.style.minHeight = '0';
         } else {
             card.style.width = '';
             card.style.height = '';
@@ -141,8 +142,9 @@ window.initHeartbeat = function(canvasId) {
             card.style.left = '';
             card.style.zIndex = '';
             card.style.borderRadius = '';
-            wrap.style.flex = '';
-            wrap.style.height = '40vh';
+            // Clear overrides, let Tailwind classes take over
+            wrap.style.height = '';
+            wrap.style.minHeight = '';
         }
     }
     document.addEventListener('fullscreenchange', _hbFullscreenChange);

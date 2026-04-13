@@ -4,14 +4,14 @@
 
 **1\.** From your wallet's main page, tap on **Send**. 
 
-<a href="./../../../green_wallet_send.png" target="_blank">
-    <img id="green wallet send" src="./../../../green_wallet_send.png" alt="green_wallet_send" width="400"/> 
+<a href="/guide-images/greenwallet/green_wallet_send.png" target="_blank">
+    <img id="green wallet send" src="/guide-images/greenwallet/green_wallet_send.png" alt="green_wallet_send" width="400"/> 
 </a>
 
 **2\.** Either scan the QR code of the receiving wallet or paste the receiver's bitcoin address in the **Recipient Address** field.
 
-<a href="./../../../green_wallet_send_to.png" target="_blank">
-    <img id="green wallet send to" src="./../../../green_wallet_send_to.png" alt="green wallet send to" width="400"/> 
+<a href="/guide-images/greenwallet/green_wallet_send_to.png" target="_blank">
+    <img id="green wallet send to" src="/guide-images/greenwallet/green_wallet_send_to.png" alt="green wallet send to" width="400"/> 
 </a>
 
 **3\.** After scanning or pasting the address you will see:  
@@ -23,8 +23,8 @@
     <li> At the bottom you can set your <strong>Network Fee</strong> or keep it as the default.</li>
 </ul>
 
-<a href="./../../../green_wallet_prepare_transaction.png" target="_blank">
-    <img id="green wallet prepare transaction" src="./../../../green_wallet_prepare_transaction.png" alt="green wallet prepare transaction" width="400"/> 
+<a href="/guide-images/greenwallet/green_wallet_prepare_transaction.png" target="_blank">
+    <img id="green wallet prepare transaction" src="/guide-images/greenwallet/green_wallet_prepare_transaction.png" alt="green wallet prepare transaction" width="400"/> 
 </a>
 
 ***A note on fees:*** *Bitcoin blocks have limited space which naturally creates a fee market. Fees will go up as demand for block space increases. Although
@@ -34,26 +34,26 @@
 
 **5\.** Once you've set the amount and selected your fee, tap on **Next**. 
 
-<a href="./../../../green_wallet_tx_ready.png" target="_blank">
-    <img id="green wallet tx ready" src="./../../../green_wallet_tx_ready.png" alt="green wallet tx ready" width="400"/> 
+<a href="/guide-images/greenwallet/green_wallet_tx_ready.png" target="_blank">
+    <img id="green wallet tx ready" src="/guide-images/greenwallet/green_wallet_tx_ready.png" alt="green wallet tx ready" width="400"/> 
 </a>
 
 **6\.** Verify that everything looks good and then tap and slide to send at the bottom. 
 
-<a href="./../../../green_wallet_tx_send.png" target="_blank">
-    <img id="green wallet tx send" src="./../../../green_wallet_tx_send.png" alt="green wallet tx send" width="400"/> 
+<a href="/guide-images/greenwallet/green_wallet_tx_send.png" target="_blank">
+    <img id="green wallet tx send" src="/guide-images/greenwallet/green_wallet_tx_send.png" alt="green wallet tx send" width="400"/> 
 </a>
 
 **6\.** After sending you'll see the sent transaction appear on the main page. 
 
-<a href="./../../../green_wallet_tx_sending.png" target="_blank">
-    <img id="green wallet tx sending" src="./../../../green_wallet_tx_sending.png" alt="green wallet tx sending" width="400"/> 
+<a href="/guide-images/greenwallet/green_wallet_tx_sending.png" target="_blank">
+    <img id="green wallet tx sending" src="/guide-images/greenwallet/green_wallet_tx_sending.png" alt="green wallet tx sending" width="400"/> 
 </a>
 
 **7\.** Tap on the transaction to view some details such as: number of confirmations, the time it was sent, the transaction id. You'll also have the ability to **Speed up Transaction** if you wish to do so by replacing with a higher fee. 
 
-<a href="./../../../green_wallet_tx_details.png" target="_blank">
-    <img id="green wallet tx details" src="./../../../green_wallet_tx_details.png" alt="green wallet tx details" width="400"/> 
+<a href="/guide-images/greenwallet/green_wallet_tx_details.png" target="_blank">
+    <img id="green wallet tx details" src="/guide-images/greenwallet/green_wallet_tx_details.png" alt="green wallet tx details" width="400"/> 
 </a>
 
 That's it! The transaction has been broadcasted to the network and must now be included in a block (confirmed/mined). 

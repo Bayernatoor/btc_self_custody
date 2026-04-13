@@ -23,8 +23,8 @@ By now you should have received your Seedplate from Coinkite. Let's transfer the
 
 <p>Once finished it should appear similar to this:</p>
 
-<a href="./../../../seedplate.jpeg" target="_blank">
-    <img id="coinkite_seedplate" src="./../../../seedplate.jpeg" alt="coinkite_seedplate" width="600"/> 
+<a href="/img/seedplate.jpeg" target="_blank">
+    <img id="coinkite_seedplate" src="/img/seedplate.jpeg" alt="coinkite_seedplate" width="600"/> 
 </a>
 
 <h4>Backup Best Practices</h4>
