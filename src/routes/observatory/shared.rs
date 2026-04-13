@@ -1260,6 +1260,8 @@ struct DrawerChart {
 /// A section (or subsection) of charts within the drawer.
 struct DrawerSection {
     label: &'static str,
+    /// URL section key (e.g. "blocks", "adoption"). Empty if page has no sub-sections.
+    section_key: &'static str,
     charts: Vec<DrawerChart>,
 }
 
@@ -1278,6 +1280,7 @@ fn drawer_pages() -> Vec<DrawerPage> {
             sections: vec![
                 DrawerSection {
                     label: "Blocks",
+                    section_key: "blocks",
                     charts: vec![
                         DrawerChart { label: "Block Size", card_id: "card-chart-size" },
                         DrawerChart { label: "Weight Utilization", card_id: "card-chart-weight-util" },
@@ -1294,6 +1297,7 @@ fn drawer_pages() -> Vec<DrawerPage> {
                 },
                 DrawerSection {
                     label: "Adoption",
+                    section_key: "adoption",
                     charts: vec![
                         DrawerChart { label: "SegWit Adoption", card_id: "card-chart-segwit" },
                         DrawerChart { label: "Taproot Outputs", card_id: "card-chart-taproot" },
@@ -1311,6 +1315,7 @@ fn drawer_pages() -> Vec<DrawerPage> {
                 },
                 DrawerSection {
                     label: "Transactions",
+                    section_key: "transactions",
                     charts: vec![
                         DrawerChart { label: "RBF Adoption", card_id: "card-chart-rbf" },
                         DrawerChart { label: "UTXO Flow", card_id: "card-chart-utxo-flow" },
@@ -1327,6 +1332,7 @@ fn drawer_pages() -> Vec<DrawerPage> {
             sections: vec![
                 DrawerSection {
                     label: "",
+                    section_key: "",
                     charts: vec![
                         DrawerChart { label: "Total Fees per Block", card_id: "card-chart-fees" },
                         DrawerChart { label: "Avg Fee per Transaction", card_id: "card-chart-avg-fee-tx" },
@@ -1349,6 +1355,7 @@ fn drawer_pages() -> Vec<DrawerPage> {
             sections: vec![
                 DrawerSection {
                     label: "Difficulty",
+                    section_key: "difficulty",
                     charts: vec![
                         DrawerChart { label: "Difficulty", card_id: "card-chart-difficulty" },
                         DrawerChart { label: "Difficulty Ribbon", card_id: "card-chart-diff-ribbon" },
@@ -1356,6 +1363,7 @@ fn drawer_pages() -> Vec<DrawerPage> {
                 },
                 DrawerSection {
                     label: "Pool Distribution",
+                    section_key: "pools",
                     charts: vec![
                         DrawerChart { label: "Mining Pool Share", card_id: "card-chart-miner-dominance" },
                         DrawerChart { label: "Mining Diversity Index", card_id: "card-chart-diversity" },
@@ -1371,6 +1379,7 @@ fn drawer_pages() -> Vec<DrawerPage> {
             sections: vec![
                 DrawerSection {
                     label: "Overview",
+                    section_key: "overview",
                     charts: vec![
                         DrawerChart { label: "All Embedded Share", card_id: "card-chart-all-embedded-share" },
                         DrawerChart { label: "All Embedded Count", card_id: "card-chart-unified-count" },
@@ -1379,6 +1388,7 @@ fn drawer_pages() -> Vec<DrawerPage> {
                 },
                 DrawerSection {
                     label: "Protocols",
+                    section_key: "protocols",
                     charts: vec![
                         DrawerChart { label: "OP_RETURN Count", card_id: "card-chart-opreturn-count" },
                         DrawerChart { label: "OP_RETURN Volume", card_id: "card-chart-opreturn-bytes" },
@@ -1388,6 +1398,7 @@ fn drawer_pages() -> Vec<DrawerPage> {
                 },
                 DrawerSection {
                     label: "Inscriptions",
+                    section_key: "inscriptions",
                     charts: vec![
                         DrawerChart { label: "Inscription Count", card_id: "card-chart-inscriptions" },
                         DrawerChart { label: "Inscription Share", card_id: "card-chart-inscription-share" },
@@ -1471,6 +1482,7 @@ pub fn ChartDrawer() -> impl IntoView {
                             // Sections
                             {page.sections.into_iter().map(|section| {
                                 let has_label = !section.label.is_empty();
+                                let section_key = section.section_key;
                                 view! {
                                     <div class="ml-1">
                                         {if has_label {
@@ -1495,8 +1507,12 @@ pub fn ChartDrawer() -> impl IntoView {
                                                                 {
                                                                     let current = location.pathname.get_untracked();
                                                                     if !current.starts_with(path_prefix) {
-                                                                        // Navigate to the correct page with hash for scroll
-                                                                        let url = format!("{}#{}", path_prefix, card_id);
+                                                                        // Navigate to the correct page with section param and hash
+                                                                        let url = if section_key.is_empty() {
+                                                                            format!("{}#{}", path_prefix, card_id)
+                                                                        } else {
+                                                                            format!("{}?section={}#{}", path_prefix, section_key, card_id)
+                                                                        };
                                                                         let _ = leptos::prelude::window().location().set_href(&url);
                                                                     } else if let Some(el) = leptos::prelude::document().get_element_by_id(card_id) {
                                                                         el.scroll_into_view();
