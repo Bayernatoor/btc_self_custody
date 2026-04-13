@@ -212,6 +212,7 @@ pub fn OnThisDayPage() -> impl IntoView {
         .unwrap_or(default_date);
 
     let (selected_date, set_selected_date) = signal(initial_date);
+    let (sort_by, set_sort_by) = signal("year_desc".to_string());
 
     // Scroll to year card on initial load (when linked from Hall of Fame)
     #[cfg(feature = "hydrate")]
@@ -513,6 +514,28 @@ pub fn OnThisDayPage() -> impl IntoView {
             </div>
         </div>
 
+        // Sort control
+        <div class="flex justify-end">
+            <div class="relative">
+                <select
+                    class="appearance-none bg-white/5 border border-white/10 text-white/70 text-xs rounded-lg px-3 py-1.5 pr-7 cursor-pointer focus:outline-none focus:border-[#f7931a]/50"
+                    on:change=move |ev| {
+                        set_sort_by.set(event_target_value(&ev));
+                    }
+                >
+                    <option value="year_desc" selected>"Newest first"</option>
+                    <option value="year_asc">"Oldest first"</option>
+                    <option value="price_desc">"Price (high to low)"</option>
+                    <option value="blocks_desc">"Blocks (most)"</option>
+                    <option value="tx_desc">"Transactions (most)"</option>
+                    <option value="fees_desc">"Fees (highest)"</option>
+                </select>
+                <svg class="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none w-3 h-3 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </div>
+        </div>
+
         // Year cards
         <div class="space-y-3 min-h-[60vh]">
             {move || match data.get() {
@@ -530,7 +553,17 @@ pub fn OnThisDayPage() -> impl IntoView {
                             </div>
                         }.into_any()
                     } else {
-                        let mut cards: Vec<leptos::tachys::view::any_view::AnyView> = otd.years.into_iter().map(|year| {
+                        let mut years = otd.years;
+                        let sort = sort_by.get();
+                        match sort.as_str() {
+                            "year_asc" => years.sort_by_key(|y| y.year),
+                            "price_desc" => years.sort_by(|a, b| b.price_usd.partial_cmp(&a.price_usd).unwrap_or(std::cmp::Ordering::Equal)),
+                            "blocks_desc" => years.sort_by_key(|y| std::cmp::Reverse(y.block_count)),
+                            "tx_desc" => years.sort_by_key(|y| std::cmp::Reverse(y.total_tx)),
+                            "fees_desc" => years.sort_by_key(|y| std::cmp::Reverse(y.total_fees)),
+                            _ => {} // year_desc is default from server
+                        }
+                        let mut cards: Vec<leptos::tachys::view::any_view::AnyView> = years.into_iter().map(|year| {
                             view! { <YearCard year=year/> }.into_any()
                         }).collect();
 
