@@ -1281,6 +1281,15 @@ mod tests {
             fee_rate_p90: 0.0,
             stamps_count: 0,
             largest_tx_size: 0,
+            max_tx_fee: 0,
+            inscription_fees: 0,
+            runes_fees: 0,
+            legacy_tx_count: 0,
+            segwit_tx_count: 0,
+            taproot_tx_count: 0,
+            coinbase_text: String::new(),
+            fee_rate_p25: 0.0,
+            fee_rate_p75: 0.0,
         };
         let result = dp(&block, 42.5);
         let arr = result.as_array().unwrap();
@@ -1382,6 +1391,15 @@ mod tests {
             fee_rate_p90: 50.0,
             stamps_count: 0,
             largest_tx_size: 50_000,
+            max_tx_fee: 1_000_000,
+            inscription_fees: 5_000_000,
+            runes_fees: 3_000_000,
+            legacy_tx_count: 200,
+            segwit_tx_count: 1200,
+            taproot_tx_count: 600,
+            coinbase_text: String::new(),
+            fee_rate_p25: 5.0,
+            fee_rate_p75: 25.0,
         }
     }
 
