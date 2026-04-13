@@ -286,10 +286,6 @@ pub fn NetworkChartsPage() -> impl IntoView {
                             |days| crate::stats::charts::witness_share_chart_daily(days)
                         );
 
-                        let taproot_velocity_option = chart_memo!(dashboard_data, range, overlay_flags,
-                            |blocks| crate::stats::charts::taproot_velocity_chart(blocks),
-                            |days| crate::stats::charts::taproot_velocity_chart_daily(days)
-                        );
                         let cumulative_adoption_option = chart_memo!(dashboard_data, range, overlay_flags,
                             |blocks| crate::stats::charts::cumulative_adoption_chart(blocks),
                             |days| crate::stats::charts::cumulative_adoption_chart_daily(days)
@@ -332,7 +328,6 @@ pub fn NetworkChartsPage() -> impl IntoView {
                                 <ChartCard title="Address Type Share" description="Each output type as a percentage of total, showing the shift from legacy to SegWit to Taproot" chart_id="chart-address-types-pct" option=address_type_pct_option/>
                                 <ChartCard title="Taproot Spend Types" description=chart_desc(range, "Key-path vs script-path spends per block. How Taproot is actually being used", "Daily average key-path vs script-path spends. How Taproot is actually being used") chart_id="chart-taproot-spend-types" option=taproot_spend_type_option/>
                                 <ChartCard title="Witness Data Share" description="Witness data as percentage of block size. Higher means more SegWit discount savings" chart_id="chart-witness-share" option=witness_share_option/>
-                                <ChartCard title="Taproot Adoption Velocity" description=chart_desc(range, "Rate of change in Taproot output percentage. Positive values indicate accelerating adoption", "Daily rate of change in Taproot adoption percentage") chart_id="chart-taproot-velocity" option=taproot_velocity_option/>
                                 <ChartCard title="Cumulative Adoption" description=chart_desc(range, "Running total of SegWit transactions and Taproot outputs within this range. Select ALL for lifetime totals", "Cumulative SegWit and Taproot counts within this range. Select ALL for lifetime totals") chart_id="chart-cumulative-adoption" option=cumulative_adoption_option/>
                                 <ChartCard title="P2PKH Sunset Tracker" description="Decline of legacy P2PKH address usage over time. Horizontal lines mark 10% and 5% thresholds" chart_id="chart-p2pkh-sunset" option=sunset_option/>
                                 <ChartCard title="Adoption Velocity (All Types)" description="Rate of change for all address types. P2PKH declining, P2WPKH flattening, P2TR growing. Shows the transition between eras" chart_id="chart-multi-velocity" option=multi_velocity_option/>
