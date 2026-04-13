@@ -147,21 +147,10 @@ pub fn NetworkChartsPage() -> impl IntoView {
                         time_server.get().flatten().unwrap_or_default()
                     });
 
-                    let propagation_option = Signal::derive(move || {
-                        let _r = range.get();
-                        let flags = overlay_flags.get();
-                        dashboard_data.get().and_then(|r| r.ok()).map(|data| {
-                            let (mut value, is_daily) = match data {
-                                DashboardData::PerBlock(ref blocks) =>
-                                    (crate::stats::charts::block_propagation_chart(blocks), false),
-                                DashboardData::Daily(_) =>
-                                    (crate::stats::charts::no_data_chart("Rapid Consecutive Blocks"), true),
-                            };
-                            if value.is_null() { return String::new(); }
-                            crate::stats::charts::apply_overlays(&mut value, &flags, is_daily);
-                            serde_json::to_string(&value).unwrap_or_default()
-                        }).unwrap_or_default()
-                    });
+                    let propagation_option = chart_memo!(dashboard_data, range, overlay_flags,
+                        |blocks| crate::stats::charts::block_propagation_chart(blocks),
+                        |_days| crate::stats::charts::no_data_chart("Rapid Consecutive Blocks")
+                    );
 
                     let weekday_option = chart_memo!(dashboard_data, range, overlay_flags,
                         |blocks| crate::stats::charts::weekday_activity_chart(blocks),
@@ -209,36 +198,14 @@ pub fn NetworkChartsPage() -> impl IntoView {
                         |blocks| crate::stats::charts::cumulative_adoption_chart(blocks),
                         |days| crate::stats::charts::cumulative_adoption_chart_daily(days)
                     );
-                    let multi_velocity_option = Signal::derive(move || {
-                        let _r = range.get();
-                        let flags = overlay_flags.get();
-                        dashboard_data.get().and_then(|r| r.ok()).map(|data| {
-                            let (mut value, is_daily) = match data {
-                                DashboardData::Daily(ref days) =>
-                                    (crate::stats::charts::multi_velocity_chart_daily(days), true),
-                                DashboardData::PerBlock(_) =>
-                                    (crate::stats::charts::no_data_chart_with_hint("Adoption Velocity", "Select a longer range (3M+) for velocity data"), false),
-                            };
-                            if value.is_null() { return String::new(); }
-                            crate::stats::charts::apply_overlays(&mut value, &flags, is_daily);
-                            serde_json::to_string(&value).unwrap_or_default()
-                        }).unwrap_or_default()
-                    });
-                    let sunset_option = Signal::derive(move || {
-                        let _r = range.get();
-                        let flags = overlay_flags.get();
-                        dashboard_data.get().and_then(|r| r.ok()).map(|data| {
-                            let (mut value, is_daily) = match data {
-                                DashboardData::Daily(ref days) =>
-                                    (crate::stats::charts::address_sunset_chart_daily(days), true),
-                                DashboardData::PerBlock(_) =>
-                                    (crate::stats::charts::no_data_chart("P2PKH Sunset Tracker"), false),
-                            };
-                            if value.is_null() { return String::new(); }
-                            crate::stats::charts::apply_overlays(&mut value, &flags, is_daily);
-                            serde_json::to_string(&value).unwrap_or_default()
-                        }).unwrap_or_default()
-                    });
+                    let multi_velocity_option = chart_memo!(dashboard_data, range, overlay_flags,
+                        |blocks| crate::stats::charts::multi_velocity_chart(blocks),
+                        |days| crate::stats::charts::multi_velocity_chart_daily(days)
+                    );
+                    let sunset_option = chart_memo!(dashboard_data, range, overlay_flags,
+                        |blocks| crate::stats::charts::address_sunset_chart(blocks),
+                        |days| crate::stats::charts::address_sunset_chart_daily(days)
+                    );
 
                     // ── Transactions ──────────────────────────────────
                     let rbf_option = chart_memo!(dashboard_data, range, overlay_flags,
@@ -265,21 +232,10 @@ pub fn NetworkChartsPage() -> impl IntoView {
                         |blocks| crate::stats::charts::utxo_growth_chart(blocks),
                         |days| crate::stats::charts::utxo_growth_chart_daily(days)
                     );
-                    let tx_type_evolution_option = Signal::derive(move || {
-                        let _r = range.get();
-                        let flags = overlay_flags.get();
-                        dashboard_data.get().and_then(|r| r.ok()).map(|data| {
-                            let (mut value, is_daily) = match data {
-                                DashboardData::PerBlock(ref blocks) =>
-                                    (crate::stats::charts::tx_type_evolution_chart(blocks), false),
-                                DashboardData::Daily(_) =>
-                                    (crate::stats::charts::no_data_chart("Transaction Type Evolution"), true),
-                            };
-                            if value.is_null() { return String::new(); }
-                            crate::stats::charts::apply_overlays(&mut value, &flags, is_daily);
-                            serde_json::to_string(&value).unwrap_or_default()
-                        }).unwrap_or_default()
-                    });
+                    let tx_type_evolution_option = chart_memo!(dashboard_data, range, overlay_flags,
+                        |blocks| crate::stats::charts::tx_type_evolution_chart(blocks),
+                        |_days| crate::stats::charts::no_data_chart("Transaction Type Evolution")
+                    );
 
                     view! {
                         <div class="space-y-10">

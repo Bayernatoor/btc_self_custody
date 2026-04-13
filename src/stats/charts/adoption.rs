@@ -947,3 +947,123 @@ pub fn multi_velocity_chart_daily(days: &[DailyAggregate]) -> serde_json::Value 
         ]
     }))
 }
+
+/// P2PKH sunset tracker (per-block). Shows P2PKH share % with a moving average.
+pub fn address_sunset_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+    if blocks.is_empty() {
+        return no_data_chart("P2PKH Sunset Tracker");
+    }
+
+    let data = build_data_array_f64(blocks, |b| {
+        let total = b.p2pkh_count + b.p2sh_count + b.p2wpkh_count
+            + b.p2wsh_count + b.p2tr_count + b.p2pk_count;
+        if total > 0 {
+            round(b.p2pkh_count as f64 / total as f64 * 100.0, 2)
+        } else {
+            0.0
+        }
+    });
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("P2PKH Share (%)"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            {
+                "name": "P2PKH %", "type": "line", "data": data_array_value(&data),
+                "lineStyle": { "width": 0.5, "color": P2PKH_COLOR },
+                "itemStyle": { "color": P2PKH_COLOR }, "symbol": "none",
+                "opacity": 0.15
+            },
+            {
+                "name": "Thresholds", "type": "line", "data": [],
+                "markLine": {
+                    "silent": true, "symbol": "none",
+                    "lineStyle": { "type": "dashed", "color": TARGET_COLOR, "width": 1 },
+                    "data": [
+                        { "yAxis": 10, "label": { "formatter": "10%", "color": TARGET_COLOR } },
+                        { "yAxis": 5, "label": { "formatter": "5%", "color": TARGET_COLOR } }
+                    ]
+                }
+            }
+        ]
+    }))
+}
+
+/// Multi-type adoption velocity (per-block). Requires 500+ blocks for meaningful data.
+pub fn multi_velocity_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+    if blocks.len() < 500 {
+        return no_data_chart_with_hint("Adoption Velocity", "Select a longer range (3M+) for velocity data");
+    }
+
+    let compute_pct = |blocks: &[BlockSummary], extract: fn(&BlockSummary) -> u64| -> Vec<f64> {
+        blocks.iter().map(|b| {
+            let total = b.p2pkh_count + b.p2sh_count + b.p2wpkh_count
+                + b.p2wsh_count + b.p2tr_count + b.p2pk_count;
+            if total > 0 { extract(b) as f64 / total as f64 * 100.0 } else { 0.0 }
+        }).collect()
+    };
+
+    let p2pkh_pct = compute_pct(blocks, |b| b.p2pkh_count);
+    let p2sh_pct = compute_pct(blocks, |b| b.p2sh_count);
+    let p2wpkh_pct = compute_pct(blocks, |b| b.p2wpkh_count);
+    let p2tr_pct = compute_pct(blocks, |b| b.p2tr_count);
+
+    // 144-block MA (~1 day) then velocity (diff from 144 blocks ago)
+    let make_velocity = |pct: &[f64], blocks: &[BlockSummary]| -> String {
+        let ma = moving_average(pct, 144);
+        let mut buf = String::with_capacity(blocks.len() * 20);
+        buf.push('[');
+        for (i, b) in blocks.iter().enumerate() {
+            if i > 0 { buf.push(','); }
+            if i >= 144 {
+                if let (Some(cur), Some(prev)) = (ma[i], ma[i.saturating_sub(144)]) {
+                    let _ = write!(buf, "[{},{}]", ts_ms(b.timestamp), round(cur - prev, 3));
+                } else {
+                    let _ = write!(buf, "[{},null]", ts_ms(b.timestamp));
+                }
+            } else {
+                let _ = write!(buf, "[{},null]", ts_ms(b.timestamp));
+            }
+        }
+        buf.push(']');
+        buf
+    };
+
+    let v_p2pkh = make_velocity(&p2pkh_pct, blocks);
+    let v_p2sh = make_velocity(&p2sh_pct, blocks);
+    let v_p2wpkh = make_velocity(&p2wpkh_pct, blocks);
+    let v_p2tr = make_velocity(&p2tr_pct, blocks);
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("% Change (144-block)"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            {
+                "name": "P2PKH", "type": "line", "data": data_array_value(&v_p2pkh),
+                "lineStyle": { "width": 1.5, "color": P2PKH_COLOR },
+                "itemStyle": { "color": P2PKH_COLOR }, "symbol": "none"
+            },
+            {
+                "name": "P2SH", "type": "line", "data": data_array_value(&v_p2sh),
+                "lineStyle": { "width": 1.5, "color": P2SH_COLOR },
+                "itemStyle": { "color": P2SH_COLOR }, "symbol": "none"
+            },
+            {
+                "name": "P2WPKH", "type": "line", "data": data_array_value(&v_p2wpkh),
+                "lineStyle": { "width": 1.5, "color": P2WPKH_COLOR },
+                "itemStyle": { "color": P2WPKH_COLOR }, "symbol": "none"
+            },
+            {
+                "name": "P2TR", "type": "line", "data": data_array_value(&v_p2tr),
+                "lineStyle": { "width": 1.5, "color": P2TR_COLOR },
+                "itemStyle": { "color": P2TR_COLOR }, "symbol": "none"
+            }
+        ]
+    }))
+}
