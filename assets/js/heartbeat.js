@@ -483,14 +483,14 @@ function _hbVisibilityChange() {
         var canvasId = _hb.canvas ? _hb.canvas.id : null;
         console.log('[heartbeat] tab return after', Math.round(now - _hb._hiddenSince), 's - full reset');
         if (canvasId) {
-            window.destroyHeartbeat();
-            window.initHeartbeat(canvasId);
-            // Re-fetch block history from API and replay (Leptos Effect won't re-fire).
-            // Default endpoint returns last 144 blocks — enough for the visual timeline.
+            // Fetch blocks FIRST, then destroy/init/replay so SSE (which starts
+            // inside initHeartbeat) can't deliver blocks before history is loaded.
             fetch('/api/stats/blocks')
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     var blocks = data.blocks || [];
+                    window.destroyHeartbeat();
+                    window.initHeartbeat(canvasId);
                     if (blocks.length > 0) {
                         console.log('[heartbeat] replaying', blocks.length, 'blocks after reset');
                         window.pushHeartbeatBlocks(JSON.stringify(blocks), true);
@@ -498,6 +498,9 @@ function _hbVisibilityChange() {
                 })
                 .catch(function(err) {
                     console.log('[heartbeat] block refetch failed:', err);
+                    // Still reset even if fetch fails
+                    window.destroyHeartbeat();
+                    window.initHeartbeat(canvasId);
                 });
         }
         return;

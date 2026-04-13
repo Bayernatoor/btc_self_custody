@@ -235,18 +235,21 @@ pub fn FeeChartsPage() -> impl IntoView {
                                 description="Fee rate percentiles from p10 to p90 showing the full spread of fee rates per block"
                                 chart_id="chart-fee-heatmap"
                                 option=fee_heatmap_option
+                                coming_soon=true
                             />
                             <ChartCard
                                 title="Max Transaction Fee"
                                 description="Largest individual transaction fee per block in BTC. Fat-finger fees and high-priority transactions stand out"
                                 chart_id="chart-max-tx-fee"
                                 option=max_tx_fee_option
+                                coming_soon=true
                             />
                             <ChartCard
                                 title="Protocol Fee Revenue"
                                 description="Fee revenue breakdown by protocol: Ordinals inscriptions, Runes, and other transactions"
                                 chart_id="chart-protocol-fees"
                                 option=protocol_fees_option
+                                coming_soon=true
                             />
                         </div>
                     }.into_any()

@@ -101,6 +101,9 @@ pub fn ChartCard(
     /// Optional content to render in the header right area (e.g. toggle button)
     #[prop(optional)]
     children: Option<Children>,
+    /// Show a "Coming Soon" overlay over the chart area
+    #[prop(optional)]
+    coming_soon: bool,
 ) -> impl IntoView {
     let (expanded, set_expanded) = signal(false);
     let anchor = chart_id.clone();
@@ -214,6 +217,14 @@ pub fn ChartCard(
                         </div>
                     </div>
                 </Show>
+                {coming_soon.then(|| view! {
+                    <div class="absolute inset-0 flex items-center justify-center bg-[#0d2137]/90 rounded-2xl z-10">
+                        <div class="text-center">
+                            <p class="text-white/70 text-lg font-semibold">"Coming Soon"</p>
+                            <p class="text-white/40 text-sm mt-1">"Data backfill in progress"</p>
+                        </div>
+                    </div>
+                })}
             </div>
         </div>
 
