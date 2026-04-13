@@ -96,8 +96,11 @@ pub async fn fetch_blocks(
     from: u64,
     to: u64,
 ) -> Result<Vec<BlockSummary>, ServerFnError> {
+    if from > to {
+        return Err(ServerFnError::new("Invalid block range"));
+    }
     // Limit range to prevent DoS via huge queries (4500 covers 1M range = ~4320 blocks)
-    if to.saturating_sub(from) > 4500 {
+    if to - from > 4500 {
         return Err(ServerFnError::new("Block range too large"));
     }
     let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =

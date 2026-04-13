@@ -16,13 +16,13 @@ Real-time Bitcoin blockchain analytics at https://www.wehodlbtc.com/observatory
 Block height, mining difficulty, network hashrate, mempool stats, BTC price, circulating supply, UTXO count, halving countdown with measured block time estimate, and difficulty adjustment predictor.
 
 ### Network Charts
-Block size (MB), transaction count, block intervals vs 10-min target, weight utilization (% of 4 MWU limit), average transaction size, cumulative chain size growth, difficulty history. SegWit adoption percentage, Taproot (P2TR) output count, witness version comparison (v0 vs v1), address type evolution (P2PK, P2PKH, P2SH, P2WPKH, P2WSH, P2TR), Taproot key-path vs script-path spend breakdown, RBF adoption rate, UTXO flow (inputs vs outputs), and transaction batching trends.
+Block size, weight utilization, transaction count, TPS, block intervals, chain size growth, block fullness distribution, block time distribution, rapid consecutive blocks, weekday activity patterns. SegWit adoption, Taproot outputs, witness versions, address type evolution, address type share, witness data share, Taproot spend types, Taproot adoption velocity, cumulative SegWit/Taproot adoption, P2PKH sunset tracker, multi-type adoption velocity, UTXO flow, UTXO growth rate, transaction density, RBF adoption, batching trends, transaction type evolution (legacy/SegWit/Taproot).
 
 ### Fee Charts
-Total fees per block in BTC and satoshis, daily averages, and block reward breakdown showing subsidy versus fee revenue across all four halving eras.
+Total fees per block in BTC and satoshis, average fee per transaction, median fee rate, fee rate bands (p10/p25/median/p75/p90), subsidy vs fees, fee revenue share (% of block reward), BTC transferred volume, input vs output value flow, fee pressure vs block space scatter, fee spike detector, halving era comparison, max transaction fee, protocol fee revenue breakdown (inscriptions vs Runes vs other).
 
 ### Mining Charts
-Difficulty adjustment history, mining pool dominance distribution (Foundry, AntPool, ViaBTC, F2Pool, MARA, OCEAN with template miner identification, and 25+ others), empty block tracking by month.
+Difficulty history, difficulty ribbon (7 MAs for miner capitulation detection), mining pool dominance distribution (Foundry, AntPool, ViaBTC, F2Pool, MARA, OCEAN with template miner identification, and 25+ others), mining diversity index (HHI gauge), empty block tracking by month, empty blocks by pool.
 
 ### Embedded Data Charts
 OP_RETURN protocol tracking: Runes, Omni Layer, Counterparty, and other data carriers by count and bytes. Ordinals inscription count and block share. BRC-20 token activity. Stamps (bare multisig). Protocol dominance percentage. All embedded data as percentage of block size.
