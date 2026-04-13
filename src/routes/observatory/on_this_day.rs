@@ -518,7 +518,8 @@ pub fn OnThisDayPage() -> impl IntoView {
         <div class="flex justify-end">
             <div class="relative">
                 <select
-                    class="appearance-none bg-white/5 border border-white/10 text-white/70 text-xs rounded-lg px-3 py-1.5 pr-7 cursor-pointer focus:outline-none focus:border-[#f7931a]/50"
+                    class="appearance-none bg-[#0d2137] border border-white/10 text-white/70 text-xs rounded-lg px-3 py-1.5 pr-7 cursor-pointer focus:outline-none focus:border-[#f7931a]/50"
+                    style="color-scheme: dark"
                     on:change=move |ev| {
                         set_sort_by.set(event_target_value(&ev));
                     }
