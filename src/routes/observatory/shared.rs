@@ -1398,7 +1398,7 @@ fn drawer_pages() -> Vec<DrawerPage> {
                 },
                 DrawerSection {
                     label: "Inscriptions",
-                    section_key: "inscriptions",
+                    section_key: "witness",
                     charts: vec![
                         DrawerChart { label: "Inscription Count", card_id: "card-chart-inscriptions" },
                         DrawerChart { label: "Inscription Share", card_id: "card-chart-inscription-share" },
