@@ -1315,7 +1315,7 @@ fn drawer_pages() -> Vec<DrawerPage> {
                 },
                 DrawerSection {
                     label: "Transactions",
-                    section_key: "transactions",
+                    section_key: "tx-metrics",
                     charts: vec![
                         DrawerChart { label: "RBF Adoption", card_id: "card-chart-rbf" },
                         DrawerChart { label: "UTXO Flow", card_id: "card-chart-utxo-flow" },
