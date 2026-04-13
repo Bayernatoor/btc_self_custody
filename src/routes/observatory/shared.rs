@@ -1274,7 +1274,7 @@ fn drawer_pages() -> Vec<DrawerPage> {
     vec![
         DrawerPage {
             label: "Network",
-            path_prefix: "/observatory/network",
+            path_prefix: "/observatory/charts/network",
             sections: vec![
                 DrawerSection {
                     label: "Blocks",
@@ -1323,7 +1323,7 @@ fn drawer_pages() -> Vec<DrawerPage> {
         },
         DrawerPage {
             label: "Fees",
-            path_prefix: "/observatory/fees",
+            path_prefix: "/observatory/charts/fees",
             sections: vec![
                 DrawerSection {
                     label: "",
@@ -1345,7 +1345,7 @@ fn drawer_pages() -> Vec<DrawerPage> {
         },
         DrawerPage {
             label: "Mining",
-            path_prefix: "/observatory/mining",
+            path_prefix: "/observatory/charts/mining",
             sections: vec![
                 DrawerSection {
                     label: "Difficulty",
@@ -1367,7 +1367,7 @@ fn drawer_pages() -> Vec<DrawerPage> {
         },
         DrawerPage {
             label: "Embedded Data",
-            path_prefix: "/observatory/embedded",
+            path_prefix: "/observatory/charts/embedded",
             sections: vec![
                 DrawerSection {
                     label: "Overview",
