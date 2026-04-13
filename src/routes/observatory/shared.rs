@@ -1493,7 +1493,12 @@ pub fn ChartDrawer() -> impl IntoView {
                                                                 set_open.set(false);
                                                                 #[cfg(feature = "hydrate")]
                                                                 {
-                                                                    if let Some(el) = leptos::prelude::document().get_element_by_id(card_id) {
+                                                                    let current = location.pathname.get_untracked();
+                                                                    if !current.starts_with(path_prefix) {
+                                                                        // Navigate to the correct page with hash for scroll
+                                                                        let url = format!("{}#{}", path_prefix, card_id);
+                                                                        let _ = leptos::prelude::window().location().set_href(&url);
+                                                                    } else if let Some(el) = leptos::prelude::document().get_element_by_id(card_id) {
                                                                         el.scroll_into_view();
                                                                     }
                                                                 }
