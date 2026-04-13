@@ -837,11 +837,56 @@ pub fn apply_overlays(
                 })
                 .collect()
         } else {
-            // For time-axis charts, use [ts_ms, price] pairs (already filtered)
-            filtered_prices
-                .iter()
-                .map(|&(ts_ms, price)| json!([ts_ms, price]))
-                .collect()
+            // For time-axis charts, interpolate price at each block timestamp
+            // so ECharts tooltip can match price to any hovered block.
+            let block_timestamps: Vec<u64> = obj
+                .get("series")
+                .and_then(|s| s.as_array())
+                .and_then(|a| a.first())
+                .and_then(|s| s.get("data"))
+                .and_then(|d| d.as_array())
+                .map(|pts| {
+                    pts.iter()
+                        .filter_map(|pt| {
+                            pt.as_array()
+                                .and_then(|a| a.first())
+                                .and_then(|v| v.as_u64().or_else(|| v.as_f64().map(|f| f as u64)))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+
+            if block_timestamps.is_empty() {
+                // Fallback: raw price points
+                filtered_prices.iter().map(|&(ts, p)| json!([ts, p])).collect()
+            } else {
+                // Interpolate price for each block timestamp
+                block_timestamps
+                    .iter()
+                    .map(|&bts| {
+                        match filtered_prices.binary_search_by_key(&bts, |&(ts, _)| ts) {
+                            Ok(idx) => json!([bts, filtered_prices[idx].1]),
+                            Err(idx) => {
+                                if idx == 0 {
+                                    json!([bts, serde_json::Value::Null])
+                                } else if idx >= filtered_prices.len() {
+                                    json!([bts, filtered_prices.last().unwrap().1])
+                                } else {
+                                    let (t0, p0) = filtered_prices[idx - 1];
+                                    let (t1, p1) = filtered_prices[idx];
+                                    if t1 == t0 {
+                                        json!([bts, p0])
+                                    } else {
+                                        let frac = (bts - t0) as f64 / (t1 - t0) as f64;
+                                        let interp = ((p0 + frac * (p1 - p0)) * 100.0).round() / 100.0;
+                                        json!([bts, interp])
+                                    }
+                                }
+                            }
+                        }
+                    })
+                    .collect()
+            }
         };
 
         // Add price line series on the secondary y-axis
