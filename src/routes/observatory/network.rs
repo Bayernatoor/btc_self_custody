@@ -376,6 +376,19 @@ pub fn NetworkChartsPage() -> impl IntoView {
                             |days| crate::stats::charts::utxo_growth_chart_daily(days)
                         );
 
+                        let tx_type_evolution_option = Signal::derive(move || {
+                            let _r = range.get();
+                            dashboard_data.get().and_then(|r| r.ok()).map(|data| {
+                                let value = match data {
+                                    DashboardData::PerBlock(ref blocks) =>
+                                        crate::stats::charts::tx_type_evolution_chart(blocks),
+                                    DashboardData::Daily(_) =>
+                                        crate::stats::charts::no_data_chart("Transaction Type Evolution"),
+                                };
+                                serde_json::to_string(&value).unwrap_or_default()
+                            }).unwrap_or_default()
+                        });
+
                         view! {
                             <div class="space-y-10">
                                 <ChartCard title="RBF Adoption" description=chart_desc(range, "Percentage of transactions opting into Replace-By-Fee per block", "Daily average RBF adoption percentage") chart_id="chart-rbf" option=rbf_option/>
@@ -384,6 +397,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
                                 <ChartCard title="Largest Transaction" description=chart_desc(range, "Size of the largest transaction in each block. Large transactions may indicate consolidations or complex scripts", "Largest transaction (per-block ranges only)") chart_id="chart-largest-tx" option=largest_tx_option/>
                                 <ChartCard title="Transaction Density" description=chart_desc(range, "Transactions per kilobyte of block space. Higher values indicate smaller, more efficient transactions", "Daily average transaction density (transactions per KB)") chart_id="chart-tx-density" option=tx_density_option/>
                                 <ChartCard title="UTXO Growth Rate" description=chart_desc(range, "Net UTXO set change per block (outputs created minus inputs consumed). Positive means the UTXO set is growing, negative means consolidation", "Daily net UTXO change across all blocks") chart_id="chart-utxo-growth" option=utxo_growth_option/>
+                                <ChartCard title="Transaction Type Evolution" description="Breakdown of transactions by input type: Legacy (non-witness), SegWit v0, and Taproot. Requires backfill v10 data" chart_id="chart-tx-type-evolution" option=tx_type_evolution_option/>
                             </div>
                         }.into_any()
                     }

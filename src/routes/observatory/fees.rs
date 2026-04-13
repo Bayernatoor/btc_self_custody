@@ -123,6 +123,45 @@ pub fn FeeChartsPage() -> impl IntoView {
                         |days| crate::stats::charts::halving_era_chart_daily(days)
                     );
 
+                    let fee_heatmap_option = Signal::derive(move || {
+                        let _r = range.get();
+                        dashboard_data.get().and_then(|r| r.ok()).map(|data| {
+                            let value = match data {
+                                DashboardData::PerBlock(ref blocks) =>
+                                    crate::stats::charts::fee_rate_heatmap_chart(blocks),
+                                DashboardData::Daily(_) =>
+                                    crate::stats::charts::no_data_chart("Fee Rate Bands (Full)"),
+                            };
+                            serde_json::to_string(&value).unwrap_or_default()
+                        }).unwrap_or_default()
+                    });
+
+                    let max_tx_fee_option = Signal::derive(move || {
+                        let _r = range.get();
+                        dashboard_data.get().and_then(|r| r.ok()).map(|data| {
+                            let value = match data {
+                                DashboardData::PerBlock(ref blocks) =>
+                                    crate::stats::charts::max_tx_fee_chart(blocks),
+                                DashboardData::Daily(_) =>
+                                    crate::stats::charts::no_data_chart("Max Transaction Fee"),
+                            };
+                            serde_json::to_string(&value).unwrap_or_default()
+                        }).unwrap_or_default()
+                    });
+
+                    let protocol_fees_option = Signal::derive(move || {
+                        let _r = range.get();
+                        dashboard_data.get().and_then(|r| r.ok()).map(|data| {
+                            let value = match data {
+                                DashboardData::PerBlock(ref blocks) =>
+                                    crate::stats::charts::protocol_fee_breakdown_chart(blocks),
+                                DashboardData::Daily(_) =>
+                                    crate::stats::charts::no_data_chart("Protocol Fee Revenue"),
+                            };
+                            serde_json::to_string(&value).unwrap_or_default()
+                        }).unwrap_or_default()
+                    });
+
                     view! {
                         <div class="space-y-10">
                             <ChartCard
@@ -190,6 +229,24 @@ pub fn FeeChartsPage() -> impl IntoView {
                                 description="Side-by-side comparison of average block metrics across Bitcoin's halving eras. Shows how the network evolves between halvings"
                                 chart_id="chart-halving-era"
                                 option=halving_era_option
+                            />
+                            <ChartCard
+                                title="Fee Rate Bands (Full)"
+                                description="Fee rate percentiles from p10 to p90 showing the full spread of fee rates per block. Requires backfill v10 data"
+                                chart_id="chart-fee-heatmap"
+                                option=fee_heatmap_option
+                            />
+                            <ChartCard
+                                title="Max Transaction Fee"
+                                description="Largest individual transaction fee per block in BTC. Fat-finger fees and high-priority transactions stand out"
+                                chart_id="chart-max-tx-fee"
+                                option=max_tx_fee_option
+                            />
+                            <ChartCard
+                                title="Protocol Fee Revenue"
+                                description="Fee revenue breakdown by protocol: Ordinals inscriptions, Runes, and other transactions. Requires backfill v10 data"
+                                chart_id="chart-protocol-fees"
+                                option=protocol_fees_option
                             />
                         </div>
                     }.into_any()
