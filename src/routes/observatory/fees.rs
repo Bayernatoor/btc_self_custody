@@ -232,7 +232,7 @@ pub fn FeeChartsPage() -> impl IntoView {
                             />
                             <ChartCard
                                 title="Fee Rate Bands (Full)"
-                                description="Fee rate percentiles from p10 to p90 showing the full spread of fee rates per block. Requires backfill v10 data"
+                                description="Fee rate percentiles from p10 to p90 showing the full spread of fee rates per block"
                                 chart_id="chart-fee-heatmap"
                                 option=fee_heatmap_option
                             />
@@ -244,7 +244,7 @@ pub fn FeeChartsPage() -> impl IntoView {
                             />
                             <ChartCard
                                 title="Protocol Fee Revenue"
-                                description="Fee revenue breakdown by protocol: Ordinals inscriptions, Runes, and other transactions. Requires backfill v10 data"
+                                description="Fee revenue breakdown by protocol: Ordinals inscriptions, Runes, and other transactions"
                                 chart_id="chart-protocol-fees"
                                 option=protocol_fees_option
                             />
