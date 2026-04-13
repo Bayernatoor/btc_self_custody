@@ -1516,10 +1516,16 @@ pub fn ChartDrawer() -> impl IntoView {
                                                                         } else {
                                                                             format!("{}?section={}#{}", path_prefix, section_key, card_id)
                                                                         };
-                                                                        // Use location.replace + reload to handle same-page section switches
+                                                                        // Set URL then reload after a tick so the browser
+                                                                        // commits the new href before reloading.
                                                                         let loc = leptos::prelude::window().location();
                                                                         let _ = loc.set_href(&url);
-                                                                        let _ = loc.reload();
+                                                                        let cb = wasm_bindgen::closure::Closure::once_into_js(move || {
+                                                                            let _ = leptos::prelude::window().location().reload();
+                                                                        });
+                                                                        let _ = leptos::prelude::window().set_timeout_with_callback_and_timeout_and_arguments_0(
+                                                                            cb.unchecked_ref(), 50
+                                                                        );
                                                                     }
                                                                 }
                                                             }
