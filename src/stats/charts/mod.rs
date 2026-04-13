@@ -116,6 +116,7 @@ pub(crate) fn data_zoom() -> serde_json::Value {
 pub(crate) fn tooltip_axis() -> serde_json::Value {
     json!({
         "trigger": "axis",
+        "axisPointer": { "type": "line" },
         "backgroundColor": "rgba(13,33,55,0.95)",
         "borderColor": "rgba(255,255,255,0.1)",
         "textStyle": { "color": "rgba(255,255,255,0.85)", "fontSize": 12 }

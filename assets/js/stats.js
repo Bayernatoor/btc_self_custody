@@ -150,9 +150,9 @@
                     yName = (ya && ya.name) || '';
                 }
                 var isPct = yName.indexOf('%') !== -1;
+                var chartEl = el;
                 opts.tooltip.formatter = function(params) {
                     if (!params || !params.length) return '';
-                    // Header: use ECharts axis label for category axes, parse timestamp for time axes
                     var first = params[0];
                     var header;
                     if (first.axisType === 'xAxis.category') {
@@ -166,10 +166,42 @@
                         header += '&nbsp;&nbsp;<span style="color:#f7931a;font-size:11px">Block #' + height.toLocaleString() + '</span>';
                     }
                     var lines = '<div style="font-size:12px;color:rgba(255,255,255,0.5);margin-bottom:4px">' + header + '</div>';
-                    // Series values
+
+                    // Build a lookup of series in params (ECharts may omit zero-value series)
+                    var paramMap = {};
                     for (var i = 0; i < params.length; i++) {
-                        var p = params[i];
-                        var val = p.data && Array.isArray(p.data) ? p.data[1] : p.value;
+                        paramMap[params[i].seriesIndex] = params[i];
+                    }
+
+                    // Iterate ALL series from the chart to ensure none are missing
+                    var chart = chartEl._chart;
+                    var allSeries = chart ? chart.getOption().series || [] : [];
+                    var dataIndex = first.dataIndex;
+
+                    var entries = allSeries.length > 0 ? allSeries : [];
+                    // Fall back to params-only if we can't read chart series
+                    if (entries.length === 0) entries = params;
+
+                    for (var si = 0; si < entries.length; si++) {
+                        var p = paramMap[si];
+                        var val, name, marker;
+                        if (p) {
+                            val = p.data && Array.isArray(p.data) ? p.data[1] : p.value;
+                            name = p.seriesName || '';
+                            marker = p.marker || '';
+                        } else if (allSeries.length > 0) {
+                            // Series not in params (zero value) — read directly
+                            var s = allSeries[si];
+                            if (!s || !s.data || !s.data[dataIndex]) continue;
+                            var d = s.data[dataIndex];
+                            val = Array.isArray(d) ? d[1] : d;
+                            name = s.name || '';
+                            var color = (s.itemStyle && s.itemStyle.color) || '#ccc';
+                            marker = '<span style="display:inline-block;margin-right:4px;border-radius:10px;width:10px;height:10px;background-color:' + color + '"></span>';
+                        } else {
+                            continue;
+                        }
+
                         var formatted;
                         if (typeof val !== 'number') {
                             formatted = val;
@@ -181,8 +213,8 @@
                             formatted = parseFloat(val.toPrecision(10)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                         }
                         lines += '<div style="display:flex;align-items:center;gap:6px;font-size:12px">';
-                        lines += p.marker || '';
-                        lines += '<span style="flex:1;color:rgba(255,255,255,0.7)">' + (p.seriesName || '') + '</span>';
+                        lines += marker;
+                        lines += '<span style="flex:1;color:rgba(255,255,255,0.7)">' + name + '</span>';
                         lines += '<span style="font-weight:600;color:rgba(255,255,255,0.9)">' + formatted + '</span>';
                         lines += '</div>';
                     }
