@@ -1325,7 +1325,7 @@ fn drawer_pages() -> Vec<DrawerPage> {
                     ],
                 },
                 DrawerSection {
-                    label: "Pool Distribution",
+                    label: "Mining Pools",
                     charts: vec![
                         DrawerChart { label: "Mining Pool Share", card_id: "card-chart-miner-dominance" },
                         DrawerChart { label: "Mining Diversity Index", card_id: "card-chart-diversity" },
@@ -1348,7 +1348,7 @@ fn drawer_pages() -> Vec<DrawerPage> {
                     ],
                 },
                 DrawerSection {
-                    label: "Protocols",
+                    label: "OP_RETURN",
                     charts: vec![
                         DrawerChart { label: "OP_RETURN Count", card_id: "card-chart-opreturn-count" },
                         DrawerChart { label: "OP_RETURN Volume", card_id: "card-chart-opreturn-bytes" },
@@ -1357,7 +1357,7 @@ fn drawer_pages() -> Vec<DrawerPage> {
                     ],
                 },
                 DrawerSection {
-                    label: "Inscriptions",
+                    label: "Ordinals & Witness Data",
                     charts: vec![
                         DrawerChart { label: "Inscription Count", card_id: "card-chart-inscriptions" },
                         DrawerChart { label: "Inscription Share", card_id: "card-chart-inscription-share" },

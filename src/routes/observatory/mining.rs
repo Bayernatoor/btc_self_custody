@@ -132,7 +132,7 @@ pub fn MiningChartsPage() -> impl IntoView {
 
                     view! {
                         <div class="space-y-10">
-                            <SectionHeading id="section-pools" title="Pool Distribution"/>
+                            <SectionHeading id="section-pools" title="Mining Pools"/>
                             <ChartCard title="Mining Pool Share" description="Which mining pools are finding the most blocks. More distributed is healthier for the network" chart_id="chart-miner-dominance" option=miner_chart_option/>
                             <ChartCard title="Mining Diversity Index" description="Herfindahl-Hirschman Index (HHI) measuring mining concentration. Below 1000 is competitive, above 1800 is concentrated" chart_id="chart-diversity" option=diversity_option/>
                             <ChartCard title="Empty Blocks" description="Blocks with no user transactions, usually mined before the pool has received the previous block's transactions" chart_id="chart-empty-blocks" option=empty_blocks_option/>
