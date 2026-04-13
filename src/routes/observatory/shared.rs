@@ -1436,7 +1436,7 @@ pub fn ChartDrawer() -> impl IntoView {
                 "z-index: 10003; transform: translateX({}); transition: transform 0.25s ease-in-out;",
                 if open.get() { "0" } else { "-100%" }
             )
-            class="fixed top-0 left-0 bottom-0 w-72 bg-[#0d2137] border-r border-white/10 overflow-y-auto"
+            class="fixed top-[48px] left-0 bottom-0 w-72 bg-[#0d2137] border-r border-white/10 overflow-y-auto"
         >
             // Header
             <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
