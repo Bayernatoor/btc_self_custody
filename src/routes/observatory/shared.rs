@@ -1509,14 +1509,17 @@ pub fn ChartDrawer() -> impl IntoView {
                                                                     if let Some(el) = leptos::prelude::document().get_element_by_id(card_id) {
                                                                         el.scroll_into_view();
                                                                     } else {
-                                                                        // Element not found - either different page or different section.
-                                                                        // Navigate with section param and hash fragment.
+                                                                        // Element not in DOM (different page or hidden section).
+                                                                        // Build URL and force reload to switch section.
                                                                         let url = if section_key.is_empty() {
                                                                             format!("{}#{}", path_prefix, card_id)
                                                                         } else {
                                                                             format!("{}?section={}#{}", path_prefix, section_key, card_id)
                                                                         };
-                                                                        let _ = leptos::prelude::window().location().set_href(&url);
+                                                                        // Use location.replace + reload to handle same-page section switches
+                                                                        let loc = leptos::prelude::window().location();
+                                                                        let _ = loc.set_href(&url);
+                                                                        let _ = loc.reload();
                                                                     }
                                                                 }
                                                             }
