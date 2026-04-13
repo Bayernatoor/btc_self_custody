@@ -636,19 +636,23 @@
         }, 250);
     });
 
-    // Scroll to #anchor on page load (for shareable chart links)
-    // Delayed to allow charts to render first
+    // Scroll to #anchor on page load (for shareable chart links and drawer navigation).
+    // Retries up to 5 times since charts render lazily after hydration.
     if (window.location.hash) {
-        setTimeout(function() {
+        var _hashScrollAttempts = 0;
+        function _tryHashScroll() {
             var id = window.location.hash.substring(1);
-            // Chart anchors use card-{id} prefix to avoid duplicate IDs with ECharts
             var el = document.getElementById('card-' + id) || document.getElementById(id);
             if (el) {
                 var rect = el.getBoundingClientRect();
                 var offset = window.scrollY + rect.top - 80;
                 window.scrollTo({ top: offset, behavior: 'smooth' });
+            } else if (_hashScrollAttempts < 5) {
+                _hashScrollAttempts++;
+                setTimeout(_tryHashScroll, 1000);
             }
-        }, 1500);
+        }
+        setTimeout(_tryHashScroll, 800);
     }
     // CSV export: extract data from an ECharts instance and trigger download.
     window.downloadChartCSV = function(chartId, title, range) {
