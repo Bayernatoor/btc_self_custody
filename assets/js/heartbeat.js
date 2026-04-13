@@ -341,7 +341,7 @@ window.pushHeartbeatBlocks = function(json, replay) {
             });
 
             // Show block arrival announcement (live blocks with real data only)
-            if (!isReplay && b.height && b.total_fees > 0) {
+            if (!isReplay && !_hb._suppressAnnounce && b.height && b.total_fees > 0) {
                 var feeBtc2 = b.total_fees / 100000000;
                 var heightStr2 = b.height.toLocaleString();
                 var nowAnn2 = Date.now() / 1000;
@@ -489,12 +489,22 @@ function _hbVisibilityChange() {
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     var blocks = data.blocks || [];
+                    // Compute inter_block_seconds from timestamps (API doesn't include it)
+                    for (var i = 0; i < blocks.length; i++) {
+                        var prevTs = i > 0 ? blocks[i - 1].timestamp : (blocks[i].timestamp - 600);
+                        blocks[i].inter_block_seconds = Math.max(0, blocks[i].timestamp - prevTs);
+                    }
                     window.destroyHeartbeat();
                     window.initHeartbeat(canvasId);
+                    // Suppress announcements until replay finishes (SSE may
+                    // deliver blocks between init and replay completion)
+                    var s = getState();
+                    if (s) s._suppressAnnounce = true;
                     if (blocks.length > 0) {
                         console.log('[heartbeat] replaying', blocks.length, 'blocks after reset');
                         window.pushHeartbeatBlocks(JSON.stringify(blocks), true);
                     }
+                    if (s) s._suppressAnnounce = false;
                 })
                 .catch(function(err) {
                     console.log('[heartbeat] block refetch failed:', err);

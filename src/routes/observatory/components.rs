@@ -219,10 +219,7 @@ pub fn ChartCard(
                 </Show>
                 {coming_soon.then(|| view! {
                     <div class="absolute inset-0 flex items-center justify-center bg-[#0d2137]/90 rounded-2xl z-10">
-                        <div class="text-center">
-                            <p class="text-white/70 text-lg font-semibold">"Coming Soon"</p>
-                            <p class="text-white/40 text-sm mt-1">"Data backfill in progress"</p>
-                        </div>
+                        <p class="text-white/70 text-lg font-semibold">"Coming Soon"</p>
                     </div>
                 })}
             </div>
