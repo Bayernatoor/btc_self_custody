@@ -122,12 +122,9 @@ pub fn MiningChartsPage() -> impl IntoView {
                             .unwrap_or_default()
                     });
                     let diversity_option = Signal::derive(move || {
-                        let flags = overlay_flags.get();
                         mining_data.get().and_then(|r| r.ok())
                             .map(|(ref miners, _)| {
-                                let mut value = crate::stats::charts::mining_diversity_chart(miners);
-                                if value.is_null() { return String::new(); }
-                                crate::stats::charts::apply_overlays(&mut value, &flags, true);
+                                let value = crate::stats::charts::mining_diversity_chart(miners);
                                 serde_json::to_string(&value).unwrap_or_default()
                             })
                             .unwrap_or_default()
