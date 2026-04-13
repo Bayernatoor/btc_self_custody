@@ -1505,17 +1505,18 @@ pub fn ChartDrawer() -> impl IntoView {
                                                                 set_open.set(false);
                                                                 #[cfg(feature = "hydrate")]
                                                                 {
-                                                                    let current = location.pathname.get_untracked();
-                                                                    if !current.starts_with(path_prefix) {
-                                                                        // Navigate to the correct page with section param and hash
+                                                                    // Try to find the element directly (same page, same section)
+                                                                    if let Some(el) = leptos::prelude::document().get_element_by_id(card_id) {
+                                                                        el.scroll_into_view();
+                                                                    } else {
+                                                                        // Element not found - either different page or different section.
+                                                                        // Navigate with section param and hash fragment.
                                                                         let url = if section_key.is_empty() {
                                                                             format!("{}#{}", path_prefix, card_id)
                                                                         } else {
                                                                             format!("{}?section={}#{}", path_prefix, section_key, card_id)
                                                                         };
                                                                         let _ = leptos::prelude::window().location().set_href(&url);
-                                                                    } else if let Some(el) = leptos::prelude::document().get_element_by_id(card_id) {
-                                                                        el.scroll_into_view();
                                                                     }
                                                                 }
                                                             }
