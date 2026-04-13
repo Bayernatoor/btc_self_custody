@@ -94,26 +94,32 @@ pub fn FeeChartsPage() -> impl IntoView {
 
                     let fee_pressure_option = Signal::derive(move || {
                         let _r = range.get();
+                        let flags = overlay_flags.get();
                         dashboard_data.get().and_then(|r| r.ok()).map(|data| {
-                            let value = match data {
+                            let (mut value, is_daily) = match data {
                                 DashboardData::PerBlock(ref blocks) =>
-                                    crate::stats::charts::fee_pressure_chart(blocks),
+                                    (crate::stats::charts::fee_pressure_chart(blocks), false),
                                 DashboardData::Daily(_) =>
-                                    crate::stats::charts::no_data_chart("Fee Pressure vs Block Space"),
+                                    (crate::stats::charts::no_data_chart("Fee Pressure vs Block Space"), true),
                             };
+                            if value.is_null() { return String::new(); }
+                            crate::stats::charts::apply_overlays(&mut value, &flags, is_daily);
                             serde_json::to_string(&value).unwrap_or_default()
                         }).unwrap_or_default()
                     });
 
                     let fee_spike_option = Signal::derive(move || {
                         let _r = range.get();
+                        let flags = overlay_flags.get();
                         dashboard_data.get().and_then(|r| r.ok()).map(|data| {
-                            let value = match data {
+                            let (mut value, is_daily) = match data {
                                 DashboardData::PerBlock(ref blocks) =>
-                                    crate::stats::charts::fee_spike_chart(blocks),
+                                    (crate::stats::charts::fee_spike_chart(blocks), false),
                                 DashboardData::Daily(_) =>
-                                    crate::stats::charts::no_data_chart("Fee Spike Detector"),
+                                    (crate::stats::charts::no_data_chart("Fee Spike Detector"), true),
                             };
+                            if value.is_null() { return String::new(); }
+                            crate::stats::charts::apply_overlays(&mut value, &flags, is_daily);
                             serde_json::to_string(&value).unwrap_or_default()
                         }).unwrap_or_default()
                     });
@@ -125,39 +131,48 @@ pub fn FeeChartsPage() -> impl IntoView {
 
                     let fee_heatmap_option = Signal::derive(move || {
                         let _r = range.get();
+                        let flags = overlay_flags.get();
                         dashboard_data.get().and_then(|r| r.ok()).map(|data| {
-                            let value = match data {
+                            let (mut value, is_daily) = match data {
                                 DashboardData::PerBlock(ref blocks) =>
-                                    crate::stats::charts::fee_rate_heatmap_chart(blocks),
+                                    (crate::stats::charts::fee_rate_heatmap_chart(blocks), false),
                                 DashboardData::Daily(_) =>
-                                    crate::stats::charts::no_data_chart("Fee Rate Bands (Full)"),
+                                    (crate::stats::charts::no_data_chart("Fee Rate Bands (Full)"), true),
                             };
+                            if value.is_null() { return String::new(); }
+                            crate::stats::charts::apply_overlays(&mut value, &flags, is_daily);
                             serde_json::to_string(&value).unwrap_or_default()
                         }).unwrap_or_default()
                     });
 
                     let max_tx_fee_option = Signal::derive(move || {
                         let _r = range.get();
+                        let flags = overlay_flags.get();
                         dashboard_data.get().and_then(|r| r.ok()).map(|data| {
-                            let value = match data {
+                            let (mut value, is_daily) = match data {
                                 DashboardData::PerBlock(ref blocks) =>
-                                    crate::stats::charts::max_tx_fee_chart(blocks),
+                                    (crate::stats::charts::max_tx_fee_chart(blocks), false),
                                 DashboardData::Daily(_) =>
-                                    crate::stats::charts::no_data_chart("Max Transaction Fee"),
+                                    (crate::stats::charts::no_data_chart("Max Transaction Fee"), true),
                             };
+                            if value.is_null() { return String::new(); }
+                            crate::stats::charts::apply_overlays(&mut value, &flags, is_daily);
                             serde_json::to_string(&value).unwrap_or_default()
                         }).unwrap_or_default()
                     });
 
                     let protocol_fees_option = Signal::derive(move || {
                         let _r = range.get();
+                        let flags = overlay_flags.get();
                         dashboard_data.get().and_then(|r| r.ok()).map(|data| {
-                            let value = match data {
+                            let (mut value, is_daily) = match data {
                                 DashboardData::PerBlock(ref blocks) =>
-                                    crate::stats::charts::protocol_fee_breakdown_chart(blocks),
+                                    (crate::stats::charts::protocol_fee_breakdown_chart(blocks), false),
                                 DashboardData::Daily(_) =>
-                                    crate::stats::charts::no_data_chart("Protocol Fee Revenue"),
+                                    (crate::stats::charts::no_data_chart("Protocol Fee Revenue"), true),
                             };
+                            if value.is_null() { return String::new(); }
+                            crate::stats::charts::apply_overlays(&mut value, &flags, is_daily);
                             serde_json::to_string(&value).unwrap_or_default()
                         }).unwrap_or_default()
                     });

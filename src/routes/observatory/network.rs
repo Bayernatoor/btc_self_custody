@@ -149,13 +149,16 @@ pub fn NetworkChartsPage() -> impl IntoView {
 
                     let propagation_option = Signal::derive(move || {
                         let _r = range.get();
+                        let flags = overlay_flags.get();
                         dashboard_data.get().and_then(|r| r.ok()).map(|data| {
-                            let value = match data {
+                            let (mut value, is_daily) = match data {
                                 DashboardData::PerBlock(ref blocks) =>
-                                    crate::stats::charts::block_propagation_chart(blocks),
+                                    (crate::stats::charts::block_propagation_chart(blocks), false),
                                 DashboardData::Daily(_) =>
-                                    crate::stats::charts::no_data_chart("Rapid Consecutive Blocks"),
+                                    (crate::stats::charts::no_data_chart("Rapid Consecutive Blocks"), true),
                             };
+                            if value.is_null() { return String::new(); }
+                            crate::stats::charts::apply_overlays(&mut value, &flags, is_daily);
                             serde_json::to_string(&value).unwrap_or_default()
                         }).unwrap_or_default()
                     });
@@ -208,25 +211,31 @@ pub fn NetworkChartsPage() -> impl IntoView {
                     );
                     let multi_velocity_option = Signal::derive(move || {
                         let _r = range.get();
+                        let flags = overlay_flags.get();
                         dashboard_data.get().and_then(|r| r.ok()).map(|data| {
-                            let value = match data {
+                            let (mut value, is_daily) = match data {
                                 DashboardData::Daily(ref days) =>
-                                    crate::stats::charts::multi_velocity_chart_daily(days),
+                                    (crate::stats::charts::multi_velocity_chart_daily(days), true),
                                 DashboardData::PerBlock(_) =>
-                                    crate::stats::charts::no_data_chart_with_hint("Adoption Velocity", "Select a longer range (3M+) for velocity data"),
+                                    (crate::stats::charts::no_data_chart_with_hint("Adoption Velocity", "Select a longer range (3M+) for velocity data"), false),
                             };
+                            if value.is_null() { return String::new(); }
+                            crate::stats::charts::apply_overlays(&mut value, &flags, is_daily);
                             serde_json::to_string(&value).unwrap_or_default()
                         }).unwrap_or_default()
                     });
                     let sunset_option = Signal::derive(move || {
                         let _r = range.get();
+                        let flags = overlay_flags.get();
                         dashboard_data.get().and_then(|r| r.ok()).map(|data| {
-                            let value = match data {
+                            let (mut value, is_daily) = match data {
                                 DashboardData::Daily(ref days) =>
-                                    crate::stats::charts::address_sunset_chart_daily(days),
+                                    (crate::stats::charts::address_sunset_chart_daily(days), true),
                                 DashboardData::PerBlock(_) =>
-                                    crate::stats::charts::no_data_chart("P2PKH Sunset Tracker"),
+                                    (crate::stats::charts::no_data_chart("P2PKH Sunset Tracker"), false),
                             };
+                            if value.is_null() { return String::new(); }
+                            crate::stats::charts::apply_overlays(&mut value, &flags, is_daily);
                             serde_json::to_string(&value).unwrap_or_default()
                         }).unwrap_or_default()
                     });
@@ -258,13 +267,16 @@ pub fn NetworkChartsPage() -> impl IntoView {
                     );
                     let tx_type_evolution_option = Signal::derive(move || {
                         let _r = range.get();
+                        let flags = overlay_flags.get();
                         dashboard_data.get().and_then(|r| r.ok()).map(|data| {
-                            let value = match data {
+                            let (mut value, is_daily) = match data {
                                 DashboardData::PerBlock(ref blocks) =>
-                                    crate::stats::charts::tx_type_evolution_chart(blocks),
+                                    (crate::stats::charts::tx_type_evolution_chart(blocks), false),
                                 DashboardData::Daily(_) =>
-                                    crate::stats::charts::no_data_chart("Transaction Type Evolution"),
+                                    (crate::stats::charts::no_data_chart("Transaction Type Evolution"), true),
                             };
+                            if value.is_null() { return String::new(); }
+                            crate::stats::charts::apply_overlays(&mut value, &flags, is_daily);
                             serde_json::to_string(&value).unwrap_or_default()
                         }).unwrap_or_default()
                     });
