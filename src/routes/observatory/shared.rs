@@ -1461,9 +1461,9 @@ pub fn ChartDrawer() -> impl IntoView {
                             <div class=move || {
                                 let current = location.pathname.get();
                                 if current.starts_with(path_prefix) {
-                                    "text-xs font-bold text-[#f7931a] uppercase tracking-wider px-2 py-1"
+                                    "text-sm font-bold text-[#f7931a] uppercase tracking-wider px-2 py-1.5 border-b border-[#f7931a]/20 mb-1"
                                 } else {
-                                    "text-xs font-bold text-white/40 uppercase tracking-wider px-2 py-1"
+                                    "text-sm font-bold text-white/50 uppercase tracking-wider px-2 py-1.5 border-b border-white/5 mb-1"
                                 }
                             }>
                                 {page.label}
@@ -1475,7 +1475,7 @@ pub fn ChartDrawer() -> impl IntoView {
                                     <div class="ml-1">
                                         {if has_label {
                                             Some(view! {
-                                                <div class="text-[11px] text-white/30 font-medium uppercase tracking-wider px-2 pt-1.5 pb-0.5">
+                                                <div class="text-[11px] text-white/45 font-semibold uppercase tracking-wider px-2 pt-2 pb-1">
                                                     {section.label}
                                                 </div>
                                             })
