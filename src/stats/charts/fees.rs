@@ -1089,3 +1089,187 @@ pub fn halving_era_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
         "series": series
     }))
 }
+
+// ---------------------------------------------------------------------------
+// Tier 2: Backfill v10 charts
+// ---------------------------------------------------------------------------
+
+/// Fee rate heatmap with 5 percentile bands (p10, p25, median, p75, p90).
+/// Stacked area showing the distribution of fee rates across each block.
+/// Requires backfill v10 for p25/p75 data.
+pub fn fee_rate_heatmap_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+    if blocks.is_empty() {
+        return no_data_chart("Fee Rate Heatmap");
+    }
+
+    // Check that v10 percentile data is available
+    let has_v10 = blocks.iter().any(|b| b.fee_rate_p25 > 0.0 || b.fee_rate_p75 > 0.0);
+    if !has_v10 {
+        return no_data_chart("Fee Rate Heatmap");
+    }
+
+    let p10_str = build_data_array_f64(blocks, |b| round(b.fee_rate_p10, 2));
+    let p10_data = data_array_value(&p10_str);
+
+    let p25_str = build_data_array_f64(blocks, |b| round(b.fee_rate_p25, 2));
+    let p25_data = data_array_value(&p25_str);
+
+    let median_str = build_data_array_f64(blocks, |b| round(b.median_fee_rate, 2));
+    let median_data = data_array_value(&median_str);
+
+    let p75_str = build_data_array_f64(blocks, |b| round(b.fee_rate_p75, 2));
+    let p75_data = data_array_value(&p75_str);
+
+    let p90_str = build_data_array_f64(blocks, |b| round(b.fee_rate_p90, 2));
+    let p90_data = data_array_value(&p90_str);
+
+    // Light-to-dark orange gradient for the 5 bands
+    const P10_COLOR: &str = "rgba(247,147,26,0.15)";
+    const P25_COLOR: &str = "rgba(247,147,26,0.30)";
+    const MED_COLOR: &str = "rgba(247,147,26,0.50)";
+    const P75_COLOR: &str = "rgba(247,147,26,0.70)";
+    const P90_COLOR: &str = "rgba(247,147,26,0.90)";
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("Fee Rate (sat/vB)"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            {
+                "name": "p10", "type": "line", "stack": "fee", "data": p10_data,
+                "lineStyle": { "width": 0 }, "symbol": "none",
+                "areaStyle": { "color": P10_COLOR, "opacity": 1.0 },
+                "itemStyle": { "color": P10_COLOR }
+            },
+            {
+                "name": "p25", "type": "line", "stack": "fee", "data": p25_data,
+                "lineStyle": { "width": 0 }, "symbol": "none",
+                "areaStyle": { "color": P25_COLOR, "opacity": 1.0 },
+                "itemStyle": { "color": P25_COLOR }
+            },
+            {
+                "name": "Median", "type": "line", "stack": "fee", "data": median_data,
+                "lineStyle": { "width": 0 }, "symbol": "none",
+                "areaStyle": { "color": MED_COLOR, "opacity": 1.0 },
+                "itemStyle": { "color": MED_COLOR }
+            },
+            {
+                "name": "p75", "type": "line", "stack": "fee", "data": p75_data,
+                "lineStyle": { "width": 0 }, "symbol": "none",
+                "areaStyle": { "color": P75_COLOR, "opacity": 1.0 },
+                "itemStyle": { "color": P75_COLOR }
+            },
+            {
+                "name": "p90", "type": "line", "stack": "fee", "data": p90_data,
+                "lineStyle": { "width": 0 }, "symbol": "none",
+                "areaStyle": { "color": P90_COLOR, "opacity": 1.0 },
+                "itemStyle": { "color": P90_COLOR }
+            }
+        ]
+    }))
+}
+
+/// Largest individual transaction fee per block (bar chart in BTC with 144-block MA).
+/// Requires backfill v10 for max_tx_fee data.
+pub fn max_tx_fee_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+    if blocks.is_empty() {
+        return no_data_chart("Max Tx Fee");
+    }
+
+    let has_data = blocks.iter().any(|b| b.max_tx_fee > 0);
+    if !has_data {
+        return no_data_chart("Max Tx Fee");
+    }
+
+    let fee_fn = |b: &BlockSummary| round(b.max_tx_fee as f64 / 100_000_000.0, 6);
+    let data_str = build_data_array_f64(blocks, fee_fn);
+    let data = data_array_value(&data_str);
+
+    let raw: Vec<f64> = blocks.iter().map(|b| fee_fn(b)).collect();
+    let ma = moving_average(&raw, 144);
+    let ma_str = build_ma_array(blocks, &ma);
+    let ma_data = data_array_value(&ma_str);
+
+    let has_ma = show_ma(blocks.len());
+
+    let mut series = vec![json!({
+        "name": "Max Tx Fee", "type": "bar", "data": data,
+        "itemStyle": { "color": DATA_COLOR }, "barMaxWidth": 3
+    })];
+
+    if has_ma {
+        series.push(json!({
+            "name": "144-block MA", "type": "line", "data": ma_data,
+            "lineStyle": { "width": 2, "color": MA_COLOR },
+            "itemStyle": { "color": MA_COLOR }, "symbol": "none"
+        }));
+    }
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("BTC"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": has_ma },
+        "series": series
+    }))
+}
+
+/// Protocol fee breakdown: inscription fees, runes fees, and other fees as stacked area.
+/// All values in BTC. Requires backfill v10 for inscription_fees/runes_fees data.
+pub fn protocol_fee_breakdown_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+    if blocks.is_empty() {
+        return no_data_chart("Protocol Fee Breakdown");
+    }
+
+    let has_data = blocks.iter().any(|b| b.inscription_fees > 0 || b.runes_fees > 0);
+    if !has_data {
+        return no_data_chart("Protocol Fee Breakdown");
+    }
+
+    let other_str = build_data_array_f64(blocks, |b| {
+        let other = b.total_fees.saturating_sub(b.inscription_fees).saturating_sub(b.runes_fees);
+        round(other as f64 / 100_000_000.0, 6)
+    });
+    let other_data = data_array_value(&other_str);
+
+    let insc_str = build_data_array_f64(blocks, |b| {
+        round(b.inscription_fees as f64 / 100_000_000.0, 6)
+    });
+    let insc_data = data_array_value(&insc_str);
+
+    let runes_str = build_data_array_f64(blocks, |b| {
+        round(b.runes_fees as f64 / 100_000_000.0, 6)
+    });
+    let runes_data = data_array_value(&runes_str);
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("BTC"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            {
+                "name": "Other", "type": "line", "stack": "proto", "data": other_data,
+                "lineStyle": { "width": 0, "color": DATA_COLOR },
+                "itemStyle": { "color": DATA_COLOR }, "symbol": "none",
+                "areaStyle": { "opacity": 0.6 }
+            },
+            {
+                "name": "Inscriptions", "type": "line", "stack": "proto", "data": insc_data,
+                "lineStyle": { "width": 0, "color": "#06b6d4" },
+                "itemStyle": { "color": "#06b6d4" }, "symbol": "none",
+                "areaStyle": { "opacity": 0.6 }
+            },
+            {
+                "name": "Runes", "type": "line", "stack": "proto", "data": runes_data,
+                "lineStyle": { "width": 0, "color": RUNES_COLOR },
+                "itemStyle": { "color": RUNES_COLOR }, "symbol": "none",
+                "areaStyle": { "opacity": 0.6 }
+            }
+        ]
+    }))
+}

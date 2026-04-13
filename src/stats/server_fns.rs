@@ -158,6 +158,15 @@ pub async fn fetch_blocks(
             fee_rate_p90: r.fee_rate_p90,
             stamps_count: r.stamps_count,
             largest_tx_size: r.largest_tx_size,
+            max_tx_fee: r.max_tx_fee,
+            inscription_fees: r.inscription_fees,
+            runes_fees: r.runes_fees,
+            legacy_tx_count: r.legacy_tx_count,
+            segwit_tx_count: r.segwit_tx_count,
+            taproot_tx_count: r.taproot_tx_count,
+            coinbase_text: r.coinbase_text,
+            fee_rate_p25: r.fee_rate_p25,
+            fee_rate_p75: r.fee_rate_p75,
         })
         .collect())
 }
@@ -229,6 +238,15 @@ pub async fn fetch_blocks_by_ts(
             fee_rate_p90: r.fee_rate_p90,
             stamps_count: r.stamps_count,
             largest_tx_size: r.largest_tx_size,
+            max_tx_fee: r.max_tx_fee,
+            inscription_fees: r.inscription_fees,
+            runes_fees: r.runes_fees,
+            legacy_tx_count: r.legacy_tx_count,
+            segwit_tx_count: r.segwit_tx_count,
+            taproot_tx_count: r.taproot_tx_count,
+            coinbase_text: r.coinbase_text,
+            fee_rate_p25: r.fee_rate_p25,
+            fee_rate_p75: r.fee_rate_p75,
         })
         .collect())
 }

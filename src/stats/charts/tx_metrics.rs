@@ -639,3 +639,70 @@ pub fn tx_density_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
         }]
     }))
 }
+
+// ---------------------------------------------------------------------------
+// Tier 2: Backfill v10 charts
+// ---------------------------------------------------------------------------
+
+/// Transaction type evolution: stacked percentage area of legacy, SegWit, and Taproot txs.
+/// Shows the migration from legacy to modern transaction formats over time.
+/// Requires backfill v10 for legacy_tx_count/segwit_tx_count/taproot_tx_count data.
+pub fn tx_type_evolution_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+    if blocks.is_empty() {
+        return no_data_chart("Tx Type Evolution");
+    }
+
+    // Check that v10 tx type data is available
+    let has_data = blocks.iter().any(|b| {
+        b.legacy_tx_count > 0 || b.segwit_tx_count > 0 || b.taproot_tx_count > 0
+    });
+    if !has_data {
+        return no_data_chart("Tx Type Evolution");
+    }
+
+    let legacy_str = build_data_array_f64(blocks, |b| {
+        let total = b.legacy_tx_count + b.segwit_tx_count + b.taproot_tx_count;
+        if total > 0 { round(b.legacy_tx_count as f64 / total as f64 * 100.0, 2) } else { 0.0 }
+    });
+    let legacy_data = data_array_value(&legacy_str);
+
+    let segwit_str = build_data_array_f64(blocks, |b| {
+        let total = b.legacy_tx_count + b.segwit_tx_count + b.taproot_tx_count;
+        if total > 0 { round(b.segwit_tx_count as f64 / total as f64 * 100.0, 2) } else { 0.0 }
+    });
+    let segwit_data = data_array_value(&segwit_str);
+
+    let taproot_str = build_data_array_f64(blocks, |b| {
+        let total = b.legacy_tx_count + b.segwit_tx_count + b.taproot_tx_count;
+        if total > 0 { round(b.taproot_tx_count as f64 / total as f64 * 100.0, 2) } else { 0.0 }
+    });
+    let taproot_data = data_array_value(&taproot_str);
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("%"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            {
+                "name": "Legacy", "type": "line", "stack": "txtype", "data": legacy_data,
+                "lineStyle": { "width": 0, "color": P2PKH_COLOR },
+                "itemStyle": { "color": P2PKH_COLOR }, "symbol": "none",
+                "areaStyle": { "opacity": 0.6 }
+            },
+            {
+                "name": "SegWit v0", "type": "line", "stack": "txtype", "data": segwit_data,
+                "lineStyle": { "width": 0, "color": P2WPKH_COLOR },
+                "itemStyle": { "color": P2WPKH_COLOR }, "symbol": "none",
+                "areaStyle": { "opacity": 0.6 }
+            },
+            {
+                "name": "Taproot", "type": "line", "stack": "txtype", "data": taproot_data,
+                "lineStyle": { "width": 0, "color": P2TR_COLOR },
+                "itemStyle": { "color": P2TR_COLOR }, "symbol": "none",
+                "areaStyle": { "opacity": 0.6 }
+            }
+        ]
+    }))
+}
