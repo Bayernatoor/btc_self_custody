@@ -185,7 +185,7 @@ pub fn MethodologyPage() -> impl IntoView {
             <Section title="Fee Calculations">
                 <p>"Fees are derived from transaction data, not from any external fee estimation API."</p>
                 <div class="space-y-2 mt-3">
-                    <MetricRow name="Total Fees" unit="satoshis" desc="Coinbase output value minus the block subsidy. The subsidy is calculated from block height: 50 BTC halved every 210,000 blocks."/>
+                    <MetricRow name="Total Fees" unit="satoshis" desc="Sum of all transaction fees in the block. Each fee = sum(inputs) - sum(outputs). Equivalently: coinbase output value minus the block subsidy (50 BTC halved every 210,000 blocks)."/>
                     <MetricRow name="Per-TX Fee" unit="satoshis" desc="For each non-coinbase transaction: sum of input values minus sum of output values. Requires txindex for input value lookups."/>
                     <MetricRow name="Median Fee Rate" unit="sat/vB" desc="Median of all per-transaction fee rates in the block. Fee rate = fee / virtual_size. Virtual size = weight / 4."/>
                     <MetricRow name="Fee Percentiles" unit="sat/vB" desc="p10, p25, p75, p90 fee rates computed from the sorted list of per-transaction fee rates. Used for the Fee Rate Bands chart."/>
