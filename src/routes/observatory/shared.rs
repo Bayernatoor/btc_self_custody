@@ -1167,7 +1167,14 @@ pub fn ChartPageLayout(
         })}
         // Compact toolbar: section selector (left) + range (right)
         <div class="flex flex-col sm:flex-row sm:items-start gap-3 mb-6">
-            {header.map(|h| view! { <div class="flex items-center gap-3 flex-shrink-0">{h.run()}</div> })}
+            <div class="flex items-center gap-3 flex-shrink-0">
+                {header.map(|h| view! { <>{h.run()}</> })}
+                <a href="/observatory/learn/methodology"
+                    class="text-xs text-white/30 hover:text-[#f7931a] transition-colors"
+                >
+                    "Methodology"
+                </a>
+            </div>
             <div class="sm:ml-auto">
                 <RangeSelector/>
             </div>
