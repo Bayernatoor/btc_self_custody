@@ -77,6 +77,8 @@ pub struct BlockSummary {
     pub inscription_count: u64,
     /// Total inscription content size in bytes (excluding envelope overhead).
     pub inscription_bytes: u64,
+    /// Full witness item bytes for inscriptions (includes envelope opcodes + payload).
+    pub inscription_envelope_bytes: u64,
     /// Number of BRC-20 token operations (subset of inscriptions).
     pub brc20_count: u64,
     /// Total OP_RETURN outputs (excludes SegWit commitments).
@@ -158,8 +160,10 @@ pub struct BlockDetail {
     pub data_carrier_count: u64,
     pub data_carrier_bytes: u64,
     pub inscription_count: u64,
-    /// Total inscription content size in bytes.
+    /// Total inscription content size in bytes (payload only).
     pub inscription_bytes: u64,
+    /// Full witness item bytes for inscriptions (envelope + payload).
+    pub inscription_envelope_bytes: u64,
     /// Block version field (used for BIP9 soft fork signaling).
     pub version: u32,
     /// Total fees in satoshis.

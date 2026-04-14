@@ -166,7 +166,8 @@ pub struct Block {
     pub witness_bytes: u64,
     // Ordinals inscriptions
     pub inscription_count: u64,
-    pub inscription_bytes: u64,
+    pub inscription_bytes: u64, // payload only (envelope overhead subtracted)
+    pub inscription_envelope_bytes: u64, // full witness item bytes including envelope
     pub brc20_count: u64,
     // Total value of non-coinbase outputs (satoshis)
     pub total_output_value: u64,
@@ -390,7 +391,8 @@ impl BitcoinRpc {
 
         // === Single pass over non-coinbase txs: fees, OP_RETURN, outputs, inputs, RBF, witness ===
         let mut inscription_count = 0u64;
-        let mut inscription_bytes = 0u64;
+        let mut inscription_bytes = 0u64; // payload only (envelope overhead subtracted)
+        let mut inscription_envelope_bytes = 0u64; // full witness item bytes (envelope + payload)
         let mut brc20_count = 0u64;
 
         let cap = n_tx.saturating_sub(1) as usize;
@@ -520,6 +522,7 @@ impl BitcoinRpc {
                                         };
                                         inscription_bytes +=
                                             item_bytes.saturating_sub(overhead);
+                                        inscription_envelope_bytes += item_bytes;
                                         // BRC-20: inscription containing {"p":"brc-20"
                                         if hex.contains(
                                             "7b2270223a226272632d3230",
@@ -769,6 +772,7 @@ impl BitcoinRpc {
             witness_bytes,
             inscription_count,
             inscription_bytes,
+            inscription_envelope_bytes,
             brc20_count,
             total_output_value,
             total_input_value,
