@@ -8,14 +8,14 @@ use leptos_meta::*;
 pub fn MethodologyPage() -> impl IntoView {
     view! {
         <Title text="Data Methodology | WE HODL BTC"/>
-        <Meta name="description" content="How WE HODL BTC detects and measures embedded protocol data on Bitcoin: inscriptions, OP_RETURN protocols, BRC-20, Runes, and more."/>
+        <Meta name="description" content="Complete data methodology for WE HODL BTC observatory: block metrics, fee calculations, address type classification, mining pool identification, embedded protocol detection, price data sourcing, and daily aggregation."/>
         <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/learn/methodology"/>
 
         <div class="max-w-4xl mx-auto space-y-8 pb-16">
             // Header
             <div class="text-center">
                 <h1 class="text-2xl sm:text-3xl font-title text-white mb-2">"Data Methodology"</h1>
-                <p class="text-sm text-white/50 max-w-2xl mx-auto">"How we detect, count, and measure embedded protocol data on the Bitcoin blockchain."</p>
+                <p class="text-sm text-white/50 max-w-2xl mx-auto">"How we source, compute, and classify every metric on the observatory. From raw RPC data to chart-ready aggregates."</p>
             </div>
 
             // ── Taxonomy ─────────────────────────────────────────
@@ -170,10 +170,80 @@ pub fn MethodologyPage() -> impl IntoView {
                 <p class="mt-3 text-white/60">"Do not add BRC-20 to Inscriptions, or Runes to OP_RETURN, as these are subsets."</p>
             </Section>
 
+            // ── Block Metrics ─────────────────────────────────────
+            <Section title="Block Metrics">
+                <p>"All block data is fetched from Bitcoin Core at " <strong>"verbosity level 2"</strong> " (full transaction details including inputs, outputs, witness data, and script types)."</p>
+                <div class="space-y-2 mt-3">
+                    <MetricRow name="Block Size" unit="bytes" desc="Raw serialized block size as reported by Bitcoin Core. Includes header, transaction data, and witness data."/>
+                    <MetricRow name="Weight" unit="weight units" desc="BIP 141 block weight: base_size * 3 + total_size. Consensus limit is 4,000,000 WU. Weight utilization is weight / 4,000,000 * 100%."/>
+                    <MetricRow name="Transaction Count" unit="transactions" desc="Total transactions in the block including the coinbase transaction."/>
+                    <MetricRow name="Block Interval" unit="seconds" desc="Difference between this block's timestamp and the previous block's timestamp. Target is 600 seconds (10 minutes)."/>
+                </div>
+            </Section>
+
+            // ── Fee Calculations ─────────────────────────────────
+            <Section title="Fee Calculations">
+                <p>"Fees are derived from transaction data, not from any external fee estimation API."</p>
+                <div class="space-y-2 mt-3">
+                    <MetricRow name="Total Fees" unit="satoshis" desc="Coinbase output value minus the block subsidy. The subsidy is calculated from block height: 50 BTC halved every 210,000 blocks."/>
+                    <MetricRow name="Per-TX Fee" unit="satoshis" desc="For each non-coinbase transaction: sum of input values minus sum of output values. Requires txindex for input value lookups."/>
+                    <MetricRow name="Median Fee Rate" unit="sat/vB" desc="Median of all per-transaction fee rates in the block. Fee rate = fee / virtual_size. Virtual size = weight / 4."/>
+                    <MetricRow name="Fee Percentiles" unit="sat/vB" desc="p10, p25, p75, p90 fee rates computed from the sorted list of per-transaction fee rates. Used for the Fee Rate Bands chart."/>
+                    <MetricRow name="Max TX Fee" unit="satoshis" desc="Largest individual transaction fee in the block. Highlights fat-finger fees and high-priority transactions."/>
+                    <MetricRow name="Protocol Fees" unit="satoshis" desc="If a transaction contains an inscription or Runes output, its entire fee is attributed to that protocol. A transaction can only be attributed to one protocol."/>
+                </div>
+            </Section>
+
+            // ── Address Type Classification ──────────────────────
+            <Section title="Address Type Classification">
+                <p>"Output types are classified from the " <code class="text-white/60">"scriptPubKey.type"</code> " field returned by Bitcoin Core:"</p>
+                <div class="space-y-2 mt-3">
+                    <MetricRow name="P2PK" unit="outputs" desc="Pay-to-Public-Key (type: 'pubkey'). Early Bitcoin transactions, rarely used after 2010."/>
+                    <MetricRow name="P2PKH" unit="outputs" desc="Pay-to-Public-Key-Hash (type: 'pubkeyhash'). Legacy addresses starting with '1'."/>
+                    <MetricRow name="P2SH" unit="outputs" desc="Pay-to-Script-Hash (type: 'scripthash'). Addresses starting with '3', used for multisig and wrapped SegWit."/>
+                    <MetricRow name="P2WPKH" unit="outputs" desc="Pay-to-Witness-Public-Key-Hash (type: 'witness_v0_keyhash'). Native SegWit addresses starting with 'bc1q'."/>
+                    <MetricRow name="P2WSH" unit="outputs" desc="Pay-to-Witness-Script-Hash (type: 'witness_v0_scripthash'). Native SegWit multisig and complex scripts."/>
+                    <MetricRow name="P2TR" unit="outputs" desc="Pay-to-Taproot (type: 'witness_v1_taproot'). Taproot addresses starting with 'bc1p'. Available since block 709,632."/>
+                </div>
+                <p class="mt-3 text-white/60">"SegWit adoption % is calculated as the percentage of non-coinbase transactions with at least one witness input. Taproot spend types (key-path vs script-path) are detected from witness stack structure."</p>
+            </Section>
+
+            // ── Mining Pool Identification ────────────────────────
+            <Section title="Mining Pool Identification">
+                <p>"Mining pools are identified by matching patterns in the coinbase transaction:"</p>
+                <div class="space-y-2 mt-3">
+                    <MetricRow name="Primary method" unit="coinbase text" desc="The coinbase scriptSig is decoded to ASCII and matched against known pool signatures (case-insensitive). Covers 30+ pools: Foundry, AntPool, ViaBTC, F2Pool, MARA, OCEAN, SpiderPool, and others."/>
+                    <MetricRow name="Fallback method" unit="coinbase outputs" desc="If text matching fails, OP_RETURN outputs in the coinbase transaction are checked for pool identifiers."/>
+                    <MetricRow name="OCEAN miners" unit="template detection" desc="OCEAN pool uses a decentralized template model. Individual OCEAN template miners are identified and attributed separately."/>
+                    <MetricRow name="Unknown" unit="unidentified" desc="Blocks that match no known pool signature are labeled 'Unknown'. The HHI diversity index excludes Unknown miners to avoid inflating concentration metrics."/>
+                </div>
+            </Section>
+
+            // ── Price Data ───────────────────────────────────────
+            <Section title="Price Data">
+                <p>"Bitcoin price data is used for the price overlay on charts."</p>
+                <div class="space-y-2 mt-3">
+                    <MetricRow name="Source" unit="API" desc="Historical daily prices from blockchain.info/charts API. Covers 2011 to present. Pre-2011 prices are hardcoded from historical records."/>
+                    <MetricRow name="Live price" unit="mempool.space" desc="Current price from mempool.space API, cached for 60 seconds to avoid excessive requests."/>
+                    <MetricRow name="Chart overlay" unit="interpolation" desc="For per-block charts, daily price data is interpolated to each block's timestamp using linear interpolation between surrounding price points. For daily charts, prices are matched by date."/>
+                </div>
+            </Section>
+
+            // ── Daily Aggregates ─────────────────────────────────
+            <Section title="Daily Aggregates">
+                <p>"For time ranges longer than ~35 days (5,000 blocks), per-block data is rolled up into daily aggregates for performance."</p>
+                <div class="space-y-2 mt-3">
+                    <MetricRow name="Aggregation" unit="daily" desc="Each day's blocks are averaged (or summed where appropriate). Dates are derived from block timestamps in UTC."/>
+                    <MetricRow name="Incremental updates" unit="automatic" desc="The daily_blocks table is updated incrementally as new blocks arrive. Only the current day's row is recomputed."/>
+                    <MetricRow name="Range switching" unit="automatic" desc="Charts automatically switch between per-block and daily data based on the selected time range. Short ranges (1D-1M) show per-block data; longer ranges (3M+) show daily aggregates."/>
+                </div>
+                <p class="mt-3 text-white/60">"Some charts are only available on per-block ranges (scatter plots, histograms) while others are only meaningful on daily ranges (adoption velocity, sunset tracker). The chart description updates to reflect which mode is active."</p>
+            </Section>
+
             // Back link
             <div class="text-center pt-4">
-                <a href="/observatory/charts/embedded" class="text-sm text-white/40 hover:text-[#f7931a] transition-colors">
-                    "Back to Embedded Data charts"
+                <a href="/observatory/learn" class="text-sm text-white/40 hover:text-[#f7931a] transition-colors">
+                    "Back to Learn"
                 </a>
             </div>
         </div>

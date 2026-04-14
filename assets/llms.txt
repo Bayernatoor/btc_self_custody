@@ -74,6 +74,8 @@ All blockchain data is sourced directly from a full Bitcoin Core node with trans
 - Stats Overview: https://www.wehodlbtc.com/observatory/stats
 - Hall of Fame: https://www.wehodlbtc.com/observatory/hall-of-fame
 - On This Day: https://www.wehodlbtc.com/observatory/on-this-day
+- Learn: https://www.wehodlbtc.com/observatory/learn
 - Protocol Guide: https://www.wehodlbtc.com/observatory/learn/protocols
+- Data Methodology: https://www.wehodlbtc.com/observatory/learn/methodology
 - Self-Custody Guides: https://www.wehodlbtc.com/guides
 - FAQ: https://www.wehodlbtc.com/faq

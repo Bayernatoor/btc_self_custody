@@ -19,6 +19,7 @@
 {"@type":"Dataset","name":"Bitcoin Embedded Data Analytics","description":"Tracking non-financial data embedded in Bitcoin transactions: OP_RETURN protocol usage (Runes, Omni Layer, Counterparty), Ordinals inscriptions, BRC-20 tokens, and Stamps. Includes per-block counts, byte volumes, block share percentages, and protocol dominance over time.","url":"https://www.wehodlbtc.com/observatory/charts/embedded","creator":{"@type":"Organization","name":"WE HODL BTC"}},
 {"@type":"Dataset","name":"Bitcoin BIP Signaling Data","description":"Per-block miner signaling data for active Bitcoin Improvement Proposals. Tracks BIP-110 (relaxed OP_RETURN data limits, version bit 4, 55% activation threshold) and BIP-54 (great consensus cleanup, coinbase locktime == height-1, 95% threshold) across 2,016-block retarget periods.","url":"https://www.wehodlbtc.com/observatory/signaling","creator":{"@type":"Organization","name":"WE HODL BTC"}},
 {"@type":"Article","name":"Bitcoin Embedding Protocols: A Technical Guide","headline":"Bitcoin Embedding Protocols: Runes, Ordinals, BRC-20, Stamps, Omni, Counterparty","description":"Technical comparison of data embedding protocols on Bitcoin. Covers OP_RETURN-based protocols (Runes, Omni, Counterparty), witness-based protocols (Ordinals, BRC-20), and bare multisig encoding (Stamps). Includes chronological timeline, pruning characteristics, and trade-offs.","url":"https://www.wehodlbtc.com/observatory/learn/protocols","author":{"@type":"Organization","name":"WE HODL BTC"},"about":[{"@type":"Thing","name":"Runes Protocol"},{"@type":"Thing","name":"Ordinals Inscriptions"},{"@type":"Thing","name":"BRC-20 Tokens"},{"@type":"Thing","name":"Bitcoin Stamps"},{"@type":"Thing","name":"Omni Layer"},{"@type":"Thing","name":"Counterparty"}]},
+{"@type":"Article","name":"Data Methodology","headline":"WE HODL BTC Data Methodology: How We Source, Compute, and Classify Bitcoin Metrics","description":"Complete documentation of the observatory's data methodology. Covers block metrics, fee calculations, address type classification, mining pool identification, embedded protocol detection, price data sourcing, daily aggregation, and known exclusions.","url":"https://www.wehodlbtc.com/observatory/learn/methodology","author":{"@type":"Organization","name":"WE HODL BTC"},"about":[{"@type":"Thing","name":"Bitcoin Analytics"},{"@type":"Thing","name":"Blockchain Data"},{"@type":"Thing","name":"Data Methodology"}]},
 {"@type":"BreadcrumbList","itemListElement":[
 {"@type":"ListItem","position":1,"name":"Home","item":"https://www.wehodlbtc.com/"},
 {"@type":"ListItem","position":2,"name":"Observatory","item":"https://www.wehodlbtc.com/observatory"},
@@ -27,11 +28,13 @@
 {"@type":"ListItem","position":5,"name":"Mining Charts","item":"https://www.wehodlbtc.com/observatory/charts/mining"},
 {"@type":"ListItem","position":6,"name":"Embedded Data","item":"https://www.wehodlbtc.com/observatory/charts/embedded"},
 {"@type":"ListItem","position":7,"name":"BIP Signaling","item":"https://www.wehodlbtc.com/observatory/signaling"},
-{"@type":"ListItem","position":8,"name":"Protocol Guide","item":"https://www.wehodlbtc.com/observatory/learn/protocols"},
-{"@type":"ListItem","position":9,"name":"Block Heartbeat","item":"https://www.wehodlbtc.com/observatory/heartbeat"},
-{"@type":"ListItem","position":10,"name":"Stats Summary","item":"https://www.wehodlbtc.com/observatory/stats"},
-{"@type":"ListItem","position":11,"name":"On This Day","item":"https://www.wehodlbtc.com/observatory/on-this-day"},
-{"@type":"ListItem","position":12,"name":"Hall of Fame","item":"https://www.wehodlbtc.com/observatory/hall-of-fame"}
+{"@type":"ListItem","position":8,"name":"Learn","item":"https://www.wehodlbtc.com/observatory/learn"},
+{"@type":"ListItem","position":9,"name":"Protocol Guide","item":"https://www.wehodlbtc.com/observatory/learn/protocols"},
+{"@type":"ListItem","position":10,"name":"Data Methodology","item":"https://www.wehodlbtc.com/observatory/learn/methodology"},
+{"@type":"ListItem","position":11,"name":"Block Heartbeat","item":"https://www.wehodlbtc.com/observatory/heartbeat"},
+{"@type":"ListItem","position":12,"name":"Stats Summary","item":"https://www.wehodlbtc.com/observatory/stats"},
+{"@type":"ListItem","position":13,"name":"On This Day","item":"https://www.wehodlbtc.com/observatory/on-this-day"},
+{"@type":"ListItem","position":14,"name":"Hall of Fame","item":"https://www.wehodlbtc.com/observatory/hall-of-fame"}
 ]},
 {"@type":"BreadcrumbList","itemListElement":[
 {"@type":"ListItem","position":1,"name":"Home","item":"https://www.wehodlbtc.com/"},
