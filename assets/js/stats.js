@@ -96,12 +96,12 @@
         if (window.innerWidth >= 640) return;
         // Hide toolbox — not usable on touch screens
         if (opts.toolbox) opts.toolbox.show = false;
-        // Scroll legend on mobile: centered, compact, paginated
+        // Scroll legend on mobile: right-aligned to avoid Y-axis overlap
         if (opts.legend) {
             opts.legend.type = 'scroll';
-            opts.legend.left = 'center';
-            opts.legend.right = undefined;
-            opts.legend.width = '60%';
+            opts.legend.left = undefined;
+            opts.legend.right = 0;
+            opts.legend.width = '65%';
             opts.legend.textStyle = opts.legend.textStyle || {};
             opts.legend.textStyle.fontSize = 10;
             opts.legend.itemWidth = 14;
