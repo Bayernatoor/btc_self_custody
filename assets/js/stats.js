@@ -115,8 +115,18 @@
         // Shorten Y-axis labels with K/M/B suffixes to save horizontal space
         var yAxes = opts.yAxis ? (Array.isArray(opts.yAxis) ? opts.yAxis : [opts.yAxis]) : [];
         var hasRightAxis = yAxes.length > 1;
+        var hasCategoryY = false;
         yAxes.forEach(function(ya) {
-            if (!ya || ya.type === 'category') return;
+            if (!ya) return;
+            if (ya.type === 'category') {
+                hasCategoryY = true;
+                // Horizontal bar charts: compact category labels
+                ya.axisLabel = ya.axisLabel || {};
+                ya.axisLabel.fontSize = 10;
+                ya.axisLabel.width = 50;
+                ya.axisLabel.overflow = 'truncate';
+                return;
+            }
             // Hide axis name on mobile — chart title/description provides context
             ya.name = '';
             // Remove right-axis offset on mobile (overlays add 60px offset)
@@ -137,10 +147,14 @@
                 };
             }
         });
-        // Compact grid: less padding so chart area is wider
+        // Compact grid
         if (opts.grid) {
-            opts.grid.left = 35;
+            opts.grid.left = hasCategoryY ? 60 : 35;
             opts.grid.right = hasRightAxis ? 35 : 10;
+            // Reduce bottom padding for rotated labels
+            if (opts.grid.bottom && opts.grid.bottom > 50) {
+                opts.grid.bottom = 50;
+            }
         }
         // Smaller X-axis labels on mobile
         var xAxes = opts.xAxis ? (Array.isArray(opts.xAxis) ? opts.xAxis : [opts.xAxis]) : [];
@@ -149,11 +163,42 @@
             xa.axisLabel = xa.axisLabel || {};
             xa.axisLabel.fontSize = 11;
         });
-        // Shrink pie charts for mobile
+        // DataZoom slider: reduce height on mobile
+        if (opts.dataZoom && Array.isArray(opts.dataZoom)) {
+            opts.dataZoom.forEach(function(dz) {
+                if (dz.type === 'slider') {
+                    dz.height = 15;
+                    dz.bottom = 5;
+                }
+            });
+            // Tighten grid bottom to match smaller slider
+            if (opts.grid && opts.grid.bottom >= 60) {
+                opts.grid.bottom = 45;
+            }
+        }
+        // Series-specific adjustments
         if (opts.series && Array.isArray(opts.series)) {
             opts.series.forEach(function(s) {
+                // Pie charts: smaller radius and shorter label lines
                 if (s.type === 'pie') {
                     s.radius = ['35%', '65%'];
+                    if (s.label) {
+                        s.label.fontSize = 10;
+                    }
+                    if (s.labelLine) {
+                        s.labelLine.length = 6;
+                        s.labelLine.length2 = 4;
+                    }
+                }
+                // Gauge charts: reduce radius for mobile viewport
+                if (s.type === 'gauge') {
+                    s.radius = '65%';
+                    if (s.detail) s.detail.fontSize = 16;
+                    if (s.title) s.title.fontSize = 12;
+                }
+                // Scatter charts: slightly larger symbols for touch targets
+                if (s.type === 'scatter' && s.symbolSize && typeof s.symbolSize === 'number' && s.symbolSize < 6) {
+                    s.symbolSize = 6;
                 }
             });
         }
