@@ -121,10 +121,8 @@
         var yAxes = opts.yAxis ? (Array.isArray(opts.yAxis) ? opts.yAxis : [opts.yAxis]) : [];
         yAxes.forEach(function(ya) {
             if (!ya || ya.type === 'category') return;
-            // Hide axis name on mobile (takes too much space)
-            ya.nameGap = 4;
-            ya.nameTextStyle = ya.nameTextStyle || {};
-            ya.nameTextStyle.fontSize = 10;
+            // Hide axis name on mobile — chart title/description provides context
+            ya.name = '';
             // Compact number formatting
             ya.axisLabel = ya.axisLabel || {};
             ya.axisLabel.fontSize = 11;
