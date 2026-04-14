@@ -1,7 +1,7 @@
 #!/bin/bash
 # Deploy to production Droplet
 # Triggered automatically by GitHub Actions on push to master
-# Can also be run manually: ssh wehodlbtc@165.227.230.64 'bash /opt/wehodlbtc/app/scripts/deploy.sh'
+# Can also be run manually: ssh wehodlbtc@<droplet-ip> 'bash /opt/wehodlbtc/app/scripts/deploy.sh'
 
 set -e
 

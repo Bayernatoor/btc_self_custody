@@ -12,7 +12,7 @@ use std::path::PathBuf;
 pub struct StatsConfig {
     /// Bitcoin Core JSON-RPC URL. Env: `BITCOIN_STATS_RPC_URL` (required).
     pub rpc_url: String,
-    /// RPC username. Env: `BITCOIN_STATS_RPC_USER` (default: "testnode").
+    /// RPC username. Env: `BITCOIN_STATS_RPC_USER` (default: "bitcoin").
     pub rpc_user: String,
     /// RPC password. Env: `BITCOIN_STATS_RPC_PASSWORD` (default: empty).
     pub rpc_password: String,
@@ -21,10 +21,10 @@ pub struct StatsConfig {
     /// Number of recent blocks to ingest on first run (when DB is empty).
     /// Env: `BITCOIN_STATS_INITIAL_INGEST` (default: 1,000,000).
     pub initial_ingest_count: u64,
-    /// ZMQ endpoint for raw transactions (e.g. "tcp://192.168.8.131:28333").
+    /// ZMQ endpoint for raw transactions (e.g. "tcp://127.0.0.1:28333").
     /// Env: `BITCOIN_STATS_ZMQ_TX` (optional - disables heartbeat if unset).
     pub zmq_tx_url: Option<String>,
-    /// ZMQ endpoint for block hashes (e.g. "tcp://192.168.8.131:28332").
+    /// ZMQ endpoint for block hashes (e.g. "tcp://127.0.0.1:28332").
     /// Env: `BITCOIN_STATS_ZMQ_BLOCK` (optional - disables heartbeat if unset).
     pub zmq_block_url: Option<String>,
 }
@@ -34,7 +34,7 @@ impl StatsConfig {
     pub fn load() -> Option<Self> {
         let rpc_url = std::env::var("BITCOIN_STATS_RPC_URL").ok()?;
         let rpc_user = std::env::var("BITCOIN_STATS_RPC_USER")
-            .unwrap_or_else(|_| "testnode".to_string());
+            .unwrap_or_else(|_| "bitcoin".to_string());
         let rpc_password =
             std::env::var("BITCOIN_STATS_RPC_PASSWORD").unwrap_or_default();
         let db_path = std::env::var("BITCOIN_STATS_DB_PATH")
