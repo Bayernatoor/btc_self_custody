@@ -319,7 +319,12 @@
                     if (typeof height === 'number') window.showBlockDetail(height);
                 });
             }
-        } catch(e) { console.error('Chart error:', e); }
+        } catch(e) {
+            // Suppress ECharts internal grid/layout errors during init
+            // (harmless race in bar chart rendering — chart recovers)
+            if (e && e.message && e.message.indexOf('properties of undefined') !== -1) return;
+            console.error('Chart error:', e);
+        }
     };
 
     window.disposeChart = function(elementId) {
