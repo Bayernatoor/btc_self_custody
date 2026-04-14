@@ -40,9 +40,16 @@ pub fn EmbeddedChartsPage() -> impl IntoView {
                 </a>
             }
         >
+            // Error overlay
             {move || match dashboard_data.get() {
-                Some(Ok(_)) => {
-                    // ── Overview ──────────────────────────────────────
+                Some(Err(_)) => Some(view! {
+                    <DataLoadError on_retry=Callback::new(move |_| dashboard_data.refetch())/>
+                }),
+                _ => None,
+            }}
+
+            {
+                    // All chart signals at component level (persist across refetches)
                     let all_embedded_share_option = chart_memo!(dashboard_data, range, overlay_flags,
                         |blocks| crate::stats::charts::all_embedded_share_chart(blocks),
                         |days| crate::stats::charts::all_embedded_share_chart_daily(days)
@@ -104,13 +111,8 @@ pub fn EmbeddedChartsPage() -> impl IntoView {
                             <ChartCard title="Ordinals Inscriptions" description=chart_desc(range, "Inscriptions per block: images, text, and other data stored in witness data", "Daily average inscriptions per block") chart_id="chart-inscriptions" option=inscription_option info="Counts standard Ordinals inscription envelopes detected in witness data (OP_FALSE OP_IF 'ord' pattern). One transaction can contain multiple inscriptions. Cursed and non-standard envelopes are not currently detected."/>
                             <ChartCard title="Inscription Block Share" description=chart_desc(range, "Inscription data as a percentage of each block's size", "Daily average inscription data as a percentage of block size") chart_id="chart-inscription-share" option=inscription_share_option info="Shows inscription payload bytes (content only, envelope overhead excluded) as a percentage of total block size. Witness data gets a 75% weight discount, so inscriptions consume less block weight than their raw byte size suggests."/>
                         </div>
-                    }.into_any()
-                }
-                Some(Err(_)) => view! {
-                    <DataLoadError on_retry=Callback::new(move |_| dashboard_data.refetch())/>
-                }.into_any(),
-                None => view! { <ChartPageSkeleton count=3/> }.into_any(),
-            }}
+                    }
+            }
         </ChartPageLayout>
     }
 }

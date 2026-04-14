@@ -23,18 +23,8 @@ pub fn FeeChartsPage() -> impl IntoView {
     // Fee unit toggle — created OUTSIDE the reactive closure
     let fee_unit = Signal::derive(|| "btc".to_string());
 
-    view! {
-        <Title text="Bitcoin Fee Charts: Miner Revenue & Subsidy Breakdown | WE HODL BTC"/>
-        <Meta name="description" content="Bitcoin transaction fee analytics showing total fees per block in BTC and sats, daily averages, and the block reward breakdown of subsidy versus fee revenue across all halving eras."/>
-        <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/charts/fees"/>
-        <ChartPageLayout
-            title="Fees"
-            description="Transaction fees earned by miners and the block reward breakdown"
-            seo_text="Track how Bitcoin miners are compensated. Total fees per block show the demand for block space in real time, while the subsidy versus fees breakdown reveals the long-term transition from block reward to fee-based security as each halving cuts the subsidy in half."
-        >
-            {move || match dashboard_data.get() {
-                Some(Ok(_)) => {
-                    let fees_option = Signal::derive(move || {
+    // All chart signals at component level (persist across refetches).
+    let fees_option = Signal::derive(move || {
                         let _r = range.get();
                         let unit = fee_unit.get();
                         let flags = overlay_flags.get();
@@ -117,11 +107,27 @@ pub fn FeeChartsPage() -> impl IntoView {
                         |_days| crate::stats::charts::no_data_chart("Protocol Fee Revenue")
                     );
 
-                    view! {
-                        <div class="space-y-10">
-                            <ChartCard
-                                title="Total Fees per Block"
-                                description=chart_desc(range, "Total transaction fees earned by miners in each block", "Average daily transaction fees earned by miners per block")
+    view! {
+        <Title text="Bitcoin Fee Charts: Miner Revenue & Subsidy Breakdown | WE HODL BTC"/>
+        <Meta name="description" content="Bitcoin transaction fee analytics showing total fees per block in BTC and sats, daily averages, and the block reward breakdown of subsidy versus fee revenue across all halving eras."/>
+        <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/charts/fees"/>
+        <ChartPageLayout
+            title="Fees"
+            description="Transaction fees earned by miners and the block reward breakdown"
+            seo_text="Track how Bitcoin miners are compensated. Total fees per block show the demand for block space in real time, while the subsidy versus fees breakdown reveals the long-term transition from block reward to fee-based security as each halving cuts the subsidy in half."
+        >
+            // Error overlay
+            {move || match dashboard_data.get() {
+                Some(Err(_)) => Some(view! {
+                    <DataLoadError on_retry=Callback::new(move |_| dashboard_data.refetch())/>
+                }),
+                _ => None,
+            }}
+
+            <div class="space-y-10">
+                <ChartCard
+                    title="Total Fees per Block"
+                    description=chart_desc(range, "Total transaction fees earned by miners in each block", "Average daily transaction fees earned by miners per block")
                                 chart_id="chart-fees"
                                 option=fees_option
                             />
@@ -209,14 +215,7 @@ pub fn FeeChartsPage() -> impl IntoView {
                                 option=protocol_fees_option
                                 coming_soon=true
                             />
-                        </div>
-                    }.into_any()
-                }
-                Some(Err(_)) => view! {
-                    <DataLoadError on_retry=Callback::new(move |_| dashboard_data.refetch())/>
-                }.into_any(),
-                None => view! { <ChartPageSkeleton count=2/> }.into_any(),
-            }}
+            </div>
         </ChartPageLayout>
     }
 }
