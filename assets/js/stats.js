@@ -41,17 +41,22 @@
         });
     }, { rootMargin: '200px' }) : null;
 
-    // Separate observer for exit detection with larger margin
+    // Separate observer for exit detection with larger margin.
+    // Defer disposal to avoid destroying a chart mid-render cycle.
     var _exitObserver = typeof IntersectionObserver !== 'undefined' ? new IntersectionObserver(function(entries) {
         entries.forEach(function(entry) {
             if (!entry.isIntersecting) {
                 var el = entry.target;
                 if (el._chart) {
                     el._lazyVisible = false;
-                    if (el._resizeObs) { el._resizeObs.disconnect(); el._resizeObs = null; }
-                    el._chart.dispose();
-                    el._chart = null;
-                    el._lastOptionJson = null;
+                    setTimeout(function() {
+                        // Re-check: user may have scrolled back before timeout
+                        if (el._lazyVisible || !el._chart) return;
+                        if (el._resizeObs) { el._resizeObs.disconnect(); el._resizeObs = null; }
+                        el._chart.dispose();
+                        el._chart = null;
+                        el._lastOptionJson = null;
+                    }, 100);
                 }
             }
         });
