@@ -36,9 +36,8 @@ use super::rpc::Block;
 
 /// Bump this when adding new columns that require re-fetching existing blocks.
 /// The backfill loop processes all blocks with backfill_version < BACKFILL_VERSION.
-/// v8: OCEAN sub-miners, RBF excludes CSV, witness byte overhead, inscription byte
-///     overhead, Runes height-gated to 840k+
-pub const BACKFILL_VERSION: u64 = 10;
+/// v11: recompute max_tx_fee, inscription_fees, runes_fees, inscription_envelope_bytes
+pub const BACKFILL_VERSION: u64 = 11;
 
 /// Type alias for the connection pool used throughout the stats module.
 pub type DbPool = r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>;
@@ -1096,7 +1095,10 @@ pub struct DailyRow {
 
 /// Rebuild a single day's row in the daily_blocks table by re-aggregating
 /// from the raw blocks table. Called after new block ingestion.
-pub fn refresh_daily_block(conn: &Connection, day: &str) -> rusqlite::Result<()> {
+pub fn refresh_daily_block(
+    conn: &Connection,
+    day: &str,
+) -> rusqlite::Result<()> {
     conn.execute(
         "INSERT OR REPLACE INTO daily_blocks
             (day, block_count, avg_size, avg_weight, avg_tx_count, avg_difficulty,
@@ -1139,19 +1141,20 @@ pub fn refresh_daily_block(conn: &Connection, day: &str) -> rusqlite::Result<()>
 /// Populate the entire daily_blocks table from scratch. Used on first run
 /// when the table is empty but blocks already exist.
 pub fn rebuild_all_daily_blocks(conn: &Connection) -> rusqlite::Result<u64> {
-    let count: u64 = conn.query_row(
-        "SELECT COUNT(*) FROM daily_blocks", [], |r| r.get(0),
-    )?;
-    let block_count: u64 = conn.query_row(
-        "SELECT COUNT(*) FROM blocks", [], |r| r.get(0),
-    )?;
+    let count: u64 =
+        conn.query_row("SELECT COUNT(*) FROM daily_blocks", [], |r| r.get(0))?;
+    let block_count: u64 =
+        conn.query_row("SELECT COUNT(*) FROM blocks", [], |r| r.get(0))?;
 
     // Only rebuild if blocks exist but daily_blocks is empty
     if count > 0 || block_count == 0 {
         return Ok(count);
     }
 
-    tracing::info!("Building daily_blocks table from {} blocks...", block_count);
+    tracing::info!(
+        "Building daily_blocks table from {} blocks...",
+        block_count
+    );
     conn.execute_batch(
         "INSERT OR REPLACE INTO daily_blocks
             (day, block_count, avg_size, avg_weight, avg_tx_count, avg_difficulty,
@@ -1187,9 +1190,8 @@ pub fn rebuild_all_daily_blocks(conn: &Connection) -> rusqlite::Result<u64> {
          FROM blocks
          GROUP BY date(datetime(timestamp, 'unixepoch'))"
     )?;
-    let new_count: u64 = conn.query_row(
-        "SELECT COUNT(*) FROM daily_blocks", [], |r| r.get(0),
-    )?;
+    let new_count: u64 =
+        conn.query_row("SELECT COUNT(*) FROM daily_blocks", [], |r| r.get(0))?;
     tracing::info!("Built {} daily_blocks rows", new_count);
     Ok(new_count)
 }
@@ -1918,13 +1920,32 @@ pub fn query_extremes_with_heights(
         },
     )?;
 
-    let (max_size, max_fees, max_mfr, max_p90, max_txs, max_ltx, max_in,
-         max_out, max_ins, max_run, max_opr, max_rbf, max_tap, max_val,
-         empty_count, block_count) = row;
+    let (
+        max_size,
+        max_fees,
+        max_mfr,
+        max_p90,
+        max_txs,
+        max_ltx,
+        max_in,
+        max_out,
+        max_ins,
+        max_run,
+        max_opr,
+        max_rbf,
+        max_tap,
+        max_val,
+        empty_count,
+        block_count,
+    ) = row;
 
     // Pass 2: look up the block that holds each maximum (index-assisted)
     fn lookup_u64(
-        conn: &Connection, col: &str, val: u64, from_ts: u64, to_ts: u64,
+        conn: &Connection,
+        col: &str,
+        val: u64,
+        from_ts: u64,
+        to_ts: u64,
     ) -> rusqlite::Result<ExtremeRecord> {
         let sql = format!(
             "SELECT {col}, height, timestamp, miner FROM blocks
@@ -1935,17 +1956,25 @@ pub fn query_extremes_with_heights(
         conn.query_row(&sql, params![val, from_ts, to_ts], |r| {
             Ok(ExtremeRecord {
                 value: r.get::<_, Option<u64>>(0)?.unwrap_or(0),
-                height: r.get(1)?, timestamp: r.get(2)?, miner: r.get(3)?,
+                height: r.get(1)?,
+                timestamp: r.get(2)?,
+                miner: r.get(3)?,
             })
         })
         .or_else(|e| match e {
-            rusqlite::Error::QueryReturnedNoRows => Ok(ExtremeRecord::default()),
+            rusqlite::Error::QueryReturnedNoRows => {
+                Ok(ExtremeRecord::default())
+            }
             other => Err(other),
         })
     }
 
     fn lookup_f64(
-        conn: &Connection, col: &str, val: f64, from_ts: u64, to_ts: u64,
+        conn: &Connection,
+        col: &str,
+        val: f64,
+        from_ts: u64,
+        to_ts: u64,
     ) -> rusqlite::Result<ExtremeRecordF64> {
         let sql = format!(
             "SELECT {col}, height, timestamp, miner FROM blocks
@@ -1956,37 +1985,98 @@ pub fn query_extremes_with_heights(
         conn.query_row(&sql, params![val, from_ts, to_ts], |r| {
             Ok(ExtremeRecordF64 {
                 value: r.get::<_, Option<f64>>(0)?.unwrap_or(0.0),
-                height: r.get(1)?, timestamp: r.get(2)?, miner: r.get(3)?,
+                height: r.get(1)?,
+                timestamp: r.get(2)?,
+                miner: r.get(3)?,
             })
         })
         .or_else(|e| match e {
-            rusqlite::Error::QueryReturnedNoRows => Ok(ExtremeRecordF64::default()),
+            rusqlite::Error::QueryReturnedNoRows => {
+                Ok(ExtremeRecordF64::default())
+            }
             other => Err(other),
         })
     }
 
     Ok(ExtremesData {
         largest_block: lookup_u64(conn, "size", max_size, from_ts, to_ts)?,
-        highest_fee_block: lookup_u64(conn, "total_fees", max_fees, from_ts, to_ts)?,
-        peak_fee_rate: lookup_f64(conn, "median_fee_rate", max_mfr, from_ts, to_ts)?,
-        peak_p90_fee_rate: lookup_f64(conn, "fee_rate_p90", max_p90, from_ts, to_ts)?,
+        highest_fee_block: lookup_u64(
+            conn,
+            "total_fees",
+            max_fees,
+            from_ts,
+            to_ts,
+        )?,
+        peak_fee_rate: lookup_f64(
+            conn,
+            "median_fee_rate",
+            max_mfr,
+            from_ts,
+            to_ts,
+        )?,
+        peak_p90_fee_rate: lookup_f64(
+            conn,
+            "fee_rate_p90",
+            max_p90,
+            from_ts,
+            to_ts,
+        )?,
         most_txs: lookup_u64(conn, "tx_count", max_txs, from_ts, to_ts)?,
-        largest_tx: lookup_u64(conn, "largest_tx_size", max_ltx, from_ts, to_ts)?,
+        largest_tx: lookup_u64(
+            conn,
+            "largest_tx_size",
+            max_ltx,
+            from_ts,
+            to_ts,
+        )?,
         most_inputs: lookup_u64(conn, "input_count", max_in, from_ts, to_ts)?,
-        most_outputs: lookup_u64(conn, "output_count", max_out, from_ts, to_ts)?,
-        most_inscriptions: lookup_u64(conn, "inscription_count", max_ins, from_ts, to_ts)?,
+        most_outputs: lookup_u64(
+            conn,
+            "output_count",
+            max_out,
+            from_ts,
+            to_ts,
+        )?,
+        most_inscriptions: lookup_u64(
+            conn,
+            "inscription_count",
+            max_ins,
+            from_ts,
+            to_ts,
+        )?,
         most_runes: lookup_u64(conn, "runes_count", max_run, from_ts, to_ts)?,
-        most_op_returns: lookup_u64(conn, "op_return_count", max_opr, from_ts, to_ts)?,
+        most_op_returns: lookup_u64(
+            conn,
+            "op_return_count",
+            max_opr,
+            from_ts,
+            to_ts,
+        )?,
         most_rbf: lookup_u64(conn, "rbf_count", max_rbf, from_ts, to_ts)?,
-        most_taproot: lookup_u64(conn, "taproot_spend_count", max_tap, from_ts, to_ts)?,
-        highest_value: lookup_u64(conn, "total_output_value", max_val, from_ts, to_ts)?,
+        most_taproot: lookup_u64(
+            conn,
+            "taproot_spend_count",
+            max_tap,
+            from_ts,
+            to_ts,
+        )?,
+        highest_value: lookup_u64(
+            conn,
+            "total_output_value",
+            max_val,
+            from_ts,
+            to_ts,
+        )?,
         empty_block_count: empty_count,
         block_count,
     })
 }
 
 /// Get the stored hash for a block at a given height. Returns None if not found.
-pub fn query_block_hash(conn: &Connection, height: u64) -> rusqlite::Result<Option<String>> {
+pub fn query_block_hash(
+    conn: &Connection,
+    height: u64,
+) -> rusqlite::Result<Option<String>> {
     conn.query_row(
         "SELECT hash FROM blocks WHERE height = ?1",
         params![height],
@@ -2009,7 +2099,7 @@ pub fn init_reorgs_table(conn: &Connection) -> rusqlite::Result<()> {
             canonical_hash  TEXT NOT NULL,
             detected_at     INTEGER NOT NULL,
             PRIMARY KEY (height, stale_hash)
-        );"
+        );",
     )
 }
 
@@ -2050,8 +2140,8 @@ pub fn query_fullness_histogram(
          ORDER BY bucket ASC",
     )?;
     let labels = [
-        "0-10%", "10-20%", "20-30%", "30-40%", "40-50%",
-        "50-60%", "60-70%", "70-80%", "80-90%", "90-100%",
+        "0-10%", "10-20%", "20-30%", "30-40%", "40-50%", "50-60%", "60-70%",
+        "70-80%", "80-90%", "90-100%",
     ];
     let mut result = vec![0u64; 10];
     let rows = stmt.query_map(params![from_ts, to_ts], |row| {
@@ -2063,7 +2153,11 @@ pub fn query_fullness_histogram(
             result[idx] = count;
         }
     }
-    Ok(labels.iter().zip(result.iter()).map(|(l, c)| (l.to_string(), *c)).collect())
+    Ok(labels
+        .iter()
+        .zip(result.iter())
+        .map(|(l, c)| (l.to_string(), *c))
+        .collect())
 }
 
 /// Bucket counts for inter-block time distribution (61 buckets: 0-1min .. 59-60min, 60+).
@@ -2089,7 +2183,8 @@ pub fn query_block_time_histogram(
         GROUP BY bucket
         ORDER BY bucket ASC",
     )?;
-    let mut labels: Vec<String> = (0..60).map(|i| format!("{}-{}", i, i + 1)).collect();
+    let mut labels: Vec<String> =
+        (0..60).map(|i| format!("{}-{}", i, i + 1)).collect();
     labels.push("60+".to_string());
     let mut result = vec![0u64; 61];
     let rows = stmt.query_map(params![from_ts, to_ts], |row| {
@@ -2103,7 +2198,11 @@ pub fn query_block_time_histogram(
             }
         }
     }
-    Ok(labels.into_iter().zip(result.into_iter()).map(|(l, c)| (l, c)).collect())
+    Ok(labels
+        .into_iter()
+        .zip(result.into_iter())
+        .map(|(l, c)| (l, c))
+        .collect())
 }
 
 #[cfg(test)]
@@ -2230,7 +2329,14 @@ mod tests {
     }
 
     /// Helper: insert a minimal test block with key fields.
-    fn insert_test_block(conn: &Connection, height: u64, timestamp: u64, weight: u64, tx_count: u64, total_fees: u64) {
+    fn insert_test_block(
+        conn: &Connection,
+        height: u64,
+        timestamp: u64,
+        weight: u64,
+        tx_count: u64,
+        total_fees: u64,
+    ) {
         let size = weight / 4;
         conn.execute(
             "INSERT OR REPLACE INTO blocks (
@@ -2317,12 +2423,13 @@ mod tests {
         let count = rebuild_all_daily_blocks(&conn).unwrap();
         assert_eq!(count, 2); // 2 distinct days
 
-        let rows = query_daily_aggregates_fast(&conn, 0, 9_999_999_999).unwrap();
+        let rows =
+            query_daily_aggregates_fast(&conn, 0, 9_999_999_999).unwrap();
         assert_eq!(rows.len(), 2);
         // First day: 2 blocks
         assert_eq!(rows[0].block_count, 2);
         assert_eq!(rows[0].total_fees, 3000); // 1000 + 2000
-        // Second day: 1 block
+                                              // Second day: 1 block
         assert_eq!(rows[1].block_count, 1);
         assert_eq!(rows[1].total_fees, 500);
     }
@@ -2334,7 +2441,8 @@ mod tests {
         insert_test_block(&conn, 2, 1700000600, 3_000_000, 200, 2000);
 
         rebuild_all_daily_blocks(&conn).unwrap();
-        let rows = query_daily_aggregates_fast(&conn, 0, 9_999_999_999).unwrap();
+        let rows =
+            query_daily_aggregates_fast(&conn, 0, 9_999_999_999).unwrap();
         assert_eq!(rows.len(), 1);
         // Each block has total_output_value=50000000, so day total = 100000000
         assert_eq!(rows[0].total_output_value, 100_000_000);
@@ -2361,9 +2469,9 @@ mod tests {
 
         // Insert reorg record
         insert_reorg(&conn, 100, "stale_hash", "canonical_hash").unwrap();
-        let reorg_count: u64 = conn.query_row(
-            "SELECT COUNT(*) FROM reorgs", [], |r| r.get(0),
-        ).unwrap();
+        let reorg_count: u64 = conn
+            .query_row("SELECT COUNT(*) FROM reorgs", [], |r| r.get(0))
+            .unwrap();
         assert_eq!(reorg_count, 1);
     }
 
@@ -2378,7 +2486,8 @@ mod tests {
         let day = timestamp_to_date(1700000000);
         refresh_daily_block(&conn, &day).unwrap();
 
-        let rows = query_daily_aggregates_fast(&conn, 0, 9_999_999_999).unwrap();
+        let rows =
+            query_daily_aggregates_fast(&conn, 0, 9_999_999_999).unwrap();
         assert_eq!(rows[0].block_count, 2);
         assert_eq!(rows[0].total_fees, 6000); // 1000 + 5000
     }
