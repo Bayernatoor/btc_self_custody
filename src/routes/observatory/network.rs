@@ -148,7 +148,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
                         fullness_server_pct.get().flatten().unwrap_or_default()
                     });
 
-                    let (fullness_pct_mode, set_fullness_pct_mode) = signal(false);
+                    let (fullness_pct_mode, set_fullness_pct_mode) = signal(true);
                     let fullness_toggled = Signal::derive(move || {
                         if fullness_pct_mode.get() { fullness_combined_pct.get() } else { fullness_combined.get() }
                     });
@@ -211,7 +211,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
                         time_server_pct.get().flatten().unwrap_or_default()
                     });
 
-                    let (time_pct_mode, set_time_pct_mode) = signal(false);
+                    let (time_pct_mode, set_time_pct_mode) = signal(true);
                     let time_toggled = Signal::derive(move || {
                         if time_pct_mode.get() { time_combined_pct.get() } else { time_combined.get() }
                     });
