@@ -103,14 +103,14 @@
             opts.legend.right = 0;
             opts.legend.width = '65%';
             opts.legend.textStyle = opts.legend.textStyle || {};
-            opts.legend.textStyle.fontSize = 10;
+            opts.legend.textStyle.fontSize = 11;
             opts.legend.itemWidth = 14;
             opts.legend.itemHeight = 8;
             opts.legend.itemGap = 6;
             opts.legend.pageIconSize = 10;
             opts.legend.pageIconColor = 'rgba(255,255,255,0.7)';
             opts.legend.pageIconInactiveColor = 'rgba(255,255,255,0.2)';
-            opts.legend.pageTextStyle = { color: 'rgba(255,255,255,0.4)', fontSize: 9 };
+            opts.legend.pageTextStyle = { color: 'rgba(255,255,255,0.4)', fontSize: 10 };
         }
         // Compact grid: less padding so chart area is wider
         if (opts.grid) {
@@ -124,10 +124,10 @@
             // Hide axis name on mobile (takes too much space)
             ya.nameGap = 4;
             ya.nameTextStyle = ya.nameTextStyle || {};
-            ya.nameTextStyle.fontSize = 9;
+            ya.nameTextStyle.fontSize = 10;
             // Compact number formatting
             ya.axisLabel = ya.axisLabel || {};
-            ya.axisLabel.fontSize = 10;
+            ya.axisLabel.fontSize = 11;
             if (!ya.axisLabel.formatter || typeof ya.axisLabel.formatter !== 'function') {
                 ya.axisLabel.formatter = function(v) {
                     if (v === 0) return '0';
@@ -146,7 +146,7 @@
         xAxes.forEach(function(xa) {
             if (!xa) return;
             xa.axisLabel = xa.axisLabel || {};
-            xa.axisLabel.fontSize = 10;
+            xa.axisLabel.fontSize = 11;
         });
         // Shrink pie charts for mobile
         if (opts.series && Array.isArray(opts.series)) {
