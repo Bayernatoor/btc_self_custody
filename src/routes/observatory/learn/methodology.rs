@@ -21,23 +21,23 @@ pub fn MethodologyPage() -> impl IntoView {
             // ── Taxonomy ─────────────────────────────────────────
             <Section title="Data Taxonomy">
                 <p>"All embedded data on Bitcoin falls into two disjoint categories based on where it lives in a transaction:"</p>
-                <div class="bg-[#0a1a2e] border border-white/10 rounded-xl p-5 mt-3 font-mono text-sm space-y-2">
-                    <p class="text-white/80">"Total Embedded Data = Witness Data + OP_RETURN Data"</p>
-                    <div class="ml-4 text-white/60 space-y-1">
-                        <p>"Witness Data (segregated witness fields)"</p>
-                        <p class="ml-4 text-white/40">"Inscriptions (Ordinals)"</p>
-                        <p class="ml-8 text-white/30">"BRC-20 (subset of Inscriptions)"</p>
+                <div class="bg-[#0a1a2e] border border-white/10 rounded-xl p-5 sm:p-6 mt-3 font-mono text-base space-y-3">
+                    <p class="text-[#f7931a] font-semibold">"Total Embedded Data = Witness Data + OP_RETURN Data"</p>
+                    <div class="ml-4 text-white/70 space-y-1">
+                        <p>"Witness Data " <span class="text-white/40">"(segregated witness fields)"</span></p>
+                        <p class="ml-4 text-white/60">"Inscriptions " <span class="text-white/40">"(Ordinals)"</span></p>
+                        <p class="ml-8 text-white/50">"BRC-20 " <span class="text-white/40">"(subset of Inscriptions)"</span></p>
                     </div>
-                    <div class="ml-4 text-white/60 space-y-1">
-                        <p>"OP_RETURN Data (nulldata script outputs)"</p>
-                        <p class="ml-4 text-white/40">"= Runes + Omni Layer + Counterparty + Other"</p>
+                    <div class="ml-4 text-white/70 space-y-1">
+                        <p>"OP_RETURN Data " <span class="text-white/40">"(nulldata script outputs)"</span></p>
+                        <p class="ml-4 text-white/50">"= Runes + Omni Layer + Counterparty + Other"</p>
                     </div>
-                    <div class="ml-4 text-white/60 space-y-1">
-                        <p>"Stamps (bare multisig outputs with fake pubkeys)"</p>
-                        <p class="ml-4 text-white/30">"count only, no byte tracking"</p>
+                    <div class="ml-4 text-white/70 space-y-1">
+                        <p>"Stamps " <span class="text-white/40">"(bare multisig outputs with fake pubkeys)"</span></p>
+                        <p class="ml-4 text-white/50">"count only, no byte tracking"</p>
                     </div>
                 </div>
-                <p class="mt-3 text-white/50 text-sm">"Inscriptions and OP_RETURN are guaranteed disjoint (different parts of the transaction). BRC-20 is always a subset of Inscriptions. Runes, Omni, Counterparty, and Other are mutually exclusive subsets of OP_RETURN."</p>
+                <p class="mt-3 text-white/60">"Inscriptions and OP_RETURN are guaranteed disjoint (different parts of the transaction). BRC-20 is always a subset of Inscriptions. Runes, Omni, Counterparty, and Other are mutually exclusive subsets of OP_RETURN."</p>
             </Section>
 
             // ── What We Count ────────────────────────────────────
@@ -96,7 +96,7 @@ pub fn MethodologyPage() -> impl IntoView {
                         desc="Full scriptPubKey byte length: includes the OP_RETURN opcode, push opcodes, and payload data. This is the on-chain serialized size."
                     />
                 </div>
-                <p class="mt-3 text-white/50 text-sm">"For comparable cross-category analysis, use inscription_envelope_bytes alongside OP_RETURN bytes (both represent full on-chain serialized footprint). Use inscription_bytes (payload) when analyzing content size alone."</p>
+                <p class="mt-3 text-white/60">"For comparable cross-category analysis, use inscription_envelope_bytes alongside OP_RETURN bytes (both represent full on-chain serialized footprint). Use inscription_bytes (payload) when analyzing content size alone."</p>
             </Section>
 
             // ── Detection Rules ──────────────────────────────────
@@ -142,7 +142,7 @@ pub fn MethodologyPage() -> impl IntoView {
             // ── Known Exclusions ─────────────────────────────────
             <Section title="Known Exclusions">
                 <p>"The following data embedding techniques are " <strong>"not currently detected"</strong> ":"</p>
-                <ul class="list-disc list-inside text-white/60 text-sm space-y-1 mt-2">
+                <ul class="list-disc list-inside text-white/70 space-y-1.5 mt-2">
                     <li>"Historical Omni Layer encodings using bare multisig (Class A) or other pre-OP_RETURN methods"</li>
                     <li>"Historical Counterparty encodings using multisig or pubkeyhash patterns"</li>
                     <li>"Cursed, unbound, or non-standard inscription envelopes"</li>
@@ -151,7 +151,7 @@ pub fn MethodologyPage() -> impl IntoView {
                     <li>"Annex field data (BIP 341)"</li>
                     <li>"Unknown or emerging protocols using novel encoding methods"</li>
                 </ul>
-                <p class="mt-2 text-white/40 text-xs">"These exclusions mean total embedded data figures are conservative lower bounds."</p>
+                <p class="mt-3 text-white/50 text-sm">"These exclusions mean total embedded data figures are conservative lower bounds."</p>
             </Section>
 
             // ── Data Source ──────────────────────────────────────
@@ -163,11 +163,11 @@ pub fn MethodologyPage() -> impl IntoView {
             // ── Non-Overlapping Formula ──────────────────────────
             <Section title="Non-Overlapping Total">
                 <p>"To compute a non-overlapping total of embedded data from the dashboard:"</p>
-                <div class="bg-[#0a1a2e] border border-white/10 rounded-xl p-4 mt-3 font-mono text-sm">
+                <div class="bg-[#0a1a2e] border border-white/10 rounded-xl p-5 mt-3 font-mono text-base">
                     <p class="text-[#f7931a]">"total_bytes = inscription_envelope_bytes + op_return_bytes"</p>
                     <p class="text-[#f7931a] mt-1">"total_count = inscription_count + op_return_count"</p>
                 </div>
-                <p class="mt-2 text-white/50 text-sm">"Do not add BRC-20 to Inscriptions, or Runes to OP_RETURN, as these are subsets."</p>
+                <p class="mt-3 text-white/60">"Do not add BRC-20 to Inscriptions, or Runes to OP_RETURN, as these are subsets."</p>
             </Section>
 
             // Back link
@@ -189,8 +189,8 @@ fn Section(
 ) -> impl IntoView {
     view! {
         <section class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 sm:p-6">
-            <h2 class="text-lg text-white font-semibold mb-3">{title}</h2>
-            <div class="text-sm text-white/70 leading-relaxed">
+            <h2 class="text-lg text-white font-semibold mb-4">{title}</h2>
+            <div class="text-[15px] text-white/75 leading-relaxed">
                 {children()}
             </div>
         </section>
@@ -207,9 +207,9 @@ fn MetricRow(
         <div class="flex flex-col sm:flex-row gap-1 sm:gap-4 py-2 border-b border-white/5 last:border-0">
             <div class="sm:w-40 shrink-0">
                 <span class="text-white/90 font-medium">{name}</span>
-                <span class="text-white/30 text-xs ml-1">"("{unit}")"</span>
+                <span class="text-white/40 text-sm ml-1">"("{unit}")"</span>
             </div>
-            <p class="text-white/60">{desc}</p>
+            <p class="text-white/70">{desc}</p>
         </div>
     }
 }
@@ -220,9 +220,9 @@ fn ByteRow(
     #[prop(into)] desc: &'static str,
 ) -> impl IntoView {
     view! {
-        <div class="bg-white/[0.03] rounded-lg p-3">
-            <p class="text-white/80 font-mono text-xs mb-1">{name}</p>
-            <p class="text-white/50 text-xs">{desc}</p>
+        <div class="bg-white/[0.03] rounded-lg p-4">
+            <p class="text-white/85 font-mono text-sm mb-1">{name}</p>
+            <p class="text-white/60 text-sm">{desc}</p>
         </div>
     }
 }
@@ -243,10 +243,10 @@ fn DetectionRow(
         <div class="py-3 border-b border-white/5 last:border-0">
             <div class="flex items-center gap-2 mb-1">
                 <span class="text-white/90 font-medium">{name}</span>
-                <span class=format!("text-[10px] px-1.5 py-0.5 rounded-full {}", badge_color)>{confidence}</span>
+                <span class=format!("text-xs px-2 py-0.5 rounded-full {}", badge_color)>{confidence}</span>
             </div>
-            <p class="text-white/60 text-xs font-mono mb-1">{rule}</p>
-            <p class="text-white/40 text-xs">{note}</p>
+            <p class="text-white/60 text-sm font-mono mb-1">{rule}</p>
+            <p class="text-white/50 text-sm">{note}</p>
         </div>
     }
 }
