@@ -126,16 +126,23 @@ pub fn FeeChartsPage() -> impl IntoView {
                                 option=fees_option
                             />
                             <ChartCard
-                                title="Avg Fee per Transaction"
-                                description=chart_desc(range, "Average fee paid per transaction in satoshis (excludes coinbase)", "Daily average fee per transaction in satoshis")
-                                chart_id="chart-avg-fee-tx"
-                                option=avg_fee_tx_option
-                            />
-                            <ChartCard
                                 title="Median Fee Rate"
                                 description=chart_desc(range, "Median fee rate across all transactions in each block", "Median fee rate (per-block ranges only for daily)")
                                 chart_id="chart-median-rate"
                                 option=median_rate_option
+                            />
+                            <ChartCard
+                                title="Fee Rate Bands"
+                                description="Fee rate percentiles from p10 to p90 showing the full spread of fee rates per block. Click legend items to toggle bands"
+                                chart_id="chart-fee-heatmap"
+                                option=fee_heatmap_option
+                                coming_soon=true
+                            />
+                            <ChartCard
+                                title="Avg Fee per Transaction"
+                                description=chart_desc(range, "Average fee paid per transaction in satoshis (excludes coinbase)", "Daily average fee per transaction in satoshis")
+                                chart_id="chart-avg-fee-tx"
+                                option=avg_fee_tx_option
                             />
                             <ChartCard
                                 title="Subsidy vs Fees"
@@ -162,6 +169,12 @@ pub fn FeeChartsPage() -> impl IntoView {
                                 option=value_flow_option
                             />
                             <ChartCard
+                                title="Halving Era Comparison"
+                                description="Side-by-side comparison of average block metrics across Bitcoin's halving eras. Shows how the network evolves between halvings"
+                                chart_id="chart-halving-era"
+                                option=halving_era_option
+                            />
+                            <ChartCard
                                 title="Fee Pressure vs Block Space"
                                 description="Scatter plot showing the relationship between block fullness and fee rates. Clusters in the top-right indicate high-demand periods"
                                 chart_id="chart-fee-pressure"
@@ -172,19 +185,6 @@ pub fn FeeChartsPage() -> impl IntoView {
                                 description="Highlights blocks where the median fee rate exceeded 5x the trailing 144-block average. Red dots mark fee spike events"
                                 chart_id="chart-fee-spikes"
                                 option=fee_spike_option
-                            />
-                            <ChartCard
-                                title="Halving Era Comparison"
-                                description="Side-by-side comparison of average block metrics across Bitcoin's halving eras. Shows how the network evolves between halvings"
-                                chart_id="chart-halving-era"
-                                option=halving_era_option
-                            />
-                            <ChartCard
-                                title="Fee Rate Bands"
-                                description="Fee rate percentiles from p10 to p90 showing the full spread of fee rates per block. Click legend items to toggle bands"
-                                chart_id="chart-fee-heatmap"
-                                option=fee_heatmap_option
-                                coming_soon=true
                             />
                             <ChartCard
                                 title="Max Transaction Fee"
