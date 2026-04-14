@@ -553,7 +553,7 @@ pub fn update_block_extras(
     let tx = conn.unchecked_transaction()?;
     {
         let mut stmt = tx.prepare_cached(
-            "UPDATE blocks SET version = ?1, total_fees = ?2, miner = ?3, median_fee = ?4, median_fee_rate = ?5, coinbase_locktime = ?6, coinbase_sequence = ?7, segwit_spend_count = ?8, taproot_spend_count = ?9, omni_count = ?10, omni_bytes = ?11, counterparty_count = ?12, counterparty_bytes = ?13, runes_count = ?14, runes_bytes = ?15, data_carrier_count = ?16, data_carrier_bytes = ?17, p2pk_count = ?18, p2pkh_count = ?19, p2sh_count = ?20, p2wpkh_count = ?21, p2wsh_count = ?22, p2tr_count = ?23, multisig_count = ?24, unknown_script_count = ?25, input_count = ?26, output_count = ?27, rbf_count = ?28, witness_bytes = ?29, inscription_count = ?30, inscription_bytes = ?31, inscription_envelope_bytes = ?32, brc20_count = ?33, taproot_keypath_count = ?34, taproot_scriptpath_count = ?35, total_output_value = ?36, total_input_value = ?37, fee_rate_p10 = ?38, fee_rate_p90 = ?39, stamps_count = ?40, largest_tx_size = ?41, backfill_version = ?42 WHERE height = ?43",
+            "UPDATE blocks SET version = ?1, total_fees = ?2, miner = ?3, median_fee = ?4, median_fee_rate = ?5, coinbase_locktime = ?6, coinbase_sequence = ?7, segwit_spend_count = ?8, taproot_spend_count = ?9, omni_count = ?10, omni_bytes = ?11, counterparty_count = ?12, counterparty_bytes = ?13, runes_count = ?14, runes_bytes = ?15, data_carrier_count = ?16, data_carrier_bytes = ?17, p2pk_count = ?18, p2pkh_count = ?19, p2sh_count = ?20, p2wpkh_count = ?21, p2wsh_count = ?22, p2tr_count = ?23, multisig_count = ?24, unknown_script_count = ?25, input_count = ?26, output_count = ?27, rbf_count = ?28, witness_bytes = ?29, inscription_count = ?30, inscription_bytes = ?31, inscription_envelope_bytes = ?32, brc20_count = ?33, taproot_keypath_count = ?34, taproot_scriptpath_count = ?35, total_output_value = ?36, total_input_value = ?37, fee_rate_p10 = ?38, fee_rate_p90 = ?39, stamps_count = ?40, largest_tx_size = ?41, max_tx_fee = ?42, inscription_fees = ?43, runes_fees = ?44, legacy_tx_count = ?45, segwit_tx_count = ?46, taproot_tx_count = ?47, coinbase_text = ?48, fee_rate_p25 = ?49, fee_rate_p75 = ?50, backfill_version = ?51 WHERE height = ?52",
         )?;
         for block in blocks {
             stmt.execute(params![
@@ -598,6 +598,15 @@ pub fn update_block_extras(
                 block.fee_rate_p90,
                 block.stamps_count,
                 block.largest_tx_size,
+                block.max_tx_fee,
+                block.inscription_fees,
+                block.runes_fees,
+                block.legacy_tx_count,
+                block.segwit_tx_count,
+                block.taproot_tx_count,
+                block.coinbase_text,
+                block.fee_rate_p25,
+                block.fee_rate_p75,
                 BACKFILL_VERSION,
                 block.height
             ])?;
