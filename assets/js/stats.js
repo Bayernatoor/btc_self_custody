@@ -181,8 +181,10 @@
                 var isPct = yName.indexOf('%') !== -1;
                 var chartEl = el;
                 opts.tooltip.formatter = function(params) {
+                    try {
                     if (!params || !params.length) return '';
                     var first = params[0];
+                    if (!first) return '';
                     var header;
                     if (first.axisType === 'xAxis.category') {
                         header = first.axisValueLabel || first.name || '';
@@ -199,29 +201,26 @@
                     // Build a lookup of series in params (ECharts may omit zero-value series)
                     var paramMap = {};
                     for (var i = 0; i < params.length; i++) {
-                        paramMap[params[i].seriesIndex] = params[i];
+                        if (params[i]) paramMap[params[i].seriesIndex] = params[i];
                     }
 
-                    // Iterate ALL series to ensure zero-value ones aren't missing.
-                    // Use cached series from parsed opts; fall back to getOption()
-                    // only when params is incomplete (stacked charts with zero values).
-                    var allSeries = [];
+                    // Use cached series only when params is missing some series
+                    // (stacked charts with zero values). Otherwise use params directly.
+                    var cached = chartEl._cachedSeries || [];
+                    var useCached = cached.length > 0 && params.length < cached.length;
+                    var seriesCount = useCached ? cached.length : params.length;
                     var dataIndex = first.dataIndex;
-                    if (params.length < (chartEl._cachedSeries || []).length) {
-                        allSeries = chartEl._cachedSeries || [];
-                    }
-                    var entries = allSeries.length > 0 ? allSeries : params;
 
-                    for (var si = 0; si < entries.length; si++) {
+                    for (var si = 0; si < seriesCount; si++) {
                         var p = paramMap[si];
                         var val, name, marker;
                         if (p) {
                             val = p.data && Array.isArray(p.data) ? p.data[1] : p.value;
                             name = p.seriesName || '';
                             marker = p.marker || '';
-                        } else if (allSeries.length > 0) {
-                            // Series not in params (zero value) — read directly
-                            var s = allSeries[si];
+                        } else if (useCached) {
+                            // Series not in params (zero value) — read from cache
+                            var s = cached[si];
                             if (!s || !s.data || !Array.isArray(s.data) || dataIndex >= s.data.length || !s.data[dataIndex]) continue;
                             var d = s.data[dataIndex];
                             val = Array.isArray(d) ? d[1] : d;
@@ -249,6 +248,7 @@
                         lines += '</div>';
                     }
                     return lines;
+                    } catch(e) { return ''; }
                 };
             }
             // Item tooltips (scatter/pie): show block height + value
