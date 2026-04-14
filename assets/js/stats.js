@@ -202,13 +202,15 @@
                         paramMap[params[i].seriesIndex] = params[i];
                     }
 
-                    // Iterate ALL series to ensure zero-value ones aren't missing
-                    var allSeries = chartEl._cachedSeries || [];
+                    // Iterate ALL series to ensure zero-value ones aren't missing.
+                    // Use cached series from parsed opts; fall back to getOption()
+                    // only when params is incomplete (stacked charts with zero values).
+                    var allSeries = [];
                     var dataIndex = first.dataIndex;
-
-                    var entries = allSeries.length > 0 ? allSeries : [];
-                    // Fall back to params-only if we can't read chart series
-                    if (entries.length === 0) entries = params;
+                    if (params.length < (chartEl._cachedSeries || []).length) {
+                        allSeries = chartEl._cachedSeries || [];
+                    }
+                    var entries = allSeries.length > 0 ? allSeries : params;
 
                     for (var si = 0; si < entries.length; si++) {
                         var p = paramMap[si];
