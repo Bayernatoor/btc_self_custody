@@ -96,10 +96,15 @@
         if (window.innerWidth >= 640) return;
         // Hide toolbox — not usable on touch screens
         if (opts.toolbox) opts.toolbox.show = false;
-        // Constrain legend within chart area
+        // Constrain legend within chart area and shrink text
         if (opts.legend) {
             opts.legend.left = 35;
             opts.legend.right = 10;
+            opts.legend.textStyle = opts.legend.textStyle || {};
+            opts.legend.textStyle.fontSize = 10;
+            opts.legend.itemWidth = 14;
+            opts.legend.itemHeight = 8;
+            opts.legend.itemGap = 6;
         }
         // Compact grid: less padding so chart area is wider
         if (opts.grid) {
