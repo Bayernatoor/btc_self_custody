@@ -79,6 +79,7 @@ fn get_heartbeat_vitals() -> String {
 #[cfg(not(feature = "hydrate"))]
 fn render_rhythm_strip(_: &str, _: &str) {}
 #[cfg(not(feature = "hydrate"))]
+#[allow(dead_code)]
 fn get_heartbeat_recent_blocks() -> String {
     "[]".to_string()
 }
@@ -89,6 +90,7 @@ fn get_organism_status() -> String {
 #[cfg(not(feature = "hydrate"))]
 fn heartbeat_download_capture(_: &str) {}
 #[cfg(not(feature = "hydrate"))]
+#[allow(dead_code)]
 fn heartbeat_search_tx(_: &str) -> bool {
     false
 }
@@ -385,7 +387,7 @@ pub fn HeartbeatPage() -> impl IntoView {
     });
 
     // Tick counter that increments every second for live countdown
-    let (tick, set_tick) = signal(0u64);
+    let (tick, _set_tick) = signal(0u64);
     let (last_block_ts, set_last_block_ts) = signal(0u64);
 
     #[cfg(feature = "hydrate")]

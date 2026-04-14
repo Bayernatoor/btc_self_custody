@@ -115,7 +115,9 @@ pub fn build_share_url(chart_id: &str) -> String {
 /// data fingerprint, and overlay flags. Persists at the parent level across
 /// Outlet navigations so switching tabs does not recompute charts.
 /// Uses Arc<Mutex> for Send+Sync compatibility with SSR.
-pub type ChartCache = Arc<Mutex<HashMap<String, String>>>;
+pub type ChartCache = Arc<Mutex<HashMap<String, (u64, String)>>>;
+pub static CHART_CACHE_SEQ: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
 
 // ---------------------------------------------------------------------------
 // Data enum for dashboard
@@ -655,43 +657,90 @@ macro_rules! chart_memo {
                     DashboardData::Daily(ref d) => d.len(),
                 })
                 .unwrap_or(0);
-            let full_key = format!(
-                "{}:{}:{}:{}",
-                cache_key,
-                r,
-                data_fp,
-                flags.cache_key()
-            );
-            // Check cache
+
+            // Two-level cache: base chart (expensive) keyed without overlays,
+            // final result (with overlays) keyed with full overlay flags.
+            let base_key = format!("{}:{}:{}", cache_key, r, data_fp);
+            let full_key = format!("{}:{}", base_key, flags.cache_key());
+
+            // Check full cache (base + overlays)
             if let Ok(c) = cache.lock() {
-                if let Some(cached) = c.get(&full_key) {
+                if let Some((_, cached)) = c.get(&full_key) {
                     return cached.clone();
                 }
             }
-            let result = data_opt
-                .map(|data| {
-                    let (mut value, is_daily) = match data {
-                        DashboardData::PerBlock(ref $blocks) => {
-                            ($per_block, false)
+
+            // Try to reuse cached base chart (avoids recomputing on overlay toggle)
+            let base_json = if let Ok(c) = cache.lock() {
+                c.get(&base_key).map(|(_, v)| v.clone())
+            } else {
+                None
+            };
+
+            let (base, is_daily) = if let Some(ref cached_base) = base_json {
+                // Determine is_daily from data without recomputing chart
+                let daily = data_opt
+                    .as_ref()
+                    .map(|d| matches!(d, DashboardData::Daily(_)))
+                    .unwrap_or(false);
+                (cached_base.clone(), daily)
+            } else {
+                // Compute base chart from scratch
+                let computed = data_opt
+                    .map(|data| {
+                        let (value, daily) = match data {
+                            DashboardData::PerBlock(ref $blocks) => {
+                                ($per_block, false)
+                            }
+                            DashboardData::Daily(ref $days) => ($daily, true),
+                        };
+                        if value.is_null() {
+                            (String::new(), daily)
+                        } else {
+                            (serde_json::to_string(&value).unwrap_or_default(), daily)
                         }
-                        DashboardData::Daily(ref $days) => ($daily, true),
-                    };
-                    if value.is_null() {
-                        return String::new();
+                    })
+                    .unwrap_or_default();
+                // Cache the base chart
+                if !computed.0.is_empty() {
+                    if let Ok(mut c) = cache.lock() {
+                        let seq = $crate::routes::observatory::shared::CHART_CACHE_SEQ
+                            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        c.insert(base_key, (seq, computed.0.clone()));
                     }
-                    $crate::stats::charts::apply_overlays(
-                        &mut value, &flags, is_daily,
-                    );
-                    serde_json::to_string(&value).unwrap_or_default()
-                })
-                .unwrap_or_default();
+                }
+                computed
+            };
+
+            if base.is_empty() {
+                return base;
+            }
+
+            // Apply overlays on top of base chart
+            let result = if let Ok(mut value) = serde_json::from_str::<serde_json::Value>(&base) {
+                $crate::stats::charts::apply_overlays(&mut value, &flags, is_daily);
+                serde_json::to_string(&value).unwrap_or_default()
+            } else {
+                base
+            };
+
             if !result.is_empty() {
                 if let Ok(mut c) = cache.lock() {
-                    // Evict oldest entries when cache grows too large (>200 entries)
+                    // LRU-style eviction: keep 150 newest, remove oldest 50+
                     if c.len() > 200 {
-                        c.clear();
+                        let mut by_seq: Vec<(String, u64)> = c
+                            .iter()
+                            .map(|(k, (seq, _))| (k.clone(), *seq))
+                            .collect();
+                        by_seq.sort_unstable_by_key(|(_, seq)| *seq);
+                        let to_remove = by_seq.len().saturating_sub(150);
+                        for (key, _) in by_seq.into_iter().take(to_remove) {
+                            c.remove(&key);
+                        }
                     }
-                    c.insert(full_key, result.clone());
+                    let seq = $crate::routes::observatory::shared::CHART_CACHE_SEQ
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    c.insert(full_key, (seq, result.clone()));
                 }
             }
             result

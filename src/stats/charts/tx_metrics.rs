@@ -76,7 +76,7 @@ pub fn witness_share_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     };
     let raw_str = build_data_array_f64(blocks, witness_fn);
     let raw = data_array_value(&raw_str);
-    let vals: Vec<f64> = blocks.iter().map(|b| witness_fn(b)).collect();
+    let vals: Vec<f64> = blocks.iter().map(witness_fn).collect();
     let ma = moving_average(&vals, 144);
     let ma_str = build_ma_array(blocks, &ma);
     let ma_data = data_array_value(&ma_str);
@@ -162,8 +162,8 @@ pub fn batching_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let in_raw_str = build_data_array_f64(blocks, in_fn);
     let in_raw = data_array_value(&in_raw_str);
 
-    let out_per_tx: Vec<f64> = blocks.iter().map(|b| out_fn(b)).collect();
-    let in_per_tx: Vec<f64> = blocks.iter().map(|b| in_fn(b)).collect();
+    let out_per_tx: Vec<f64> = blocks.iter().map(out_fn).collect();
+    let in_per_tx: Vec<f64> = blocks.iter().map(in_fn).collect();
     let out_ma = moving_average(&out_per_tx, 144);
     let in_ma = moving_average(&in_per_tx, 144);
     let out_ma_str = build_ma_array(blocks, &out_ma);
@@ -581,7 +581,7 @@ pub fn tx_density_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let data_str = build_data_array_f64(blocks, density_fn);
     let data = data_array_value(&data_str);
 
-    let raw: Vec<f64> = blocks.iter().map(|b| density_fn(b)).collect();
+    let raw: Vec<f64> = blocks.iter().map(density_fn).collect();
     let ma = moving_average(&raw, 144);
     let ma_str = build_ma_array(blocks, &ma);
     let ma_data = data_array_value(&ma_str);

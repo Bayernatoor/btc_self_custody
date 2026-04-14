@@ -73,6 +73,16 @@
 - [ ] Pre-computed chart snapshots (compact binary in chart_snapshots table)
 - [ ] Cache query_blocks for common ranges with short TTL
 - [ ] Client-side caching of server responses across range switches
+- [ ] **Split shared.rs God file (1,550 lines)** — into state.rs (ObservatoryState +
+      create_observatory_state), url_sync.rs (URL query param helpers), range.rs
+      (RangeSelector + FloatingRangePicker), drawer.rs (ChartDrawer + drawer_pages).
+      Keep shared.rs as re-export hub. Needs careful testing due to Leptos hydration sensitivity.
+- [ ] **Split db.rs God file (2,500+ lines)** — into schema.rs (init_schema + migrations),
+      queries.rs (query_blocks, query_stats, query_daily_aggregates), mining_queries.rs
+      (miner_dominance, empty_blocks), insert.rs (insert_blocks, update_block_extras).
+      Keep db.rs as re-export hub.
+- [ ] **Server-side price history range filtering** — fetch_price_history currently returns
+      all 16 years regardless of range. Add from_ts/to_ts params for 80% bandwidth reduction.
 
 ---
 

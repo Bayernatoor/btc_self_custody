@@ -181,8 +181,8 @@ fn extract_ocean_subminer(bytes: &[u8]) -> Option<String> {
     // Collect printable ASCII chars after ">", skipping leading control chars
     let name: String = bytes[after_gt..]
         .iter()
-        .skip_while(|&&b| b < 0x20 || b > 0x7e) // skip control chars
-        .take_while(|&&b| b >= 0x20 && b <= 0x7e) // take printable ASCII
+        .skip_while(|&&b| !(0x20..=0x7e).contains(&b)) // skip control chars
+        .take_while(|&&b| (0x20..=0x7e).contains(&b)) // take printable ASCII
         .map(|&b| b as char)
         .collect();
 

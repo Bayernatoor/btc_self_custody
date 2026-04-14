@@ -355,7 +355,7 @@ impl BitcoinRpc {
                                     .and_then(|s| u8::from_str_radix(s, 16).ok()))
                                 .collect();
                             coinbase_text = cb_bytes.iter()
-                                .filter(|&&b| b >= 0x20 && b <= 0x7e)
+                                .filter(|&&b| (0x20..=0x7e).contains(&b))
                                 .map(|&b| b as char)
                                 .collect::<String>()
                                 .trim()
@@ -643,7 +643,7 @@ impl BitcoinRpc {
                                 // Stamps: bare multisig with fake pubkeys (data encoding).
                                 // Real compressed pubkeys start with 02 or 03. If the hex
                                 // contains keys that don't, it's likely a Stamps output.
-                                if let Some(hex) =
+                                if let Some(_hex) =
                                     vout["scriptPubKey"]["hex"].as_str()
                                 {
                                     // Stamps multisig pattern: 1-of-N where N keys contain data.

@@ -283,26 +283,27 @@ pub(crate) fn show_ma(data_len: usize) -> bool {
     data_len >= 200
 }
 
-/// Merge chart_defaults with additional fields.
+/// Merge chart_defaults with additional fields (consumes extra to avoid cloning).
 pub(crate) fn build_option(extra: serde_json::Value) -> serde_json::Value {
     let mut base = chart_defaults();
-    if let (Some(base_obj), Some(extra_obj)) =
-        (base.as_object_mut(), extra.as_object())
+    if let (Some(base_obj), serde_json::Value::Object(extra_obj)) =
+        (base.as_object_mut(), extra)
     {
         for (k, v) in extra_obj {
             // Deep-merge legend so "show" doesn't wipe out default textStyle/position
             if k == "legend" {
-                if let (Some(base_legend), Some(extra_legend)) = (
-                    base_obj.get_mut("legend").and_then(|l| l.as_object_mut()),
-                    v.as_object(),
-                ) {
-                    for (lk, lv) in extra_legend {
-                        base_legend.insert(lk.clone(), lv.clone());
+                if let Some(base_legend) =
+                    base_obj.get_mut("legend").and_then(|l| l.as_object_mut())
+                {
+                    if let serde_json::Value::Object(extra_legend) = v {
+                        for (lk, lv) in extra_legend {
+                            base_legend.insert(lk, lv);
+                        }
+                        continue;
                     }
-                    continue;
                 }
             }
-            base_obj.insert(k.clone(), v.clone());
+            base_obj.insert(k, v);
         }
     }
     base
@@ -484,6 +485,290 @@ impl OverlayFlags {
     }
 }
 
+/// Configuration for a single mark line overlay type.
+struct MarkLineStyle {
+    color: &'static str,
+    line_type: &'static str,
+    width: f64,
+    font_size: u32,
+    font_weight: &'static str,
+    rotate: Option<u32>,
+    bg_alpha: &'static str,
+    padding: [u32; 2],
+    border_radius: u32,
+}
+
+/// Create mark line entries for a given overlay type.
+/// `daily_data` is used for category-axis charts, `ts_data` for time-axis charts.
+fn make_mark_lines(
+    is_daily: bool,
+    daily_data: &[(&str, &str)],
+    ts_data: &[(u64, &str)],
+    style: &MarkLineStyle,
+) -> Vec<serde_json::Value> {
+    if is_daily {
+        daily_data
+            .iter()
+            .map(|&(date, name)| {
+                json!({
+                    "xAxis": date,
+                    "lineStyle": { "color": style.color, "type": style.line_type, "width": style.width },
+                    "label": {
+                        "show": true, "formatter": name, "color": style.color,
+                        "fontSize": style.font_size, "fontWeight": style.font_weight,
+                        "position": "insideEndTop",
+                        "rotate": style.rotate.unwrap_or(0),
+                        "backgroundColor": format!("rgba(10,25,41,{})", style.bg_alpha),
+                        "padding": style.padding, "borderRadius": style.border_radius
+                    }
+                })
+            })
+            .collect()
+    } else {
+        ts_data
+            .iter()
+            .map(|&(ts, name)| {
+                json!({
+                    "xAxis": ts * 1000,
+                    "lineStyle": { "color": style.color, "type": style.line_type, "width": style.width },
+                    "label": {
+                        "show": true, "formatter": name, "color": style.color,
+                        "fontSize": style.font_size, "fontWeight": style.font_weight,
+                        "position": "insideEndTop",
+                        "rotate": style.rotate.unwrap_or(0),
+                        "backgroundColor": format!("rgba(10,25,41,{})", style.bg_alpha),
+                        "padding": style.padding, "borderRadius": style.border_radius
+                    }
+                })
+            })
+            .collect()
+    }
+}
+
+/// Extract the visible time range (in milliseconds) from a chart option.
+fn chart_visible_range(
+    obj: &serde_json::Map<String, serde_json::Value>,
+    is_daily: bool,
+) -> (u64, u64) {
+    if is_daily {
+        let cats = obj
+            .get("xAxis")
+            .and_then(|x| x.get("data"))
+            .and_then(|d| d.as_array());
+        if let Some(cats) = cats {
+            let parse = |s: &str| -> u64 {
+                chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d")
+                    .map(|d| {
+                        d.and_hms_opt(12, 0, 0)
+                            .unwrap()
+                            .and_utc()
+                            .timestamp() as u64
+                            * 1000
+                    })
+                    .unwrap_or(0)
+            };
+            let first = cats.first().and_then(|v| v.as_str()).unwrap_or("");
+            let last = cats.last().and_then(|v| v.as_str()).unwrap_or("");
+            (parse(first), parse(last))
+        } else {
+            (0, u64::MAX)
+        }
+    } else {
+        let mut min_ts = u64::MAX;
+        let mut max_ts = 0u64;
+        if let Some(series) = obj.get("series") {
+            if let Some(first_s) = series.as_array().and_then(|a| a.first()) {
+                if let Some(data) = first_s.get("data").and_then(|d| d.as_array()) {
+                    for pt in data {
+                        if let Some(arr) = pt.as_array() {
+                            let ts = arr.first().and_then(|v| {
+                                v.as_u64().or_else(|| v.as_f64().map(|f| f as u64))
+                            });
+                            if let Some(ts) = ts {
+                                min_ts = min_ts.min(ts);
+                                max_ts = max_ts.max(ts);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if min_ts == u64::MAX { min_ts = 0; }
+        (min_ts, max_ts)
+    }
+}
+
+/// Interpolate overlay data points onto chart categories/timestamps.
+fn interpolate_overlay_data(
+    obj: &serde_json::Map<String, serde_json::Value>,
+    filtered: &[(u64, f64)],
+    is_daily: bool,
+) -> Vec<serde_json::Value> {
+    if is_daily {
+        let categories = obj
+            .get("xAxis")
+            .and_then(|x| x.get("data"))
+            .and_then(|d| d.as_array())
+            .cloned()
+            .unwrap_or_default();
+
+        categories
+            .iter()
+            .map(|cat| {
+                let cat_ms = chrono::NaiveDate::parse_from_str(
+                    cat.as_str().unwrap_or_default(),
+                    "%Y-%m-%d",
+                )
+                .map(|d| {
+                    d.and_hms_opt(12, 0, 0).unwrap().and_utc().timestamp() as u64 * 1000
+                })
+                .unwrap_or(0);
+                if cat_ms == 0 { return json!(null); }
+                interpolate_value(filtered, cat_ms, false)
+            })
+            .collect()
+    } else {
+        // For time-axis: interpolate at each block timestamp
+        let block_timestamps: Vec<u64> = obj
+            .get("series")
+            .and_then(|s| s.as_array())
+            .and_then(|a| a.first())
+            .and_then(|s| s.get("data"))
+            .and_then(|d| d.as_array())
+            .map(|pts| {
+                pts.iter()
+                    .filter_map(|pt| {
+                        pt.as_array()
+                            .and_then(|a| a.first())
+                            .and_then(|v| v.as_u64().or_else(|| v.as_f64().map(|f| f as u64)))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        if block_timestamps.is_empty() {
+            filtered.iter().map(|&(ts, v)| json!([ts, v])).collect()
+        } else {
+            block_timestamps
+                .iter()
+                .map(|&bts| interpolate_value(filtered, bts, true))
+                .collect()
+        }
+    }
+}
+
+/// Interpolate a single value from sorted data points at a given timestamp.
+fn interpolate_value(data: &[(u64, f64)], ts: u64, as_array: bool) -> serde_json::Value {
+    match data.binary_search_by_key(&ts, |&(t, _)| t) {
+        Ok(idx) => {
+            if as_array { json!([ts, data[idx].1]) } else { json!(data[idx].1) }
+        }
+        Err(idx) => {
+            if idx == 0 {
+                if as_array { json!([ts, serde_json::Value::Null]) } else { json!(null) }
+            } else if idx >= data.len() {
+                let v = data.last().unwrap().1;
+                if as_array { json!([ts, v]) } else { json!(v) }
+            } else {
+                let (t0, v0) = data[idx - 1];
+                let (t1, v1) = data[idx];
+                let interp = if t1 == t0 {
+                    v0
+                } else {
+                    let frac = (ts - t0) as f64 / (t1 - t0) as f64;
+                    ((v0 + frac * (v1 - v0)) * 100.0).round() / 100.0
+                };
+                if as_array { json!([ts, interp]) } else { json!(interp) }
+            }
+        }
+    }
+}
+
+/// Add a secondary Y-axis overlay series (price or chain size).
+fn add_series_overlay(
+    obj: &mut serde_json::Map<String, serde_json::Value>,
+    source_data: &[(u64, f64)],
+    is_daily: bool,
+    name: &str,
+    unit: &str,
+    color: &str,
+) {
+    let (min_ms, max_ms) = chart_visible_range(obj, is_daily);
+    let range_min = min_ms.saturating_sub(86_400_000);
+    let range_max = max_ms.saturating_add(86_400_000);
+    let filtered: Vec<(u64, f64)> = source_data
+        .iter()
+        .filter(|&&(ts, _)| ts >= range_min && ts <= range_max)
+        .copied()
+        .collect();
+    if filtered.is_empty() { return; }
+
+    // Convert yAxis to array and add secondary axis
+    let y_axis = obj.remove("yAxis");
+    let mut y_axes = match y_axis {
+        Some(serde_json::Value::Array(arr)) => arr,
+        Some(v) => vec![v],
+        None => vec![json!({ "type": "value" })],
+    };
+    let axis_idx = y_axes.len();
+    y_axes.push(json!({
+        "type": "value",
+        "name": unit,
+        "nameTextStyle": { "color": color },
+        "position": "right",
+        "offset": if y_axes.len() > 1 { 60 } else { 0 },
+        "axisLabel": { "color": color, "fontSize": 10 },
+        "axisLine": { "lineStyle": { "color": color } },
+        "splitLine": { "show": false }
+    }));
+    obj.insert("yAxis".into(), json!(y_axes));
+
+    // Ensure existing series have explicit yAxisIndex
+    if let Some(series) = obj.get_mut("series") {
+        if let Some(arr) = series.as_array_mut() {
+            for s in arr.iter_mut() {
+                if let Some(s_obj) = s.as_object_mut() {
+                    s_obj.entry("yAxisIndex").or_insert(json!(0));
+                }
+            }
+        }
+    }
+
+    // Widen grid for the extra axis
+    if let Some(grid) = obj.get_mut("grid") {
+        if let Some(g) = grid.as_object_mut() {
+            let current = g.get("right").and_then(|v| v.as_u64()).unwrap_or(20);
+            g.insert("right".into(), json!(current.max(70) + if axis_idx > 1 { 60 } else { 0 }));
+        }
+    }
+
+    let series_data = interpolate_overlay_data(obj, &filtered, is_daily);
+
+    let series_obj = json!({
+        "name": name,
+        "type": "line",
+        "yAxisIndex": axis_idx,
+        "data": series_data,
+        "connectNulls": true,
+        "lineStyle": { "color": color, "width": 1.5, "opacity": 0.8 },
+        "itemStyle": { "color": color },
+        "symbol": "none",
+        "smooth": true,
+        "z": 1
+    });
+
+    if let Some(series) = obj.get_mut("series") {
+        if let Some(arr) = series.as_array_mut() {
+            arr.push(series_obj);
+        }
+    }
+    if let Some(legend) = obj.get_mut("legend") {
+        if let Some(l) = legend.as_object_mut() {
+            l.insert("show".into(), json!(true));
+        }
+    }
+}
+
 /// Merge overlay markLines and series into an already-parsed chart option Value.
 /// Works for both time-axis (per-block) and category-axis (daily) charts.
 pub fn apply_overlays(
@@ -498,9 +783,7 @@ pub fn apply_overlays(
         || !overlays.price_data.is_empty()
         || !overlays.chain_size_data.is_empty();
 
-    if !has_any {
-        return;
-    }
+    if !has_any { return; }
 
     let obj = match opt.as_object_mut() {
         Some(o) => o,
@@ -516,133 +799,60 @@ pub fn apply_overlays(
     if need_right_space {
         if let Some(grid) = obj.get_mut("grid") {
             if let Some(g) = grid.as_object_mut() {
-                let right = if !overlays.price_data.is_empty() {
-                    70
-                } else {
-                    60
-                };
-                g.insert("right".into(), json!(right));
+                g.insert("right".into(), json!(if !overlays.price_data.is_empty() { 70 } else { 60 }));
             }
         }
     }
 
-    // Track whether any right-side axes will be added (for toolbox repositioning later)
     let has_right_axis =
         !overlays.price_data.is_empty() || !overlays.chain_size_data.is_empty();
 
-    // --- Mark lines (halvings, BIP activations) ---
+    // --- Mark lines ---
     let mut mark_lines: Vec<serde_json::Value> = Vec::new();
 
     if overlays.halvings {
-        if is_daily {
-            for &date in HALVING_DATES {
-                mark_lines.push(json!({
-                    "xAxis": date,
-                    "lineStyle": { "color": "#f7931a", "type": "dashed", "width": 1.5 },
-                    "label": {
-                        "show": true, "formatter": "½", "color": "#f7931a",
-                        "fontSize": 13, "fontWeight": "bold", "position": "insideEndTop",
-                        "backgroundColor": "rgba(10,25,41,0.8)", "padding": [2, 4], "borderRadius": 2
-                    }
-                }));
-            }
-        } else {
-            for &(_, ts, _label) in HALVINGS {
-                mark_lines.push(json!({
-                    "xAxis": ts * 1000,
-                    "lineStyle": { "color": "#f7931a", "type": "dashed", "width": 1.5 },
-                    "label": {
-                        "show": true, "formatter": "½", "color": "#f7931a",
-                        "fontSize": 13, "fontWeight": "bold", "position": "insideEndTop",
-                        "backgroundColor": "rgba(10,25,41,0.8)", "padding": [2, 4], "borderRadius": 2
-                    }
-                }));
-            }
-        }
+        // Halvings use a special label ("½") instead of the name
+        let halving_daily: Vec<(&str, &str)> = HALVING_DATES.iter().map(|&d| (d, "½")).collect();
+        let halving_ts: Vec<(u64, &str)> = HALVINGS.iter().map(|&(_, ts, _)| (ts, "½")).collect();
+        mark_lines.extend(make_mark_lines(
+            is_daily, &halving_daily, &halving_ts,
+            &MarkLineStyle {
+                color: "#f7931a", line_type: "dashed", width: 1.5,
+                font_size: 13, font_weight: "bold", rotate: None,
+                bg_alpha: "0.8", padding: [2, 4], border_radius: 2,
+            },
+        ));
     }
-
     if overlays.bip_activations {
-        if is_daily {
-            for &(date, name) in BIP_ACTIVATION_DATES {
-                mark_lines.push(json!({
-                    "xAxis": date,
-                    "lineStyle": { "color": "#4ecdc4", "type": "dotted", "width": 1 },
-                    "label": {
-                        "show": true, "formatter": name, "color": "#4ecdc4",
-                        "fontSize": 11, "position": "insideEndTop", "rotate": 90,
-                        "backgroundColor": "rgba(10,25,41,0.8)", "padding": [2, 4], "borderRadius": 2
-                    }
-                }));
-            }
-        } else {
-            for &(_, ts, name) in BIP_ACTIVATIONS {
-                mark_lines.push(json!({
-                    "xAxis": ts * 1000,
-                    "lineStyle": { "color": "#4ecdc4", "type": "dotted", "width": 1 },
-                    "label": {
-                        "show": true, "formatter": name, "color": "#4ecdc4",
-                        "fontSize": 11, "position": "insideEndTop", "rotate": 90,
-                        "backgroundColor": "rgba(10,25,41,0.8)", "padding": [2, 4], "borderRadius": 2
-                    }
-                }));
-            }
-        }
+        let ts_data: Vec<(u64, &str)> = BIP_ACTIVATIONS.iter().map(|&(_, ts, n)| (ts, n)).collect();
+        mark_lines.extend(make_mark_lines(
+            is_daily, BIP_ACTIVATION_DATES, &ts_data,
+            &MarkLineStyle {
+                color: "#4ecdc4", line_type: "dotted", width: 1.0,
+                font_size: 11, font_weight: "normal", rotate: Some(90),
+                bg_alpha: "0.8", padding: [2, 4], border_radius: 2,
+            },
+        ));
     }
-
     if overlays.core_releases {
-        if is_daily {
-            for &(date, name) in CORE_RELEASE_DATES {
-                mark_lines.push(json!({
-                    "xAxis": date,
-                    "lineStyle": { "color": "#a855f7", "type": "dotted", "width": 1 },
-                    "label": {
-                        "show": true, "formatter": name, "color": "#a855f7",
-                        "fontSize": 10, "position": "insideEndTop", "rotate": 90,
-                        "backgroundColor": "rgba(10,25,41,0.8)", "padding": [2, 3], "borderRadius": 2
-                    }
-                }));
-            }
-        } else {
-            for &(ts, name) in CORE_RELEASES {
-                mark_lines.push(json!({
-                    "xAxis": ts * 1000,
-                    "lineStyle": { "color": "#a855f7", "type": "dotted", "width": 1 },
-                    "label": {
-                        "show": true, "formatter": name, "color": "#a855f7",
-                        "fontSize": 10, "position": "insideEndTop", "rotate": 90,
-                        "backgroundColor": "rgba(10,25,41,0.8)", "padding": [2, 3], "borderRadius": 2
-                    }
-                }));
-            }
-        }
+        mark_lines.extend(make_mark_lines(
+            is_daily, CORE_RELEASE_DATES, CORE_RELEASES,
+            &MarkLineStyle {
+                color: "#a855f7", line_type: "dotted", width: 1.0,
+                font_size: 10, font_weight: "normal", rotate: Some(90),
+                bg_alpha: "0.8", padding: [2, 3], border_radius: 2,
+            },
+        ));
     }
-
     if overlays.events {
-        if is_daily {
-            for &(date, name) in EVENT_DATES {
-                mark_lines.push(json!({
-                    "xAxis": date,
-                    "lineStyle": { "color": "#ef4444", "type": "solid", "width": 2 },
-                    "label": {
-                        "show": true, "formatter": name, "color": "#ef4444",
-                        "fontSize": 11, "fontWeight": "bold", "position": "insideEndTop", "rotate": 90,
-                        "backgroundColor": "rgba(10,25,41,0.85)", "padding": [3, 5], "borderRadius": 3
-                    }
-                }));
-            }
-        } else {
-            for &(ts, name) in EVENTS {
-                mark_lines.push(json!({
-                    "xAxis": ts * 1000,
-                    "lineStyle": { "color": "#ef4444", "type": "solid", "width": 2 },
-                    "label": {
-                        "show": true, "formatter": name, "color": "#ef4444",
-                        "fontSize": 11, "fontWeight": "bold", "position": "insideEndTop", "rotate": 90,
-                        "backgroundColor": "rgba(10,25,41,0.85)", "padding": [3, 5], "borderRadius": 3
-                    }
-                }));
-            }
-        }
+        mark_lines.extend(make_mark_lines(
+            is_daily, EVENT_DATES, EVENTS,
+            &MarkLineStyle {
+                color: "#ef4444", line_type: "solid", width: 2.0,
+                font_size: 11, font_weight: "bold", rotate: Some(90),
+                bg_alpha: "0.85", padding: [3, 5], border_radius: 3,
+            },
+        ));
     }
 
     // Attach markLines to the first series
@@ -653,11 +863,7 @@ pub fn apply_overlays(
                     if let Some(s) = first.as_object_mut() {
                         s.insert(
                             "markLine".into(),
-                            json!({
-                                "silent": true,
-                                "symbol": "none",
-                                "data": mark_lines
-                            }),
+                            json!({ "silent": true, "symbol": "none", "data": mark_lines }),
                         );
                     }
                 }
@@ -665,466 +871,15 @@ pub fn apply_overlays(
         }
     }
 
-    // --- Price overlay (secondary Y-axis + line series) ---
+    // --- Series overlays (price, chain size) ---
     if !overlays.price_data.is_empty() {
-        // Determine the chart's visible time range from existing data
-        let (chart_min_ms, chart_max_ms) = if is_daily {
-            let cats = obj
-                .get("xAxis")
-                .and_then(|x| x.get("data"))
-                .and_then(|d| d.as_array());
-            if let Some(cats) = cats {
-                let parse_date = |s: &str| -> u64 {
-                    chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d")
-                        .map(|d| {
-                            d.and_hms_opt(0, 0, 0)
-                                .unwrap()
-                                .and_utc()
-                                .timestamp() as u64
-                                * 1000
-                        })
-                        .unwrap_or(0)
-                };
-                let first = cats.first().and_then(|v| v.as_str()).unwrap_or("");
-                let last = cats.last().and_then(|v| v.as_str()).unwrap_or("");
-                (parse_date(first), parse_date(last))
-            } else {
-                (0, u64::MAX)
-            }
-        } else {
-            // For time-axis charts, scan first series data for min/max timestamps
-            let mut min_ts = u64::MAX;
-            let mut max_ts = 0u64;
-            if let Some(series) = obj.get("series") {
-                if let Some(first_s) = series.as_array().and_then(|a| a.first())
-                {
-                    if let Some(data) =
-                        first_s.get("data").and_then(|d| d.as_array())
-                    {
-                        for pt in data {
-                            if let Some(arr) = pt.as_array() {
-                                // Handle both u64 and f64 number representations
-                                let ts = arr.first().and_then(|v| {
-                                    v.as_u64().or_else(|| {
-                                        v.as_f64().map(|f| f as u64)
-                                    })
-                                });
-                                if let Some(ts) = ts {
-                                    min_ts = min_ts.min(ts);
-                                    max_ts = max_ts.max(ts);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            if min_ts == u64::MAX {
-                min_ts = 0;
-            }
-            (min_ts, max_ts)
-        };
-
-        // Add padding (1 day each side) and filter price data to visible range
-        let range_min = chart_min_ms.saturating_sub(86_400_000);
-        let range_max = chart_max_ms.saturating_add(86_400_000);
-        let filtered_prices: Vec<(u64, f64)> = overlays
-            .price_data
-            .iter()
-            .filter(|&&(ts_ms, _)| ts_ms >= range_min && ts_ms <= range_max)
-            .copied()
-            .collect();
-
-        // Only add overlay if we have price data in range
-        if filtered_prices.is_empty() {
-            return;
-        }
-
-        // Convert existing yAxis to array if it's a single object
-        let y_axis = obj.remove("yAxis");
-        let mut y_axes = match y_axis {
-            Some(serde_json::Value::Array(arr)) => arr,
-            Some(obj_val) => vec![obj_val],
-            None => vec![json!({ "type": "value" })],
-        };
-
-        // Add price Y-axis on the right
-        let price_axis_idx = y_axes.len();
-        y_axes.push(json!({
-            "type": "value",
-            "name": "USD",
-            "nameTextStyle": { "color": "#e6c84e" },
-            "position": "right",
-            "axisLabel": { "color": "#e6c84e", "fontSize": 10 },
-            "axisLine": { "lineStyle": { "color": "#e6c84e" } },
-            "splitLine": { "show": false }
-        }));
-
-        obj.insert("yAxis".into(), json!(y_axes));
-
-        // Ensure existing series explicitly reference yAxisIndex: 0
-        if let Some(series) = obj.get_mut("series") {
-            if let Some(arr) = series.as_array_mut() {
-                for s in arr.iter_mut() {
-                    if let Some(s_obj) = s.as_object_mut() {
-                        s_obj.entry("yAxisIndex").or_insert(json!(0));
-                    }
-                }
-            }
-        }
-
-        // Build price series data using interpolation for smooth coverage.
-        // Price data is daily but chart categories may not align exactly.
-        let price_series_data: Vec<serde_json::Value> = if is_daily {
-            // For daily/category charts: interpolate between price data points.
-            // Convert each category date to a timestamp, then interpolate.
-            let categories = obj
-                .get("xAxis")
-                .and_then(|x| x.get("data"))
-                .and_then(|d| d.as_array())
-                .cloned()
-                .unwrap_or_default();
-
-            // Price data is already sorted by timestamp (blockchain.info returns chronological)
-            categories
-                .iter()
-                .map(|cat| {
-                    let date_str = cat.as_str().unwrap_or_default();
-                    let cat_ms =
-                        chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
-                            .map(|d| {
-                                d.and_hms_opt(12, 0, 0) // noon UTC for better matching
-                                    .unwrap()
-                                    .and_utc()
-                                    .timestamp()
-                                    as u64
-                                    * 1000
-                            })
-                            .unwrap_or(0);
-
-                    if cat_ms == 0 {
-                        return json!(null);
-                    }
-
-                    // Binary search for surrounding price points and interpolate
-                    match filtered_prices
-                        .binary_search_by_key(&cat_ms, |&(ts, _)| ts)
-                    {
-                        Ok(idx) => json!(filtered_prices[idx].1),
-                        Err(idx) => {
-                            if idx == 0 {
-                                // Before first price point
-                                json!(null)
-                            } else if idx >= filtered_prices.len() {
-                                // After last price point — use last known
-                                json!(filtered_prices.last().unwrap().1)
-                            } else {
-                                // Interpolate between surrounding points
-                                let (t0, p0) = filtered_prices[idx - 1];
-                                let (t1, p1) = filtered_prices[idx];
-                                if t1 == t0 {
-                                    json!(p0)
-                                } else {
-                                    let frac =
-                                        (cat_ms - t0) as f64 / (t1 - t0) as f64;
-                                    let interpolated = p0 + frac * (p1 - p0);
-                                    json!(
-                                        (interpolated * 100.0).round() / 100.0
-                                    )
-                                }
-                            }
-                        }
-                    }
-                })
-                .collect()
-        } else {
-            // For time-axis charts, interpolate price at each block timestamp
-            // so ECharts tooltip can match price to any hovered block.
-            let block_timestamps: Vec<u64> = obj
-                .get("series")
-                .and_then(|s| s.as_array())
-                .and_then(|a| a.first())
-                .and_then(|s| s.get("data"))
-                .and_then(|d| d.as_array())
-                .map(|pts| {
-                    pts.iter()
-                        .filter_map(|pt| {
-                            pt.as_array()
-                                .and_then(|a| a.first())
-                                .and_then(|v| v.as_u64().or_else(|| v.as_f64().map(|f| f as u64)))
-                        })
-                        .collect()
-                })
-                .unwrap_or_default();
-
-            if block_timestamps.is_empty() {
-                // Fallback: raw price points
-                filtered_prices.iter().map(|&(ts, p)| json!([ts, p])).collect()
-            } else {
-                // Interpolate price for each block timestamp
-                block_timestamps
-                    .iter()
-                    .map(|&bts| {
-                        match filtered_prices.binary_search_by_key(&bts, |&(ts, _)| ts) {
-                            Ok(idx) => json!([bts, filtered_prices[idx].1]),
-                            Err(idx) => {
-                                if idx == 0 {
-                                    json!([bts, serde_json::Value::Null])
-                                } else if idx >= filtered_prices.len() {
-                                    json!([bts, filtered_prices.last().unwrap().1])
-                                } else {
-                                    let (t0, p0) = filtered_prices[idx - 1];
-                                    let (t1, p1) = filtered_prices[idx];
-                                    if t1 == t0 {
-                                        json!([bts, p0])
-                                    } else {
-                                        let frac = (bts - t0) as f64 / (t1 - t0) as f64;
-                                        let interp = ((p0 + frac * (p1 - p0)) * 100.0).round() / 100.0;
-                                        json!([bts, interp])
-                                    }
-                                }
-                            }
-                        }
-                    })
-                    .collect()
-            }
-        };
-
-        // Add price line series on the secondary y-axis
-        let price_series = json!({
-            "name": "Price (USD)",
-            "type": "line",
-            "yAxisIndex": price_axis_idx,
-            "data": price_series_data,
-            "connectNulls": true,
-            "lineStyle": { "color": "#e6c84e", "width": 1.5, "opacity": 0.8 },
-            "itemStyle": { "color": "#e6c84e" },
-            "symbol": "none",
-            "smooth": true,
-            "z": 1
-        });
-
-        if let Some(series) = obj.get_mut("series") {
-            if let Some(arr) = series.as_array_mut() {
-                arr.push(price_series);
-            }
-        }
-
-        // Add Price to legend
-        if let Some(legend) = obj.get_mut("legend") {
-            if let Some(l) = legend.as_object_mut() {
-                l.insert("show".into(), json!(true));
-            }
-        }
+        add_series_overlay(obj, &overlays.price_data, is_daily, "Price (USD)", "USD", "#e6c84e");
     }
-
-    // --- Chain size overlay (secondary Y-axis + line series) ---
     if !overlays.chain_size_data.is_empty() {
-        // Determine visible range (reuse same logic as price)
-        let (cs_min_ms, cs_max_ms) = if is_daily {
-            let cats = obj
-                .get("xAxis")
-                .and_then(|x| x.get("data"))
-                .and_then(|d| d.as_array());
-            if let Some(cats) = cats {
-                let parse_date = |s: &str| -> u64 {
-                    chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d")
-                        .map(|d| {
-                            d.and_hms_opt(12, 0, 0)
-                                .unwrap()
-                                .and_utc()
-                                .timestamp() as u64
-                                * 1000
-                        })
-                        .unwrap_or(0)
-                };
-                let first = cats.first().and_then(|v| v.as_str()).unwrap_or("");
-                let last = cats.last().and_then(|v| v.as_str()).unwrap_or("");
-                (parse_date(first), parse_date(last))
-            } else {
-                (0, u64::MAX)
-            }
-        } else {
-            let mut min_ts = u64::MAX;
-            let mut max_ts = 0u64;
-            if let Some(series) = obj.get("series") {
-                if let Some(first_s) = series.as_array().and_then(|a| a.first())
-                {
-                    if let Some(data) =
-                        first_s.get("data").and_then(|d| d.as_array())
-                    {
-                        for pt in data {
-                            if let Some(arr) = pt.as_array() {
-                                let ts = arr.first().and_then(|v| {
-                                    v.as_u64().or_else(|| {
-                                        v.as_f64().map(|f| f as u64)
-                                    })
-                                });
-                                if let Some(ts) = ts {
-                                    min_ts = min_ts.min(ts);
-                                    max_ts = max_ts.max(ts);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            if min_ts == u64::MAX {
-                min_ts = 0;
-            }
-            (min_ts, max_ts)
-        };
-
-        let cs_range_min = cs_min_ms.saturating_sub(86_400_000);
-        let cs_range_max = cs_max_ms.saturating_add(86_400_000);
-        let filtered_cs: Vec<(u64, f64)> = overlays
-            .chain_size_data
-            .iter()
-            .filter(|&&(ts_ms, _)| {
-                ts_ms >= cs_range_min && ts_ms <= cs_range_max
-            })
-            .copied()
-            .collect();
-
-        if !filtered_cs.is_empty() {
-            // Add or extend yAxis array
-            let y_axis_val = obj.remove("yAxis");
-            let mut y_axes = match y_axis_val {
-                Some(serde_json::Value::Array(arr)) => arr,
-                Some(obj_val) => vec![obj_val],
-                None => vec![json!({ "type": "value" })],
-            };
-
-            let cs_axis_idx = y_axes.len();
-            y_axes.push(json!({
-                "type": "value",
-                "name": "GB",
-                "nameTextStyle": { "color": "#10b981" },
-                "position": "right",
-                "offset": if y_axes.len() > 1 { 60 } else { 0 },
-                "axisLabel": { "color": "#10b981", "fontSize": 10 },
-                "axisLine": { "lineStyle": { "color": "#10b981" } },
-                "splitLine": { "show": false }
-            }));
-
-            obj.insert("yAxis".into(), json!(y_axes));
-
-            // Ensure existing series have explicit yAxisIndex
-            if let Some(series) = obj.get_mut("series") {
-                if let Some(arr) = series.as_array_mut() {
-                    for s in arr.iter_mut() {
-                        if let Some(s_obj) = s.as_object_mut() {
-                            s_obj.entry("yAxisIndex").or_insert(json!(0));
-                        }
-                    }
-                }
-            }
-
-            // Widen grid for the extra axis
-            if let Some(grid) = obj.get_mut("grid") {
-                if let Some(g) = grid.as_object_mut() {
-                    let current =
-                        g.get("right").and_then(|v| v.as_u64()).unwrap_or(20);
-                    g.insert(
-                        "right".into(),
-                        json!(
-                            current.max(70)
-                                + if cs_axis_idx > 1 { 60 } else { 0 }
-                        ),
-                    );
-                }
-            }
-
-            let cs_series_data: Vec<serde_json::Value> = if is_daily {
-                let categories = obj
-                    .get("xAxis")
-                    .and_then(|x| x.get("data"))
-                    .and_then(|d| d.as_array())
-                    .cloned()
-                    .unwrap_or_default();
-
-                categories
-                    .iter()
-                    .map(|cat| {
-                        let date_str = cat.as_str().unwrap_or_default();
-                        let cat_ms = chrono::NaiveDate::parse_from_str(
-                            date_str, "%Y-%m-%d",
-                        )
-                        .map(|d| {
-                            d.and_hms_opt(12, 0, 0)
-                                .unwrap()
-                                .and_utc()
-                                .timestamp() as u64
-                                * 1000
-                        })
-                        .unwrap_or(0);
-
-                        if cat_ms == 0 {
-                            return json!(null);
-                        }
-
-                        match filtered_cs
-                            .binary_search_by_key(&cat_ms, |&(ts, _)| ts)
-                        {
-                            Ok(idx) => json!(filtered_cs[idx].1),
-                            Err(idx) => {
-                                if idx == 0 {
-                                    json!(null)
-                                } else if idx >= filtered_cs.len() {
-                                    json!(filtered_cs.last().unwrap().1)
-                                } else {
-                                    let (t0, v0) = filtered_cs[idx - 1];
-                                    let (t1, v1) = filtered_cs[idx];
-                                    if t1 == t0 {
-                                        json!(v0)
-                                    } else {
-                                        let frac = (cat_ms - t0) as f64
-                                            / (t1 - t0) as f64;
-                                        json!(
-                                            ((v0 + frac * (v1 - v0)) * 100.0)
-                                                .round()
-                                                / 100.0
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    })
-                    .collect()
-            } else {
-                filtered_cs
-                    .iter()
-                    .map(|&(ts_ms, gb)| json!([ts_ms, gb]))
-                    .collect()
-            };
-
-            let cs_series = json!({
-                "name": "Chain Size (GB)",
-                "type": "line",
-                "yAxisIndex": cs_axis_idx,
-                "data": cs_series_data,
-                "connectNulls": true,
-                "lineStyle": { "color": "#10b981", "width": 1.5, "opacity": 0.8 },
-                "itemStyle": { "color": "#10b981" },
-                "symbol": "none",
-                "smooth": true,
-                "z": 1
-            });
-
-            if let Some(series) = obj.get_mut("series") {
-                if let Some(arr) = series.as_array_mut() {
-                    arr.push(cs_series);
-                }
-            }
-
-            if let Some(legend) = obj.get_mut("legend") {
-                if let Some(l) = legend.as_object_mut() {
-                    l.insert("show".into(), json!(true));
-                }
-            }
-        }
+        add_series_overlay(obj, &overlays.chain_size_data, is_daily, "Chain Size (GB)", "GB", "#10b981");
     }
 
-    // After all overlays applied: reposition toolbox clear of any right-side axes.
+    // Reposition toolbox clear of any right-side axes
     if has_right_axis {
         let grid_right = obj
             .get("grid")
@@ -1138,15 +893,12 @@ pub fn apply_overlays(
         }
         if let Some(toolbox) = obj.get_mut("toolbox") {
             if let Some(t) = toolbox.as_object_mut() {
-                // Place toolbox just inside the grid area, past all right-axis labels
                 t.insert("right".into(), json!(grid_right + 25));
             }
         }
-        // Constrain legend to avoid overlapping with right-side axis labels
         if let Some(legend) = obj.get_mut("legend") {
             if let Some(l) = legend.as_object_mut() {
                 l.insert("right".into(), json!(grid_right + 10));
-                // Show fewer items per page when space is tight
                 l.insert("pageButtonItemGap".into(), json!(2));
                 l.insert("pageIconSize".into(), json!(10));
             }

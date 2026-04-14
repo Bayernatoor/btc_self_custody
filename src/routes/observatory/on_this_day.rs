@@ -454,7 +454,7 @@ pub fn OnThisDayPage() -> impl IntoView {
                                     // Format: "MM-DD:YYYY" — date + target year for scrolling
                                     let parts: Vec<&str> = val.split(':').collect();
                                     let date = parts[0].to_string();
-                                    let scroll_year = parts.get(1).unwrap_or(&"").to_string();
+                                    let _scroll_year = parts.get(1).unwrap_or(&"").to_string();
                                     set_selected_date.set(date.clone());
                                     #[cfg(feature = "hydrate")]
                                     {

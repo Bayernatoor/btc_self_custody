@@ -16,7 +16,7 @@ pub fn block_size_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let raw_str = build_data_array_f64(blocks, size_fn);
     let raw_data = data_array_value(&raw_str);
 
-    let vals: Vec<f64> = blocks.iter().map(|b| size_fn(b)).collect();
+    let vals: Vec<f64> = blocks.iter().map(size_fn).collect();
     let ma = moving_average(&vals, 144);
     let ma_str = build_ma_array(blocks, &ma);
     let ma_data = data_array_value(&ma_str);
@@ -446,7 +446,7 @@ pub fn weight_utilization_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let raw_str = build_data_array_f64(blocks, weight_fn);
     let raw = data_array_value(&raw_str);
 
-    let vals: Vec<f64> = blocks.iter().map(|b| weight_fn(b)).collect();
+    let vals: Vec<f64> = blocks.iter().map(weight_fn).collect();
     let ma = moving_average(&vals, 144);
     let ma_str = build_ma_array(blocks, &ma);
     let ma_series = data_array_value(&ma_str);
@@ -535,7 +535,7 @@ pub fn avg_tx_size_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let raw_str = build_data_array_f64(blocks, avg_fn);
     let raw = data_array_value(&raw_str);
 
-    let vals: Vec<f64> = blocks.iter().map(|b| avg_fn(b)).collect();
+    let vals: Vec<f64> = blocks.iter().map(avg_fn).collect();
     let ma = moving_average(&vals, 144);
     let ma_str = build_ma_array(blocks, &ma);
     let ma_series = data_array_value(&ma_str);
@@ -747,7 +747,7 @@ pub fn largest_tx_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let raw_str = build_data_array_f64(blocks, size_fn);
     let raw = data_array_value(&raw_str);
 
-    let vals: Vec<f64> = blocks.iter().map(|b| size_fn(b)).collect();
+    let vals: Vec<f64> = blocks.iter().map(size_fn).collect();
     let ma = moving_average(&vals, 144);
     let ma_str = build_ma_array(blocks, &ma);
     let ma_data = data_array_value(&ma_str);

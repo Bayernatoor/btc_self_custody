@@ -113,66 +113,7 @@ pub async fn fetch_blocks(
         .map_err(|e| internal_err("DB pool", e))?;
     let rows = super::db::query_blocks(&conn, from, to)
         .map_err(|e| internal_err("DB query", e))?;
-    Ok(rows
-        .into_iter()
-        .map(|r| BlockSummary {
-            height: r.height,
-            hash: r.hash,
-            timestamp: r.timestamp,
-            tx_count: r.tx_count,
-            size: r.size,
-            weight: r.weight,
-            difficulty: r.difficulty,
-            total_fees: r.total_fees,
-            median_fee: r.median_fee,
-            median_fee_rate: r.median_fee_rate,
-            segwit_spend_count: r.segwit_spend_count,
-            taproot_spend_count: r.taproot_spend_count,
-            p2pk_count: r.p2pk_count,
-            p2pkh_count: r.p2pkh_count,
-            p2sh_count: r.p2sh_count,
-            p2wpkh_count: r.p2wpkh_count,
-            p2wsh_count: r.p2wsh_count,
-            p2tr_count: r.p2tr_count,
-            multisig_count: r.multisig_count,
-            unknown_script_count: r.unknown_script_count,
-            input_count: r.input_count,
-            output_count: r.output_count,
-            rbf_count: r.rbf_count,
-            witness_bytes: r.witness_bytes,
-            inscription_count: r.inscription_count,
-            inscription_bytes: r.inscription_bytes,
-            inscription_envelope_bytes: r.inscription_envelope_bytes,
-            brc20_count: r.brc20_count,
-            op_return_count: r.op_return_count,
-            op_return_bytes: r.op_return_bytes,
-            runes_count: r.runes_count,
-            runes_bytes: r.runes_bytes,
-            omni_count: r.omni_count,
-            omni_bytes: r.omni_bytes,
-            counterparty_count: r.counterparty_count,
-            counterparty_bytes: r.counterparty_bytes,
-            data_carrier_count: r.data_carrier_count,
-            data_carrier_bytes: r.data_carrier_bytes,
-            taproot_keypath_count: r.taproot_keypath_count,
-            taproot_scriptpath_count: r.taproot_scriptpath_count,
-            total_output_value: r.total_output_value,
-            total_input_value: r.total_input_value,
-            fee_rate_p10: r.fee_rate_p10,
-            fee_rate_p90: r.fee_rate_p90,
-            stamps_count: r.stamps_count,
-            largest_tx_size: r.largest_tx_size,
-            max_tx_fee: r.max_tx_fee,
-            inscription_fees: r.inscription_fees,
-            runes_fees: r.runes_fees,
-            legacy_tx_count: r.legacy_tx_count,
-            segwit_tx_count: r.segwit_tx_count,
-            taproot_tx_count: r.taproot_tx_count,
-            coinbase_text: r.coinbase_text,
-            fee_rate_p25: r.fee_rate_p25,
-            fee_rate_p75: r.fee_rate_p75,
-        })
-        .collect())
+    Ok(rows.into_iter().map(BlockSummary::from).collect())
 }
 
 /// Fetch blocks by timestamp range (for custom date ranges).
@@ -194,66 +135,7 @@ pub async fn fetch_blocks_by_ts(
         .map_err(|e| internal_err("DB pool", e))?;
     let rows = super::db::query_blocks_by_ts(&conn, from_ts, to_ts)
         .map_err(|e| internal_err("DB query", e))?;
-    Ok(rows
-        .into_iter()
-        .map(|r| BlockSummary {
-            height: r.height,
-            hash: r.hash,
-            timestamp: r.timestamp,
-            tx_count: r.tx_count,
-            size: r.size,
-            weight: r.weight,
-            difficulty: r.difficulty,
-            total_fees: r.total_fees,
-            median_fee: r.median_fee,
-            median_fee_rate: r.median_fee_rate,
-            segwit_spend_count: r.segwit_spend_count,
-            taproot_spend_count: r.taproot_spend_count,
-            p2pk_count: r.p2pk_count,
-            p2pkh_count: r.p2pkh_count,
-            p2sh_count: r.p2sh_count,
-            p2wpkh_count: r.p2wpkh_count,
-            p2wsh_count: r.p2wsh_count,
-            p2tr_count: r.p2tr_count,
-            multisig_count: r.multisig_count,
-            unknown_script_count: r.unknown_script_count,
-            input_count: r.input_count,
-            output_count: r.output_count,
-            rbf_count: r.rbf_count,
-            witness_bytes: r.witness_bytes,
-            inscription_count: r.inscription_count,
-            inscription_bytes: r.inscription_bytes,
-            inscription_envelope_bytes: r.inscription_envelope_bytes,
-            brc20_count: r.brc20_count,
-            op_return_count: r.op_return_count,
-            op_return_bytes: r.op_return_bytes,
-            runes_count: r.runes_count,
-            runes_bytes: r.runes_bytes,
-            omni_count: r.omni_count,
-            omni_bytes: r.omni_bytes,
-            counterparty_count: r.counterparty_count,
-            counterparty_bytes: r.counterparty_bytes,
-            data_carrier_count: r.data_carrier_count,
-            data_carrier_bytes: r.data_carrier_bytes,
-            taproot_keypath_count: r.taproot_keypath_count,
-            taproot_scriptpath_count: r.taproot_scriptpath_count,
-            total_output_value: r.total_output_value,
-            total_input_value: r.total_input_value,
-            fee_rate_p10: r.fee_rate_p10,
-            fee_rate_p90: r.fee_rate_p90,
-            stamps_count: r.stamps_count,
-            largest_tx_size: r.largest_tx_size,
-            max_tx_fee: r.max_tx_fee,
-            inscription_fees: r.inscription_fees,
-            runes_fees: r.runes_fees,
-            legacy_tx_count: r.legacy_tx_count,
-            segwit_tx_count: r.segwit_tx_count,
-            taproot_tx_count: r.taproot_tx_count,
-            coinbase_text: r.coinbase_text,
-            fee_rate_p25: r.fee_rate_p25,
-            fee_rate_p75: r.fee_rate_p75,
-        })
-        .collect())
+    Ok(rows.into_iter().map(BlockSummary::from).collect())
 }
 
 #[server(prefix = "/api", endpoint = "stats_block_detail")]
@@ -1100,7 +982,7 @@ pub async fn fetch_on_this_day(
         .get()
         .map_err(|e| internal_err("DB pool", e))?;
 
-    if month < 1 || month > 12 || day < 1 || day > 31 {
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
         return Err(ServerFnError::new("Invalid date"));
     }
     let month_day = format!("{:02}-{:02}", month, day);

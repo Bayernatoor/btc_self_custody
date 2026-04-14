@@ -93,10 +93,15 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
         CREATE INDEX IF NOT EXISTS idx_blocks_timestamp ON blocks(timestamp);",
     )?;
 
-    // Migration: add version, total_fees, miner columns if missing
-    let has_version: bool =
-        conn.prepare("SELECT version FROM blocks LIMIT 0").is_ok();
-    if !has_version {
+    // Collect existing column names with a single PRAGMA query (replaces 15+ SELECT probes)
+    let cols: std::collections::HashSet<String> = {
+        let mut stmt = conn.prepare("PRAGMA table_info(blocks)")?;
+        let names = stmt.query_map([], |row| row.get::<_, String>(1))?;
+        names.filter_map(|r| r.ok()).collect()
+    };
+    let has = |col: &str| cols.contains(col);
+
+    if !has("version") {
         tracing::info!("Migrating: adding version, total_fees, miner columns");
         conn.execute_batch(
             "ALTER TABLE blocks ADD COLUMN version INTEGER NOT NULL DEFAULT 0;
@@ -104,63 +109,34 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
              ALTER TABLE blocks ADD COLUMN miner TEXT NOT NULL DEFAULT '';",
         )?;
     }
-
-    // Migration: add median_fee, median_fee_rate columns if missing
-    let has_median: bool = conn
-        .prepare("SELECT median_fee FROM blocks LIMIT 0")
-        .is_ok();
-    if !has_median {
+    if !has("median_fee") {
         tracing::info!("Migrating: adding median_fee, median_fee_rate columns");
         conn.execute_batch(
             "ALTER TABLE blocks ADD COLUMN median_fee INTEGER NOT NULL DEFAULT 0;
              ALTER TABLE blocks ADD COLUMN median_fee_rate REAL NOT NULL DEFAULT 0;",
         )?;
     }
-
-    // Migration: add coinbase_locktime column if missing
-    let has_locktime: bool = conn
-        .prepare("SELECT coinbase_locktime FROM blocks LIMIT 0")
-        .is_ok();
-    if !has_locktime {
+    if !has("coinbase_locktime") {
         tracing::info!("Migrating: adding coinbase_locktime column");
         conn.execute_batch(
             "ALTER TABLE blocks ADD COLUMN coinbase_locktime INTEGER NOT NULL DEFAULT 0;",
         )?;
     }
-
-    // Migration: add coinbase_sequence column if missing
-    let has_sequence: bool = conn
-        .prepare("SELECT coinbase_sequence FROM blocks LIMIT 0")
-        .is_ok();
-    if !has_sequence {
+    if !has("coinbase_sequence") {
         tracing::info!("Migrating: adding coinbase_sequence column");
         conn.execute_batch(
             "ALTER TABLE blocks ADD COLUMN coinbase_sequence INTEGER NOT NULL DEFAULT 0;",
         )?;
     }
-
-    // Migration: add segwit/taproot spend counts
-    let has_segwit: bool = conn
-        .prepare("SELECT segwit_spend_count FROM blocks LIMIT 0")
-        .is_ok();
-    if !has_segwit {
-        tracing::info!(
-            "Migrating: adding segwit_spend_count, taproot_spend_count columns"
-        );
+    if !has("segwit_spend_count") {
+        tracing::info!("Migrating: adding segwit_spend_count, taproot_spend_count columns");
         conn.execute_batch(
             "ALTER TABLE blocks ADD COLUMN segwit_spend_count INTEGER NOT NULL DEFAULT 0;
              ALTER TABLE blocks ADD COLUMN taproot_spend_count INTEGER NOT NULL DEFAULT 0;",
         )?;
     }
-
-    // Migration: add omni/counterparty protocol columns
-    let has_omni: bool = conn
-        .prepare("SELECT omni_count FROM blocks LIMIT 0")
-        .is_ok();
-    if !has_omni {
-        tracing::info!(
-            "Migrating: adding omni_count, omni_bytes, counterparty_count, counterparty_bytes columns"
-        );
+    if !has("omni_count") {
+        tracing::info!("Migrating: adding omni/counterparty protocol columns");
         conn.execute_batch(
             "ALTER TABLE blocks ADD COLUMN omni_count INTEGER NOT NULL DEFAULT 0;
              ALTER TABLE blocks ADD COLUMN omni_bytes INTEGER NOT NULL DEFAULT 0;
@@ -168,15 +144,8 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
              ALTER TABLE blocks ADD COLUMN counterparty_bytes INTEGER NOT NULL DEFAULT 0;",
         )?;
     }
-
-    // Migration: add output type counts, tx metrics, and witness size columns
-    let has_p2pkh: bool = conn
-        .prepare("SELECT p2pkh_count FROM blocks LIMIT 0")
-        .is_ok();
-    if !has_p2pkh {
-        tracing::info!(
-            "Migrating: adding output type counts, input/output counts, rbf_count, witness_bytes"
-        );
+    if !has("p2pkh_count") {
+        tracing::info!("Migrating: adding output type counts, input/output counts, rbf_count, witness_bytes");
         conn.execute_batch(
             "ALTER TABLE blocks ADD COLUMN p2pk_count INTEGER NOT NULL DEFAULT 0;
              ALTER TABLE blocks ADD COLUMN p2pkh_count INTEGER NOT NULL DEFAULT 0;
@@ -191,82 +160,45 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
              ALTER TABLE blocks ADD COLUMN witness_bytes INTEGER NOT NULL DEFAULT 0;",
         )?;
     }
-
-    // Migration: add multisig_count (split from unknown_script_count)
-    let has_multisig: bool = conn
-        .prepare("SELECT multisig_count FROM blocks LIMIT 0")
-        .is_ok();
-    if !has_multisig {
+    if !has("multisig_count") {
         tracing::info!("Migrating: adding multisig_count column");
         conn.execute_batch(
             "ALTER TABLE blocks ADD COLUMN multisig_count INTEGER NOT NULL DEFAULT 0;",
         )?;
     }
-
-    // Migration: add inscription tracking columns
-    let has_inscriptions: bool = conn
-        .prepare("SELECT inscription_count FROM blocks LIMIT 0")
-        .is_ok();
-    if !has_inscriptions {
-        tracing::info!(
-            "Migrating: adding inscription_count, inscription_bytes columns"
-        );
+    if !has("inscription_count") {
+        tracing::info!("Migrating: adding inscription_count, inscription_bytes columns");
         conn.execute_batch(
             "ALTER TABLE blocks ADD COLUMN inscription_count INTEGER NOT NULL DEFAULT 0;
              ALTER TABLE blocks ADD COLUMN inscription_bytes INTEGER NOT NULL DEFAULT 0;",
         )?;
     }
-
-    // Migration: add brc20_count column
-    let has_brc20: bool = conn
-        .prepare("SELECT brc20_count FROM blocks LIMIT 0")
-        .is_ok();
-    if !has_brc20 {
+    if !has("brc20_count") {
         tracing::info!("Migrating: adding brc20_count column");
         conn.execute_batch(
             "ALTER TABLE blocks ADD COLUMN brc20_count INTEGER NOT NULL DEFAULT 0;",
         )?;
     }
-
-    // Migration: add backfill_version column if missing
-    // Tracks which backfill pass has been applied. Blocks with
-    // backfill_version < BACKFILL_VERSION are re-fetched on startup.
-    let has_bf_version: bool = conn
-        .prepare("SELECT backfill_version FROM blocks LIMIT 0")
-        .is_ok();
-    if !has_bf_version {
+    if !has("backfill_version") {
         tracing::info!("Migrating: adding backfill_version column");
         conn.execute_batch(
             "ALTER TABLE blocks ADD COLUMN backfill_version INTEGER NOT NULL DEFAULT 0;",
         )?;
     }
-
-    // Migration: add taproot key-path/script-path spend counts
-    let has_keypath: bool = conn
-        .prepare("SELECT taproot_keypath_count FROM blocks LIMIT 0")
-        .is_ok();
-    if !has_keypath {
+    if !has("taproot_keypath_count") {
         tracing::info!("Migrating: adding taproot_keypath_count, taproot_scriptpath_count columns");
         conn.execute_batch(
             "ALTER TABLE blocks ADD COLUMN taproot_keypath_count INTEGER NOT NULL DEFAULT 0;
              ALTER TABLE blocks ADD COLUMN taproot_scriptpath_count INTEGER NOT NULL DEFAULT 0;",
         )?;
     }
-
-    let has_output_value: bool = conn
-        .prepare("SELECT total_output_value FROM blocks LIMIT 0")
-        .is_ok();
-    if !has_output_value {
+    if !has("total_output_value") {
         tracing::info!("Migrating: adding total_output_value column");
         conn.execute_batch(
             "ALTER TABLE blocks ADD COLUMN total_output_value INTEGER NOT NULL DEFAULT 0;",
         )?;
     }
-
-    let has_input_value: bool = conn
-        .prepare("SELECT total_input_value FROM blocks LIMIT 0")
-        .is_ok();
-    if !has_input_value {
+    if !has("total_input_value") {
         tracing::info!("Migrating: adding total_input_value, fee percentiles, stamps_count, largest_tx_size");
         conn.execute_batch(
             "ALTER TABLE blocks ADD COLUMN total_input_value INTEGER NOT NULL DEFAULT 0;
@@ -359,22 +291,22 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
     init_reorgs_table(conn)?;
 
     // Migration: add value columns to daily_blocks if missing
-    let has_daily_value: bool = conn
-        .prepare("SELECT total_output_value FROM daily_blocks LIMIT 0")
-        .is_ok();
-    if !has_daily_value {
-        tracing::info!("Migrating daily_blocks: adding value columns");
-        conn.execute_batch(
-            "ALTER TABLE daily_blocks ADD COLUMN total_output_value INTEGER NOT NULL DEFAULT 0;
-             ALTER TABLE daily_blocks ADD COLUMN total_input_value INTEGER NOT NULL DEFAULT 0;",
-        )?;
+    {
+        let daily_cols: std::collections::HashSet<String> = {
+            let mut stmt = conn.prepare("PRAGMA table_info(daily_blocks)")?;
+            let names = stmt.query_map([], |row| row.get::<_, String>(1))?;
+            names.filter_map(|r| r.ok()).collect()
+        };
+        if !daily_cols.contains("total_output_value") {
+            tracing::info!("Migrating daily_blocks: adding value columns");
+            conn.execute_batch(
+                "ALTER TABLE daily_blocks ADD COLUMN total_output_value INTEGER NOT NULL DEFAULT 0;
+                 ALTER TABLE daily_blocks ADD COLUMN total_input_value INTEGER NOT NULL DEFAULT 0;",
+            )?;
+        }
     }
 
-    // Migration: add backfill v10 columns if missing
-    let has_max_tx_fee: bool = conn
-        .prepare("SELECT max_tx_fee FROM blocks LIMIT 0")
-        .is_ok();
-    if !has_max_tx_fee {
+    if !has("max_tx_fee") {
         tracing::info!("Migrating: adding v10 columns (max_tx_fee, protocol fees, tx types, coinbase_text, fee percentiles)");
         conn.execute_batch(
             "ALTER TABLE blocks ADD COLUMN max_tx_fee INTEGER NOT NULL DEFAULT 0;
@@ -388,12 +320,7 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
              ALTER TABLE blocks ADD COLUMN fee_rate_p75 REAL NOT NULL DEFAULT 0.0;",
         )?;
     }
-
-    // Migration: add inscription_envelope_bytes (full witness item bytes)
-    let has_envelope: bool = conn
-        .prepare("SELECT inscription_envelope_bytes FROM blocks LIMIT 0")
-        .is_ok();
-    if !has_envelope {
+    if !has("inscription_envelope_bytes") {
         tracing::info!("Migrating: adding inscription_envelope_bytes column");
         conn.execute_batch(
             "ALTER TABLE blocks ADD COLUMN inscription_envelope_bytes INTEGER NOT NULL DEFAULT 0;",
@@ -677,6 +604,68 @@ pub struct BlockRow {
     pub coinbase_text: String,
     pub fee_rate_p25: f64,
     pub fee_rate_p75: f64,
+}
+
+impl From<BlockRow> for super::types::BlockSummary {
+    fn from(r: BlockRow) -> Self {
+        Self {
+            height: r.height,
+            hash: r.hash,
+            timestamp: r.timestamp,
+            tx_count: r.tx_count,
+            size: r.size,
+            weight: r.weight,
+            difficulty: r.difficulty,
+            total_fees: r.total_fees,
+            median_fee: r.median_fee,
+            median_fee_rate: r.median_fee_rate,
+            segwit_spend_count: r.segwit_spend_count,
+            taproot_spend_count: r.taproot_spend_count,
+            p2pk_count: r.p2pk_count,
+            p2pkh_count: r.p2pkh_count,
+            p2sh_count: r.p2sh_count,
+            p2wpkh_count: r.p2wpkh_count,
+            p2wsh_count: r.p2wsh_count,
+            p2tr_count: r.p2tr_count,
+            multisig_count: r.multisig_count,
+            unknown_script_count: r.unknown_script_count,
+            input_count: r.input_count,
+            output_count: r.output_count,
+            rbf_count: r.rbf_count,
+            witness_bytes: r.witness_bytes,
+            inscription_count: r.inscription_count,
+            inscription_bytes: r.inscription_bytes,
+            inscription_envelope_bytes: r.inscription_envelope_bytes,
+            brc20_count: r.brc20_count,
+            op_return_count: r.op_return_count,
+            op_return_bytes: r.op_return_bytes,
+            runes_count: r.runes_count,
+            runes_bytes: r.runes_bytes,
+            omni_count: r.omni_count,
+            omni_bytes: r.omni_bytes,
+            counterparty_count: r.counterparty_count,
+            counterparty_bytes: r.counterparty_bytes,
+            data_carrier_count: r.data_carrier_count,
+            data_carrier_bytes: r.data_carrier_bytes,
+            taproot_keypath_count: r.taproot_keypath_count,
+            taproot_scriptpath_count: r.taproot_scriptpath_count,
+            total_output_value: r.total_output_value,
+            total_input_value: r.total_input_value,
+            fee_rate_p10: r.fee_rate_p10,
+            fee_rate_p90: r.fee_rate_p90,
+            stamps_count: r.stamps_count,
+            largest_tx_size: r.largest_tx_size,
+            max_tx_fee: r.max_tx_fee,
+            inscription_fees: r.inscription_fees,
+            runes_fees: r.runes_fees,
+            legacy_tx_count: r.legacy_tx_count,
+            segwit_tx_count: r.segwit_tx_count,
+            taproot_tx_count: r.taproot_tx_count,
+            coinbase_text: r.coinbase_text,
+            fee_rate_p25: r.fee_rate_p25,
+            fee_rate_p75: r.fee_rate_p75,
+        }
+    }
 }
 
 /// Query blocks by height range [from, to] inclusive, ordered by height ASC.
@@ -2152,15 +2141,13 @@ pub fn query_fullness_histogram(
         "0-10%", "10-20%", "20-30%", "30-40%", "40-50%", "50-60%", "60-70%",
         "70-80%", "80-90%", "90-100%",
     ];
-    let mut result = vec![0u64; 10];
+    let mut result = [0u64; 10];
     let rows = stmt.query_map(params![from_ts, to_ts], |row| {
         Ok((row.get::<_, i64>(0)?, row.get::<_, u64>(1)?))
     })?;
-    for r in rows {
-        if let Ok((bucket, count)) = r {
-            let idx = (bucket as usize).min(9);
-            result[idx] = count;
-        }
+    for (bucket, count) in rows.flatten() {
+        let idx = (bucket as usize).min(9);
+        result[idx] = count;
     }
     Ok(labels
         .iter()
@@ -2199,18 +2186,15 @@ pub fn query_block_time_histogram(
     let rows = stmt.query_map(params![from_ts, to_ts], |row| {
         Ok((row.get::<_, i64>(0)?, row.get::<_, u64>(1)?))
     })?;
-    for r in rows {
-        if let Ok((bucket, count)) = r {
-            if bucket >= 0 {
-                let idx = (bucket as usize).min(60);
-                result[idx] = count;
-            }
+    for (bucket, count) in rows.flatten() {
+        if bucket >= 0 {
+            let idx = (bucket as usize).min(60);
+            result[idx] = count;
         }
     }
     Ok(labels
         .into_iter()
-        .zip(result.into_iter())
-        .map(|(l, c)| (l, c))
+        .zip(result)
         .collect())
 }
 

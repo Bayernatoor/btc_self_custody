@@ -333,6 +333,7 @@ const SEQUENCE_R_WINDOW_SECS: f64 = 3.0;
 /// resets on `C` (block connected) or `D` (block disconnected/reorg). `A` (added)
 /// events are ignored since they interleave with R events during block processing
 /// on slower hardware.
+#[derive(Default)]
 struct SequenceState {
     /// Number of R events in the current time window.
     r_count: u32,
@@ -342,15 +343,6 @@ struct SequenceState {
     mining_sent: bool,
 }
 
-impl Default for SequenceState {
-    fn default() -> Self {
-        Self {
-            r_count: 0,
-            window_start: None,
-            mining_sent: false,
-        }
-    }
-}
 
 impl SequenceState {
     /// Process a sequence event type character. Returns true if BlockMining

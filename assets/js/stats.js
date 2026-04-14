@@ -19,25 +19,44 @@
         if (!el || el._chart) return;
         if (typeof echarts === 'undefined') return;
         el._chart = echarts.init(el, null, { renderer: 'canvas' });
-        new ResizeObserver(function() { if (el._chart) el._chart.resize(); }).observe(el);
+        el._resizeObs = new ResizeObserver(function() { if (el._chart) el._chart.resize(); });
+        el._resizeObs.observe(el);
     };
 
-    // Lazy chart rendering: only call setChartOption when the element is
-    // visible (or within 200px of viewport). Stores pending JSON until then.
-    var _lazyObserver = typeof IntersectionObserver !== 'undefined' ? new IntersectionObserver(function(entries) {
+    // Lazy chart rendering: only render charts visible (or within 200px of
+    // viewport). When a chart scrolls far away (600px), dispose it to free
+    // canvas memory. Re-inits automatically on scroll back via stored JSON.
+    var _enterObserver = typeof IntersectionObserver !== 'undefined' ? new IntersectionObserver(function(entries) {
         entries.forEach(function(entry) {
             if (entry.isIntersecting) {
                 var el = entry.target;
-                _lazyObserver.unobserve(el);
                 el._lazyVisible = true;
-                // Render any pending chart
-                if (el._pendingJson) {
-                    window.setChartOption(el.id, el._pendingJson);
+                // Render from stored or pending JSON
+                var json = el._pendingJson || el._storedOptionJson;
+                if (json) {
+                    window.setChartOption(el.id, json);
                     el._pendingJson = null;
                 }
             }
         });
     }, { rootMargin: '200px' }) : null;
+
+    // Separate observer for exit detection with larger margin
+    var _exitObserver = typeof IntersectionObserver !== 'undefined' ? new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+            if (!entry.isIntersecting) {
+                var el = entry.target;
+                if (el._chart) {
+                    el._lazyVisible = false;
+                    if (el._resizeObs) { el._resizeObs.disconnect(); el._resizeObs = null; }
+                    el._chart.dispose();
+                    el._chart = null;
+                    el._lastOptionJson = null;
+                }
+            }
+        });
+    }, { rootMargin: '600px' }) : null;
+
 
     window.setChartOptionLazy = function(elementId, optionJson) {
         var el = document.getElementById(elementId);
@@ -46,14 +65,20 @@
             requestAnimationFrame(function() { window.setChartOptionLazy(elementId, optionJson); });
             return;
         }
+        // Always store latest JSON for re-init on scroll back
+        el._storedOptionJson = optionJson;
         if (el._lazyVisible) {
             // Already visible — render immediately
             window.setChartOption(elementId, optionJson);
         } else {
             // Store pending JSON and start observing
             el._pendingJson = optionJson;
-            if (_lazyObserver) {
-                _lazyObserver.observe(el);
+            if (_enterObserver) {
+                if (!el._lazyObserved) {
+                    el._lazyObserved = true;
+                    _enterObserver.observe(el);
+                    if (_exitObserver) _exitObserver.observe(el);
+                }
             } else {
                 // Fallback: no IntersectionObserver support — render immediately
                 window.setChartOption(elementId, optionJson);
@@ -112,7 +137,9 @@
             el.textContent = ''; // clear error message if one was shown
             el._chart = echarts.init(el, null, { renderer: 'canvas' });
             el._lastOptionJson = null; // reset dedup on fresh init
-            new ResizeObserver(function() { if (el._chart) el._chart.resize(); }).observe(el);
+            if (el._resizeObs) el._resizeObs.disconnect();
+            el._resizeObs = new ResizeObserver(function() { if (el._chart) el._chart.resize(); });
+            el._resizeObs.observe(el);
         }
         // Skip if option JSON unchanged (prevents zoom/pan reset)
         if (el._lastOptionJson === optionJson) return;
@@ -122,6 +149,8 @@
         try {
             var opts = JSON.parse(optionJson);
             opts.animation = false;
+            // Cache series array for tooltip (avoids getOption() deep-copy per hover)
+            el._cachedSeries = opts.series || [];
             // Halving era chart: show actual values in tooltip
             if (opts.tooltip && opts.tooltip._useRawValues) {
                 delete opts.tooltip._useRawValues;
@@ -173,9 +202,8 @@
                         paramMap[params[i].seriesIndex] = params[i];
                     }
 
-                    // Iterate ALL series from the chart to ensure none are missing
-                    var chart = chartEl._chart;
-                    var allSeries = chart ? chart.getOption().series || [] : [];
+                    // Iterate ALL series to ensure zero-value ones aren't missing
+                    var allSeries = chartEl._cachedSeries || [];
                     var dataIndex = first.dataIndex;
 
                     var entries = allSeries.length > 0 ? allSeries : [];
@@ -289,10 +317,13 @@
 
     window.disposeChart = function(elementId) {
         var el = document.getElementById(elementId);
-        if (el && el._chart) {
-            el._chart.dispose();
-            el._chart = null;
-        }
+        if (!el) return;
+        if (el._resizeObs) { el._resizeObs.disconnect(); el._resizeObs = null; }
+        if (el._chart) { el._chart.dispose(); el._chart = null; }
+        if (_enterObserver) _enterObserver.unobserve(el);
+        if (_exitObserver) _exitObserver.unobserve(el);
+        el._lazyObserved = false;
+        el._lazyVisible = false;
     };
 
     // Register click handler on a chart. When a data point is clicked,

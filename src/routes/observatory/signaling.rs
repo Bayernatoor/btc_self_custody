@@ -212,7 +212,7 @@ pub fn SignalingPage() -> impl IntoView {
                                 let signaled = b.signaled;
                                 let color = if signaled { "bg-green-500/70" } else { "bg-red-500/30" };
                                 let marker = if signaled { "\u{2713}" } else { "\u{2717}" };
-                                let sig_label = if bip_method.get() == "locktime" { if signaled { "compatible" } else { "not compatible" } } else { if signaled { "signaled" } else { "not signaled" } };
+                                let sig_label = if bip_method.get() == "locktime" { if signaled { "compatible" } else { "not compatible" } } else if signaled { "signaled" } else { "not signaled" };
                                 let label = format!("Block {} by {}, {}", b.height, b.miner, sig_label);
                                 let title = format!("#{} | {}{}", b.height, b.miner, if signaled { " \u{2713}" } else { "" });
                                 let h = b.height;

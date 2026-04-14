@@ -273,7 +273,7 @@ pub fn op_return_block_share_chart(
     let raw_str = build_data_array_f64(blocks, share_fn);
     let raw = data_array_value(&raw_str);
 
-    let vals: Vec<f64> = blocks.iter().map(|b| share_fn(b)).collect();
+    let vals: Vec<f64> = blocks.iter().map(share_fn).collect();
     let ma = moving_average(&vals, 144);
     let ma_str = build_ma_array(blocks, &ma);
     let ma_data = data_array_value(&ma_str);
@@ -449,7 +449,7 @@ pub fn inscription_share_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     };
     let raw_str = build_data_array_f64(blocks, insc_fn);
     let raw = data_array_value(&raw_str);
-    let vals: Vec<f64> = blocks.iter().map(|b| insc_fn(b)).collect();
+    let vals: Vec<f64> = blocks.iter().map(insc_fn).collect();
     let ma = moving_average(&vals, 144);
     let ma_str = build_ma_array(blocks, &ma);
     let ma_data = data_array_value(&ma_str);
