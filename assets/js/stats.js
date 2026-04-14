@@ -96,15 +96,21 @@
         if (window.innerWidth >= 640) return;
         // Hide toolbox — not usable on touch screens
         if (opts.toolbox) opts.toolbox.show = false;
-        // Constrain legend within chart area and shrink text
+        // Scroll legend on mobile: centered, compact, paginated
         if (opts.legend) {
-            opts.legend.left = 35;
-            opts.legend.right = 10;
+            opts.legend.type = 'scroll';
+            opts.legend.left = 'center';
+            opts.legend.right = undefined;
+            opts.legend.width = '60%';
             opts.legend.textStyle = opts.legend.textStyle || {};
             opts.legend.textStyle.fontSize = 10;
             opts.legend.itemWidth = 14;
             opts.legend.itemHeight = 8;
             opts.legend.itemGap = 6;
+            opts.legend.pageIconSize = 10;
+            opts.legend.pageIconColor = 'rgba(255,255,255,0.7)';
+            opts.legend.pageIconInactiveColor = 'rgba(255,255,255,0.2)';
+            opts.legend.pageTextStyle = { color: 'rgba(255,255,255,0.4)', fontSize: 9 };
         }
         // Compact grid: less padding so chart area is wider
         if (opts.grid) {
