@@ -139,7 +139,6 @@ pub fn FeeChartsPage() -> impl IntoView {
                                 description="Fee rate percentiles from p10 to p90 showing the full spread of fee rates per block. Click legend items to toggle bands"
                                 chart_id="chart-fee-heatmap"
                                 option=fee_heatmap_option
-                                coming_soon=true
                                 info="Five stacked bands showing fee rate percentiles. p10 (blue) is what the cheapest 10% of transactions paid. Median (orange) is the middle. p90 (red) is what urgent transactions paid. A wide spread means high fee variance. Click legend items to isolate specific bands."
                             />
                             <ChartCard
