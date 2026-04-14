@@ -34,6 +34,7 @@ use crate::routes::faq::FaqPage;
 use crate::routes::guide::{GuideTwoSegment, GuideWalletPage};
 use crate::routes::guideselector::{GuideLevelSelector, GuideSelector};
 use crate::routes::homepage::HomePage;
+use crate::routes::observatory::learn::methodology::MethodologyPage;
 use crate::routes::observatory::learn::protocols::ProtocolGuidePage;
 use crate::routes::observatory::{
     EmbeddedChartsPage, FeeChartsPage, HallOfFamePage, HeartbeatPage,
@@ -196,6 +197,7 @@ pub fn App() -> impl IntoView {
                             <Route path=path!("/hall-of-fame") view=HallOfFamePage/>
                             <Route path=path!("/heartbeat") view=HeartbeatPage/>
                             <Route path=path!("/learn/protocols") view=ProtocolGuidePage/>
+                            <Route path=path!("/learn/methodology") view=MethodologyPage/>
                             <Route path=path!("/*any") view=|| view! {
                                 <div class="flex flex-col items-center justify-center min-h-[40vh] px-6">
                                     <div class="text-[4rem] font-title text-white/10 font-bold mb-4">"404"</div>

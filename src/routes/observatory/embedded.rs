@@ -33,6 +33,11 @@ pub fn EmbeddedChartsPage() -> impl IntoView {
                 >
                     "Protocol guide \u{2192}"
                 </a>
+                <a href="/observatory/learn/methodology"
+                    class="text-xs text-white/30 hover:text-[#f7931a] transition-colors flex items-center gap-1.5"
+                >
+                    "Methodology \u{2192}"
+                </a>
             }
         >
             {move || match dashboard_data.get() {
