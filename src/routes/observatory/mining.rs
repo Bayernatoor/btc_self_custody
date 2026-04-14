@@ -81,7 +81,7 @@ pub fn MiningChartsPage() -> impl IntoView {
                         <div class="space-y-10">
                             <SectionHeading id="section-difficulty" title="Difficulty"/>
                             <ChartCard title="Difficulty" description=chart_desc(range, "Mining difficulty per block, adjusts every 2,016 blocks (~2 weeks)", "Daily mining difficulty, adjusts every 2,016 blocks (~2 weeks)") chart_id="chart-difficulty" option=diff_option/>
-                            <ChartCard title="Difficulty Ribbon" description=chart_desc(range, "Multiple moving averages of mining difficulty. When short MAs cross below long MAs, it may indicate miner capitulation", "Daily difficulty ribbon showing 7 moving averages from 7-day to 128-day") chart_id="chart-diff-ribbon" option=diff_ribbon_option/>
+                            <ChartCard title="Difficulty Ribbon" description=chart_desc(range, "Multiple moving averages of mining difficulty. When short MAs cross below long MAs, it may indicate miner capitulation", "Daily difficulty ribbon showing 7 moving averages from 7-day to 128-day") chart_id="chart-diff-ribbon" option=diff_ribbon_option info="Seven moving averages of difficulty (7, 14, 25, 40, 60, 90, 128 days) form a ribbon. When the ribbon is wide and expanding, difficulty is rising steadily (healthy mining growth). When it compresses or inverts (short MAs drop below long MAs), less efficient miners may be shutting down, a signal historically correlated with price bottoms."/>
                         </div>
                     }.into_any()
                 }
@@ -134,7 +134,7 @@ pub fn MiningChartsPage() -> impl IntoView {
                         <div class="space-y-10">
                             <SectionHeading id="section-pools" title="Mining Pools"/>
                             <ChartCard title="Mining Pool Share" description="Which mining pools are finding the most blocks. More distributed is healthier for the network" chart_id="chart-miner-dominance" option=miner_chart_option/>
-                            <ChartCard title="Mining Diversity Index" description="Herfindahl-Hirschman Index (HHI) measuring mining concentration. Below 1000 is competitive, above 1800 is concentrated" chart_id="chart-diversity" option=diversity_option/>
+                            <ChartCard title="Mining Diversity Index" description="Herfindahl-Hirschman Index (HHI) measuring mining concentration. Below 1000 is competitive, above 1800 is concentrated" chart_id="chart-diversity" option=diversity_option info="The HHI is calculated by squaring each pool's market share percentage and summing the results. A monopoly scores 10,000, perfectly distributed mining scores near 0. Below 1,000 (green) means no single pool dominates. 1,000-1,800 (yellow) means moderate concentration. Above 1,800 (red) means a few pools control most hashrate, which is a centralization risk. Unknown miners are excluded from the calculation."/>
                             <ChartCard title="Empty Blocks" description="Blocks with no user transactions, usually mined before the pool has received the previous block's transactions" chart_id="chart-empty-blocks" option=empty_blocks_option/>
                             <ChartCard title="Empty Blocks by Pool" description="Which mining pools produce the most coinbase-only blocks" chart_id="chart-empty-by-pool" option=empty_by_pool_option/>
                         </div>

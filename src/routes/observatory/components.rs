@@ -118,8 +118,12 @@ pub fn ChartCard(
     /// Show a "Coming Soon" overlay over the chart area
     #[prop(optional)]
     coming_soon: bool,
+    /// Info tooltip text explaining how to read this chart
+    #[prop(optional, into)]
+    info: Option<&'static str>,
 ) -> impl IntoView {
     let (expanded, set_expanded) = signal(false);
+    let (info_open, set_info_open) = signal(false);
     let anchor = chart_id.clone();
     let share_id = chart_id.clone();
     let download_id = chart_id.clone();
@@ -153,7 +157,28 @@ pub fn ChartCard(
                         " "
                         <span class="text-white/20 text-xs font-normal">{move || if copied.get() { "\u{2713} copied" } else { "#" }}</span>
                     </h3>
-                    <p class="text-sm text-white/50 mt-0.5">{move || description.get()}</p>
+                    <div class="flex items-center gap-1.5 mt-0.5">
+                        <p class="text-sm text-white/50">{move || description.get()}</p>
+                        {info.map(|_| view! {
+                            <button
+                                class="text-white/30 hover:text-[#f7931a] transition-colors cursor-pointer shrink-0"
+                                title="How to read this chart"
+                                on:click=move |_| set_info_open.update(|v| *v = !*v)
+                            >
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <path d="M12 16v-4M12 8h.01"/>
+                                </svg>
+                            </button>
+                        })}
+                    </div>
+                    {info.map(|text| view! {
+                        <Show when=move || info_open.get()>
+                            <div class="mt-2 p-3 bg-white/[0.03] border border-white/5 rounded-lg text-sm text-white/60 leading-relaxed">
+                                {text}
+                            </div>
+                        </Show>
+                    })}
                 </div>
                 <div class="flex items-center gap-1 shrink-0">
                     {children.map(|c| c())}

@@ -173,18 +173,21 @@ pub fn FeeChartsPage() -> impl IntoView {
                                 description="Side-by-side comparison of average block metrics across Bitcoin's halving eras. Shows how the network evolves between halvings"
                                 chart_id="chart-halving-era"
                                 option=halving_era_option
+                                info="Each bar group represents one halving era (the period between two halvings). Metrics are normalized to percentages of the highest era so different scales are comparable. For example, if Era 4 has the highest average fee, it shows as 100% and other eras show relative to that. Click legend items to focus on specific metrics. Hover bars for actual values."
                             />
                             <ChartCard
                                 title="Fee Pressure vs Block Space"
                                 description="Scatter plot showing the relationship between block fullness and fee rates. Clusters in the top-right indicate high-demand periods"
                                 chart_id="chart-fee-pressure"
                                 option=fee_pressure_option
+                                info="Each dot is one block. X-axis shows how full the block is (weight utilization %), Y-axis shows the median fee rate. When blocks are nearly full AND fees are high (top-right cluster), the network is under pressure. Dots in the bottom-right mean full blocks with low fees (normal operation). Top-left means high fees despite empty blocks (unusual)."
                             />
                             <ChartCard
                                 title="Fee Spike Detector"
                                 description="Highlights blocks where the median fee rate exceeded 5x the trailing 144-block average. Red dots mark fee spike events"
                                 chart_id="chart-fee-spikes"
                                 option=fee_spike_option
+                                info="The white line shows the 144-block trailing average fee rate (roughly one day). Red dots appear when a block's median fee rate exceeds 5x that average, indicating sudden fee spikes. These often correspond to NFT mints, token launches, or unexpected demand surges. Requires at least 300 blocks (1W+ range) for meaningful detection."
                             />
                             <ChartCard
                                 title="Max Transaction Fee"
