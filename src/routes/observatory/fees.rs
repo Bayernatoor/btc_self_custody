@@ -130,6 +130,7 @@ pub fn FeeChartsPage() -> impl IntoView {
                                 description=chart_desc(range, "Median fee rate across all transactions in each block", "Median fee rate (per-block ranges only for daily)")
                                 chart_id="chart-median-rate"
                                 option=median_rate_option
+                                info="The median is more representative than the average because it ignores outliers like fat-finger fees. A rising median means the typical user is paying more. The 144-block moving average (~1 day) smooths out block-to-block variance."
                             />
                             <ChartCard
                                 title="Fee Rate Bands"
@@ -137,6 +138,7 @@ pub fn FeeChartsPage() -> impl IntoView {
                                 chart_id="chart-fee-heatmap"
                                 option=fee_heatmap_option
                                 coming_soon=true
+                                info="Five stacked bands showing fee rate percentiles. p10 (blue) is what the cheapest 10% of transactions paid. Median (orange) is the middle. p90 (red) is what urgent transactions paid. A wide spread means high fee variance. Click legend items to isolate specific bands."
                             />
                             <ChartCard
                                 title="Avg Fee per Transaction"
@@ -149,24 +151,28 @@ pub fn FeeChartsPage() -> impl IntoView {
                                 description=chart_desc(range, "Block reward breakdown per block. The subsidy halves every 4 years while fees must eventually replace it", "Daily average block reward breakdown. The subsidy halves every 4 years while fees must eventually replace it")
                                 chart_id="chart-subsidy-fees"
                                 option=subsidy_fees_option
+                                info="The block subsidy (new BTC created) halves every 210,000 blocks (~4 years). As the subsidy shrinks, transaction fees must grow to maintain miner incentives. This chart shows whether fees are keeping pace. After the 2024 halving, the subsidy is 3.125 BTC per block."
                             />
                             <ChartCard
                                 title="Fee Revenue Share"
                                 description=chart_desc(range, "Percentage of total block reward that comes from fees rather than subsidy", "Daily average fee revenue as a percentage of total block reward")
                                 chart_id="chart-fee-revenue-share"
                                 option=fee_revenue_share_option
+                                info="Shows fees as a percentage of total miner revenue (subsidy + fees). This must trend upward over time for Bitcoin's security model to work long-term. Currently around 1-5% during normal periods, but can spike to 10-40% during high-demand events."
                             />
                             <ChartCard
                                 title="BTC Transferred Volume"
                                 description=chart_desc(range, "Total non-coinbase output value per block in BTC", "Daily total non-coinbase output value in BTC")
                                 chart_id="chart-btc-volume"
                                 option=btc_volume_option
+                                info="Total value of all non-coinbase outputs. This includes both the payment and the change output, so it overstates actual economic activity. Still useful for relative comparisons across time periods."
                             />
                             <ChartCard
                                 title="Input vs Output Value"
                                 description=chart_desc(range, "Total input value vs output value per block in BTC. The gap between the lines represents fees extracted by miners", "Daily total input and output value in BTC. The gap represents fees extracted by miners")
                                 chart_id="chart-value-flow"
                                 option=value_flow_option
+                                info="Inputs always exceed outputs because the difference is the fee. The visible gap between the two lines IS the total fee. When the gap widens, users are paying more in fees. The lines track closely because fees are typically a tiny fraction of transferred value."
                             />
                             <ChartCard
                                 title="Halving Era Comparison"
