@@ -12,6 +12,11 @@
 - [ ] **Price overlay on custom date ranges** — reported as showing all-time data instead
       of filtering to selected range. Code logic looks correct (clips by chart bounds).
       Needs exact repro steps to investigate further.
+- [ ] **ECharts TypeError on bar/histogram charts** — "Cannot read properties of undefined"
+      fires in console when scrolling to Block Fullness Distribution, Block Time Distribution,
+      and Weekday Activity charts. Comes from ECharts internal grid layout code (not our
+      formatter). Charts render correctly despite the error. May be related to scroll-out
+      disposal or lazy init timing. Suppression catch added but not fully effective.
 - [ ] **Largest Transaction chart click-to-detail** — cursor appears but block detail modal
       may not open. Click handler uses zrender click with binary search for nearest
       data point. Needs testing — may already be fixed by component-level signal refactor.
