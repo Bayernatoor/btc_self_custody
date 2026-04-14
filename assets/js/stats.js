@@ -98,9 +98,45 @@
         if (opts.toolbox) opts.toolbox.show = false;
         // Constrain legend within chart area
         if (opts.legend) {
-            opts.legend.left = 55;
-            opts.legend.right = 40;
+            opts.legend.left = 35;
+            opts.legend.right = 10;
         }
+        // Compact grid: less padding so chart area is wider
+        if (opts.grid) {
+            opts.grid.left = 35;
+            opts.grid.right = 10;
+        }
+        // Shorten Y-axis labels with K/M/B suffixes to save horizontal space
+        var yAxes = opts.yAxis ? (Array.isArray(opts.yAxis) ? opts.yAxis : [opts.yAxis]) : [];
+        yAxes.forEach(function(ya) {
+            if (!ya || ya.type === 'category') return;
+            // Hide axis name on mobile (takes too much space)
+            ya.nameGap = 4;
+            ya.nameTextStyle = ya.nameTextStyle || {};
+            ya.nameTextStyle.fontSize = 9;
+            // Compact number formatting
+            ya.axisLabel = ya.axisLabel || {};
+            ya.axisLabel.fontSize = 10;
+            if (!ya.axisLabel.formatter || typeof ya.axisLabel.formatter !== 'function') {
+                ya.axisLabel.formatter = function(v) {
+                    if (v === 0) return '0';
+                    var abs = Math.abs(v);
+                    if (abs >= 1e9) return (v / 1e9).toFixed(1) + 'B';
+                    if (abs >= 1e6) return (v / 1e6).toFixed(1) + 'M';
+                    if (abs >= 1e4) return (v / 1e3).toFixed(0) + 'K';
+                    if (abs >= 1e3) return (v / 1e3).toFixed(1) + 'K';
+                    if (abs < 1 && abs > 0) return v.toFixed(2);
+                    return v.toLocaleString();
+                };
+            }
+        });
+        // Smaller X-axis labels on mobile
+        var xAxes = opts.xAxis ? (Array.isArray(opts.xAxis) ? opts.xAxis : [opts.xAxis]) : [];
+        xAxes.forEach(function(xa) {
+            if (!xa) return;
+            xa.axisLabel = xa.axisLabel || {};
+            xa.axisLabel.fontSize = 10;
+        });
         // Shrink pie charts for mobile
         if (opts.series && Array.isArray(opts.series)) {
             opts.series.forEach(function(s) {
