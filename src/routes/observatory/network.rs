@@ -118,6 +118,41 @@ pub fn NetworkChartsPage() -> impl IntoView {
                         fullness_server.get().flatten().unwrap_or_default()
                     });
 
+                    // Percentage variants for histogram toggles
+                    let fullness_dist_pct_option = Signal::derive(move || {
+                        let _r = range.get();
+                        dashboard_data.get().and_then(|r| r.ok()).map(|data| {
+                            let value = match data {
+                                DashboardData::PerBlock(ref blocks) =>
+                                    crate::stats::charts::block_fullness_distribution_pct_chart(blocks),
+                                DashboardData::Daily(_) => return String::new(),
+                            };
+                            serde_json::to_string(&value).unwrap_or_default()
+                        }).unwrap_or_default()
+                    });
+                    let fullness_server_pct = LocalResource::new(move || {
+                        let r = range.get();
+                        async move {
+                            let n = crate::routes::observatory::helpers::range_to_blocks(&r);
+                            if n <= 5_000 { return None; }
+                            let stats = crate::stats::server_fns::fetch_stats_summary().await.ok()?;
+                            let from_ts = stats.latest_timestamp.saturating_sub(n * 600);
+                            let buckets = crate::stats::server_fns::fetch_fullness_histogram(from_ts, stats.latest_timestamp).await.ok()?;
+                            let value = crate::stats::charts::block_fullness_histogram_from_buckets_pct(&buckets);
+                            Some(serde_json::to_string(&value).unwrap_or_default())
+                        }
+                    });
+                    let fullness_combined_pct = Signal::derive(move || {
+                        let local = fullness_dist_pct_option.get();
+                        if !local.is_empty() { return local; }
+                        fullness_server_pct.get().flatten().unwrap_or_default()
+                    });
+
+                    let (fullness_pct_mode, set_fullness_pct_mode) = signal(false);
+                    let fullness_toggled = Signal::derive(move || {
+                        if fullness_pct_mode.get() { fullness_combined_pct.get() } else { fullness_combined.get() }
+                    });
+
                     let time_dist_option = Signal::derive(move || {
                         let _r = range.get();
                         dashboard_data.get().and_then(|r| r.ok()).map(|data| {
@@ -145,6 +180,40 @@ pub fn NetworkChartsPage() -> impl IntoView {
                         let local = time_dist_option.get();
                         if !local.is_empty() { return local; }
                         time_server.get().flatten().unwrap_or_default()
+                    });
+
+                    let time_dist_pct_option = Signal::derive(move || {
+                        let _r = range.get();
+                        dashboard_data.get().and_then(|r| r.ok()).map(|data| {
+                            let value = match data {
+                                DashboardData::PerBlock(ref blocks) =>
+                                    crate::stats::charts::block_time_distribution_pct_chart(blocks),
+                                DashboardData::Daily(_) => return String::new(),
+                            };
+                            serde_json::to_string(&value).unwrap_or_default()
+                        }).unwrap_or_default()
+                    });
+                    let time_server_pct = LocalResource::new(move || {
+                        let r = range.get();
+                        async move {
+                            let n = crate::routes::observatory::helpers::range_to_blocks(&r);
+                            if n <= 5_000 { return None; }
+                            let stats = crate::stats::server_fns::fetch_stats_summary().await.ok()?;
+                            let from_ts = stats.latest_timestamp.saturating_sub(n * 600);
+                            let buckets = crate::stats::server_fns::fetch_block_time_histogram(from_ts, stats.latest_timestamp).await.ok()?;
+                            let value = crate::stats::charts::block_time_histogram_from_buckets_pct(&buckets);
+                            Some(serde_json::to_string(&value).unwrap_or_default())
+                        }
+                    });
+                    let time_combined_pct = Signal::derive(move || {
+                        let local = time_dist_pct_option.get();
+                        if !local.is_empty() { return local; }
+                        time_server_pct.get().flatten().unwrap_or_default()
+                    });
+
+                    let (time_pct_mode, set_time_pct_mode) = signal(false);
+                    let time_toggled = Signal::derive(move || {
+                        if time_pct_mode.get() { time_combined_pct.get() } else { time_combined.get() }
                     });
 
                     let propagation_option = chart_memo!(dashboard_data, range, overlay_flags,
@@ -249,8 +318,22 @@ pub fn NetworkChartsPage() -> impl IntoView {
                             <ChartCard title="Avg Transaction Size" description=chart_desc(range, "Average size of a transaction in bytes. Smaller means more efficient use of block space", "Daily average transaction size in bytes. Smaller means more efficient use of block space") chart_id="chart-avg-tx-size" option=avg_tx_size_option info="SegWit and Taproot transactions are typically smaller than legacy because they move signature data to the witness section (which gets a weight discount). Lower values generally mean more transactions can fit per block."/>
                             <ChartCard title="Chain Size Growth" description="Total blockchain size over time, showing how fast the chain is growing" chart_id="chart-chain-size" option=chain_size_option/>
                             <ChartCard title="Weekday Activity" description="Average transaction count and fees by day of week. Reveals patterns between weekday and weekend network usage" chart_id="chart-weekday" option=weekday_option/>
-                            <ChartCard title="Block Fullness Distribution" description="Distribution of blocks by weight utilization percentage. Shows how many blocks are nearly full vs partially empty" chart_id="chart-fullness-dist" option=fullness_combined info="A histogram of block fullness. Most modern blocks cluster near 100% because miners maximize fee revenue. Empty or near-empty blocks usually appear right after a new block is found (before the miner has received transactions). On longer ranges that include early Bitcoin history, more blocks appear at lower percentages since demand was much lower."/>
-                            <ChartCard title="Block Time Distribution" description="Distribution of time between consecutive blocks. Most cluster near the 10-minute target" chart_id="chart-time-dist" option=time_combined info="Shows how block intervals are distributed. The theoretical distribution is exponential with a 10-minute mean. Most blocks arrive within 20 minutes, but the long tail extends to 60+ minutes. This is normal Poisson process behavior, not a network problem."/>
+                            <ChartCard title="Block Fullness Distribution" description="Distribution of blocks by weight utilization percentage. Shows how many blocks are nearly full vs partially empty" chart_id="chart-fullness-dist" option=fullness_toggled info="A histogram of block fullness. Most modern blocks cluster near 100% because miners maximize fee revenue. Empty or near-empty blocks usually appear right after a new block is found (before the miner has received transactions). On longer ranges that include early Bitcoin history, more blocks appear at lower percentages since demand was much lower.">
+                                <button
+                                    class=move || if fullness_pct_mode.get() { "text-xs px-2 py-1 rounded-md cursor-pointer transition-colors bg-[#f7931a]/20 text-[#f7931a]" } else { "text-xs px-2 py-1 rounded-md cursor-pointer transition-colors bg-white/10 text-white/50" }
+                                    on:click=move |_| set_fullness_pct_mode.update(|v| *v = !*v)
+                                >
+                                    {move || if fullness_pct_mode.get() { "%" } else { "#" }}
+                                </button>
+                            </ChartCard>
+                            <ChartCard title="Block Time Distribution" description="Distribution of time between consecutive blocks. Most cluster near the 10-minute target" chart_id="chart-time-dist" option=time_toggled info="Shows how block intervals are distributed. The theoretical distribution is exponential with a 10-minute mean. Most blocks arrive within 20 minutes, but the long tail extends to 60+ minutes. This is normal Poisson process behavior, not a network problem.">
+                                <button
+                                    class=move || if time_pct_mode.get() { "text-xs px-2 py-1 rounded-md cursor-pointer transition-colors bg-[#f7931a]/20 text-[#f7931a]" } else { "text-xs px-2 py-1 rounded-md cursor-pointer transition-colors bg-white/10 text-white/50" }
+                                    on:click=move |_| set_time_pct_mode.update(|v| *v = !*v)
+                                >
+                                    {move || if time_pct_mode.get() { "%" } else { "#" }}
+                                </button>
+                            </ChartCard>
                             <ChartCard title="Rapid Consecutive Blocks" description="Blocks arriving within 60 seconds of each other, indicating fast mining luck or potential stale block races" chart_id="chart-propagation" option=propagation_option/>
 
                             // ── Adoption ─────────────────────────────

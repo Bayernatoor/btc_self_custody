@@ -882,6 +882,98 @@ pub fn block_time_distribution_chart(
     }))
 }
 
+/// Block fullness distribution as percentage of total blocks.
+pub fn block_fullness_distribution_pct_chart(
+    blocks: &[BlockSummary],
+) -> serde_json::Value {
+    if blocks.is_empty() {
+        return no_data_chart("Block Fullness Distribution (%)");
+    }
+
+    let labels: Vec<&str> = vec![
+        "0-10%", "10-20%", "20-30%", "30-40%", "40-50%",
+        "50-60%", "60-70%", "70-80%", "80-90%", "90-100%",
+    ];
+    let mut counts = [0u64; 10];
+    for b in blocks {
+        let pct = b.weight as f64 / 4_000_000.0 * 100.0;
+        let idx = if pct >= 100.0 { 9 } else { (pct / 10.0) as usize };
+        counts[idx] += 1;
+    }
+    let total = blocks.len() as f64;
+    let data: Vec<f64> = counts.iter().map(|&c| round(c as f64 / total * 100.0, 2)).collect();
+
+    build_option(json!({
+        "xAxis": {
+            "type": "category",
+            "data": labels,
+            "axisLabel": { "color": "rgba(255,255,255,0.6)" },
+            "axisLine": { "lineStyle": { "color": "rgba(255,255,255,0.15)" } }
+        },
+        "yAxis": y_axis("% of Blocks"),
+        "tooltip": {
+            "trigger": "axis",
+            "backgroundColor": "rgba(13,33,55,0.95)",
+            "borderColor": "rgba(255,255,255,0.1)",
+            "textStyle": { "color": "rgba(255,255,255,0.85)", "fontSize": 12 }
+        },
+        "series": [{
+            "name": "% of Blocks", "type": "bar", "data": data,
+            "itemStyle": { "color": DATA_COLOR }
+        }]
+    }))
+}
+
+/// Block time distribution as percentage of total blocks.
+pub fn block_time_distribution_pct_chart(
+    blocks: &[BlockSummary],
+) -> serde_json::Value {
+    if blocks.is_empty() {
+        return no_data_chart("Block Time Distribution (%)");
+    }
+
+    let mut counts = vec![0u64; 61];
+    let mut labels: Vec<String> = (0..60).map(|i| format!("{}-{}", i, i + 1)).collect();
+    labels.push("60+".to_string());
+
+    for i in 1..blocks.len() {
+        let interval = blocks[i].timestamp.saturating_sub(blocks[i - 1].timestamp);
+        let mins = interval as f64 / 60.0;
+        let idx = if mins >= 60.0 { 60 } else { mins as usize };
+        counts[idx] += 1;
+    }
+
+    let total = blocks.len().saturating_sub(1) as f64;
+    let data: Vec<f64> = counts.iter().map(|&c| {
+        if total > 0.0 { round(c as f64 / total * 100.0, 2) } else { 0.0 }
+    }).collect();
+
+    build_option(json!({
+        "xAxis": {
+            "type": "category",
+            "data": labels,
+            "axisLabel": { "color": "rgba(255,255,255,0.6)" },
+            "axisLine": { "lineStyle": { "color": "rgba(255,255,255,0.15)" } }
+        },
+        "yAxis": y_axis("% of Blocks"),
+        "tooltip": {
+            "trigger": "axis",
+            "backgroundColor": "rgba(13,33,55,0.95)",
+            "borderColor": "rgba(255,255,255,0.1)",
+            "textStyle": { "color": "rgba(255,255,255,0.85)", "fontSize": 12 }
+        },
+        "series": [{
+            "name": "% of Blocks", "type": "bar", "data": data,
+            "itemStyle": { "color": DATA_COLOR },
+            "markLine": {
+                "silent": true, "symbol": "none",
+                "lineStyle": { "type": "dashed", "color": TARGET_COLOR, "width": 2 },
+                "data": [{ "xAxis": "9-10", "label": { "formatter": "Target", "color": TARGET_COLOR } }]
+            }
+        }]
+    }))
+}
+
 /// Scatter plot of rapid consecutive blocks (interval < 60 seconds).
 pub fn block_propagation_chart(
     blocks: &[BlockSummary],
@@ -954,6 +1046,37 @@ pub fn block_fullness_histogram_from_buckets(
         },
         "series": [{
             "name": "Block Count", "type": "bar", "data": counts,
+            "itemStyle": { "color": DATA_COLOR }
+        }]
+    }))
+}
+
+/// Block fullness histogram from buckets as percentage.
+pub fn block_fullness_histogram_from_buckets_pct(
+    buckets: &[super::HistogramBucket],
+) -> serde_json::Value {
+    if buckets.is_empty() {
+        return no_data_chart("Block Fullness Distribution (%)");
+    }
+    let labels: Vec<&str> = buckets.iter().map(|b| b.label.as_str()).collect();
+    let total: u64 = buckets.iter().map(|b| b.count).sum();
+    let data: Vec<f64> = buckets.iter().map(|b| round(b.count as f64 / total as f64 * 100.0, 2)).collect();
+
+    build_option(json!({
+        "xAxis": {
+            "type": "category", "data": labels,
+            "axisLabel": { "color": "rgba(255,255,255,0.6)" },
+            "axisLine": { "lineStyle": { "color": "rgba(255,255,255,0.15)" } }
+        },
+        "yAxis": y_axis("% of Blocks"),
+        "tooltip": {
+            "trigger": "axis",
+            "backgroundColor": "rgba(13,33,55,0.95)",
+            "borderColor": "rgba(255,255,255,0.1)",
+            "textStyle": { "color": "rgba(255,255,255,0.85)", "fontSize": 12 }
+        },
+        "series": [{
+            "name": "% of Blocks", "type": "bar", "data": data,
             "itemStyle": { "color": DATA_COLOR }
         }]
     }))
@@ -1226,5 +1349,41 @@ pub fn weekday_activity_chart_daily(days: &[DailyAggregate]) -> serde_json::Valu
                 "itemStyle": { "color": "#3b82f6" }
             }
         ]
+    }))
+}
+
+/// Block time histogram from buckets as percentage.
+pub fn block_time_histogram_from_buckets_pct(
+    buckets: &[super::HistogramBucket],
+) -> serde_json::Value {
+    if buckets.is_empty() {
+        return no_data_chart("Block Time Distribution (%)");
+    }
+    let labels: Vec<&str> = buckets.iter().map(|b| b.label.as_str()).collect();
+    let total: u64 = buckets.iter().map(|b| b.count).sum();
+    let data: Vec<f64> = buckets.iter().map(|b| round(b.count as f64 / total as f64 * 100.0, 2)).collect();
+
+    build_option(json!({
+        "xAxis": {
+            "type": "category", "data": labels,
+            "axisLabel": { "color": "rgba(255,255,255,0.6)" },
+            "axisLine": { "lineStyle": { "color": "rgba(255,255,255,0.15)" } }
+        },
+        "yAxis": y_axis("% of Blocks"),
+        "tooltip": {
+            "trigger": "axis",
+            "backgroundColor": "rgba(13,33,55,0.95)",
+            "borderColor": "rgba(255,255,255,0.1)",
+            "textStyle": { "color": "rgba(255,255,255,0.85)", "fontSize": 12 }
+        },
+        "series": [{
+            "name": "% of Blocks", "type": "bar", "data": data,
+            "itemStyle": { "color": DATA_COLOR },
+            "markLine": {
+                "silent": true, "symbol": "none",
+                "lineStyle": { "type": "dashed", "color": TARGET_COLOR, "width": 2 },
+                "data": [{ "xAxis": "9-10", "label": { "formatter": "Target", "color": TARGET_COLOR } }]
+            }
+        }]
     }))
 }
