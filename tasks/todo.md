@@ -31,8 +31,8 @@
 - [x] **Backfill v11** — Fixed update_block_extras to include all v10 columns +
       inscription_envelope_bytes. BACKFILL_VERSION bumped to 11. Running now.
 - [ ] **Remove Coming Soon overlays** — once v11 backfill completes, remove
-      `coming_soon=true` from Fee Rate Bands, Max TX Fee, Protocol Fee Revenue,
-      and TX Type Evolution charts.
+      `coming_soon=true` from Max TX Fee, Protocol Fee Revenue,
+      and TX Type Evolution charts. Fee Rate Bands already removed.
 - [ ] **Node Mempool Config** — set minrelaytxfee=0.00000100 (0.1 sat/vB), increase maxmempool
 
 ---
@@ -167,6 +167,24 @@
 ---
 
 ## Completed
+
+<details>
+<summary>Session 2026-04-14 (performance audit)</summary>
+
+- [x] chart_memo! LRU eviction (keep 150 newest vs clearing all at 200)
+- [x] chart_memo! two-level cache: base chart cached without overlays
+- [x] ResizeObserver stored on element, disconnected on dispose
+- [x] Charts disposed on scroll-out (600px margin), re-init on scroll-back
+- [x] Tooltip series cached on option set (avoids getOption deep-copy per hover)
+- [x] apply_overlays refactored: 5 helper functions, 666 lines to ~420
+- [x] From<BlockRow> for BlockSummary (replaces 2x 57-field manual mappings)
+- [x] build_option consumes extra Value (zero-clone merge)
+- [x] PRAGMA table_info replaces 17 SELECT LIMIT 0 migration probes
+- [x] Clippy: 16 redundant closures, unused vars, dead code, collapsible else-if
+- [x] Removed Coming Soon from Fee Rate Bands (p10/p90 available without v10)
+- [x] Removed duplicate Methodology link from Embedded page
+- [x] Tooltip TypeError fix for histogram/bar charts
+</details>
 
 <details>
 <summary>Session 2026-04-13/14</summary>
