@@ -387,7 +387,7 @@ pub fn HeartbeatPage() -> impl IntoView {
     });
 
     // Tick counter that increments every second for live countdown
-    let (tick, _set_tick) = signal(0u64);
+    let (tick, set_tick) = signal(0u64);
     let (last_block_ts, set_last_block_ts) = signal(0u64);
 
     #[cfg(feature = "hydrate")]
