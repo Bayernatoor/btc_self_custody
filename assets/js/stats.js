@@ -112,17 +112,15 @@
             opts.legend.pageIconInactiveColor = 'rgba(255,255,255,0.2)';
             opts.legend.pageTextStyle = { color: 'rgba(255,255,255,0.4)', fontSize: 10 };
         }
-        // Compact grid: less padding so chart area is wider
-        if (opts.grid) {
-            opts.grid.left = 35;
-            opts.grid.right = 10;
-        }
         // Shorten Y-axis labels with K/M/B suffixes to save horizontal space
         var yAxes = opts.yAxis ? (Array.isArray(opts.yAxis) ? opts.yAxis : [opts.yAxis]) : [];
+        var hasRightAxis = yAxes.length > 1;
         yAxes.forEach(function(ya) {
             if (!ya || ya.type === 'category') return;
             // Hide axis name on mobile — chart title/description provides context
             ya.name = '';
+            // Remove right-axis offset on mobile (overlays add 60px offset)
+            if (ya.offset) ya.offset = 0;
             // Compact number formatting
             ya.axisLabel = ya.axisLabel || {};
             ya.axisLabel.fontSize = 11;
@@ -139,6 +137,11 @@
                 };
             }
         });
+        // Compact grid: less padding so chart area is wider
+        if (opts.grid) {
+            opts.grid.left = 35;
+            opts.grid.right = hasRightAxis ? 35 : 10;
+        }
         // Smaller X-axis labels on mobile
         var xAxes = opts.xAxis ? (Array.isArray(opts.xAxis) ? opts.xAxis : [opts.xAxis]) : [];
         xAxes.forEach(function(xa) {
