@@ -62,10 +62,6 @@ pub fn FeeChartsPage() -> impl IntoView {
                         |days| crate::stats::charts::median_fee_rate_chart_daily(days)
                     );
 
-                    let fee_band_option = chart_memo!(dashboard_data, range, overlay_flags,
-                        |blocks| crate::stats::charts::fee_rate_band_chart(blocks),
-                        |days| crate::stats::charts::fee_rate_band_chart_daily(days)
-                    );
 
                     let fee_revenue_share_option = chart_memo!(dashboard_data, range, overlay_flags,
                         |blocks| crate::stats::charts::fee_revenue_share_chart(blocks),
