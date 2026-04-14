@@ -1301,7 +1301,6 @@ fn drawer_pages() -> Vec<DrawerPage> {
                         DrawerChart { label: "Total Fees per Block", card_id: "card-chart-fees" },
                         DrawerChart { label: "Avg Fee per Transaction", card_id: "card-chart-avg-fee-tx" },
                         DrawerChart { label: "Median Fee Rate", card_id: "card-chart-median-rate" },
-                        DrawerChart { label: "Fee Rate Bands", card_id: "card-chart-fee-band" },
                         DrawerChart { label: "Subsidy vs Fees", card_id: "card-chart-subsidy-fees" },
                         DrawerChart { label: "Fee Revenue Share", card_id: "card-chart-fee-revenue-share" },
                         DrawerChart { label: "BTC Transferred Volume", card_id: "card-chart-btc-volume" },

@@ -138,12 +138,6 @@ pub fn FeeChartsPage() -> impl IntoView {
                                 option=median_rate_option
                             />
                             <ChartCard
-                                title="Fee Rate Band"
-                                description=chart_desc(range, "Fee rate spread: 10th percentile (cheapest), median, and 90th percentile (most urgent)", "Fee rate percentile band (per-block ranges only)")
-                                chart_id="chart-fee-band"
-                                option=fee_band_option
-                            />
-                            <ChartCard
                                 title="Subsidy vs Fees"
                                 description=chart_desc(range, "Block reward breakdown per block. The subsidy halves every 4 years while fees must eventually replace it", "Daily average block reward breakdown. The subsidy halves every 4 years while fees must eventually replace it")
                                 chart_id="chart-subsidy-fees"
@@ -186,8 +180,8 @@ pub fn FeeChartsPage() -> impl IntoView {
                                 option=halving_era_option
                             />
                             <ChartCard
-                                title="Fee Rate Bands (Full)"
-                                description="Fee rate percentiles from p10 to p90 showing the full spread of fee rates per block"
+                                title="Fee Rate Bands"
+                                description="Fee rate percentiles from p10 to p90 showing the full spread of fee rates per block. Click legend items to toggle bands"
                                 chart_id="chart-fee-heatmap"
                                 option=fee_heatmap_option
                             />

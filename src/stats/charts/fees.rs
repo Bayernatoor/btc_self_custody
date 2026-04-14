@@ -1123,12 +1123,12 @@ pub fn fee_rate_heatmap_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let p90_str = build_data_array_f64(blocks, |b| round(b.fee_rate_p90, 2));
     let p90_data = data_array_value(&p90_str);
 
-    // Light-to-dark orange gradient for the 5 bands
-    const P10_COLOR: &str = "rgba(247,147,26,0.15)";
-    const P25_COLOR: &str = "rgba(247,147,26,0.30)";
-    const MED_COLOR: &str = "rgba(247,147,26,0.50)";
-    const P75_COLOR: &str = "rgba(247,147,26,0.70)";
-    const P90_COLOR: &str = "rgba(247,147,26,0.90)";
+    // Distinct colors for each percentile band (cool to hot)
+    const P10_COLOR: &str = "#3b82f6"; // blue (cheapest)
+    const P25_COLOR: &str = "#22c55e"; // green
+    const MED_COLOR: &str = "#f7931a"; // bitcoin orange (median)
+    const P75_COLOR: &str = "#f59e0b"; // amber
+    const P90_COLOR: &str = "#ef4444"; // red (most expensive)
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
@@ -1140,31 +1140,31 @@ pub fn fee_rate_heatmap_chart(blocks: &[BlockSummary]) -> serde_json::Value {
             {
                 "name": "p10", "type": "line", "stack": "fee", "data": p10_data,
                 "lineStyle": { "width": 0 }, "symbol": "none",
-                "areaStyle": { "color": P10_COLOR, "opacity": 1.0 },
+                "areaStyle": { "opacity": 0.6 },
                 "itemStyle": { "color": P10_COLOR }
             },
             {
                 "name": "p25", "type": "line", "stack": "fee", "data": p25_data,
                 "lineStyle": { "width": 0 }, "symbol": "none",
-                "areaStyle": { "color": P25_COLOR, "opacity": 1.0 },
+                "areaStyle": { "opacity": 0.6 },
                 "itemStyle": { "color": P25_COLOR }
             },
             {
                 "name": "Median", "type": "line", "stack": "fee", "data": median_data,
                 "lineStyle": { "width": 0 }, "symbol": "none",
-                "areaStyle": { "color": MED_COLOR, "opacity": 1.0 },
+                "areaStyle": { "opacity": 0.6 },
                 "itemStyle": { "color": MED_COLOR }
             },
             {
                 "name": "p75", "type": "line", "stack": "fee", "data": p75_data,
                 "lineStyle": { "width": 0 }, "symbol": "none",
-                "areaStyle": { "color": P75_COLOR, "opacity": 1.0 },
+                "areaStyle": { "opacity": 0.6 },
                 "itemStyle": { "color": P75_COLOR }
             },
             {
                 "name": "p90", "type": "line", "stack": "fee", "data": p90_data,
                 "lineStyle": { "width": 0 }, "symbol": "none",
-                "areaStyle": { "color": P90_COLOR, "opacity": 1.0 },
+                "areaStyle": { "opacity": 0.6 },
                 "itemStyle": { "color": P90_COLOR }
             }
         ]
