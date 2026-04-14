@@ -151,7 +151,7 @@ pub fn FeeChartsPage() -> impl IntoView {
                                 description=chart_desc(range, "Block reward breakdown per block. The subsidy halves every 4 years while fees must eventually replace it", "Daily average block reward breakdown. The subsidy halves every 4 years while fees must eventually replace it")
                                 chart_id="chart-subsidy-fees"
                                 option=subsidy_fees_option
-                                info="The block subsidy (new BTC created) halves every 210,000 blocks (~4 years). After the 2024 halving, the subsidy is 3.125 BTC per block. The stacked view shows the relative contribution of subsidy vs fees to total miner revenue."
+                                info="The block subsidy (new BTC created) halves every 210,000 blocks (~4 years). After the 2024 halving, the subsidy is 3.125 BTC per block. As the subsidy decreases over time, fees become a larger share of miner revenue."
                             />
                             <ChartCard
                                 title="Fee Revenue Share"
@@ -193,7 +193,7 @@ pub fn FeeChartsPage() -> impl IntoView {
                                 description="Highlights blocks where the median fee rate exceeded 5x the trailing 144-block average. Red dots mark fee spike events"
                                 chart_id="chart-fee-spikes"
                                 option=fee_spike_option
-                                info="The white line shows the 144-block trailing average fee rate (roughly one day). Red dots appear when a block's median fee rate exceeds 5x that average. Requires at least 300 blocks (1W+ range) for meaningful detection."
+                                info="The white line shows the 144-block trailing average fee rate (roughly one day). Red dots appear when a block's median fee rate exceeds 5x that average, indicating sudden demand surges. Requires at least 300 blocks (1W+ range) for meaningful detection."
                             />
                             <ChartCard
                                 title="Max Transaction Fee"
