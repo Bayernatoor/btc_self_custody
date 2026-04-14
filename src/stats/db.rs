@@ -304,6 +304,19 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
                  ALTER TABLE daily_blocks ADD COLUMN total_input_value INTEGER NOT NULL DEFAULT 0;",
             )?;
         }
+        if !daily_cols.contains("avg_inscription_envelope_bytes") {
+            tracing::info!("Migrating daily_blocks: adding v11 columns");
+            conn.execute_batch(
+                "ALTER TABLE daily_blocks ADD COLUMN avg_inscription_envelope_bytes REAL NOT NULL DEFAULT 0;
+                 ALTER TABLE daily_blocks ADD COLUMN total_inscription_fees INTEGER NOT NULL DEFAULT 0;
+                 ALTER TABLE daily_blocks ADD COLUMN total_runes_fees INTEGER NOT NULL DEFAULT 0;
+                 ALTER TABLE daily_blocks ADD COLUMN avg_legacy_tx_count REAL NOT NULL DEFAULT 0;
+                 ALTER TABLE daily_blocks ADD COLUMN avg_segwit_tx_count REAL NOT NULL DEFAULT 0;
+                 ALTER TABLE daily_blocks ADD COLUMN avg_taproot_tx_count REAL NOT NULL DEFAULT 0;
+                 ALTER TABLE daily_blocks ADD COLUMN avg_fee_rate_p25 REAL NOT NULL DEFAULT 0;
+                 ALTER TABLE daily_blocks ADD COLUMN avg_fee_rate_p75 REAL NOT NULL DEFAULT 0;",
+            )?;
+        }
     }
 
     if !has("max_tx_fee") {
@@ -1089,6 +1102,15 @@ pub struct DailyRow {
     pub avg_median_fee_rate: f64,
     pub total_output_value: u64,
     pub total_input_value: u64,
+    // --- v11 fields ---
+    pub avg_inscription_envelope_bytes: f64,
+    pub total_inscription_fees: u64,
+    pub total_runes_fees: u64,
+    pub avg_legacy_tx_count: f64,
+    pub avg_segwit_tx_count: f64,
+    pub avg_taproot_tx_count: f64,
+    pub avg_fee_rate_p25: f64,
+    pub avg_fee_rate_p75: f64,
 }
 
 /// Rebuild a single day's row in the daily_blocks table by re-aggregating
@@ -1112,7 +1134,10 @@ pub fn refresh_daily_block(
              avg_inscription_count, avg_inscription_bytes, avg_brc20_count,
              avg_taproot_keypath_count, avg_taproot_scriptpath_count,
              avg_fee_rate_p10, avg_fee_rate_p90, avg_stamps_count, avg_median_fee_rate,
-             total_output_value, total_input_value)
+             total_output_value, total_input_value,
+             avg_inscription_envelope_bytes, total_inscription_fees, total_runes_fees,
+             avg_legacy_tx_count, avg_segwit_tx_count, avg_taproot_tx_count,
+             avg_fee_rate_p25, avg_fee_rate_p75)
          SELECT date(datetime(timestamp, 'unixepoch')),
                 COUNT(*), AVG(size), AVG(weight), AVG(tx_count), AVG(difficulty),
                 SUM(op_return_count), SUM(runes_count), SUM(omni_count),
@@ -1128,7 +1153,10 @@ pub fn refresh_daily_block(
                 AVG(inscription_count), AVG(inscription_bytes), AVG(brc20_count),
                 AVG(taproot_keypath_count), AVG(taproot_scriptpath_count),
                 AVG(fee_rate_p10), AVG(fee_rate_p90), AVG(stamps_count), AVG(median_fee_rate),
-                SUM(total_output_value), SUM(total_input_value)
+                SUM(total_output_value), SUM(total_input_value),
+                AVG(inscription_envelope_bytes), SUM(inscription_fees), SUM(runes_fees),
+                AVG(legacy_tx_count), AVG(segwit_tx_count), AVG(taproot_tx_count),
+                AVG(fee_rate_p25), AVG(fee_rate_p75)
          FROM blocks
          WHERE date(datetime(timestamp, 'unixepoch')) = ?1",
         params![day],
@@ -1168,7 +1196,10 @@ pub fn rebuild_all_daily_blocks(conn: &Connection) -> rusqlite::Result<u64> {
              avg_inscription_count, avg_inscription_bytes, avg_brc20_count,
              avg_taproot_keypath_count, avg_taproot_scriptpath_count,
              avg_fee_rate_p10, avg_fee_rate_p90, avg_stamps_count, avg_median_fee_rate,
-             total_output_value, total_input_value)
+             total_output_value, total_input_value,
+             avg_inscription_envelope_bytes, total_inscription_fees, total_runes_fees,
+             avg_legacy_tx_count, avg_segwit_tx_count, avg_taproot_tx_count,
+             avg_fee_rate_p25, avg_fee_rate_p75)
          SELECT date(datetime(timestamp, 'unixepoch')),
                 COUNT(*), AVG(size), AVG(weight), AVG(tx_count), AVG(difficulty),
                 SUM(op_return_count), SUM(runes_count), SUM(omni_count),
@@ -1184,7 +1215,10 @@ pub fn rebuild_all_daily_blocks(conn: &Connection) -> rusqlite::Result<u64> {
                 AVG(inscription_count), AVG(inscription_bytes), AVG(brc20_count),
                 AVG(taproot_keypath_count), AVG(taproot_scriptpath_count),
                 AVG(fee_rate_p10), AVG(fee_rate_p90), AVG(stamps_count), AVG(median_fee_rate),
-                SUM(total_output_value), SUM(total_input_value)
+                SUM(total_output_value), SUM(total_input_value),
+                AVG(inscription_envelope_bytes), SUM(inscription_fees), SUM(runes_fees),
+                AVG(legacy_tx_count), AVG(segwit_tx_count), AVG(taproot_tx_count),
+                AVG(fee_rate_p25), AVG(fee_rate_p75)
          FROM blocks
          GROUP BY date(datetime(timestamp, 'unixepoch'))"
     )?;
@@ -1219,7 +1253,10 @@ pub fn query_daily_aggregates_fast(
                 avg_inscription_count, avg_inscription_bytes, avg_brc20_count,
                 avg_taproot_keypath_count, avg_taproot_scriptpath_count,
                 avg_fee_rate_p10, avg_fee_rate_p90, avg_stamps_count, avg_median_fee_rate,
-                total_output_value, total_input_value
+                total_output_value, total_input_value,
+                avg_inscription_envelope_bytes, total_inscription_fees, total_runes_fees,
+                avg_legacy_tx_count, avg_segwit_tx_count, avg_taproot_tx_count,
+                avg_fee_rate_p25, avg_fee_rate_p75
          FROM daily_blocks
          WHERE day >= ?1 AND day <= ?2
          ORDER BY day ASC",
@@ -1268,6 +1305,14 @@ pub fn query_daily_aggregates_fast(
             avg_median_fee_rate: row.get(39)?,
             total_output_value: row.get::<_, Option<u64>>(40)?.unwrap_or(0),
             total_input_value: row.get::<_, Option<u64>>(41)?.unwrap_or(0),
+            avg_inscription_envelope_bytes: row.get::<_, Option<f64>>(42)?.unwrap_or(0.0),
+            total_inscription_fees: row.get::<_, Option<u64>>(43)?.unwrap_or(0),
+            total_runes_fees: row.get::<_, Option<u64>>(44)?.unwrap_or(0),
+            avg_legacy_tx_count: row.get::<_, Option<f64>>(45)?.unwrap_or(0.0),
+            avg_segwit_tx_count: row.get::<_, Option<f64>>(46)?.unwrap_or(0.0),
+            avg_taproot_tx_count: row.get::<_, Option<f64>>(47)?.unwrap_or(0.0),
+            avg_fee_rate_p25: row.get::<_, Option<f64>>(48)?.unwrap_or(0.0),
+            avg_fee_rate_p75: row.get::<_, Option<f64>>(49)?.unwrap_or(0.0),
         })
     })?;
 
@@ -1327,7 +1372,10 @@ pub fn query_daily_aggregates(
                 AVG(taproot_keypath_count), AVG(taproot_scriptpath_count),
                 AVG(fee_rate_p10), AVG(fee_rate_p90), AVG(stamps_count),
                 AVG(median_fee_rate),
-                SUM(total_output_value), SUM(total_input_value)
+                SUM(total_output_value), SUM(total_input_value),
+                AVG(inscription_envelope_bytes), SUM(inscription_fees), SUM(runes_fees),
+                AVG(legacy_tx_count), AVG(segwit_tx_count), AVG(taproot_tx_count),
+                AVG(fee_rate_p25), AVG(fee_rate_p75)
          FROM blocks
          WHERE timestamp >= ?1 AND timestamp <= ?2
          GROUP BY day
@@ -1377,6 +1425,14 @@ pub fn query_daily_aggregates(
             avg_median_fee_rate: row.get(39)?,
             total_output_value: row.get::<_, Option<u64>>(40)?.unwrap_or(0),
             total_input_value: row.get::<_, Option<u64>>(41)?.unwrap_or(0),
+            avg_inscription_envelope_bytes: row.get::<_, Option<f64>>(42)?.unwrap_or(0.0),
+            total_inscription_fees: row.get::<_, Option<u64>>(43)?.unwrap_or(0),
+            total_runes_fees: row.get::<_, Option<u64>>(44)?.unwrap_or(0),
+            avg_legacy_tx_count: row.get::<_, Option<f64>>(45)?.unwrap_or(0.0),
+            avg_segwit_tx_count: row.get::<_, Option<f64>>(46)?.unwrap_or(0.0),
+            avg_taproot_tx_count: row.get::<_, Option<f64>>(47)?.unwrap_or(0.0),
+            avg_fee_rate_p25: row.get::<_, Option<f64>>(48)?.unwrap_or(0.0),
+            avg_fee_rate_p75: row.get::<_, Option<f64>>(49)?.unwrap_or(0.0),
         })
     })?;
     rows.collect()

@@ -507,6 +507,14 @@ pub async fn fetch_daily_aggregates(
             avg_median_fee_rate: r.avg_median_fee_rate,
             total_output_value: r.total_output_value,
             total_input_value: r.total_input_value,
+            avg_inscription_envelope_bytes: r.avg_inscription_envelope_bytes,
+            total_inscription_fees: r.total_inscription_fees,
+            total_runes_fees: r.total_runes_fees,
+            avg_legacy_tx_count: r.avg_legacy_tx_count,
+            avg_segwit_tx_count: r.avg_segwit_tx_count,
+            avg_taproot_tx_count: r.avg_taproot_tx_count,
+            avg_fee_rate_p25: r.avg_fee_rate_p25,
+            avg_fee_rate_p75: r.avg_fee_rate_p75,
         })
         .collect();
 

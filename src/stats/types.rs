@@ -280,6 +280,23 @@ pub struct DailyAggregate {
     pub total_output_value: u64,
     /// Total input value in satoshis for the day.
     pub total_input_value: u64,
+    // --- v11 fields ---
+    /// Average inscription envelope bytes per block (full witness item size).
+    pub avg_inscription_envelope_bytes: f64,
+    /// Total inscription fees in satoshis for the day.
+    pub total_inscription_fees: u64,
+    /// Total Runes fees in satoshis for the day.
+    pub total_runes_fees: u64,
+    /// Average legacy (non-witness) transaction count per block.
+    pub avg_legacy_tx_count: f64,
+    /// Average SegWit v0 transaction count per block.
+    pub avg_segwit_tx_count: f64,
+    /// Average Taproot transaction count per block.
+    pub avg_taproot_tx_count: f64,
+    /// Average 25th percentile fee rate in sat/vB per block.
+    pub avg_fee_rate_p25: f64,
+    /// Average 75th percentile fee rate in sat/vB per block.
+    pub avg_fee_rate_p75: f64,
 }
 
 /// Single-row aggregate summary for an arbitrary timestamp range, used by the
