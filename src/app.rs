@@ -34,6 +34,7 @@ use crate::routes::faq::FaqPage;
 use crate::routes::guide::{GuideTwoSegment, GuideWalletPage};
 use crate::routes::guideselector::{GuideLevelSelector, GuideSelector};
 use crate::routes::homepage::HomePage;
+use crate::routes::observatory::learn::index::LearnIndexPage;
 use crate::routes::observatory::learn::methodology::MethodologyPage;
 use crate::routes::observatory::learn::protocols::ProtocolGuidePage;
 use crate::routes::observatory::{
@@ -196,6 +197,7 @@ pub fn App() -> impl IntoView {
                             <Route path=path!("/on-this-day") view=OnThisDayPage/>
                             <Route path=path!("/hall-of-fame") view=HallOfFamePage/>
                             <Route path=path!("/heartbeat") view=HeartbeatPage/>
+                            <Route path=path!("/learn") view=LearnIndexPage/>
                             <Route path=path!("/learn/protocols") view=ProtocolGuidePage/>
                             <Route path=path!("/learn/methodology") view=MethodologyPage/>
                             <Route path=path!("/*any") view=|| view! {

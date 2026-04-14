@@ -72,6 +72,7 @@ pub fn Footer() -> impl IntoView {
                             <li><a href="/observatory/charts/mining" class="text-sm text-white/30 hover:text-[#f7931a] transition-colors">"Mining Charts"</a></li>
                             <li><a href="/observatory/charts/embedded" class="text-sm text-white/30 hover:text-[#f7931a] transition-colors">"Embedded Data"</a></li>
                             <li><a href="/observatory/signaling" class="text-sm text-white/30 hover:text-[#f7931a] transition-colors">"BIP Signaling"</a></li>
+                            <li><a href="/observatory/learn" class="text-sm text-white/30 hover:text-[#f7931a] transition-colors">"Learn"</a></li>
                         </ul>
                     </div>
 
