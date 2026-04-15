@@ -149,7 +149,10 @@ fn drawer_pages() -> Vec<DrawerPage> {
                     label: "Ordinals & Witness Data",
                     charts: vec![
                         DrawerChart { label: "Inscription Count", card_id: "card-chart-inscriptions" },
-                        DrawerChart { label: "Inscription Share", card_id: "card-chart-inscription-share" },
+                        DrawerChart { label: "Inscription Block Share", card_id: "card-chart-inscription-share" },
+                        DrawerChart { label: "Payload vs Envelope", card_id: "card-chart-inscription-envelope" },
+                        DrawerChart { label: "Inscription Fee Share", card_id: "card-chart-inscription-fee-share" },
+                        DrawerChart { label: "Protocol Fee Competition", card_id: "card-chart-protocol-fee-competition" },
                     ],
                 },
             ],

@@ -437,9 +437,15 @@ pub fn inscription_share_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Inscription Block Share");
     }
 
+    // Use envelope bytes (full witness item size) for accurate block share
     let insc_fn = |b: &BlockSummary| {
         if b.size > 0 {
-            ((b.inscription_bytes as f64 / b.size as f64 * 100.0 * 100.0)
+            let bytes = if b.inscription_envelope_bytes > 0 {
+                b.inscription_envelope_bytes
+            } else {
+                b.inscription_bytes // fallback for pre-backfill blocks
+            };
+            ((bytes as f64 / b.size as f64 * 100.0 * 100.0)
                 .round()
                 / 100.0)
                 .min(100.0)
@@ -488,11 +494,17 @@ pub fn inscription_share_chart_daily(
         return no_data_chart("Inscription Block Share");
     }
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    // Use envelope bytes when available for accurate block share
     let vals: Vec<f64> = days
         .iter()
         .map(|d| {
             if d.avg_size > 0.0 {
-                ((d.avg_inscription_bytes / d.avg_size * 100.0 * 100.0).round()
+                let bytes = if d.avg_inscription_envelope_bytes > 0.0 {
+                    d.avg_inscription_envelope_bytes
+                } else {
+                    d.avg_inscription_bytes
+                };
+                ((bytes / d.avg_size * 100.0 * 100.0).round()
                     / 100.0)
                     .min(100.0)
             } else {
@@ -925,6 +937,252 @@ pub fn stamps_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
             { "name": "7-day MA", "type": "line", "data": ma_vals,
               "lineStyle": { "width": 2, "color": MA_COLOR },
               "itemStyle": { "color": MA_COLOR }, "symbol": "none" }
+        ]
+    }))
+}
+
+// ---------------------------------------------------------------------------
+// Inscription envelope vs payload charts (v11 backfill)
+// ---------------------------------------------------------------------------
+
+const ENVELOPE_COLOR: &str = "#f97316"; // Orange for envelope overhead
+const PAYLOAD_COLOR: &str = "#06b6d4"; // Cyan for payload (matches inscription)
+
+/// Inscription payload vs envelope bytes per block, showing overhead from
+/// witness envelope structure (opcodes, push data, ord marker).
+pub fn inscription_envelope_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+    if blocks.is_empty() {
+        return no_data_chart("Inscription Payload vs Envelope");
+    }
+    let has_data = blocks.iter().any(|b| b.inscription_envelope_bytes > 0);
+    if !has_data {
+        return no_data_chart("Inscription Payload vs Envelope");
+    }
+
+    let payload_str = build_data_array_f64(blocks, |b| b.inscription_bytes as f64 / 1024.0);
+    let envelope_str = build_data_array_f64(blocks, |b| {
+        b.inscription_envelope_bytes.saturating_sub(b.inscription_bytes) as f64 / 1024.0
+    });
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("KB"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            { "name": "Payload", "type": "bar", "stack": "total",
+              "data": data_array_value(&payload_str),
+              "itemStyle": { "color": PAYLOAD_COLOR } },
+            { "name": "Envelope Overhead", "type": "bar", "stack": "total",
+              "data": data_array_value(&envelope_str),
+              "itemStyle": { "color": ENVELOPE_COLOR } }
+        ]
+    }))
+}
+
+/// Inscription payload vs envelope bytes (daily averages).
+pub fn inscription_envelope_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+    if days.is_empty() {
+        return no_data_chart("Inscription Payload vs Envelope");
+    }
+    let has_data = days.iter().any(|d| d.avg_inscription_envelope_bytes > 0.0);
+    if !has_data {
+        return no_data_chart("Inscription Payload vs Envelope");
+    }
+
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    let payload: Vec<f64> = days.iter().map(|d| round(d.avg_inscription_bytes / 1024.0, 2)).collect();
+    let overhead: Vec<f64> = days.iter().map(|d| {
+        let oh = d.avg_inscription_envelope_bytes - d.avg_inscription_bytes;
+        round(oh.max(0.0) / 1024.0, 2)
+    }).collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": y_axis("KB/Block"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            { "name": "Payload", "type": "bar", "stack": "total", "data": payload,
+              "itemStyle": { "color": PAYLOAD_COLOR } },
+            { "name": "Envelope Overhead", "type": "bar", "stack": "total", "data": overhead,
+              "itemStyle": { "color": ENVELOPE_COLOR } }
+        ]
+    }))
+}
+
+// ---------------------------------------------------------------------------
+// Inscription fee share chart
+// ---------------------------------------------------------------------------
+
+/// Inscription fees as a percentage of total block fees.
+pub fn inscription_fee_share_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+    if blocks.is_empty() {
+        return no_data_chart("Inscription Fee Share");
+    }
+    let has_data = blocks.iter().any(|b| b.inscription_fees > 0);
+    if !has_data {
+        return no_data_chart("Inscription Fee Share");
+    }
+
+    let share_fn = |b: &BlockSummary| {
+        if b.total_fees > 0 {
+            round(b.inscription_fees as f64 / b.total_fees as f64 * 100.0, 2)
+        } else {
+            0.0
+        }
+    };
+    let raw_str = build_data_array_f64(blocks, share_fn);
+    let raw = data_array_value(&raw_str);
+    let vals: Vec<f64> = blocks.iter().map(share_fn).collect();
+    let ma = moving_average(&vals, 144);
+    let ma_str = build_ma_array(blocks, &ma);
+    let ma_data = data_array_value(&ma_str);
+    let has_ma = show_ma(blocks.len());
+
+    let mut series = vec![json!({
+        "name": "Inscription Fees %", "type": "line", "data": raw,
+        "areaStyle": { "color": INSCRIPTION_COLOR, "opacity": 0.15 },
+        "lineStyle": { "width": if has_ma { 1.0 } else { 1.5 }, "color": INSCRIPTION_COLOR },
+        "itemStyle": { "color": INSCRIPTION_COLOR }, "symbol": "none",
+        "opacity": if has_ma { 0.4 } else { 1.0 }
+    })];
+    if has_ma {
+        series.push(json!({
+            "name": "144-block MA", "type": "line", "data": ma_data,
+            "lineStyle": { "width": 2, "color": MA_COLOR },
+            "itemStyle": { "color": MA_COLOR }, "symbol": "none"
+        }));
+    }
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("% of Fees"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": has_ma },
+        "series": series
+    }))
+}
+
+/// Inscription fee share (daily).
+pub fn inscription_fee_share_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+    if days.is_empty() {
+        return no_data_chart("Inscription Fee Share");
+    }
+    let has_data = days.iter().any(|d| d.total_inscription_fees > 0);
+    if !has_data {
+        return no_data_chart("Inscription Fee Share");
+    }
+
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    let vals: Vec<f64> = days.iter().map(|d| {
+        if d.total_fees > 0 {
+            round(d.total_inscription_fees as f64 / d.total_fees as f64 * 100.0, 2)
+        } else {
+            0.0
+        }
+    }).collect();
+    let ma = moving_average(&vals, 7);
+    let ma_vals: Vec<serde_json::Value> = ma.iter().map(|v| match v {
+        Some(x) => json!(x),
+        None => json!(null),
+    }).collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": y_axis("% of Fees"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "series": [
+            { "name": "Inscription Fees %", "type": "line", "data": vals,
+              "areaStyle": { "color": INSCRIPTION_COLOR, "opacity": 0.15 },
+              "lineStyle": { "width": 1, "color": INSCRIPTION_COLOR },
+              "itemStyle": { "color": INSCRIPTION_COLOR }, "symbol": "none", "opacity": 0.4 },
+            { "name": "7-day MA", "type": "line", "data": ma_vals,
+              "lineStyle": { "width": 2, "color": MA_COLOR },
+              "itemStyle": { "color": MA_COLOR }, "symbol": "none" }
+        ]
+    }))
+}
+
+// ---------------------------------------------------------------------------
+// Protocol fee competition chart
+// ---------------------------------------------------------------------------
+
+const RUNES_FEE_COLOR: &str = "#f7931a"; // Bitcoin orange for Runes fees
+const OTHER_FEE_COLOR: &str = "#6366f1"; // Indigo for other fees
+
+/// Fee revenue breakdown by protocol: Inscriptions, Runes, and standard transactions.
+pub fn protocol_fee_competition_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+    if blocks.is_empty() {
+        return no_data_chart("Protocol Fee Competition");
+    }
+    let has_data = blocks.iter().any(|b| b.inscription_fees > 0 || b.runes_fees > 0);
+    if !has_data {
+        return no_data_chart("Protocol Fee Competition");
+    }
+
+    let insc_str = build_data_array_f64(blocks, |b| b.inscription_fees as f64 / 100_000_000.0);
+    let runes_str = build_data_array_f64(blocks, |b| b.runes_fees as f64 / 100_000_000.0);
+    let other_str = build_data_array_f64(blocks, |b| {
+        let other = b.total_fees.saturating_sub(b.inscription_fees).saturating_sub(b.runes_fees);
+        other as f64 / 100_000_000.0
+    });
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("BTC"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            { "name": "Other", "type": "bar", "stack": "fees",
+              "data": data_array_value(&other_str),
+              "itemStyle": { "color": OTHER_FEE_COLOR } },
+            { "name": "Inscriptions", "type": "bar", "stack": "fees",
+              "data": data_array_value(&insc_str),
+              "itemStyle": { "color": INSCRIPTION_COLOR } },
+            { "name": "Runes", "type": "bar", "stack": "fees",
+              "data": data_array_value(&runes_str),
+              "itemStyle": { "color": RUNES_FEE_COLOR } }
+        ]
+    }))
+}
+
+/// Protocol fee competition (daily totals).
+pub fn protocol_fee_competition_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+    if days.is_empty() {
+        return no_data_chart("Protocol Fee Competition");
+    }
+    let has_data = days.iter().any(|d| d.total_inscription_fees > 0 || d.total_runes_fees > 0);
+    if !has_data {
+        return no_data_chart("Protocol Fee Competition");
+    }
+
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    let insc: Vec<f64> = days.iter().map(|d| round(d.total_inscription_fees as f64 / 100_000_000.0, 4)).collect();
+    let runes: Vec<f64> = days.iter().map(|d| round(d.total_runes_fees as f64 / 100_000_000.0, 4)).collect();
+    let other: Vec<f64> = days.iter().map(|d| {
+        let o = d.total_fees.saturating_sub(d.total_inscription_fees).saturating_sub(d.total_runes_fees);
+        round(o as f64 / 100_000_000.0, 4)
+    }).collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": y_axis("BTC"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            { "name": "Other", "type": "bar", "stack": "fees", "data": other,
+              "itemStyle": { "color": OTHER_FEE_COLOR } },
+            { "name": "Inscriptions", "type": "bar", "stack": "fees", "data": insc,
+              "itemStyle": { "color": INSCRIPTION_COLOR } },
+            { "name": "Runes", "type": "bar", "stack": "fees", "data": runes,
+              "itemStyle": { "color": RUNES_FEE_COLOR } }
         ]
     }))
 }
