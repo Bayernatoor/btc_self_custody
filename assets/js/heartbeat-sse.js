@@ -707,6 +707,7 @@ window._notableFeed = function(tx) {
     var row = document.createElement('div');
     row.className = 'flex items-baseline gap-3 px-4 py-2 border-b border-white/5 text-xs font-mono opacity-0';
     row.style.animation = 'fadeinone 0.5s ease forwards';
+    row.dataset.type = isWhale ? 'whale' : 'fee';
     row.innerHTML = labelHtml +
         '<a href="https://mempool.space/tx/' + (tx.txid || '') + '" target="_blank" rel="noopener" ' +
             'class="text-white/30 hover:text-[#f7931a] transition-colors">' + txidShort + '</a>' +
@@ -718,5 +719,39 @@ window._notableFeed = function(tx) {
     // Cap entries
     while (list.children.length > MAX_WHALE_ENTRIES) {
         list.removeChild(list.lastChild);
+    }
+
+    // Apply active filter to new row
+    var activeFilter = window._notableFilter || 'all';
+    if (activeFilter !== 'all' && row.dataset.type !== activeFilter) {
+        row.style.display = 'none';
+    }
+};
+
+// Filter notable feed by type
+window._notableFilter = 'all';
+window._filterNotable = function(filter) {
+    window._notableFilter = filter;
+    var list = document.getElementById('whale-feed-list');
+    if (!list) return;
+
+    // Update button styles
+    var btns = ['all', 'whale', 'fee'];
+    for (var bi = 0; bi < btns.length; bi++) {
+        var btn = document.getElementById('whale-filter-' + btns[bi]);
+        if (!btn) continue;
+        if (btns[bi] === filter) {
+            btn.className = 'px-2 py-0.5 rounded text-[10px] font-mono bg-white/10 text-white/60 hover:bg-white/20 transition-colors';
+        } else {
+            btn.className = 'px-2 py-0.5 rounded text-[10px] font-mono bg-transparent text-white/30 hover:bg-white/10 transition-colors';
+        }
+    }
+
+    // Show/hide rows
+    var rows = list.children;
+    for (var i = 0; i < rows.length; i++) {
+        var rowType = rows[i].dataset.type;
+        if (!rowType) continue;
+        rows[i].style.display = (filter === 'all' || rowType === filter) ? '' : 'none';
     }
 };

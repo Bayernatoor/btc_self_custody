@@ -732,7 +732,11 @@ pub fn HeartbeatPage() -> impl IntoView {
                         <span class="w-2 h-2 rounded-full bg-[#ffd700] animate-pulse"></span>
                         <span class="text-xs font-mono text-[#ffd700]/80 uppercase tracking-wider">"Whale Watch"</span>
                     </div>
-                    <span class="text-[10px] text-white/30 font-mono">"Whale txs (>$500K) + Fee outliers (>500 sat/vB)"</span>
+                    <div class="flex items-center gap-1.5">
+                        <button onclick="window._filterNotable('all')" id="whale-filter-all" class="px-2 py-0.5 rounded text-[10px] font-mono bg-white/10 text-white/60 hover:bg-white/20 transition-colors">"All"</button>
+                        <button onclick="window._filterNotable('whale')" id="whale-filter-whale" class="px-2 py-0.5 rounded text-[10px] font-mono bg-transparent text-white/30 hover:bg-white/10 transition-colors">"Whales"</button>
+                        <button onclick="window._filterNotable('fee')" id="whale-filter-fee" class="px-2 py-0.5 rounded text-[10px] font-mono bg-transparent text-white/30 hover:bg-white/10 transition-colors">"Fees"</button>
+                    </div>
                 </div>
                 <div id="whale-feed-list" class="max-h-[200px] overflow-y-auto">
                     <div class="px-4 py-3 text-xs text-white/20 font-mono italic text-center">"Listening for whale transactions..."</div>
