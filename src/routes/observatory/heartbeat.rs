@@ -733,12 +733,12 @@ pub fn HeartbeatPage() -> impl IntoView {
                         <span class="text-xs font-mono text-[#ffd700]/80 uppercase tracking-wider">"Whale Watch"</span>
                     </div>
                     <div class="flex items-center gap-1 flex-wrap">
-                        <button onclick="window._filterNotable('all')" id="whale-filter-all" class="px-2 py-0.5 rounded text-[10px] font-mono bg-white/10 text-white/60 hover:bg-white/20 transition-colors">"All"</button>
-                        <button onclick="window._filterNotable('whale')" id="whale-filter-whale" class="px-2 py-0.5 rounded text-[10px] font-mono bg-transparent text-[#ffd700]/50 hover:bg-[#ffd700]/10 transition-colors">"Whales"</button>
-                        <button onclick="window._filterNotable('fee')" id="whale-filter-fee" class="px-2 py-0.5 rounded text-[10px] font-mono bg-transparent text-[#ff4444]/50 hover:bg-[#ff4444]/10 transition-colors">"Fees"</button>
-                        <button onclick="window._filterNotable('consolidation')" id="whale-filter-consolidation" class="px-2 py-0.5 rounded text-[10px] font-mono bg-transparent text-[#a855f7]/50 hover:bg-[#a855f7]/10 transition-colors">"Consol."</button>
-                        <button onclick="window._filterNotable('fan_out')" id="whale-filter-fan_out" class="px-2 py-0.5 rounded text-[10px] font-mono bg-transparent text-[#00d2ff]/50 hover:bg-[#00d2ff]/10 transition-colors">"Fan-out"</button>
-                        <button onclick="window._filterNotable('inscription')" id="whale-filter-inscription" class="px-2 py-0.5 rounded text-[10px] font-mono bg-transparent text-[#ff00c8]/50 hover:bg-[#ff00c8]/10 transition-colors">"Inscriptions"</button>
+                        <button onclick="window._filterNotable('all')" id="whale-filter-all" title="Show all notable transactions" class="px-2 py-0.5 rounded text-[10px] font-mono bg-white/10 text-white/60 hover:bg-white/20 transition-colors">"All"</button>
+                        <button onclick="window._filterNotable('whale')" id="whale-filter-whale" title="Whales: total output value over $1,000,000 USD" class="px-2 py-0.5 rounded text-[10px] font-mono bg-transparent text-[#ffd700]/50 hover:bg-[#ffd700]/10 transition-colors">"Whales"</button>
+                        <button onclick="window._filterNotable('fee')" id="whale-filter-fee" title="Fee outliers: fee rate over 500 sat/vB or absolute fee over 0.05 BTC" class="px-2 py-0.5 rounded text-[10px] font-mono bg-transparent text-[#ff4444]/50 hover:bg-[#ff4444]/10 transition-colors">"Fees"</button>
+                        <button onclick="window._filterNotable('consolidation')" id="whale-filter-consolidation" title="Consolidations: 50+ inputs merged into 3 or fewer outputs (exchange cold wallet sweeps, UTXO cleanup)" class="px-2 py-0.5 rounded text-[10px] font-mono bg-transparent text-[#a855f7]/50 hover:bg-[#a855f7]/10 transition-colors">"Consol."</button>
+                        <button onclick="window._filterNotable('fan_out')" id="whale-filter-fan_out" title="Fan-outs: 3 or fewer inputs sprayed to 50+ outputs (exchange batch payouts, mining rewards, airdrops)" class="px-2 py-0.5 rounded text-[10px] font-mono bg-transparent text-[#00d2ff]/50 hover:bg-[#00d2ff]/10 transition-colors">"Fan-out"</button>
+                        <button onclick="window._filterNotable('inscription')" id="whale-filter-inscription" title="Large inscriptions: witness data over 100KB (Ordinals, BRC-20, images, JSON)" class="px-2 py-0.5 rounded text-[10px] font-mono bg-transparent text-[#ff00c8]/50 hover:bg-[#ff00c8]/10 transition-colors">"Inscriptions"</button>
                     </div>
                 </div>
                 <div id="whale-feed-list" class="max-h-[200px] overflow-y-auto">

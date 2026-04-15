@@ -343,30 +343,29 @@ export function connectOwnFeed() {
                 processLiveBlock(block);
             } catch (err) {}
         });
-        es.addEventListener('block_mining', function(e) {
-            if (!_hb) return;
-            // Node is processing a new block. Delay showing the overlay by
-            // 90 seconds so it only appears for longer-than-usual processing.
-            // Most blocks process in under 2 minutes, so the overlay only
-            // shows for the tail end instead of the full duration.
-            if (_hb._miningDelayTimeout) clearTimeout(_hb._miningDelayTimeout);
-            if (_hb._miningTimeout) clearTimeout(_hb._miningTimeout);
-            _hb._miningDelayTimeout = setTimeout(function() {
-                if (!_hb) return;
-                _hb._blockMiningOverlay = true;
-                var miningEl = document.getElementById('heartbeat-mining-overlay');
-                if (miningEl) miningEl.classList.remove('hidden');
-            }, 90000); // 90 second delay before showing
-            // Auto-dismiss after 120s from mining event (30s after overlay appears)
-            _hb._miningTimeout = setTimeout(function() {
-                if (_hb && _hb._blockMiningOverlay) {
-                    _hb._blockMiningOverlay = false;
-                    var el = document.getElementById('heartbeat-mining-overlay');
-                    if (el) el.classList.add('hidden');
-                }
-            }, 120000);
-            console.log('[heartbeat] block mining detected');
-        });
+        // TODO: block_mining overlay disabled — triggers at wrong times, needs review.
+        // See tasks/todo.md "Heartbeat > Review block_mining overlay trigger logic".
+        // es.addEventListener('block_mining', function(e) {
+        //     if (!_hb) return;
+        //     // Node is processing a new block. Delay showing the overlay by
+        //     // 90 seconds so it only appears for longer-than-usual processing.
+        //     if (_hb._miningDelayTimeout) clearTimeout(_hb._miningDelayTimeout);
+        //     if (_hb._miningTimeout) clearTimeout(_hb._miningTimeout);
+        //     _hb._miningDelayTimeout = setTimeout(function() {
+        //         if (!_hb) return;
+        //         _hb._blockMiningOverlay = true;
+        //         var miningEl = document.getElementById('heartbeat-mining-overlay');
+        //         if (miningEl) miningEl.classList.remove('hidden');
+        //     }, 90000);
+        //     _hb._miningTimeout = setTimeout(function() {
+        //         if (_hb && _hb._blockMiningOverlay) {
+        //             _hb._blockMiningOverlay = false;
+        //             var el = document.getElementById('heartbeat-mining-overlay');
+        //             if (el) el.classList.add('hidden');
+        //         }
+        //     }, 120000);
+        //     console.log('[heartbeat] block mining detected');
+        // });
         es.addEventListener('lag', function(e) {
             console.log('SSE lag:', e.data);
         });
