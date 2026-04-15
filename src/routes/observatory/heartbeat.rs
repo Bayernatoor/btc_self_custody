@@ -732,10 +732,13 @@ pub fn HeartbeatPage() -> impl IntoView {
                         <span class="w-2 h-2 rounded-full bg-[#ffd700] animate-pulse"></span>
                         <span class="text-xs font-mono text-[#ffd700]/80 uppercase tracking-wider">"Whale Watch"</span>
                     </div>
-                    <div class="flex items-center gap-1.5">
+                    <div class="flex items-center gap-1 flex-wrap">
                         <button onclick="window._filterNotable('all')" id="whale-filter-all" class="px-2 py-0.5 rounded text-[10px] font-mono bg-white/10 text-white/60 hover:bg-white/20 transition-colors">"All"</button>
-                        <button onclick="window._filterNotable('whale')" id="whale-filter-whale" class="px-2 py-0.5 rounded text-[10px] font-mono bg-transparent text-white/30 hover:bg-white/10 transition-colors">"Whales"</button>
-                        <button onclick="window._filterNotable('fee')" id="whale-filter-fee" class="px-2 py-0.5 rounded text-[10px] font-mono bg-transparent text-white/30 hover:bg-white/10 transition-colors">"Fees"</button>
+                        <button onclick="window._filterNotable('whale')" id="whale-filter-whale" class="px-2 py-0.5 rounded text-[10px] font-mono bg-transparent text-[#ffd700]/50 hover:bg-[#ffd700]/10 transition-colors">"Whales"</button>
+                        <button onclick="window._filterNotable('fee')" id="whale-filter-fee" class="px-2 py-0.5 rounded text-[10px] font-mono bg-transparent text-[#ff4444]/50 hover:bg-[#ff4444]/10 transition-colors">"Fees"</button>
+                        <button onclick="window._filterNotable('consolidation')" id="whale-filter-consolidation" class="px-2 py-0.5 rounded text-[10px] font-mono bg-transparent text-[#a855f7]/50 hover:bg-[#a855f7]/10 transition-colors">"Consol."</button>
+                        <button onclick="window._filterNotable('fan_out')" id="whale-filter-fan_out" class="px-2 py-0.5 rounded text-[10px] font-mono bg-transparent text-[#00d2ff]/50 hover:bg-[#00d2ff]/10 transition-colors">"Fan-out"</button>
+                        <button onclick="window._filterNotable('inscription')" id="whale-filter-inscription" class="px-2 py-0.5 rounded text-[10px] font-mono bg-transparent text-[#ff00c8]/50 hover:bg-[#ff00c8]/10 transition-colors">"Inscriptions"</button>
                     </div>
                 </div>
                 <div id="whale-feed-list" class="max-h-[200px] overflow-y-auto">

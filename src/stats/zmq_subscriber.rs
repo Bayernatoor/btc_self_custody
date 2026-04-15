@@ -72,6 +72,15 @@ pub enum HeartbeatEvent {
         /// Whether this tx has an unusually high fee rate (>500 sat/vB) or absolute fee (>0.05 BTC).
         #[serde(skip_serializing_if = "std::ops::Not::not")]
         fee_outlier: bool,
+        /// Consolidation: many inputs (>50) funneled into few outputs.
+        #[serde(skip_serializing_if = "std::ops::Not::not")]
+        consolidation: bool,
+        /// Fan-out: few inputs sprayed to many outputs (>50). Exchange batch payouts.
+        #[serde(skip_serializing_if = "std::ops::Not::not")]
+        fan_out: bool,
+        /// Large inscription: witness data > 100KB.
+        #[serde(skip_serializing_if = "std::ops::Not::not")]
+        large_inscription: bool,
     },
     /// Block found - complete data (fees, size, weight all populated).
     /// Sent after node finishes validation and we fetch all metadata.
@@ -104,6 +113,12 @@ const WHALE_THRESHOLD_USD: f64 = 1_000_000.0;
 const FEE_RATE_OUTLIER_THRESHOLD: f64 = 500.0;
 /// Absolute fee above which a tx is flagged as a fee outlier (satoshis = 0.05 BTC).
 const FEE_ABSOLUTE_OUTLIER_THRESHOLD: u64 = 5_000_000;
+/// Input count above which a tx is flagged as a consolidation (with few outputs).
+const CONSOLIDATION_INPUT_THRESHOLD: u64 = 50;
+/// Output count above which a tx is flagged as a fan-out (with few inputs).
+const FAN_OUT_OUTPUT_THRESHOLD: u64 = 50;
+/// Witness data size above which a tx is flagged as a large inscription (bytes).
+const LARGE_INSCRIPTION_THRESHOLD: u64 = 100_000;
 
 fn is_zero_f64(v: &f64) -> bool {
     *v == 0.0
@@ -324,34 +339,41 @@ async fn subscribe_tx_and_sequence(
             }
         };
 
-        // Fee outlier detection
+        // Notable tx detection
         let fee_outlier = fee_rate >= FEE_RATE_OUTLIER_THRESHOLD
             || fee >= FEE_ABSOLUTE_OUTLIER_THRESHOLD;
+        let consolidation = parsed.input_count >= CONSOLIDATION_INPUT_THRESHOLD
+            && parsed.output_count <= 3;
+        let fan_out = parsed.input_count <= 3
+            && parsed.output_count >= FAN_OUT_OUTPUT_THRESHOLD;
+        let large_inscription = parsed.witness_bytes >= LARGE_INSCRIPTION_THRESHOLD;
 
-        if whale {
-            tracing::info!(
-                "ZMQ: whale tx {} — ${:.0} ({:.4} BTC, {fee} sat fee)",
-                parsed.txid,
-                value_usd,
-                parsed.value as f64 / 100_000_000.0,
-            );
-        }
-        if fee_outlier {
-            tracing::info!(
-                "ZMQ: fee outlier tx {} — {fee_rate:.1} sat/vB, {fee} sat total ({:.6} BTC)",
-                parsed.txid,
-                fee as f64 / 100_000_000.0,
-            );
-        }
-
-        // Determine notable type (priority order: whale > fee_outlier)
+        // Determine notable type (priority order)
         let notable_type = if whale {
             Some("whale")
         } else if fee_outlier {
             Some("fee_outlier")
+        } else if large_inscription {
+            Some("large_inscription")
+        } else if consolidation {
+            Some("consolidation")
+        } else if fan_out {
+            Some("fan_out")
         } else {
             None
         };
+
+        if let Some(nt) = notable_type {
+            tracing::info!(
+                "ZMQ: notable tx [{}] {} — {:.4} BTC, {fee} sat fee, {fee_rate:.1} sat/vB, {}in/{}out, {}B witness",
+                nt,
+                parsed.txid,
+                parsed.value as f64 / 100_000_000.0,
+                parsed.input_count,
+                parsed.output_count,
+                parsed.witness_bytes,
+            );
+        }
 
         // Store in DB (with notable info for persistence across restarts)
         if let Ok(conn) = state.db.get() {
@@ -378,6 +400,9 @@ async fn subscribe_tx_and_sequence(
             whale,
             value_usd: if whale { value_usd } else { 0.0 },
             fee_outlier,
+            consolidation,
+            fan_out,
+            large_inscription,
         });
 
         tx_count += 1;
@@ -628,7 +653,10 @@ async fn get_block_info(
 /// Minimal parsed info from a raw Bitcoin transaction.
 struct ParsedTx {
     txid: String,
-    value: u64, // sum of output values in sats
+    value: u64,        // sum of output values in sats
+    input_count: u64,  // number of inputs
+    output_count: u64, // number of outputs
+    witness_bytes: u64, // total witness data size in bytes
 }
 
 /// Parse a raw Bitcoin transaction to extract txid and total output value.
@@ -682,6 +710,7 @@ fn parse_raw_tx(data: &[u8]) -> Option<ParsedTx> {
 
     // For txid: we need the non-witness serialization (version + inputs + outputs + locktime)
     // Build it by stripping segwit marker/flag and witness data
+    let mut total_witness_bytes = 0u64;
     let txid = if is_segwit {
         // Non-witness serialization: version(4) + vin + vout + locktime(4)
         // We need to reconstruct this from the original data
@@ -692,7 +721,7 @@ fn parse_raw_tx(data: &[u8]) -> Option<ParsedTx> {
         // The witness data starts after all outputs, which is at `cursor`
         stripped.extend_from_slice(&data[6..cursor]); // skip 4 (version) + 2 (marker+flag)
 
-        // Skip witness data to find locktime
+        // Skip witness data to find locktime, tracking total witness bytes
         let mut wit_cursor = cursor;
         for _ in 0..input_count {
             let wit_count = read_varint(data, &mut wit_cursor)?;
@@ -701,6 +730,7 @@ fn parse_raw_tx(data: &[u8]) -> Option<ParsedTx> {
                 if wit_cursor + item_len > data.len() {
                     return None;
                 }
+                total_witness_bytes += item_len as u64;
                 wit_cursor += item_len;
             }
         }
@@ -720,6 +750,9 @@ fn parse_raw_tx(data: &[u8]) -> Option<ParsedTx> {
     Some(ParsedTx {
         txid,
         value: total_value,
+        input_count,
+        output_count,
+        witness_bytes: total_witness_bytes,
     })
 }
 

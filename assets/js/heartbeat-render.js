@@ -116,11 +116,15 @@ export function drawBlipTooltip(ctx, blip, canvasX, baseline) {
         var btcVal = blip.value / 100000000;
         lines.push('Value: ' + (btcVal < 0.001 ? btcVal.toFixed(8) : btcVal.toFixed(4)) + ' BTC');
     }
-    if (blip.whale && blip.valueUsd) {
-        lines.push('WHALE: $' + Math.round(blip.valueUsd).toLocaleString() + ' USD');
-    }
-    if (blip.feeOutlier) {
-        lines.push('FEE OUTLIER');
+    if (blip.notableType) {
+        var labels = {
+            'whale': 'WHALE: $' + Math.round(blip.valueUsd || 0).toLocaleString() + ' USD',
+            'fee_outlier': 'FEE OUTLIER',
+            'consolidation': 'CONSOLIDATION',
+            'fan_out': 'FAN-OUT (BATCH PAYOUT)',
+            'large_inscription': 'LARGE INSCRIPTION'
+        };
+        lines.push(labels[blip.notableType] || blip.notableType.toUpperCase());
     }
     if (blip.timestamp) {
         var d = new Date(blip.timestamp * 1000);
@@ -130,7 +134,16 @@ export function drawBlipTooltip(ctx, blip, canvasX, baseline) {
     if (blip.txid && _hb._pinnedBlip === blip) {
         lines.push('\u2192 Click again to view on mempool.space');
     }
-    var blipColor = blip.whale ? 'rgba(255,215,0,0.8)' : blip.feeOutlier ? 'rgba(255,68,68,0.8)' : (blip.color ? blip.color + '0.6)' : 'rgba(0,230,118,0.6)');
+    var tooltipColors = {
+        'whale': 'rgba(255,215,0,0.8)',
+        'fee_outlier': 'rgba(255,68,68,0.8)',
+        'consolidation': 'rgba(168,85,247,0.8)',
+        'fan_out': 'rgba(0,210,255,0.8)',
+        'large_inscription': 'rgba(255,0,200,0.8)'
+    };
+    var blipColor = (blip.notableType && tooltipColors[blip.notableType])
+        ? tooltipColors[blip.notableType]
+        : (blip.color ? blip.color + '0.6)' : 'rgba(0,230,118,0.6)');
     // Position tooltip above the blip
     var tipY;
     if (_hb.renderMode === 'bloodstream') {
@@ -1020,12 +1033,22 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                     }
 
                     // Notable tx glow: strong pulsing halo at ALL zoom levels
-                    if (blip.whale) {
+                    var nt = blip.notableType;
+                    if (nt === 'whale') {
                         ctx.shadowBlur = 20 + Math.sin(nowSec * 2.5) * 8;
                         ctx.shadowColor = 'rgba(255, 215, 0, 0.95)';
-                    } else if (blip.feeOutlier) {
+                    } else if (nt === 'fee_outlier') {
                         ctx.shadowBlur = 16 + Math.sin(nowSec * 3) * 6;
                         ctx.shadowColor = 'rgba(255, 68, 68, 0.9)';
+                    } else if (nt === 'consolidation') {
+                        ctx.shadowBlur = 14 + Math.sin(nowSec * 2) * 5;
+                        ctx.shadowColor = 'rgba(168, 85, 247, 0.85)';
+                    } else if (nt === 'fan_out') {
+                        ctx.shadowBlur = 14 + Math.sin(nowSec * 2) * 5;
+                        ctx.shadowColor = 'rgba(0, 210, 255, 0.85)';
+                    } else if (nt === 'large_inscription') {
+                        ctx.shadowBlur = 16 + Math.sin(nowSec * 2.5) * 6;
+                        ctx.shadowColor = 'rgba(255, 0, 200, 0.85)';
                     }
                     // Shadow glow only at mid-zoom where bricks are visible but
                     // not outlined. Skip at low zoom (sub-pixel, too expensive
@@ -1042,7 +1065,7 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                         ctx.fillRect(rx, ry, rw, rh);
                     }
                     // Notable txs: draw a second pass for stronger glow + bright outline
-                    if (blip.whale || blip.feeOutlier) {
+                    if (blip.notableType) {
                         // Second glow pass (doubles the bloom)
                         if (useRound) {
                             ctx.beginPath();
@@ -1053,7 +1076,14 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                         }
                         // Bright colored outline at all zoom levels
                         ctx.shadowBlur = 0;
-                        ctx.strokeStyle = blip.whale ? 'rgba(255, 215, 0, 0.8)' : 'rgba(255, 68, 68, 0.7)';
+                        var outlineColors = {
+                            'whale': 'rgba(255, 215, 0, 0.8)',
+                            'fee_outlier': 'rgba(255, 68, 68, 0.7)',
+                            'consolidation': 'rgba(168, 85, 247, 0.7)',
+                            'fan_out': 'rgba(0, 210, 255, 0.7)',
+                            'large_inscription': 'rgba(255, 0, 200, 0.7)'
+                        };
+                        ctx.strokeStyle = outlineColors[blip.notableType] || 'rgba(255, 255, 255, 0.5)';
                         ctx.lineWidth = Math.max(1, zoom * 0.4);
                         if (useRound) {
                             ctx.beginPath();
@@ -1066,7 +1096,7 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                     ctx.shadowBlur = 0;
 
                     // Dark outline at 4x+ zoom for clear brick separation
-                    if (zoom > 4 && !blip.whale && !blip.feeOutlier) {
+                    if (zoom > 4 && !blip.notableType) {
                         ctx.lineWidth = lw;
                         var ins = lw / 2;
                         if (useRound) {

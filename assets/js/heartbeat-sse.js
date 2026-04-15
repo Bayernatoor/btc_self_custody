@@ -74,9 +74,13 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
         if (!tx.fee || !tx.vsize) continue;
 
         // Detect notable type from history data (notable_type field) or live flags
-        var isWhale = tx.whale || tx.notable_type === 'whale';
-        var isFeeOutlier = tx.fee_outlier || tx.notable_type === 'fee_outlier';
-        var isNotable = isWhale || isFeeOutlier;
+        var nt = tx.notable_type || null;
+        var isWhale = tx.whale || nt === 'whale';
+        var isFeeOutlier = tx.fee_outlier || nt === 'fee_outlier';
+        var isConsolidation = tx.consolidation || nt === 'consolidation';
+        var isFanOut = tx.fan_out || nt === 'fan_out';
+        var isLargeInscription = tx.large_inscription || nt === 'large_inscription';
+        var isNotable = isWhale || isFeeOutlier || isConsolidation || isFanOut || isLargeInscription;
 
         // Spread randomly across the flatline, leaving last 20px for live txs.
         var usableSpan = Math.max(10, flatlineSpan - 20);
@@ -95,7 +99,18 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
         if (stackY > histMaxStack && !isNotable) continue;
         stackMap[gridX] = stackY + brickH;
 
-        var blipColor = isWhale ? 'rgba(255, 215, 0, ' : isFeeOutlier ? 'rgba(255, 68, 68, ' : feeRateColor(feeRate, medianFee);
+        var blipColor = isWhale ? 'rgba(255, 215, 0, '
+            : isFeeOutlier ? 'rgba(255, 68, 68, '
+            : isConsolidation ? 'rgba(168, 85, 247, '
+            : isFanOut ? 'rgba(0, 210, 255, '
+            : isLargeInscription ? 'rgba(255, 0, 200, '
+            : feeRateColor(feeRate, medianFee);
+        var notableType = isWhale ? 'whale'
+            : isFeeOutlier ? 'fee_outlier'
+            : isConsolidation ? 'consolidation'
+            : isFanOut ? 'fan_out'
+            : isLargeInscription ? 'large_inscription'
+            : null;
 
         // Stagger: left-most bricks appear first, sweeping right
         var xFrac = flatlineSpan > 0 ? (txVX - liveSeg.x_start) / flatlineSpan : 0;
@@ -115,6 +130,7 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
             feeRatio: medianFee > 0 ? feeRate / medianFee : 1,
             whale: isWhale,
             feeOutlier: isFeeOutlier,
+            notableType: notableType,
             valueUsd: tx.value_usd || 0
         });
         placed++;
@@ -122,7 +138,10 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
         if (isNotable) {
             notableTxs.push({
                 txid: tx.txid, fee: tx.fee, vsize: tx.vsize, value: tx.value,
-                whale: isWhale, fee_outlier: isFeeOutlier, value_usd: tx.value_usd || 0
+                whale: isWhale, fee_outlier: isFeeOutlier,
+                consolidation: isConsolidation, fan_out: isFanOut,
+                large_inscription: isLargeInscription,
+                value_usd: tx.value_usd || 0
             });
         }
     }
@@ -513,7 +532,10 @@ export function flushTxBatch() {
         var feeNorm = Math.min(Math.log2(feeRate + 1) / 6, 1.0);
         var isWhale = tx.whale || false;
         var isFeeOutlier = tx.fee_outlier || false;
-        var isNotable = isWhale || isFeeOutlier;
+        var isConsolidation = tx.consolidation || false;
+        var isFanOut = tx.fan_out || false;
+        var isLargeInscription = tx.large_inscription || false;
+        var isNotable = isWhale || isFeeOutlier || isConsolidation || isFanOut || isLargeInscription;
 
         // Notable txs: wider (6px, occupies ~2 grid cells) and much taller
         var brickW = isNotable ? 6 : 4;
@@ -549,7 +571,20 @@ export function flushTxBatch() {
             if (!found) continue;
         }
 
-        var blipColor = isWhale ? 'rgba(255, 215, 0, ' : isFeeOutlier ? 'rgba(255, 68, 68, ' : feeRateColor(feeRate, medianFee);
+        var blipColor = isWhale ? 'rgba(255, 215, 0, '
+            : isFeeOutlier ? 'rgba(255, 68, 68, '
+            : isConsolidation ? 'rgba(168, 85, 247, '
+            : isFanOut ? 'rgba(0, 210, 255, '
+            : isLargeInscription ? 'rgba(255, 0, 200, '
+            : feeRateColor(feeRate, medianFee);
+
+        // Determine notable type string for the blip
+        var notableType = isWhale ? 'whale'
+            : isFeeOutlier ? 'fee_outlier'
+            : isConsolidation ? 'consolidation'
+            : isFanOut ? 'fan_out'
+            : isLargeInscription ? 'large_inscription'
+            : null;
 
         liveSeg.blips.push({
             x: brickX,
@@ -573,6 +608,7 @@ export function flushTxBatch() {
             feeRatio: medianFee > 0 ? feeRate / medianFee : 1,
             whale: isWhale,
             feeOutlier: isFeeOutlier,
+            notableType: notableType,
             valueUsd: tx.value_usd || 0
         });
         liveSeg._colHeights[gridX] = stackY + brickH;
@@ -594,7 +630,7 @@ export function flushTxBatch() {
         for (var ci = 0; ci < liveSeg.blips.length; ci++) {
             var cb = liveSeg.blips[ci];
             if (cb.fadeStart > 0) continue; // already fading, skip
-            if (cb.whale || cb.feeOutlier) continue; // never cull notable blips
+            if (cb.notableType) continue; // never cull notable blips
             var score = (cb.feeRate || 0.1) * Math.log2((cb.vsize || 100) + 1);
             scored.push({ idx: ci, score: score });
         }
@@ -717,6 +753,9 @@ window._notableFeed = function(tx) {
 
     var isWhale = tx.whale || false;
     var isFeeOutlier = tx.fee_outlier || false;
+    var isConsolidation = tx.consolidation || false;
+    var isFanOut = tx.fan_out || false;
+    var isLargeInscription = tx.large_inscription || false;
     var btcVal = (tx.value || 0) / 100000000;
     var feeRate = tx.fee && tx.vsize ? (tx.fee / tx.vsize).toFixed(1) : '?';
     var feeBtc = (tx.fee || 0) / 100000000;
@@ -725,19 +764,37 @@ window._notableFeed = function(tx) {
 
     // Build label based on type
     var labelHtml;
+    var feedType;
     if (isWhale) {
+        feedType = 'whale';
         var usdVal = Math.round(tx.value_usd || 0);
         labelHtml = '<span class="text-[#ffd700] font-bold shrink-0">$' + usdVal.toLocaleString() + '</span>' +
             '<span class="text-white/50 shrink-0">' + btcVal.toFixed(4) + ' BTC</span>';
-    } else {
+    } else if (isFeeOutlier) {
+        feedType = 'fee';
         labelHtml = '<span class="text-[#ff4444] font-bold shrink-0">FEE: ' + feeRate + ' sat/vB</span>' +
             '<span class="text-white/50 shrink-0">' + feeBtc.toFixed(6) + ' BTC fee</span>';
+    } else if (isConsolidation) {
+        feedType = 'consolidation';
+        labelHtml = '<span class="text-[#a855f7] font-bold shrink-0">CONSOLIDATION</span>' +
+            '<span class="text-white/50 shrink-0">' + btcVal.toFixed(4) + ' BTC</span>';
+    } else if (isFanOut) {
+        feedType = 'fan_out';
+        labelHtml = '<span class="text-[#00d2ff] font-bold shrink-0">FAN-OUT</span>' +
+            '<span class="text-white/50 shrink-0">' + btcVal.toFixed(4) + ' BTC</span>';
+    } else if (isLargeInscription) {
+        feedType = 'inscription';
+        labelHtml = '<span class="text-[#ff00c8] font-bold shrink-0">INSCRIPTION</span>' +
+            '<span class="text-white/50 shrink-0">' + btcVal.toFixed(4) + ' BTC</span>';
+    } else {
+        feedType = 'other';
+        labelHtml = '<span class="text-white/50 font-bold shrink-0">NOTABLE</span>';
     }
 
     var row = document.createElement('div');
     row.className = 'flex items-baseline gap-3 px-4 py-2 border-b border-white/5 text-xs font-mono opacity-0';
     row.style.animation = 'fadeinone 0.5s ease forwards';
-    row.dataset.type = isWhale ? 'whale' : 'fee';
+    row.dataset.type = feedType;
     var txid = tx.txid || '';
     row.innerHTML = labelHtml +
         '<span class="text-white/30 hover:text-[#f7931a] transition-colors cursor-pointer" data-txid="' + txid + '">' + txidShort + '</span>' +
@@ -780,15 +837,17 @@ window._filterNotable = function(filter) {
     var list = document.getElementById('whale-feed-list');
     if (!list) return;
 
-    // Update button styles
-    var btns = ['all', 'whale', 'fee'];
+    // Update button styles: active gets bg-white/10, inactive reverts to original
+    var btns = document.querySelectorAll('[id^="whale-filter-"]');
     for (var bi = 0; bi < btns.length; bi++) {
-        var btn = document.getElementById('whale-filter-' + btns[bi]);
-        if (!btn) continue;
-        if (btns[bi] === filter) {
-            btn.className = 'px-2 py-0.5 rounded text-[10px] font-mono bg-white/10 text-white/60 hover:bg-white/20 transition-colors';
+        var btnEl = btns[bi];
+        var btnFilter = btnEl.id.replace('whale-filter-', '');
+        if (btnFilter === filter) {
+            btnEl.style.background = 'rgba(255,255,255,0.1)';
+            btnEl.style.opacity = '1';
         } else {
-            btn.className = 'px-2 py-0.5 rounded text-[10px] font-mono bg-transparent text-white/30 hover:bg-white/10 transition-colors';
+            btnEl.style.background = 'transparent';
+            btnEl.style.opacity = '0.7';
         }
     }
 
