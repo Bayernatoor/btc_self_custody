@@ -59,7 +59,7 @@ fn SectionHeader(
         <div class="col-span-2 sm:col-span-3 lg:col-span-4 mt-6 first:mt-0">
             <h2 class="text-sm font-semibold text-white/60 uppercase tracking-wider">{title}</h2>
             {subtitle.map(|s| view! {
-                <p class="text-[11px] text-white/30 mt-0.5">{s}</p>
+                <p class="text-[11px] text-white/40 mt-0.5">{s}</p>
             })}
             <div class="border-b border-white/10 mt-2"></div>
         </div>
@@ -701,7 +701,9 @@ pub fn StatsSummaryPage() -> impl IntoView {
         // EXTREMES — Hero section at top, clickable cards with block links
         // ===================================================================
         <div class="bg-[#0d2137] border border-[#f7931a]/25 rounded-2xl p-4 sm:p-6 mb-6">
-            <h2 class="text-sm font-bold text-[#f7931a] uppercase tracking-widest border-b border-[#f7931a]/25 pb-2 mb-4">"Records"</h2>
+            <h2 class="text-sm font-bold text-[#f7931a] uppercase tracking-widest">"Records"</h2>
+            <p class="text-[11px] text-white/40 mt-0.5 mb-2">"Notable extremes across the selected range"</p>
+            <div class="border-b border-[#f7931a]/25 mb-4"></div>
 
             <Suspense fallback=move || view! {
                 <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
@@ -712,14 +714,7 @@ pub fn StatsSummaryPage() -> impl IntoView {
             }>
                 {move || {
                     let ext = extremes_res.get().flatten();
-                    ext.map(|d| view! {
-                        <div class="mb-2">
-                            <h2 class="text-sm font-semibold text-white/60 uppercase tracking-wider">"Records"</h2>
-                            <p class="text-[11px] text-white/30 mt-0.5">"Notable extremes across the selected range"</p>
-                            <div class="border-b border-white/10 mt-2 mb-4"></div>
-                        </div>
-                        <ExtremesHero data=d/>
-                    })
+                    ext.map(|d| view! { <ExtremesHero data=d/> })
                 }}
             </Suspense>
         </div>
