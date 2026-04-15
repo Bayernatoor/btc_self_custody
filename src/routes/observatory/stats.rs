@@ -712,7 +712,14 @@ pub fn StatsSummaryPage() -> impl IntoView {
             }>
                 {move || {
                     let ext = extremes_res.get().flatten();
-                    ext.map(|d| view! { <ExtremesHero data=d/> })
+                    ext.map(|d| view! {
+                        <div class="mb-2">
+                            <h2 class="text-sm font-semibold text-white/60 uppercase tracking-wider">"Records"</h2>
+                            <p class="text-[11px] text-white/30 mt-0.5">"Notable extremes across the selected range"</p>
+                            <div class="border-b border-white/10 mt-2 mb-4"></div>
+                        </div>
+                        <ExtremesHero data=d/>
+                    })
                 }}
             </Suspense>
         </div>
