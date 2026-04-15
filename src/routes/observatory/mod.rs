@@ -81,7 +81,7 @@ pub fn ObservatoryPage() -> impl IntoView {
                     <div class="absolute inset-0 flex flex-col items-center justify-end pb-4 sm:pb-5">
                         <h1 class="text-2xl sm:text-3xl lg:text-4xl font-title text-white mb-1.5 drop-shadow-lg">"The Bitcoin Observatory"</h1>
                         <p class="text-sm sm:text-base text-white/60 max-w-lg mx-auto px-4 text-center drop-shadow">
-                            "Live blockchain metrics, block data, embedded data analysis, and BIP signaling tracker."
+                            "50+ live charts tracking blocks, fees, adoption, mining, embedded protocols, and BIP signaling."
                         </p>
                     </div>
                 </div>

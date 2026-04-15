@@ -51,10 +51,17 @@ fn StatCard(
 
 /// Section header within the stats grid.
 #[component]
-fn SectionHeader(#[prop(into)] title: &'static str) -> impl IntoView {
+fn SectionHeader(
+    #[prop(into)] title: &'static str,
+    #[prop(optional, into)] subtitle: Option<&'static str>,
+) -> impl IntoView {
     view! {
-        <div class="col-span-2 sm:col-span-3 lg:col-span-4 mt-4 first:mt-0">
-            <h2 class="text-sm font-semibold text-white/60 uppercase tracking-wider border-b border-white/10 pb-2">{title}</h2>
+        <div class="col-span-2 sm:col-span-3 lg:col-span-4 mt-6 first:mt-0">
+            <h2 class="text-sm font-semibold text-white/60 uppercase tracking-wider">{title}</h2>
+            {subtitle.map(|s| view! {
+                <p class="text-[11px] text-white/30 mt-0.5">{s}</p>
+            })}
+            <div class="border-b border-white/10 mt-2"></div>
         </div>
     }
 }
@@ -630,7 +637,7 @@ pub fn StatsSummaryPage() -> impl IntoView {
             <div class="absolute inset-0 bg-gradient-to-t from-[#123c64] via-[#123c64]/60 to-[#123c64]/30"></div>
             <div class="absolute inset-0 flex flex-col items-center justify-end pb-3 sm:pb-4">
                 <h1 class="text-lg sm:text-xl lg:text-2xl font-title text-white mb-0.5 drop-shadow-lg">"Stats Overview"</h1>
-                <p class="text-[11px] sm:text-xs text-white/50 max-w-lg mx-auto px-4 text-center drop-shadow">"At-a-glance Bitcoin network counters for any time range"</p>
+                <p class="text-[11px] sm:text-xs text-white/50 max-w-lg mx-auto px-4 text-center drop-shadow">"Key network counters across any time range. Select a range to explore."</p>
             </div>
         </div>
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-6">
@@ -709,7 +716,7 @@ pub fn StatsSummaryPage() -> impl IntoView {
         // REST OF THE STATS — Network, Fees, Adoption, Embedded, Mining, Price
         // ===================================================================
         <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-            <SectionHeader title="Network"/>
+            <SectionHeader title="Network" subtitle="Block production, size, throughput, and chain growth"/>
             <StatCard label="Blocks" value=blocks
                 tooltip="Total number of blocks mined in this range"/>
             <StatCard label="Transactions" value=txs sub=txs_sub
@@ -729,7 +736,7 @@ pub fn StatsSummaryPage() -> impl IntoView {
             <StatCard label="Transaction Volume" value=total_btc_transferred
                 tooltip="Sum of all non-coinbase output values. Includes change outputs, so the same BTC can be counted multiple times"/>
 
-            <SectionHeader title="Fees"/>
+            <SectionHeader title="Fees" subtitle="Miner revenue from transaction fees"/>
             <StatCard label="Total Fees" value=total_fees_btc sub=total_fees_sub
                 tooltip="Sum of all transaction fees paid to miners in this range"/>
             <StatCard label="Avg Fee Rate" value=avg_fee_rate
@@ -739,7 +746,7 @@ pub fn StatsSummaryPage() -> impl IntoView {
             <StatCard label="Avg Median Fee" value=avg_median_fee
                 tooltip="Average of per-block median absolute fees in satoshis"/>
 
-            <SectionHeader title="Adoption"/>
+            <SectionHeader title="Adoption" subtitle="SegWit, Taproot, witness data, and UTXO activity"/>
             <StatCard label="SegWit Transactions" value=segwit_pct
                 tooltip="Percentage of transactions with at least one SegWit input. A transaction counts even if it also creates legacy outputs, so this is higher than SegWit's share of total outputs"/>
             <StatCard label="Taproot Outputs" value=taproot_outputs sub=taproot_sub
@@ -753,7 +760,7 @@ pub fn StatsSummaryPage() -> impl IntoView {
             <StatCard label="RBF Usage" value=rbf_pct
                 tooltip="Percentage of non-coinbase transactions signaling Replace-By-Fee (nSequence < 0xFFFFFFFE)"/>
 
-            <SectionHeader title="Embedded Data"/>
+            <SectionHeader title="Embedded Data" subtitle="Non-financial protocols using block space"/>
             <StatCard label="Inscriptions" value=inscriptions sub=inscriptions_sub
                 tooltip="Ordinals inscriptions detected via witness envelope (OP_FALSE OP_IF OP_PUSH 'ord')"/>
             <StatCard label="BRC-20" value=brc20 sub=brc20_sub
@@ -767,13 +774,13 @@ pub fn StatsSummaryPage() -> impl IntoView {
             <StatCard label="Counterparty" value=counterparty
                 tooltip="Counterparty protocol outputs (XCP, identified by CNTRPRTY marker)"/>
 
-            <SectionHeader title="Mining"/>
+            <SectionHeader title="Mining" subtitle="Pool distribution and block production"/>
             <StatCard label="Top Pool" value=top_pool sub=top_pool_sub
                 tooltip="Mining pool that found the most blocks in this range"/>
             <StatCard label="Unique Pools" value=pool_count
                 tooltip="Number of distinct mining pools identified by coinbase signature"/>
 
-            <SectionHeader title="Price"/>
+            <SectionHeader title="Price" subtitle="BTC/USD at the boundaries of the selected range"/>
             <StatCard label="Start Price" value=price_start
                 tooltip="BTC/USD price at the beginning of the selected range (daily granularity from blockchain.info)"/>
             <StatCard label="End Price" value=price_end

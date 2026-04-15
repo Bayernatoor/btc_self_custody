@@ -125,7 +125,7 @@ pub fn HomePage() -> impl IntoView {
             <div class="text-center mb-10">
                 <h2 class="text-xl sm:text-2xl lg:text-3xl font-title text-white mb-2">"Explore the Blockchain"</h2>
                 <div class="w-12 h-0.5 bg-[#f7931a] mx-auto mt-2 mb-4"></div>
-                <p class="text-sm sm:text-[0.9rem] text-white/50 max-w-lg mx-auto">"Live data from my full Bitcoin node."</p>
+                <p class="text-sm sm:text-[0.9rem] text-white/50 max-w-lg mx-auto">"Live analytics from a self-hosted full Bitcoin node with full transaction index."</p>
             </div>
 
             // Hero banner
@@ -140,7 +140,7 @@ pub fn HomePage() -> impl IntoView {
                     <div class="absolute inset-0 bg-gradient-to-t from-[#123c64] via-[#123c64]/50 to-transparent"></div>
                     <div class="absolute inset-0 flex flex-col items-center justify-end pb-4 sm:pb-6">
                         <h3 class="text-lg sm:text-xl lg:text-2xl font-title text-white mb-1 drop-shadow-lg group-hover:text-[#f4a949] transition-colors">"The Bitcoin Observatory"</h3>
-                        <p class="text-xs sm:text-sm text-white/50 drop-shadow">"Live blockchain analytics, charts, and BIP signaling tracker"</p>
+                        <p class="text-xs sm:text-sm text-white/50 drop-shadow">"50+ charts, live block data, protocol analytics, and BIP signaling"</p>
                     </div>
                 </div>
             </a>
@@ -155,7 +155,7 @@ pub fn HomePage() -> impl IntoView {
                             </svg>
                         </div>
                         <h4 class="text-sm font-semibold text-white mb-1 group-hover:text-[#f4a949] transition-colors">"Live Dashboard"</h4>
-                        <p class="text-xs text-white/40 leading-relaxed">"Real-time mempool, mining stats, difficulty, from my own node."</p>
+                        <p class="text-xs text-white/40 leading-relaxed">"Real-time block height, difficulty, mempool, hashrate, and halving countdown."</p>
                     </div>
                 </a>
                 <a href="/observatory/charts/network" class="block opacity-0 animate-slideup" style="animation-delay: 300ms">
@@ -165,8 +165,8 @@ pub fn HomePage() -> impl IntoView {
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"/>
                             </svg>
                         </div>
-                        <h4 class="text-sm font-semibold text-white mb-1 group-hover:text-[#f4a949] transition-colors">"30+ Charts"</h4>
-                        <p class="text-xs text-white/40 leading-relaxed">"Block size, fees, SegWit and Taproot adoption, mining pools, and transaction metrics."</p>
+                        <h4 class="text-sm font-semibold text-white mb-1 group-hover:text-[#f4a949] transition-colors">"50+ Charts"</h4>
+                        <p class="text-xs text-white/40 leading-relaxed">"Block metrics, fee analysis, SegWit and Taproot adoption, mining pools, and transaction trends."</p>
                     </div>
                 </a>
                 <a href="/observatory/charts/embedded" class="block opacity-0 animate-slideup" style="animation-delay: 400ms">
@@ -177,7 +177,7 @@ pub fn HomePage() -> impl IntoView {
                             </svg>
                         </div>
                         <h4 class="text-sm font-semibold text-white mb-1 group-hover:text-[#f4a949] transition-colors">"Embedded Data"</h4>
-                        <p class="text-xs text-white/40 leading-relaxed">"Track Runes, Ordinals, BRC-20, and OP_RETURN protocols across every block."</p>
+                        <p class="text-xs text-white/40 leading-relaxed">"Runes, Ordinals, BRC-20, OP_RETURN protocols, inscription fees, and miner coinbase messages."</p>
                     </div>
                 </a>
                 <a href="/observatory/signaling" class="block opacity-0 animate-slideup" style="animation-delay: 500ms">
