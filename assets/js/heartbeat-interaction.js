@@ -395,8 +395,9 @@ export function handleControlClick(id) {
             _hb.viewOffset = vx2 - cx2 / _hb.zoom;
             break;
         case 'center':
-            // Center viewport on the live head without changing zoom
+            // Center viewport on the live head and reset vertical pan
             _hb.viewOffset = _hb.virtualX - (_hb.width * HEAD_POSITION_FRAC) / _hb.zoom;
+            _hb.viewOffsetY = 0;
             break;
         case 'mode':
             _hb.renderMode = _hb.renderMode === 'bricks' ? 'bloodstream' : 'bricks';
