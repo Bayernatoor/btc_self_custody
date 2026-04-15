@@ -1308,3 +1308,149 @@ pub async fn fetch_extremes(
 
     Ok(result)
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Notable Transactions (Whale Watch) server functions
+// ═══════════════════════════════════════════════════════════════════════════
+
+#[server(prefix = "/api", endpoint = "notable_txs")]
+pub async fn fetch_notable_txs(
+    filter: NotableTxFilter,
+    limit: u64,
+    offset: u64,
+) -> Result<NotableTxPage, ServerFnError> {
+    // Cap limit to prevent abuse
+    let limit = limit.min(500);
+    let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
+        leptos_axum::extract().await.map_err(|e| {
+            internal_err("Stats unavailable", e)
+        })?;
+    let conn = state
+        .db
+        .get()
+        .map_err(|e| internal_err("DB pool", e))?;
+
+    let db_filter = super::db::NotableFilter {
+        notable_type: filter.notable_type.clone(),
+        since: filter.since,
+        until: filter.until,
+        min_value_usd: filter.min_value_usd,
+        confirmed_only: filter.confirmed_only,
+        unconfirmed_only: filter.unconfirmed_only,
+    };
+
+    let rows = super::db::query_notable_txs(&conn, &db_filter, limit, offset)
+        .map_err(|e| internal_err("DB query", e))?;
+    let total = super::db::count_notable_txs(&conn, &db_filter)
+        .map_err(|e| internal_err("DB count", e))?;
+
+    let items: Vec<NotableTxInfo> = rows
+        .into_iter()
+        .map(|r| NotableTxInfo {
+            txid: r.txid,
+            notable_type: r.notable_type,
+            fee: r.fee,
+            vsize: r.vsize,
+            value: r.value,
+            max_output_value: r.max_output_value,
+            value_usd: r.value_usd,
+            input_count: r.input_count,
+            output_count: r.output_count,
+            witness_bytes: r.witness_bytes,
+            op_return_text: r.op_return_text,
+            first_seen: r.first_seen,
+            confirmed_height: r.confirmed_height,
+            confirmed_at: r.confirmed_at,
+        })
+        .collect();
+
+    Ok(NotableTxPage {
+        items,
+        total,
+        offset,
+        limit,
+    })
+}
+
+#[server(prefix = "/api", endpoint = "notable_stats")]
+pub async fn fetch_notable_stats(
+    since: u64,
+) -> Result<NotableStatsInfo, ServerFnError> {
+    let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
+        leptos_axum::extract().await.map_err(|e| {
+            internal_err("Stats unavailable", e)
+        })?;
+    let conn = state
+        .db
+        .get()
+        .map_err(|e| internal_err("DB pool", e))?;
+
+    let stats = super::db::query_notable_stats(&conn, since)
+        .map_err(|e| internal_err("DB query", e))?;
+
+    Ok(NotableStatsInfo {
+        total_count: stats.total_count,
+        total_value_usd: stats.total_value_usd,
+        by_type: stats.by_type,
+        top_value_usd: stats.top_value_usd,
+        top_txid: stats.top_txid,
+    })
+}
+
+/// Fetch top N notable txs by USD value in a time window (leaderboard).
+#[server(prefix = "/api", endpoint = "notable_top")]
+pub async fn fetch_notable_top(
+    since: u64,
+    limit: u64,
+) -> Result<Vec<NotableTxInfo>, ServerFnError> {
+    let limit = limit.min(50);
+    let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
+        leptos_axum::extract().await.map_err(|e| {
+            internal_err("Stats unavailable", e)
+        })?;
+    let conn = state
+        .db
+        .get()
+        .map_err(|e| internal_err("DB pool", e))?;
+
+    // Direct query ordered by value_usd DESC
+    let mut stmt = conn
+        .prepare(
+            "SELECT txid, notable_type, fee, vsize, value, max_output_value, value_usd,
+                    input_count, output_count, witness_bytes, op_return_text,
+                    first_seen, confirmed_height, confirmed_at
+             FROM notable_txs
+             WHERE first_seen >= ?1
+             ORDER BY value_usd DESC
+             LIMIT ?2",
+        )
+        .map_err(|e| internal_err("DB prepare", e))?;
+
+    let items = stmt
+        .query_map(
+            rusqlite::params![since as i64, limit as i64],
+            |row| {
+                Ok(NotableTxInfo {
+                    txid: row.get(0)?,
+                    notable_type: row.get(1)?,
+                    fee: row.get(2)?,
+                    vsize: row.get(3)?,
+                    value: row.get(4)?,
+                    max_output_value: row.get(5)?,
+                    value_usd: row.get(6)?,
+                    input_count: row.get(7)?,
+                    output_count: row.get(8)?,
+                    witness_bytes: row.get(9)?,
+                    op_return_text: row.get(10)?,
+                    first_seen: row.get(11)?,
+                    confirmed_height: row.get(12)?,
+                    confirmed_at: row.get(13)?,
+                })
+            },
+        )
+        .map_err(|e| internal_err("DB query", e))?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(|e| internal_err("DB collect", e))?;
+
+    Ok(items)
+}

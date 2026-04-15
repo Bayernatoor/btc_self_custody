@@ -81,6 +81,19 @@ pub enum HeartbeatEvent {
         /// Large inscription: witness data > 100KB.
         #[serde(skip_serializing_if = "std::ops::Not::not")]
         large_inscription: bool,
+        /// Round number transfer: an output matches a round BTC amount (1, 10, 100, 1000).
+        #[serde(skip_serializing_if = "std::ops::Not::not")]
+        round_number: bool,
+        /// OP_RETURN contains readable ASCII text (>= 4 printable chars).
+        #[serde(skip_serializing_if = "std::ops::Not::not")]
+        op_return_msg: bool,
+        /// Decoded OP_RETURN text if op_return_msg is true.
+        #[serde(skip_serializing_if = "String::is_empty", default)]
+        op_return_text: String,
+        /// Number of inputs in the transaction.
+        input_count: u64,
+        /// Number of outputs in the transaction.
+        output_count: u64,
     },
     /// Block found - complete data (fees, size, weight all populated).
     /// Sent after node finishes validation and we fetch all metadata.
@@ -110,15 +123,29 @@ pub enum HeartbeatEvent {
 /// Minimum USD value to flag a transaction as a whale tx.
 const WHALE_THRESHOLD_USD: f64 = 1_000_000.0;
 /// Fee rate above which a tx is flagged as a fee outlier (sat/vB).
-const FEE_RATE_OUTLIER_THRESHOLD: f64 = 500.0;
-/// Absolute fee above which a tx is flagged as a fee outlier (satoshis = 0.05 BTC).
-const FEE_ABSOLUTE_OUTLIER_THRESHOLD: u64 = 5_000_000;
+/// Raised from 500 to 2000 to reduce false positives during mempool congestion.
+const FEE_RATE_OUTLIER_THRESHOLD: f64 = 2000.0;
+/// Absolute fee above which a tx is flagged as a fee outlier (satoshis = 0.1 BTC).
+/// Raised from 0.05 BTC to avoid flagging large consolidations.
+const FEE_ABSOLUTE_OUTLIER_THRESHOLD: u64 = 10_000_000;
 /// Input count above which a tx is flagged as a consolidation (with few outputs).
 const CONSOLIDATION_INPUT_THRESHOLD: u64 = 50;
 /// Output count above which a tx is flagged as a fan-out (with few inputs).
-const FAN_OUT_OUTPUT_THRESHOLD: u64 = 50;
+/// Raised from 50 to 100 to focus on genuine batch payouts.
+const FAN_OUT_OUTPUT_THRESHOLD: u64 = 100;
 /// Witness data size above which a tx is flagged as a large inscription (bytes).
 const LARGE_INSCRIPTION_THRESHOLD: u64 = 100_000;
+/// Exact round BTC amounts to detect (in satoshis). Humans often send round numbers.
+const ROUND_NUMBER_AMOUNTS: &[u64] = &[
+    100_000_000,        // 1 BTC
+    1_000_000_000,      // 10 BTC
+    10_000_000_000,     // 100 BTC
+    100_000_000_000,    // 1000 BTC
+];
+/// Tolerance for round number detection (sats). Allows 0.001 BTC slop for dust change.
+const ROUND_NUMBER_TOLERANCE: u64 = 100_000;
+/// Minimum USD value for a round number tx to be flagged (avoids 1 BTC dust at low prices).
+const ROUND_NUMBER_MIN_USD: f64 = 100_000.0;
 
 fn is_zero_f64(v: &f64) -> bool {
     *v == 0.0
@@ -322,21 +349,27 @@ async fn subscribe_tx_and_sequence(
             0.0
         };
 
-        // Check whale status using cached price
-        let (whale, value_usd) = {
-            let price = state
-                .price_cache
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .as_ref()
-                .map(|(p, _)| p.usd)
-                .unwrap_or(0.0);
-            if price > 0.0 {
-                let usd = parsed.value as f64 * price / 100_000_000.0;
-                (usd >= WHALE_THRESHOLD_USD, usd)
+        // Get cached price once for all USD-based detections
+        let price_usd = state
+            .price_cache
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .map(|(p, _)| p.usd)
+            .unwrap_or(0.0);
+
+        // Whale: use non_change_value (total - largest output) to avoid inflating by change.
+        // This gives a better "actual transfer" estimate for self-spends/consolidations.
+        let whale = if price_usd > 0.0 {
+            let transfer_sats = if parsed.non_change_value > 0 {
+                parsed.non_change_value
             } else {
-                (false, 0.0)
-            }
+                parsed.value
+            };
+            let usd = transfer_sats as f64 * price_usd / 100_000_000.0;
+            usd >= WHALE_THRESHOLD_USD
+        } else {
+            false
         };
 
         // Notable tx detection
@@ -348,17 +381,40 @@ async fn subscribe_tx_and_sequence(
             && parsed.output_count >= FAN_OUT_OUTPUT_THRESHOLD;
         let large_inscription = parsed.witness_bytes >= LARGE_INSCRIPTION_THRESHOLD;
 
-        // Determine notable type (priority order)
+        // Round number detection: any output exactly matches a round BTC amount.
+        // Only flag if the tx is substantial (at least $100k) to avoid 1 BTC dust.
+        let round_number = {
+            let matches_round = ROUND_NUMBER_AMOUNTS.iter().any(|&amt| {
+                parsed.max_output_value >= amt.saturating_sub(ROUND_NUMBER_TOLERANCE)
+                    && parsed.max_output_value <= amt + ROUND_NUMBER_TOLERANCE
+            });
+            if matches_round && price_usd > 0.0 {
+                let max_usd = parsed.max_output_value as f64 * price_usd / 100_000_000.0;
+                max_usd >= ROUND_NUMBER_MIN_USD
+            } else {
+                false
+            }
+        };
+
+        let op_return_msg = parsed.op_return_text.is_some();
+
+        // Determine notable type (priority order: structural > value > fee > data)
+        // Structural patterns (consolidation/fan_out) take priority over fee_outlier
+        // because they're more informative signals.
         let notable_type = if whale {
             Some("whale")
-        } else if fee_outlier {
-            Some("fee_outlier")
+        } else if round_number {
+            Some("round_number")
         } else if large_inscription {
             Some("large_inscription")
         } else if consolidation {
             Some("consolidation")
         } else if fan_out {
             Some("fan_out")
+        } else if fee_outlier {
+            Some("fee_outlier")
+        } else if op_return_msg {
+            Some("op_return_msg")
         } else {
             None
         };
@@ -375,6 +431,20 @@ async fn subscribe_tx_and_sequence(
             );
         }
 
+        // Compute USD value for any notable tx (not just whales).
+        // Uses non_change_value as a rough "transfer" estimate.
+        let is_notable = notable_type.is_some();
+        let broadcast_usd = if is_notable && price_usd > 0.0 {
+            let transfer_sats = if parsed.non_change_value > 0 {
+                parsed.non_change_value
+            } else {
+                parsed.value
+            };
+            transfer_sats as f64 * price_usd / 100_000_000.0
+        } else {
+            0.0
+        };
+
         // Store in DB (with notable info for persistence across restarts)
         if let Ok(conn) = state.db.get() {
             let _ = db::insert_mempool_tx(
@@ -385,8 +455,27 @@ async fn subscribe_tx_and_sequence(
                 parsed.value,
                 now,
                 notable_type,
-                if whale { Some(value_usd) } else { None },
+                if is_notable && broadcast_usd > 0.0 { Some(broadcast_usd) } else { None },
             );
+
+            // Also persist to notable_txs table (separate from mempool_txs, never pruned).
+            if is_notable {
+                let _ = db::insert_notable_tx(
+                    &conn,
+                    &parsed.txid,
+                    notable_type.unwrap_or(""),
+                    fee,
+                    vsize,
+                    parsed.value,
+                    parsed.max_output_value,
+                    broadcast_usd,
+                    parsed.input_count,
+                    parsed.output_count,
+                    parsed.witness_bytes,
+                    parsed.op_return_text.as_deref(),
+                    now,
+                );
+            }
         }
 
         // Broadcast to SSE clients
@@ -398,11 +487,16 @@ async fn subscribe_tx_and_sequence(
             fee_rate,
             timestamp: now,
             whale,
-            value_usd: if whale { value_usd } else { 0.0 },
+            value_usd: broadcast_usd,
             fee_outlier,
             consolidation,
             fan_out,
             large_inscription,
+            round_number,
+            op_return_msg,
+            op_return_text: parsed.op_return_text.unwrap_or_default(),
+            input_count: parsed.input_count,
+            output_count: parsed.output_count,
         });
 
         tx_count += 1;
@@ -559,7 +653,11 @@ async fn subscribe_blocks(
 
         let confirm_fut = tokio::task::spawn_blocking(move || {
             match db.get() {
-                Ok(conn) => db::confirm_mempool_txs(&conn, &txids, height, now),
+                Ok(conn) => {
+                    // Also mark notable txs as confirmed
+                    let _ = db::confirm_notable_txs(&conn, &txids, height, now);
+                    db::confirm_mempool_txs(&conn, &txids, height, now)
+                }
                 Err(e) => {
                     tracing::error!(
                         "ZMQ: DB error for block {height}: {e}"
@@ -653,10 +751,13 @@ async fn get_block_info(
 /// Minimal parsed info from a raw Bitcoin transaction.
 struct ParsedTx {
     txid: String,
-    value: u64,        // sum of output values in sats
-    input_count: u64,  // number of inputs
-    output_count: u64, // number of outputs
-    witness_bytes: u64, // total witness data size in bytes
+    value: u64,                   // sum of output values in sats
+    input_count: u64,             // number of inputs
+    output_count: u64,            // number of outputs
+    witness_bytes: u64,           // total witness data size in bytes
+    max_output_value: u64,        // largest single output (for round number detection)
+    non_change_value: u64,        // total value minus largest output (rough "transfer" estimate)
+    op_return_text: Option<String>, // first OP_RETURN output with readable ASCII
 }
 
 /// Parse a raw Bitcoin transaction to extract txid and total output value.
@@ -696,17 +797,41 @@ fn parse_raw_tx(data: &[u8]) -> Option<ParsedTx> {
     // Output count
     let output_count = read_varint(data, &mut cursor)?;
 
-    // Parse outputs for value
+    // Parse outputs for value, track max output, detect OP_RETURN text
     let mut total_value = 0u64;
+    let mut max_output_value = 0u64;
+    let mut op_return_text: Option<String> = None;
     for _ in 0..output_count {
         let value = read_u64_le(data, &mut cursor)?;
-        total_value += value;
+        total_value = total_value.saturating_add(value);
+        if value > max_output_value {
+            max_output_value = value;
+        }
         let script_len = read_varint(data, &mut cursor)? as usize;
+        if cursor + script_len > data.len() {
+            return None;
+        }
+        // Detect OP_RETURN: 0x6a prefix, scan for readable ASCII
+        if op_return_text.is_none() && script_len >= 4 && data[cursor] == 0x6a {
+            let payload = &data[cursor + 1..cursor + script_len];
+            if let Some(text) = extract_readable_text(payload) {
+                op_return_text = Some(text);
+            }
+        }
         cursor += script_len; // scriptPubKey
         if cursor > data.len() {
             return None;
         }
     }
+
+    // Sanity check: Bitcoin supply is capped at 21M BTC = 2.1 * 10^15 sats.
+    // Any higher value indicates parse corruption.
+    const MAX_SUPPLY_SATS: u64 = 21_000_000 * 100_000_000;
+    if total_value > MAX_SUPPLY_SATS {
+        return None;
+    }
+
+    let non_change_value = total_value.saturating_sub(max_output_value);
 
     // For txid: we need the non-witness serialization (version + inputs + outputs + locktime)
     // Build it by stripping segwit marker/flag and witness data
@@ -753,7 +878,60 @@ fn parse_raw_tx(data: &[u8]) -> Option<ParsedTx> {
         input_count,
         output_count,
         witness_bytes: total_witness_bytes,
+        max_output_value,
+        non_change_value,
+        op_return_text,
     })
+}
+
+/// Extract readable ASCII text from OP_RETURN payload.
+/// Returns Some(text) if at least 4 consecutive printable chars found.
+/// Strips common protocol prefixes (Runes, SRC-20, etc.) to surface actual messages.
+fn extract_readable_text(payload: &[u8]) -> Option<String> {
+    // Skip push opcodes at start (OP_PUSH* or OP_PUSHDATA*)
+    let mut start = 0;
+    while start < payload.len() && payload[start] < 0x20 {
+        start += 1;
+        if start >= payload.len() { return None; }
+    }
+    let slice = &payload[start..];
+
+    // Skip known protocol markers: Runes (0x52 'R' at start without text)
+    // Actually just check if result has reasonable printable ratio
+    let printable_count = slice.iter()
+        .filter(|&&b| b >= 0x20 && b <= 0x7e)
+        .count();
+    if printable_count < 4 || printable_count < slice.len() / 2 {
+        return None;
+    }
+
+    // Build string from printable chars, collapse runs of non-printable to single space
+    let mut result = String::with_capacity(slice.len());
+    let mut last_space = false;
+    for &b in slice {
+        if b >= 0x20 && b <= 0x7e {
+            result.push(b as char);
+            last_space = false;
+        } else if !last_space {
+            result.push(' ');
+            last_space = true;
+        }
+    }
+    let trimmed = result.trim().to_string();
+
+    // Filter out obvious binary noise: require at least one letter
+    if !trimmed.chars().any(|c| c.is_alphabetic()) {
+        return None;
+    }
+
+    // Filter out Runes protocol (starts with RUNE_TESTN usually binary)
+    // and other known binary protocols that happen to have some printable chars.
+    // Require at least 6 chars of real text.
+    if trimmed.len() < 6 {
+        return None;
+    }
+
+    Some(trimmed.chars().take(200).collect())
 }
 
 /// Double SHA256, return as reversed hex (Bitcoin txid convention).
@@ -842,6 +1020,43 @@ mod tests {
             .step_by(2)
             .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap())
             .collect()
+    }
+
+    // --- extract_readable_text tests ---
+
+    #[test]
+    fn test_extract_readable_text_alphabetic() {
+        let text = b"Hello, world from Bitcoin!";
+        let result = extract_readable_text(text);
+        assert!(result.is_some());
+        assert!(result.unwrap().contains("Hello"));
+    }
+
+    #[test]
+    fn test_extract_readable_text_too_short() {
+        let text = b"hi";
+        assert_eq!(extract_readable_text(text), None);
+    }
+
+    #[test]
+    fn test_extract_readable_text_binary_junk() {
+        let data = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08];
+        assert_eq!(extract_readable_text(&data), None);
+    }
+
+    #[test]
+    fn test_extract_readable_text_needs_letters() {
+        let data = b"1234567890";
+        assert_eq!(extract_readable_text(data), None);
+    }
+
+    #[test]
+    fn test_extract_readable_text_with_binary_wrapper() {
+        // Binary prefix (push opcodes) followed by real text
+        let mut data = vec![0x0c]; // push 12 bytes
+        data.extend_from_slice(b"Hello Bitcoin!");
+        let result = extract_readable_text(&data);
+        assert!(result.is_some());
     }
 
     // --- read_varint tests ---

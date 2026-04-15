@@ -254,6 +254,33 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
         }
     }
 
+    // Persistent notable transactions table (separate from mempool_txs).
+    // Holds all notable txs regardless of confirmation status, indefinitely
+    // (until manually pruned). This powers the dedicated whale-watch page
+    // with historical browsing, leaderboards, and aggregations.
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS notable_txs (
+            txid                TEXT    PRIMARY KEY,
+            notable_type        TEXT    NOT NULL,
+            fee                 INTEGER NOT NULL,
+            vsize               INTEGER NOT NULL,
+            value               INTEGER NOT NULL,
+            max_output_value    INTEGER NOT NULL DEFAULT 0,
+            value_usd           REAL    NOT NULL DEFAULT 0,
+            input_count         INTEGER NOT NULL DEFAULT 0,
+            output_count        INTEGER NOT NULL DEFAULT 0,
+            witness_bytes       INTEGER NOT NULL DEFAULT 0,
+            op_return_text      TEXT,
+            first_seen          INTEGER NOT NULL,
+            confirmed_height    INTEGER,
+            confirmed_at        INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_notable_type ON notable_txs(notable_type);
+        CREATE INDEX IF NOT EXISTS idx_notable_first_seen ON notable_txs(first_seen DESC);
+        CREATE INDEX IF NOT EXISTS idx_notable_value_usd ON notable_txs(value_usd DESC);
+        CREATE INDEX IF NOT EXISTS idx_notable_confirmed_height ON notable_txs(confirmed_height);",
+    )?;
+
     // Pre-computed daily aggregates table. Populated incrementally on new
     // blocks so queries read directly instead of re-aggregating 940k+ rows.
     conn.execute_batch(
@@ -1940,6 +1967,331 @@ pub struct MempoolTxRow {
     /// Estimated USD value at time of detection (for whale txs).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub value_usd: Option<f64>,
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Notable Transactions (Whale Watch) — persistent, long-lived table
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// A notable transaction record used for the Whale Watch feature.
+/// Derives Default so filters and partial queries are easy.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct NotableTx {
+    pub txid: String,
+    pub notable_type: String,
+    pub fee: u64,
+    pub vsize: u32,
+    pub value: u64,
+    pub max_output_value: u64,
+    pub value_usd: f64,
+    pub input_count: u64,
+    pub output_count: u64,
+    pub witness_bytes: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub op_return_text: Option<String>,
+    pub first_seen: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confirmed_height: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confirmed_at: Option<u64>,
+}
+
+/// Insert a notable tx. Uses INSERT OR IGNORE so duplicates on reconnect are safe.
+#[allow(clippy::too_many_arguments)]
+pub fn insert_notable_tx(
+    conn: &Connection,
+    txid: &str,
+    notable_type: &str,
+    fee: u64,
+    vsize: u32,
+    value: u64,
+    max_output_value: u64,
+    value_usd: f64,
+    input_count: u64,
+    output_count: u64,
+    witness_bytes: u64,
+    op_return_text: Option<&str>,
+    first_seen: u64,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "INSERT OR IGNORE INTO notable_txs
+         (txid, notable_type, fee, vsize, value, max_output_value, value_usd,
+          input_count, output_count, witness_bytes, op_return_text, first_seen)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+        params![
+            txid, notable_type, fee, vsize, value, max_output_value, value_usd,
+            input_count, output_count, witness_bytes, op_return_text, first_seen
+        ],
+    )?;
+    Ok(())
+}
+
+/// Mark notable txs as confirmed when a block confirms them.
+/// Takes a list of txids and updates confirmed_height/confirmed_at for any matches.
+pub fn confirm_notable_txs(
+    conn: &Connection,
+    txids: &[String],
+    height: u64,
+    confirmed_at: u64,
+) -> rusqlite::Result<u64> {
+    if txids.is_empty() {
+        return Ok(0);
+    }
+    let tx = conn.unchecked_transaction()?;
+    let mut total = 0u64;
+    for chunk in txids.chunks(100) {
+        let placeholders: Vec<&str> = chunk.iter().map(|_| "?").collect();
+        let sql = format!(
+            "UPDATE notable_txs SET confirmed_height = ?1, confirmed_at = ?2
+             WHERE txid IN ({}) AND confirmed_height IS NULL",
+            placeholders.join(",")
+        );
+        let mut stmt = tx.prepare(&sql)?;
+        let mut param_idx = 1;
+        stmt.raw_bind_parameter(param_idx, height as i64)?;
+        param_idx += 1;
+        stmt.raw_bind_parameter(param_idx, confirmed_at as i64)?;
+        param_idx += 1;
+        for txid in chunk {
+            stmt.raw_bind_parameter(param_idx, txid.as_str())?;
+            param_idx += 1;
+        }
+        total += stmt.raw_execute()? as u64;
+    }
+    tx.commit()?;
+    Ok(total)
+}
+
+/// Filter parameters for notable tx queries.
+#[derive(Debug, Clone, Default)]
+pub struct NotableFilter {
+    pub notable_type: Option<String>,
+    pub since: Option<u64>,        // first_seen >= since
+    pub until: Option<u64>,        // first_seen <= until
+    pub min_value_usd: Option<f64>,
+    pub confirmed_only: bool,
+    pub unconfirmed_only: bool,
+}
+
+/// Query notable txs with optional filters and pagination.
+pub fn query_notable_txs(
+    conn: &Connection,
+    filter: &NotableFilter,
+    limit: u64,
+    offset: u64,
+) -> rusqlite::Result<Vec<NotableTx>> {
+    let mut conditions: Vec<String> = Vec::new();
+    let mut idx = 1usize;
+
+    if filter.notable_type.is_some() {
+        conditions.push(format!("notable_type = ?{idx}"));
+        idx += 1;
+    }
+    if filter.since.is_some() {
+        conditions.push(format!("first_seen >= ?{idx}"));
+        idx += 1;
+    }
+    if filter.until.is_some() {
+        conditions.push(format!("first_seen <= ?{idx}"));
+        idx += 1;
+    }
+    if filter.min_value_usd.is_some() {
+        conditions.push(format!("value_usd >= ?{idx}"));
+        idx += 1;
+    }
+    if filter.confirmed_only {
+        conditions.push("confirmed_height IS NOT NULL".to_string());
+    }
+    if filter.unconfirmed_only {
+        conditions.push("confirmed_height IS NULL".to_string());
+    }
+
+    let where_clause = if conditions.is_empty() {
+        String::new()
+    } else {
+        format!("WHERE {}", conditions.join(" AND "))
+    };
+
+    let limit_idx = idx;
+    let offset_idx = idx + 1;
+    let sql = format!(
+        "SELECT txid, notable_type, fee, vsize, value, max_output_value, value_usd,
+                input_count, output_count, witness_bytes, op_return_text,
+                first_seen, confirmed_height, confirmed_at
+         FROM notable_txs {where_clause}
+         ORDER BY first_seen DESC
+         LIMIT ?{limit_idx} OFFSET ?{offset_idx}"
+    );
+
+    let mut stmt = conn.prepare(&sql)?;
+    let mut param_idx = 1usize;
+    if let Some(ref t) = filter.notable_type {
+        stmt.raw_bind_parameter(param_idx, t.as_str())?;
+        param_idx += 1;
+    }
+    if let Some(s) = filter.since {
+        stmt.raw_bind_parameter(param_idx, s as i64)?;
+        param_idx += 1;
+    }
+    if let Some(u) = filter.until {
+        stmt.raw_bind_parameter(param_idx, u as i64)?;
+        param_idx += 1;
+    }
+    if let Some(m) = filter.min_value_usd {
+        stmt.raw_bind_parameter(param_idx, m)?;
+        param_idx += 1;
+    }
+    stmt.raw_bind_parameter(param_idx, limit as i64)?;
+    stmt.raw_bind_parameter(param_idx + 1, offset as i64)?;
+
+    let mut rows = stmt.raw_query();
+    let mut result = Vec::new();
+    while let Some(row) = rows.next()? {
+        result.push(NotableTx {
+            txid: row.get(0)?,
+            notable_type: row.get(1)?,
+            fee: row.get(2)?,
+            vsize: row.get(3)?,
+            value: row.get(4)?,
+            max_output_value: row.get(5)?,
+            value_usd: row.get(6)?,
+            input_count: row.get(7)?,
+            output_count: row.get(8)?,
+            witness_bytes: row.get(9)?,
+            op_return_text: row.get(10)?,
+            first_seen: row.get(11)?,
+            confirmed_height: row.get(12)?,
+            confirmed_at: row.get(13)?,
+        });
+    }
+    Ok(result)
+}
+
+/// Count notable txs matching a filter (for pagination).
+pub fn count_notable_txs(
+    conn: &Connection,
+    filter: &NotableFilter,
+) -> rusqlite::Result<u64> {
+    let mut conditions: Vec<String> = Vec::new();
+    let mut idx = 1usize;
+
+    if filter.notable_type.is_some() {
+        conditions.push(format!("notable_type = ?{idx}"));
+        idx += 1;
+    }
+    if filter.since.is_some() {
+        conditions.push(format!("first_seen >= ?{idx}"));
+        idx += 1;
+    }
+    if filter.until.is_some() {
+        conditions.push(format!("first_seen <= ?{idx}"));
+        idx += 1;
+    }
+    if filter.min_value_usd.is_some() {
+        conditions.push(format!("value_usd >= ?{idx}"));
+        #[allow(unused_assignments)]
+        {
+            idx += 1;
+        }
+    }
+    if filter.confirmed_only {
+        conditions.push("confirmed_height IS NOT NULL".to_string());
+    }
+    if filter.unconfirmed_only {
+        conditions.push("confirmed_height IS NULL".to_string());
+    }
+
+    let where_clause = if conditions.is_empty() {
+        String::new()
+    } else {
+        format!("WHERE {}", conditions.join(" AND "))
+    };
+
+    let sql = format!("SELECT COUNT(*) FROM notable_txs {where_clause}");
+    let mut stmt = conn.prepare(&sql)?;
+    let mut param_idx = 1usize;
+    if let Some(ref t) = filter.notable_type {
+        stmt.raw_bind_parameter(param_idx, t.as_str())?;
+        param_idx += 1;
+    }
+    if let Some(s) = filter.since {
+        stmt.raw_bind_parameter(param_idx, s as i64)?;
+        param_idx += 1;
+    }
+    if let Some(u) = filter.until {
+        stmt.raw_bind_parameter(param_idx, u as i64)?;
+        param_idx += 1;
+    }
+    if let Some(m) = filter.min_value_usd {
+        stmt.raw_bind_parameter(param_idx, m)?;
+    }
+
+    let mut rows = stmt.raw_query();
+    if let Some(row) = rows.next()? {
+        Ok(row.get::<_, i64>(0)? as u64)
+    } else {
+        Ok(0)
+    }
+}
+
+/// Aggregate statistics for notable txs in a time window.
+#[derive(Debug, Clone, Default, serde::Serialize)]
+pub struct NotableStats {
+    pub total_count: u64,
+    pub total_value_usd: f64,
+    pub by_type: Vec<(String, u64, f64)>, // (type, count, total_usd)
+    pub top_value_usd: f64,
+    pub top_txid: Option<String>,
+}
+
+/// Get aggregate stats for notable txs in a time window.
+pub fn query_notable_stats(
+    conn: &Connection,
+    since: u64,
+) -> rusqlite::Result<NotableStats> {
+    // Total count + total USD
+    let (total_count, total_value_usd): (u64, f64) = conn.query_row(
+        "SELECT COUNT(*), COALESCE(SUM(value_usd), 0)
+         FROM notable_txs WHERE first_seen >= ?1",
+        params![since],
+        |r| Ok((r.get::<_, i64>(0)? as u64, r.get::<_, f64>(1)?)),
+    )?;
+
+    // By type
+    let mut stmt = conn.prepare(
+        "SELECT notable_type, COUNT(*), COALESCE(SUM(value_usd), 0)
+         FROM notable_txs WHERE first_seen >= ?1
+         GROUP BY notable_type
+         ORDER BY COUNT(*) DESC",
+    )?;
+    let by_type: Vec<(String, u64, f64)> = stmt
+        .query_map(params![since], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, i64>(1)? as u64,
+                r.get::<_, f64>(2)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+
+    // Top single tx
+    let top: Option<(String, f64)> = conn
+        .query_row(
+            "SELECT txid, value_usd FROM notable_txs
+             WHERE first_seen >= ?1
+             ORDER BY value_usd DESC LIMIT 1",
+            params![since],
+            |r| Ok((r.get::<_, String>(0)?, r.get::<_, f64>(1)?)),
+        )
+        .ok();
+
+    Ok(NotableStats {
+        total_count,
+        total_value_usd,
+        by_type,
+        top_value_usd: top.as_ref().map(|(_, v)| *v).unwrap_or(0.0),
+        top_txid: top.map(|(t, _)| t),
+    })
 }
 
 /// Query txids that are still unconfirmed (survived block confirmation).

@@ -734,15 +734,20 @@ pub fn HeartbeatPage() -> impl IntoView {
                     </div>
                     <div class="flex items-center gap-1 flex-wrap">
                         <button onclick="window._filterNotable('all')" id="whale-filter-all" title="Show all notable transactions" class="px-2 py-0.5 rounded text-[10px] font-mono bg-white/10 text-white/60 hover:bg-white/20 transition-colors">"All"</button>
-                        <button onclick="window._filterNotable('whale')" id="whale-filter-whale" title="Whales: total output value over $1,000,000 USD" class="px-2 py-0.5 rounded text-[10px] font-mono bg-transparent text-[#ffd700]/50 hover:bg-[#ffd700]/10 transition-colors">"Whales"</button>
-                        <button onclick="window._filterNotable('fee')" id="whale-filter-fee" title="Fee outliers: fee rate over 500 sat/vB or absolute fee over 0.05 BTC" class="px-2 py-0.5 rounded text-[10px] font-mono bg-transparent text-[#ff4444]/50 hover:bg-[#ff4444]/10 transition-colors">"Fees"</button>
+                        <button onclick="window._filterNotable('whale')" id="whale-filter-whale" title="Whales: transfer value over $1,000,000 USD (excluding change output)" class="px-2 py-0.5 rounded text-[10px] font-mono bg-transparent text-[#ffd700]/50 hover:bg-[#ffd700]/10 transition-colors">"Whales"</button>
+                        <button onclick="window._filterNotable('round_number')" id="whale-filter-round_number" title="Round-number transfers: exact 1, 10, 100, or 1000 BTC output amounts. Often human-initiated vs exchange automation." class="px-2 py-0.5 rounded text-[10px] font-mono bg-transparent text-[#90ee90]/60 hover:bg-[#90ee90]/10 transition-colors">"Round #"</button>
+                        <button onclick="window._filterNotable('inscription')" id="whale-filter-inscription" title="Large inscriptions: witness data over 100KB (Ordinals, BRC-20, images, JSON)" class="px-2 py-0.5 rounded text-[10px] font-mono bg-transparent text-[#ff00c8]/50 hover:bg-[#ff00c8]/10 transition-colors">"Inscr."</button>
                         <button onclick="window._filterNotable('consolidation')" id="whale-filter-consolidation" title="Consolidations: 50+ inputs merged into 3 or fewer outputs (exchange cold wallet sweeps, UTXO cleanup)" class="px-2 py-0.5 rounded text-[10px] font-mono bg-transparent text-[#a855f7]/50 hover:bg-[#a855f7]/10 transition-colors">"Consol."</button>
-                        <button onclick="window._filterNotable('fan_out')" id="whale-filter-fan_out" title="Fan-outs: 3 or fewer inputs sprayed to 50+ outputs (exchange batch payouts, mining rewards, airdrops)" class="px-2 py-0.5 rounded text-[10px] font-mono bg-transparent text-[#00d2ff]/50 hover:bg-[#00d2ff]/10 transition-colors">"Fan-out"</button>
-                        <button onclick="window._filterNotable('inscription')" id="whale-filter-inscription" title="Large inscriptions: witness data over 100KB (Ordinals, BRC-20, images, JSON)" class="px-2 py-0.5 rounded text-[10px] font-mono bg-transparent text-[#ff00c8]/50 hover:bg-[#ff00c8]/10 transition-colors">"Inscriptions"</button>
+                        <button onclick="window._filterNotable('fan_out')" id="whale-filter-fan_out" title="Fan-outs: 3 or fewer inputs sprayed to 100+ outputs (exchange batch payouts, mining rewards, airdrops)" class="px-2 py-0.5 rounded text-[10px] font-mono bg-transparent text-[#00d2ff]/50 hover:bg-[#00d2ff]/10 transition-colors">"Fan-out"</button>
+                        <button onclick="window._filterNotable('fee')" id="whale-filter-fee" title="Fee outliers: fee rate over 2000 sat/vB or absolute fee over 0.1 BTC" class="px-2 py-0.5 rounded text-[10px] font-mono bg-transparent text-[#ff4444]/50 hover:bg-[#ff4444]/10 transition-colors">"Fees"</button>
+                        <button onclick="window._filterNotable('op_return')" id="whale-filter-op_return" title="OP_RETURN messages: transactions embedding readable ASCII text on-chain" class="px-2 py-0.5 rounded text-[10px] font-mono bg-transparent text-[#ffa500]/60 hover:bg-[#ffa500]/10 transition-colors">"Messages"</button>
                     </div>
                 </div>
-                <div id="whale-feed-list" class="max-h-[200px] overflow-y-auto">
-                    <div class="px-4 py-3 text-xs text-white/20 font-mono italic text-center">"Listening for whale transactions..."</div>
+                <div id="whale-feed-list" class="max-h-[240px] overflow-y-auto">
+                    <div data-placeholder="1" class="px-4 py-3 text-xs text-white/20 font-mono italic text-center">"Listening for notable transactions..."</div>
+                </div>
+                <div class="px-3 py-1.5 border-t border-white/5 text-[10px] font-mono text-white/30 text-center">
+                    <a href="/observatory/whale-watch" class="hover:text-[#f7931a] transition-colors">"View all history and stats \u{2192}"</a>
                 </div>
             </div>
 

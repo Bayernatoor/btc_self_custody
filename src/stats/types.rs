@@ -718,6 +718,64 @@ pub struct EmptyBlock {
 }
 
 // ---------------------------------------------------------------------------
+// Whale Watch / Notable Transactions
+// ---------------------------------------------------------------------------
+
+/// A notable transaction record returned to the frontend.
+/// Mirrors `db::NotableTx` but lives in the shared types module so
+/// server functions can cross the SSR/WASM boundary.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct NotableTxInfo {
+    pub txid: String,
+    pub notable_type: String,
+    pub fee: u64,
+    pub vsize: u32,
+    pub value: u64,
+    pub max_output_value: u64,
+    pub value_usd: f64,
+    pub input_count: u64,
+    pub output_count: u64,
+    pub witness_bytes: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub op_return_text: Option<String>,
+    pub first_seen: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confirmed_height: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confirmed_at: Option<u64>,
+}
+
+/// Filter parameters for notable tx queries (crosses the wire).
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct NotableTxFilter {
+    pub notable_type: Option<String>,
+    pub since: Option<u64>,
+    pub until: Option<u64>,
+    pub min_value_usd: Option<f64>,
+    pub confirmed_only: bool,
+    pub unconfirmed_only: bool,
+}
+
+/// Page of notable txs with total count for pagination.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct NotableTxPage {
+    pub items: Vec<NotableTxInfo>,
+    pub total: u64,
+    pub offset: u64,
+    pub limit: u64,
+}
+
+/// Aggregate stats for a time window.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct NotableStatsInfo {
+    pub total_count: u64,
+    pub total_value_usd: f64,
+    pub by_type: Vec<(String, u64, f64)>,
+    pub top_value_usd: f64,
+    pub top_txid: Option<String>,
+}
+
+// ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
 

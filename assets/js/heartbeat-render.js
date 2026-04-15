@@ -117,14 +117,33 @@ export function drawBlipTooltip(ctx, blip, canvasX, baseline) {
         lines.push('Value: ' + (btcVal < 0.001 ? btcVal.toFixed(8) : btcVal.toFixed(4)) + ' BTC');
     }
     if (blip.notableType) {
-        var labels = {
-            'whale': 'WHALE: $' + Math.round(blip.valueUsd || 0).toLocaleString() + ' USD',
+        var typeLabels = {
+            'whale': 'WHALE',
             'fee_outlier': 'FEE OUTLIER',
             'consolidation': 'CONSOLIDATION',
             'fan_out': 'FAN-OUT (BATCH PAYOUT)',
-            'large_inscription': 'LARGE INSCRIPTION'
+            'large_inscription': 'LARGE INSCRIPTION',
+            'round_number': 'ROUND-NUMBER TRANSFER',
+            'op_return_msg': 'OP_RETURN MESSAGE'
         };
-        lines.push(labels[blip.notableType] || blip.notableType.toUpperCase());
+        lines.push(typeLabels[blip.notableType] || blip.notableType.toUpperCase());
+        // Show USD value for ANY notable type when available
+        if (blip.valueUsd && blip.valueUsd > 0) {
+            lines.push('~$' + Math.round(blip.valueUsd).toLocaleString() + ' USD');
+        }
+        // Show input/output structure for structural types
+        if (blip.notableType === 'consolidation' || blip.notableType === 'fan_out') {
+            if (blip.inputCount != null && blip.outputCount != null) {
+                lines.push(blip.inputCount + ' in -> ' + blip.outputCount + ' out');
+            }
+        }
+        // Show message text for op_return_msg
+        if (blip.notableType === 'op_return_msg' && blip.opReturnText) {
+            var msg = blip.opReturnText.length > 60
+                ? blip.opReturnText.substring(0, 57) + '...'
+                : blip.opReturnText;
+            lines.push('"' + msg + '"');
+        }
     }
     if (blip.timestamp) {
         var d = new Date(blip.timestamp * 1000);
@@ -139,7 +158,9 @@ export function drawBlipTooltip(ctx, blip, canvasX, baseline) {
         'fee_outlier': 'rgba(255,68,68,0.8)',
         'consolidation': 'rgba(168,85,247,0.8)',
         'fan_out': 'rgba(0,210,255,0.8)',
-        'large_inscription': 'rgba(255,0,200,0.8)'
+        'large_inscription': 'rgba(255,0,200,0.8)',
+        'round_number': 'rgba(144,238,144,0.8)',
+        'op_return_msg': 'rgba(255,165,0,0.8)'
     };
     var blipColor = (blip.notableType && tooltipColors[blip.notableType])
         ? tooltipColors[blip.notableType]
@@ -885,7 +906,7 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                 // Fade-in: grow from 0. Notable txs get slower, more dramatic drop.
                 var age = nowSec - blip.timestamp;
                 if (age < 0) continue; // staggered history brick not yet visible
-                var isNotable = blip.whale || blip.feeOutlier;
+                var isNotable = !!blip.notableType;
                 var fadeTime = isNotable ? 0.8 : 0.4;
                 var fadeIn = Math.min(age / fadeTime, 1.0);
                 // Drop from above: notable txs drop from 3x higher with bounce easing
@@ -1037,18 +1058,24 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                     if (nt === 'whale') {
                         ctx.shadowBlur = 20 + Math.sin(nowSec * 2.5) * 8;
                         ctx.shadowColor = 'rgba(255, 215, 0, 0.95)';
-                    } else if (nt === 'fee_outlier') {
-                        ctx.shadowBlur = 16 + Math.sin(nowSec * 3) * 6;
-                        ctx.shadowColor = 'rgba(255, 68, 68, 0.9)';
+                    } else if (nt === 'round_number') {
+                        ctx.shadowBlur = 16 + Math.sin(nowSec * 2.2) * 6;
+                        ctx.shadowColor = 'rgba(144, 238, 144, 0.9)';
+                    } else if (nt === 'large_inscription') {
+                        ctx.shadowBlur = 16 + Math.sin(nowSec * 2.5) * 6;
+                        ctx.shadowColor = 'rgba(255, 0, 200, 0.85)';
                     } else if (nt === 'consolidation') {
                         ctx.shadowBlur = 14 + Math.sin(nowSec * 2) * 5;
                         ctx.shadowColor = 'rgba(168, 85, 247, 0.85)';
                     } else if (nt === 'fan_out') {
                         ctx.shadowBlur = 14 + Math.sin(nowSec * 2) * 5;
                         ctx.shadowColor = 'rgba(0, 210, 255, 0.85)';
-                    } else if (nt === 'large_inscription') {
-                        ctx.shadowBlur = 16 + Math.sin(nowSec * 2.5) * 6;
-                        ctx.shadowColor = 'rgba(255, 0, 200, 0.85)';
+                    } else if (nt === 'fee_outlier') {
+                        ctx.shadowBlur = 16 + Math.sin(nowSec * 3) * 6;
+                        ctx.shadowColor = 'rgba(255, 68, 68, 0.9)';
+                    } else if (nt === 'op_return_msg') {
+                        ctx.shadowBlur = 12 + Math.sin(nowSec * 2) * 4;
+                        ctx.shadowColor = 'rgba(255, 165, 0, 0.85)';
                     }
                     // Shadow glow only at mid-zoom where bricks are visible but
                     // not outlined. Skip at low zoom (sub-pixel, too expensive
@@ -1081,7 +1108,9 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                             'fee_outlier': 'rgba(255, 68, 68, 0.7)',
                             'consolidation': 'rgba(168, 85, 247, 0.7)',
                             'fan_out': 'rgba(0, 210, 255, 0.7)',
-                            'large_inscription': 'rgba(255, 0, 200, 0.7)'
+                            'large_inscription': 'rgba(255, 0, 200, 0.7)',
+                            'round_number': 'rgba(144, 238, 144, 0.8)',
+                            'op_return_msg': 'rgba(255, 165, 0, 0.7)'
                         };
                         ctx.strokeStyle = outlineColors[blip.notableType] || 'rgba(255, 255, 255, 0.5)';
                         ctx.lineWidth = Math.max(1, zoom * 0.4);

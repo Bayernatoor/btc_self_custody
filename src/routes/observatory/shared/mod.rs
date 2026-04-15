@@ -258,6 +258,7 @@ pub fn ObservatoryNav() -> impl IntoView {
         ("/observatory/on-this-day", "On This Day"),
         ("/observatory/hall-of-fame", "Hall of Fame"),
         ("/observatory/heartbeat", "Heartbeat"),
+        ("/observatory/whale-watch", "Whale Watch"),
     ];
 
     let charts: Vec<(&'static str, &'static str)> = vec![

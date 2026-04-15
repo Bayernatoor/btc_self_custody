@@ -1,0 +1,668 @@
+//! Whale Watch: dedicated page for browsing notable transactions.
+//!
+//! Extends the real-time feed on the Heartbeat page with historical browsing,
+//! filtering, aggregation stats, and a leaderboard.
+
+use leptos::prelude::*;
+use leptos_meta::*;
+use leptos_router::hooks::use_query_map;
+
+#[cfg(feature = "hydrate")]
+use leptos::web_sys;
+#[cfg(feature = "hydrate")]
+use wasm_bindgen::prelude::*;
+
+use crate::stats::server_fns::{fetch_notable_stats, fetch_notable_top, fetch_notable_txs};
+use crate::stats::types::{NotableTxFilter, NotableTxInfo};
+
+// JS interop: call window.showTxDetail defined in stats.js
+#[cfg(feature = "hydrate")]
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_name = showTxDetail, catch)]
+    fn js_show_tx_detail(txid: &str) -> Result<(), JsValue>;
+}
+
+#[cfg(not(feature = "hydrate"))]
+fn js_show_tx_detail(_txid: &str) -> Result<(), ()> {
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Filter enum (matches server-side notable_type strings)
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum TypeFilter {
+    All,
+    Whale,
+    RoundNumber,
+    LargeInscription,
+    Consolidation,
+    FanOut,
+    FeeOutlier,
+    OpReturnMsg,
+}
+
+impl TypeFilter {
+    fn slug(self) -> &'static str {
+        match self {
+            Self::All => "all",
+            Self::Whale => "whale",
+            Self::RoundNumber => "round_number",
+            Self::LargeInscription => "large_inscription",
+            Self::Consolidation => "consolidation",
+            Self::FanOut => "fan_out",
+            Self::FeeOutlier => "fee_outlier",
+            Self::OpReturnMsg => "op_return_msg",
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::All => "All",
+            Self::Whale => "Whales",
+            Self::RoundNumber => "Round Numbers",
+            Self::LargeInscription => "Inscriptions",
+            Self::Consolidation => "Consolidations",
+            Self::FanOut => "Fan-outs",
+            Self::FeeOutlier => "Fee Outliers",
+            Self::OpReturnMsg => "Messages",
+        }
+    }
+
+    fn color(self) -> &'static str {
+        match self {
+            Self::All => "#ffffff",
+            Self::Whale => "#ffd700",
+            Self::RoundNumber => "#90ee90",
+            Self::LargeInscription => "#ff00c8",
+            Self::Consolidation => "#a855f7",
+            Self::FanOut => "#00d2ff",
+            Self::FeeOutlier => "#ff4444",
+            Self::OpReturnMsg => "#ffa500",
+        }
+    }
+
+    fn description(self) -> &'static str {
+        match self {
+            Self::All => "All notable transactions",
+            Self::Whale => "Transfer value over $1,000,000 USD (excluding change output)",
+            Self::RoundNumber => "Exact round BTC amounts (1, 10, 100, 1000). Often human-initiated",
+            Self::LargeInscription => "Witness data over 100KB (Ordinals, BRC-20, images)",
+            Self::Consolidation => "50+ inputs merged into 3 or fewer outputs (UTXO cleanup)",
+            Self::FanOut => "3 or fewer inputs sprayed to 100+ outputs (batch payouts)",
+            Self::FeeOutlier => "Fee rate over 2000 sat/vB or absolute fee over 0.1 BTC",
+            Self::OpReturnMsg => "Transactions embedding readable ASCII text on-chain",
+        }
+    }
+
+    fn from_slug(s: &str) -> Self {
+        match s {
+            "whale" => Self::Whale,
+            "round_number" => Self::RoundNumber,
+            "large_inscription" => Self::LargeInscription,
+            "consolidation" => Self::Consolidation,
+            "fan_out" => Self::FanOut,
+            "fee_outlier" => Self::FeeOutlier,
+            "op_return_msg" => Self::OpReturnMsg,
+            _ => Self::All,
+        }
+    }
+
+    fn to_filter(self) -> Option<String> {
+        if self == Self::All {
+            None
+        } else {
+            Some(self.slug().to_string())
+        }
+    }
+}
+
+const FILTERS: &[TypeFilter] = &[
+    TypeFilter::All,
+    TypeFilter::Whale,
+    TypeFilter::RoundNumber,
+    TypeFilter::LargeInscription,
+    TypeFilter::Consolidation,
+    TypeFilter::FanOut,
+    TypeFilter::FeeOutlier,
+    TypeFilter::OpReturnMsg,
+];
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum TimeWindow {
+    Hour,
+    Day,
+    Week,
+    Month,
+    AllTime,
+}
+
+impl TimeWindow {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Hour => "1H",
+            Self::Day => "24H",
+            Self::Week => "7D",
+            Self::Month => "30D",
+            Self::AllTime => "All",
+        }
+    }
+
+    fn seconds_ago(self) -> u64 {
+        match self {
+            Self::Hour => 3600,
+            Self::Day => 86400,
+            Self::Week => 604800,
+            Self::Month => 2_592_000,
+            Self::AllTime => 1_900_000_000, // far in the past
+        }
+    }
+
+    fn since(self) -> u64 {
+        let now = now_secs();
+        now.saturating_sub(self.seconds_ago())
+    }
+}
+
+fn now_secs() -> u64 {
+    // chrono::Utc::now() works on both SSR (std) and WASM (chrono pulls in js-sys)
+    chrono::Utc::now().timestamp() as u64
+}
+
+const WINDOWS: &[TimeWindow] = &[
+    TimeWindow::Hour,
+    TimeWindow::Day,
+    TimeWindow::Week,
+    TimeWindow::Month,
+    TimeWindow::AllTime,
+];
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+
+#[component]
+pub fn WhaleWatchPage() -> impl IntoView {
+    let query = use_query_map();
+
+    let initial_filter = query
+        .read_untracked()
+        .get("type")
+        .map(|s| TypeFilter::from_slug(&s))
+        .unwrap_or(TypeFilter::All);
+
+    let (active_filter, set_active_filter) = signal(initial_filter);
+    let (window, set_window) = signal(TimeWindow::Day);
+    let (page, set_page) = signal(0u64);
+
+    const PAGE_SIZE: u64 = 50;
+
+    // Reset page to 0 when filter or window changes
+    Effect::new(move || {
+        let _ = active_filter.get();
+        let _ = window.get();
+        set_page.set(0);
+    });
+
+    // Main tx list resource
+    let tx_list = LocalResource::new(move || {
+        let filter = active_filter.get();
+        let w = window.get();
+        let p = page.get();
+        async move {
+            let f = NotableTxFilter {
+                notable_type: filter.to_filter(),
+                since: Some(w.since()),
+                ..Default::default()
+            };
+            fetch_notable_txs(f, PAGE_SIZE, p * PAGE_SIZE).await
+        }
+    });
+
+    // Aggregate stats resource
+    let stats = LocalResource::new(move || {
+        let w = window.get();
+        async move { fetch_notable_stats(w.since()).await }
+    });
+
+    // Top-value leaderboard
+    let top = LocalResource::new(move || {
+        let w = window.get();
+        async move { fetch_notable_top(w.since(), 10).await }
+    });
+
+    // URL sync
+    #[cfg(feature = "hydrate")]
+    {
+        Effect::new(move || {
+            let f = active_filter.get();
+            if let Some(win) = web_sys::window() {
+                if let Ok(history) = win.history() {
+                    let slug = f.slug();
+                    let search = if slug == "all" {
+                        String::new()
+                    } else {
+                        format!("?type={slug}")
+                    };
+                    let path = format!("/observatory/whale-watch{search}");
+                    let _ = history.replace_state_with_url(
+                        &web_sys::wasm_bindgen::JsValue::NULL,
+                        "",
+                        Some(&path),
+                    );
+                }
+            }
+        });
+    }
+
+    view! {
+        <Title text="Whale Watch: Notable Bitcoin Transactions | WE HODL BTC"/>
+        <Meta name="description" content="Real-time and historical browser for notable Bitcoin transactions: whales, round-number transfers, large inscriptions, consolidations, fan-outs, fee outliers, and on-chain messages."/>
+        <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/whale-watch"/>
+
+        <div class="opacity-0 animate-fadeinone">
+            // Header
+            <div class="mb-6">
+                <div class="flex items-baseline gap-3 mb-2">
+                    <h2 class="text-xl sm:text-2xl font-title text-white">"Whale Watch"</h2>
+                    <span class="text-xs font-mono text-white/30">"Notable transactions, live + historical"</span>
+                </div>
+                <p class="text-sm text-white/40 max-w-3xl">
+                    "Transactions that stand out from the normal mempool flow: million-dollar transfers, round-number amounts, exchange consolidations and batch payouts, massive inscriptions, fat-fingered fees, and readable OP_RETURN messages. Each one is detected in real-time as it enters our node's mempool."
+                </p>
+            </div>
+
+            // Time window selector
+            <div class="flex items-center gap-2 mb-4">
+                <span class="text-xs font-mono text-white/40 uppercase tracking-wider">"Window:"</span>
+                {WINDOWS.iter().map(|&w| {
+                    view! {
+                        <button
+                            on:click=move |_| set_window.set(w)
+                            class=move || {
+                                if window.get() == w {
+                                    "px-3 py-1 rounded text-xs font-mono bg-[#f7931a]/20 text-[#f7931a] border border-[#f7931a]/40"
+                                } else {
+                                    "px-3 py-1 rounded text-xs font-mono bg-white/5 text-white/50 border border-white/10 hover:bg-white/10"
+                                }
+                            }
+                        >
+                            {w.label()}
+                        </button>
+                    }
+                }).collect::<Vec<_>>()}
+            </div>
+
+            // Stats cards
+            <StatsCards stats=stats/>
+
+            // Type filter pills
+            <div class="flex flex-wrap items-center gap-2 mb-4">
+                <span class="text-xs font-mono text-white/40 uppercase tracking-wider mr-1">"Type:"</span>
+                {FILTERS.iter().map(|&f| {
+                    let color = f.color();
+                    let label = f.label();
+                    let desc = f.description();
+                    view! {
+                        <button
+                            on:click=move |_| set_active_filter.set(f)
+                            title=desc
+                            class=move || {
+                                let active = active_filter.get() == f;
+                                if active {
+                                    format!("px-3 py-1 rounded text-xs font-mono border font-semibold")
+                                } else {
+                                    format!("px-3 py-1 rounded text-xs font-mono border hover:bg-white/5 transition-colors")
+                                }
+                            }
+                            style=move || {
+                                let active = active_filter.get() == f;
+                                if active {
+                                    format!("background-color: {color}20; border-color: {color}60; color: {color};")
+                                } else {
+                                    format!("background-color: transparent; border-color: {color}30; color: {color}aa;")
+                                }
+                            }
+                        >
+                            {label}
+                        </button>
+                    }
+                }).collect::<Vec<_>>()}
+            </div>
+
+            // Leaderboard (top 10 by USD)
+            <TopLeaderboard top=top/>
+
+            // Main tx list
+            <div class="bg-[#0d2137] border border-white/10 rounded-2xl overflow-hidden mb-4">
+                <div class="flex items-center justify-between px-4 py-2.5 border-b border-white/10">
+                    <span class="text-xs font-mono text-white/60 uppercase tracking-wider">"Transactions"</span>
+                    <span class="text-xs font-mono text-white/30">
+                        {move || match tx_list.get() {
+                            Some(Ok(p)) => format!("{} total", p.total),
+                            _ => "Loading...".to_string(),
+                        }}
+                    </span>
+                </div>
+                <Suspense fallback=|| view! {
+                    <div class="px-4 py-8 text-center text-white/30 text-sm">"Loading transactions..."</div>
+                }>
+                    {move || tx_list.get().map(|result| match result {
+                        Ok(page_data) => {
+                            if page_data.items.is_empty() {
+                                view! {
+                                    <div class="px-4 py-12 text-center text-white/30 text-sm italic">
+                                        "No notable transactions in this window"
+                                    </div>
+                                }.into_any()
+                            } else {
+                                let items = page_data.items;
+                                view! {
+                                    <div>
+                                        {items.into_iter().map(|tx| view! { <TxRow tx=tx/> }).collect::<Vec<_>>()}
+                                    </div>
+                                }.into_any()
+                            }
+                        }
+                        Err(_) => view! {
+                            <div class="px-4 py-8 text-center text-[#ff4444] text-sm">"Failed to load transactions"</div>
+                        }.into_any(),
+                    })}
+                </Suspense>
+
+                // Pagination
+                {move || {
+                    let current_page = page.get();
+                    let total = tx_list.get().and_then(|r| r.ok()).map(|p| p.total).unwrap_or(0);
+                    let total_pages = total.div_ceil(PAGE_SIZE.max(1));
+                    if total_pages <= 1 {
+                        view! { <div></div> }.into_any()
+                    } else {
+                        view! {
+                            <div class="flex items-center justify-between px-4 py-2.5 border-t border-white/10">
+                                <button
+                                    on:click=move |_| {
+                                        if current_page > 0 { set_page.set(current_page - 1); }
+                                    }
+                                    disabled=move || page.get() == 0
+                                    class="px-3 py-1 rounded text-xs font-mono bg-white/5 text-white/60 border border-white/10 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed"
+                                >
+                                    "\u{2190} Prev"
+                                </button>
+                                <span class="text-xs font-mono text-white/40">
+                                    {format!("Page {} of {}", current_page + 1, total_pages)}
+                                </span>
+                                <button
+                                    on:click=move |_| {
+                                        let p = page.get_untracked();
+                                        if p + 1 < total_pages { set_page.set(p + 1); }
+                                    }
+                                    disabled=move || {
+                                        let p = page.get();
+                                        p + 1 >= total_pages
+                                    }
+                                    class="px-3 py-1 rounded text-xs font-mono bg-white/5 text-white/60 border border-white/10 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed"
+                                >
+                                    "Next \u{2192}"
+                                </button>
+                            </div>
+                        }.into_any()
+                    }
+                }}
+            </div>
+
+            // Back link
+            <div class="text-center">
+                <a href="/observatory/heartbeat" class="text-xs font-mono text-white/30 hover:text-[#f7931a] transition-colors">
+                    "\u{2190} Back to Heartbeat"
+                </a>
+            </div>
+        </div>
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Sub-components
+// ---------------------------------------------------------------------------
+
+#[component]
+fn StatsCards(
+    stats: LocalResource<Result<crate::stats::types::NotableStatsInfo, ServerFnError>>,
+) -> impl IntoView {
+    view! {
+        <Suspense fallback=|| view! {
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+                <div class="bg-[#0d2137] border border-white/10 rounded-xl p-4 h-[72px] animate-pulse"></div>
+                <div class="bg-[#0d2137] border border-white/10 rounded-xl p-4 h-[72px] animate-pulse"></div>
+                <div class="bg-[#0d2137] border border-white/10 rounded-xl p-4 h-[72px] animate-pulse"></div>
+                <div class="bg-[#0d2137] border border-white/10 rounded-xl p-4 h-[72px] animate-pulse"></div>
+            </div>
+        }>
+            {move || stats.get().map(|result| match result {
+                Ok(s) => {
+                    let total_count = s.total_count;
+                    let total_usd = s.total_value_usd;
+                    let top_usd = s.top_value_usd;
+                    let top_txid = s.top_txid.clone().unwrap_or_default();
+                    let top_type = s.by_type.first().map(|(t, _, _)| t.clone()).unwrap_or_else(|| "—".to_string());
+                    let top_type_count = s.by_type.first().map(|(_, c, _)| *c).unwrap_or(0);
+                    view! {
+                        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+                            <StatCard label="Notable txs".to_string() value={total_count.to_string()} sub="in window".to_string()/>
+                            <StatCard label="Total USD flow".to_string() value={format!("${}", fmt_usd_short(total_usd))} sub="sum of transfer values".to_string()/>
+                            <StatCard label="Biggest single tx".to_string() value={format!("${}", fmt_usd_short(top_usd))} sub={
+                                if top_txid.is_empty() { "—".to_string() } else { format!("{}...", &top_txid[..12.min(top_txid.len())]) }
+                            }/>
+                            <StatCard label="Most common type".to_string() value={pretty_type(&top_type)} sub={format!("{} occurrences", top_type_count)}/>
+                        </div>
+                    }.into_any()
+                }
+                Err(_) => view! { <div></div> }.into_any(),
+            })}
+        </Suspense>
+    }
+}
+
+#[component]
+fn StatCard(label: String, value: String, sub: String) -> impl IntoView {
+    view! {
+        <div class="bg-[#0d2137] border border-white/10 rounded-xl p-4">
+            <div class="text-[10px] font-mono text-white/40 uppercase tracking-wider mb-1">{label}</div>
+            <div class="text-xl sm:text-2xl font-bold text-[#f7931a] font-mono leading-tight">{value}</div>
+            <div class="text-[11px] font-mono text-white/30 mt-0.5">{sub}</div>
+        </div>
+    }
+}
+
+#[component]
+fn TopLeaderboard(
+    top: LocalResource<Result<Vec<NotableTxInfo>, ServerFnError>>,
+) -> impl IntoView {
+    view! {
+        <div class="bg-[#0d2137] border border-white/10 rounded-2xl overflow-hidden mb-4">
+            <div class="px-4 py-2.5 border-b border-white/10">
+                <span class="text-xs font-mono text-[#ffd700] uppercase tracking-wider">
+                    "\u{2605} Top 10 by USD value"
+                </span>
+            </div>
+            <Suspense fallback=|| view! {
+                <div class="px-4 py-6 text-center text-white/30 text-sm">"Loading leaderboard..."</div>
+            }>
+                {move || top.get().map(|result| match result {
+                    Ok(items) if !items.is_empty() => {
+                        view! {
+                            <div>
+                                {items.into_iter().enumerate().map(|(i, tx)| {
+                                    let rank = i + 1;
+                                    view! { <LeaderRow rank=rank tx=tx/> }
+                                }).collect::<Vec<_>>()}
+                            </div>
+                        }.into_any()
+                    }
+                    _ => view! {
+                        <div class="px-4 py-6 text-center text-white/30 text-sm italic">"No data in this window"</div>
+                    }.into_any(),
+                })}
+            </Suspense>
+        </div>
+    }
+}
+
+#[component]
+fn LeaderRow(rank: usize, tx: NotableTxInfo) -> impl IntoView {
+    let txid_for_click = tx.txid.clone();
+    let txid_short = shorten_txid(&tx.txid);
+    let type_color = notable_color(&tx.notable_type);
+    let type_label = pretty_type(&tx.notable_type);
+    let usd_str = fmt_usd_short(tx.value_usd);
+    let btc_str = format!("{:.4} BTC", tx.value as f64 / 1e8);
+    let time_str = fmt_time_ago(tx.first_seen);
+
+    view! {
+        <div
+            class="flex items-baseline gap-3 px-4 py-2 border-b border-white/5 text-xs font-mono cursor-pointer hover:bg-white/5 transition-colors"
+            on:click=move |_| show_tx_detail(&txid_for_click)
+        >
+            <span class="text-white/30 w-6 shrink-0">{format!("#{}", rank)}</span>
+            <span class="font-bold shrink-0" style=format!("color: {}", type_color)>
+                {format!("${}", usd_str)}
+            </span>
+            <span class="text-white/50 shrink-0">{btc_str}</span>
+            <span class="text-[10px] shrink-0" style=format!("color: {}aa", type_color)>
+                {type_label}
+            </span>
+            <span class="text-white/40 text-[11px] ml-auto shrink-0">{txid_short}</span>
+            <span class="text-white/20 text-[10px] shrink-0">{time_str}</span>
+        </div>
+    }
+}
+
+#[component]
+fn TxRow(tx: NotableTxInfo) -> impl IntoView {
+    let txid_for_click = tx.txid.clone();
+    let txid_short = shorten_txid(&tx.txid);
+    let type_color = notable_color(&tx.notable_type);
+    let type_label = pretty_type(&tx.notable_type);
+    let usd_str = fmt_usd_short(tx.value_usd);
+    let btc_str = format!("{:.4} BTC", tx.value as f64 / 1e8);
+    let time_str = fmt_time_ago(tx.first_seen);
+    let fee_str = if tx.vsize > 0 {
+        format!("{:.1} sat/vB", tx.fee as f64 / tx.vsize as f64)
+    } else {
+        "—".to_string()
+    };
+    let io_str = format!("{}in / {}out", tx.input_count, tx.output_count);
+    let confirmed = tx.confirmed_height.is_some();
+    let conf_badge = if confirmed {
+        format!("#{}", tx.confirmed_height.unwrap_or(0))
+    } else {
+        "mempool".to_string()
+    };
+    let msg_text = tx.op_return_text.clone().unwrap_or_default();
+
+    view! {
+        <div
+            class="px-4 py-3 border-b border-white/5 text-xs font-mono cursor-pointer hover:bg-white/5 transition-colors"
+            on:click=move |_| show_tx_detail(&txid_for_click)
+        >
+            <div class="flex items-baseline gap-3 flex-wrap">
+                <span class="font-bold shrink-0" style=format!("color: {}", type_color)>
+                    {type_label}
+                </span>
+                <span class="text-[#f7931a] shrink-0">{format!("${}", usd_str)}</span>
+                <span class="text-white/50 shrink-0">{btc_str}</span>
+                <span class="text-white/40 shrink-0">{io_str}</span>
+                <span class="text-white/40 shrink-0">{fee_str}</span>
+                <span class="text-white/30 text-[10px] shrink-0">
+                    {if confirmed { "\u{2713}" } else { "\u{25CB}" }}
+                    " "
+                    {conf_badge}
+                </span>
+                <span class="text-white/20 text-[11px] ml-auto shrink-0">{time_str}</span>
+                <span class="text-white/30 text-[11px] shrink-0">{txid_short}</span>
+            </div>
+            {if !msg_text.is_empty() {
+                let quoted = format!("\"{}\"", &msg_text.chars().take(200).collect::<String>());
+                view! {
+                    <div class="mt-1 text-[11px] text-white/50 italic truncate">{quoted}</div>
+                }.into_any()
+            } else {
+                view! { <div></div> }.into_any()
+            }}
+        </div>
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+fn shorten_txid(txid: &str) -> String {
+    if txid.len() >= 16 {
+        format!("{}...{}", &txid[..8], &txid[txid.len() - 6..])
+    } else {
+        txid.to_string()
+    }
+}
+
+fn notable_color(t: &str) -> &'static str {
+    match t {
+        "whale" => "#ffd700",
+        "round_number" => "#90ee90",
+        "large_inscription" => "#ff00c8",
+        "consolidation" => "#a855f7",
+        "fan_out" => "#00d2ff",
+        "fee_outlier" => "#ff4444",
+        "op_return_msg" => "#ffa500",
+        _ => "#ffffff",
+    }
+}
+
+fn pretty_type(t: &str) -> String {
+    match t {
+        "whale" => "Whale".to_string(),
+        "round_number" => "Round #".to_string(),
+        "large_inscription" => "Inscription".to_string(),
+        "consolidation" => "Consolidation".to_string(),
+        "fan_out" => "Fan-out".to_string(),
+        "fee_outlier" => "Fee Outlier".to_string(),
+        "op_return_msg" => "Message".to_string(),
+        _ => t.to_string(),
+    }
+}
+
+fn fmt_usd_short(v: f64) -> String {
+    if v >= 1_000_000_000.0 {
+        format!("{:.2}B", v / 1_000_000_000.0)
+    } else if v >= 1_000_000.0 {
+        format!("{:.2}M", v / 1_000_000.0)
+    } else if v >= 1_000.0 {
+        format!("{:.1}K", v / 1_000.0)
+    } else {
+        format!("{:.0}", v)
+    }
+}
+
+fn fmt_time_ago(ts: u64) -> String {
+    let now = now_secs();
+    if ts >= now {
+        return "just now".to_string();
+    }
+    let delta = now - ts;
+    if delta < 60 {
+        format!("{}s ago", delta)
+    } else if delta < 3600 {
+        format!("{}m ago", delta / 60)
+    } else if delta < 86400 {
+        format!("{}h ago", delta / 3600)
+    } else {
+        format!("{}d ago", delta / 86400)
+    }
+}
+
+/// Open the tx detail modal (defined in stats.js as window.showTxDetail).
+fn show_tx_detail(txid: &str) {
+    let _ = js_show_tx_detail(txid);
+}

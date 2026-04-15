@@ -80,7 +80,10 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
         var isConsolidation = tx.consolidation || nt === 'consolidation';
         var isFanOut = tx.fan_out || nt === 'fan_out';
         var isLargeInscription = tx.large_inscription || nt === 'large_inscription';
-        var isNotable = isWhale || isFeeOutlier || isConsolidation || isFanOut || isLargeInscription;
+        var isRoundNumber = tx.round_number || nt === 'round_number';
+        var isOpReturnMsg = tx.op_return_msg || nt === 'op_return_msg';
+        var isNotable = isWhale || isFeeOutlier || isConsolidation || isFanOut
+            || isLargeInscription || isRoundNumber || isOpReturnMsg;
 
         // Spread randomly across the flatline, leaving last 20px for live txs.
         var usableSpan = Math.max(10, flatlineSpan - 20);
@@ -99,18 +102,24 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
         if (stackY > histMaxStack && !isNotable) continue;
         stackMap[gridX] = stackY + brickH;
 
-        var blipColor = isWhale ? 'rgba(255, 215, 0, '
-            : isFeeOutlier ? 'rgba(255, 68, 68, '
-            : isConsolidation ? 'rgba(168, 85, 247, '
-            : isFanOut ? 'rgba(0, 210, 255, '
-            : isLargeInscription ? 'rgba(255, 0, 200, '
-            : feeRateColor(feeRate, medianFee);
-        var notableType = isWhale ? 'whale'
-            : isFeeOutlier ? 'fee_outlier'
-            : isConsolidation ? 'consolidation'
-            : isFanOut ? 'fan_out'
-            : isLargeInscription ? 'large_inscription'
-            : null;
+        var blipColor, notableType;
+        if (isWhale) {
+            blipColor = 'rgba(255, 215, 0, '; notableType = 'whale';
+        } else if (isRoundNumber) {
+            blipColor = 'rgba(144, 238, 144, '; notableType = 'round_number';
+        } else if (isLargeInscription) {
+            blipColor = 'rgba(255, 0, 200, '; notableType = 'large_inscription';
+        } else if (isConsolidation) {
+            blipColor = 'rgba(168, 85, 247, '; notableType = 'consolidation';
+        } else if (isFanOut) {
+            blipColor = 'rgba(0, 210, 255, '; notableType = 'fan_out';
+        } else if (isFeeOutlier) {
+            blipColor = 'rgba(255, 68, 68, '; notableType = 'fee_outlier';
+        } else if (isOpReturnMsg) {
+            blipColor = 'rgba(255, 165, 0, '; notableType = 'op_return_msg';
+        } else {
+            blipColor = feeRateColor(feeRate, medianFee); notableType = null;
+        }
 
         // Stagger: left-most bricks appear first, sweeping right
         var xFrac = flatlineSpan > 0 ? (txVX - liveSeg.x_start) / flatlineSpan : 0;
@@ -131,7 +140,10 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
             whale: isWhale,
             feeOutlier: isFeeOutlier,
             notableType: notableType,
-            valueUsd: tx.value_usd || 0
+            valueUsd: tx.value_usd || 0,
+            opReturnText: tx.op_return_text || '',
+            inputCount: tx.input_count || 0,
+            outputCount: tx.output_count || 0
         });
         placed++;
 
@@ -141,7 +153,11 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
                 whale: isWhale, fee_outlier: isFeeOutlier,
                 consolidation: isConsolidation, fan_out: isFanOut,
                 large_inscription: isLargeInscription,
-                value_usd: tx.value_usd || 0
+                round_number: isRoundNumber, op_return_msg: isOpReturnMsg,
+                op_return_text: tx.op_return_text || '',
+                value_usd: tx.value_usd || 0,
+                input_count: tx.input_count || 0,
+                output_count: tx.output_count || 0
             });
         }
     }
@@ -248,6 +264,22 @@ export function connectOwnFeed() {
     _hb._sseTxCount = 0;
     try {
         var es = new EventSource('/api/stats/heartbeat');
+        es.addEventListener('notable_history', function(e) {
+            if (!_hb) return;
+            try {
+                var notables = JSON.parse(e.data);
+                if (!Array.isArray(notables) || notables.length === 0) return;
+                console.log('[heartbeat] SSE notable_history:', notables.length, 'txs');
+                // Server sends newest-first. Append preserves that order (newest at top).
+                for (var ni = 0; ni < notables.length; ni++) {
+                    if (window._notableFeed) {
+                        window._notableFeed(notables[ni], { append: true });
+                    }
+                }
+            } catch (err) {
+                console.log('[heartbeat] notable_history parse error:', err);
+            }
+        });
         es.addEventListener('history', function(e) {
             if (!_hb) return;
             try {
@@ -534,12 +566,16 @@ export function flushTxBatch() {
         var isConsolidation = tx.consolidation || false;
         var isFanOut = tx.fan_out || false;
         var isLargeInscription = tx.large_inscription || false;
-        var isNotable = isWhale || isFeeOutlier || isConsolidation || isFanOut || isLargeInscription;
+        var isRoundNumber = tx.round_number || false;
+        var isOpReturnMsg = tx.op_return_msg || false;
+        var isNotable = isWhale || isFeeOutlier || isConsolidation || isFanOut
+            || isLargeInscription || isRoundNumber || isOpReturnMsg;
 
-        // Notable txs: wider (6px, occupies ~2 grid cells) and much taller
+        // Notable txs: slightly wider and taller, but not so tall they fill columns fast.
+        // Reduced from 35-60px (which caused tx drops) to 22-38px.
         var brickW = isNotable ? 6 : 4;
         var brickH = isNotable
-            ? 35 + feeNorm * 20 + Math.random() * 5
+            ? 22 + feeNorm * 12 + Math.random() * 4
             : 3 + feeNorm * 14 + Math.random() * 3;
         var brickX = _hb.virtualX - Math.random() * spread;
         var gridX = Math.round(brickX / 5) * 5;
@@ -566,24 +602,50 @@ export function flushTxBatch() {
                     break;
                 }
             }
-            // If all nearby columns are full, skip this brick entirely
-            if (!found) continue;
+            // Normal bricks: skip when all nearby columns full.
+            // Notable bricks: never skip — force-place at shortest nearby column.
+            if (!found) {
+                if (isNotable) {
+                    // Find shortest column in a wider search to force placement
+                    var shortest = stackY;
+                    var shortestX = gridX;
+                    for (var bk = 1; bk <= 60; bk++) {
+                        var tx2 = gridX - bk * 5;
+                        if (tx2 < liveSeg.x_start) break;
+                        var th2 = liveSeg._colHeights[tx2] || 0;
+                        if (th2 < shortest) {
+                            shortest = th2;
+                            shortestX = tx2;
+                        }
+                    }
+                    gridX = shortestX;
+                    brickX = shortestX;
+                    stackY = shortest;
+                } else {
+                    continue;
+                }
+            }
         }
 
-        var blipColor = isWhale ? 'rgba(255, 215, 0, '
-            : isFeeOutlier ? 'rgba(255, 68, 68, '
-            : isConsolidation ? 'rgba(168, 85, 247, '
-            : isFanOut ? 'rgba(0, 210, 255, '
-            : isLargeInscription ? 'rgba(255, 0, 200, '
-            : feeRateColor(feeRate, medianFee);
-
-        // Determine notable type string for the blip
-        var notableType = isWhale ? 'whale'
-            : isFeeOutlier ? 'fee_outlier'
-            : isConsolidation ? 'consolidation'
-            : isFanOut ? 'fan_out'
-            : isLargeInscription ? 'large_inscription'
-            : null;
+        // Priority order matches backend (structural > value > fee > data)
+        var blipColor, notableType;
+        if (isWhale) {
+            blipColor = 'rgba(255, 215, 0, '; notableType = 'whale';
+        } else if (isRoundNumber) {
+            blipColor = 'rgba(144, 238, 144, '; notableType = 'round_number';
+        } else if (isLargeInscription) {
+            blipColor = 'rgba(255, 0, 200, '; notableType = 'large_inscription';
+        } else if (isConsolidation) {
+            blipColor = 'rgba(168, 85, 247, '; notableType = 'consolidation';
+        } else if (isFanOut) {
+            blipColor = 'rgba(0, 210, 255, '; notableType = 'fan_out';
+        } else if (isFeeOutlier) {
+            blipColor = 'rgba(255, 68, 68, '; notableType = 'fee_outlier';
+        } else if (isOpReturnMsg) {
+            blipColor = 'rgba(255, 165, 0, '; notableType = 'op_return_msg';
+        } else {
+            blipColor = feeRateColor(feeRate, medianFee); notableType = null;
+        }
 
         liveSeg.blips.push({
             x: brickX,
@@ -608,7 +670,10 @@ export function flushTxBatch() {
             whale: isWhale,
             feeOutlier: isFeeOutlier,
             notableType: notableType,
-            valueUsd: tx.value_usd || 0
+            valueUsd: tx.value_usd || 0,
+            opReturnText: tx.op_return_text || '',
+            inputCount: tx.input_count || 0,
+            outputCount: tx.output_count || 0
         });
         liveSeg._colHeights[gridX] = stackY + brickH;
 
@@ -738,70 +803,107 @@ export function addMempoolTxs(newTxCount, medianFeeRate, topFeeRate) {
 // ── Whale Watch Feed ──────────────────────────────────
 var MAX_WHALE_ENTRIES = 100;
 
-window._notableFeed = function(tx) {
-    var panel = document.getElementById('whale-feed-panel');
-    var list = document.getElementById('whale-feed-list');
-    if (!panel || !list) return;
+// Track seen txids to prevent duplicates when history replays + live arrives
+window._seenNotableTxids = window._seenNotableTxids || new Set();
 
-    // Show panel on first notable tx
-    panel.classList.remove('hidden');
+// Build the feed row HTML and styling from a tx object.
+// Accepts both live SSE format (whale/fee_outlier/... booleans) and
+// persistent notable_txs format (notable_type string).
+function _buildNotableRow(tx) {
+    // Support both formats: explicit flags (live) and notable_type string (history)
+    var nt = tx.notable_type || null;
+    var isWhale = tx.whale || nt === 'whale';
+    var isFeeOutlier = tx.fee_outlier || nt === 'fee_outlier';
+    var isConsolidation = tx.consolidation || nt === 'consolidation';
+    var isFanOut = tx.fan_out || nt === 'fan_out';
+    var isLargeInscription = tx.large_inscription || nt === 'large_inscription';
+    var isRoundNumber = tx.round_number || nt === 'round_number';
+    var isOpReturnMsg = tx.op_return_msg || nt === 'op_return_msg';
 
-    // Remove placeholder
-    var placeholder = list.querySelector('.italic');
-    if (placeholder) placeholder.remove();
-
-    var isWhale = tx.whale || false;
-    var isFeeOutlier = tx.fee_outlier || false;
-    var isConsolidation = tx.consolidation || false;
-    var isFanOut = tx.fan_out || false;
-    var isLargeInscription = tx.large_inscription || false;
     var btcVal = (tx.value || 0) / 100000000;
     var feeRate = tx.fee && tx.vsize ? (tx.fee / tx.vsize).toFixed(1) : '?';
     var feeBtc = (tx.fee || 0) / 100000000;
-    var time = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    var timestamp = tx.first_seen || tx.timestamp || Math.floor(Date.now() / 1000);
+    var time = new Date(timestamp * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     var txidShort = tx.txid ? tx.txid.substring(0, 12) + '...' : '?';
+    var usdVal = Math.round(tx.value_usd || 0);
+    var usdStr = usdVal > 0 ? '$' + usdVal.toLocaleString() : btcVal.toFixed(4) + ' BTC';
 
-    // Build label based on type
-    var labelHtml;
-    var feedType;
+    var labelHtml, feedType;
     if (isWhale) {
         feedType = 'whale';
-        var usdVal = Math.round(tx.value_usd || 0);
-        labelHtml = '<span class="text-[#ffd700] font-bold shrink-0">$' + usdVal.toLocaleString() + '</span>' +
-            '<span class="text-white/50 shrink-0">' + btcVal.toFixed(4) + ' BTC</span>';
-    } else if (isFeeOutlier) {
-        feedType = 'fee';
-        labelHtml = '<span class="text-[#ff4444] font-bold shrink-0">FEE: ' + feeRate + ' sat/vB</span>' +
-            '<span class="text-white/50 shrink-0">' + feeBtc.toFixed(6) + ' BTC fee</span>';
-    } else if (isConsolidation) {
-        feedType = 'consolidation';
-        labelHtml = '<span class="text-[#a855f7] font-bold shrink-0">CONSOLIDATION</span>' +
-            '<span class="text-white/50 shrink-0">' + btcVal.toFixed(4) + ' BTC</span>';
-    } else if (isFanOut) {
-        feedType = 'fan_out';
-        labelHtml = '<span class="text-[#00d2ff] font-bold shrink-0">FAN-OUT</span>' +
-            '<span class="text-white/50 shrink-0">' + btcVal.toFixed(4) + ' BTC</span>';
+        labelHtml = '<span class="text-[#ffd700] font-bold shrink-0">WHALE</span>' +
+            '<span class="text-[#ffd700]/80 shrink-0">' + usdStr + '</span>';
+    } else if (isRoundNumber) {
+        feedType = 'round_number';
+        labelHtml = '<span class="text-[#90ee90] font-bold shrink-0">ROUND #</span>' +
+            '<span class="text-white/60 shrink-0">' + btcVal.toFixed(2) + ' BTC</span>';
     } else if (isLargeInscription) {
         feedType = 'inscription';
         labelHtml = '<span class="text-[#ff00c8] font-bold shrink-0">INSCRIPTION</span>' +
             '<span class="text-white/50 shrink-0">' + btcVal.toFixed(4) + ' BTC</span>';
+    } else if (isConsolidation) {
+        feedType = 'consolidation';
+        var ioC = (tx.input_count || '?') + '->' + (tx.output_count || '?');
+        labelHtml = '<span class="text-[#a855f7] font-bold shrink-0">CONSOL</span>' +
+            '<span class="text-white/50 shrink-0">' + ioC + '</span>';
+    } else if (isFanOut) {
+        feedType = 'fan_out';
+        var ioF = (tx.input_count || '?') + '->' + (tx.output_count || '?');
+        labelHtml = '<span class="text-[#00d2ff] font-bold shrink-0">FAN-OUT</span>' +
+            '<span class="text-white/50 shrink-0">' + ioF + '</span>';
+    } else if (isFeeOutlier) {
+        feedType = 'fee';
+        labelHtml = '<span class="text-[#ff4444] font-bold shrink-0">FEE</span>' +
+            '<span class="text-white/50 shrink-0">' + feeRate + ' sat/vB</span>';
+    } else if (isOpReturnMsg) {
+        feedType = 'op_return';
+        var msgText = (tx.op_return_text || '').substring(0, 30);
+        labelHtml = '<span class="text-[#ffa500] font-bold shrink-0">MSG</span>' +
+            '<span class="text-white/60 shrink-0 truncate max-w-[200px]" title="' + (tx.op_return_text || '').replace(/"/g, '&quot;') + '">' + msgText + '</span>';
     } else {
         feedType = 'other';
         labelHtml = '<span class="text-white/50 font-bold shrink-0">NOTABLE</span>';
     }
 
-    var row = document.createElement('div');
-    row.className = 'flex items-baseline gap-3 px-4 py-2 border-b border-white/5 text-xs font-mono opacity-0';
-    row.style.animation = 'fadeinone 0.5s ease forwards';
-    row.dataset.type = feedType;
+    return { labelHtml: labelHtml, feedType: feedType, txidShort: txidShort, time: time };
+}
+
+window._notableFeed = function(tx, opts) {
+    var panel = document.getElementById('whale-feed-panel');
+    var list = document.getElementById('whale-feed-list');
+    if (!panel || !list) return;
+
     var txid = tx.txid || '';
-    row.innerHTML = labelHtml +
-        '<span class="text-white/30 hover:text-[#f7931a] transition-colors cursor-pointer" data-txid="' + txid + '">' + txidShort + '</span>' +
-        '<span class="text-white/20 ml-auto shrink-0">' + time + '</span>';
+    if (!txid) return;
+
+    // Dedup: skip if we've already rendered this txid
+    if (window._seenNotableTxids.has(txid)) return;
+    window._seenNotableTxids.add(txid);
+
+    // Show panel on first notable tx
+    panel.classList.remove('hidden');
+
+    // Remove placeholder (use explicit attribute, not fragile .italic class)
+    var placeholder = list.querySelector('[data-placeholder]');
+    if (placeholder) placeholder.remove();
+
+    var built = _buildNotableRow(tx);
+
+    var row = document.createElement('div');
+    var appendMode = opts && opts.append;
+    row.className = 'flex items-baseline gap-3 px-4 py-2 border-b border-white/5 text-xs font-mono'
+        + (appendMode ? '' : ' opacity-0');
+    if (!appendMode) row.style.animation = 'fadeinone 0.5s ease forwards';
+    row.dataset.type = built.feedType;
+    row.dataset.txid = txid;
+    row.innerHTML = built.labelHtml +
+        '<span class="text-white/30 hover:text-[#f7931a] transition-colors cursor-pointer" data-txid-link="' + txid + '">' + built.txidShort + '</span>' +
+        '<span class="text-white/20 ml-auto shrink-0">' + built.time + '</span>';
 
     // Click txid to open tx detail modal
-    var txSpan = row.querySelector('[data-txid]');
-    if (txSpan && txid) {
+    var txSpan = row.querySelector('[data-txid-link]');
+    if (txSpan) {
         txSpan.addEventListener('click', function() {
             if (window.showTxDetail) {
                 window.showTxDetail(txid, {
@@ -814,12 +916,21 @@ window._notableFeed = function(tx) {
         });
     }
 
-    // Prepend (newest first)
-    list.insertBefore(row, list.firstChild);
+    // Append mode for history (preserve chronological order),
+    // prepend mode for live (newest first)
+    if (appendMode) {
+        list.appendChild(row);
+    } else {
+        list.insertBefore(row, list.firstChild);
+    }
 
     // Cap entries
     while (list.children.length > MAX_WHALE_ENTRIES) {
-        list.removeChild(list.lastChild);
+        var removed = list.lastChild;
+        if (removed && removed.dataset && removed.dataset.txid) {
+            window._seenNotableTxids.delete(removed.dataset.txid);
+        }
+        list.removeChild(removed);
     }
 
     // Apply active filter to new row

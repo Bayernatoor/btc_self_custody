@@ -34,6 +34,7 @@ mod on_this_day;
 mod overview;
 mod signaling;
 mod stats;
+mod whale_watch;
 
 pub use embedded::EmbeddedChartsPage;
 pub use fees::FeeChartsPage;
@@ -45,6 +46,7 @@ pub use on_this_day::OnThisDayPage;
 pub use overview::ObservatoryOverview;
 pub use signaling::SignalingPage;
 pub use stats::StatsSummaryPage;
+pub use whale_watch::WhaleWatchPage;
 
 use leptos::prelude::*;
 

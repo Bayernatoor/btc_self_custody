@@ -168,6 +168,35 @@ pub fn spawn_background_tasks(
         });
     }
 
+    // Background price refresh every 90 seconds.
+    // Critical for whale detection: ZMQ subscriber reads price_cache per tx,
+    // and if nobody loads the dashboard, the cache stays empty and no whales
+    // get flagged. This ensures the price is always fresh regardless of user activity.
+    {
+        let state = Arc::clone(&state);
+        tokio::spawn(async move {
+            // Initial fetch immediately so whale detection works from startup
+            match state.rpc.fetch_price().await {
+                Ok(price) => {
+                    tracing::info!("Price cache initialized: ${:.2}", price.usd);
+                    *state.price_cache.lock().unwrap_or_else(|e| e.into_inner()) =
+                        Some((price, std::time::Instant::now()));
+                }
+                Err(e) => tracing::warn!("Initial price fetch failed: {e}"),
+            }
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(90)).await;
+                match state.rpc.fetch_price().await {
+                    Ok(price) => {
+                        *state.price_cache.lock().unwrap_or_else(|e| e.into_inner()) =
+                            Some((price, std::time::Instant::now()));
+                    }
+                    Err(e) => tracing::debug!("Price refresh failed: {e}"),
+                }
+            }
+        });
+    }
+
     // Poll for new blocks every 15 seconds, invalidate caches on new data
     {
         let state = Arc::clone(&state);

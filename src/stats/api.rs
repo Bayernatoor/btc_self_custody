@@ -527,17 +527,19 @@ pub async fn get_heartbeat_sse(
 
     let rx = state.heartbeat_tx.subscribe();
 
-    // Load unconfirmed txs for the current flatline. The mempool_txs table
-    // is sparsely populated after restarts (ZMQ only records NEW txs), so
-    // many unconfirmed txs have no first_seen entry. Use a generous 2-hour
-    // window to catch as many as possible. The query filters confirmed_height
-    // IS NULL so only genuinely unconfirmed txs are returned.
-    let (history, last_block_ts) = {
+    // Load unconfirmed txs for the current flatline + recent notable txs (including confirmed)
+    // for the whale watch feed. mempool_txs only holds unconfirmed; notable_txs holds both.
+    let (history, notable_history, last_block_ts) = {
         let two_hours_ago = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs()
             .saturating_sub(7200);
+        let twenty_four_hours_ago = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs()
+            .saturating_sub(86400);
         match state.db.get() {
             Ok(conn) => {
                 let block_ts = db::max_height(&conn)
@@ -547,40 +549,48 @@ pub async fn get_heartbeat_sse(
                     .unwrap_or(0);
                 let txs = db::query_recent_mempool_txs(&conn, two_hours_ago, 10000)
                     .unwrap_or_default();
-                (txs, block_ts)
+                // Fetch recent notable txs (last 24h, up to 200) for the feed panel.
+                // Includes confirmed txs, unlike mempool_txs query.
+                let filter = db::NotableFilter {
+                    since: Some(twenty_four_hours_ago),
+                    ..Default::default()
+                };
+                let notables = db::query_notable_txs(&conn, &filter, 200, 0)
+                    .unwrap_or_default();
+                (txs, notables, block_ts)
             }
-            Err(_) => (vec![], 0),
+            Err(_) => (vec![], vec![], 0),
         }
     };
 
-    // State machine: first emit history, then stream live events
+    // State machine: history → notable history → live events
     enum Phase {
-        History(Vec<db::MempoolTxRow>, u64), // txs + last_block_timestamp
+        History(Vec<db::MempoolTxRow>, Vec<db::NotableTx>, u64),
+        NotableHistory(Vec<db::NotableTx>),
         Live,
     }
 
     let stream = futures::stream::unfold(
-        (Phase::History(history, last_block_ts), rx),
+        (Phase::History(history, notable_history, last_block_ts), rx),
         |(phase, mut rx)| async move {
             match phase {
-                Phase::History(txs, block_ts) => {
-                    if txs.is_empty() {
-                        return Some((
-                            Ok(Event::default().event("history").data(
-                                format!(
-                                "{{\"txs\":[],\"last_block_ts\":{block_ts}}}"
-                            ),
-                            )),
-                            (Phase::Live, rx),
-                        ));
-                    }
-                    let txs_json =
-                        serde_json::to_string(&txs).unwrap_or_default();
-                    let data = format!(
-                        "{{\"txs\":{txs_json},\"last_block_ts\":{block_ts}}}"
-                    );
+                Phase::History(txs, notables, block_ts) => {
+                    let data = if txs.is_empty() {
+                        format!("{{\"txs\":[],\"last_block_ts\":{block_ts}}}")
+                    } else {
+                        let txs_json =
+                            serde_json::to_string(&txs).unwrap_or_default();
+                        format!("{{\"txs\":{txs_json},\"last_block_ts\":{block_ts}}}")
+                    };
                     Some((
                         Ok(Event::default().event("history").data(data)),
+                        (Phase::NotableHistory(notables), rx),
+                    ))
+                }
+                Phase::NotableHistory(notables) => {
+                    let data = serde_json::to_string(&notables).unwrap_or_else(|_| "[]".to_string());
+                    Some((
+                        Ok(Event::default().event("notable_history").data(data)),
                         (Phase::Live, rx),
                     ))
                 }

@@ -23,6 +23,7 @@
 //!   /observatory/on-this-day                 -> On This Day in Bitcoin
 //!   /observatory/hall-of-fame                -> Hall of Fame (notable blocks/transactions)
 //!   /observatory/heartbeat                   -> Block Heartbeat (live EKG animation)
+//!   /observatory/whale-watch                 -> Whale Watch (notable tx browser)
 //!   /observatory/learn/protocols             -> Protocol guide
 //!   /blog, /faq, /about                      -> Static pages
 
@@ -40,7 +41,7 @@ use crate::routes::observatory::learn::protocols::ProtocolGuidePage;
 use crate::routes::observatory::{
     EmbeddedChartsPage, FeeChartsPage, HallOfFamePage, HeartbeatPage,
     MiningChartsPage, NetworkChartsPage, ObservatoryOverview, ObservatoryPage,
-    OnThisDayPage, SignalingPage, StatsSummaryPage,
+    OnThisDayPage, SignalingPage, StatsSummaryPage, WhaleWatchPage,
 };
 use leptos::prelude::*;
 use leptos_meta::*;
@@ -197,6 +198,7 @@ pub fn App() -> impl IntoView {
                             <Route path=path!("/on-this-day") view=OnThisDayPage/>
                             <Route path=path!("/hall-of-fame") view=HallOfFamePage/>
                             <Route path=path!("/heartbeat") view=HeartbeatPage/>
+                            <Route path=path!("/whale-watch") view=WhaleWatchPage/>
                             <Route path=path!("/learn") view=LearnIndexPage/>
                             <Route path=path!("/learn/protocols") view=ProtocolGuidePage/>
                             <Route path=path!("/learn/methodology") view=MethodologyPage/>
