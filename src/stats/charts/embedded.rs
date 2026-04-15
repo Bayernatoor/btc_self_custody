@@ -1186,3 +1186,60 @@ pub fn protocol_fee_competition_chart_daily(days: &[DailyAggregate]) -> serde_js
         ]
     }))
 }
+
+// ---------------------------------------------------------------------------
+// Coinbase message charts
+// ---------------------------------------------------------------------------
+
+/// Average coinbase message length per block (bytes of decoded ASCII text).
+/// Longer messages often indicate pools encoding custom data, timestamps, or
+/// signaling information in the coinbase.
+pub fn coinbase_message_length_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+    if blocks.is_empty() {
+        return no_data_chart("Coinbase Message Length");
+    }
+    let has_data = blocks.iter().any(|b| !b.coinbase_text.is_empty());
+    if !has_data {
+        return no_data_chart("Coinbase Message Length");
+    }
+
+    let len_fn = |b: &BlockSummary| b.coinbase_text.len() as f64;
+    let raw_str = build_data_array_f64(blocks, len_fn);
+    let raw = data_array_value(&raw_str);
+    let vals: Vec<f64> = blocks.iter().map(len_fn).collect();
+    let ma = moving_average(&vals, 144);
+    let ma_str = build_ma_array(blocks, &ma);
+    let ma_data = data_array_value(&ma_str);
+    let has_ma = show_ma(blocks.len());
+
+    let mut series = vec![json!({
+        "name": "Message Length", "type": "line", "data": raw,
+        "lineStyle": { "width": if has_ma { 1.0 } else { 1.5 }, "color": "#a78bfa" },
+        "itemStyle": { "color": "#a78bfa" }, "symbol": "none",
+        "opacity": if has_ma { 0.3 } else { 1.0 }
+    })];
+    if has_ma {
+        series.push(json!({
+            "name": "144-block MA", "type": "line", "data": ma_data,
+            "lineStyle": { "width": 2, "color": MA_COLOR },
+            "itemStyle": { "color": MA_COLOR }, "symbol": "none"
+        }));
+    }
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("Characters"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": has_ma },
+        "series": series
+    }))
+}
+
+/// Coinbase message length chart (daily - no daily aggregate available,
+/// so return no_data for daily ranges).
+pub fn coinbase_message_length_chart_daily(
+    _days: &[DailyAggregate],
+) -> serde_json::Value {
+    no_data_chart("Coinbase Message Length")
+}

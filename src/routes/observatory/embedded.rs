@@ -97,6 +97,10 @@ pub fn EmbeddedChartsPage() -> impl IntoView {
                         |blocks| crate::stats::charts::protocol_fee_competition_chart(blocks),
                         |days| crate::stats::charts::protocol_fee_competition_chart_daily(days)
                     );
+                    let coinbase_msg_option = chart_memo!(dashboard_data, range, overlay_flags,
+                        |blocks| crate::stats::charts::coinbase_message_length_chart(blocks),
+                        |_days| crate::stats::charts::coinbase_message_length_chart_daily(_days)
+                    );
 
                     view! {
                         <div class="space-y-10">
@@ -120,6 +124,10 @@ pub fn EmbeddedChartsPage() -> impl IntoView {
                             <ChartCard title="Inscription Payload vs Envelope" description=chart_desc(range, "Breakdown of inscription witness data into actual content (payload) and protocol overhead (envelope structure)", "Daily average inscription payload vs envelope overhead per block") chart_id="chart-inscription-envelope" option=inscription_envelope_option info="Every Ordinals inscription wraps content in a witness envelope: OP_FALSE OP_IF ... OP_ENDIF with push opcodes and the 'ord' marker. The overhead is typically 10-15% of total inscription bytes. Higher overhead ratios indicate smaller inscriptions (like BRC-20 JSON operations) where the fixed envelope cost is a larger fraction."/>
                             <ChartCard title="Inscription Fee Share" description=chart_desc(range, "Percentage of total transaction fees paid by inscription-bearing transactions", "Daily inscription fee revenue as a percentage of total fees") chart_id="chart-inscription-fee-share" option=inscription_fee_share_option info="Tracks how much of the block's fee revenue comes from transactions containing Ordinals inscriptions. During high-demand periods like BRC-20 launches, inscription fees can spike significantly as inscribers compete for block space."/>
                             <ChartCard title="Protocol Fee Competition" description=chart_desc(range, "Fee revenue breakdown: standard transactions vs Ordinals inscriptions vs Runes protocol", "Daily fee revenue by protocol type") chart_id="chart-protocol-fee-competition" option=protocol_fee_option info="Shows how total fee revenue is split between standard Bitcoin transactions, Ordinals inscription transactions, and Runes protocol transactions. Reveals which protocol type is driving fee pressure at any given time."/>
+
+                            // ── Miner Signals ────────────────────
+                            <SectionHeading id="section-coinbase" title="Miner Signals"/>
+                            <ChartCard title="Coinbase Message Length" description="Length of decoded ASCII text found in each block's coinbase transaction. Mining pools embed identifiers, timestamps, and occasionally custom messages in this space" chart_id="chart-coinbase-msg-length" option=coinbase_msg_option info="Every block's coinbase transaction contains a scriptSig with arbitrary data. Miners use this to embed their pool identifier, block height (required since BIP-34), and sometimes custom messages or political statements. Longer messages indicate pools that pack additional data into this field."/>
                         </div>
                     }
             }

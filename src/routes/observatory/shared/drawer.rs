@@ -155,6 +155,12 @@ fn drawer_pages() -> Vec<DrawerPage> {
                         DrawerChart { label: "Protocol Fee Competition", card_id: "card-chart-protocol-fee-competition" },
                     ],
                 },
+                DrawerSection {
+                    label: "Miner Signals",
+                    charts: vec![
+                        DrawerChart { label: "Coinbase Message Length", card_id: "card-chart-coinbase-msg-length" },
+                    ],
+                },
             ],
         },
     ]
