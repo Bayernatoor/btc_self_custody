@@ -828,6 +828,8 @@ function _buildNotableRow(tx) {
     var txidShort = tx.txid ? tx.txid.substring(0, 12) + '...' : '?';
     var usdVal = Math.round(tx.value_usd || 0);
     var usdStr = usdVal > 0 ? '$' + usdVal.toLocaleString() : btcVal.toFixed(4) + ' BTC';
+    var isConfirmed = !!tx.confirmed_height;
+    var statusIcon = isConfirmed ? '<span class="text-white/40 text-[10px] shrink-0" title="Confirmed">\u2713</span>' : '';
 
     var labelHtml, feedType;
     if (isWhale) {
@@ -866,7 +868,13 @@ function _buildNotableRow(tx) {
         labelHtml = '<span class="text-white/50 font-bold shrink-0">NOTABLE</span>';
     }
 
-    return { labelHtml: labelHtml, feedType: feedType, txidShort: txidShort, time: time };
+    return {
+        labelHtml: labelHtml,
+        feedType: feedType,
+        txidShort: txidShort,
+        time: time,
+        statusIcon: statusIcon
+    };
 }
 
 window._notableFeed = function(tx, opts) {
@@ -898,6 +906,7 @@ window._notableFeed = function(tx, opts) {
     row.dataset.type = built.feedType;
     row.dataset.txid = txid;
     row.innerHTML = built.labelHtml +
+        built.statusIcon +
         '<span class="text-white/30 hover:text-[#f7931a] transition-colors cursor-pointer" data-txid-link="' + txid + '">' + built.txidShort + '</span>' +
         '<span class="text-white/20 ml-auto shrink-0">' + built.time + '</span>';
 
@@ -942,21 +951,36 @@ window._notableFeed = function(tx, opts) {
 
 // Filter notable feed by type
 window._notableFilter = 'all';
+// Color map per filter type (matches blip colors)
+var _filterColors = {
+    'all': '255,255,255',
+    'whale': '255,215,0',
+    'round_number': '144,238,144',
+    'inscription': '255,0,200',
+    'consolidation': '168,85,247',
+    'fan_out': '0,210,255',
+    'fee': '255,68,68',
+    'op_return': '255,165,0'
+};
+
 window._filterNotable = function(filter) {
     window._notableFilter = filter;
     var list = document.getElementById('whale-feed-list');
     if (!list) return;
 
-    // Update button styles: active gets bg-white/10, inactive reverts to original
+    // Update button styles: active uses type-colored background at 20% opacity
     var btns = document.querySelectorAll('[id^="whale-filter-"]');
     for (var bi = 0; bi < btns.length; bi++) {
         var btnEl = btns[bi];
         var btnFilter = btnEl.id.replace('whale-filter-', '');
+        var rgb = _filterColors[btnFilter] || '255,255,255';
         if (btnFilter === filter) {
-            btnEl.style.background = 'rgba(255,255,255,0.1)';
+            btnEl.style.background = 'rgba(' + rgb + ',0.2)';
+            btnEl.style.borderColor = 'rgba(' + rgb + ',0.5)';
             btnEl.style.opacity = '1';
         } else {
             btnEl.style.background = 'transparent';
+            btnEl.style.borderColor = 'rgba(255,255,255,0.08)';
             btnEl.style.opacity = '0.7';
         }
     }
