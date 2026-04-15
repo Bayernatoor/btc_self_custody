@@ -1019,13 +1019,13 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                         ctx.fillStyle = blipColor + bOpacity + ')';
                     }
 
-                    // Notable tx glow: prominent halo at all zoom levels
+                    // Notable tx glow: strong pulsing halo at ALL zoom levels
                     if (blip.whale) {
-                        ctx.shadowBlur = 12 + Math.sin(nowSec * 2) * 4;
-                        ctx.shadowColor = 'rgba(255, 215, 0, 0.7)';
+                        ctx.shadowBlur = 20 + Math.sin(nowSec * 2.5) * 8;
+                        ctx.shadowColor = 'rgba(255, 215, 0, 0.95)';
                     } else if (blip.feeOutlier) {
-                        ctx.shadowBlur = 10 + Math.sin(nowSec * 3) * 3;
-                        ctx.shadowColor = 'rgba(255, 68, 68, 0.6)';
+                        ctx.shadowBlur = 16 + Math.sin(nowSec * 3) * 6;
+                        ctx.shadowColor = 'rgba(255, 68, 68, 0.9)';
                     }
                     // Shadow glow only at mid-zoom where bricks are visible but
                     // not outlined. Skip at low zoom (sub-pixel, too expensive
@@ -1041,10 +1041,32 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                     } else {
                         ctx.fillRect(rx, ry, rw, rh);
                     }
+                    // Notable txs: draw a second pass for stronger glow + bright outline
+                    if (blip.whale || blip.feeOutlier) {
+                        // Second glow pass (doubles the bloom)
+                        if (useRound) {
+                            ctx.beginPath();
+                            roundRect(ctx, rx, ry, rw, rh, cornerR);
+                            ctx.fill();
+                        } else {
+                            ctx.fillRect(rx, ry, rw, rh);
+                        }
+                        // Bright colored outline at all zoom levels
+                        ctx.shadowBlur = 0;
+                        ctx.strokeStyle = blip.whale ? 'rgba(255, 215, 0, 0.8)' : 'rgba(255, 68, 68, 0.7)';
+                        ctx.lineWidth = Math.max(1, zoom * 0.4);
+                        if (useRound) {
+                            ctx.beginPath();
+                            roundRect(ctx, rx, ry, rw, rh, cornerR);
+                            ctx.stroke();
+                        } else {
+                            ctx.strokeRect(rx, ry, rw, rh);
+                        }
+                    }
                     ctx.shadowBlur = 0;
 
                     // Dark outline at 4x+ zoom for clear brick separation
-                    if (zoom > 4) {
+                    if (zoom > 4 && !blip.whale && !blip.feeOutlier) {
                         ctx.lineWidth = lw;
                         var ins = lw / 2;
                         if (useRound) {
