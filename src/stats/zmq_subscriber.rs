@@ -307,18 +307,6 @@ async fn subscribe_tx_and_sequence(
             0.0
         };
 
-        // Store in DB
-        if let Ok(conn) = state.db.get() {
-            let _ = db::insert_mempool_tx(
-                &conn,
-                &parsed.txid,
-                fee,
-                vsize,
-                parsed.value,
-                now,
-            );
-        }
-
         // Check whale status using cached price
         let (whale, value_usd) = {
             let price = state
@@ -353,6 +341,29 @@ async fn subscribe_tx_and_sequence(
                 "ZMQ: fee outlier tx {} — {fee_rate:.1} sat/vB, {fee} sat total ({:.6} BTC)",
                 parsed.txid,
                 fee as f64 / 100_000_000.0,
+            );
+        }
+
+        // Determine notable type (priority order: whale > fee_outlier)
+        let notable_type = if whale {
+            Some("whale")
+        } else if fee_outlier {
+            Some("fee_outlier")
+        } else {
+            None
+        };
+
+        // Store in DB (with notable info for persistence across restarts)
+        if let Ok(conn) = state.db.get() {
+            let _ = db::insert_mempool_tx(
+                &conn,
+                &parsed.txid,
+                fee,
+                vsize,
+                parsed.value,
+                now,
+                notable_type,
+                if whale { Some(value_usd) } else { None },
             );
         }
 

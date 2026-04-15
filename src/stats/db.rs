@@ -238,6 +238,22 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
             WHERE confirmed_height IS NULL;",
     )?;
 
+    // Migration: add notable_type and value_usd to mempool_txs for whale watch
+    {
+        let has_notable: bool = conn
+            .prepare("SELECT notable_type FROM mempool_txs LIMIT 0")
+            .is_ok();
+        if !has_notable {
+            tracing::info!("Migrating: adding notable_type, value_usd to mempool_txs");
+            conn.execute_batch(
+                "ALTER TABLE mempool_txs ADD COLUMN notable_type TEXT;
+                 ALTER TABLE mempool_txs ADD COLUMN value_usd REAL;
+                 CREATE INDEX IF NOT EXISTS idx_mempool_notable ON mempool_txs(notable_type)
+                     WHERE notable_type IS NOT NULL;",
+            )?;
+        }
+    }
+
     // Pre-computed daily aggregates table. Populated incrementally on new
     // blocks so queries read directly instead of re-aggregating 940k+ rows.
     conn.execute_batch(
@@ -1796,11 +1812,13 @@ pub fn insert_mempool_tx(
     vsize: u32,
     value: u64,
     first_seen: u64,
+    notable_type: Option<&str>,
+    value_usd: Option<f64>,
 ) -> rusqlite::Result<()> {
     conn.execute(
-        "INSERT OR IGNORE INTO mempool_txs (txid, fee, vsize, value, first_seen)
-         VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![txid, fee, vsize, value, first_seen],
+        "INSERT OR IGNORE INTO mempool_txs (txid, fee, vsize, value, first_seen, notable_type, value_usd)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![txid, fee, vsize, value, first_seen, notable_type, value_usd],
     )?;
     Ok(())
 }
@@ -1872,7 +1890,7 @@ pub fn query_recent_mempool_txs(
     limit: u64,
 ) -> rusqlite::Result<Vec<MempoolTxRow>> {
     let mut stmt = conn.prepare_cached(
-        "SELECT txid, fee, vsize, value, first_seen
+        "SELECT txid, fee, vsize, value, first_seen, notable_type, value_usd
          FROM mempool_txs
          WHERE confirmed_height IS NULL AND first_seen >= ?1
          ORDER BY first_seen DESC
@@ -1885,6 +1903,8 @@ pub fn query_recent_mempool_txs(
             vsize: row.get(2)?,
             value: row.get(3)?,
             first_seen: row.get(4)?,
+            notable_type: row.get(5)?,
+            value_usd: row.get(6)?,
         })
     })?;
     rows.collect()
@@ -1913,6 +1933,13 @@ pub struct MempoolTxRow {
     pub value: u64,
     /// Unix timestamp when the transaction was first observed via ZMQ.
     pub first_seen: u64,
+    /// Notable transaction type: "whale", "fee_outlier", "consolidation", "fan_out",
+    /// "large_inscription", "ancient_spend", or null for normal transactions.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub notable_type: Option<String>,
+    /// Estimated USD value at time of detection (for whale txs).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value_usd: Option<f64>,
 }
 
 /// Query txids that are still unconfirmed (survived block confirmation).
@@ -2270,7 +2297,7 @@ mod tests {
     #[test]
     fn test_mempool_insert_and_query() {
         let conn = setup_db();
-        insert_mempool_tx(&conn, "abc123", 500, 200, 1_000_000, 1700000000)
+        insert_mempool_tx(&conn, "abc123", 500, 200, 1_000_000, 1700000000, None, None)
             .unwrap();
 
         let txs = query_recent_mempool_txs(&conn, 0, 100).unwrap();
@@ -2285,9 +2312,9 @@ mod tests {
     #[test]
     fn test_mempool_insert_duplicate_ignored() {
         let conn = setup_db();
-        insert_mempool_tx(&conn, "dup_tx", 100, 150, 500_000, 1700000000)
+        insert_mempool_tx(&conn, "dup_tx", 100, 150, 500_000, 1700000000, None, None)
             .unwrap();
-        insert_mempool_tx(&conn, "dup_tx", 200, 250, 600_000, 1700000001)
+        insert_mempool_tx(&conn, "dup_tx", 200, 250, 600_000, 1700000001, None, None)
             .unwrap();
 
         let count: u64 = conn
@@ -2303,9 +2330,9 @@ mod tests {
     #[test]
     fn test_mempool_confirm() {
         let conn = setup_db();
-        insert_mempool_tx(&conn, "tx1", 100, 150, 500_000, 1700000000).unwrap();
-        insert_mempool_tx(&conn, "tx2", 200, 250, 600_000, 1700000001).unwrap();
-        insert_mempool_tx(&conn, "tx3", 300, 350, 700_000, 1700000002).unwrap();
+        insert_mempool_tx(&conn, "tx1", 100, 150, 500_000, 1700000000, None, None).unwrap();
+        insert_mempool_tx(&conn, "tx2", 200, 250, 600_000, 1700000001, None, None).unwrap();
+        insert_mempool_tx(&conn, "tx3", 300, 350, 700_000, 1700000002, None, None).unwrap();
 
         let txids = vec!["tx1".to_string(), "tx2".to_string()];
         let (confirmed, fees) =
@@ -2327,9 +2354,9 @@ mod tests {
     #[test]
     fn test_mempool_query_unconfirmed_only() {
         let conn = setup_db();
-        insert_mempool_tx(&conn, "tx1", 100, 150, 500_000, 1700000000).unwrap();
-        insert_mempool_tx(&conn, "tx2", 200, 250, 600_000, 1700000001).unwrap();
-        insert_mempool_tx(&conn, "tx3", 300, 350, 700_000, 1700000002).unwrap();
+        insert_mempool_tx(&conn, "tx1", 100, 150, 500_000, 1700000000, None, None).unwrap();
+        insert_mempool_tx(&conn, "tx2", 200, 250, 600_000, 1700000001, None, None).unwrap();
+        insert_mempool_tx(&conn, "tx3", 300, 350, 700_000, 1700000002, None, None).unwrap();
 
         // Confirm tx1
         confirm_mempool_txs(&conn, &["tx1".to_string()], 800_000, 1700001000)
@@ -2348,9 +2375,9 @@ mod tests {
     fn test_mempool_prune() {
         let conn = setup_db();
         // Old tx (timestamp 1000)
-        insert_mempool_tx(&conn, "old_tx", 100, 150, 500_000, 1000).unwrap();
+        insert_mempool_tx(&conn, "old_tx", 100, 150, 500_000, 1000, None, None).unwrap();
         // Recent tx (timestamp 2000)
-        insert_mempool_tx(&conn, "new_tx", 200, 250, 600_000, 2000).unwrap();
+        insert_mempool_tx(&conn, "new_tx", 200, 250, 600_000, 2000, None, None).unwrap();
 
         // Prune anything older than 1500
         let pruned = prune_mempool_txs(&conn, 1500).unwrap();
@@ -2364,9 +2391,9 @@ mod tests {
     #[test]
     fn test_mempool_query_unconfirmed_txids() {
         let conn = setup_db();
-        insert_mempool_tx(&conn, "tx1", 100, 150, 500_000, 1700000000).unwrap();
-        insert_mempool_tx(&conn, "tx2", 200, 250, 600_000, 1700000001).unwrap();
-        insert_mempool_tx(&conn, "tx3", 300, 350, 700_000, 1700000002).unwrap();
+        insert_mempool_tx(&conn, "tx1", 100, 150, 500_000, 1700000000, None, None).unwrap();
+        insert_mempool_tx(&conn, "tx2", 200, 250, 600_000, 1700000001, None, None).unwrap();
+        insert_mempool_tx(&conn, "tx3", 300, 350, 700_000, 1700000002, None, None).unwrap();
 
         // Confirm tx2
         confirm_mempool_txs(&conn, &["tx2".to_string()], 800_000, 1700001000)

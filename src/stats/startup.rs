@@ -236,7 +236,7 @@ pub fn spawn_background_tasks(
                         let mut inserted = 0u64;
                         for (txid, fee, vsize) in &entries {
                             if db::insert_mempool_tx(
-                                &conn, txid, *fee, *vsize, 0, now,
+                                &conn, txid, *fee, *vsize, 0, now, None, None,
                             )
                             .is_ok()
                             {

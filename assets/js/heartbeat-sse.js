@@ -66,9 +66,17 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
     var dropNow = Date.now() / 1000;
     var DROP_DURATION = instant ? 0 : 1.5;
 
+    // Collect notable txs from history for the feed panel
+    var notableTxs = [];
+
     for (var i = 0; i < txs.length && placed < maxBricks; i++) {
         var tx = txs[i];
         if (!tx.fee || !tx.vsize) continue;
+
+        // Detect notable type from history data (notable_type field) or live flags
+        var isWhale = tx.whale || tx.notable_type === 'whale';
+        var isFeeOutlier = tx.fee_outlier || tx.notable_type === 'fee_outlier';
+        var isNotable = isWhale || isFeeOutlier;
 
         // Spread randomly across the flatline, leaving last 20px for live txs.
         var usableSpan = Math.max(10, flatlineSpan - 20);
@@ -77,12 +85,17 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
         var feeRate = tx.fee / tx.vsize;
         var feeNorm = Math.min(Math.log2(feeRate + 1) / 6, 1.0);
 
-        var brickH = 3 + feeNorm * 14 + Math.random() * 3;
+        var brickW = isNotable ? 6 : 4;
+        var brickH = isNotable
+            ? 35 + feeNorm * 20 + Math.random() * 5
+            : 3 + feeNorm * 14 + Math.random() * 3;
         var gridX = Math.round(txVX / 5) * 5;
         var stackY = stackMap[gridX] || 0;
         var histMaxStack = (_hb.height || 400) * 0.35;
-        if (stackY > histMaxStack) continue;
+        if (stackY > histMaxStack && !isNotable) continue;
         stackMap[gridX] = stackY + brickH;
+
+        var blipColor = isWhale ? '#ffd700' : isFeeOutlier ? '#ff4444' : feeRateColor(feeRate, medianFee);
 
         // Stagger: left-most bricks appear first, sweeping right
         var xFrac = flatlineSpan > 0 ? (txVX - liveSeg.x_start) / flatlineSpan : 0;
@@ -90,18 +103,35 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
 
         liveSeg.blips.push({
             x: txVX, gridX: gridX,
-            height: brickH + stackY, brickH: brickH, brickW: 4, stackY: stackY,
-            color: feeRateColor(feeRate, medianFee), opacity: 0.75 + feeNorm * 0.2,
+            height: brickH + stackY, brickH: brickH, brickW: brickW, stackY: stackY,
+            color: blipColor, opacity: isNotable ? 1.0 : 0.75 + feeNorm * 0.2,
             txCount: 1, txid: tx.txid || null,
             feeRate: Math.round(feeRate * 10) / 10,
             vsize: tx.vsize || 0, value: tx.value || 0,
             timestamp: dropNow + dropDelay, isDrop: !instant, fadeStart: 0,
             bobPhase: Math.random() * Math.PI * 2,
-            bobSpeed: 1.2 + feeNorm * 0.8,
+            bobSpeed: isNotable ? 0.6 : 1.2 + feeNorm * 0.8,
             lane: Math.floor(Math.random() * 5) - 2,
-            feeRatio: medianFee > 0 ? feeRate / medianFee : 1
+            feeRatio: medianFee > 0 ? feeRate / medianFee : 1,
+            whale: isWhale,
+            feeOutlier: isFeeOutlier,
+            valueUsd: tx.value_usd || 0
         });
         placed++;
+
+        if (isNotable) {
+            notableTxs.push({
+                txid: tx.txid, fee: tx.fee, vsize: tx.vsize, value: tx.value,
+                whale: isWhale, fee_outlier: isFeeOutlier, value_usd: tx.value_usd || 0
+            });
+        }
+    }
+
+    // Populate feed panel with notable txs from history
+    if (notableTxs.length > 0 && window._notableFeed) {
+        for (var ni = notableTxs.length - 1; ni >= 0; ni--) {
+            window._notableFeed(notableTxs[ni]);
+        }
     }
     // Seed the segment's column height map so live blips stack correctly
     liveSeg._colHeights = stackMap;
