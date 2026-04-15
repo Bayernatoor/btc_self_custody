@@ -99,7 +99,7 @@ pub enum HeartbeatEvent {
 }
 
 /// Minimum USD value to flag a transaction as a whale tx.
-const WHALE_THRESHOLD_USD: f64 = 500_000.0;
+const WHALE_THRESHOLD_USD: f64 = 1_000_000.0;
 /// Fee rate above which a tx is flagged as a fee outlier (sat/vB).
 const FEE_RATE_OUTLIER_THRESHOLD: f64 = 500.0;
 /// Absolute fee above which a tx is flagged as a fee outlier (satoshis = 0.05 BTC).
