@@ -123,6 +123,7 @@ window.initHeartbeat = function(canvasId) {
         var s = getState();
         if (!s || !wrap || !card) return;
         var fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+        var modal = document.getElementById('block-detail-modal');
         if (fsEl) {
             card.style.width = '100vw';
             card.style.height = '100vh';
@@ -134,6 +135,12 @@ window.initHeartbeat = function(canvasId) {
             // Override Tailwind's sm:h-[40vh] so flex-1 fills fullscreen
             wrap.style.height = 'auto';
             wrap.style.minHeight = '0';
+            // Move block detail modal inside fullscreen element so it's visible
+            if (modal && modal.parentNode !== card) {
+                s._modalOrigParent = modal.parentNode;
+                s._modalOrigNext = modal.nextSibling;
+                card.appendChild(modal);
+            }
         } else {
             card.style.width = '';
             card.style.height = '';
@@ -145,6 +152,16 @@ window.initHeartbeat = function(canvasId) {
             // Clear overrides, let Tailwind classes take over
             wrap.style.height = '';
             wrap.style.minHeight = '';
+            // Move modal back to its original position
+            if (modal && s._modalOrigParent) {
+                if (s._modalOrigNext) {
+                    s._modalOrigParent.insertBefore(modal, s._modalOrigNext);
+                } else {
+                    s._modalOrigParent.appendChild(modal);
+                }
+                s._modalOrigParent = null;
+                s._modalOrigNext = null;
+            }
         }
     }
     document.addEventListener('fullscreenchange', _hbFullscreenChange);

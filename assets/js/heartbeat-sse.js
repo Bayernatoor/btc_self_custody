@@ -95,7 +95,7 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
         if (stackY > histMaxStack && !isNotable) continue;
         stackMap[gridX] = stackY + brickH;
 
-        var blipColor = isWhale ? '#ffd700' : isFeeOutlier ? '#ff4444' : feeRateColor(feeRate, medianFee);
+        var blipColor = isWhale ? 'rgba(255, 215, 0, ' : isFeeOutlier ? 'rgba(255, 68, 68, ' : feeRateColor(feeRate, medianFee);
 
         // Stagger: left-most bricks appear first, sweeping right
         var xFrac = flatlineSpan > 0 ? (txVX - liveSeg.x_start) / flatlineSpan : 0;
@@ -549,7 +549,7 @@ export function flushTxBatch() {
             if (!found) continue;
         }
 
-        var blipColor = isWhale ? '#ffd700' : isFeeOutlier ? '#ff4444' : feeRateColor(feeRate, medianFee);
+        var blipColor = isWhale ? 'rgba(255, 215, 0, ' : isFeeOutlier ? 'rgba(255, 68, 68, ' : feeRateColor(feeRate, medianFee);
 
         liveSeg.blips.push({
             x: brickX,

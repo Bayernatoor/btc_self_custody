@@ -176,8 +176,8 @@ export function setupInputHandlers(canvas) {
                     if (!_hb.hoveredBlip && (my < baseline || inTube) && _hb.zoom >= 1.5) {
                         _hb.hoveredBlip = blipAtVirtualX(vx, 4 / _hb.zoom);
                     }
-                    // Flatline tooltip only when cursor is outside the tube zone
-                    if (!_hb.hoveredBlip && !inTube) {
+                    // Flatline tooltip only when cursor is at/below baseline (not in brick area above)
+                    if (!_hb.hoveredBlip && !inTube && my >= baseline - 5) {
                         _hb.hoveredFlatline = flatlineAtVirtualX(vx);
                     }
                 }
