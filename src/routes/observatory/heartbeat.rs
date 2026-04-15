@@ -725,6 +725,20 @@ pub fn HeartbeatPage() -> impl IntoView {
                 </p>
             </div>
 
+            // ── Whale Watch Feed ──────────────────────────────
+            <div id="whale-feed-panel" class="bg-[#0d2137] border border-[#ffd700]/20 rounded-2xl overflow-hidden hidden">
+                <div class="flex items-center justify-between px-4 py-2.5 border-b border-[#ffd700]/10">
+                    <div class="flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-[#ffd700] animate-pulse"></span>
+                        <span class="text-xs font-mono text-[#ffd700]/80 uppercase tracking-wider">"Whale Watch"</span>
+                    </div>
+                    <span class="text-[10px] text-white/30 font-mono">"Whale txs (>$500K) + Fee outliers (>500 sat/vB)"</span>
+                </div>
+                <div id="whale-feed-list" class="max-h-[200px] overflow-y-auto">
+                    <div class="px-4 py-3 text-xs text-white/20 font-mono italic text-center">"Listening for whale transactions..."</div>
+                </div>
+            </div>
+
             // ── Phase 5: Capture controls ────────────────────
             <div class="flex flex-wrap items-center justify-center gap-3">
                 // Capture moment

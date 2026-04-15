@@ -481,9 +481,15 @@ export function flushTxBatch() {
         var tx = batch[i];
         var feeRate = tx.fee && tx.vsize ? tx.fee / tx.vsize : 1;
         var feeNorm = Math.min(Math.log2(feeRate + 1) / 6, 1.0);
+        var isWhale = tx.whale || false;
+        var isFeeOutlier = tx.fee_outlier || false;
+        var isNotable = isWhale || isFeeOutlier;
 
-        var brickW = 4;
-        var brickH = 3 + feeNorm * 14 + Math.random() * 3;
+        // Notable txs get larger bricks
+        var brickW = isNotable ? 8 : 4;
+        var brickH = isNotable
+            ? 20 + Math.random() * 8
+            : 3 + feeNorm * 14 + Math.random() * 3;
         var brickX = _hb.virtualX - Math.random() * spread;
         var gridX = Math.round(brickX / 5) * 5;
         if (gridX < liveSeg.x_start) gridX = Math.round(liveSeg.x_start / 5) * 5;
@@ -513,6 +519,8 @@ export function flushTxBatch() {
             if (!found) continue;
         }
 
+        var blipColor = isWhale ? '#ffd700' : isFeeOutlier ? '#ff4444' : feeRateColor(feeRate, medianFee);
+
         liveSeg.blips.push({
             x: brickX,
             gridX: gridX,
@@ -520,8 +528,8 @@ export function flushTxBatch() {
             brickH: brickH,
             brickW: brickW,
             stackY: stackY,
-            color: feeRateColor(feeRate, medianFee),
-            opacity: 0.75 + feeNorm * 0.2,
+            color: blipColor,
+            opacity: isNotable ? 1.0 : 0.75 + feeNorm * 0.2,
             txCount: 1,
             txid: tx.txid || null,
             feeRate: Math.round(feeRate * 10) / 10,
@@ -530,11 +538,19 @@ export function flushTxBatch() {
             timestamp: Date.now() / 1000,
             fadeStart: 0,
             bobPhase: Math.random() * Math.PI * 2,
-            bobSpeed: 1.2 + feeNorm * 0.8,
+            bobSpeed: isNotable ? 0.6 : 1.2 + feeNorm * 0.8,
             lane: Math.floor(Math.random() * 5) - 2,
-            feeRatio: medianFee > 0 ? feeRate / medianFee : 1
+            feeRatio: medianFee > 0 ? feeRate / medianFee : 1,
+            whale: isWhale,
+            feeOutlier: isFeeOutlier,
+            valueUsd: tx.value_usd || 0
         });
         liveSeg._colHeights[gridX] = stackY + brickH;
+
+        // Push notable txs to the feed
+        if (isNotable && window._notableFeed) {
+            window._notableFeed(tx);
+        }
     }
 
     // Priority culling: only when truly excessive. Viewport culling already
@@ -548,6 +564,7 @@ export function flushTxBatch() {
         for (var ci = 0; ci < liveSeg.blips.length; ci++) {
             var cb = liveSeg.blips[ci];
             if (cb.fadeStart > 0) continue; // already fading, skip
+            if (cb.whale || cb.feeOutlier) continue; // never cull notable blips
             var score = (cb.feeRate || 0.1) * Math.log2((cb.vsize || 100) + 1);
             scored.push({ idx: ci, score: score });
         }
@@ -652,3 +669,54 @@ export function addMempoolTxs(newTxCount, medianFeeRate, topFeeRate) {
         liveSeg._colHeights[gridX] = (liveSeg._colHeights[gridX] || 0) + brickH;
     }
 }
+
+// ── Whale Watch Feed ──────────────────────────────────
+var MAX_WHALE_ENTRIES = 100;
+
+window._notableFeed = function(tx) {
+    var panel = document.getElementById('whale-feed-panel');
+    var list = document.getElementById('whale-feed-list');
+    if (!panel || !list) return;
+
+    // Show panel on first notable tx
+    panel.classList.remove('hidden');
+
+    // Remove placeholder
+    var placeholder = list.querySelector('.italic');
+    if (placeholder) placeholder.remove();
+
+    var isWhale = tx.whale || false;
+    var isFeeOutlier = tx.fee_outlier || false;
+    var btcVal = (tx.value || 0) / 100000000;
+    var feeRate = tx.fee && tx.vsize ? (tx.fee / tx.vsize).toFixed(1) : '?';
+    var feeBtc = (tx.fee || 0) / 100000000;
+    var time = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    var txidShort = tx.txid ? tx.txid.substring(0, 12) + '...' : '?';
+
+    // Build label based on type
+    var labelHtml;
+    if (isWhale) {
+        var usdVal = Math.round(tx.value_usd || 0);
+        labelHtml = '<span class="text-[#ffd700] font-bold shrink-0">$' + usdVal.toLocaleString() + '</span>' +
+            '<span class="text-white/50 shrink-0">' + btcVal.toFixed(4) + ' BTC</span>';
+    } else {
+        labelHtml = '<span class="text-[#ff4444] font-bold shrink-0">FEE: ' + feeRate + ' sat/vB</span>' +
+            '<span class="text-white/50 shrink-0">' + feeBtc.toFixed(6) + ' BTC fee</span>';
+    }
+
+    var row = document.createElement('div');
+    row.className = 'flex items-baseline gap-3 px-4 py-2 border-b border-white/5 text-xs font-mono opacity-0';
+    row.style.animation = 'fadeinone 0.5s ease forwards';
+    row.innerHTML = labelHtml +
+        '<a href="https://mempool.space/tx/' + (tx.txid || '') + '" target="_blank" rel="noopener" ' +
+            'class="text-white/30 hover:text-[#f7931a] transition-colors">' + txidShort + '</a>' +
+        '<span class="text-white/20 ml-auto shrink-0">' + time + '</span>';
+
+    // Prepend (newest first)
+    list.insertBefore(row, list.firstChild);
+
+    // Cap entries
+    while (list.children.length > MAX_WHALE_ENTRIES) {
+        list.removeChild(list.lastChild);
+    }
+};

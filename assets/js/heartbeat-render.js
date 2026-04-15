@@ -116,6 +116,12 @@ export function drawBlipTooltip(ctx, blip, canvasX, baseline) {
         var btcVal = blip.value / 100000000;
         lines.push('Value: ' + (btcVal < 0.001 ? btcVal.toFixed(8) : btcVal.toFixed(4)) + ' BTC');
     }
+    if (blip.whale && blip.valueUsd) {
+        lines.push('WHALE: $' + Math.round(blip.valueUsd).toLocaleString() + ' USD');
+    }
+    if (blip.feeOutlier) {
+        lines.push('FEE OUTLIER');
+    }
     if (blip.timestamp) {
         var d = new Date(blip.timestamp * 1000);
         lines.push(d.toLocaleTimeString());
@@ -124,7 +130,7 @@ export function drawBlipTooltip(ctx, blip, canvasX, baseline) {
     if (blip.txid && _hb._pinnedBlip === blip) {
         lines.push('\u2192 Click again to view on mempool.space');
     }
-    var blipColor = blip.color ? blip.color + '0.6)' : 'rgba(0,230,118,0.6)';
+    var blipColor = blip.whale ? 'rgba(255,215,0,0.8)' : blip.feeOutlier ? 'rgba(255,68,68,0.8)' : (blip.color ? blip.color + '0.6)' : 'rgba(0,230,118,0.6)');
     // Position tooltip above the blip
     var tipY;
     if (_hb.renderMode === 'bloodstream') {
@@ -1007,10 +1013,18 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                         ctx.fillStyle = blipColor + bOpacity + ')';
                     }
 
+                    // Notable tx glow: prominent halo at all zoom levels
+                    if (blip.whale) {
+                        ctx.shadowBlur = 12 + Math.sin(nowSec * 2) * 4;
+                        ctx.shadowColor = 'rgba(255, 215, 0, 0.7)';
+                    } else if (blip.feeOutlier) {
+                        ctx.shadowBlur = 10 + Math.sin(nowSec * 3) * 3;
+                        ctx.shadowColor = 'rgba(255, 68, 68, 0.6)';
+                    }
                     // Shadow glow only at mid-zoom where bricks are visible but
                     // not outlined. Skip at low zoom (sub-pixel, too expensive
                     // with thousands of bricks) and high zoom (outlines instead).
-                    if (zoom >= 1.0 && zoom < 4) {
+                    else if (zoom >= 1.0 && zoom < 4) {
                         ctx.shadowBlur = 4;
                         ctx.shadowColor = blipColor + (bOpacity * 0.4) + ')';
                     }

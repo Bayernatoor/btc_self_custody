@@ -63,6 +63,15 @@ pub enum HeartbeatEvent {
         fee_rate: f64,
         /// Unix timestamp when this tx was observed.
         timestamp: u64,
+        /// Whether this tx's total output value exceeds the whale threshold ($500K USD).
+        #[serde(skip_serializing_if = "std::ops::Not::not")]
+        whale: bool,
+        /// Estimated USD value of outputs (value * cached_price / 1e8). Only set for whale txs.
+        #[serde(skip_serializing_if = "is_zero_f64")]
+        value_usd: f64,
+        /// Whether this tx has an unusually high fee rate (>500 sat/vB) or absolute fee (>0.05 BTC).
+        #[serde(skip_serializing_if = "std::ops::Not::not")]
+        fee_outlier: bool,
     },
     /// Block found - complete data (fees, size, weight all populated).
     /// Sent after node finishes validation and we fetch all metadata.
@@ -87,6 +96,17 @@ pub enum HeartbeatEvent {
     /// Frontend shows mining overlay until the complete Block event arrives.
     #[serde(rename = "block_mining")]
     BlockMining,
+}
+
+/// Minimum USD value to flag a transaction as a whale tx.
+const WHALE_THRESHOLD_USD: f64 = 500_000.0;
+/// Fee rate above which a tx is flagged as a fee outlier (sat/vB).
+const FEE_RATE_OUTLIER_THRESHOLD: f64 = 500.0;
+/// Absolute fee above which a tx is flagged as a fee outlier (satoshis = 0.05 BTC).
+const FEE_ABSOLUTE_OUTLIER_THRESHOLD: u64 = 5_000_000;
+
+fn is_zero_f64(v: &f64) -> bool {
+    *v == 0.0
 }
 
 /// Spawn the ZMQ subscriber tasks. Both tx/sequence topics share a single socket
@@ -299,6 +319,43 @@ async fn subscribe_tx_and_sequence(
             );
         }
 
+        // Check whale status using cached price
+        let (whale, value_usd) = {
+            let price = state
+                .price_cache
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .as_ref()
+                .map(|(p, _)| p.usd)
+                .unwrap_or(0.0);
+            if price > 0.0 {
+                let usd = parsed.value as f64 * price / 100_000_000.0;
+                (usd >= WHALE_THRESHOLD_USD, usd)
+            } else {
+                (false, 0.0)
+            }
+        };
+
+        // Fee outlier detection
+        let fee_outlier = fee_rate >= FEE_RATE_OUTLIER_THRESHOLD
+            || fee >= FEE_ABSOLUTE_OUTLIER_THRESHOLD;
+
+        if whale {
+            tracing::info!(
+                "ZMQ: whale tx {} — ${:.0} ({:.4} BTC, {fee} sat fee)",
+                parsed.txid,
+                value_usd,
+                parsed.value as f64 / 100_000_000.0,
+            );
+        }
+        if fee_outlier {
+            tracing::info!(
+                "ZMQ: fee outlier tx {} — {fee_rate:.1} sat/vB, {fee} sat total ({:.6} BTC)",
+                parsed.txid,
+                fee as f64 / 100_000_000.0,
+            );
+        }
+
         // Broadcast to SSE clients
         let _ = sender.send(HeartbeatEvent::Tx {
             txid: parsed.txid,
@@ -307,6 +364,9 @@ async fn subscribe_tx_and_sequence(
             value: parsed.value,
             fee_rate,
             timestamp: now,
+            whale,
+            value_usd: if whale { value_usd } else { 0.0 },
+            fee_outlier,
         });
 
         tx_count += 1;
