@@ -738,10 +738,25 @@ window._notableFeed = function(tx) {
     row.className = 'flex items-baseline gap-3 px-4 py-2 border-b border-white/5 text-xs font-mono opacity-0';
     row.style.animation = 'fadeinone 0.5s ease forwards';
     row.dataset.type = isWhale ? 'whale' : 'fee';
+    var txid = tx.txid || '';
     row.innerHTML = labelHtml +
-        '<a href="https://mempool.space/tx/' + (tx.txid || '') + '" target="_blank" rel="noopener" ' +
-            'class="text-white/30 hover:text-[#f7931a] transition-colors">' + txidShort + '</a>' +
+        '<span class="text-white/30 hover:text-[#f7931a] transition-colors cursor-pointer" data-txid="' + txid + '">' + txidShort + '</span>' +
         '<span class="text-white/20 ml-auto shrink-0">' + time + '</span>';
+
+    // Click txid to open tx detail modal
+    var txSpan = row.querySelector('[data-txid]');
+    if (txSpan && txid) {
+        txSpan.addEventListener('click', function() {
+            if (window.showTxDetail) {
+                window.showTxDetail(txid, {
+                    fee: tx.fee || null,
+                    vsize: tx.vsize || null,
+                    feeRate: tx.fee && tx.vsize ? tx.fee / tx.vsize : null,
+                    value: tx.value || null
+                });
+            }
+        });
+    }
 
     // Prepend (newest first)
     list.insertBefore(row, list.firstChild);
