@@ -1463,7 +1463,8 @@ pub fn query_range_summary(
                 MAX(size), MAX(total_fees),
                 SUM(CASE WHEN tx_count <= 1 THEN 1 ELSE 0 END),
                 AVG(median_fee),
-                MAX(median_fee_rate)
+                MAX(median_fee_rate),
+                SUM(inscription_envelope_bytes)
          FROM blocks
          WHERE timestamp >= ?1 AND timestamp <= ?2",
         params![from_ts, to_ts],
@@ -1510,6 +1511,7 @@ pub fn query_range_summary(
                 total_witness_bytes: row.get(20)?,
                 total_inscriptions: row.get(21)?,
                 total_inscription_bytes: row.get(22)?,
+                total_inscription_envelope_bytes: row.get::<_, Option<u64>>(37)?.unwrap_or(0),
                 total_brc20: row.get(23)?,
                 total_op_return_count: row.get(24)?,
                 total_op_return_bytes: row.get(25)?,

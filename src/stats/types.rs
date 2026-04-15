@@ -342,8 +342,10 @@ pub struct RangeSummary {
     /// Total witness data in bytes.
     pub total_witness_bytes: u64,
     pub total_inscriptions: u64,
-    /// Total inscription content in bytes.
+    /// Total inscription content in bytes (payload only).
     pub total_inscription_bytes: u64,
+    /// Total inscription envelope bytes (payload + witness overhead).
+    pub total_inscription_envelope_bytes: u64,
     pub total_brc20: u64,
     pub total_op_return_count: u64,
     pub total_op_return_bytes: u64,

@@ -543,7 +543,12 @@ pub fn StatsSummaryPage() -> impl IntoView {
     // === Embedded Data ===
     let inscriptions = stat(|s| format_compact(s.total_inscriptions));
     let inscriptions_sub = stat(|s| {
-        format!("{} data", format_data_size(s.total_inscription_bytes))
+        let bytes = if s.total_inscription_envelope_bytes > 0 {
+            s.total_inscription_envelope_bytes
+        } else {
+            s.total_inscription_bytes
+        };
+        format!("{} data", format_data_size(bytes))
     });
     let brc20 = stat(|s| format_compact(s.total_brc20));
     let brc20_sub = stat(|s| {
