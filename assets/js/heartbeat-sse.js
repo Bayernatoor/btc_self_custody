@@ -485,10 +485,10 @@ export function flushTxBatch() {
         var isFeeOutlier = tx.fee_outlier || false;
         var isNotable = isWhale || isFeeOutlier;
 
-        // Notable txs get larger bricks
-        var brickW = isNotable ? 8 : 4;
+        // Notable txs get taller bricks (same width to keep grid clean)
+        var brickW = 4;
         var brickH = isNotable
-            ? 20 + Math.random() * 8
+            ? 25 + feeNorm * 15 + Math.random() * 5
             : 3 + feeNorm * 14 + Math.random() * 3;
         var brickX = _hb.virtualX - Math.random() * spread;
         var gridX = Math.round(brickX / 5) * 5;

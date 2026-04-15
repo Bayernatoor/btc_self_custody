@@ -984,8 +984,8 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                     // Gap scales with zoom so bricks stay visually separated.
                     // strokeRect bleeds half its lineWidth outside the rect,
                     // so the gap must exceed that to remain visible.
-                    var lw = zoom > 10 ? 2 : 1;
-                    var gap = zoom > 4 ? Math.ceil(lw) + 1 : 0;
+                    var lw = zoom > 10 ? 1.5 : zoom > 6 ? 1 : 0.5;
+                    var gap = zoom > 8 ? 1.5 : zoom > 4 ? 1 : 0;
                     var rx = bx - bw / 2 + gap;
                     var ry = baseline - sy - bh + gap - dropOffset;
                     var rw = bw - gap * 2;
