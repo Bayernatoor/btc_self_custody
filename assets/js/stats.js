@@ -190,12 +190,7 @@
                         s.labelLine.length2 = 4;
                     }
                 }
-                // Gauge charts: reduce radius for mobile viewport
-                if (s.type === 'gauge') {
-                    s.radius = '65%';
-                    if (s.detail) s.detail.fontSize = 16;
-                    if (s.title) s.title.fontSize = 12;
-                }
+                // Gauge charts: leave as-is (dashboard mempool gauge needs full size)
                 // Scatter charts: slightly larger symbols for touch targets
                 if (s.type === 'scatter' && s.symbolSize && typeof s.symbolSize === 'number' && s.symbolSize < 6) {
                     s.symbolSize = 6;
