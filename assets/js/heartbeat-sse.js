@@ -806,6 +806,20 @@ var MAX_WHALE_ENTRIES = 100;
 // Track seen txids to prevent duplicates when history replays + live arrives
 window._seenNotableTxids = window._seenNotableTxids || new Set();
 
+// Format BTC preserving precision - avoids 99.99998 showing as "100.0000".
+function _fmtBtcFeed(btc) {
+    if (btc >= 100) {
+        var s = btc.toFixed(6).replace(/0+$/, '');
+        if (s.endsWith('.')) s += '00';
+        var dot = s.indexOf('.');
+        if (dot >= 0 && s.length - dot - 1 < 2) s = btc.toFixed(2);
+        return s;
+    }
+    if (btc >= 1) return btc.toFixed(4);
+    if (btc >= 0.01) return btc.toFixed(6);
+    return btc.toFixed(8);
+}
+
 // Build the feed row HTML and styling from a tx object.
 // Accepts both live SSE format (whale/fee_outlier/... booleans) and
 // persistent notable_txs format (notable_type string).
@@ -827,7 +841,7 @@ function _buildNotableRow(tx) {
     var time = new Date(timestamp * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     var txidShort = tx.txid ? tx.txid.substring(0, 12) + '...' : '?';
     var usdVal = Math.round(tx.value_usd || 0);
-    var usdStr = usdVal > 0 ? '$' + usdVal.toLocaleString() : btcVal.toFixed(4) + ' BTC';
+    var usdStr = usdVal > 0 ? '$' + usdVal.toLocaleString() : _fmtBtcFeed(btcVal) + ' BTC';
     var isConfirmed = !!tx.confirmed_height;
     var statusIcon = isConfirmed ? '<span class="text-white/40 text-[10px] shrink-0" title="Confirmed">\u2713</span>' : '';
 
@@ -839,11 +853,11 @@ function _buildNotableRow(tx) {
     } else if (isRoundNumber) {
         feedType = 'round_number';
         labelHtml = '<span class="text-[#90ee90] font-bold shrink-0">ROUND #</span>' +
-            '<span class="text-white/60 shrink-0">' + btcVal.toFixed(2) + ' BTC</span>';
+            '<span class="text-white/60 shrink-0">' + _fmtBtcFeed(btcVal) + ' BTC</span>';
     } else if (isLargeInscription) {
         feedType = 'inscription';
         labelHtml = '<span class="text-[#ff00c8] font-bold shrink-0">INSCRIPTION</span>' +
-            '<span class="text-white/50 shrink-0">' + btcVal.toFixed(4) + ' BTC</span>';
+            '<span class="text-white/50 shrink-0">' + _fmtBtcFeed(btcVal) + ' BTC</span>';
     } else if (isConsolidation) {
         feedType = 'consolidation';
         var ioC = (tx.input_count || '?') + '->' + (tx.output_count || '?');

@@ -85,7 +85,7 @@ export function drawTooltip(ctx, seg, canvasX, canvasY, baseline) {
     var lines = [
         'Block #' + seg.height,
         'Txns: ' + seg.tx_count.toLocaleString(),
-        'Fees: ' + (seg.total_fees / 100000000).toFixed(4) + ' BTC',
+        'Fees: ' + fmtBtc(seg.total_fees / 100000000) + ' BTC',
         'Wait: ' + formatDuration(seg.inter_block_seconds)
     ];
     if (seg.timestamp) {
@@ -114,7 +114,7 @@ export function drawBlipTooltip(ctx, blip, canvasX, baseline) {
     }
     if (blip.value) {
         var btcVal = blip.value / 100000000;
-        lines.push('Value: ' + (btcVal < 0.001 ? btcVal.toFixed(8) : btcVal.toFixed(4)) + ' BTC');
+        lines.push('Value: ' + fmtBtc(btcVal) + ' BTC');
     }
     if (blip.notableType) {
         var typeLabels = {
@@ -216,6 +216,24 @@ export function drawFlatlineTooltip(ctx, info, canvasX, baseline) {
     drawTooltipBox(ctx, lines, canvasX, baseline - 20, 'rgba(255, 255, 255, 0.15)', {
         textColor: 'rgba(255, 255, 255, 0.7)'
     });
+}
+
+// Format BTC with enough precision to avoid rounding artifacts.
+// 99.99998 BTC must NOT display as "100.0000 BTC" (misleading round number).
+function fmtBtc(btc) {
+    if (btc >= 100) {
+        // 6 decimals with trailing zero trim (min 2 decimals shown)
+        var s = btc.toFixed(6);
+        s = s.replace(/0+$/, '');
+        if (s.endsWith('.')) s += '00';
+        // Ensure at least 2 decimals after point
+        var dot = s.indexOf('.');
+        if (dot >= 0 && s.length - dot - 1 < 2) s = btc.toFixed(2);
+        return s;
+    }
+    if (btc >= 1) return btc.toFixed(4);
+    if (btc >= 0.01) return btc.toFixed(6);
+    return btc.toFixed(8);
 }
 
 export function formatDuration(sec) {
