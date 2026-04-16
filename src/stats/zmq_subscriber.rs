@@ -992,24 +992,41 @@ fn extract_readable_text(payload: &[u8]) -> Option<String> {
     }
     let trimmed = result.trim().to_string();
 
-    // Require substantial alphabetic content (>= 50% letters).
-    let letter_count = trimmed.chars().filter(|c| c.is_alphabetic()).count();
-    if letter_count < 4 || letter_count * 2 < trimmed.len() {
+    // Strip non-alphanumeric leading/trailing chars. Protocol fragments often
+    // have noise prefixes like "=|" before their readable part. Real messages
+    // typically start and end with word characters.
+    let core: String = trimmed
+        .trim_matches(|c: char| !c.is_alphanumeric())
+        .to_string();
+
+    // Core must be meaningful on its own
+    if core.len() < 6 {
         return None;
     }
 
-    // Require minimum length for meaningful text.
-    // 6 chars catches short but real messages like "SATFLOW", "EXODUS" etc.
-    if trimmed.len() < 6 {
+    // Core must be mostly letters (>= 50%)
+    let letter_count = core.chars().filter(|c| c.is_alphabetic()).count();
+    if letter_count < 5 || letter_count * 2 < core.len() {
         return None;
     }
 
-    // Require at least one word of 4+ consecutive alphabetic chars.
-    // Catches "SATFLOW", "Bitcoin", "EXODUS" but not "ifi" in "=|1ifi T".
-    let has_word = trimmed
+    // Require at least one word of 6+ consecutive alphabetic chars OR
+    // multiple shorter words with natural separators (real sentences).
+    // Catches "SATFLOW", "Bitcoin", "EXODUS", "Hello world" but rejects
+    // "lifiQ" (5 chars, often a fragment of binary protocol data).
+    let longest_word = core
         .split(|c: char| !c.is_alphabetic())
-        .any(|w| w.len() >= 4);
-    if !has_word {
+        .map(|w| w.len())
+        .max()
+        .unwrap_or(0);
+    let word_count = core
+        .split(|c: char| !c.is_alphabetic())
+        .filter(|w| w.len() >= 3)
+        .count();
+    let has_natural_separators =
+        core.contains(' ') || core.contains('.') || core.contains(',');
+    // Accept if: one substantial word (6+) OR multiple words with separators
+    if longest_word < 6 && !(word_count >= 2 && has_natural_separators) {
         return None;
     }
 
@@ -1776,6 +1793,15 @@ mod tests {
         // "=|1ifi T" style noise - has letters but not a real message
         assert_eq!(extract_readable_text(b"=|1ifi T"), None);
         assert_eq!(extract_readable_text(b"x!@#$%^&"), None);
+    }
+
+    #[test]
+    fn test_extract_readable_text_rejects_protocol_fragments() {
+        // "=|lifiZ" / "=|lifiQ1Oq" are binary protocol fragments (li.fi?)
+        // that start with `=|` before the identifier. Should not be surfaced
+        // as messages since they're not natural text.
+        assert_eq!(extract_readable_text(b"=|lifiZ"), None);
+        assert_eq!(extract_readable_text(b"=|lifiQ1Oq"), None);
     }
 
     #[test]
