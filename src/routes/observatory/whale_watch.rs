@@ -283,7 +283,7 @@ pub fn WhaleWatchPage() -> impl IntoView {
             <div class="absolute inset-0 bg-gradient-to-t from-[#123c64] via-[#123c64]/60 to-[#123c64]/30"></div>
             <div class="absolute inset-0 flex flex-col items-center justify-end pb-3 sm:pb-4">
                 <h1 class="text-lg sm:text-xl lg:text-2xl font-title text-white mb-0.5 drop-shadow-lg">"Whale Watch"</h1>
-                <p class="text-[11px] sm:text-xs text-white/50 max-w-lg mx-auto px-4 text-center drop-shadow">"Notable transactions detected in real-time from our Bitcoin node"</p>
+                <p class="text-[11px] sm:text-xs text-white/50 max-w-lg mx-auto px-4 text-center drop-shadow">"Notable transactions detected in real-time from my Bitcoin node"</p>
             </div>
         </div>
 
@@ -327,7 +327,7 @@ pub fn WhaleWatchPage() -> impl IntoView {
         // Info panel (toggleable)
         <Show when=move || info_open.get()>
             <div class="mb-5 p-3 sm:p-4 bg-white/[0.03] border border-white/5 rounded-xl text-xs sm:text-sm text-white/60 leading-relaxed space-y-2 opacity-0 animate-fadeinone">
-                <p>"Every transaction entering our node's mempool is analyzed in real-time for notable characteristics. Detected transactions are highlighted on the Block Heartbeat EKG and stored permanently for historical browsing."</p>
+                <p>"Every transaction entering my node's mempool is analyzed in real-time for notable characteristics. Detected transactions are highlighted on the Block Heartbeat EKG and stored permanently for historical browsing."</p>
                 <p class="text-white/40 text-[11px] sm:text-xs">"Detection uses total output value for whale classification. Exchange self-sends (hot/cold wallet reshuffles) may appear as whales since change output detection requires UTXO data not available from raw transaction parsing."</p>
             </div>
         </Show>

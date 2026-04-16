@@ -684,7 +684,7 @@
 
         modal.classList.remove('hidden');
 
-        // Fetch full details from our own node (getrawtransaction via API)
+        // Fetch full details via local node RPC (getrawtransaction)
         fetch('/api/stats/tx/' + txid)
             .then(function(r) { return r.ok ? r.json() : null; })
             .then(function(tx) {
