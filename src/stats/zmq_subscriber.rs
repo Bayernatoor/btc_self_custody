@@ -896,12 +896,11 @@ fn extract_readable_text(payload: &[u8]) -> Option<String> {
     }
     let slice = &payload[start..];
 
-    // Skip known protocol markers: Runes (0x52 'R' at start without text)
-    // Actually just check if result has reasonable printable ratio
+    // Require high printable ratio (>= 70%) to filter binary noise
     let printable_count = slice.iter()
         .filter(|&&b| b >= 0x20 && b <= 0x7e)
         .count();
-    if printable_count < 4 || printable_count < slice.len() / 2 {
+    if printable_count < 8 || printable_count * 100 < slice.len() * 70 {
         return None;
     }
 
@@ -919,15 +918,21 @@ fn extract_readable_text(payload: &[u8]) -> Option<String> {
     }
     let trimmed = result.trim().to_string();
 
-    // Filter out obvious binary noise: require at least one letter
-    if !trimmed.chars().any(|c| c.is_alphabetic()) {
+    // Require substantial alphabetic content (>= 50% letters).
+    let letter_count = trimmed.chars().filter(|c| c.is_alphabetic()).count();
+    if letter_count < 5 || letter_count * 2 < trimmed.len() {
         return None;
     }
 
-    // Filter out Runes protocol (starts with RUNE_TESTN usually binary)
-    // and other known binary protocols that happen to have some printable chars.
-    // Require at least 6 chars of real text.
-    if trimmed.len() < 6 {
+    // Require minimum length for meaningful text
+    if trimmed.len() < 8 {
+        return None;
+    }
+
+    // Require at least one word of 4+ letters (filters "ifi" / "a bc" noise)
+    let has_word = trimmed.split_whitespace()
+        .any(|w| w.chars().filter(|c| c.is_alphabetic()).count() >= 4);
+    if !has_word {
         return None;
     }
 
@@ -1048,6 +1053,13 @@ mod tests {
     fn test_extract_readable_text_needs_letters() {
         let data = b"1234567890";
         assert_eq!(extract_readable_text(data), None);
+    }
+
+    #[test]
+    fn test_extract_readable_text_rejects_low_quality() {
+        // "=|1ifi T" style noise - has letters but not a real message
+        assert_eq!(extract_readable_text(b"=|1ifi T"), None);
+        assert_eq!(extract_readable_text(b"x!@#$%^&"), None);
     }
 
     #[test]

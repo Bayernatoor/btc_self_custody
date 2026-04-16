@@ -127,8 +127,10 @@ export function drawBlipTooltip(ctx, blip, canvasX, baseline) {
             'op_return_msg': 'OP_RETURN MESSAGE'
         };
         lines.push(typeLabels[blip.notableType] || blip.notableType.toUpperCase());
-        // Show USD value for ANY notable type when available
-        if (blip.valueUsd && blip.valueUsd > 0) {
+        // Show USD value for value-centric types (not op_return or fee_outlier where USD is noise)
+        if (blip.valueUsd && blip.valueUsd > 100
+            && blip.notableType !== 'op_return_msg'
+            && blip.notableType !== 'fee_outlier') {
             lines.push('~$' + Math.round(blip.valueUsd).toLocaleString() + ' USD');
         }
         // Show input/output structure for structural types
