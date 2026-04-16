@@ -1676,6 +1676,25 @@ mod tests {
     }
 
     #[test]
+    fn test_real_fan_out_177_outputs() {
+        // txid: e1289d501169e3dc58fd5e631f8bca12574615f5a49c571fef603888d9522ff9
+        // 2 inputs -> 177 outputs, 0.00113983 BTC total. Batch payout.
+        let tx = ParsedTx {
+            txid: "e1289d501169e3dc58fd5e631f8bca12574615f5a49c571fef603888d9522ff9".to_string(),
+            value: 113_983,
+            input_count: 2,
+            output_count: 177,
+            witness_bytes: 208,
+            has_inscription: false,
+            max_output_value: 15_929,
+            non_change_value: 113_983 - 15_929,
+            op_return_text: None,
+        };
+
+        assert_eq!(classify_notable(&tx, 3_000, 0.5, 100_000.0), Some("fan_out"));
+    }
+
+    #[test]
     fn test_real_segwit_consolidation_436_inputs() {
         // txid: 562c22eb7a7d620347d285452a938b7fd78e5c178e11d3dfed3f9e2b90e93013
         // 436 inputs -> 1 output, segwit, 44.3KB witness (standard sigs, no inscription).
