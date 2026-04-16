@@ -1676,6 +1676,26 @@ mod tests {
     }
 
     #[test]
+    fn test_real_multisig_batch_not_flagged() {
+        // txid: 3cd122cb06d492d792ecfd46b4facb798c032ab95d1126a39d73e6f9b71cebba
+        // 1 input (multisig) -> 16 outputs. Batch payment but below fan_out
+        // threshold (100). Should NOT be flagged as notable.
+        let tx = ParsedTx {
+            txid: "3cd122cb06d492d792ecfd46b4facb798c032ab95d1126a39d73e6f9b71cebba".to_string(),
+            value: 10_362_839,
+            input_count: 1,
+            output_count: 16,
+            witness_bytes: 247,
+            has_inscription: false,
+            max_output_value: 8_481_168,
+            non_change_value: 10_362_839 - 8_481_168,
+            op_return_text: None,
+        };
+
+        assert_eq!(classify_notable(&tx, 2_000, 3.1, 100_000.0), None);
+    }
+
+    #[test]
     fn test_real_fan_out_177_outputs() {
         // txid: e1289d501169e3dc58fd5e631f8bca12574615f5a49c571fef603888d9522ff9
         // 2 inputs -> 177 outputs, 0.00113983 BTC total. Batch payout.
