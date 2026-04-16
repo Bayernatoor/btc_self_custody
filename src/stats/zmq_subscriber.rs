@@ -1675,6 +1675,26 @@ mod tests {
         assert_eq!(classify_notable(&parsed, 5000, 5.0, 10_000.0), None);
     }
 
+    #[test]
+    fn test_real_small_inscription_not_flagged() {
+        // txid: 6c3d7281f99cb3fd0b7c1a8efc5ca4e62a9e523fe81af7033419e600a15857b2
+        // 1 in / 1 out, 217 bytes witness, HAS inscription envelope but too small.
+        // This is a BRC-20 transfer (text/plain, 64 bytes payload).
+        // Should NOT be flagged as large_inscription since witness < 100KB.
+        let hex = "0200000000010102ff05fcf2669c140bca4fac2e7dc169ec45b52c95a6854ef1c1e0aaf7f565910000000000ffffffff014a01000000000000160014675ae0072f4515c9085cef2d3c5de690bb8707cb034003199cfc1b94e4077da9b4c5127709d36c03cd3c662e58b3297e857fdba867d9f3f8ef52508514688c6fb32f6e002e1279d3f4ad53164f1606c7df45bd90231b7820a063299cf5a7f3181b001db7b9e6f6ce65717bba7648ef9e8f4d9dba42694194ac0063036f726401010a746578742f706c61696e00407b2270223a226272632d3230222c226f70223a227472616e73666572222c227469636b223a22f09d9b91222c22616d74223a223134303030303030303030227d6821c1a063299cf5a7f3181b001db7b9e6f6ce65717bba7648ef9e8f4d9dba4269419400000000";
+        let data = hex_decode(hex);
+        let parsed = parse_raw_tx(&data).expect("should parse small inscription tx");
+
+        assert_eq!(parsed.txid, "6c3d7281f99cb3fd0b7c1a8efc5ca4e62a9e523fe81af7033419e600a15857b2");
+        assert_eq!(parsed.input_count, 1);
+        assert_eq!(parsed.output_count, 1);
+        assert!(parsed.has_inscription); // envelope IS present
+        assert!(parsed.witness_bytes < 100_000); // but witness is tiny
+
+        // Should NOT be classified as notable (too small for large_inscription)
+        assert_eq!(classify_notable(&parsed, 200, 1.5, 100_000.0), None);
+    }
+
     // --- read_varint tests ---
 
     #[test]
