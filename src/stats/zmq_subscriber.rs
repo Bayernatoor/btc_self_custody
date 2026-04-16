@@ -423,6 +423,8 @@ async fn subscribe_tx_and_sequence(
                 } else {
                     None
                 },
+                parsed.input_count,
+                parsed.output_count,
             );
 
             // Also persist to notable_txs table (separate from mempool_txs, never pruned).
