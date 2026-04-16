@@ -909,13 +909,19 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                 var age = nowSec - blip.timestamp;
                 if (age < 0) continue; // staggered history brick not yet visible
                 var isNotable = !!blip.notableType;
-                var fadeTime = isNotable ? 0.8 : 0.4;
+                var fadeTime = isNotable ? 1.0 : 0.6;
                 var fadeIn = Math.min(age / fadeTime, 1.0);
-                // Drop from above: notable txs drop from 3x higher with bounce easing
-                var dropHeight = isNotable ? 80 : 20;
-                var dropEase = isNotable
-                    ? (1 - fadeIn) * (1 - fadeIn) * (1 + 0.3 * Math.sin(fadeIn * Math.PI))
-                    : (1 - fadeIn) * (1 - fadeIn);
+                // Drop from above with bounce easing. Notable = much higher drop.
+                var dropHeight = isNotable ? 120 : 50;
+                // Cubic ease-out with subtle overshoot for a bouncy feel.
+                var inv = 1 - fadeIn;
+                var dropEase = inv * inv * inv;
+                // Subtle bounce near landing (last 25%) for all bricks, stronger for notable
+                var bounceAmt = isNotable ? 0.35 : 0.15;
+                if (fadeIn > 0.75) {
+                    var bouncePhase = (fadeIn - 0.75) * 4; // 0..1
+                    dropEase += bounceAmt * Math.sin(bouncePhase * Math.PI) * 0.08;
+                }
                 var dropOffset = _hb.renderMode !== 'bloodstream' ? dropEase * dropHeight : 0;
                 bh *= fadeIn;
                 bOpacity *= fadeIn;
