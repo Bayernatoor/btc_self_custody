@@ -12,7 +12,9 @@ use leptos::web_sys;
 #[cfg(feature = "hydrate")]
 use wasm_bindgen::prelude::*;
 
-use crate::stats::server_fns::{fetch_notable_stats, fetch_notable_top, fetch_notable_txs};
+use crate::stats::server_fns::{
+    fetch_notable_stats, fetch_notable_top, fetch_notable_txs,
+};
 use crate::stats::types::{NotableTxFilter, NotableTxInfo};
 
 // JS interop: call window.showTxDetail defined in stats.js.
@@ -21,7 +23,10 @@ use crate::stats::types::{NotableTxFilter, NotableTxInfo};
 #[wasm_bindgen]
 extern "C" {
     #[wasm_bindgen(js_name = showTxDetail, catch)]
-    fn js_show_tx_detail(txid: &str, local_data: JsValue) -> Result<(), JsValue>;
+    fn js_show_tx_detail(
+        txid: &str,
+        local_data: JsValue,
+    ) -> Result<(), JsValue>;
 }
 
 #[cfg(not(feature = "hydrate"))]
@@ -278,7 +283,7 @@ pub fn WhaleWatchPage() -> impl IntoView {
             <div class="absolute inset-0 bg-gradient-to-t from-[#123c64] via-[#123c64]/60 to-[#123c64]/30"></div>
             <div class="absolute inset-0 flex flex-col items-center justify-end pb-3 sm:pb-4">
                 <h1 class="text-lg sm:text-xl lg:text-2xl font-title text-white mb-0.5 drop-shadow-lg">"Whale Watch"</h1>
-                <p class="text-[11px] sm:text-xs text-white/50 max-w-lg mx-auto px-4 text-center drop-shadow">"Notable transactions detected in real-time from our Bitcoin node"</p>
+                <p class="text-[11px] sm:text-xs text-white/50 max-w-lg mx-auto px-4 text-center drop-shadow">"Notable transactions detected in real-time from my Bitcoin node"</p>
             </div>
         </div>
 
@@ -451,7 +456,9 @@ pub fn WhaleWatchPage() -> impl IntoView {
 
 #[component]
 fn StatsCards(
-    stats: LocalResource<Result<crate::stats::types::NotableStatsInfo, ServerFnError>>,
+    stats: LocalResource<
+        Result<crate::stats::types::NotableStatsInfo, ServerFnError>,
+    >,
 ) -> impl IntoView {
     view! {
         <Suspense fallback=|| view! {
@@ -540,7 +547,7 @@ fn LeaderRow(rank: usize, tx: NotableTxInfo) -> impl IntoView {
     let type_color = notable_color(&tx.notable_type);
     let type_label = pretty_type(&tx.notable_type);
     let usd_str = fmt_usd_short(tx.value_usd);
-    let btc_str = format!("{:.4} BTC", tx.value as f64 / 1e8);
+    let btc_str = fmt_btc(tx.value);
     let time_str = fmt_time_ago(tx.first_seen);
 
     view! {
@@ -570,7 +577,7 @@ fn TxRow(tx: NotableTxInfo) -> impl IntoView {
     let type_color = notable_color(&tx.notable_type);
     let type_label = pretty_type(&tx.notable_type);
     let usd_str = fmt_usd_short(tx.value_usd);
-    let btc_str = format!("{:.4} BTC", tx.value as f64 / 1e8);
+    let btc_str = fmt_btc(tx.value);
     let time_str = fmt_time_ago(tx.first_seen);
     let fee_str = if tx.vsize > 0 {
         format!("{:.1} sat/vB", tx.fee as f64 / tx.vsize as f64)
@@ -622,6 +629,33 @@ fn TxRow(tx: NotableTxInfo) -> impl IntoView {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/// Format BTC with enough precision to avoid rounding artifacts.
+/// 99.99998 BTC should NOT display as "100.0000 BTC".
+fn fmt_btc(sats: u64) -> String {
+    let btc = sats as f64 / 1e8;
+    if btc >= 100.0 {
+        // Show 6 decimals for large values to avoid false round-number appearance
+        let s = format!("{:.6}", btc);
+        // Trim trailing zeros but keep at least 2 decimals
+        let trimmed = s.trim_end_matches('0');
+        let trimmed = if trimmed.ends_with('.') { &s[..trimmed.len() + 2] } else { trimmed };
+        // Ensure at least 2 decimal places
+        let dot_pos = trimmed.find('.').unwrap_or(trimmed.len());
+        let decimals = trimmed.len() - dot_pos - 1;
+        if decimals < 2 {
+            format!("{:.2} BTC", btc)
+        } else {
+            format!("{trimmed} BTC")
+        }
+    } else if btc >= 1.0 {
+        format!("{:.4} BTC", btc)
+    } else if btc >= 0.01 {
+        format!("{:.6} BTC", btc)
+    } else {
+        format!("{:.8} BTC", btc)
+    }
+}
 
 fn shorten_txid(txid: &str) -> String {
     if txid.len() >= 16 {
@@ -689,12 +723,17 @@ fn fmt_time_ago(ts: u64) -> String {
 /// Open the tx detail modal with local data pre-populated.
 #[cfg(feature = "hydrate")]
 fn show_tx_detail_with_data(txid: &str, tx: &NotableTxInfo) {
-    let fee_rate = if tx.vsize > 0 { tx.fee as f64 / tx.vsize as f64 } else { 0.0 };
+    let fee_rate = if tx.vsize > 0 {
+        tx.fee as f64 / tx.vsize as f64
+    } else {
+        0.0
+    };
     let json = format!(
         r#"{{"fee":{},"vsize":{},"feeRate":{:.1},"value":{}}}"#,
         tx.fee, tx.vsize, fee_rate, tx.value,
     );
-    let local_data = web_sys::js_sys::JSON::parse(&json).unwrap_or(JsValue::NULL);
+    let local_data =
+        web_sys::js_sys::JSON::parse(&json).unwrap_or(JsValue::NULL);
     let _ = js_show_tx_detail(txid, local_data);
 }
 
@@ -705,5 +744,7 @@ fn show_tx_detail_with_data(_txid: &str, _tx: &NotableTxInfo) {}
 #[allow(dead_code)]
 fn show_tx_detail(txid: &str) {
     #[cfg(feature = "hydrate")]
-    { let _ = js_show_tx_detail(txid, JsValue::NULL); }
+    {
+        let _ = js_show_tx_detail(txid, JsValue::NULL);
+    }
 }
