@@ -87,7 +87,7 @@ impl TypeFilter {
     fn description(self) -> &'static str {
         match self {
             Self::All => "All notable transactions",
-            Self::Whale => "Transfer value over $1,000,000 USD (excluding change output)",
+            Self::Whale => "Total output value over $1,000,000 USD. May include exchange self-sends.",
             Self::RoundNumber => "Exact round BTC amounts (1, 10, 100, 1000). Often human-initiated",
             Self::LargeInscription => "Witness data over 100KB (Ordinals, BRC-20, images)",
             Self::Consolidation => "50+ inputs merged into 3 or fewer outputs (UTXO cleanup)",
@@ -270,7 +270,7 @@ pub fn WhaleWatchPage() -> impl IntoView {
                     <span class="text-xs font-mono text-white/30">"Notable transactions, live + historical"</span>
                 </div>
                 <p class="text-sm text-white/40 max-w-3xl">
-                    "Transactions that stand out from the normal mempool flow: million-dollar transfers, round-number amounts, exchange consolidations and batch payouts, massive inscriptions, fat-fingered fees, and readable OP_RETURN messages. Each one is detected in real-time as it enters our node's mempool."
+                    "Transactions that stand out from the normal mempool flow: million-dollar transfers, round-number amounts, exchange consolidations and batch payouts, massive inscriptions, fat-fingered fees, and readable OP_RETURN messages. Each one is detected in real-time as it enters our node's mempool. Note: whale detection uses total output value, which may include exchange self-sends where funds return to the same entity."
                 </p>
             </div>
 

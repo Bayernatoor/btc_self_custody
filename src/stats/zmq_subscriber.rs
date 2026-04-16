@@ -358,15 +358,13 @@ async fn subscribe_tx_and_sequence(
             .map(|(p, _)| p.usd)
             .unwrap_or(0.0);
 
-        // Whale: use non_change_value (total - largest output) to avoid inflating by change.
-        // This gives a better "actual transfer" estimate for self-spends/consolidations.
+        // Whale detection uses total output value. This means exchange self-sends
+        // (reshuffling between hot/cold wallets) will trigger as whales even though
+        // no value actually changed hands. Reliable change output detection requires
+        // input-side UTXO data which we don't have from raw tx parsing alone.
+        // TODO: improve with UTXO lookups or address clustering when available.
         let whale = if price_usd > 0.0 {
-            let transfer_sats = if parsed.non_change_value > 0 {
-                parsed.non_change_value
-            } else {
-                parsed.value
-            };
-            let usd = transfer_sats as f64 * price_usd / 100_000_000.0;
+            let usd = parsed.value as f64 * price_usd / 100_000_000.0;
             usd >= WHALE_THRESHOLD_USD
         } else {
             false
