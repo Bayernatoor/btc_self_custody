@@ -431,16 +431,13 @@ async fn subscribe_tx_and_sequence(
             );
         }
 
-        // Compute USD value for any notable tx (not just whales).
-        // Uses non_change_value as a rough "transfer" estimate.
+        // Compute USD value for any notable tx.
+        // Use total output value for display (accurate for most tx types).
+        // The whale detection above already uses non_change_value for its threshold
+        // check, but for display we show the full value which is what users expect.
         let is_notable = notable_type.is_some();
         let broadcast_usd = if is_notable && price_usd > 0.0 {
-            let transfer_sats = if parsed.non_change_value > 0 {
-                parsed.non_change_value
-            } else {
-                parsed.value
-            };
-            transfer_sats as f64 * price_usd / 100_000_000.0
+            parsed.value as f64 * price_usd / 100_000_000.0
         } else {
             0.0
         };
