@@ -427,6 +427,7 @@ async fn subscribe_tx_and_sequence(
                     value_usd: value_usd_opt,
                     input_count: parsed.input_count,
                     output_count: parsed.output_count,
+                    op_return_text: parsed.op_return_text.as_deref(),
                 },
             );
 

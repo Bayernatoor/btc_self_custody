@@ -278,6 +278,23 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
         }
     }
 
+    // Migration: add op_return_text for tooltip display on history replay.
+    // Without this, OP_RETURN message txs replayed via SSE history show
+    // "OP_RETURN MESSAGE" label but no actual text content.
+    {
+        let has_op_return_text: bool = conn
+            .prepare("SELECT op_return_text FROM mempool_txs LIMIT 0")
+            .is_ok();
+        if !has_op_return_text {
+            tracing::info!(
+                "Migrating: adding op_return_text to mempool_txs"
+            );
+            conn.execute_batch(
+                "ALTER TABLE mempool_txs ADD COLUMN op_return_text TEXT;",
+            )?;
+        }
+    }
+
     // Persistent notable transactions table (separate from mempool_txs).
     // Holds all notable txs regardless of confirmation status, indefinitely
     // (until manually pruned). This powers the dedicated whale-watch page
@@ -1874,6 +1891,7 @@ pub struct MempoolTxInsert<'a> {
     pub value_usd: Option<f64>,
     pub input_count: u64,
     pub output_count: u64,
+    pub op_return_text: Option<&'a str>,
 }
 
 /// Insert a mempool transaction (ignore if txid already exists).
@@ -1884,8 +1902,8 @@ pub fn insert_mempool_tx(
     conn.execute(
         "INSERT OR IGNORE INTO mempool_txs
              (txid, fee, vsize, value, first_seen, notable_type, value_usd,
-              input_count, output_count)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+              input_count, output_count, op_return_text)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
         params![
             tx.txid,
             tx.fee,
@@ -1895,7 +1913,8 @@ pub fn insert_mempool_tx(
             tx.notable_type,
             tx.value_usd,
             tx.input_count,
-            tx.output_count
+            tx.output_count,
+            tx.op_return_text
         ],
     )?;
     Ok(())
@@ -1969,7 +1988,7 @@ pub fn query_recent_mempool_txs(
 ) -> rusqlite::Result<Vec<MempoolTxRow>> {
     let mut stmt = conn.prepare_cached(
         "SELECT txid, fee, vsize, value, first_seen, notable_type, value_usd,
-                input_count, output_count
+                input_count, output_count, op_return_text
          FROM mempool_txs
          WHERE confirmed_height IS NULL AND first_seen >= ?1
          ORDER BY first_seen DESC
@@ -1986,6 +2005,7 @@ pub fn query_recent_mempool_txs(
             value_usd: row.get(6)?,
             input_count: row.get(7)?,
             output_count: row.get(8)?,
+            op_return_text: row.get(9)?,
         })
     })?;
     rows.collect()
@@ -2025,6 +2045,9 @@ pub struct MempoolTxRow {
     pub input_count: u64,
     /// Number of outputs in the transaction.
     pub output_count: u64,
+    /// Decoded OP_RETURN text, if the tx contains a readable message.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub op_return_text: Option<String>,
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -2867,6 +2890,7 @@ mod tests {
                 value_usd: Some(5_000_000.0),
                 input_count: 5,
                 output_count: 2,
+                ..Default::default()
             },
         )
         .unwrap();
