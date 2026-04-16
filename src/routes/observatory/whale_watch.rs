@@ -258,35 +258,57 @@ pub fn WhaleWatchPage() -> impl IntoView {
         });
     }
 
+    let (info_open, set_info_open) = signal(false);
+
     view! {
         <Title text="Whale Watch: Notable Bitcoin Transactions | WE HODL BTC"/>
         <Meta name="description" content="Real-time and historical browser for notable Bitcoin transactions: whales, round-number transfers, large inscriptions, consolidations, fan-outs, fee outliers, and on-chain messages."/>
         <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/whale-watch"/>
 
-        <div class="opacity-0 animate-fadeinone">
-            // Header
-            <div class="mb-6">
-                <div class="flex items-baseline gap-3 mb-2">
-                    <h2 class="text-xl sm:text-2xl font-title text-white">"Whale Watch"</h2>
-                    <span class="text-xs font-mono text-white/30">"Notable transactions, live + historical"</span>
-                </div>
-                <p class="text-sm text-white/40 max-w-3xl">
-                    "Transactions that stand out from the normal mempool flow: million-dollar transfers, round-number amounts, exchange consolidations and batch payouts, massive inscriptions, fat-fingered fees, and readable OP_RETURN messages. Each one is detected in real-time as it enters our node's mempool. Note: whale detection uses total output value, which may include exchange self-sends where funds return to the same entity."
-                </p>
-            </div>
+        // SEO text (hidden, crawlable)
+        <p class="sr-only">"Track notable Bitcoin transactions in real-time. Whale Watch detects million-dollar transfers, round-number amounts, UTXO consolidations, exchange batch payouts, large Ordinals inscriptions, extreme fee rates, and readable OP_RETURN messages as they enter the mempool. Browse historical data with filters, leaderboards, and aggregated statistics."</p>
 
-            // Time window selector
-            <div class="flex items-center gap-2 mb-4">
-                <span class="text-xs font-mono text-white/40 uppercase tracking-wider">"Window:"</span>
+        // Hero banner (matches other Observatory pages)
+        <div class="relative rounded-2xl overflow-hidden mb-5">
+            <img
+                src="/img/observatory_hero.png"
+                alt="Whale Watch"
+                class="w-full h-[100px] sm:h-[120px] lg:h-[140px] object-cover object-center"
+            />
+            <div class="absolute inset-0 bg-gradient-to-t from-[#123c64] via-[#123c64]/60 to-[#123c64]/30"></div>
+            <div class="absolute inset-0 flex flex-col items-center justify-end pb-3 sm:pb-4">
+                <h1 class="text-lg sm:text-xl lg:text-2xl font-title text-white mb-0.5 drop-shadow-lg">"Whale Watch"</h1>
+                <p class="text-[11px] sm:text-xs text-white/50 max-w-lg mx-auto px-4 text-center drop-shadow">"Notable transactions detected in real-time from our Bitcoin node"</p>
+            </div>
+        </div>
+
+        // Info button + time window (toolbar row)
+        <div class="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
+            <div class="flex items-center gap-2">
+                <button
+                    class="text-white/30 hover:text-[#f7931a] transition-colors cursor-pointer shrink-0"
+                    title="About Whale Watch"
+                    on:click=move |_| set_info_open.update(|v| *v = !*v)
+                >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 16v-4M12 8h.01"/>
+                    </svg>
+                </button>
+                <a href="/observatory/heartbeat" class="text-xs text-white/30 hover:text-[#f7931a] transition-colors">
+                    "Live Heartbeat \u{2192}"
+                </a>
+            </div>
+            <div class="flex items-center gap-2 sm:ml-auto">
                 {WINDOWS.iter().map(|&w| {
                     view! {
                         <button
                             on:click=move |_| set_window.set(w)
                             class=move || {
                                 if window.get() == w {
-                                    "px-3 py-1 rounded text-xs font-mono bg-[#f7931a]/20 text-[#f7931a] border border-[#f7931a]/40"
+                                    "px-3 py-1.5 rounded-full text-xs font-semibold bg-[#f7931a] text-black whitespace-nowrap transition-all"
                                 } else {
-                                    "px-3 py-1 rounded text-xs font-mono bg-white/5 text-white/50 border border-white/10 hover:bg-white/10"
+                                    "px-3 py-1.5 rounded-full text-xs font-medium bg-white/5 text-white/50 hover:bg-white/10 hover:text-white/70 whitespace-nowrap transition-all"
                                 }
                             }
                         >
@@ -295,58 +317,64 @@ pub fn WhaleWatchPage() -> impl IntoView {
                     }
                 }).collect::<Vec<_>>()}
             </div>
+        </div>
 
-            // Stats cards
-            <StatsCards stats=stats/>
-
-            // Type filter pills
-            <div class="flex flex-wrap items-center gap-2 mb-4">
-                <span class="text-xs font-mono text-white/40 uppercase tracking-wider mr-1">"Type:"</span>
-                {FILTERS.iter().map(|&f| {
-                    let color = f.color();
-                    let label = f.label();
-                    let desc = f.description();
-                    view! {
-                        <button
-                            on:click=move |_| set_active_filter.set(f)
-                            title=desc
-                            class=move || {
-                                let active = active_filter.get() == f;
-                                if active {
-                                    format!("px-3 py-1 rounded text-xs font-mono border font-semibold")
-                                } else {
-                                    format!("px-3 py-1 rounded text-xs font-mono border hover:bg-white/5 transition-colors")
-                                }
-                            }
-                            style=move || {
-                                let active = active_filter.get() == f;
-                                if active {
-                                    format!("background-color: {color}20; border-color: {color}60; color: {color};")
-                                } else {
-                                    format!("background-color: transparent; border-color: {color}30; color: {color}aa;")
-                                }
-                            }
-                        >
-                            {label}
-                        </button>
-                    }
-                }).collect::<Vec<_>>()}
+        // Info panel (toggleable)
+        <Show when=move || info_open.get()>
+            <div class="mb-5 p-4 bg-white/[0.03] border border-white/5 rounded-xl text-sm text-white/60 leading-relaxed space-y-2">
+                <p>"Every transaction entering our node's mempool is analyzed in real-time for notable characteristics. Detected transactions are highlighted on the Block Heartbeat EKG and stored permanently for historical browsing."</p>
+                <p class="text-white/40 text-xs">"Detection uses total output value for whale classification. Exchange self-sends (hot/cold wallet reshuffles) may appear as whales since change output detection requires UTXO data not available from raw transaction parsing."</p>
             </div>
+        </Show>
 
-            // Leaderboard (top 10 by USD)
-            <TopLeaderboard top=top/>
+        // Stats cards
+        <StatsCards stats=stats/>
 
-            // Main tx list
-            <div class="bg-[#0d2137] border border-white/10 rounded-2xl overflow-hidden mb-4">
-                <div class="flex items-center justify-between px-4 py-2.5 border-b border-white/10">
-                    <span class="text-xs font-mono text-white/60 uppercase tracking-wider">"Transactions"</span>
-                    <span class="text-xs font-mono text-white/30">
-                        {move || match tx_list.get() {
-                            Some(Ok(p)) => format!("{} total", p.total),
-                            _ => "Loading...".to_string(),
-                        }}
-                    </span>
-                </div>
+        // Type filter pills (rounded, matching Hall of Fame style)
+        <div class="flex items-center gap-2 overflow-x-auto pb-2 mb-4 scrollbar-hide">
+            {FILTERS.iter().map(|&f| {
+                let color = f.color();
+                let label = f.label();
+                let desc = f.description();
+                view! {
+                    <button
+                        on:click=move |_| set_active_filter.set(f)
+                        title=desc
+                        class=move || {
+                            if active_filter.get() == f {
+                                "px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all flex-shrink-0"
+                            } else {
+                                "px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all flex-shrink-0 hover:opacity-80"
+                            }
+                        }
+                        style=move || {
+                            if active_filter.get() == f {
+                                format!("background-color: {color}; color: #0a1a2e;")
+                            } else {
+                                format!("background-color: {color}15; color: {color}cc; border: 1px solid {color}30;")
+                            }
+                        }
+                    >
+                        {label}
+                    </button>
+                }
+            }).collect::<Vec<_>>()}
+        </div>
+
+        // Leaderboard (top 10 by USD)
+        <TopLeaderboard top=top/>
+
+        // Main tx list
+        <div class="bg-[#0d2137] border border-white/10 rounded-2xl overflow-hidden mb-4">
+            <div class="flex items-center justify-between px-4 py-2.5 border-b border-white/10">
+                <span class="text-xs font-mono text-white/60 uppercase tracking-wider">"Transactions"</span>
+                <span class="text-xs font-mono text-white/30">
+                    {move || match tx_list.get() {
+                        Some(Ok(p)) => format!("{} total", p.total),
+                        _ => "Loading...".to_string(),
+                    }}
+                </span>
+            </div>
                 <Suspense fallback=|| view! {
                     <div class="px-4 py-8 text-center text-white/30 text-sm">"Loading transactions..."</div>
                 }>
@@ -414,13 +442,6 @@ pub fn WhaleWatchPage() -> impl IntoView {
                 }}
             </div>
 
-            // Back link
-            <div class="text-center">
-                <a href="/observatory/heartbeat" class="text-xs font-mono text-white/30 hover:text-[#f7931a] transition-colors">
-                    "\u{2190} Back to Heartbeat"
-                </a>
-            </div>
-        </div>
     }
 }
 
@@ -450,13 +471,13 @@ fn StatsCards(
                     let top_type = s.by_type.first().map(|(t, _, _)| t.clone()).unwrap_or_else(|| "—".to_string());
                     let top_type_count = s.by_type.first().map(|(_, c, _)| *c).unwrap_or(0);
                     view! {
-                        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-                            <StatCard label="Notable txs".to_string() value={total_count.to_string()} sub="in window".to_string()/>
-                            <StatCard label="Total USD flow".to_string() value={format!("${}", fmt_usd_short(total_usd))} sub="sum of transfer values".to_string()/>
-                            <StatCard label="Biggest single tx".to_string() value={format!("${}", fmt_usd_short(top_usd))} sub={
-                                if top_txid.is_empty() { "—".to_string() } else { format!("{}...", &top_txid[..12.min(top_txid.len())]) }
+                        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+                            <StatCard label="Detected".to_string() value={total_count.to_string()} sub="notable transactions".to_string()/>
+                            <StatCard label="Combined Value".to_string() value={format!("${}", fmt_usd_short(total_usd))} sub="total output volume".to_string()/>
+                            <StatCard label="Largest".to_string() value={format!("${}", fmt_usd_short(top_usd))} sub={
+                                if top_txid.is_empty() { "in this window".to_string() } else { format!("{}...", &top_txid[..12.min(top_txid.len())]) }
                             }/>
-                            <StatCard label="Most common type".to_string() value={pretty_type(&top_type)} sub={format!("{} occurrences", top_type_count)}/>
+                            <StatCard label="Top Category".to_string() value={pretty_type(&top_type)} sub={format!("{} detected", top_type_count)}/>
                         </div>
                     }.into_any()
                 }
