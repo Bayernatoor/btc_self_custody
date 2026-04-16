@@ -94,6 +94,9 @@ pub enum HeartbeatEvent {
         input_count: u64,
         /// Number of outputs in the transaction.
         output_count: u64,
+        /// Largest single output value in sats. Used for round_number display.
+        #[serde(skip_serializing_if = "is_zero")]
+        max_output_value: u64,
     },
     /// Block found - complete data (fees, size, weight all populated).
     /// Sent after node finishes validation and we fetch all metadata.
@@ -142,13 +145,19 @@ const ROUND_NUMBER_AMOUNTS: &[u64] = &[
     10_000_000_000,  // 100 BTC
     100_000_000_000, // 1000 BTC
 ];
-/// Tolerance for round number detection (sats). Allows 0.001 BTC slop for dust change.
-const ROUND_NUMBER_TOLERANCE: u64 = 100_000;
+/// Tolerance for round number detection (sats). Exact match up to dust threshold.
+/// Tighter than before (was 0.001 BTC) since we want truly exact round amounts,
+/// not just close-to-round values with significant dust.
+const ROUND_NUMBER_TOLERANCE: u64 = 1_000;
 /// Minimum USD value for a round number tx to be flagged (avoids 1 BTC dust at low prices).
 const ROUND_NUMBER_MIN_USD: f64 = 100_000.0;
 
 fn is_zero_f64(v: &f64) -> bool {
     *v == 0.0
+}
+
+fn is_zero(v: &u64) -> bool {
+    *v == 0
 }
 
 /// Spawn the ZMQ subscriber tasks. Both tx/sequence topics share a single socket
@@ -472,6 +481,7 @@ async fn subscribe_tx_and_sequence(
             op_return_text: parsed.op_return_text.unwrap_or_default(),
             input_count: parsed.input_count,
             output_count: parsed.output_count,
+            max_output_value: parsed.max_output_value,
         });
 
         tx_count += 1;

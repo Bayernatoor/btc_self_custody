@@ -852,8 +852,10 @@ function _buildNotableRow(tx) {
             '<span class="text-[#ffd700]/80 shrink-0">' + usdStr + '</span>';
     } else if (isRoundNumber) {
         feedType = 'round_number';
+        // Show the round output value (the part that triggered detection), not total
+        var roundBtc = (tx.max_output_value || tx.value || 0) / 100000000;
         labelHtml = '<span class="text-[#90ee90] font-bold shrink-0">ROUND #</span>' +
-            '<span class="text-white/60 shrink-0">' + _fmtBtcFeed(btcVal) + ' BTC</span>';
+            '<span class="text-white/60 shrink-0">' + _fmtBtcFeed(roundBtc) + ' BTC out</span>';
     } else if (isLargeInscription) {
         feedType = 'inscription';
         labelHtml = '<span class="text-[#ff00c8] font-bold shrink-0">INSCRIPTION</span>' +
