@@ -1676,6 +1676,28 @@ mod tests {
     }
 
     #[test]
+    fn test_real_segwit_consolidation_436_inputs() {
+        // txid: 562c22eb7a7d620347d285452a938b7fd78e5c178e11d3dfed3f9e2b90e93013
+        // 436 inputs -> 1 output, segwit, 44.3KB witness (standard sigs, no inscription).
+        // Must classify as consolidation, NOT large_inscription.
+        let tx = ParsedTx {
+            txid: "562c22eb7a7d620347d285452a938b7fd78e5c178e11d3dfed3f9e2b90e93013".to_string(),
+            value: 47_806_688,     // 0.47806688 BTC
+            input_count: 436,
+            output_count: 1,
+            witness_bytes: 45_341, // 44.3 KB - below 100KB but still big
+            has_inscription: false,
+            max_output_value: 47_806_688,
+            non_change_value: 0,
+            op_return_text: None,
+        };
+
+        assert_eq!(classify_notable(&tx, 5_000, 0.17, 100_000.0), Some("consolidation"));
+        // Verify it's NOT flagged as inscription despite having large witness
+        assert!(!tx.has_inscription);
+    }
+
+    #[test]
     fn test_real_small_inscription_not_flagged() {
         // txid: 6c3d7281f99cb3fd0b7c1a8efc5ca4e62a9e523fe81af7033419e600a15857b2
         // 1 in / 1 out, 217 bytes witness, HAS inscription envelope but too small.
