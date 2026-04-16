@@ -377,7 +377,11 @@ async fn subscribe_tx_and_sequence(
             && parsed.output_count <= 3;
         let fan_out = parsed.input_count <= 3
             && parsed.output_count >= FAN_OUT_OUTPUT_THRESHOLD;
-        let large_inscription = parsed.witness_bytes >= LARGE_INSCRIPTION_THRESHOLD;
+        // Large inscription: big witness data BUT not from many standard signatures.
+        // A 1000-input consolidation has ~107KB of witness (107 bytes/sig * 1000)
+        // which would false-positive. Real inscriptions have few inputs (usually 1).
+        let large_inscription = parsed.witness_bytes >= LARGE_INSCRIPTION_THRESHOLD
+            && parsed.input_count <= 5;
 
         // Round number detection: any output exactly matches a round BTC amount.
         // Only flag if the tx is substantial (at least $100k) to avoid 1 BTC dust.
