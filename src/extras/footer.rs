@@ -64,9 +64,12 @@ pub fn Footer() -> impl IntoView {
                     <div>
                         <h3 class="text-xs font-semibold text-white/60 uppercase tracking-wider mb-3">"Observatory"</h3>
                         <ul class="space-y-2">
-                            <li><a href="/observatory" class="text-sm text-white/30 hover:text-[#f7931a] transition-colors">"Dashboard"</a></li>
-                            <li><a href="/observatory/stats" class="text-sm text-white/30 hover:text-[#f7931a] transition-colors">"Stats Overview"</a></li>
-                            <li><a href="/observatory/on-this-day" class="text-sm text-white/30 hover:text-[#f7931a] transition-colors">"On This Day"</a></li>
+                            <li><a href="/observatory" class="text-sm text-white/30 hover:text-[#f7931a] transition-colors">"Readings"</a></li>
+                            <li><a href="/observatory/stats" class="text-sm text-white/30 hover:text-[#f7931a] transition-colors">"The Logbook"</a></li>
+                            <li><a href="/observatory/on-this-day" class="text-sm text-white/30 hover:text-[#f7931a] transition-colors">"Almanac"</a></li>
+                            <li><a href="/observatory/hall-of-fame" class="text-sm text-white/30 hover:text-[#f7931a] transition-colors">"The Archives"</a></li>
+                            <li><a href="/observatory/heartbeat" class="text-sm text-white/30 hover:text-[#f7931a] transition-colors">"Heartbeat"</a></li>
+                            <li><a href="/observatory/whale-watch" class="text-sm text-white/30 hover:text-[#f7931a] transition-colors">"The Lookout"</a></li>
                             <li><a href="/observatory/charts/network" class="text-sm text-white/30 hover:text-[#f7931a] transition-colors">"Network Charts"</a></li>
                             <li><a href="/observatory/charts/fees" class="text-sm text-white/30 hover:text-[#f7931a] transition-colors">"Fee Charts"</a></li>
                             <li><a href="/observatory/charts/mining" class="text-sm text-white/30 hover:text-[#f7931a] transition-colors">"Mining Charts"</a></li>

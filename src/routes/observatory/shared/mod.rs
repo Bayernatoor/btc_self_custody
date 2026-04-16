@@ -253,12 +253,12 @@ fn OverlayCheckbox(
 #[component]
 pub fn ObservatoryNav() -> impl IntoView {
     let pages: Vec<(&'static str, &'static str)> = vec![
-        ("/observatory", "Dashboard"),
-        ("/observatory/stats", "Overview"),
-        ("/observatory/on-this-day", "On This Day"),
-        ("/observatory/hall-of-fame", "Hall of Fame"),
+        ("/observatory", "Readings"),
+        ("/observatory/stats", "Logbook"),
+        ("/observatory/on-this-day", "Almanac"),
+        ("/observatory/hall-of-fame", "The Archives"),
         ("/observatory/heartbeat", "Heartbeat"),
-        ("/observatory/whale-watch", "Whale Watch"),
+        ("/observatory/whale-watch", "The Lookout"),
     ];
 
     let charts: Vec<(&'static str, &'static str)> = vec![

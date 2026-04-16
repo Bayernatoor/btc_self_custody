@@ -13,17 +13,17 @@
 //!   /guides/:level                           -> GuideLevelSelector
 //!   /guides/:level/:segment                  -> GuideTwoSegment
 //!   /guides/:level/:platform/:wallet         -> GuideWalletPage
-//!   /observatory                             -> Dashboard (live stats, difficulty, halving)
+//!   /observatory                             -> Readings (live stats, difficulty, halving)
 //!   /observatory/charts/network              -> Network charts (blocks, adoption, tx metrics)
 //!   /observatory/charts/fees                 -> Fee charts (total fees, subsidy breakdown)
 //!   /observatory/charts/mining               -> Mining charts (difficulty, pool distribution)
 //!   /observatory/charts/embedded             -> Embedded data charts (OP_RETURN, inscriptions)
 //!   /observatory/signaling                   -> BIP signaling tracker
-//!   /observatory/stats                       -> Stats overview (at-a-glance counters)
-//!   /observatory/on-this-day                 -> On This Day in Bitcoin
-//!   /observatory/hall-of-fame                -> Hall of Fame (notable blocks/transactions)
+//!   /observatory/stats                       -> The Logbook (network observations by range)
+//!   /observatory/on-this-day                 -> Almanac (what happened on any calendar date)
+//!   /observatory/hall-of-fame                -> The Archives (curated notable blocks/transactions)
 //!   /observatory/heartbeat                   -> Block Heartbeat (live EKG animation)
-//!   /observatory/whale-watch                 -> Whale Watch (notable tx browser)
+//!   /observatory/whale-watch                 -> The Lookout (notable tx browser)
 //!   /observatory/learn/protocols             -> Protocol guide
 //!   /blog, /faq, /about                      -> Static pages
 
@@ -207,7 +207,7 @@ pub fn App() -> impl IntoView {
                                     <div class="text-[4rem] font-title text-white/10 font-bold mb-4">"404"</div>
                                     <h1 class="text-xl text-white font-semibold mb-2">"Page not found"</h1>
                                     <p class="text-sm text-white/50 mb-8">"This observatory page doesn\u{2019}t exist."</p>
-                                    <a href="/observatory" class="px-5 py-2.5 bg-[#f7931a] text-white text-sm font-medium rounded-xl hover:bg-[#f4a949] transition-all">"Back to Dashboard"</a>
+                                    <a href="/observatory" class="px-5 py-2.5 bg-[#f7931a] text-white text-sm font-medium rounded-xl hover:bg-[#f4a949] transition-all">"Back to Observatory"</a>
                                 </div>
                             }/>
                         </ParentRoute>

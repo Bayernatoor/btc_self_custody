@@ -630,21 +630,21 @@ pub fn StatsSummaryPage() -> impl IntoView {
     });
 
     view! {
-        <Title text="Bitcoin Stats Summary: At-a-Glance Network Counters | WE HODL BTC"/>
-        <Meta name="description" content="Bitcoin network summary statistics for any time range. Total transactions, fees, inscriptions, Runes, SegWit adoption, Taproot usage, and embedded data counters."/>
+        <Title text="The Logbook: Bitcoin Network Statistics by Range | WE HODL BTC"/>
+        <Meta name="description" content="Systematic record of Bitcoin network observations across any time range. Total transactions, fees, inscriptions, Runes, SegWit adoption, Taproot usage, and embedded data counters."/>
         <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/stats"/>
 
         // Page header with range selector
         <div class="relative rounded-2xl overflow-hidden mb-5">
             <img
                 src="/img/observatory_hero.png"
-                alt="Stats Summary"
+                alt="The Logbook"
                 class="w-full h-[100px] sm:h-[120px] lg:h-[140px] object-cover object-center"
             />
             <div class="absolute inset-0 bg-gradient-to-t from-[#123c64] via-[#123c64]/60 to-[#123c64]/30"></div>
             <div class="absolute inset-0 flex flex-col items-center justify-end pb-3 sm:pb-4">
-                <h1 class="text-lg sm:text-xl lg:text-2xl font-title text-white mb-0.5 drop-shadow-lg">"Stats Overview"</h1>
-                <p class="text-[11px] sm:text-xs text-white/50 max-w-lg mx-auto px-4 text-center drop-shadow">"Key network counters across any time range. Select a range to explore."</p>
+                <h1 class="text-lg sm:text-xl lg:text-2xl font-title text-white mb-0.5 drop-shadow-lg">"The Logbook"</h1>
+                <p class="text-[11px] sm:text-xs text-white/50 max-w-lg mx-auto px-4 text-center drop-shadow">"Network observations across any time range. Choose a span to explore the record."</p>
             </div>
         </div>
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-6">

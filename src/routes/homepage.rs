@@ -154,7 +154,7 @@ pub fn HomePage() -> impl IntoView {
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
                             </svg>
                         </div>
-                        <h4 class="text-sm font-semibold text-white mb-1 group-hover:text-[#f4a949] transition-colors">"Live Dashboard"</h4>
+                        <h4 class="text-sm font-semibold text-white mb-1 group-hover:text-[#f4a949] transition-colors">"Live Readings"</h4>
                         <p class="text-xs text-white/40 leading-relaxed">"Real-time block height, difficulty, mempool, hashrate, and halving countdown."</p>
                     </div>
                 </a>

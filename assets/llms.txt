@@ -12,8 +12,8 @@ WE HODL BTC is a Bitcoin education and analytics platform. It provides:
 
 Real-time Bitcoin blockchain analytics at https://www.wehodlbtc.com/observatory
 
-### Live Dashboard
-Block height, mining difficulty, network hashrate, mempool stats, BTC price, circulating supply, UTXO count, halving countdown with measured block time estimate, and difficulty adjustment predictor.
+### Readings
+Current readings from the Bitcoin network. Block height, mining difficulty, network hashrate, mempool stats, BTC price, circulating supply, UTXO count, halving countdown with measured block time estimate, and difficulty adjustment predictor.
 
 ### Network Charts
 Block size, weight utilization, transaction count, TPS, block intervals, chain size growth, block fullness distribution, block time distribution, rapid consecutive blocks, weekday activity patterns. SegWit adoption, Taproot outputs, witness versions, address type evolution, address type share, witness data share, Taproot spend types, Taproot adoption velocity, cumulative SegWit/Taproot adoption, P2PKH sunset tracker, multi-type adoption velocity, UTXO flow, UTXO growth rate, transaction density, RBF adoption, batching trends, transaction type evolution (legacy/SegWit/Taproot).
@@ -33,17 +33,20 @@ Per-block miner signaling for active Bitcoin Improvement Proposals:
 - BIP-54: Great Consensus Cleanup (coinbase locktime == height-1, 95% threshold)
 Block grid visualization, historical period chart, progress tracking per 2,016-block retarget period.
 
-### Block Heartbeat
+### Heartbeat
 Real-time EKG-style visualization of Bitcoin network activity. Mempool transactions appear as blips on a flatline, block arrivals trigger spikes proportional to total fees. Click spikes for block details, click bricks for transaction details. Built on ZMQ and Server-Sent Events for sub-second updates.
 
-### Stats Overview
+### The Lookout
+Real-time detection of notable Bitcoin transactions. Spots whales (>$1M), round-number transfers, large Ordinals inscriptions, UTXO consolidations, exchange batch payouts, extreme fee outliers, and readable OP_RETURN messages as they enter the mempool. Historical browser with filters, leaderboard, and aggregated stats.
+
+### The Logbook
 Record-breaking blocks with 13 extreme categories (largest block, most transactions, highest fees, most Taproot spends, etc.). Range-filtered summary statistics across all time periods. Click any record to view full block details.
 
-### Hall of Fame
+### The Archives
 A curated collection of 57+ remarkable Bitcoin blocks and transactions across five categories: Milestones, Records, Attacks and Stress Tests, Protocol Moments, and Oddities. From the genesis block to the latest halving, each entry provides verified data and historical context.
 
-### On This Day in Bitcoin
-Daily historical events from Bitcoin's history. Shows which blocks were mined on this date across all years, along with curated notable events (halvings, protocol activations, price milestones).
+### Almanac
+Daily historical events from Bitcoin's history. Shows which blocks were mined on any calendar date across all years, along with curated notable events (halvings, protocol activations, price milestones).
 
 ### Protocol Guide
 Technical comparison of Bitcoin data embedding protocols: Omni Layer (2013), Counterparty (2014), Stamps (2023), Ordinals/Inscriptions (2023), BRC-20 (2023), and Runes (2024). Includes chronological timeline, how each works, pruning characteristics, and trade-offs.
@@ -64,16 +67,17 @@ All blockchain data is sourced directly from a full Bitcoin Core node with trans
 
 ## Links
 - Homepage: https://www.wehodlbtc.com
-- Observatory Dashboard: https://www.wehodlbtc.com/observatory
+- Observatory (Readings): https://www.wehodlbtc.com/observatory
 - Network Charts: https://www.wehodlbtc.com/observatory/charts/network
 - Fee Charts: https://www.wehodlbtc.com/observatory/charts/fees
 - Mining Charts: https://www.wehodlbtc.com/observatory/charts/mining
 - Embedded Data: https://www.wehodlbtc.com/observatory/charts/embedded
 - BIP Signaling: https://www.wehodlbtc.com/observatory/signaling
-- Block Heartbeat: https://www.wehodlbtc.com/observatory/heartbeat
-- Stats Overview: https://www.wehodlbtc.com/observatory/stats
-- Hall of Fame: https://www.wehodlbtc.com/observatory/hall-of-fame
-- On This Day: https://www.wehodlbtc.com/observatory/on-this-day
+- Heartbeat: https://www.wehodlbtc.com/observatory/heartbeat
+- The Lookout: https://www.wehodlbtc.com/observatory/whale-watch
+- The Logbook: https://www.wehodlbtc.com/observatory/stats
+- The Archives: https://www.wehodlbtc.com/observatory/hall-of-fame
+- Almanac: https://www.wehodlbtc.com/observatory/on-this-day
 - Learn: https://www.wehodlbtc.com/observatory/learn
 - Protocol Guide: https://www.wehodlbtc.com/observatory/learn/protocols
 - Data Methodology: https://www.wehodlbtc.com/observatory/learn/methodology

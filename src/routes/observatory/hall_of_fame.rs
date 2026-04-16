@@ -159,21 +159,21 @@ pub fn HallOfFamePage() -> impl IntoView {
     );
 
     view! {
-        <Title text="Bitcoin Hall of Fame: Remarkable Blocks & Transactions | WE HODL BTC"/>
-        <Meta name="description" content="A curated museum of Bitcoin's most remarkable blocks and transactions. Genesis block, Pizza Day, SegWit, Taproot, the 184 billion BTC bug, record-breaking blocks, and more."/>
+        <Title text="The Archives: Remarkable Blocks & Transactions | WE HODL BTC"/>
+        <Meta name="description" content="The Archives: a curated collection of Bitcoin's most remarkable blocks and transactions. Genesis block, Pizza Day, SegWit, Taproot, the 184 billion BTC bug, record-breaking blocks, and more."/>
         <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/hall-of-fame"/>
 
         // Hero
         <div class="relative rounded-2xl overflow-hidden mb-5">
             <img
                 src="/img/observatory_hero.png"
-                alt="Bitcoin Hall of Fame"
+                alt="The Archives"
                 class="w-full h-[100px] sm:h-[120px] lg:h-[140px] object-cover object-center"
             />
             <div class="absolute inset-0 bg-gradient-to-t from-[#123c64] via-[#123c64]/60 to-[#123c64]/30"></div>
             <div class="absolute inset-0 flex flex-col items-center justify-end pb-3 sm:pb-4">
-                <h1 class="text-lg sm:text-xl lg:text-2xl font-title text-white mb-0.5 drop-shadow-lg">"Hall of Fame"</h1>
-                <p class="text-[11px] sm:text-xs text-white/50 max-w-lg mx-auto px-4 text-center drop-shadow">"Remarkable blocks and transactions that shaped Bitcoin"</p>
+                <h1 class="text-lg sm:text-xl lg:text-2xl font-title text-white mb-0.5 drop-shadow-lg">"The Archives"</h1>
+                <p class="text-[11px] sm:text-xs text-white/50 max-w-lg mx-auto px-4 text-center drop-shadow">"Remarkable blocks, transactions, and events that shaped Bitcoin"</p>
             </div>
         </div>
 

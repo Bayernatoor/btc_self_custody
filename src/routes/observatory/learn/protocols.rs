@@ -128,17 +128,25 @@ pub fn ProtocolGuidePage() -> impl IntoView {
         <Title text="Bitcoin Embedding Protocols: Runes, Ordinals, BRC-20, Stamps | WE HODL BTC"/>
         <Meta name="description" content="Technical guide to data embedding protocols on Bitcoin. Compare Omni Layer, Counterparty, Stamps, Ordinals inscriptions, BRC-20, and Runes with timelines, trade-offs, and pruning characteristics."/>
         <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/learn/protocols"/>
-        <section class="max-w-6xl mx-auto px-6 pt-12 pb-24 opacity-0 animate-fadeinone">
 
-            // Hero
-            <div class="text-center mb-14">
-                <a href="/observatory" class="text-sm text-white/40 hover:text-white/60 transition-colors">
-                    "\u{2190} Back to The Bitcoin Observatory"
-                </a>
-                <h1 class="text-4xl lg:text-5xl font-title text-white mt-4 mb-3">
-                    "Bitcoin Embedding Protocols"
-                </h1>
-                <div class="w-16 h-0.5 bg-[#f7931a] mx-auto mb-5"></div>
+        // Hero (matches other Observatory pages)
+        <div class="relative rounded-2xl overflow-hidden mb-5">
+            <img
+                src="/img/observatory_hero.png"
+                alt="Bitcoin Embedding Protocols"
+                class="w-full h-[100px] sm:h-[120px] lg:h-[140px] object-cover object-center"
+            />
+            <div class="absolute inset-0 bg-gradient-to-t from-[#123c64] via-[#123c64]/60 to-[#123c64]/30"></div>
+            <div class="absolute inset-0 flex flex-col items-center justify-end pb-3 sm:pb-4">
+                <h1 class="text-lg sm:text-xl lg:text-2xl font-title text-white mb-0.5 drop-shadow-lg">"Bitcoin Embedding Protocols"</h1>
+                <p class="text-[11px] sm:text-xs text-white/50 max-w-lg mx-auto px-4 text-center drop-shadow">"Omni Layer, Counterparty, Stamps, Ordinals, BRC-20, and Runes"</p>
+            </div>
+        </div>
+
+        <section class="max-w-6xl mx-auto px-6 pt-2 pb-24 opacity-0 animate-fadeinone">
+
+            // Intro paragraph
+            <div class="text-center mb-10">
                 <p class="text-base lg:text-lg text-white/70 max-w-2xl mx-auto leading-relaxed">
                     "Since 2013, developers have found ways to embed non-financial data into Bitcoin's blockchain. From token protocols to digital art, each approach uses a different part of the transaction structure, with different trade-offs for cost, pruning, and chain impact."
                 </p>

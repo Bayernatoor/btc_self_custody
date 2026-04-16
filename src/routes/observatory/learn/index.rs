@@ -33,12 +33,21 @@ pub fn LearnIndexPage() -> impl IntoView {
         <Meta name="description" content="Educational articles about Bitcoin data analysis: protocol guides, methodology documentation, and how to interpret observatory charts."/>
         <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/learn"/>
 
-        <div class="max-w-3xl mx-auto space-y-8 pb-16">
-            <div class="text-center">
-                <h1 class="text-2xl sm:text-3xl font-title text-white mb-2">"Learn"</h1>
-                <p class="text-sm text-white/50 max-w-xl mx-auto">"Educational articles about Bitcoin data analysis and the methodology behind the observatory."</p>
+        // Hero (matches other Observatory pages)
+        <div class="relative rounded-2xl overflow-hidden mb-5">
+            <img
+                src="/img/observatory_hero.png"
+                alt="Learn"
+                class="w-full h-[100px] sm:h-[120px] lg:h-[140px] object-cover object-center"
+            />
+            <div class="absolute inset-0 bg-gradient-to-t from-[#123c64] via-[#123c64]/60 to-[#123c64]/30"></div>
+            <div class="absolute inset-0 flex flex-col items-center justify-end pb-3 sm:pb-4">
+                <h1 class="text-lg sm:text-xl lg:text-2xl font-title text-white mb-0.5 drop-shadow-lg">"Learn"</h1>
+                <p class="text-[11px] sm:text-xs text-white/50 max-w-lg mx-auto px-4 text-center drop-shadow">"Educational articles about Bitcoin data analysis and the methodology behind the observatory"</p>
             </div>
+        </div>
 
+        <div class="max-w-3xl mx-auto space-y-8 pb-16">
             <div class="space-y-4">
                 {ARTICLES.iter().map(|article| {
                     view! {

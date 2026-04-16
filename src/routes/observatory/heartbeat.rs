@@ -726,12 +726,12 @@ pub fn HeartbeatPage() -> impl IntoView {
                 </p>
             </div>
 
-            // ── Whale Watch Feed ──────────────────────────────
+            // ── The Lookout Feed ──────────────────────────────
             <div id="whale-feed-panel" class="bg-[#0d2137] border border-[#ffd700]/20 rounded-2xl overflow-hidden hidden">
                 <div class="flex items-center justify-between px-4 py-2.5 border-b border-[#ffd700]/10">
                     <div class="flex items-center gap-2">
                         <span class="w-2 h-2 rounded-full bg-[#ffd700] animate-pulse"></span>
-                        <span class="text-xs font-mono text-[#ffd700]/80 uppercase tracking-wider">"Whale Watch"</span>
+                        <span class="text-xs font-mono text-[#ffd700]/80 uppercase tracking-wider">"The Lookout"</span>
                     </div>
                     <div class="flex items-center gap-1 flex-wrap">
                         <button onclick="window._filterNotable('all')" id="whale-filter-all" title="Show all notable transactions" class="px-2 py-0.5 rounded text-[10px] font-mono bg-white/10 text-white/60 hover:bg-white/20 transition-colors border border-white/[0.08]">"All"</button>
@@ -748,7 +748,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                     <div data-placeholder="1" class="px-4 py-3 text-xs text-white/20 font-mono italic text-center">"Listening for notable transactions..."</div>
                 </div>
                 <div class="px-3 py-1.5 border-t border-white/5 text-[10px] font-mono text-white/30 text-center">
-                    <a href="/observatory/whale-watch" class="hover:text-[#f7931a] transition-colors">"View all history and stats \u{2192}"</a>
+                    <a href="/observatory/whale-watch" class="hover:text-[#f7931a] transition-colors">"Visit The Lookout for history and stats \u{2192}"</a>
                 </div>
             </div>
 

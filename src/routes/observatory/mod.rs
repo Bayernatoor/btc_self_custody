@@ -6,16 +6,17 @@
 //! navigation tabs, overlay panel, block detail modal) around child pages via `Outlet`.
 //!
 //! Routes:
-//!   /observatory                     -> Dashboard (live stats, difficulty, halving)
+//!   /observatory                     -> Readings (live network instruments)
 //!   /observatory/charts/network      -> Network charts (blocks, adoption, tx metrics)
 //!   /observatory/charts/fees         -> Fee charts (total fees, subsidy breakdown)
 //!   /observatory/charts/mining       -> Mining charts (difficulty, pool distribution)
 //!   /observatory/charts/embedded     -> Embedded data charts (OP_RETURN, inscriptions)
 //!   /observatory/signaling           -> BIP signaling tracker (version bits + coinbase)
-//!   /observatory/stats               -> Stats overview (at-a-glance counters)
-//!   /observatory/on-this-day         -> On This Day in Bitcoin
-//!   /observatory/hall-of-fame        -> Hall of Fame (notable blocks/transactions)
-//!   /observatory/heartbeat           -> Block Heartbeat (live EKG animation)
+//!   /observatory/stats               -> The Logbook (network observations by range)
+//!   /observatory/on-this-day         -> Almanac (date-based historical lookup)
+//!   /observatory/hall-of-fame        -> The Archives (curated notable events)
+//!   /observatory/heartbeat           -> Heartbeat (live EKG animation)
+//!   /observatory/whale-watch         -> The Lookout (notable tx watcher)
 //!   /observatory/learn/protocols     -> Protocol guide
 
 pub mod components;
@@ -83,7 +84,7 @@ pub fn ObservatoryPage() -> impl IntoView {
                     <div class="absolute inset-0 flex flex-col items-center justify-end pb-4 sm:pb-5">
                         <h1 class="text-2xl sm:text-3xl lg:text-4xl font-title text-white mb-1.5 drop-shadow-lg">"The Bitcoin Observatory"</h1>
                         <p class="text-sm sm:text-base text-white/60 max-w-lg mx-auto px-4 text-center drop-shadow">
-                            "50+ live charts tracking blocks, fees, adoption, mining, embedded protocols, and BIP signaling."
+                            "Instruments, logs, and watchers trained on the Bitcoin network."
                         </p>
                     </div>
                 </div>

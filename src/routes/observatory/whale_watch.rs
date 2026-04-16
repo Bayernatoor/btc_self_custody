@@ -267,24 +267,24 @@ pub fn WhaleWatchPage() -> impl IntoView {
     let (info_open, set_info_open) = signal(false);
 
     view! {
-        <Title text="Whale Watch: Notable Bitcoin Transactions | WE HODL BTC"/>
-        <Meta name="description" content="Real-time and historical browser for notable Bitcoin transactions: whales, round-number transfers, large inscriptions, consolidations, fan-outs, fee outliers, and on-chain messages."/>
+        <Title text="The Lookout: Notable Bitcoin Transactions | WE HODL BTC"/>
+        <Meta name="description" content="The Lookout: real-time and historical browser for notable Bitcoin transactions. Spots whales, round-number transfers, large inscriptions, consolidations, fan-outs, fee outliers, and on-chain messages as they enter the mempool."/>
         <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/whale-watch"/>
 
         // SEO text (hidden, crawlable)
-        <p class="sr-only">"Track notable Bitcoin transactions in real-time. Whale Watch detects million-dollar transfers, round-number amounts, UTXO consolidations, exchange batch payouts, large Ordinals inscriptions, extreme fee rates, and readable OP_RETURN messages as they enter the mempool. Browse historical data with filters, leaderboards, and aggregated statistics."</p>
+        <p class="sr-only">"The Lookout tracks notable Bitcoin transactions in real-time. It detects million-dollar transfers, round-number amounts, UTXO consolidations, exchange batch payouts, large Ordinals inscriptions, extreme fee rates, and readable OP_RETURN messages as they enter the mempool. Browse historical data with filters, leaderboards, and aggregated statistics."</p>
 
         // Hero banner (matches other Observatory pages)
         <div class="relative rounded-2xl overflow-hidden mb-5">
             <img
                 src="/img/observatory_hero.png"
-                alt="Whale Watch"
+                alt="The Lookout"
                 class="w-full h-[100px] sm:h-[120px] lg:h-[140px] object-cover object-center"
             />
             <div class="absolute inset-0 bg-gradient-to-t from-[#123c64] via-[#123c64]/60 to-[#123c64]/30"></div>
             <div class="absolute inset-0 flex flex-col items-center justify-end pb-3 sm:pb-4">
-                <h1 class="text-lg sm:text-xl lg:text-2xl font-title text-white mb-0.5 drop-shadow-lg">"Whale Watch"</h1>
-                <p class="text-[11px] sm:text-xs text-white/50 max-w-lg mx-auto px-4 text-center drop-shadow">"Notable transactions detected in real-time from my Bitcoin node"</p>
+                <h1 class="text-lg sm:text-xl lg:text-2xl font-title text-white mb-0.5 drop-shadow-lg">"The Lookout"</h1>
+                <p class="text-[11px] sm:text-xs text-white/50 max-w-lg mx-auto px-4 text-center drop-shadow">"Notable transactions spotted in real-time from my Bitcoin node"</p>
             </div>
         </div>
 
@@ -302,7 +302,7 @@ pub fn WhaleWatchPage() -> impl IntoView {
                     </svg>
                 </button>
                 <a href="/observatory/heartbeat" class="text-xs text-white/30 hover:text-[#f7931a] transition-colors">
-                    "Live Heartbeat \u{2192}"
+                    "Live on the Heartbeat \u{2192}"
                 </a>
             </div>
             <div class="flex items-center gap-2 sm:ml-auto">
@@ -328,7 +328,7 @@ pub fn WhaleWatchPage() -> impl IntoView {
         // Info panel (toggleable)
         <Show when=move || info_open.get()>
             <div class="mb-5 p-3 sm:p-4 bg-white/[0.03] border border-white/5 rounded-xl text-xs sm:text-sm text-white/60 leading-relaxed space-y-2 opacity-0 animate-fadeinone">
-                <p>"Every transaction entering my node's mempool is analyzed in real-time for notable characteristics. Detected transactions are highlighted on the Block Heartbeat EKG and stored permanently for historical browsing."</p>
+                <p>"Every transaction entering my node's mempool is analyzed in real-time for notable characteristics. Spotted transactions are highlighted on the Heartbeat EKG and stored permanently for historical browsing from The Lookout."</p>
                 <p>
                     <span class="text-[#f7931a]/80 font-semibold">"Work in progress."</span>
                     " Detection rules are still being tuned. Some transactions may be misclassified, some notable patterns may be missed, and thresholds will shift as the feature evolves. Feedback welcome."

@@ -11,12 +11,21 @@ pub fn MethodologyPage() -> impl IntoView {
         <Meta name="description" content="Complete data methodology for WE HODL BTC observatory: block metrics, fee calculations, address type classification, mining pool identification, embedded protocol detection, price data sourcing, and daily aggregation."/>
         <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/learn/methodology"/>
 
-        <div class="max-w-4xl mx-auto space-y-8 pb-16">
-            // Header
-            <div class="text-center">
-                <h1 class="text-2xl sm:text-3xl font-title text-white mb-2">"Data Methodology"</h1>
-                <p class="text-sm text-white/50 max-w-2xl mx-auto">"How we source, compute, and classify every metric on the observatory. From raw RPC data to chart-ready aggregates."</p>
+        // Hero (matches other Observatory pages)
+        <div class="relative rounded-2xl overflow-hidden mb-5">
+            <img
+                src="/img/observatory_hero.png"
+                alt="Data Methodology"
+                class="w-full h-[100px] sm:h-[120px] lg:h-[140px] object-cover object-center"
+            />
+            <div class="absolute inset-0 bg-gradient-to-t from-[#123c64] via-[#123c64]/60 to-[#123c64]/30"></div>
+            <div class="absolute inset-0 flex flex-col items-center justify-end pb-3 sm:pb-4">
+                <h1 class="text-lg sm:text-xl lg:text-2xl font-title text-white mb-0.5 drop-shadow-lg">"Data Methodology"</h1>
+                <p class="text-[11px] sm:text-xs text-white/50 max-w-lg mx-auto px-4 text-center drop-shadow">"How we source, compute, and classify every metric on the observatory"</p>
             </div>
+        </div>
+
+        <div class="max-w-4xl mx-auto space-y-8 pb-16">
 
             // ── Taxonomy ─────────────────────────────────────────
             <Section title="Data Taxonomy">

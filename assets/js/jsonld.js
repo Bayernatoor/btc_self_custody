@@ -31,10 +31,11 @@
 {"@type":"ListItem","position":8,"name":"Learn","item":"https://www.wehodlbtc.com/observatory/learn"},
 {"@type":"ListItem","position":9,"name":"Protocol Guide","item":"https://www.wehodlbtc.com/observatory/learn/protocols"},
 {"@type":"ListItem","position":10,"name":"Data Methodology","item":"https://www.wehodlbtc.com/observatory/learn/methodology"},
-{"@type":"ListItem","position":11,"name":"Block Heartbeat","item":"https://www.wehodlbtc.com/observatory/heartbeat"},
-{"@type":"ListItem","position":12,"name":"Stats Summary","item":"https://www.wehodlbtc.com/observatory/stats"},
-{"@type":"ListItem","position":13,"name":"On This Day","item":"https://www.wehodlbtc.com/observatory/on-this-day"},
-{"@type":"ListItem","position":14,"name":"Hall of Fame","item":"https://www.wehodlbtc.com/observatory/hall-of-fame"}
+{"@type":"ListItem","position":11,"name":"Heartbeat","item":"https://www.wehodlbtc.com/observatory/heartbeat"},
+{"@type":"ListItem","position":12,"name":"The Logbook","item":"https://www.wehodlbtc.com/observatory/stats"},
+{"@type":"ListItem","position":13,"name":"Almanac","item":"https://www.wehodlbtc.com/observatory/on-this-day"},
+{"@type":"ListItem","position":14,"name":"The Archives","item":"https://www.wehodlbtc.com/observatory/hall-of-fame"},
+{"@type":"ListItem","position":15,"name":"The Lookout","item":"https://www.wehodlbtc.com/observatory/whale-watch"}
 ]},
 {"@type":"BreadcrumbList","itemListElement":[
 {"@type":"ListItem","position":1,"name":"Home","item":"https://www.wehodlbtc.com/"},
@@ -48,7 +49,7 @@
 {"@type":"ListItem","position":1,"name":"Home","item":"https://www.wehodlbtc.com/"},
 {"@type":"ListItem","position":2,"name":"About","item":"https://www.wehodlbtc.com/about"}
 ]},
-{"@type":"ItemList","name":"Bitcoin Hall of Fame","description":"A curated collection of Bitcoin's most remarkable blocks and transactions. Covers milestones (genesis block, halvings, price ATHs), on-chain records (largest block, highest fees), protocol moments (SegWit, Taproot, Ordinals activations), attacks and stress tests, and oddities.","url":"https://www.wehodlbtc.com/observatory/hall-of-fame","numberOfItems":57,"itemListElement":[
+{"@type":"ItemList","name":"The Bitcoin Archives","description":"A curated collection of Bitcoin's most remarkable blocks and transactions. Covers milestones (genesis block, halvings, price ATHs), on-chain records (largest block, highest fees), protocol moments (SegWit, Taproot, Ordinals activations), attacks and stress tests, and oddities.","url":"https://www.wehodlbtc.com/observatory/hall-of-fame","numberOfItems":57,"itemListElement":[
 {"@type":"ListItem","position":1,"name":"Genesis Block","url":"https://www.wehodlbtc.com/observatory/hall-of-fame#genesis-block"},
 {"@type":"ListItem","position":2,"name":"First Bitcoin Transaction","url":"https://www.wehodlbtc.com/observatory/hall-of-fame#first-transaction"},
 {"@type":"ListItem","position":3,"name":"Bitcoin Pizza Day","url":"https://www.wehodlbtc.com/observatory/hall-of-fame#pizza-day"},
