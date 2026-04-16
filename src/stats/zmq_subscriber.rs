@@ -358,68 +358,21 @@ async fn subscribe_tx_and_sequence(
             .map(|(p, _)| p.usd)
             .unwrap_or(0.0);
 
-        // Whale detection uses total output value. This means exchange self-sends
-        // (reshuffling between hot/cold wallets) will trigger as whales even though
-        // no value actually changed hands. Reliable change output detection requires
-        // input-side UTXO data which we don't have from raw tx parsing alone.
-        // TODO: improve with UTXO lookups or address clustering when available.
-        let whale = if price_usd > 0.0 {
-            let usd = parsed.value as f64 * price_usd / 100_000_000.0;
-            usd >= WHALE_THRESHOLD_USD
-        } else {
-            false
-        };
+        // Classify this tx using the shared detection function
+        let notable_type = classify_notable(&parsed, fee, fee_rate, price_usd);
 
-        // Notable tx detection
+        // Compute individual flags for SSE broadcast (frontend uses these)
+        let whale = notable_type == Some("whale");
         let fee_outlier = fee_rate >= FEE_RATE_OUTLIER_THRESHOLD
             || fee >= FEE_ABSOLUTE_OUTLIER_THRESHOLD;
         let consolidation = parsed.input_count >= CONSOLIDATION_INPUT_THRESHOLD
             && parsed.output_count <= 3;
         let fan_out = parsed.input_count <= 3
             && parsed.output_count >= FAN_OUT_OUTPUT_THRESHOLD;
-        // Large inscription: must have the Ordinals envelope marker in witness data
-        // AND witness exceeding threshold. This definitively detects inscriptions
-        // without false-positiving on consolidations with many standard signatures.
         let large_inscription = parsed.has_inscription
             && parsed.witness_bytes >= LARGE_INSCRIPTION_THRESHOLD;
-
-        // Round number detection: any output exactly matches a round BTC amount.
-        // Only flag if the tx is substantial (at least $100k) to avoid 1 BTC dust.
-        let round_number = {
-            let matches_round = ROUND_NUMBER_AMOUNTS.iter().any(|&amt| {
-                parsed.max_output_value >= amt.saturating_sub(ROUND_NUMBER_TOLERANCE)
-                    && parsed.max_output_value <= amt + ROUND_NUMBER_TOLERANCE
-            });
-            if matches_round && price_usd > 0.0 {
-                let max_usd = parsed.max_output_value as f64 * price_usd / 100_000_000.0;
-                max_usd >= ROUND_NUMBER_MIN_USD
-            } else {
-                false
-            }
-        };
-
+        let round_number = notable_type == Some("round_number");
         let op_return_msg = parsed.op_return_text.is_some();
-
-        // Determine notable type (priority order: structural > value > fee > data)
-        // Structural patterns (consolidation/fan_out) take priority over fee_outlier
-        // because they're more informative signals.
-        let notable_type = if whale {
-            Some("whale")
-        } else if round_number {
-            Some("round_number")
-        } else if large_inscription {
-            Some("large_inscription")
-        } else if consolidation {
-            Some("consolidation")
-        } else if fan_out {
-            Some("fan_out")
-        } else if fee_outlier {
-            Some("fee_outlier")
-        } else if op_return_msg {
-            Some("op_return_msg")
-        } else {
-            None
-        };
 
         if let Some(nt) = notable_type {
             tracing::info!(
@@ -750,6 +703,70 @@ async fn get_block_info(
 /// Ordinals inscription envelope marker: OP_FALSE(00) OP_IF(63) OP_PUSH3(03) "ord"(6f7264)
 const INSCRIPTION_ENVELOPE: &[u8] = &[0x00, 0x63, 0x03, 0x6f, 0x72, 0x64];
 
+/// Classify a parsed transaction as a notable type based on its properties.
+/// Returns None if the tx is not notable. Priority order determines which
+/// type wins when multiple conditions are met.
+fn classify_notable(parsed: &ParsedTx, fee: u64, fee_rate: f64, price_usd: f64) -> Option<&'static str> {
+    // Whale: total output value > $1M USD
+    let whale = if price_usd > 0.0 {
+        parsed.value as f64 * price_usd / 100_000_000.0 >= WHALE_THRESHOLD_USD
+    } else {
+        false
+    };
+
+    // Fee outlier: extreme fee rate or absolute fee
+    let fee_outlier = fee_rate >= FEE_RATE_OUTLIER_THRESHOLD
+        || fee >= FEE_ABSOLUTE_OUTLIER_THRESHOLD;
+
+    // Consolidation: many inputs, few outputs
+    let consolidation = parsed.input_count >= CONSOLIDATION_INPUT_THRESHOLD
+        && parsed.output_count <= 3;
+
+    // Fan-out: few inputs, many outputs
+    let fan_out = parsed.input_count <= 3
+        && parsed.output_count >= FAN_OUT_OUTPUT_THRESHOLD;
+
+    // Large inscription: Ordinals envelope marker + large witness
+    let large_inscription = parsed.has_inscription
+        && parsed.witness_bytes >= LARGE_INSCRIPTION_THRESHOLD;
+
+    // Round number: exact BTC amount in an output, must be substantial
+    let round_number = if price_usd > 0.0 {
+        let matches_round = ROUND_NUMBER_AMOUNTS.iter().any(|&amt| {
+            parsed.max_output_value >= amt.saturating_sub(ROUND_NUMBER_TOLERANCE)
+                && parsed.max_output_value <= amt + ROUND_NUMBER_TOLERANCE
+        });
+        if matches_round {
+            parsed.max_output_value as f64 * price_usd / 100_000_000.0 >= ROUND_NUMBER_MIN_USD
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+
+    let op_return_msg = parsed.op_return_text.is_some();
+
+    // Priority order: value > structural > fee > data
+    if whale {
+        Some("whale")
+    } else if round_number {
+        Some("round_number")
+    } else if large_inscription {
+        Some("large_inscription")
+    } else if consolidation {
+        Some("consolidation")
+    } else if fan_out {
+        Some("fan_out")
+    } else if fee_outlier {
+        Some("fee_outlier")
+    } else if op_return_msg {
+        Some("op_return_msg")
+    } else {
+        None
+    }
+}
+
 /// Minimal parsed info from a raw Bitcoin transaction.
 struct ParsedTx {
     txid: String,
@@ -1041,6 +1058,541 @@ mod tests {
             .step_by(2)
             .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap())
             .collect()
+    }
+
+    // === Detection classification tests ===
+    //
+    // Each test validates classify_notable() against synthetic ParsedTx data
+    // matching real-world transaction patterns.
+
+    /// Helper: build a ParsedTx with sensible defaults. Override specific fields.
+    fn make_tx() -> ParsedTx {
+        ParsedTx {
+            txid: "aaaa".to_string(),
+            value: 50_000,          // 0.0005 BTC
+            input_count: 1,
+            output_count: 2,
+            witness_bytes: 200,
+            has_inscription: false,
+            max_output_value: 40_000,
+            non_change_value: 10_000,
+            op_return_text: None,
+        }
+    }
+
+    const TEST_PRICE: f64 = 100_000.0; // $100k/BTC for easy math
+
+    // --- 1. WHALE ---
+
+    #[test]
+    fn test_whale_above_threshold() {
+        // 15 BTC total output at $100k = $1.5M > $1M threshold
+        let tx = ParsedTx { value: 15_0000_0000, max_output_value: 15_0000_0000, ..make_tx() };
+        assert_eq!(classify_notable(&tx, 1000, 5.0, TEST_PRICE), Some("whale"));
+    }
+
+    #[test]
+    fn test_whale_below_threshold() {
+        // 5 BTC total output at $100k = $500k < $1M threshold
+        let tx = ParsedTx { value: 5_0000_0000, max_output_value: 5_0000_0000, ..make_tx() };
+        assert_eq!(classify_notable(&tx, 1000, 5.0, TEST_PRICE), None);
+    }
+
+    #[test]
+    fn test_whale_exactly_at_threshold() {
+        // 10 BTC at $100k = exactly $1M
+        let tx = ParsedTx { value: 10_0000_0000, max_output_value: 10_0000_0000, ..make_tx() };
+        assert_eq!(classify_notable(&tx, 1000, 5.0, TEST_PRICE), Some("whale"));
+    }
+
+    #[test]
+    fn test_whale_no_price_available() {
+        // Price = 0 means we can't detect whales
+        let tx = ParsedTx { value: 100_0000_0000, max_output_value: 100_0000_0000, ..make_tx() };
+        assert_eq!(classify_notable(&tx, 1000, 5.0, 0.0), None);
+    }
+
+    #[test]
+    fn test_whale_takes_priority_over_consolidation() {
+        // 50 inputs, 1 output, 20 BTC = whale AND consolidation. Whale wins.
+        let tx = ParsedTx {
+            value: 20_0000_0000, max_output_value: 20_0000_0000,
+            input_count: 100, output_count: 1,
+            ..make_tx()
+        };
+        assert_eq!(classify_notable(&tx, 5000, 3.0, TEST_PRICE), Some("whale"));
+    }
+
+    // --- 2. ROUND NUMBER ---
+
+    #[test]
+    fn test_round_number_exact_1_btc() {
+        // Exactly 1 BTC output at $100k = $100k, meets min threshold
+        // Total value stays below $1M so whale doesn't trigger
+        let tx = ParsedTx {
+            value: 1_5000_0000, // 1.5 BTC total (1 + 0.5 change)
+            max_output_value: 1_0000_0000, // 1 BTC output
+            ..make_tx()
+        };
+        assert_eq!(classify_notable(&tx, 1000, 5.0, TEST_PRICE), Some("round_number"));
+    }
+
+    #[test]
+    fn test_round_number_10_btc() {
+        // 10 BTC output. Total = 10 BTC at $100k = $1M which triggers whale.
+        // So at this price, round_number 10 BTC is always also a whale.
+        // Test with lower price: 10 BTC at $50k = $500k total, round = $500k > $100k min.
+        let tx = ParsedTx {
+            value: 10_5000_0000, // 10.5 BTC total
+            max_output_value: 10_0000_0000, // 10 BTC round output
+            ..make_tx()
+        };
+        // At $50k: total = $525k (not whale), max output = $500k (> $100k min)
+        assert_eq!(classify_notable(&tx, 1000, 5.0, 50_000.0), Some("round_number"));
+    }
+
+    #[test]
+    fn test_round_number_with_tolerance() {
+        // 0.999999 BTC (just 100 sats off 1 BTC, within 100,000 sat tolerance)
+        // At $100k: 0.999999 BTC = $99,999.90 which is just under $100k min.
+        // Need to use a slightly higher price so it clears the USD threshold.
+        let tx = ParsedTx {
+            value: 1_5000_0000,
+            max_output_value: 99_999_900, // 0.999999 BTC
+            ..make_tx()
+        };
+        // At $101k the max output = $100,999.90 > $100k min
+        assert_eq!(classify_notable(&tx, 1000, 5.0, 101_000.0), Some("round_number"));
+    }
+
+    #[test]
+    fn test_round_number_outside_tolerance() {
+        // 0.99 BTC (0.01 BTC off, well outside 0.001 BTC tolerance)
+        let tx = ParsedTx {
+            value: 1_5000_0000,
+            max_output_value: 9900_0000, // 0.99 BTC = outside tolerance
+            ..make_tx()
+        };
+        assert_eq!(classify_notable(&tx, 1000, 5.0, TEST_PRICE), None);
+    }
+
+    #[test]
+    fn test_round_number_1_btc_at_low_price() {
+        // 1 BTC at $50k = $50k < $100k min -> not flagged
+        let tx = ParsedTx {
+            value: 1_5000_0000,
+            max_output_value: 1_0000_0000,
+            ..make_tx()
+        };
+        assert_eq!(classify_notable(&tx, 500, 5.0, 50_000.0), None);
+    }
+
+    #[test]
+    fn test_round_number_whale_takes_priority() {
+        // 100 BTC round output + total > $1M = whale takes priority
+        let tx = ParsedTx {
+            value: 105_0000_0000, // 105 BTC total
+            max_output_value: 100_0000_0000, // 100 BTC round
+            ..make_tx()
+        };
+        assert_eq!(classify_notable(&tx, 1000, 5.0, TEST_PRICE), Some("whale"));
+    }
+
+    // --- 3. LARGE INSCRIPTION ---
+
+    #[test]
+    fn test_inscription_with_envelope_and_large_witness() {
+        let tx = ParsedTx {
+            witness_bytes: 200_000, // 200KB
+            has_inscription: true,
+            ..make_tx()
+        };
+        assert_eq!(classify_notable(&tx, 500, 2.0, TEST_PRICE), Some("large_inscription"));
+    }
+
+    #[test]
+    fn test_inscription_small_witness_ignored() {
+        // Has envelope but witness is only 50KB (below 100KB threshold)
+        let tx = ParsedTx {
+            witness_bytes: 50_000,
+            has_inscription: true,
+            ..make_tx()
+        };
+        assert_eq!(classify_notable(&tx, 500, 2.0, TEST_PRICE), None);
+    }
+
+    #[test]
+    fn test_large_witness_without_envelope_not_inscription() {
+        // 200KB witness but NO inscription envelope = not an inscription
+        // (this is the consolidation-with-many-sigs case)
+        let tx = ParsedTx {
+            witness_bytes: 200_000,
+            has_inscription: false,
+            input_count: 500, output_count: 1, // looks like consolidation
+            ..make_tx()
+        };
+        assert_eq!(classify_notable(&tx, 500, 2.0, TEST_PRICE), Some("consolidation"));
+    }
+
+    // --- 4. CONSOLIDATION ---
+
+    #[test]
+    fn test_consolidation_classic() {
+        // 100 inputs -> 1 output
+        let tx = ParsedTx {
+            input_count: 100, output_count: 1,
+            ..make_tx()
+        };
+        assert_eq!(classify_notable(&tx, 2000, 2.0, TEST_PRICE), Some("consolidation"));
+    }
+
+    #[test]
+    fn test_consolidation_with_change() {
+        // 50 inputs -> 2 outputs (1 destination + 1 change)
+        let tx = ParsedTx {
+            input_count: 50, output_count: 2,
+            ..make_tx()
+        };
+        assert_eq!(classify_notable(&tx, 2000, 2.0, TEST_PRICE), Some("consolidation"));
+    }
+
+    #[test]
+    fn test_consolidation_at_threshold() {
+        // Exactly 50 inputs -> 3 outputs (boundary)
+        let tx = ParsedTx {
+            input_count: 50, output_count: 3,
+            ..make_tx()
+        };
+        assert_eq!(classify_notable(&tx, 1000, 2.0, TEST_PRICE), Some("consolidation"));
+    }
+
+    #[test]
+    fn test_consolidation_below_threshold() {
+        // 49 inputs = not enough
+        let tx = ParsedTx {
+            input_count: 49, output_count: 1,
+            ..make_tx()
+        };
+        assert_eq!(classify_notable(&tx, 1000, 2.0, TEST_PRICE), None);
+    }
+
+    #[test]
+    fn test_consolidation_too_many_outputs() {
+        // 100 inputs -> 4 outputs = not consolidation (might be batched spend)
+        let tx = ParsedTx {
+            input_count: 100, output_count: 4,
+            ..make_tx()
+        };
+        assert_eq!(classify_notable(&tx, 1000, 2.0, TEST_PRICE), None);
+    }
+
+    #[test]
+    fn test_consolidation_with_high_fee_keeps_consolidation_type() {
+        // 200 inputs, 1 output, high fee rate. Should be consolidation, not fee_outlier.
+        let tx = ParsedTx {
+            input_count: 200, output_count: 1,
+            ..make_tx()
+        };
+        // fee_rate 3000 > 2000 threshold, but consolidation has higher priority
+        assert_eq!(classify_notable(&tx, 50_000_000, 3000.0, TEST_PRICE), Some("consolidation"));
+    }
+
+    // --- 5. FAN-OUT ---
+
+    #[test]
+    fn test_fan_out_classic() {
+        // 1 input -> 200 outputs (exchange batch payout)
+        let tx = ParsedTx {
+            input_count: 1, output_count: 200,
+            ..make_tx()
+        };
+        assert_eq!(classify_notable(&tx, 5000, 5.0, TEST_PRICE), Some("fan_out"));
+    }
+
+    #[test]
+    fn test_fan_out_at_threshold() {
+        // 2 inputs -> 100 outputs (boundary)
+        let tx = ParsedTx {
+            input_count: 2, output_count: 100,
+            ..make_tx()
+        };
+        assert_eq!(classify_notable(&tx, 5000, 5.0, TEST_PRICE), Some("fan_out"));
+    }
+
+    #[test]
+    fn test_fan_out_below_threshold() {
+        // 2 inputs -> 99 outputs
+        let tx = ParsedTx {
+            input_count: 2, output_count: 99,
+            ..make_tx()
+        };
+        assert_eq!(classify_notable(&tx, 5000, 5.0, TEST_PRICE), None);
+    }
+
+    #[test]
+    fn test_fan_out_too_many_inputs() {
+        // 4 inputs -> 200 outputs: not fan_out (>3 inputs)
+        let tx = ParsedTx {
+            input_count: 4, output_count: 200,
+            ..make_tx()
+        };
+        assert_eq!(classify_notable(&tx, 5000, 5.0, TEST_PRICE), None);
+    }
+
+    #[test]
+    fn test_fan_out_not_consolidation() {
+        // 50 inputs -> 200 outputs: neither (too many inputs for fan_out, too many outputs for consolidation)
+        let tx = ParsedTx {
+            input_count: 50, output_count: 200,
+            ..make_tx()
+        };
+        assert_eq!(classify_notable(&tx, 5000, 5.0, TEST_PRICE), None);
+    }
+
+    // --- 6. FEE OUTLIER ---
+
+    #[test]
+    fn test_fee_outlier_high_rate() {
+        let tx = make_tx();
+        // 2500 sat/vB > 2000 threshold
+        assert_eq!(classify_notable(&tx, 500_000, 2500.0, TEST_PRICE), Some("fee_outlier"));
+    }
+
+    #[test]
+    fn test_fee_outlier_high_absolute() {
+        let tx = make_tx();
+        // 0.15 BTC fee = 15_000_000 sats > 10_000_000 threshold
+        assert_eq!(classify_notable(&tx, 15_000_000, 100.0, TEST_PRICE), Some("fee_outlier"));
+    }
+
+    #[test]
+    fn test_fee_outlier_below_both_thresholds() {
+        let tx = make_tx();
+        // 1999 sat/vB and 0.09 BTC = below both
+        assert_eq!(classify_notable(&tx, 9_000_000, 1999.0, TEST_PRICE), None);
+    }
+
+    #[test]
+    fn test_fee_outlier_at_rate_boundary() {
+        let tx = make_tx();
+        // Exactly 2000 sat/vB = triggers (>=)
+        assert_eq!(classify_notable(&tx, 400_000, 2000.0, TEST_PRICE), Some("fee_outlier"));
+    }
+
+    #[test]
+    fn test_fee_outlier_consolidation_takes_priority() {
+        // Big consolidation with high fee rate. Consolidation wins.
+        let tx = ParsedTx {
+            input_count: 100, output_count: 1,
+            ..make_tx()
+        };
+        assert_eq!(classify_notable(&tx, 30_000_000, 3000.0, TEST_PRICE), Some("consolidation"));
+    }
+
+    // --- 7. OP_RETURN MESSAGE ---
+
+    #[test]
+    fn test_op_return_msg_detected() {
+        let tx = ParsedTx {
+            op_return_text: Some("Hello from the Bitcoin blockchain!".to_string()),
+            ..make_tx()
+        };
+        assert_eq!(classify_notable(&tx, 500, 5.0, TEST_PRICE), Some("op_return_msg"));
+    }
+
+    #[test]
+    fn test_op_return_no_text() {
+        let tx = make_tx(); // op_return_text is None
+        assert_eq!(classify_notable(&tx, 500, 5.0, TEST_PRICE), None);
+    }
+
+    #[test]
+    fn test_op_return_lowest_priority() {
+        // Has OP_RETURN text AND is a fee outlier. Fee outlier wins.
+        let tx = ParsedTx {
+            op_return_text: Some("Some message".to_string()),
+            ..make_tx()
+        };
+        assert_eq!(classify_notable(&tx, 15_000_000, 3000.0, TEST_PRICE), Some("fee_outlier"));
+    }
+
+    // --- PRIORITY ORDER / EDGE CASES ---
+
+    #[test]
+    fn test_whale_consolidation_round_all_at_once() {
+        // 100 BTC round amount, 500 inputs, 1 output = whale + consolidation + round
+        // Whale should win (highest priority)
+        let tx = ParsedTx {
+            value: 100_0000_0000,
+            max_output_value: 100_0000_0000,
+            input_count: 500, output_count: 1,
+            ..make_tx()
+        };
+        assert_eq!(classify_notable(&tx, 5000, 2.0, TEST_PRICE), Some("whale"));
+    }
+
+    #[test]
+    fn test_inscription_takes_priority_over_consolidation() {
+        // This was the bug: a 5-input tx with inscription + big witness.
+        // Should be inscription, not anything else.
+        let tx = ParsedTx {
+            input_count: 2, output_count: 1,
+            witness_bytes: 500_000,
+            has_inscription: true,
+            ..make_tx()
+        };
+        assert_eq!(classify_notable(&tx, 1000, 5.0, TEST_PRICE), Some("large_inscription"));
+    }
+
+    #[test]
+    fn test_normal_tx_not_notable() {
+        // Completely ordinary tx
+        let tx = ParsedTx {
+            value: 100_000, // 0.001 BTC
+            input_count: 2, output_count: 2,
+            witness_bytes: 200,
+            has_inscription: false,
+            max_output_value: 90_000,
+            non_change_value: 10_000,
+            op_return_text: None,
+            ..make_tx()
+        };
+        assert_eq!(classify_notable(&tx, 500, 5.0, TEST_PRICE), None);
+    }
+
+    // --- INSCRIPTION ENVELOPE DETECTION IN PARSER ---
+
+    #[test]
+    fn test_inscription_envelope_in_witness() {
+        // Build a minimal segwit tx with inscription envelope in witness
+        let mut tx = Vec::new();
+        tx.extend_from_slice(&1u32.to_le_bytes()); // version
+        tx.push(0x00); tx.push(0x01); // segwit marker
+        tx.push(0x01); // 1 input
+        tx.extend_from_slice(&[0u8; 32]); // prev txid
+        tx.extend_from_slice(&0u32.to_le_bytes()); // prev vout
+        tx.push(0x00); // scriptSig length = 0
+        tx.extend_from_slice(&0xFFFFFFFFu32.to_le_bytes()); // sequence
+        tx.push(0x01); // 1 output
+        tx.extend_from_slice(&50000u64.to_le_bytes()); // value
+        tx.push(0x01); tx.push(0x51); // scriptPubKey: OP_TRUE
+        // Witness: 1 item containing inscription envelope
+        tx.push(0x01); // 1 witness item
+        // Build a witness item with the envelope marker
+        let mut witness_item = vec![0x00, 0x63, 0x03, 0x6f, 0x72, 0x64]; // OP_FALSE OP_IF OP_PUSH3 "ord"
+        witness_item.extend_from_slice(&[0xAA; 200]); // fake inscription payload
+        tx.push(witness_item.len() as u8); // item length
+        tx.extend_from_slice(&witness_item);
+        tx.extend_from_slice(&0u32.to_le_bytes()); // locktime
+
+        let parsed = parse_raw_tx(&tx).expect("should parse");
+        assert!(parsed.has_inscription);
+        assert!(parsed.witness_bytes >= 200);
+    }
+
+    #[test]
+    fn test_no_inscription_envelope_in_normal_witness() {
+        // Normal segwit tx without inscription
+        let mut tx = Vec::new();
+        tx.extend_from_slice(&1u32.to_le_bytes());
+        tx.push(0x00); tx.push(0x01);
+        tx.push(0x01);
+        tx.extend_from_slice(&[0u8; 32]);
+        tx.extend_from_slice(&0u32.to_le_bytes());
+        tx.push(0x00);
+        tx.extend_from_slice(&0xFFFFFFFFu32.to_le_bytes());
+        tx.push(0x01);
+        tx.extend_from_slice(&50000u64.to_le_bytes());
+        tx.push(0x01); tx.push(0x51);
+        // Normal P2WPKH witness: 2 items (sig + pubkey)
+        tx.push(0x02); // 2 witness items
+        tx.push(0x48); // 72 byte signature
+        tx.extend_from_slice(&[0xAA; 72]);
+        tx.push(0x21); // 33 byte pubkey
+        tx.extend_from_slice(&[0xBB; 33]);
+        tx.extend_from_slice(&0u32.to_le_bytes());
+
+        let parsed = parse_raw_tx(&tx).expect("should parse");
+        assert!(!parsed.has_inscription);
+    }
+
+    // --- OP_RETURN DETECTION IN PARSER ---
+
+    #[test]
+    fn test_op_return_detected_in_output() {
+        // Build a legacy tx with an OP_RETURN output containing readable text
+        let mut tx = Vec::new();
+        tx.extend_from_slice(&1u32.to_le_bytes()); // version
+        tx.push(0x01); // 1 input
+        tx.extend_from_slice(&[0u8; 32]); // prev txid
+        tx.extend_from_slice(&0u32.to_le_bytes()); // prev vout
+        tx.push(0x00); // scriptSig length = 0
+        tx.extend_from_slice(&0xFFFFFFFFu32.to_le_bytes()); // sequence
+        tx.push(0x02); // 2 outputs
+        // Output 0: normal
+        tx.extend_from_slice(&50000u64.to_le_bytes());
+        tx.push(0x01); tx.push(0x51); // OP_TRUE
+        // Output 1: OP_RETURN with text
+        tx.extend_from_slice(&0u64.to_le_bytes()); // 0 value
+        let msg = b"Hello from Bitcoin blockchain test!";
+        let script_len = 1 + 1 + msg.len(); // OP_RETURN + push + data
+        tx.push(script_len as u8);
+        tx.push(0x6a); // OP_RETURN
+        tx.push(msg.len() as u8); // push N bytes
+        tx.extend_from_slice(msg);
+        tx.extend_from_slice(&0u32.to_le_bytes()); // locktime
+
+        let parsed = parse_raw_tx(&tx).expect("should parse");
+        assert!(parsed.op_return_text.is_some());
+        assert!(parsed.op_return_text.unwrap().contains("Hello from Bitcoin"));
+    }
+
+    #[test]
+    fn test_op_return_binary_not_detected() {
+        // OP_RETURN with binary data (Runes etc) should NOT be detected as text
+        let mut tx = Vec::new();
+        tx.extend_from_slice(&1u32.to_le_bytes());
+        tx.push(0x01);
+        tx.extend_from_slice(&[0u8; 32]);
+        tx.extend_from_slice(&0u32.to_le_bytes());
+        tx.push(0x00);
+        tx.extend_from_slice(&0xFFFFFFFFu32.to_le_bytes());
+        tx.push(0x01);
+        tx.extend_from_slice(&0u64.to_le_bytes());
+        // OP_RETURN with binary data
+        let binary_data = [0x6a, 0x5d, 0x14, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a];
+        tx.push(binary_data.len() as u8);
+        tx.extend_from_slice(&binary_data);
+        tx.extend_from_slice(&0u32.to_le_bytes());
+
+        let parsed = parse_raw_tx(&tx).expect("should parse");
+        assert!(parsed.op_return_text.is_none());
+    }
+
+    // --- ROUND NUMBER EDGE: max_output_value vs total ---
+
+    #[test]
+    fn test_round_number_checks_max_output_not_total() {
+        // Total = 3.5 BTC but max single output = 1 BTC (round)
+        // At $100k: total = $350k (not whale), max = $100k (meets round min)
+        let tx = ParsedTx {
+            value: 3_5000_0000, // 3.5 BTC total
+            max_output_value: 1_0000_0000, // 1 BTC round output
+            output_count: 3,
+            ..make_tx()
+        };
+        assert_eq!(classify_notable(&tx, 1000, 5.0, TEST_PRICE), Some("round_number"));
+    }
+
+    #[test]
+    fn test_round_number_7_btc_not_round() {
+        // 7 BTC is not in the round list
+        let tx = ParsedTx {
+            value: 7_0000_0000,
+            max_output_value: 7_0000_0000,
+            ..make_tx()
+        };
+        assert_eq!(classify_notable(&tx, 1000, 5.0, TEST_PRICE), None);
     }
 
     // --- extract_readable_text tests ---
