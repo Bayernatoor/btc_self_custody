@@ -759,7 +759,8 @@ struct ParsedTx {
     witness_bytes: u64,           // total witness data size in bytes
     has_inscription: bool,        // true if witness contains Ordinals envelope marker
     max_output_value: u64,        // largest single output (for round number detection)
-    non_change_value: u64,        // total value minus largest output (rough "transfer" estimate)
+    #[allow(dead_code)]
+    non_change_value: u64,        // reserved for future improved whale detection
     op_return_text: Option<String>, // first OP_RETURN output with readable ASCII
 }
 

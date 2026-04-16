@@ -15,16 +15,17 @@ use wasm_bindgen::prelude::*;
 use crate::stats::server_fns::{fetch_notable_stats, fetch_notable_top, fetch_notable_txs};
 use crate::stats::types::{NotableTxFilter, NotableTxInfo};
 
-// JS interop: call window.showTxDetail defined in stats.js
+// JS interop: call window.showTxDetail defined in stats.js.
+// Second arg is a JSON string of local data (fee, vsize, value, feeRate).
 #[cfg(feature = "hydrate")]
 #[wasm_bindgen]
 extern "C" {
     #[wasm_bindgen(js_name = showTxDetail, catch)]
-    fn js_show_tx_detail(txid: &str) -> Result<(), JsValue>;
+    fn js_show_tx_detail(txid: &str, local_data: JsValue) -> Result<(), JsValue>;
 }
 
 #[cfg(not(feature = "hydrate"))]
-fn js_show_tx_detail(_txid: &str) -> Result<(), ()> {
+fn js_show_tx_detail(_txid: &str, _local_data: ()) -> Result<(), ()> {
     Ok(())
 }
 
@@ -512,6 +513,7 @@ fn TopLeaderboard(
 
 #[component]
 fn LeaderRow(rank: usize, tx: NotableTxInfo) -> impl IntoView {
+    let tx_for_click = tx.clone();
     let txid_for_click = tx.txid.clone();
     let txid_short = shorten_txid(&tx.txid);
     let type_color = notable_color(&tx.notable_type);
@@ -523,7 +525,7 @@ fn LeaderRow(rank: usize, tx: NotableTxInfo) -> impl IntoView {
     view! {
         <div
             class="flex items-baseline gap-3 px-4 py-2 border-b border-white/5 text-xs font-mono cursor-pointer hover:bg-white/5 transition-colors"
-            on:click=move |_| show_tx_detail(&txid_for_click)
+            on:click=move |_| show_tx_detail_with_data(&txid_for_click, &tx_for_click)
         >
             <span class="text-white/30 w-6 shrink-0">{format!("#{}", rank)}</span>
             <span class="font-bold shrink-0" style=format!("color: {}", type_color)>
@@ -541,6 +543,7 @@ fn LeaderRow(rank: usize, tx: NotableTxInfo) -> impl IntoView {
 
 #[component]
 fn TxRow(tx: NotableTxInfo) -> impl IntoView {
+    let tx_for_click = tx.clone();
     let txid_for_click = tx.txid.clone();
     let txid_short = shorten_txid(&tx.txid);
     let type_color = notable_color(&tx.notable_type);
@@ -565,7 +568,7 @@ fn TxRow(tx: NotableTxInfo) -> impl IntoView {
     view! {
         <div
             class="px-4 py-3 border-b border-white/5 text-xs font-mono cursor-pointer hover:bg-white/5 transition-colors"
-            on:click=move |_| show_tx_detail(&txid_for_click)
+            on:click=move |_| show_tx_detail_with_data(&txid_for_click, &tx_for_click)
         >
             <div class="flex items-baseline gap-3 flex-wrap">
                 <span class="font-bold shrink-0" style=format!("color: {}", type_color)>
@@ -662,7 +665,24 @@ fn fmt_time_ago(ts: u64) -> String {
     }
 }
 
-/// Open the tx detail modal (defined in stats.js as window.showTxDetail).
+/// Open the tx detail modal with local data pre-populated.
+#[cfg(feature = "hydrate")]
+fn show_tx_detail_with_data(txid: &str, tx: &NotableTxInfo) {
+    let fee_rate = if tx.vsize > 0 { tx.fee as f64 / tx.vsize as f64 } else { 0.0 };
+    let json = format!(
+        r#"{{"fee":{},"vsize":{},"feeRate":{:.1},"value":{}}}"#,
+        tx.fee, tx.vsize, fee_rate, tx.value,
+    );
+    let local_data = web_sys::js_sys::JSON::parse(&json).unwrap_or(JsValue::NULL);
+    let _ = js_show_tx_detail(txid, local_data);
+}
+
+#[cfg(not(feature = "hydrate"))]
+fn show_tx_detail_with_data(_txid: &str, _tx: &NotableTxInfo) {}
+
+/// Open the tx detail modal with just a txid (no local data).
+#[allow(dead_code)]
 fn show_tx_detail(txid: &str) {
-    let _ = js_show_tx_detail(txid);
+    #[cfg(feature = "hydrate")]
+    { let _ = js_show_tx_detail(txid, JsValue::NULL); }
 }
