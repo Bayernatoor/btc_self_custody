@@ -377,11 +377,11 @@ async fn subscribe_tx_and_sequence(
             && parsed.output_count <= 3;
         let fan_out = parsed.input_count <= 3
             && parsed.output_count >= FAN_OUT_OUTPUT_THRESHOLD;
-        // Large inscription: big witness data BUT not from many standard signatures.
-        // A 1000-input consolidation has ~107KB of witness (107 bytes/sig * 1000)
-        // which would false-positive. Real inscriptions have few inputs (usually 1).
-        let large_inscription = parsed.witness_bytes >= LARGE_INSCRIPTION_THRESHOLD
-            && parsed.input_count <= 5;
+        // Large inscription: must have the Ordinals envelope marker in witness data
+        // AND witness exceeding threshold. This definitively detects inscriptions
+        // without false-positiving on consolidations with many standard signatures.
+        let large_inscription = parsed.has_inscription
+            && parsed.witness_bytes >= LARGE_INSCRIPTION_THRESHOLD;
 
         // Round number detection: any output exactly matches a round BTC amount.
         // Only flag if the tx is substantial (at least $100k) to avoid 1 BTC dust.
@@ -747,6 +747,9 @@ async fn get_block_info(
 
 // === Raw transaction parsing ===
 
+/// Ordinals inscription envelope marker: OP_FALSE(00) OP_IF(63) OP_PUSH3(03) "ord"(6f7264)
+const INSCRIPTION_ENVELOPE: &[u8] = &[0x00, 0x63, 0x03, 0x6f, 0x72, 0x64];
+
 /// Minimal parsed info from a raw Bitcoin transaction.
 struct ParsedTx {
     txid: String,
@@ -754,6 +757,7 @@ struct ParsedTx {
     input_count: u64,             // number of inputs
     output_count: u64,            // number of outputs
     witness_bytes: u64,           // total witness data size in bytes
+    has_inscription: bool,        // true if witness contains Ordinals envelope marker
     max_output_value: u64,        // largest single output (for round number detection)
     non_change_value: u64,        // total value minus largest output (rough "transfer" estimate)
     op_return_text: Option<String>, // first OP_RETURN output with readable ASCII
@@ -835,6 +839,7 @@ fn parse_raw_tx(data: &[u8]) -> Option<ParsedTx> {
     // For txid: we need the non-witness serialization (version + inputs + outputs + locktime)
     // Build it by stripping segwit marker/flag and witness data
     let mut total_witness_bytes = 0u64;
+    let mut has_inscription = false;
     let txid = if is_segwit {
         // Non-witness serialization: version(4) + vin + vout + locktime(4)
         // We need to reconstruct this from the original data
@@ -846,6 +851,7 @@ fn parse_raw_tx(data: &[u8]) -> Option<ParsedTx> {
         stripped.extend_from_slice(&data[6..cursor]); // skip 4 (version) + 2 (marker+flag)
 
         // Skip witness data to find locktime, tracking total witness bytes
+        // and scanning for the Ordinals inscription envelope marker.
         let mut wit_cursor = cursor;
         for _ in 0..input_count {
             let wit_count = read_varint(data, &mut wit_cursor)?;
@@ -855,6 +861,15 @@ fn parse_raw_tx(data: &[u8]) -> Option<ParsedTx> {
                     return None;
                 }
                 total_witness_bytes += item_len as u64;
+                // Scan this witness item for the Ordinals envelope
+                if !has_inscription && item_len >= INSCRIPTION_ENVELOPE.len() {
+                    let item_data = &data[wit_cursor..wit_cursor + item_len];
+                    if item_data.windows(INSCRIPTION_ENVELOPE.len())
+                        .any(|w| w == INSCRIPTION_ENVELOPE)
+                    {
+                        has_inscription = true;
+                    }
+                }
                 wit_cursor += item_len;
             }
         }
@@ -877,6 +892,7 @@ fn parse_raw_tx(data: &[u8]) -> Option<ParsedTx> {
         input_count,
         output_count,
         witness_bytes: total_witness_bytes,
+        has_inscription,
         max_output_value,
         non_change_value,
         op_return_text,
