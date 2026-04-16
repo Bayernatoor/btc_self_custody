@@ -329,6 +329,14 @@ pub fn WhaleWatchPage() -> impl IntoView {
         <Show when=move || info_open.get()>
             <div class="mb-5 p-3 sm:p-4 bg-white/[0.03] border border-white/5 rounded-xl text-xs sm:text-sm text-white/60 leading-relaxed space-y-2 opacity-0 animate-fadeinone">
                 <p>"Every transaction entering my node's mempool is analyzed in real-time for notable characteristics. Detected transactions are highlighted on the Block Heartbeat EKG and stored permanently for historical browsing."</p>
+                <p>
+                    <span class="text-[#f7931a]/80 font-semibold">"Work in progress."</span>
+                    " Detection rules are still being tuned. Some transactions may be misclassified, some notable patterns may be missed, and thresholds will shift as the feature evolves. Feedback welcome."
+                </p>
+                <p>
+                    <span class="text-white/70 font-semibold">"Historical data is limited to what has been detected since the feature launched."</span>
+                    " Older notable transactions are not yet surfaced here. A full backfill from the genesis block is on the roadmap but requires stable detection logic first (no point reprocessing a billion transactions while thresholds are still changing) and historical daily price data for accurate whale classification across Bitcoin's full history."
+                </p>
                 <p class="text-white/40 text-[11px] sm:text-xs">"Detection uses total output value for whale classification. Exchange self-sends (hot/cold wallet reshuffles) may appear as whales since change output detection requires UTXO data not available from raw transaction parsing."</p>
             </div>
         </Show>
