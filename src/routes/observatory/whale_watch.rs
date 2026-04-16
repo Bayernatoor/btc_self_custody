@@ -283,7 +283,7 @@ pub fn WhaleWatchPage() -> impl IntoView {
             <div class="absolute inset-0 bg-gradient-to-t from-[#123c64] via-[#123c64]/60 to-[#123c64]/30"></div>
             <div class="absolute inset-0 flex flex-col items-center justify-end pb-3 sm:pb-4">
                 <h1 class="text-lg sm:text-xl lg:text-2xl font-title text-white mb-0.5 drop-shadow-lg">"Whale Watch"</h1>
-                <p class="text-[11px] sm:text-xs text-white/50 max-w-lg mx-auto px-4 text-center drop-shadow">"Notable transactions detected in real-time from my Bitcoin node"</p>
+                <p class="text-[11px] sm:text-xs text-white/50 max-w-lg mx-auto px-4 text-center drop-shadow">"Notable transactions detected in real-time from our Bitcoin node"</p>
             </div>
         </div>
 
@@ -311,9 +311,9 @@ pub fn WhaleWatchPage() -> impl IntoView {
                             on:click=move |_| set_window.set(w)
                             class=move || {
                                 if window.get() == w {
-                                    "px-3 py-1.5 rounded-full text-xs font-semibold bg-[#f7931a] text-black whitespace-nowrap transition-all"
+                                    "px-3 py-1.5 rounded-full text-xs font-semibold bg-[#f7931a] text-black whitespace-nowrap transition-all active:scale-95 active:opacity-70"
                                 } else {
-                                    "px-3 py-1.5 rounded-full text-xs font-medium bg-white/5 text-white/50 hover:bg-white/10 hover:text-white/70 whitespace-nowrap transition-all"
+                                    "px-3 py-1.5 rounded-full text-xs font-medium bg-white/5 text-white/50 hover:bg-white/10 hover:text-white/70 whitespace-nowrap transition-all active:scale-95 active:opacity-70"
                                 }
                             }
                         >
@@ -326,9 +326,9 @@ pub fn WhaleWatchPage() -> impl IntoView {
 
         // Info panel (toggleable)
         <Show when=move || info_open.get()>
-            <div class="mb-5 p-4 bg-white/[0.03] border border-white/5 rounded-xl text-sm text-white/60 leading-relaxed space-y-2">
+            <div class="mb-5 p-3 sm:p-4 bg-white/[0.03] border border-white/5 rounded-xl text-xs sm:text-sm text-white/60 leading-relaxed space-y-2 opacity-0 animate-fadeinone">
                 <p>"Every transaction entering our node's mempool is analyzed in real-time for notable characteristics. Detected transactions are highlighted on the Block Heartbeat EKG and stored permanently for historical browsing."</p>
-                <p class="text-white/40 text-xs">"Detection uses total output value for whale classification. Exchange self-sends (hot/cold wallet reshuffles) may appear as whales since change output detection requires UTXO data not available from raw transaction parsing."</p>
+                <p class="text-white/40 text-[11px] sm:text-xs">"Detection uses total output value for whale classification. Exchange self-sends (hot/cold wallet reshuffles) may appear as whales since change output detection requires UTXO data not available from raw transaction parsing."</p>
             </div>
         </Show>
 
@@ -347,9 +347,9 @@ pub fn WhaleWatchPage() -> impl IntoView {
                         title=desc
                         class=move || {
                             if active_filter.get() == f {
-                                "px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all flex-shrink-0"
+                                "px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all flex-shrink-0 active:scale-95"
                             } else {
-                                "px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all flex-shrink-0 hover:opacity-80"
+                                "px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all flex-shrink-0 hover:opacity-80 active:scale-95"
                             }
                         }
                         style=move || {
@@ -371,9 +371,9 @@ pub fn WhaleWatchPage() -> impl IntoView {
 
         // Main tx list
         <div class="bg-[#0d2137] border border-white/10 rounded-2xl overflow-hidden mb-4">
-            <div class="flex items-center justify-between px-4 py-2.5 border-b border-white/10">
-                <span class="text-xs font-mono text-white/60 uppercase tracking-wider">"Transactions"</span>
-                <span class="text-xs font-mono text-white/30">
+            <div class="flex items-center justify-between px-3 sm:px-4 py-2.5 border-b border-white/10">
+                <span class="text-[10px] sm:text-xs font-mono text-white/60 uppercase tracking-wider">"Transactions"</span>
+                <span class="text-[10px] sm:text-xs font-mono text-white/30">
                     {move || match tx_list.get() {
                         Some(Ok(p)) => format!("{} total", p.total),
                         _ => "Loading...".to_string(),
@@ -415,17 +415,17 @@ pub fn WhaleWatchPage() -> impl IntoView {
                         view! { <div></div> }.into_any()
                     } else {
                         view! {
-                            <div class="flex items-center justify-between px-4 py-2.5 border-t border-white/10">
+                            <div class="flex items-center justify-between px-3 sm:px-4 py-2 sm:py-2.5 border-t border-white/10">
                                 <button
                                     on:click=move |_| {
                                         if current_page > 0 { set_page.set(current_page - 1); }
                                     }
                                     disabled=move || page.get() == 0
-                                    class="px-3 py-1 rounded text-xs font-mono bg-white/5 text-white/60 border border-white/10 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed"
+                                    class="px-2.5 sm:px-3 py-1 rounded text-[11px] sm:text-xs font-mono bg-white/5 text-white/60 border border-white/10 hover:bg-white/10 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                                 >
                                     "\u{2190} Prev"
                                 </button>
-                                <span class="text-xs font-mono text-white/40">
+                                <span class="text-[10px] sm:text-xs font-mono text-white/40">
                                     {format!("Page {} of {}", current_page + 1, total_pages)}
                                 </span>
                                 <button
@@ -437,7 +437,7 @@ pub fn WhaleWatchPage() -> impl IntoView {
                                         let p = page.get();
                                         p + 1 >= total_pages
                                     }
-                                    class="px-3 py-1 rounded text-xs font-mono bg-white/5 text-white/60 border border-white/10 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed"
+                                    class="px-2.5 sm:px-3 py-1 rounded text-[11px] sm:text-xs font-mono bg-white/5 text-white/60 border border-white/10 hover:bg-white/10 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                                 >
                                     "Next \u{2192}"
                                 </button>
@@ -511,9 +511,9 @@ fn TopLeaderboard(
 ) -> impl IntoView {
     view! {
         <div class="bg-[#0d2137] border border-white/10 rounded-2xl overflow-hidden mb-4">
-            <div class="px-4 py-2.5 border-b border-white/10">
-                <span class="text-xs font-mono text-[#ffd700] uppercase tracking-wider">
-                    "\u{2605} Top 10 by USD value"
+            <div class="px-3 sm:px-4 py-2.5 border-b border-white/10">
+                <span class="text-[10px] sm:text-xs font-mono text-[#ffd700]/80 uppercase tracking-wider">
+                    "\u{2605} Top 10 by Value"
                 </span>
             </div>
             <Suspense fallback=|| view! {
@@ -552,10 +552,10 @@ fn LeaderRow(rank: usize, tx: NotableTxInfo) -> impl IntoView {
 
     view! {
         <div
-            class="flex items-baseline gap-3 px-4 py-2 border-b border-white/5 text-xs font-mono cursor-pointer hover:bg-white/5 transition-colors"
+            class="flex items-baseline gap-x-3 gap-y-0.5 flex-wrap px-3 sm:px-4 py-2 border-b border-white/5 text-xs font-mono cursor-pointer hover:bg-white/5 active:scale-[0.99] transition-all"
             on:click=move |_| show_tx_detail_with_data(&txid_for_click, &tx_for_click)
         >
-            <span class="text-white/30 w-6 shrink-0">{format!("#{}", rank)}</span>
+            <span class="text-white/30 w-5 shrink-0">{format!("#{}", rank)}</span>
             <span class="font-bold shrink-0" style=format!("color: {}", type_color)>
                 {format!("${}", usd_str)}
             </span>
@@ -563,7 +563,7 @@ fn LeaderRow(rank: usize, tx: NotableTxInfo) -> impl IntoView {
             <span class="text-[10px] shrink-0" style=format!("color: {}aa", type_color)>
                 {type_label}
             </span>
-            <span class="text-white/40 text-[11px] ml-auto shrink-0">{txid_short}</span>
+            <span class="text-white/30 text-[11px] ml-auto shrink-0 hidden sm:inline">{txid_short}</span>
             <span class="text-white/20 text-[10px] shrink-0">{time_str}</span>
         </div>
     }
@@ -585,6 +585,9 @@ fn TxRow(tx: NotableTxInfo) -> impl IntoView {
         "—".to_string()
     };
     let io_str = format!("{}in / {}out", tx.input_count, tx.output_count);
+    let io_str_mobile = io_str.clone();
+    let fee_str_mobile = fee_str.clone();
+    let txid_short_mobile = txid_short.clone();
     let confirmed = tx.confirmed_height.is_some();
     let conf_badge = if confirmed {
         format!("#{}", tx.confirmed_height.unwrap_or(0))
@@ -595,29 +598,36 @@ fn TxRow(tx: NotableTxInfo) -> impl IntoView {
 
     view! {
         <div
-            class="px-4 py-3 border-b border-white/5 text-xs font-mono cursor-pointer hover:bg-white/5 transition-colors"
+            class="px-3 sm:px-4 py-2.5 sm:py-3 border-b border-white/5 text-xs font-mono cursor-pointer hover:bg-white/5 active:scale-[0.99] transition-all"
             on:click=move |_| show_tx_detail_with_data(&txid_for_click, &tx_for_click)
         >
-            <div class="flex items-baseline gap-3 flex-wrap">
+            // Row 1: type + value + BTC (always visible)
+            <div class="flex items-baseline gap-x-2 sm:gap-x-3 flex-wrap gap-y-0.5">
                 <span class="font-bold shrink-0" style=format!("color: {}", type_color)>
                     {type_label}
                 </span>
                 <span class="text-[#f7931a] shrink-0">{format!("${}", usd_str)}</span>
                 <span class="text-white/50 shrink-0">{btc_str}</span>
-                <span class="text-white/40 shrink-0">{io_str}</span>
-                <span class="text-white/40 shrink-0">{fee_str}</span>
+                <span class="text-white/40 shrink-0 hidden sm:inline">{io_str}</span>
+                <span class="text-white/40 shrink-0 hidden sm:inline">{fee_str}</span>
                 <span class="text-white/30 text-[10px] shrink-0">
                     {if confirmed { "\u{2713}" } else { "\u{25CB}" }}
                     " "
                     {conf_badge}
                 </span>
                 <span class="text-white/20 text-[11px] ml-auto shrink-0">{time_str}</span>
-                <span class="text-white/30 text-[11px] shrink-0">{txid_short}</span>
+                <span class="text-white/30 text-[11px] shrink-0 hidden sm:inline">{txid_short}</span>
+            </div>
+            // Row 2: mobile-only compact details
+            <div class="flex items-baseline gap-2 mt-0.5 sm:hidden text-[10px] text-white/30">
+                <span>{io_str_mobile}</span>
+                <span>{fee_str_mobile}</span>
+                <span>{txid_short_mobile}</span>
             </div>
             {if !msg_text.is_empty() {
-                let quoted = format!("\"{}\"", &msg_text.chars().take(200).collect::<String>());
+                let quoted = format!("\"{}\"", &msg_text.chars().take(120).collect::<String>());
                 view! {
-                    <div class="mt-1 text-[11px] text-white/50 italic truncate">{quoted}</div>
+                    <div class="mt-1 text-[10px] sm:text-[11px] text-white/40 italic truncate">{quoted}</div>
                 }.into_any()
             } else {
                 view! { <div></div> }.into_any()
