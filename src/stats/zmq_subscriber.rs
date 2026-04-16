@@ -933,7 +933,7 @@ fn extract_readable_text(payload: &[u8]) -> Option<String> {
     let printable_count = slice.iter()
         .filter(|&&b| b >= 0x20 && b <= 0x7e)
         .count();
-    if printable_count < 8 || printable_count * 100 < slice.len() * 70 {
+    if printable_count < 6 || printable_count * 100 < slice.len() * 70 {
         return None;
     }
 
@@ -953,18 +953,20 @@ fn extract_readable_text(payload: &[u8]) -> Option<String> {
 
     // Require substantial alphabetic content (>= 50% letters).
     let letter_count = trimmed.chars().filter(|c| c.is_alphabetic()).count();
-    if letter_count < 5 || letter_count * 2 < trimmed.len() {
+    if letter_count < 4 || letter_count * 2 < trimmed.len() {
         return None;
     }
 
-    // Require minimum length for meaningful text
-    if trimmed.len() < 8 {
+    // Require minimum length for meaningful text.
+    // 6 chars catches short but real messages like "SATFLOW", "EXODUS" etc.
+    if trimmed.len() < 6 {
         return None;
     }
 
-    // Require at least one word of 4+ letters (filters "ifi" / "a bc" noise)
-    let has_word = trimmed.split_whitespace()
-        .any(|w| w.chars().filter(|c| c.is_alphabetic()).count() >= 4);
+    // Require at least one word of 4+ consecutive alphabetic chars.
+    // Catches "SATFLOW", "Bitcoin", "EXODUS" but not "ifi" in "=|1ifi T".
+    let has_word = trimmed.split(|c: char| !c.is_alphabetic())
+        .any(|w| w.len() >= 4);
     if !has_word {
         return None;
     }
@@ -1631,12 +1633,46 @@ mod tests {
     }
 
     #[test]
+    fn test_extract_readable_text_satflow() {
+        // Real-world OP_RETURN from tx 20ebb964...
+        assert!(extract_readable_text(b"SATFLOW").is_some());
+    }
+
+    #[test]
     fn test_extract_readable_text_with_binary_wrapper() {
         // Binary prefix (push opcodes) followed by real text
         let mut data = vec![0x0c]; // push 12 bytes
         data.extend_from_slice(b"Hello Bitcoin!");
         let result = extract_readable_text(&data);
         assert!(result.is_some());
+    }
+
+    // --- REAL-WORLD TX INTEGRATION TESTS ---
+    // These use actual raw tx hex from mainnet to validate our parser
+    // produces the correct fields for each detection type.
+
+    #[test]
+    fn test_real_whale_tx() {
+        // txid: 6b70840bad4f5da8b0c61b00bf782cd85c241ebcb38e78b3c70249759c010dcf
+        // 8 inputs, 15 outputs, 51.15 BTC total (whale at $100k)
+        let hex = "01000000000108f7dfe87cefe0ef4dc78ffa71a38c5f335b9e9b647c315c9d666f328898da8df20000000000ffffffffdad6e8af7f34c918ffd363cafd83014bcba81e721220e2c53a712a7cf005bf210000000000ffffffff6790a5ef9cf354c4d182f90920ef525f141fd4f5696c7a4060806381d0f932040100000000ffffffffb000c9a69ef605410ea9a4c850a38c903f7c9d064cca3b5dd0a7d16fb10522650100000000ffffffff5ab53a567e842d4d805e04454deb2d939fccda9ece6f251679ae9b45fc6273890100000000ffffffffd6cbdf1b0f0500b5c96ed2e2f84e101890cae6f5ef8ab3d8f27ac58a9bcebcaa0100000000ffffffff755ea8572fc700e705991407429539050cd9da2cb0250ef9838735d73edbd9ed0100000000ffffffffa83ac3468118e07ad3989f73bb22d37eedcf1ddf56d8f2e8632bc976825afb800100000000ffffffff0f9ba907000000000017a914a6059d3e1bcb6e804e67c0929f27d38a5350d2c687820c040000000000220020467d42c580ee359538eaaac31c8e8e2caef8774a3881aec662df9e93c332dde351fc0000000000001976a914365e396e1b31a2960322fa0b6ae3e444a7177d7b88ac043d080000000000160014e7ee299d297e0fe41cee102a4ea7cf2026aae952330b020000000000160014c2d92562f55d1cb270168eff80637addd3d3a16da3ce000000000000160014d5214713f1d6b04a142f3e69d6806fc0b55c4d18ba4e580000000000160014b2077ce6dc7905fa42ed0db46e5bc2e08fccb4591410030000000000220020812d3cb2d0e102aa3f7c62b515c6475c8f2b7b487365f156394ff338e85452bb8f600f0000000000160014fa41e2ba60034ffb98ef604e5577ff417f34e9bc80aa0c000000000016001436084fdaf3c5be031bcc15859017f22b4a6eea7289040a00000000001600146e79d7c732a39af7581b77c227d327e8e3d0799e12480a0000000000160014d0646d3ccee8ce2e00c0b69f1ea990fa93fdfdc93fa51e0000000000160014e0b2b1f8e2bdbf6567fbb58592ac54ccf1f8cce4fbbe100000000000160014bf26026381c2db8842d260bda93ba7f03f3f1506671d16300100000016001424c8881db1970b80f3650e43bb96a0b53cb4ebc1024730440220432a347398c128459840d52bde8164f1146e84ee0272ec2a282b6746bb76982c02200e41d217591088e353e3efb01b5b29878868bcb12f748c0dfb7c5cba610092df012103dab9c0bd64a8b09cc45319c2af642ae06ca74a361b4dc086365a6b09b482796902473044022019a59a4ff37f2b1d45dd803ef86d1b54688546abb42455dace301fee9175b6d9022026ce767c92c59b2a4c83599cd4f8ecc496cc5755a812e8fa210e148eb3869026012102a5cbd14715c936dc917bcd0220235b5d6404d223c0c43b34d780614b533f222002483045022100cc21e7cb6077a8804a6c7e8ef60042c8376da2eb51504f4fd1b47899a412f1500220405f4917cdb29d5853b7f40f9dc81041e0dcf647ce20049ba95c29628ee2206d012102243c96ec52de618a10c13f5756026f877af427203c37df59183dd1be8ee4eaa102483045022100d6fe20f04c29dd2d015fb8c3faf13c2f9e32b7adfbd31d8ed1dd86590c8d93ec02203499f293568839e10249f0382a36cc69f7466bc6fe47186321d2e9d83d859372012102243c96ec52de618a10c13f5756026f877af427203c37df59183dd1be8ee4eaa10247304402207d564de4fa9463801f67443dcfd77960c10acb03a630b60d529baf1c6a4c934902200abd3bd55a028f2a2b59bdae6173538bcc78f686390785bb2893776d7157a70d012102243c96ec52de618a10c13f5756026f877af427203c37df59183dd1be8ee4eaa10247304402202b322a8634089a030f0dfe3beee4a4a133d310c7c74bff817bee510648b6f8650220687f5591f3089d5d39a7620df84726a8aef44f9ff67ba1c4f3fadeb2fbb2c1a0012102243c96ec52de618a10c13f5756026f877af427203c37df59183dd1be8ee4eaa102473044022028f409e29115981c5b9d371b13c3940c3c85abf1760bdf0fb41cbbacd6d4215e02206e0818e6ad24545f8308e8069e317748a0ec70e4d4b5378706f1b1be2f2ef0b2012102243c96ec52de618a10c13f5756026f877af427203c37df59183dd1be8ee4eaa102483045022100e8710468dbeaa2b040810387e8ec5b19436507bf34e48a7cf08f34a3bf83486c02207f7764215d5083cb95861399f68fcd00625e6d0913c9d36aae7d7514a1a38ecc01210399bb5e3f47f03e9b52e3a48b1aafce512863327a9d81b92410ba1cfccdab9e0700000000";
+        let data = hex_decode(hex);
+        let parsed = parse_raw_tx(&data).expect("should parse real whale tx");
+
+        // Verify parser output matches known tx metadata
+        assert_eq!(parsed.txid, "6b70840bad4f5da8b0c61b00bf782cd85c241ebcb38e78b3c70249759c010dcf");
+        assert_eq!(parsed.input_count, 8);
+        assert_eq!(parsed.output_count, 15);
+        assert!(!parsed.has_inscription);
+        assert!(parsed.op_return_text.is_none());
+
+        // 51.15543905 BTC = 5_115_543_905 sats
+        assert_eq!(parsed.value, 5_115_543_905);
+
+        // Classify: at $100k, 51.15 BTC = $5.1M -> whale
+        assert_eq!(classify_notable(&parsed, 5000, 5.0, 100_000.0), Some("whale"));
+        // At $10k, 51.15 BTC = $511k -> not whale
+        assert_eq!(classify_notable(&parsed, 5000, 5.0, 10_000.0), None);
     }
 
     // --- read_varint tests ---
