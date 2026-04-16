@@ -410,39 +410,44 @@ async fn subscribe_tx_and_sequence(
 
         // Store in DB (with notable info for persistence across restarts)
         if let Ok(conn) = state.db.get() {
+            let value_usd_opt = if is_notable && broadcast_usd > 0.0 {
+                Some(broadcast_usd)
+            } else {
+                None
+            };
             let _ = db::insert_mempool_tx(
                 &conn,
-                &parsed.txid,
-                fee,
-                vsize,
-                parsed.value,
-                now,
-                notable_type,
-                if is_notable && broadcast_usd > 0.0 {
-                    Some(broadcast_usd)
-                } else {
-                    None
+                &db::MempoolTxInsert {
+                    txid: &parsed.txid,
+                    fee,
+                    vsize,
+                    value: parsed.value,
+                    first_seen: now,
+                    notable_type,
+                    value_usd: value_usd_opt,
+                    input_count: parsed.input_count,
+                    output_count: parsed.output_count,
                 },
-                parsed.input_count,
-                parsed.output_count,
             );
 
             // Also persist to notable_txs table (separate from mempool_txs, never pruned).
             if is_notable {
                 let _ = db::insert_notable_tx(
                     &conn,
-                    &parsed.txid,
-                    notable_type.unwrap_or(""),
-                    fee,
-                    vsize,
-                    parsed.value,
-                    parsed.max_output_value,
-                    broadcast_usd,
-                    parsed.input_count,
-                    parsed.output_count,
-                    parsed.witness_bytes,
-                    parsed.op_return_text.as_deref(),
-                    now,
+                    &db::NotableTxInsert {
+                        txid: &parsed.txid,
+                        notable_type: notable_type.unwrap_or(""),
+                        fee,
+                        vsize,
+                        value: parsed.value,
+                        max_output_value: parsed.max_output_value,
+                        value_usd: broadcast_usd,
+                        input_count: parsed.input_count,
+                        output_count: parsed.output_count,
+                        witness_bytes: parsed.witness_bytes,
+                        op_return_text: parsed.op_return_text.as_deref(),
+                        first_seen: now,
+                    },
                 );
             }
         }

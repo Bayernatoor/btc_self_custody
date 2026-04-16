@@ -1859,19 +1859,27 @@ pub fn query_block_timestamp(
 
 // === Mempool transaction functions ===
 
+/// Input data for [`insert_mempool_tx`]. Use `..Default::default()` to skip
+/// fields you don't care about (useful in tests). Required fields have no
+/// meaningful defaults but the struct still derives `Default` so tests can
+/// skip unrelated fields.
+#[derive(Debug, Clone, Default)]
+pub struct MempoolTxInsert<'a> {
+    pub txid: &'a str,
+    pub fee: u64,
+    pub vsize: u32,
+    pub value: u64,
+    pub first_seen: u64,
+    pub notable_type: Option<&'a str>,
+    pub value_usd: Option<f64>,
+    pub input_count: u64,
+    pub output_count: u64,
+}
+
 /// Insert a mempool transaction (ignore if txid already exists).
-#[allow(clippy::too_many_arguments)]
 pub fn insert_mempool_tx(
     conn: &Connection,
-    txid: &str,
-    fee: u64,
-    vsize: u32,
-    value: u64,
-    first_seen: u64,
-    notable_type: Option<&str>,
-    value_usd: Option<f64>,
-    input_count: u64,
-    output_count: u64,
+    tx: &MempoolTxInsert<'_>,
 ) -> rusqlite::Result<()> {
     conn.execute(
         "INSERT OR IGNORE INTO mempool_txs
@@ -1879,8 +1887,15 @@ pub fn insert_mempool_tx(
               input_count, output_count)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         params![
-            txid, fee, vsize, value, first_seen, notable_type, value_usd,
-            input_count, output_count
+            tx.txid,
+            tx.fee,
+            tx.vsize,
+            tx.value,
+            tx.first_seen,
+            tx.notable_type,
+            tx.value_usd,
+            tx.input_count,
+            tx.output_count
         ],
     )?;
     Ok(())
@@ -2039,22 +2054,27 @@ pub struct NotableTx {
     pub confirmed_at: Option<u64>,
 }
 
+/// Input data for [`insert_notable_tx`]. Use `..Default::default()` in tests.
+#[derive(Debug, Clone, Default)]
+pub struct NotableTxInsert<'a> {
+    pub txid: &'a str,
+    pub notable_type: &'a str,
+    pub fee: u64,
+    pub vsize: u32,
+    pub value: u64,
+    pub max_output_value: u64,
+    pub value_usd: f64,
+    pub input_count: u64,
+    pub output_count: u64,
+    pub witness_bytes: u64,
+    pub op_return_text: Option<&'a str>,
+    pub first_seen: u64,
+}
+
 /// Insert a notable tx. Uses INSERT OR IGNORE so duplicates on reconnect are safe.
-#[allow(clippy::too_many_arguments)]
 pub fn insert_notable_tx(
     conn: &Connection,
-    txid: &str,
-    notable_type: &str,
-    fee: u64,
-    vsize: u32,
-    value: u64,
-    max_output_value: u64,
-    value_usd: f64,
-    input_count: u64,
-    output_count: u64,
-    witness_bytes: u64,
-    op_return_text: Option<&str>,
-    first_seen: u64,
+    tx: &NotableTxInsert<'_>,
 ) -> rusqlite::Result<()> {
     conn.execute(
         "INSERT OR IGNORE INTO notable_txs
@@ -2062,18 +2082,18 @@ pub fn insert_notable_tx(
           input_count, output_count, witness_bytes, op_return_text, first_seen)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
         params![
-            txid,
-            notable_type,
-            fee,
-            vsize,
-            value,
-            max_output_value,
-            value_usd,
-            input_count,
-            output_count,
-            witness_bytes,
-            op_return_text,
-            first_seen
+            tx.txid,
+            tx.notable_type,
+            tx.fee,
+            tx.vsize,
+            tx.value,
+            tx.max_output_value,
+            tx.value_usd,
+            tx.input_count,
+            tx.output_count,
+            tx.witness_bytes,
+            tx.op_return_text,
+            tx.first_seen
         ],
     )?;
     Ok(())
@@ -2696,13 +2716,36 @@ mod tests {
         conn
     }
 
+    /// Test helper: insert a minimal mempool tx with the given txid, fee, vsize,
+    /// value, and timestamp. All other fields use sensible defaults. Tests that
+    /// need to set specific notable_type/value_usd/etc. should call insert_mempool_tx
+    /// directly with a full MempoolTxInsert struct.
+    fn insert_test_tx(
+        conn: &Connection,
+        txid: &str,
+        fee: u64,
+        vsize: u32,
+        value: u64,
+        first_seen: u64,
+    ) {
+        insert_mempool_tx(
+            conn,
+            &MempoolTxInsert {
+                txid,
+                fee,
+                vsize,
+                value,
+                first_seen,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    }
+
     #[test]
     fn test_mempool_insert_and_query() {
         let conn = setup_db();
-        insert_mempool_tx(
-            &conn, "abc123", 500, 200, 1_000_000, 1700000000, None, None, 0, 0,
-        )
-        .unwrap();
+        insert_test_tx(&conn, "abc123", 500, 200, 1_000_000, 1700000000);
 
         let txs = query_recent_mempool_txs(&conn, 0, 100).unwrap();
         assert_eq!(txs.len(), 1);
@@ -2716,14 +2759,8 @@ mod tests {
     #[test]
     fn test_mempool_insert_duplicate_ignored() {
         let conn = setup_db();
-        insert_mempool_tx(
-            &conn, "dup_tx", 100, 150, 500_000, 1700000000, None, None, 0, 0,
-        )
-        .unwrap();
-        insert_mempool_tx(
-            &conn, "dup_tx", 200, 250, 600_000, 1700000001, None, None, 0, 0,
-        )
-        .unwrap();
+        insert_test_tx(&conn, "dup_tx", 100, 150, 500_000, 1700000000);
+        insert_test_tx(&conn, "dup_tx", 200, 250, 600_000, 1700000001);
 
         let count: u64 = conn
             .query_row("SELECT COUNT(*) FROM mempool_txs", [], |r| r.get(0))
@@ -2738,18 +2775,9 @@ mod tests {
     #[test]
     fn test_mempool_confirm() {
         let conn = setup_db();
-        insert_mempool_tx(
-            &conn, "tx1", 100, 150, 500_000, 1700000000, None, None, 0, 0,
-        )
-        .unwrap();
-        insert_mempool_tx(
-            &conn, "tx2", 200, 250, 600_000, 1700000001, None, None, 0, 0,
-        )
-        .unwrap();
-        insert_mempool_tx(
-            &conn, "tx3", 300, 350, 700_000, 1700000002, None, None, 0, 0,
-        )
-        .unwrap();
+        insert_test_tx(&conn, "tx1", 100, 150, 500_000, 1700000000);
+        insert_test_tx(&conn, "tx2", 200, 250, 600_000, 1700000001);
+        insert_test_tx(&conn, "tx3", 300, 350, 700_000, 1700000002);
 
         let txids = vec!["tx1".to_string(), "tx2".to_string()];
         let (confirmed, fees) =
@@ -2771,18 +2799,9 @@ mod tests {
     #[test]
     fn test_mempool_query_unconfirmed_only() {
         let conn = setup_db();
-        insert_mempool_tx(
-            &conn, "tx1", 100, 150, 500_000, 1700000000, None, None, 0, 0,
-        )
-        .unwrap();
-        insert_mempool_tx(
-            &conn, "tx2", 200, 250, 600_000, 1700000001, None, None, 0, 0,
-        )
-        .unwrap();
-        insert_mempool_tx(
-            &conn, "tx3", 300, 350, 700_000, 1700000002, None, None, 0, 0,
-        )
-        .unwrap();
+        insert_test_tx(&conn, "tx1", 100, 150, 500_000, 1700000000);
+        insert_test_tx(&conn, "tx2", 200, 250, 600_000, 1700000001);
+        insert_test_tx(&conn, "tx3", 300, 350, 700_000, 1700000002);
 
         // Confirm tx1
         confirm_mempool_txs(&conn, &["tx1".to_string()], 800_000, 1700001000)
@@ -2801,15 +2820,9 @@ mod tests {
     fn test_mempool_prune() {
         let conn = setup_db();
         // Old tx (timestamp 1000)
-        insert_mempool_tx(
-            &conn, "old_tx", 100, 150, 500_000, 1000, None, None, 0, 0,
-        )
-        .unwrap();
+        insert_test_tx(&conn, "old_tx", 100, 150, 500_000, 1000);
         // Recent tx (timestamp 2000)
-        insert_mempool_tx(
-            &conn, "new_tx", 200, 250, 600_000, 2000, None, None, 0, 0,
-        )
-        .unwrap();
+        insert_test_tx(&conn, "new_tx", 200, 250, 600_000, 2000);
 
         // Prune anything older than 1500
         let pruned = prune_mempool_txs(&conn, 1500).unwrap();
@@ -2823,18 +2836,9 @@ mod tests {
     #[test]
     fn test_mempool_query_unconfirmed_txids() {
         let conn = setup_db();
-        insert_mempool_tx(
-            &conn, "tx1", 100, 150, 500_000, 1700000000, None, None, 0, 0,
-        )
-        .unwrap();
-        insert_mempool_tx(
-            &conn, "tx2", 200, 250, 600_000, 1700000001, None, None, 0, 0,
-        )
-        .unwrap();
-        insert_mempool_tx(
-            &conn, "tx3", 300, 350, 700_000, 1700000002, None, None, 0, 0,
-        )
-        .unwrap();
+        insert_test_tx(&conn, "tx1", 100, 150, 500_000, 1700000000);
+        insert_test_tx(&conn, "tx2", 200, 250, 600_000, 1700000001);
+        insert_test_tx(&conn, "tx3", 300, 350, 700_000, 1700000002);
 
         // Confirm tx2
         confirm_mempool_txs(&conn, &["tx2".to_string()], 800_000, 1700001000)
@@ -2845,6 +2849,33 @@ mod tests {
         assert!(unconfirmed.contains(&"tx1".to_string()));
         assert!(unconfirmed.contains(&"tx3".to_string()));
         assert!(!unconfirmed.contains(&"tx2".to_string()));
+    }
+
+    #[test]
+    fn test_mempool_insert_notable_fields() {
+        // Verify the struct-based API supports notable fields via Default spread
+        let conn = setup_db();
+        insert_mempool_tx(
+            &conn,
+            &MempoolTxInsert {
+                txid: "whale_tx",
+                fee: 1000,
+                vsize: 200,
+                value: 100_000_000_000, // 1000 BTC
+                first_seen: 1700000000,
+                notable_type: Some("whale"),
+                value_usd: Some(5_000_000.0),
+                input_count: 5,
+                output_count: 2,
+            },
+        )
+        .unwrap();
+
+        let txs = query_recent_mempool_txs(&conn, 0, 100).unwrap();
+        assert_eq!(txs[0].notable_type.as_deref(), Some("whale"));
+        assert_eq!(txs[0].value_usd, Some(5_000_000.0));
+        assert_eq!(txs[0].input_count, 5);
+        assert_eq!(txs[0].output_count, 2);
     }
 
     /// Helper: insert a minimal test block with key fields.
