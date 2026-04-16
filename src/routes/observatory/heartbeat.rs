@@ -465,7 +465,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                 <div class="absolute inset-0 flex flex-col items-center justify-end pb-3 sm:pb-4">
                     <h1 class="text-xl sm:text-2xl lg:text-3xl font-title text-white mb-1 drop-shadow-lg">"Block Heartbeat"</h1>
                     <p class="text-xs sm:text-sm lg:text-base text-white/60 max-w-xl mx-auto px-4 text-center drop-shadow">
-                        "A live EKG of the Bitcoin network. Each spike is a block, each brick is a transaction."
+                        "A live EKG of Bitcoin \u{b7} spikes are blocks, bricks are transactions"
                     </p>
                 </div>
             </div>
