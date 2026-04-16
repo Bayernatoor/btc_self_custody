@@ -11,10 +11,7 @@ async fn security_headers(
 ) -> axum::response::Response {
     let mut res = next.run(req).await;
     let h = res.headers_mut();
-    h.insert(
-        axum::http::header::X_FRAME_OPTIONS,
-        "DENY".parse().unwrap(),
-    );
+    h.insert(axum::http::header::X_FRAME_OPTIONS, "DENY".parse().unwrap());
     h.insert(
         axum::http::header::X_CONTENT_TYPE_OPTIONS,
         "nosniff".parse().unwrap(),

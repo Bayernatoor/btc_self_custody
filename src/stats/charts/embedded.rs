@@ -21,7 +21,8 @@ pub fn op_return_count_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let omni = data_array_value(&omni_str);
     let xcp_str = build_data_array_i64(blocks, |b| b.counterparty_count as i64);
     let xcp = data_array_value(&xcp_str);
-    let other_str = build_data_array_i64(blocks, |b| b.data_carrier_count as i64);
+    let other_str =
+        build_data_array_i64(blocks, |b| b.data_carrier_count as i64);
     let other = data_array_value(&other_str);
 
     build_option(json!({
@@ -96,7 +97,8 @@ pub fn op_return_bytes_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let omni = data_array_value(&omni_str);
     let xcp_str = build_data_array_i64(blocks, |b| b.counterparty_bytes as i64);
     let xcp = data_array_value(&xcp_str);
-    let other_str = build_data_array_i64(blocks, |b| b.data_carrier_bytes as i64);
+    let other_str =
+        build_data_array_i64(blocks, |b| b.data_carrier_bytes as i64);
     let other = data_array_value(&other_str);
 
     build_option(json!({
@@ -173,13 +175,19 @@ pub fn runes_pct_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         }
     };
 
-    let runes_str = build_data_array_f64(blocks, |b| pct(b.runes_count, b.op_return_count));
+    let runes_str =
+        build_data_array_f64(blocks, |b| pct(b.runes_count, b.op_return_count));
     let runes_data = data_array_value(&runes_str);
-    let omni_str = build_data_array_f64(blocks, |b| pct(b.omni_count, b.op_return_count));
+    let omni_str =
+        build_data_array_f64(blocks, |b| pct(b.omni_count, b.op_return_count));
     let omni_data = data_array_value(&omni_str);
-    let xcp_str = build_data_array_f64(blocks, |b| pct(b.counterparty_count, b.op_return_count));
+    let xcp_str = build_data_array_f64(blocks, |b| {
+        pct(b.counterparty_count, b.op_return_count)
+    });
     let xcp_data = data_array_value(&xcp_str);
-    let other_str = build_data_array_f64(blocks, |b| pct(b.data_carrier_count, b.op_return_count));
+    let other_str = build_data_array_f64(blocks, |b| {
+        pct(b.data_carrier_count, b.op_return_count)
+    });
     let other_data = data_array_value(&other_str);
 
     build_option(json!({
@@ -262,8 +270,7 @@ pub fn op_return_block_share_chart(
 
     let share_fn = |b: &BlockSummary| {
         if b.size > 0 {
-            ((b.op_return_bytes as f64 / b.size as f64 * 100.0 * 100.0)
-                .round()
+            ((b.op_return_bytes as f64 / b.size as f64 * 100.0 * 100.0).round()
                 / 100.0)
                 .min(100.0)
         } else {
@@ -366,7 +373,8 @@ pub fn inscription_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 
     let raw_str = build_data_array_f64(blocks, |b| b.inscription_count as f64);
     let raw = data_array_value(&raw_str);
-    let vals: Vec<f64> = blocks.iter().map(|b| b.inscription_count as f64).collect();
+    let vals: Vec<f64> =
+        blocks.iter().map(|b| b.inscription_count as f64).collect();
     let ma = moving_average(&vals, 144);
     let ma_str = build_ma_array(blocks, &ma);
     let ma_data = data_array_value(&ma_str);
@@ -445,9 +453,7 @@ pub fn inscription_share_chart(blocks: &[BlockSummary]) -> serde_json::Value {
             } else {
                 b.inscription_bytes // fallback for pre-backfill blocks
             };
-            ((bytes as f64 / b.size as f64 * 100.0 * 100.0)
-                .round()
-                / 100.0)
+            ((bytes as f64 / b.size as f64 * 100.0 * 100.0).round() / 100.0)
                 .min(100.0)
         } else {
             0.0
@@ -504,8 +510,7 @@ pub fn inscription_share_chart_daily(
                 } else {
                     d.avg_inscription_bytes
                 };
-                ((bytes / d.avg_size * 100.0 * 100.0).round()
-                    / 100.0)
+                ((bytes / d.avg_size * 100.0 * 100.0).round() / 100.0)
                     .min(100.0)
             } else {
                 0.0
@@ -563,12 +568,20 @@ pub fn all_embedded_share_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let mut insc_buf = String::with_capacity(blocks.len() * 30);
     insc_buf.push('[');
     for (i, b) in blocks.iter().enumerate() {
-        if i > 0 { insc_buf.push(','); }
+        if i > 0 {
+            insc_buf.push(',');
+        }
         if b.height < 774_000 {
-            let _ = write!(insc_buf, "[{},null,{}]", ts_ms(b.timestamp), b.height);
+            let _ =
+                write!(insc_buf, "[{},null,{}]", ts_ms(b.timestamp), b.height);
         } else if b.size > 0 {
-            let _ = write!(insc_buf, "[{},{},{}]", ts_ms(b.timestamp),
-                round(b.inscription_bytes as f64 / b.size as f64 * 100.0, 2), b.height);
+            let _ = write!(
+                insc_buf,
+                "[{},{},{}]",
+                ts_ms(b.timestamp),
+                round(b.inscription_bytes as f64 / b.size as f64 * 100.0, 2),
+                b.height
+            );
         } else {
             let _ = write!(insc_buf, "[{},0,{}]", ts_ms(b.timestamp), b.height);
         }
@@ -683,10 +696,13 @@ pub fn unified_embedded_count_chart(
     let omni = data_array_value(&omni_str);
     let xcp_str = build_data_array_i64(blocks, |b| b.counterparty_count as i64);
     let xcp = data_array_value(&xcp_str);
-    let other_op_str = build_data_array_i64(blocks, |b| b.data_carrier_count as i64);
+    let other_op_str =
+        build_data_array_i64(blocks, |b| b.data_carrier_count as i64);
     let other_op = data_array_value(&other_op_str);
     // BRC-20 is a subset of inscriptions -- split them to avoid double-counting
-    let inscriptions_str = build_data_array_i64(blocks, |b| b.inscription_count.saturating_sub(b.brc20_count) as i64);
+    let inscriptions_str = build_data_array_i64(blocks, |b| {
+        b.inscription_count.saturating_sub(b.brc20_count) as i64
+    });
     let inscriptions = data_array_value(&inscriptions_str);
     let brc20_str = build_data_array_i64(blocks, |b| b.brc20_count as i64);
     let brc20 = data_array_value(&brc20_str);
@@ -782,9 +798,11 @@ pub fn unified_embedded_volume_chart(
     let omni = data_array_value(&omni_str);
     let xcp_str = build_data_array_i64(blocks, |b| b.counterparty_bytes as i64);
     let xcp = data_array_value(&xcp_str);
-    let other_op_str = build_data_array_i64(blocks, |b| b.data_carrier_bytes as i64);
+    let other_op_str =
+        build_data_array_i64(blocks, |b| b.data_carrier_bytes as i64);
     let other_op = data_array_value(&other_op_str);
-    let inscriptions_str = build_data_array_i64(blocks, |b| b.inscription_bytes as i64);
+    let inscriptions_str =
+        build_data_array_i64(blocks, |b| b.inscription_bytes as i64);
     let inscriptions = data_array_value(&inscriptions_str);
 
     build_option(json!({
@@ -950,7 +968,9 @@ const PAYLOAD_COLOR: &str = "#06b6d4"; // Cyan for payload (matches inscription)
 
 /// Inscription payload vs envelope bytes per block, showing overhead from
 /// witness envelope structure (opcodes, push data, ord marker).
-pub fn inscription_envelope_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+pub fn inscription_envelope_chart(
+    blocks: &[BlockSummary],
+) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Inscription Payload vs Envelope");
     }
@@ -959,9 +979,12 @@ pub fn inscription_envelope_chart(blocks: &[BlockSummary]) -> serde_json::Value 
         return no_data_chart("Inscription Payload vs Envelope");
     }
 
-    let payload_str = build_data_array_f64(blocks, |b| b.inscription_bytes as f64 / 1024.0);
+    let payload_str =
+        build_data_array_f64(blocks, |b| b.inscription_bytes as f64 / 1024.0);
     let envelope_str = build_data_array_f64(blocks, |b| {
-        b.inscription_envelope_bytes.saturating_sub(b.inscription_bytes) as f64 / 1024.0
+        b.inscription_envelope_bytes
+            .saturating_sub(b.inscription_bytes) as f64
+            / 1024.0
     });
 
     build_option(json!({
@@ -982,7 +1005,9 @@ pub fn inscription_envelope_chart(blocks: &[BlockSummary]) -> serde_json::Value 
 }
 
 /// Inscription payload vs envelope bytes (daily averages).
-pub fn inscription_envelope_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+pub fn inscription_envelope_chart_daily(
+    days: &[DailyAggregate],
+) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Inscription Payload vs Envelope");
     }
@@ -992,11 +1017,17 @@ pub fn inscription_envelope_chart_daily(days: &[DailyAggregate]) -> serde_json::
     }
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let payload: Vec<f64> = days.iter().map(|d| round(d.avg_inscription_bytes / 1024.0, 2)).collect();
-    let overhead: Vec<f64> = days.iter().map(|d| {
-        let oh = d.avg_inscription_envelope_bytes - d.avg_inscription_bytes;
-        round(oh.max(0.0) / 1024.0, 2)
-    }).collect();
+    let payload: Vec<f64> = days
+        .iter()
+        .map(|d| round(d.avg_inscription_bytes / 1024.0, 2))
+        .collect();
+    let overhead: Vec<f64> = days
+        .iter()
+        .map(|d| {
+            let oh = d.avg_inscription_envelope_bytes - d.avg_inscription_bytes;
+            round(oh.max(0.0) / 1024.0, 2)
+        })
+        .collect();
 
     build_option(json!({
         "xAxis": x_axis_for(true, &cats),
@@ -1018,7 +1049,9 @@ pub fn inscription_envelope_chart_daily(days: &[DailyAggregate]) -> serde_json::
 // ---------------------------------------------------------------------------
 
 /// Inscription fees as a percentage of total block fees.
-pub fn inscription_fee_share_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+pub fn inscription_fee_share_chart(
+    blocks: &[BlockSummary],
+) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Inscription Fee Share");
     }
@@ -1068,7 +1101,9 @@ pub fn inscription_fee_share_chart(blocks: &[BlockSummary]) -> serde_json::Value
 }
 
 /// Inscription fee share (daily).
-pub fn inscription_fee_share_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+pub fn inscription_fee_share_chart_daily(
+    days: &[DailyAggregate],
+) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Inscription Fee Share");
     }
@@ -1078,18 +1113,28 @@ pub fn inscription_fee_share_chart_daily(days: &[DailyAggregate]) -> serde_json:
     }
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let vals: Vec<f64> = days.iter().map(|d| {
-        if d.total_fees > 0 {
-            round(d.total_inscription_fees as f64 / d.total_fees as f64 * 100.0, 2)
-        } else {
-            0.0
-        }
-    }).collect();
+    let vals: Vec<f64> = days
+        .iter()
+        .map(|d| {
+            if d.total_fees > 0 {
+                round(
+                    d.total_inscription_fees as f64 / d.total_fees as f64
+                        * 100.0,
+                    2,
+                )
+            } else {
+                0.0
+            }
+        })
+        .collect();
     let ma = moving_average(&vals, 7);
-    let ma_vals: Vec<serde_json::Value> = ma.iter().map(|v| match v {
-        Some(x) => json!(x),
-        None => json!(null),
-    }).collect();
+    let ma_vals: Vec<serde_json::Value> = ma
+        .iter()
+        .map(|v| match v {
+            Some(x) => json!(x),
+            None => json!(null),
+        })
+        .collect();
 
     build_option(json!({
         "xAxis": x_axis_for(true, &cats),
@@ -1116,19 +1161,29 @@ const RUNES_FEE_COLOR: &str = "#f7931a"; // Bitcoin orange for Runes fees
 const OTHER_FEE_COLOR: &str = "#6366f1"; // Indigo for other fees
 
 /// Fee revenue breakdown by protocol: Inscriptions, Runes, and standard transactions.
-pub fn protocol_fee_competition_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+pub fn protocol_fee_competition_chart(
+    blocks: &[BlockSummary],
+) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Protocol Fee Competition");
     }
-    let has_data = blocks.iter().any(|b| b.inscription_fees > 0 || b.runes_fees > 0);
+    let has_data = blocks
+        .iter()
+        .any(|b| b.inscription_fees > 0 || b.runes_fees > 0);
     if !has_data {
         return no_data_chart("Protocol Fee Competition");
     }
 
-    let insc_str = build_data_array_f64(blocks, |b| b.inscription_fees as f64 / 100_000_000.0);
-    let runes_str = build_data_array_f64(blocks, |b| b.runes_fees as f64 / 100_000_000.0);
+    let insc_str = build_data_array_f64(blocks, |b| {
+        b.inscription_fees as f64 / 100_000_000.0
+    });
+    let runes_str =
+        build_data_array_f64(blocks, |b| b.runes_fees as f64 / 100_000_000.0);
     let other_str = build_data_array_f64(blocks, |b| {
-        let other = b.total_fees.saturating_sub(b.inscription_fees).saturating_sub(b.runes_fees);
+        let other = b
+            .total_fees
+            .saturating_sub(b.inscription_fees)
+            .saturating_sub(b.runes_fees);
         other as f64 / 100_000_000.0
     });
 
@@ -1153,22 +1208,38 @@ pub fn protocol_fee_competition_chart(blocks: &[BlockSummary]) -> serde_json::Va
 }
 
 /// Protocol fee competition (daily totals).
-pub fn protocol_fee_competition_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+pub fn protocol_fee_competition_chart_daily(
+    days: &[DailyAggregate],
+) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Protocol Fee Competition");
     }
-    let has_data = days.iter().any(|d| d.total_inscription_fees > 0 || d.total_runes_fees > 0);
+    let has_data = days
+        .iter()
+        .any(|d| d.total_inscription_fees > 0 || d.total_runes_fees > 0);
     if !has_data {
         return no_data_chart("Protocol Fee Competition");
     }
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let insc: Vec<f64> = days.iter().map(|d| round(d.total_inscription_fees as f64 / 100_000_000.0, 4)).collect();
-    let runes: Vec<f64> = days.iter().map(|d| round(d.total_runes_fees as f64 / 100_000_000.0, 4)).collect();
-    let other: Vec<f64> = days.iter().map(|d| {
-        let o = d.total_fees.saturating_sub(d.total_inscription_fees).saturating_sub(d.total_runes_fees);
-        round(o as f64 / 100_000_000.0, 4)
-    }).collect();
+    let insc: Vec<f64> = days
+        .iter()
+        .map(|d| round(d.total_inscription_fees as f64 / 100_000_000.0, 4))
+        .collect();
+    let runes: Vec<f64> = days
+        .iter()
+        .map(|d| round(d.total_runes_fees as f64 / 100_000_000.0, 4))
+        .collect();
+    let other: Vec<f64> = days
+        .iter()
+        .map(|d| {
+            let o = d
+                .total_fees
+                .saturating_sub(d.total_inscription_fees)
+                .saturating_sub(d.total_runes_fees);
+            round(o as f64 / 100_000_000.0, 4)
+        })
+        .collect();
 
     build_option(json!({
         "xAxis": x_axis_for(true, &cats),
@@ -1194,7 +1265,9 @@ pub fn protocol_fee_competition_chart_daily(days: &[DailyAggregate]) -> serde_js
 /// Average coinbase message length per block (bytes of decoded ASCII text).
 /// Longer messages often indicate pools encoding custom data, timestamps, or
 /// signaling information in the coinbase.
-pub fn coinbase_message_length_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+pub fn coinbase_message_length_chart(
+    blocks: &[BlockSummary],
+) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Coinbase Message Length");
     }

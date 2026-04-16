@@ -5,8 +5,8 @@
 
 use leptos::prelude::*;
 
-use crate::routes::observatory::helpers::*;
 use super::state::ObservatoryState;
+use crate::routes::observatory::helpers::*;
 
 /// Range selector bar (1D through ALL + YTD)
 #[component]
@@ -49,7 +49,11 @@ pub fn RangeSelector() -> impl IntoView {
             return;
         }
         let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
-        let to_clamped = if t.as_str() > today.as_str() { today } else { t };
+        let to_clamped = if t.as_str() > today.as_str() {
+            today
+        } else {
+            t
+        };
         set_custom_from.set(Some(f));
         set_custom_to.set(Some(to_clamped));
         set_range.set("custom".to_string());

@@ -25,27 +25,45 @@ pub fn NetworkChartsPage() -> impl IntoView {
     // fullscreen and toggle state.
 
     // ── Blocks ────────────────────────────────────────
-    let size_option = chart_memo!(dashboard_data, range, overlay_flags,
+    let size_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
         |blocks| crate::stats::charts::block_size_chart(blocks),
         |days| crate::stats::charts::block_size_chart_daily(days)
     );
-    let weight_util_option = chart_memo!(dashboard_data, range, overlay_flags,
+    let weight_util_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
         |blocks| crate::stats::charts::weight_utilization_chart(blocks),
         |days| crate::stats::charts::weight_utilization_chart_daily(days)
     );
-    let tx_option = chart_memo!(dashboard_data, range, overlay_flags,
+    let tx_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
         |blocks| crate::stats::charts::tx_count_chart(blocks),
         |days| crate::stats::charts::tx_count_chart_daily(days)
     );
-    let avg_tx_size_option = chart_memo!(dashboard_data, range, overlay_flags,
+    let avg_tx_size_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
         |blocks| crate::stats::charts::avg_tx_size_chart(blocks),
         |days| crate::stats::charts::avg_tx_size_chart_daily(days)
     );
-    let interval_option = chart_memo!(dashboard_data, range, overlay_flags,
+    let interval_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
         |blocks| crate::stats::charts::block_interval_chart(blocks),
         |days| crate::stats::charts::block_interval_chart_daily(days)
     );
-    let tps_option = chart_memo!(dashboard_data, range, overlay_flags,
+    let tps_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
         |blocks| crate::stats::charts::tps_chart(blocks),
         |days| crate::stats::charts::tps_chart_daily(days)
     );
@@ -54,10 +72,15 @@ pub fn NetworkChartsPage() -> impl IntoView {
         let r = range.get();
         async move {
             let n = crate::routes::observatory::helpers::range_to_blocks(&r);
-            let stats = crate::stats::server_fns::fetch_stats_summary().await.ok();
-            let from_height = stats.map(|s| s.min_height.max(s.max_height.saturating_sub(n))).unwrap_or(0);
+            let stats =
+                crate::stats::server_fns::fetch_stats_summary().await.ok();
+            let from_height = stats
+                .map(|s| s.min_height.max(s.max_height.saturating_sub(n)))
+                .unwrap_or(0);
             if from_height > 0 {
-                crate::stats::server_fns::fetch_cumulative_size(from_height).await.unwrap_or(0)
+                crate::stats::server_fns::fetch_cumulative_size(from_height)
+                    .await
+                    .unwrap_or(0)
             } else {
                 0u64
             }
@@ -66,49 +89,87 @@ pub fn NetworkChartsPage() -> impl IntoView {
     let chain_size_option = Signal::derive(move || {
         let _r = range.get();
         let flags = overlay_flags.get();
-        let disk_gb = state.cached_live.get_untracked()
+        let disk_gb = state
+            .cached_live
+            .get_untracked()
             .map(|s| s.network.chain_size_gb)
             .unwrap_or(0.0);
         let offset = chain_offset.get().unwrap_or(0);
-        dashboard_data.get().and_then(|r| r.ok()).map(|data| {
-            let (mut value, is_daily) = match data {
-                DashboardData::PerBlock(ref blocks) =>
-                    (crate::stats::charts::chain_size_chart(blocks, disk_gb, offset), false),
-                DashboardData::Daily(ref days) =>
-                    (crate::stats::charts::chain_size_chart_daily(days, disk_gb, offset), true),
-            };
-            if value.is_null() { return String::new(); }
-            crate::stats::charts::apply_overlays(&mut value, &flags, is_daily);
-            serde_json::to_string(&value).unwrap_or_default()
-        }).unwrap_or_default()
+        dashboard_data
+            .get()
+            .and_then(|r| r.ok())
+            .map(|data| {
+                let (mut value, is_daily) = match data {
+                    DashboardData::PerBlock(ref blocks) => (
+                        crate::stats::charts::chain_size_chart(
+                            blocks, disk_gb, offset,
+                        ),
+                        false,
+                    ),
+                    DashboardData::Daily(ref days) => (
+                        crate::stats::charts::chain_size_chart_daily(
+                            days, disk_gb, offset,
+                        ),
+                        true,
+                    ),
+                };
+                if value.is_null() {
+                    return String::new();
+                }
+                crate::stats::charts::apply_overlays(
+                    &mut value, &flags, is_daily,
+                );
+                serde_json::to_string(&value).unwrap_or_default()
+            })
+            .unwrap_or_default()
     });
 
     let fullness_dist_option = Signal::derive(move || {
         let _r = range.get();
-        dashboard_data.get().and_then(|r| r.ok()).map(|data| {
-            let value = match data {
-                DashboardData::PerBlock(ref blocks) =>
-                    crate::stats::charts::block_fullness_distribution_chart(blocks),
-                DashboardData::Daily(_) => return String::new(),
-            };
-            serde_json::to_string(&value).unwrap_or_default()
-        }).unwrap_or_default()
+        dashboard_data
+            .get()
+            .and_then(|r| r.ok())
+            .map(|data| {
+                let value = match data {
+                    DashboardData::PerBlock(ref blocks) => {
+                        crate::stats::charts::block_fullness_distribution_chart(
+                            blocks,
+                        )
+                    }
+                    DashboardData::Daily(_) => return String::new(),
+                };
+                serde_json::to_string(&value).unwrap_or_default()
+            })
+            .unwrap_or_default()
     });
     let fullness_server = LocalResource::new(move || {
         let r = range.get();
         async move {
             let n = crate::routes::observatory::helpers::range_to_blocks(&r);
-            if n <= 5_000 { return None; }
-            let stats = crate::stats::server_fns::fetch_stats_summary().await.ok()?;
+            if n <= 5_000 {
+                return None;
+            }
+            let stats =
+                crate::stats::server_fns::fetch_stats_summary().await.ok()?;
             let from_ts = stats.latest_timestamp.saturating_sub(n * 600);
-            let buckets = crate::stats::server_fns::fetch_fullness_histogram(from_ts, stats.latest_timestamp).await.ok()?;
-            let value = crate::stats::charts::block_fullness_histogram_from_buckets(&buckets);
+            let buckets = crate::stats::server_fns::fetch_fullness_histogram(
+                from_ts,
+                stats.latest_timestamp,
+            )
+            .await
+            .ok()?;
+            let value =
+                crate::stats::charts::block_fullness_histogram_from_buckets(
+                    &buckets,
+                );
             Some(serde_json::to_string(&value).unwrap_or_default())
         }
     });
     let fullness_combined = Signal::derive(move || {
         let local = fullness_dist_option.get();
-        if !local.is_empty() { return local; }
+        if !local.is_empty() {
+            return local;
+        }
         fullness_server.get().flatten().unwrap_or_default()
     });
 
@@ -127,174 +188,299 @@ pub fn NetworkChartsPage() -> impl IntoView {
         let r = range.get();
         async move {
             let n = crate::routes::observatory::helpers::range_to_blocks(&r);
-            if n <= 5_000 { return None; }
-            let stats = crate::stats::server_fns::fetch_stats_summary().await.ok()?;
+            if n <= 5_000 {
+                return None;
+            }
+            let stats =
+                crate::stats::server_fns::fetch_stats_summary().await.ok()?;
             let from_ts = stats.latest_timestamp.saturating_sub(n * 600);
-            let buckets = crate::stats::server_fns::fetch_fullness_histogram(from_ts, stats.latest_timestamp).await.ok()?;
-            let value = crate::stats::charts::block_fullness_histogram_from_buckets_pct(&buckets);
+            let buckets = crate::stats::server_fns::fetch_fullness_histogram(
+                from_ts,
+                stats.latest_timestamp,
+            )
+            .await
+            .ok()?;
+            let value =
+                crate::stats::charts::block_fullness_histogram_from_buckets_pct(
+                    &buckets,
+                );
             Some(serde_json::to_string(&value).unwrap_or_default())
         }
     });
     let fullness_combined_pct = Signal::derive(move || {
         let local = fullness_dist_pct_option.get();
-        if !local.is_empty() { return local; }
+        if !local.is_empty() {
+            return local;
+        }
         fullness_server_pct.get().flatten().unwrap_or_default()
     });
     let (fullness_pct_mode, set_fullness_pct_mode) = signal(true);
     let fullness_toggled = Signal::derive(move || {
-        if fullness_pct_mode.get() { fullness_combined_pct.get() } else { fullness_combined.get() }
+        if fullness_pct_mode.get() {
+            fullness_combined_pct.get()
+        } else {
+            fullness_combined.get()
+        }
     });
 
     let time_dist_option = Signal::derive(move || {
         let _r = range.get();
-        dashboard_data.get().and_then(|r| r.ok()).map(|data| {
-            let value = match data {
-                DashboardData::PerBlock(ref blocks) =>
-                    crate::stats::charts::block_time_distribution_chart(blocks),
-                DashboardData::Daily(_) => return String::new(),
-            };
-            serde_json::to_string(&value).unwrap_or_default()
-        }).unwrap_or_default()
+        dashboard_data
+            .get()
+            .and_then(|r| r.ok())
+            .map(|data| {
+                let value = match data {
+                    DashboardData::PerBlock(ref blocks) => {
+                        crate::stats::charts::block_time_distribution_chart(
+                            blocks,
+                        )
+                    }
+                    DashboardData::Daily(_) => return String::new(),
+                };
+                serde_json::to_string(&value).unwrap_or_default()
+            })
+            .unwrap_or_default()
     });
     let time_server = LocalResource::new(move || {
         let r = range.get();
         async move {
             let n = crate::routes::observatory::helpers::range_to_blocks(&r);
-            if n <= 5_000 { return None; }
-            let stats = crate::stats::server_fns::fetch_stats_summary().await.ok()?;
+            if n <= 5_000 {
+                return None;
+            }
+            let stats =
+                crate::stats::server_fns::fetch_stats_summary().await.ok()?;
             let from_ts = stats.latest_timestamp.saturating_sub(n * 600);
-            let buckets = crate::stats::server_fns::fetch_block_time_histogram(from_ts, stats.latest_timestamp).await.ok()?;
-            let value = crate::stats::charts::block_time_histogram_from_buckets(&buckets);
+            let buckets = crate::stats::server_fns::fetch_block_time_histogram(
+                from_ts,
+                stats.latest_timestamp,
+            )
+            .await
+            .ok()?;
+            let value = crate::stats::charts::block_time_histogram_from_buckets(
+                &buckets,
+            );
             Some(serde_json::to_string(&value).unwrap_or_default())
         }
     });
     let time_combined = Signal::derive(move || {
         let local = time_dist_option.get();
-        if !local.is_empty() { return local; }
+        if !local.is_empty() {
+            return local;
+        }
         time_server.get().flatten().unwrap_or_default()
     });
 
     let time_dist_pct_option = Signal::derive(move || {
         let _r = range.get();
-        dashboard_data.get().and_then(|r| r.ok()).map(|data| {
-            let value = match data {
-                DashboardData::PerBlock(ref blocks) =>
-                    crate::stats::charts::block_time_distribution_pct_chart(blocks),
-                DashboardData::Daily(_) => return String::new(),
-            };
-            serde_json::to_string(&value).unwrap_or_default()
-        }).unwrap_or_default()
+        dashboard_data
+            .get()
+            .and_then(|r| r.ok())
+            .map(|data| {
+                let value = match data {
+                    DashboardData::PerBlock(ref blocks) => {
+                        crate::stats::charts::block_time_distribution_pct_chart(
+                            blocks,
+                        )
+                    }
+                    DashboardData::Daily(_) => return String::new(),
+                };
+                serde_json::to_string(&value).unwrap_or_default()
+            })
+            .unwrap_or_default()
     });
     let time_server_pct = LocalResource::new(move || {
         let r = range.get();
         async move {
             let n = crate::routes::observatory::helpers::range_to_blocks(&r);
-            if n <= 5_000 { return None; }
-            let stats = crate::stats::server_fns::fetch_stats_summary().await.ok()?;
+            if n <= 5_000 {
+                return None;
+            }
+            let stats =
+                crate::stats::server_fns::fetch_stats_summary().await.ok()?;
             let from_ts = stats.latest_timestamp.saturating_sub(n * 600);
-            let buckets = crate::stats::server_fns::fetch_block_time_histogram(from_ts, stats.latest_timestamp).await.ok()?;
-            let value = crate::stats::charts::block_time_histogram_from_buckets_pct(&buckets);
+            let buckets = crate::stats::server_fns::fetch_block_time_histogram(
+                from_ts,
+                stats.latest_timestamp,
+            )
+            .await
+            .ok()?;
+            let value =
+                crate::stats::charts::block_time_histogram_from_buckets_pct(
+                    &buckets,
+                );
             Some(serde_json::to_string(&value).unwrap_or_default())
         }
     });
     let time_combined_pct = Signal::derive(move || {
         let local = time_dist_pct_option.get();
-        if !local.is_empty() { return local; }
+        if !local.is_empty() {
+            return local;
+        }
         time_server_pct.get().flatten().unwrap_or_default()
     });
     let (time_pct_mode, set_time_pct_mode) = signal(true);
     let time_toggled = Signal::derive(move || {
-        if time_pct_mode.get() { time_combined_pct.get() } else { time_combined.get() }
+        if time_pct_mode.get() {
+            time_combined_pct.get()
+        } else {
+            time_combined.get()
+        }
     });
 
-    let propagation_option = chart_memo!(dashboard_data, range, overlay_flags,
+    let propagation_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
         |blocks| crate::stats::charts::block_propagation_chart(blocks),
         |_days| crate::stats::charts::no_data_chart("Rapid Consecutive Blocks")
     );
 
-    let weekday_option = chart_memo!(dashboard_data, range, overlay_flags,
+    let weekday_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
         |blocks| crate::stats::charts::weekday_activity_chart(blocks),
         |days| crate::stats::charts::weekday_activity_chart_daily(days)
     );
 
     // ── Adoption ──────────────────────────────────────
-    let segwit_option = chart_memo!(dashboard_data, range, overlay_flags,
+    let segwit_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
         |blocks| crate::stats::charts::segwit_adoption_chart(blocks),
         |days| crate::stats::charts::segwit_adoption_chart_daily(days)
     );
-    let taproot_option = chart_memo!(dashboard_data, range, overlay_flags,
+    let taproot_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
         |blocks| crate::stats::charts::taproot_chart(blocks),
         |days| crate::stats::charts::taproot_chart_daily(days)
     );
-    let witness_version_option = chart_memo!(dashboard_data, range, overlay_flags,
+    let witness_version_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
         |blocks| crate::stats::charts::witness_version_chart(blocks),
         |days| crate::stats::charts::witness_version_chart_daily(days)
     );
-    let witness_pct_option = chart_memo!(dashboard_data, range, overlay_flags,
+    let witness_pct_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
         |blocks| crate::stats::charts::witness_version_pct_chart(blocks),
         |days| crate::stats::charts::witness_version_pct_chart_daily(days)
     );
-    let witness_tx_pct_option = chart_memo!(dashboard_data, range, overlay_flags,
+    let witness_tx_pct_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
         |blocks| crate::stats::charts::witness_version_tx_pct_chart(blocks),
         |days| crate::stats::charts::witness_version_tx_pct_chart_daily(days)
     );
-    let address_type_option = chart_memo!(dashboard_data, range, overlay_flags,
+    let address_type_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
         |blocks| crate::stats::charts::address_type_chart(blocks),
         |days| crate::stats::charts::address_type_chart_daily(days)
     );
-    let address_type_pct_option = chart_memo!(dashboard_data, range, overlay_flags,
+    let address_type_pct_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
         |blocks| crate::stats::charts::address_type_pct_chart(blocks),
         |days| crate::stats::charts::address_type_pct_chart_daily(days)
     );
-    let taproot_spend_type_option = chart_memo!(dashboard_data, range, overlay_flags,
+    let taproot_spend_type_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
         |blocks| crate::stats::charts::taproot_spend_type_chart(blocks),
         |days| crate::stats::charts::taproot_spend_type_chart_daily(days)
     );
-    let witness_share_option = chart_memo!(dashboard_data, range, overlay_flags,
+    let witness_share_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
         |blocks| crate::stats::charts::witness_share_chart(blocks),
         |days| crate::stats::charts::witness_share_chart_daily(days)
     );
-    let cumulative_adoption_option = chart_memo!(dashboard_data, range, overlay_flags,
+    let cumulative_adoption_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
         |blocks| crate::stats::charts::cumulative_adoption_chart(blocks),
         |days| crate::stats::charts::cumulative_adoption_chart_daily(days)
     );
-    let multi_velocity_option = chart_memo!(dashboard_data, range, overlay_flags,
+    let multi_velocity_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
         |blocks| crate::stats::charts::multi_velocity_chart(blocks),
         |days| crate::stats::charts::multi_velocity_chart_daily(days)
     );
-    let sunset_option = chart_memo!(dashboard_data, range, overlay_flags,
+    let sunset_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
         |blocks| crate::stats::charts::address_sunset_chart(blocks),
         |days| crate::stats::charts::address_sunset_chart_daily(days)
     );
 
     // ── Transactions ──────────────────────────────────
-    let rbf_option = chart_memo!(dashboard_data, range, overlay_flags,
+    let rbf_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
         |blocks| crate::stats::charts::rbf_chart(blocks),
         |days| crate::stats::charts::rbf_chart_daily(days)
     );
-    let utxo_flow_option = chart_memo!(dashboard_data, range, overlay_flags,
+    let utxo_flow_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
         |blocks| crate::stats::charts::utxo_flow_chart(blocks),
         |days| crate::stats::charts::utxo_flow_chart_daily(days)
     );
-    let batching_option = chart_memo!(dashboard_data, range, overlay_flags,
+    let batching_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
         |blocks| crate::stats::charts::batching_chart(blocks),
         |days| crate::stats::charts::batching_chart_daily(days)
     );
-    let largest_tx_option = chart_memo!(dashboard_data, range, overlay_flags,
+    let largest_tx_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
         |blocks| crate::stats::charts::largest_tx_chart(blocks),
         |days| crate::stats::charts::largest_tx_chart_daily(days)
     );
-    let tx_density_option = chart_memo!(dashboard_data, range, overlay_flags,
+    let tx_density_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
         |blocks| crate::stats::charts::tx_density_chart(blocks),
         |days| crate::stats::charts::tx_density_chart_daily(days)
     );
-    let utxo_growth_option = chart_memo!(dashboard_data, range, overlay_flags,
+    let utxo_growth_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
         |blocks| crate::stats::charts::utxo_growth_chart(blocks),
         |days| crate::stats::charts::utxo_growth_chart_daily(days)
     );
-    let tx_type_evolution_option = chart_memo!(dashboard_data, range, overlay_flags,
+    let tx_type_evolution_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
         |blocks| crate::stats::charts::tx_type_evolution_chart(blocks),
-        |_days| crate::stats::charts::no_data_chart("Transaction Type Evolution")
+        |_days| crate::stats::charts::no_data_chart(
+            "Transaction Type Evolution"
+        )
     );
 
     view! {

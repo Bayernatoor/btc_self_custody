@@ -351,10 +351,14 @@ impl BitcoinRpc {
                             // Extract printable ASCII from coinbase for graffiti
                             let cb_bytes: Vec<u8> = (0..coinbase_hex.len())
                                 .step_by(2)
-                                .filter_map(|i| coinbase_hex.get(i..i+2)
-                                    .and_then(|s| u8::from_str_radix(s, 16).ok()))
+                                .filter_map(|i| {
+                                    coinbase_hex.get(i..i + 2).and_then(|s| {
+                                        u8::from_str_radix(s, 16).ok()
+                                    })
+                                })
                                 .collect();
-                            coinbase_text = cb_bytes.iter()
+                            coinbase_text = cb_bytes
+                                .iter()
                                 .filter(|&&b| (0x20..=0x7e).contains(&b))
                                 .map(|&b| b as char)
                                 .collect::<String>()
@@ -447,7 +451,8 @@ impl BitcoinRpc {
                     }
                     if let Some(vsize) = tx["vsize"].as_u64() {
                         if vsize > 0 {
-                            tx_fee_rates.push(this_fee_sats as f64 / vsize as f64);
+                            tx_fee_rates
+                                .push(this_fee_sats as f64 / vsize as f64);
                         }
                     }
                 }
@@ -522,7 +527,8 @@ impl BitcoinRpc {
                                         };
                                         inscription_bytes +=
                                             item_bytes.saturating_sub(overhead);
-                                        inscription_envelope_bytes += item_bytes;
+                                        inscription_envelope_bytes +=
+                                            item_bytes;
                                         // BRC-20: inscription containing {"p":"brc-20"
                                         if hex.contains(
                                             "7b2270223a226272632d3230",
@@ -680,8 +686,12 @@ impl BitcoinRpc {
                 }
 
                 // Per-tx fee attribution by protocol
-                if tx_has_inscription { inscription_fees += this_fee_sats; }
-                if tx_has_runes { runes_fees += this_fee_sats; }
+                if tx_has_inscription {
+                    inscription_fees += this_fee_sats;
+                }
+                if tx_has_runes {
+                    runes_fees += this_fee_sats;
+                }
 
                 // Classify tx by input type (taproot > segwit > legacy)
                 if tx_has_taproot_input {
@@ -832,8 +842,8 @@ impl BitcoinRpc {
         Ok(BlockTxids {
             height: result["height"].as_u64().unwrap_or(0),
             timestamp: result["time"].as_u64().unwrap_or(0),
-            size: 0,     // not in header
-            weight: 0,   // not in header
+            size: 0,   // not in header
+            weight: 0, // not in header
             tx_count: result["nTx"].as_u64().unwrap_or(0),
             txids: vec![], // not in header
         })
@@ -896,10 +906,7 @@ impl BitcoinRpc {
         height: u64,
     ) -> Result<u64, StatsError> {
         let result = self
-            .call(
-                "getblockstats",
-                &[json!(height), json!(["totalfee"])],
-            )
+            .call("getblockstats", &[json!(height), json!(["totalfee"])])
             .await?;
         Ok(result["totalfee"].as_u64().unwrap_or(0))
     }

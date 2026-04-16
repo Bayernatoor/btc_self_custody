@@ -73,9 +73,7 @@ pub fn Chart(
 /// Shared error state shown when a resource fetch fails.
 /// Displays "Failed to load data" with a retry button.
 #[component]
-pub fn DataLoadError(
-    #[prop(into)] on_retry: Callback<()>,
-) -> impl IntoView {
+pub fn DataLoadError(#[prop(into)] on_retry: Callback<()>) -> impl IntoView {
     view! {
         <div class="flex flex-col items-center justify-center min-h-[200px] gap-4">
             <p class="text-white/50 font-mono text-sm">"Failed to load data"</p>

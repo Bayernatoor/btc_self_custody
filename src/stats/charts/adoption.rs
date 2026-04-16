@@ -17,8 +17,8 @@ pub fn segwit_adoption_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 
     let segwit_fn = |b: &BlockSummary| {
         if b.tx_count > 1 {
-            let pct = b.segwit_spend_count as f64 / (b.tx_count - 1) as f64
-                * 100.0;
+            let pct =
+                b.segwit_spend_count as f64 / (b.tx_count - 1) as f64 * 100.0;
             (pct * 100.0).round() / 100.0
         } else {
             0.0
@@ -114,10 +114,14 @@ pub fn taproot_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Taproot Outputs");
     }
 
-    let raw_str = build_data_array_f64(blocks, |b| b.taproot_spend_count as f64);
+    let raw_str =
+        build_data_array_f64(blocks, |b| b.taproot_spend_count as f64);
     let raw = data_array_value(&raw_str);
 
-    let vals: Vec<f64> = blocks.iter().map(|b| b.taproot_spend_count as f64).collect();
+    let vals: Vec<f64> = blocks
+        .iter()
+        .map(|b| b.taproot_spend_count as f64)
+        .collect();
     let ma = moving_average(&vals, 144);
     let ma_str = build_ma_array(blocks, &ma);
     let ma_series = data_array_value(&ma_str);
@@ -195,7 +199,9 @@ pub fn witness_version_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     }
 
     // v0 outputs = P2WPKH + P2WSH, v1 outputs = P2TR
-    let v0_str = build_data_array_f64(blocks, |b| (b.p2wpkh_count + b.p2wsh_count) as f64);
+    let v0_str = build_data_array_f64(blocks, |b| {
+        (b.p2wpkh_count + b.p2wsh_count) as f64
+    });
     let v0_data = data_array_value(&v0_str);
     let v1_str = build_data_array_f64(blocks, |b| b.p2tr_count as f64);
     let v1_data = data_array_value(&v1_str);
@@ -282,8 +288,7 @@ pub fn witness_version_pct_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         let v0 = b.p2wpkh_count + b.p2wsh_count;
         let total = v0 + b.p2tr_count;
         if total > 0 {
-            (b.p2tr_count as f64 / total as f64 * 100.0 * 100.0).round()
-                / 100.0
+            (b.p2tr_count as f64 / total as f64 * 100.0 * 100.0).round() / 100.0
         } else {
             0.0
         }
@@ -398,17 +403,26 @@ pub fn witness_version_tx_pct_chart(
     let mut v0_buf = String::with_capacity(blocks.len() * 30);
     let mut v1_buf = String::with_capacity(blocks.len() * 30);
     let mut leg_buf = String::with_capacity(blocks.len() * 30);
-    v0_buf.push('['); v1_buf.push('['); leg_buf.push('[');
+    v0_buf.push('[');
+    v1_buf.push('[');
+    leg_buf.push('[');
     for (i, b) in blocks.iter().enumerate() {
-        if i > 0 { v0_buf.push(','); v1_buf.push(','); leg_buf.push(','); }
+        if i > 0 {
+            v0_buf.push(',');
+            v1_buf.push(',');
+            leg_buf.push(',');
+        }
         let v0 = pct_fn(b.p2wpkh_count + b.p2wsh_count, b.output_count);
         let v1 = pct_fn(b.p2tr_count, b.output_count);
         let leg = (100.0 - v0 - v1).max(0.0);
         let _ = write!(v0_buf, "[{},{},{}]", ts_ms(b.timestamp), v0, b.height);
         let _ = write!(v1_buf, "[{},{},{}]", ts_ms(b.timestamp), v1, b.height);
-        let _ = write!(leg_buf, "[{},{},{}]", ts_ms(b.timestamp), leg, b.height);
+        let _ =
+            write!(leg_buf, "[{},{},{}]", ts_ms(b.timestamp), leg, b.height);
     }
-    v0_buf.push(']'); v1_buf.push(']'); leg_buf.push(']');
+    v0_buf.push(']');
+    v1_buf.push(']');
+    leg_buf.push(']');
     let v0_data = data_array_value(&v0_buf);
     let v1_data = data_array_value(&v1_buf);
     let legacy_data = data_array_value(&leg_buf);
@@ -527,9 +541,11 @@ pub fn taproot_spend_type_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Taproot Spend Types");
     }
 
-    let keypath_str = build_data_array_i64(blocks, |b| b.taproot_keypath_count as i64);
+    let keypath_str =
+        build_data_array_i64(blocks, |b| b.taproot_keypath_count as i64);
     let keypath = data_array_value(&keypath_str);
-    let scriptpath_str = build_data_array_i64(blocks, |b| b.taproot_scriptpath_count as i64);
+    let scriptpath_str =
+        build_data_array_i64(blocks, |b| b.taproot_scriptpath_count as i64);
     let scriptpath = data_array_value(&scriptpath_str);
 
     build_option(json!({
@@ -588,9 +604,14 @@ pub fn taproot_velocity_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let pct: Vec<f64> = blocks
         .iter()
         .map(|b| {
-            let total = b.p2pk_count + b.p2pkh_count + b.p2sh_count
-                + b.p2wpkh_count + b.p2wsh_count + b.p2tr_count
-                + b.multisig_count + b.unknown_script_count;
+            let total = b.p2pk_count
+                + b.p2pkh_count
+                + b.p2sh_count
+                + b.p2wpkh_count
+                + b.p2wsh_count
+                + b.p2tr_count
+                + b.multisig_count
+                + b.unknown_script_count;
             if total > 0 {
                 b.p2tr_count as f64 / total as f64 * 100.0
             } else {
@@ -619,10 +640,22 @@ pub fn taproot_velocity_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let mut data_buf = String::with_capacity(blocks.len() * 30);
     data_buf.push('[');
     for (i, (b, v)) in blocks.iter().zip(velocity.iter()).enumerate() {
-        if i > 0 { data_buf.push(','); }
+        if i > 0 {
+            data_buf.push(',');
+        }
         match v {
-            Some(val) => { let _ = write!(data_buf, "[{},{},{}]", ts_ms(b.timestamp), val, b.height); }
-            None => { let _ = write!(data_buf, "[{},null]", ts_ms(b.timestamp)); }
+            Some(val) => {
+                let _ = write!(
+                    data_buf,
+                    "[{},{},{}]",
+                    ts_ms(b.timestamp),
+                    val,
+                    b.height
+                );
+            }
+            None => {
+                let _ = write!(data_buf, "[{},null]", ts_ms(b.timestamp));
+            }
         }
     }
     data_buf.push(']');
@@ -651,7 +684,9 @@ pub fn taproot_velocity_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 
 /// Taproot adoption velocity from daily aggregates.
 /// Same concept as per-block but using 30-day moving average and daily velocity.
-pub fn taproot_velocity_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+pub fn taproot_velocity_chart_daily(
+    days: &[DailyAggregate],
+) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Taproot Velocity");
     }
@@ -662,9 +697,14 @@ pub fn taproot_velocity_chart_daily(days: &[DailyAggregate]) -> serde_json::Valu
     let pct: Vec<f64> = days
         .iter()
         .map(|d| {
-            let total = d.avg_p2pk_count + d.avg_p2pkh_count + d.avg_p2sh_count
-                + d.avg_p2wpkh_count + d.avg_p2wsh_count + d.avg_p2tr_count
-                + d.avg_multisig_count + d.avg_unknown_script_count;
+            let total = d.avg_p2pk_count
+                + d.avg_p2pkh_count
+                + d.avg_p2sh_count
+                + d.avg_p2wpkh_count
+                + d.avg_p2wsh_count
+                + d.avg_p2tr_count
+                + d.avg_multisig_count
+                + d.avg_unknown_script_count;
             if total > 0.0 {
                 d.avg_p2tr_count / total * 100.0
             } else {
@@ -722,15 +762,32 @@ pub fn cumulative_adoption_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 
     let mut segwit_buf = String::with_capacity(blocks.len() * 30);
     let mut taproot_buf = String::with_capacity(blocks.len() * 30);
-    segwit_buf.push('['); taproot_buf.push('[');
+    segwit_buf.push('[');
+    taproot_buf.push('[');
     for (i, b) in blocks.iter().enumerate() {
-        if i > 0 { segwit_buf.push(','); taproot_buf.push(','); }
+        if i > 0 {
+            segwit_buf.push(',');
+            taproot_buf.push(',');
+        }
         segwit_total += b.p2wpkh_count + b.p2wsh_count;
         taproot_total += b.p2tr_count;
-        let _ = write!(segwit_buf, "[{},{},{}]", ts_ms(b.timestamp), segwit_total, b.height);
-        let _ = write!(taproot_buf, "[{},{},{}]", ts_ms(b.timestamp), taproot_total, b.height);
+        let _ = write!(
+            segwit_buf,
+            "[{},{},{}]",
+            ts_ms(b.timestamp),
+            segwit_total,
+            b.height
+        );
+        let _ = write!(
+            taproot_buf,
+            "[{},{},{}]",
+            ts_ms(b.timestamp),
+            taproot_total,
+            b.height
+        );
     }
-    segwit_buf.push(']'); taproot_buf.push(']');
+    segwit_buf.push(']');
+    taproot_buf.push(']');
     let segwit_data = data_array_value(&segwit_buf);
     let taproot_data = data_array_value(&taproot_buf);
 
@@ -758,7 +815,9 @@ pub fn cumulative_adoption_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 }
 
 /// Cumulative adoption from daily aggregates.
-pub fn cumulative_adoption_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+pub fn cumulative_adoption_chart_daily(
+    days: &[DailyAggregate],
+) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Cumulative Adoption");
     }
@@ -769,7 +828,8 @@ pub fn cumulative_adoption_chart_daily(days: &[DailyAggregate]) -> serde_json::V
     let segwit_data: Vec<f64> = days
         .iter()
         .map(|d| {
-            segwit_total += (d.avg_p2wpkh_count + d.avg_p2wsh_count) * d.block_count as f64;
+            segwit_total +=
+                (d.avg_p2wpkh_count + d.avg_p2wsh_count) * d.block_count as f64;
             round(segwit_total, 0)
         })
         .collect();
@@ -808,7 +868,9 @@ pub fn cumulative_adoption_chart_daily(days: &[DailyAggregate]) -> serde_json::V
 
 /// P2PKH address type sunset tracker (daily). Shows the declining share of
 /// legacy P2PKH outputs with a 90-day MA and threshold markers at 10% and 5%.
-pub fn address_sunset_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+pub fn address_sunset_chart_daily(
+    days: &[DailyAggregate],
+) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Address Type Sunset");
     }
@@ -817,9 +879,14 @@ pub fn address_sunset_chart_daily(days: &[DailyAggregate]) -> serde_json::Value 
     let vals: Vec<f64> = days
         .iter()
         .map(|d| {
-            let total = d.avg_p2pkh_count + d.avg_p2sh_count + d.avg_p2wpkh_count
-                + d.avg_p2wsh_count + d.avg_p2tr_count + d.avg_p2pk_count
-                + d.avg_multisig_count + d.avg_unknown_script_count;
+            let total = d.avg_p2pkh_count
+                + d.avg_p2sh_count
+                + d.avg_p2wpkh_count
+                + d.avg_p2wsh_count
+                + d.avg_p2tr_count
+                + d.avg_p2pk_count
+                + d.avg_multisig_count
+                + d.avg_unknown_script_count;
             if total > 0.0 {
                 round(d.avg_p2pkh_count / total * 100.0, 2)
             } else {
@@ -872,24 +939,42 @@ pub fn address_sunset_chart_daily(days: &[DailyAggregate]) -> serde_json::Value 
 
 /// Multi-type adoption velocity from daily aggregates. Shows rate of change
 /// for all major address types: P2PKH (declining), P2SH, P2WPKH, P2TR (growing).
-pub fn multi_velocity_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+pub fn multi_velocity_chart_daily(
+    days: &[DailyAggregate],
+) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Adoption Velocity");
     }
     if days.len() < 60 {
-        return no_data_chart_with_hint("Adoption Velocity", "Select a longer range (3M+) for meaningful velocity data");
+        return no_data_chart_with_hint(
+            "Adoption Velocity",
+            "Select a longer range (3M+) for meaningful velocity data",
+        );
     }
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
 
     // Compute percentage for each type
-    let compute_pct = |days: &[DailyAggregate], extract: fn(&DailyAggregate) -> f64| -> Vec<f64> {
-        days.iter().map(|d| {
-            let total = d.avg_p2pkh_count + d.avg_p2sh_count + d.avg_p2wpkh_count
-                + d.avg_p2wsh_count + d.avg_p2tr_count + d.avg_p2pk_count
-                + d.avg_multisig_count + d.avg_unknown_script_count;
-            if total > 0.0 { extract(d) / total * 100.0 } else { 0.0 }
-        }).collect()
+    let compute_pct = |days: &[DailyAggregate],
+                       extract: fn(&DailyAggregate) -> f64|
+     -> Vec<f64> {
+        days.iter()
+            .map(|d| {
+                let total = d.avg_p2pkh_count
+                    + d.avg_p2sh_count
+                    + d.avg_p2wpkh_count
+                    + d.avg_p2wsh_count
+                    + d.avg_p2tr_count
+                    + d.avg_p2pk_count
+                    + d.avg_multisig_count
+                    + d.avg_unknown_script_count;
+                if total > 0.0 {
+                    extract(d) / total * 100.0
+                } else {
+                    0.0
+                }
+            })
+            .collect()
     };
 
     let p2pkh_pct = compute_pct(days, |d| d.avg_p2pkh_count);
@@ -900,16 +985,18 @@ pub fn multi_velocity_chart_daily(days: &[DailyAggregate]) -> serde_json::Value 
     // 30-day MA then velocity (diff from 30 days ago)
     let make_velocity = |pct: &[f64]| -> Vec<serde_json::Value> {
         let ma = moving_average(pct, 30);
-        (0..ma.len()).map(|i| {
-            if i >= 30 {
-                match (ma[i], ma[i - 30]) {
-                    (Some(cur), Some(prev)) => json!(round(cur - prev, 3)),
-                    _ => json!(null),
+        (0..ma.len())
+            .map(|i| {
+                if i >= 30 {
+                    match (ma[i], ma[i - 30]) {
+                        (Some(cur), Some(prev)) => json!(round(cur - prev, 3)),
+                        _ => json!(null),
+                    }
+                } else {
+                    json!(null)
                 }
-            } else {
-                json!(null)
-            }
-        }).collect()
+            })
+            .collect()
     };
 
     let v_p2pkh = make_velocity(&p2pkh_pct);
@@ -955,8 +1042,12 @@ pub fn address_sunset_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     }
 
     let data = build_data_array_f64(blocks, |b| {
-        let total = b.p2pkh_count + b.p2sh_count + b.p2wpkh_count
-            + b.p2wsh_count + b.p2tr_count + b.p2pk_count;
+        let total = b.p2pkh_count
+            + b.p2sh_count
+            + b.p2wpkh_count
+            + b.p2wsh_count
+            + b.p2tr_count
+            + b.p2pk_count;
         if total > 0 {
             round(b.p2pkh_count as f64 / total as f64 * 100.0, 2)
         } else {
@@ -995,15 +1086,31 @@ pub fn address_sunset_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 /// Multi-type adoption velocity (per-block). Requires 500+ blocks for meaningful data.
 pub fn multi_velocity_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.len() < 500 {
-        return no_data_chart_with_hint("Adoption Velocity", "Select a longer range (3M+) for velocity data");
+        return no_data_chart_with_hint(
+            "Adoption Velocity",
+            "Select a longer range (3M+) for velocity data",
+        );
     }
 
-    let compute_pct = |blocks: &[BlockSummary], extract: fn(&BlockSummary) -> u64| -> Vec<f64> {
-        blocks.iter().map(|b| {
-            let total = b.p2pkh_count + b.p2sh_count + b.p2wpkh_count
-                + b.p2wsh_count + b.p2tr_count + b.p2pk_count;
-            if total > 0 { extract(b) as f64 / total as f64 * 100.0 } else { 0.0 }
-        }).collect()
+    let compute_pct = |blocks: &[BlockSummary],
+                       extract: fn(&BlockSummary) -> u64|
+     -> Vec<f64> {
+        blocks
+            .iter()
+            .map(|b| {
+                let total = b.p2pkh_count
+                    + b.p2sh_count
+                    + b.p2wpkh_count
+                    + b.p2wsh_count
+                    + b.p2tr_count
+                    + b.p2pk_count;
+                if total > 0 {
+                    extract(b) as f64 / total as f64 * 100.0
+                } else {
+                    0.0
+                }
+            })
+            .collect()
     };
 
     let p2pkh_pct = compute_pct(blocks, |b| b.p2pkh_count);
@@ -1017,10 +1124,19 @@ pub fn multi_velocity_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         let mut buf = String::with_capacity(blocks.len() * 20);
         buf.push('[');
         for (i, b) in blocks.iter().enumerate() {
-            if i > 0 { buf.push(','); }
+            if i > 0 {
+                buf.push(',');
+            }
             if i >= 144 {
-                if let (Some(cur), Some(prev)) = (ma[i], ma[i.saturating_sub(144)]) {
-                    let _ = write!(buf, "[{},{}]", ts_ms(b.timestamp), round(cur - prev, 3));
+                if let (Some(cur), Some(prev)) =
+                    (ma[i], ma[i.saturating_sub(144)])
+                {
+                    let _ = write!(
+                        buf,
+                        "[{},{}]",
+                        ts_ms(b.timestamp),
+                        round(cur - prev, 3)
+                    );
                 } else {
                     let _ = write!(buf, "[{},null]", ts_ms(b.timestamp));
                 }

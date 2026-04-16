@@ -253,10 +253,7 @@ pub fn MethodologyPage() -> impl IntoView {
 // ── Helper components ────────────────────────────────────────────
 
 #[component]
-fn Section(
-    #[prop(into)] title: String,
-    children: Children,
-) -> impl IntoView {
+fn Section(#[prop(into)] title: String, children: Children) -> impl IntoView {
     view! {
         <section class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 sm:p-6">
             <h2 class="text-lg text-white font-semibold mb-4">{title}</h2>

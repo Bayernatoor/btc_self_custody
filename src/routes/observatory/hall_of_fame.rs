@@ -227,22 +227,25 @@ fn HofEntryCard(entry: &'static HallOfFameEntry) -> impl IntoView {
     let cat_color = entry.category.color();
     let cat_label = entry.category.label();
     let border_style = format!("border-left: 3px solid {cat_color}");
-    let badge_style = format!(
-        "background: {}20; color: {cat_color}",
-        cat_color
-    );
+    let badge_style =
+        format!("background: {}20; color: {cat_color}", cat_color);
 
     // Format date nicely + build On This Day link
-    let parsed_date = chrono::NaiveDate::parse_from_str(entry.date, "%Y-%m-%d").ok();
+    let parsed_date =
+        chrono::NaiveDate::parse_from_str(entry.date, "%Y-%m-%d").ok();
     let date_display = parsed_date
         .map(|d| d.format("%b %d, %Y").to_string())
         .unwrap_or_else(|| entry.date.to_string());
-    let on_this_day_link = parsed_date
-        .map(|d| format!("/observatory/on-this-day?date={:02}-{:02}&year={}", d.month(), d.day(), d.year()));
+    let on_this_day_link = parsed_date.map(|d| {
+        format!(
+            "/observatory/on-this-day?date={:02}-{:02}&year={}",
+            d.month(),
+            d.day(),
+            d.year()
+        )
+    });
 
-    let tx_link = entry
-        .txid
-        .map(|t| format!("https://mempool.space/tx/{t}"));
+    let tx_link = entry.txid.map(|t| format!("https://mempool.space/tx/{t}"));
     let tx_short = entry.txid.map(|t| {
         if t.len() > 16 {
             format!("{}...{}", &t[..8], &t[t.len() - 8..])

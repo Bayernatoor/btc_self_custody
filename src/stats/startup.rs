@@ -135,8 +135,12 @@ pub fn spawn_background_tasks(
                     *state
                         .extremes_cache
                         .lock()
-                        .unwrap_or_else(|e| e.into_inner()) =
-                        Some((from_ts, to_ts, extremes, std::time::Instant::now()));
+                        .unwrap_or_else(|e| e.into_inner()) = Some((
+                        from_ts,
+                        to_ts,
+                        extremes,
+                        std::time::Instant::now(),
+                    ));
                 }
                 // Warm range summary cache
                 if let Ok(summary) =
@@ -145,8 +149,12 @@ pub fn spawn_background_tasks(
                     *state
                         .range_summary_cache
                         .lock()
-                        .unwrap_or_else(|e| e.into_inner()) =
-                        Some((from_ts, to_ts, summary, std::time::Instant::now()));
+                        .unwrap_or_else(|e| e.into_inner()) = Some((
+                        from_ts,
+                        to_ts,
+                        summary,
+                        std::time::Instant::now(),
+                    ));
                 }
                 tracing::info!("Cache pre-warm complete");
             }
@@ -179,8 +187,14 @@ pub fn spawn_background_tasks(
             // Initial fetch immediately so whale detection works from startup
             match state.rpc.fetch_price().await {
                 Ok(price) => {
-                    tracing::info!("Price cache initialized: ${:.2}", price.usd);
-                    *state.price_cache.lock().unwrap_or_else(|e| e.into_inner()) =
+                    tracing::info!(
+                        "Price cache initialized: ${:.2}",
+                        price.usd
+                    );
+                    *state
+                        .price_cache
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner()) =
                         Some((price, std::time::Instant::now()));
                 }
                 Err(e) => tracing::warn!("Initial price fetch failed: {e}"),
@@ -189,7 +203,10 @@ pub fn spawn_background_tasks(
                 tokio::time::sleep(std::time::Duration::from_secs(90)).await;
                 match state.rpc.fetch_price().await {
                     Ok(price) => {
-                        *state.price_cache.lock().unwrap_or_else(|e| e.into_inner()) =
+                        *state
+                            .price_cache
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner()) =
                             Some((price, std::time::Instant::now()));
                     }
                     Err(e) => tracing::debug!("Price refresh failed: {e}"),
@@ -203,7 +220,10 @@ pub fn spawn_background_tasks(
         let state = Arc::clone(&state);
         tokio::spawn(async move {
             let mut last_height = {
-                state.db.get().ok()
+                state
+                    .db
+                    .get()
+                    .ok()
                     .and_then(|c| db::max_height(&c).ok().flatten())
                     .unwrap_or(0)
             };
@@ -215,23 +235,42 @@ pub fn spawn_background_tasks(
                 ingest::verify_recent_blocks(&state.rpc, &state.db, 6).await;
 
                 // Check if new blocks were added; if so, clear stale caches
-                let new_height = state.db.get().ok()
+                let new_height = state
+                    .db
+                    .get()
+                    .ok()
                     .and_then(|c| db::max_height(&c).ok().flatten())
                     .unwrap_or(0);
                 if new_height > last_height {
                     last_height = new_height;
                     // Invalidate server-side caches
-                    state.range_summary_cache.lock().unwrap_or_else(|e| e.into_inner()).take();
-                    state.extremes_cache.lock().unwrap_or_else(|e| e.into_inner()).take();
-                    state.stats_summary_cache.lock().unwrap_or_else(|e| e.into_inner()).take();
-                    state.daily_cache.lock().unwrap_or_else(|e| e.into_inner()).take();
+                    state
+                        .range_summary_cache
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .take();
+                    state
+                        .extremes_cache
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .take();
+                    state
+                        .stats_summary_cache
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .take();
+                    state
+                        .daily_cache
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .take();
                     // Update today's pre-computed daily aggregate
                     if let Ok(conn) = state.db.get() {
                         let today = db::timestamp_to_date(
                             std::time::SystemTime::now()
                                 .duration_since(std::time::UNIX_EPOCH)
                                 .unwrap_or_default()
-                                .as_secs()
+                                .as_secs(),
                         );
                         let _ = db::refresh_daily_block(&conn, &today);
                     }

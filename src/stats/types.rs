@@ -475,7 +475,6 @@ impl HofCategory {
             Self::Oddities => "#34d399",
         }
     }
-
 }
 
 /// Pre-computed histogram bucket: label + count.

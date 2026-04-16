@@ -268,7 +268,9 @@ fn ExtremesHero(data: ExtremesData) -> impl IntoView {
     ];
 
     // Filter out zero-value cards
-    cards.retain(|c| c.value != "0" && c.value != "0.0 sat/vB" && c.value != "0 B");
+    cards.retain(|c| {
+        c.value != "0" && c.value != "0.0 sat/vB" && c.value != "0 B"
+    });
 
     view! {
         <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 mb-2">

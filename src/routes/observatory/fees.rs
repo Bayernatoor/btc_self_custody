@@ -25,83 +25,128 @@ pub fn FeeChartsPage() -> impl IntoView {
 
     // All chart signals at component level (persist across refetches).
     let fees_option = Signal::derive(move || {
-                        let _r = range.get();
-                        let unit = fee_unit.get();
-                        let flags = overlay_flags.get();
-                        dashboard_data
-                            .get()
-                            .and_then(|r| r.ok())
-                            .map(|data| {
-                                let (mut value, is_daily) = match data {
-                                    DashboardData::PerBlock(ref blocks) => {
-                                        (crate::stats::charts::fees_chart_unit(blocks, &unit), false)
-                                    }
-                                    DashboardData::Daily(ref days) => {
-                                        (crate::stats::charts::fees_chart_daily_unit(days, &unit), true)
-                                    }
-                                };
-                                if value.is_null() { return String::new(); }
-                                crate::stats::charts::apply_overlays(&mut value, &flags, is_daily);
-                                serde_json::to_string(&value).unwrap_or_default()
-                            })
-                            .unwrap_or_default()
-                    });
+        let _r = range.get();
+        let unit = fee_unit.get();
+        let flags = overlay_flags.get();
+        dashboard_data
+            .get()
+            .and_then(|r| r.ok())
+            .map(|data| {
+                let (mut value, is_daily) = match data {
+                    DashboardData::PerBlock(ref blocks) => (
+                        crate::stats::charts::fees_chart_unit(blocks, &unit),
+                        false,
+                    ),
+                    DashboardData::Daily(ref days) => (
+                        crate::stats::charts::fees_chart_daily_unit(
+                            days, &unit,
+                        ),
+                        true,
+                    ),
+                };
+                if value.is_null() {
+                    return String::new();
+                }
+                crate::stats::charts::apply_overlays(
+                    &mut value, &flags, is_daily,
+                );
+                serde_json::to_string(&value).unwrap_or_default()
+            })
+            .unwrap_or_default()
+    });
 
-                    let subsidy_fees_option = chart_memo!(dashboard_data, range, overlay_flags,
-                        |blocks| crate::stats::charts::subsidy_vs_fees_chart(blocks),
-                        |days| crate::stats::charts::subsidy_vs_fees_chart_daily(days)
-                    );
+    let subsidy_fees_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
+        |blocks| crate::stats::charts::subsidy_vs_fees_chart(blocks),
+        |days| crate::stats::charts::subsidy_vs_fees_chart_daily(days)
+    );
 
-                    let avg_fee_tx_option = chart_memo!(dashboard_data, range, overlay_flags,
-                        |blocks| crate::stats::charts::avg_fee_per_tx_chart(blocks),
-                        |days| crate::stats::charts::avg_fee_per_tx_chart_daily(days)
-                    );
+    let avg_fee_tx_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
+        |blocks| crate::stats::charts::avg_fee_per_tx_chart(blocks),
+        |days| crate::stats::charts::avg_fee_per_tx_chart_daily(days)
+    );
 
-                    let median_rate_option = chart_memo!(dashboard_data, range, overlay_flags,
-                        |blocks| crate::stats::charts::median_fee_rate_chart(blocks),
-                        |days| crate::stats::charts::median_fee_rate_chart_daily(days)
-                    );
+    let median_rate_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
+        |blocks| crate::stats::charts::median_fee_rate_chart(blocks),
+        |days| crate::stats::charts::median_fee_rate_chart_daily(days)
+    );
 
+    let fee_revenue_share_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
+        |blocks| crate::stats::charts::fee_revenue_share_chart(blocks),
+        |days| crate::stats::charts::fee_revenue_share_chart_daily(days)
+    );
 
-                    let fee_revenue_share_option = chart_memo!(dashboard_data, range, overlay_flags,
-                        |blocks| crate::stats::charts::fee_revenue_share_chart(blocks),
-                        |days| crate::stats::charts::fee_revenue_share_chart_daily(days)
-                    );
+    let btc_volume_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
+        |blocks| crate::stats::charts::btc_volume_chart(blocks),
+        |days| crate::stats::charts::btc_volume_chart_daily(days)
+    );
 
-                    let btc_volume_option = chart_memo!(dashboard_data, range, overlay_flags,
-                        |blocks| crate::stats::charts::btc_volume_chart(blocks),
-                        |days| crate::stats::charts::btc_volume_chart_daily(days)
-                    );
+    let value_flow_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
+        |blocks| crate::stats::charts::value_flow_chart(blocks),
+        |days| crate::stats::charts::value_flow_chart_daily(days)
+    );
 
-                    let value_flow_option = chart_memo!(dashboard_data, range, overlay_flags,
-                        |blocks| crate::stats::charts::value_flow_chart(blocks),
-                        |days| crate::stats::charts::value_flow_chart_daily(days)
-                    );
-
-                    let fee_pressure_option = chart_memo!(dashboard_data, range, overlay_flags,
-                        |blocks| crate::stats::charts::fee_pressure_chart(blocks),
-                        |_days| crate::stats::charts::no_data_chart("Fee Pressure vs Block Space")
-                    );
-                    let fee_spike_option = chart_memo!(dashboard_data, range, overlay_flags,
-                        |blocks| crate::stats::charts::fee_spike_chart(blocks),
-                        |_days| crate::stats::charts::no_data_chart("Fee Spike Detector")
-                    );
-                    let halving_era_option = chart_memo!(dashboard_data, range, overlay_flags,
-                        |blocks| crate::stats::charts::halving_era_chart(blocks),
-                        |days| crate::stats::charts::halving_era_chart_daily(days)
-                    );
-                    let fee_heatmap_option = chart_memo!(dashboard_data, range, overlay_flags,
-                        |blocks| crate::stats::charts::fee_rate_heatmap_chart(blocks),
-                        |_days| crate::stats::charts::no_data_chart("Fee Rate Bands (Full)")
-                    );
-                    let max_tx_fee_option = chart_memo!(dashboard_data, range, overlay_flags,
-                        |blocks| crate::stats::charts::max_tx_fee_chart(blocks),
-                        |_days| crate::stats::charts::no_data_chart("Max Transaction Fee")
-                    );
-                    let protocol_fees_option = chart_memo!(dashboard_data, range, overlay_flags,
-                        |blocks| crate::stats::charts::protocol_fee_breakdown_chart(blocks),
-                        |_days| crate::stats::charts::no_data_chart("Protocol Fee Revenue")
-                    );
+    let fee_pressure_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
+        |blocks| crate::stats::charts::fee_pressure_chart(blocks),
+        |_days| crate::stats::charts::no_data_chart(
+            "Fee Pressure vs Block Space"
+        )
+    );
+    let fee_spike_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
+        |blocks| crate::stats::charts::fee_spike_chart(blocks),
+        |_days| crate::stats::charts::no_data_chart("Fee Spike Detector")
+    );
+    let halving_era_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
+        |blocks| crate::stats::charts::halving_era_chart(blocks),
+        |days| crate::stats::charts::halving_era_chart_daily(days)
+    );
+    let fee_heatmap_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
+        |blocks| crate::stats::charts::fee_rate_heatmap_chart(blocks),
+        |_days| crate::stats::charts::no_data_chart("Fee Rate Bands (Full)")
+    );
+    let max_tx_fee_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
+        |blocks| crate::stats::charts::max_tx_fee_chart(blocks),
+        |_days| crate::stats::charts::no_data_chart("Max Transaction Fee")
+    );
+    let protocol_fees_option = chart_memo!(
+        dashboard_data,
+        range,
+        overlay_flags,
+        |blocks| crate::stats::charts::protocol_fee_breakdown_chart(blocks),
+        |_days| crate::stats::charts::no_data_chart("Protocol Fee Revenue")
+    );
 
     view! {
         <Title text="Bitcoin Fee Charts: Miner Revenue & Subsidy Breakdown | WE HODL BTC"/>

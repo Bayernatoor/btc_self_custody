@@ -34,46 +34,136 @@ fn drawer_pages() -> Vec<DrawerPage> {
                 DrawerSection {
                     label: "Blocks",
                     charts: vec![
-                        DrawerChart { label: "Transaction Count", card_id: "card-chart-txcount" },
-                        DrawerChart { label: "TPS", card_id: "card-chart-tps" },
-                        DrawerChart { label: "Block Size", card_id: "card-chart-size" },
-                        DrawerChart { label: "Weight Utilization", card_id: "card-chart-weight-util" },
-                        DrawerChart { label: "Block Interval", card_id: "card-chart-interval" },
-                        DrawerChart { label: "Avg Transaction Size", card_id: "card-chart-avg-tx-size" },
-                        DrawerChart { label: "Chain Size Growth", card_id: "card-chart-chain-size" },
-                        DrawerChart { label: "Weekday Activity", card_id: "card-chart-weekday" },
-                        DrawerChart { label: "Block Fullness Distribution", card_id: "card-chart-fullness-dist" },
-                        DrawerChart { label: "Block Time Distribution", card_id: "card-chart-time-dist" },
-                        DrawerChart { label: "Rapid Consecutive Blocks", card_id: "card-chart-propagation" },
+                        DrawerChart {
+                            label: "Transaction Count",
+                            card_id: "card-chart-txcount",
+                        },
+                        DrawerChart {
+                            label: "TPS",
+                            card_id: "card-chart-tps",
+                        },
+                        DrawerChart {
+                            label: "Block Size",
+                            card_id: "card-chart-size",
+                        },
+                        DrawerChart {
+                            label: "Weight Utilization",
+                            card_id: "card-chart-weight-util",
+                        },
+                        DrawerChart {
+                            label: "Block Interval",
+                            card_id: "card-chart-interval",
+                        },
+                        DrawerChart {
+                            label: "Avg Transaction Size",
+                            card_id: "card-chart-avg-tx-size",
+                        },
+                        DrawerChart {
+                            label: "Chain Size Growth",
+                            card_id: "card-chart-chain-size",
+                        },
+                        DrawerChart {
+                            label: "Weekday Activity",
+                            card_id: "card-chart-weekday",
+                        },
+                        DrawerChart {
+                            label: "Block Fullness Distribution",
+                            card_id: "card-chart-fullness-dist",
+                        },
+                        DrawerChart {
+                            label: "Block Time Distribution",
+                            card_id: "card-chart-time-dist",
+                        },
+                        DrawerChart {
+                            label: "Rapid Consecutive Blocks",
+                            card_id: "card-chart-propagation",
+                        },
                     ],
                 },
                 DrawerSection {
                     label: "Adoption",
                     charts: vec![
-                        DrawerChart { label: "SegWit Adoption", card_id: "card-chart-segwit" },
-                        DrawerChart { label: "Taproot Outputs", card_id: "card-chart-taproot" },
-                        DrawerChart { label: "Address Type Evolution", card_id: "card-chart-address-types" },
-                        DrawerChart { label: "Address Type Share", card_id: "card-chart-address-types-pct" },
-                        DrawerChart { label: "Output Type Breakdown", card_id: "card-chart-witness-tx-pct" },
-                        DrawerChart { label: "Witness Version Comparison", card_id: "card-chart-witness-versions" },
-                        DrawerChart { label: "Witness Version Share", card_id: "card-chart-witness-pct" },
-                        DrawerChart { label: "Taproot Spend Types", card_id: "card-chart-taproot-spend-types" },
-                        DrawerChart { label: "Witness Data Share", card_id: "card-chart-witness-share" },
-                        DrawerChart { label: "Cumulative Adoption", card_id: "card-chart-cumulative-adoption" },
-                        DrawerChart { label: "Adoption Velocity", card_id: "card-chart-multi-velocity" },
-                        DrawerChart { label: "P2PKH Sunset Tracker", card_id: "card-chart-p2pkh-sunset" },
+                        DrawerChart {
+                            label: "SegWit Adoption",
+                            card_id: "card-chart-segwit",
+                        },
+                        DrawerChart {
+                            label: "Taproot Outputs",
+                            card_id: "card-chart-taproot",
+                        },
+                        DrawerChart {
+                            label: "Address Type Evolution",
+                            card_id: "card-chart-address-types",
+                        },
+                        DrawerChart {
+                            label: "Address Type Share",
+                            card_id: "card-chart-address-types-pct",
+                        },
+                        DrawerChart {
+                            label: "Output Type Breakdown",
+                            card_id: "card-chart-witness-tx-pct",
+                        },
+                        DrawerChart {
+                            label: "Witness Version Comparison",
+                            card_id: "card-chart-witness-versions",
+                        },
+                        DrawerChart {
+                            label: "Witness Version Share",
+                            card_id: "card-chart-witness-pct",
+                        },
+                        DrawerChart {
+                            label: "Taproot Spend Types",
+                            card_id: "card-chart-taproot-spend-types",
+                        },
+                        DrawerChart {
+                            label: "Witness Data Share",
+                            card_id: "card-chart-witness-share",
+                        },
+                        DrawerChart {
+                            label: "Cumulative Adoption",
+                            card_id: "card-chart-cumulative-adoption",
+                        },
+                        DrawerChart {
+                            label: "Adoption Velocity",
+                            card_id: "card-chart-multi-velocity",
+                        },
+                        DrawerChart {
+                            label: "P2PKH Sunset Tracker",
+                            card_id: "card-chart-p2pkh-sunset",
+                        },
                     ],
                 },
                 DrawerSection {
                     label: "Transactions",
                     charts: vec![
-                        DrawerChart { label: "RBF Adoption", card_id: "card-chart-rbf" },
-                        DrawerChart { label: "UTXO Flow", card_id: "card-chart-utxo-flow" },
-                        DrawerChart { label: "Batching Efficiency", card_id: "card-chart-batching" },
-                        DrawerChart { label: "Largest Transaction", card_id: "card-chart-largest-tx" },
-                        DrawerChart { label: "Transaction Density", card_id: "card-chart-tx-density" },
-                        DrawerChart { label: "UTXO Growth Rate", card_id: "card-chart-utxo-growth" },
-                        DrawerChart { label: "Transaction Type Evolution", card_id: "card-chart-tx-type-evolution" },
+                        DrawerChart {
+                            label: "RBF Adoption",
+                            card_id: "card-chart-rbf",
+                        },
+                        DrawerChart {
+                            label: "UTXO Flow",
+                            card_id: "card-chart-utxo-flow",
+                        },
+                        DrawerChart {
+                            label: "Batching Efficiency",
+                            card_id: "card-chart-batching",
+                        },
+                        DrawerChart {
+                            label: "Largest Transaction",
+                            card_id: "card-chart-largest-tx",
+                        },
+                        DrawerChart {
+                            label: "Transaction Density",
+                            card_id: "card-chart-tx-density",
+                        },
+                        DrawerChart {
+                            label: "UTXO Growth Rate",
+                            card_id: "card-chart-utxo-growth",
+                        },
+                        DrawerChart {
+                            label: "Transaction Type Evolution",
+                            card_id: "card-chart-tx-type-evolution",
+                        },
                     ],
                 },
             ],
@@ -81,26 +171,63 @@ fn drawer_pages() -> Vec<DrawerPage> {
         DrawerPage {
             label: "Fees",
             path_prefix: "/observatory/charts/fees",
-            sections: vec![
-                DrawerSection {
-                    label: "",
-                    charts: vec![
-                        DrawerChart { label: "Total Fees per Block", card_id: "card-chart-fees" },
-                        DrawerChart { label: "Median Fee Rate", card_id: "card-chart-median-rate" },
-                        DrawerChart { label: "Fee Rate Bands", card_id: "card-chart-fee-heatmap" },
-                        DrawerChart { label: "Avg Fee per Transaction", card_id: "card-chart-avg-fee-tx" },
-                        DrawerChart { label: "Subsidy vs Fees", card_id: "card-chart-subsidy-fees" },
-                        DrawerChart { label: "Fee Revenue Share", card_id: "card-chart-fee-revenue-share" },
-                        DrawerChart { label: "BTC Transferred Volume", card_id: "card-chart-btc-volume" },
-                        DrawerChart { label: "Input vs Output Value", card_id: "card-chart-value-flow" },
-                        DrawerChart { label: "Halving Era Comparison", card_id: "card-chart-halving-era" },
-                        DrawerChart { label: "Fee Pressure vs Block Space", card_id: "card-chart-fee-pressure" },
-                        DrawerChart { label: "Fee Spike Detector", card_id: "card-chart-fee-spikes" },
-                        DrawerChart { label: "Max Transaction Fee", card_id: "card-chart-max-tx-fee" },
-                        DrawerChart { label: "Protocol Fee Revenue", card_id: "card-chart-protocol-fees" },
-                    ],
-                },
-            ],
+            sections: vec![DrawerSection {
+                label: "",
+                charts: vec![
+                    DrawerChart {
+                        label: "Total Fees per Block",
+                        card_id: "card-chart-fees",
+                    },
+                    DrawerChart {
+                        label: "Median Fee Rate",
+                        card_id: "card-chart-median-rate",
+                    },
+                    DrawerChart {
+                        label: "Fee Rate Bands",
+                        card_id: "card-chart-fee-heatmap",
+                    },
+                    DrawerChart {
+                        label: "Avg Fee per Transaction",
+                        card_id: "card-chart-avg-fee-tx",
+                    },
+                    DrawerChart {
+                        label: "Subsidy vs Fees",
+                        card_id: "card-chart-subsidy-fees",
+                    },
+                    DrawerChart {
+                        label: "Fee Revenue Share",
+                        card_id: "card-chart-fee-revenue-share",
+                    },
+                    DrawerChart {
+                        label: "BTC Transferred Volume",
+                        card_id: "card-chart-btc-volume",
+                    },
+                    DrawerChart {
+                        label: "Input vs Output Value",
+                        card_id: "card-chart-value-flow",
+                    },
+                    DrawerChart {
+                        label: "Halving Era Comparison",
+                        card_id: "card-chart-halving-era",
+                    },
+                    DrawerChart {
+                        label: "Fee Pressure vs Block Space",
+                        card_id: "card-chart-fee-pressure",
+                    },
+                    DrawerChart {
+                        label: "Fee Spike Detector",
+                        card_id: "card-chart-fee-spikes",
+                    },
+                    DrawerChart {
+                        label: "Max Transaction Fee",
+                        card_id: "card-chart-max-tx-fee",
+                    },
+                    DrawerChart {
+                        label: "Protocol Fee Revenue",
+                        card_id: "card-chart-protocol-fees",
+                    },
+                ],
+            }],
         },
         DrawerPage {
             label: "Mining",
@@ -109,17 +236,35 @@ fn drawer_pages() -> Vec<DrawerPage> {
                 DrawerSection {
                     label: "Difficulty",
                     charts: vec![
-                        DrawerChart { label: "Difficulty", card_id: "card-chart-difficulty" },
-                        DrawerChart { label: "Difficulty Ribbon", card_id: "card-chart-diff-ribbon" },
+                        DrawerChart {
+                            label: "Difficulty",
+                            card_id: "card-chart-difficulty",
+                        },
+                        DrawerChart {
+                            label: "Difficulty Ribbon",
+                            card_id: "card-chart-diff-ribbon",
+                        },
                     ],
                 },
                 DrawerSection {
                     label: "Mining Pools",
                     charts: vec![
-                        DrawerChart { label: "Mining Pool Share", card_id: "card-chart-miner-dominance" },
-                        DrawerChart { label: "Mining Diversity Index", card_id: "card-chart-diversity" },
-                        DrawerChart { label: "Empty Blocks", card_id: "card-chart-empty-blocks" },
-                        DrawerChart { label: "Empty Blocks by Pool", card_id: "card-chart-empty-by-pool" },
+                        DrawerChart {
+                            label: "Mining Pool Share",
+                            card_id: "card-chart-miner-dominance",
+                        },
+                        DrawerChart {
+                            label: "Mining Diversity Index",
+                            card_id: "card-chart-diversity",
+                        },
+                        DrawerChart {
+                            label: "Empty Blocks",
+                            card_id: "card-chart-empty-blocks",
+                        },
+                        DrawerChart {
+                            label: "Empty Blocks by Pool",
+                            card_id: "card-chart-empty-by-pool",
+                        },
                     ],
                 },
             ],
@@ -131,35 +276,72 @@ fn drawer_pages() -> Vec<DrawerPage> {
                 DrawerSection {
                     label: "Overview",
                     charts: vec![
-                        DrawerChart { label: "All Embedded Share", card_id: "card-chart-all-embedded-share" },
-                        DrawerChart { label: "All Embedded Count", card_id: "card-chart-unified-count" },
-                        DrawerChart { label: "All Embedded Volume", card_id: "card-chart-unified-volume" },
+                        DrawerChart {
+                            label: "All Embedded Share",
+                            card_id: "card-chart-all-embedded-share",
+                        },
+                        DrawerChart {
+                            label: "All Embedded Count",
+                            card_id: "card-chart-unified-count",
+                        },
+                        DrawerChart {
+                            label: "All Embedded Volume",
+                            card_id: "card-chart-unified-volume",
+                        },
                     ],
                 },
                 DrawerSection {
                     label: "OP_RETURN",
                     charts: vec![
-                        DrawerChart { label: "OP_RETURN Count", card_id: "card-chart-opreturn-count" },
-                        DrawerChart { label: "OP_RETURN Volume", card_id: "card-chart-opreturn-bytes" },
-                        DrawerChart { label: "OP_RETURN Protocol Share", card_id: "card-chart-runes-pct" },
-                        DrawerChart { label: "OP_RETURN Block Share", card_id: "card-chart-op-block-share" },
+                        DrawerChart {
+                            label: "OP_RETURN Count",
+                            card_id: "card-chart-opreturn-count",
+                        },
+                        DrawerChart {
+                            label: "OP_RETURN Volume",
+                            card_id: "card-chart-opreturn-bytes",
+                        },
+                        DrawerChart {
+                            label: "OP_RETURN Protocol Share",
+                            card_id: "card-chart-runes-pct",
+                        },
+                        DrawerChart {
+                            label: "OP_RETURN Block Share",
+                            card_id: "card-chart-op-block-share",
+                        },
                     ],
                 },
                 DrawerSection {
                     label: "Ordinals & Witness Data",
                     charts: vec![
-                        DrawerChart { label: "Inscription Count", card_id: "card-chart-inscriptions" },
-                        DrawerChart { label: "Inscription Block Share", card_id: "card-chart-inscription-share" },
-                        DrawerChart { label: "Payload vs Envelope", card_id: "card-chart-inscription-envelope" },
-                        DrawerChart { label: "Inscription Fee Share", card_id: "card-chart-inscription-fee-share" },
-                        DrawerChart { label: "Protocol Fee Competition", card_id: "card-chart-protocol-fee-competition" },
+                        DrawerChart {
+                            label: "Inscription Count",
+                            card_id: "card-chart-inscriptions",
+                        },
+                        DrawerChart {
+                            label: "Inscription Block Share",
+                            card_id: "card-chart-inscription-share",
+                        },
+                        DrawerChart {
+                            label: "Payload vs Envelope",
+                            card_id: "card-chart-inscription-envelope",
+                        },
+                        DrawerChart {
+                            label: "Inscription Fee Share",
+                            card_id: "card-chart-inscription-fee-share",
+                        },
+                        DrawerChart {
+                            label: "Protocol Fee Competition",
+                            card_id: "card-chart-protocol-fee-competition",
+                        },
                     ],
                 },
                 DrawerSection {
                     label: "Miner Signals",
-                    charts: vec![
-                        DrawerChart { label: "Coinbase Message Length", card_id: "card-chart-coinbase-msg-length" },
-                    ],
+                    charts: vec![DrawerChart {
+                        label: "Coinbase Message Length",
+                        card_id: "card-chart-coinbase-msg-length",
+                    }],
                 },
             ],
         },

@@ -30,6 +30,7 @@ extern "C" {
 }
 
 #[cfg(not(feature = "hydrate"))]
+#[allow(dead_code)]
 fn js_show_tx_detail(_txid: &str, _local_data: ()) -> Result<(), ()> {
     Ok(())
 }
@@ -649,7 +650,11 @@ fn fmt_btc(sats: u64) -> String {
         let s = format!("{:.6}", btc);
         // Trim trailing zeros but keep at least 2 decimals
         let trimmed = s.trim_end_matches('0');
-        let trimmed = if trimmed.ends_with('.') { &s[..trimmed.len() + 2] } else { trimmed };
+        let trimmed = if trimmed.ends_with('.') {
+            &s[..trimmed.len() + 2]
+        } else {
+            trimmed
+        };
         // Ensure at least 2 decimal places
         let dot_pos = trimmed.find('.').unwrap_or(trimmed.len());
         let decimals = trimmed.len() - dot_pos - 1;
@@ -752,9 +757,9 @@ fn show_tx_detail_with_data(_txid: &str, _tx: &NotableTxInfo) {}
 
 /// Open the tx detail modal with just a txid (no local data).
 #[allow(dead_code)]
-fn show_tx_detail(txid: &str) {
+fn show_tx_detail(_txid: &str) {
     #[cfg(feature = "hydrate")]
     {
-        let _ = js_show_tx_detail(txid, JsValue::NULL);
+        let _ = js_show_tx_detail(_txid, JsValue::NULL);
     }
 }

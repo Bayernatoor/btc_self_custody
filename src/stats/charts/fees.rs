@@ -14,9 +14,17 @@ pub fn fees_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let mut raw_buf = String::with_capacity(blocks.len() * 30);
     raw_buf.push('[');
     for (i, b) in blocks.iter().enumerate() {
-        if i > 0 { raw_buf.push(','); }
+        if i > 0 {
+            raw_buf.push(',');
+        }
         if b.total_fees > 0 {
-            let _ = write!(raw_buf, "[{},{},{}]", ts_ms(b.timestamp), b.total_fees, b.height);
+            let _ = write!(
+                raw_buf,
+                "[{},{},{}]",
+                ts_ms(b.timestamp),
+                b.total_fees,
+                b.height
+            );
         } else {
             let _ = write!(raw_buf, "[{},null]", ts_ms(b.timestamp));
         }
@@ -89,10 +97,13 @@ pub fn fees_chart_unit(
     let mut raw_buf = String::with_capacity(blocks.len() * 30);
     raw_buf.push('[');
     for (i, b) in blocks.iter().enumerate() {
-        if i > 0 { raw_buf.push(','); }
+        if i > 0 {
+            raw_buf.push(',');
+        }
         if b.total_fees > 0 {
             let v = (b.total_fees as f64 / divisor * 1000.0).round() / 1000.0;
-            let _ = write!(raw_buf, "[{},{},{}]", ts_ms(b.timestamp), v, b.height);
+            let _ =
+                write!(raw_buf, "[{},{},{}]", ts_ms(b.timestamp), v, b.height);
         } else {
             let _ = write!(raw_buf, "[{},null]", ts_ms(b.timestamp));
         }
@@ -259,7 +270,8 @@ pub fn median_fee_rate_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Median Fee Rate");
     }
 
-    let rate_fn = |b: &BlockSummary| (b.median_fee_rate * 100.0).round() / 100.0;
+    let rate_fn =
+        |b: &BlockSummary| (b.median_fee_rate * 100.0).round() / 100.0;
     let raw_str = build_data_array_f64(blocks, rate_fn);
     let raw = data_array_value(&raw_str);
 
@@ -364,13 +376,19 @@ pub fn fee_rate_band_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Fee Rate Band");
     }
 
-    let p10_str = build_data_array_f64(blocks, |b| (b.fee_rate_p10 * 100.0).round() / 100.0);
+    let p10_str = build_data_array_f64(blocks, |b| {
+        (b.fee_rate_p10 * 100.0).round() / 100.0
+    });
     let p10_data = data_array_value(&p10_str);
 
-    let median_str = build_data_array_f64(blocks, |b| (b.median_fee_rate * 100.0).round() / 100.0);
+    let median_str = build_data_array_f64(blocks, |b| {
+        (b.median_fee_rate * 100.0).round() / 100.0
+    });
     let median_data = data_array_value(&median_str);
 
-    let p90_str = build_data_array_f64(blocks, |b| (b.fee_rate_p90 * 100.0).round() / 100.0);
+    let p90_str = build_data_array_f64(blocks, |b| {
+        (b.fee_rate_p90 * 100.0).round() / 100.0
+    });
     let p90_data = data_array_value(&p90_str);
 
     build_option(json!({
@@ -601,7 +619,9 @@ pub fn fee_revenue_share_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 }
 
 /// Fee revenue share from daily aggregates.
-pub fn fee_revenue_share_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+pub fn fee_revenue_share_chart_daily(
+    days: &[DailyAggregate],
+) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Fee Revenue Share");
     }
@@ -622,7 +642,8 @@ pub fn fee_revenue_share_chart_daily(days: &[DailyAggregate]) -> serde_json::Val
             } else {
                 50.0
             };
-            let total_subsidy = subsidy_per_block * d.block_count as f64 * 100_000_000.0;
+            let total_subsidy =
+                subsidy_per_block * d.block_count as f64 * 100_000_000.0;
             let fees = d.total_fees as f64;
             if total_subsidy + fees > 0.0 {
                 round(fees / (total_subsidy + fees) * 100.0, 2)
@@ -652,7 +673,9 @@ pub fn btc_volume_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("BTC Transferred Volume");
     }
 
-    let vol_fn = |b: &BlockSummary| round(b.total_output_value as f64 / 100_000_000.0, 2);
+    let vol_fn = |b: &BlockSummary| {
+        round(b.total_output_value as f64 / 100_000_000.0, 2)
+    };
     let data_str = build_data_array_f64(blocks, vol_fn);
     let data = data_array_value(&data_str);
 
@@ -838,10 +861,14 @@ pub fn fee_spike_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Fee Spike Detector");
     }
     if blocks.len() < 300 {
-        return no_data_chart_with_hint("Fee Spike Detector", "Select a longer range (1W+) for enough data to detect fee spikes");
+        return no_data_chart_with_hint(
+            "Fee Spike Detector",
+            "Select a longer range (1W+) for enough data to detect fee spikes",
+        );
     }
 
-    let rates: Vec<f64> = blocks.iter().map(|b| round(b.median_fee_rate, 2)).collect();
+    let rates: Vec<f64> =
+        blocks.iter().map(|b| round(b.median_fee_rate, 2)).collect();
     let ma = moving_average(&rates, 144);
     let ma_str = build_ma_array(blocks, &ma);
     let ma_data = data_array_value(&ma_str);
@@ -853,9 +880,17 @@ pub fn fee_spike_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     for (i, b) in blocks.iter().enumerate() {
         if let Some(avg) = ma[i] {
             if avg > 0.0 && rates[i] > avg * 5.0 {
-                if !first { spike_buf.push(','); }
+                if !first {
+                    spike_buf.push(',');
+                }
                 first = false;
-                let _ = write!(spike_buf, "[{},{},{}]", ts_ms(b.timestamp), rates[i], b.height);
+                let _ = write!(
+                    spike_buf,
+                    "[{},{},{}]",
+                    ts_ms(b.timestamp),
+                    rates[i],
+                    b.height
+                );
             }
         }
     }
@@ -896,14 +931,16 @@ pub fn halving_era_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     }
 
     // Group blocks by halving era (210,000 blocks each)
-    let mut era_data: std::collections::BTreeMap<u64, (f64, f64, f64, f64, u64)> =
-        std::collections::BTreeMap::new();
+    let mut era_data: std::collections::BTreeMap<
+        u64,
+        (f64, f64, f64, f64, u64),
+    > = std::collections::BTreeMap::new();
 
     for b in blocks {
         let era = b.height / 210_000;
         let entry = era_data.entry(era).or_insert((0.0, 0.0, 0.0, 0.0, 0));
-        entry.0 += b.size as f64 / 1_000_000.0;     // size in MB
-        entry.1 += b.tx_count as f64;                // tx count
+        entry.0 += b.size as f64 / 1_000_000.0; // size in MB
+        entry.1 += b.tx_count as f64; // tx count
         entry.2 += b.total_fees as f64 / 100_000_000.0; // fees in BTC
         let subsidy = block_subsidy(b.height) as f64;
         let fees = b.total_fees as f64;
@@ -913,15 +950,24 @@ pub fn halving_era_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         entry.4 += 1;
     }
 
-    let subsidy_labels = ["50 BTC", "25 BTC", "12.5 BTC", "6.25 BTC", "3.125 BTC"];
+    let subsidy_labels =
+        ["50 BTC", "25 BTC", "12.5 BTC", "6.25 BTC", "3.125 BTC"];
     let era_colors = ["#fbbf24", "#f59e0b", "#d97706", "#b45309", "#92400e"];
-    let metrics = ["Avg Size (MB)", "Avg Tx Count", "Avg Fees (BTC)", "Fee Revenue %"];
+    let metrics = [
+        "Avg Size (MB)",
+        "Avg Tx Count",
+        "Avg Fees (BTC)",
+        "Fee Revenue %",
+    ];
 
     let eras: Vec<u64> = era_data.keys().copied().collect();
 
     // Need at least 2 eras to compare
     if eras.len() < 2 {
-        return no_data_chart_with_hint("Halving Era Comparison", "Select a range spanning multiple halving eras (try ALL range)");
+        return no_data_chart_with_hint(
+            "Halving Era Comparison",
+            "Select a range spanning multiple halving eras (try ALL range)",
+        );
     }
 
     // Compute per-era averages for each metric
@@ -942,7 +988,9 @@ pub fn halving_era_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let mut maxes = [0.0f64; 4];
     for avgs in &era_avgs {
         for i in 0..4 {
-            if avgs[i] > maxes[i] { maxes[i] = avgs[i]; }
+            if avgs[i] > maxes[i] {
+                maxes[i] = avgs[i];
+            }
         }
     }
 
@@ -951,11 +999,17 @@ pub fn halving_era_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let units = ["MB", "txs", "BTC", "%"];
     let mut series = Vec::new();
     for (ei, &era) in eras.iter().enumerate() {
-        let data: Vec<serde_json::Value> = (0..4).map(|i| {
-            let norm = if maxes[i] > 0.0 { round(era_avgs[ei][i] / maxes[i] * 100.0, 1) } else { 0.0 };
-            let raw = era_avgs[ei][i];
-            json!({ "value": norm, "_raw": raw, "_unit": units[i] })
-        }).collect();
+        let data: Vec<serde_json::Value> = (0..4)
+            .map(|i| {
+                let norm = if maxes[i] > 0.0 {
+                    round(era_avgs[ei][i] / maxes[i] * 100.0, 1)
+                } else {
+                    0.0
+                };
+                let raw = era_avgs[ei][i];
+                json!({ "value": norm, "_raw": raw, "_unit": units[i] })
+            })
+            .collect();
         let label = if (era as usize) < subsidy_labels.len() {
             format!("Era {} ({})", era, subsidy_labels[era as usize])
         } else {
@@ -997,16 +1051,24 @@ pub fn halving_era_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     }
 
     fn date_to_era(date: &str) -> u64 {
-        if date >= "2024-04-20" { 4 }
-        else if date >= "2020-05-11" { 3 }
-        else if date >= "2016-07-09" { 2 }
-        else if date >= "2012-11-28" { 1 }
-        else { 0 }
+        if date >= "2024-04-20" {
+            4
+        } else if date >= "2020-05-11" {
+            3
+        } else if date >= "2016-07-09" {
+            2
+        } else if date >= "2012-11-28" {
+            1
+        } else {
+            0
+        }
     }
 
     let subsidy_btc = [50.0, 25.0, 12.5, 6.25, 3.125];
-    let mut era_data: std::collections::BTreeMap<u64, (f64, f64, f64, f64, u64)> =
-        std::collections::BTreeMap::new();
+    let mut era_data: std::collections::BTreeMap<
+        u64,
+        (f64, f64, f64, f64, u64),
+    > = std::collections::BTreeMap::new();
 
     for d in days {
         let era = date_to_era(&d.date);
@@ -1026,12 +1088,21 @@ pub fn halving_era_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
 
     let eras: Vec<u64> = era_data.keys().copied().collect();
     if eras.len() < 2 {
-        return no_data_chart_with_hint("Halving Era Comparison", "Select a range spanning multiple halving eras (try ALL range)");
+        return no_data_chart_with_hint(
+            "Halving Era Comparison",
+            "Select a range spanning multiple halving eras (try ALL range)",
+        );
     }
 
-    let subsidy_labels = ["50 BTC", "25 BTC", "12.5 BTC", "6.25 BTC", "3.125 BTC"];
+    let subsidy_labels =
+        ["50 BTC", "25 BTC", "12.5 BTC", "6.25 BTC", "3.125 BTC"];
     let era_colors = ["#fbbf24", "#f59e0b", "#d97706", "#b45309", "#92400e"];
-    let metrics = ["Avg Size (MB)", "Avg Tx Count", "Avg Fees (BTC)", "Fee Revenue %"];
+    let metrics = [
+        "Avg Size (MB)",
+        "Avg Tx Count",
+        "Avg Fees (BTC)",
+        "Fee Revenue %",
+    ];
 
     let mut era_avgs: Vec<[f64; 4]> = Vec::new();
     for &era in &eras {
@@ -1048,7 +1119,9 @@ pub fn halving_era_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     let mut maxes = [0.0f64; 4];
     for avgs in &era_avgs {
         for i in 0..4 {
-            if avgs[i] > maxes[i] { maxes[i] = avgs[i]; }
+            if avgs[i] > maxes[i] {
+                maxes[i] = avgs[i];
+            }
         }
     }
 
@@ -1103,7 +1176,9 @@ pub fn fee_rate_heatmap_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     }
 
     // Check that v10 percentile data is available
-    let has_v10 = blocks.iter().any(|b| b.fee_rate_p25 > 0.0 || b.fee_rate_p75 > 0.0);
+    let has_v10 = blocks
+        .iter()
+        .any(|b| b.fee_rate_p25 > 0.0 || b.fee_rate_p75 > 0.0);
     if !has_v10 {
         return no_data_chart("Fee Rate Heatmap");
     }
@@ -1114,7 +1189,8 @@ pub fn fee_rate_heatmap_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let p25_str = build_data_array_f64(blocks, |b| round(b.fee_rate_p25, 2));
     let p25_data = data_array_value(&p25_str);
 
-    let median_str = build_data_array_f64(blocks, |b| round(b.median_fee_rate, 2));
+    let median_str =
+        build_data_array_f64(blocks, |b| round(b.median_fee_rate, 2));
     let median_data = data_array_value(&median_str);
 
     let p75_str = build_data_array_f64(blocks, |b| round(b.fee_rate_p75, 2));
@@ -1183,7 +1259,8 @@ pub fn max_tx_fee_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Max Tx Fee");
     }
 
-    let fee_fn = |b: &BlockSummary| round(b.max_tx_fee as f64 / 100_000_000.0, 6);
+    let fee_fn =
+        |b: &BlockSummary| round(b.max_tx_fee as f64 / 100_000_000.0, 6);
     let data_str = build_data_array_f64(blocks, fee_fn);
     let data = data_array_value(&data_str);
 
@@ -1219,18 +1296,25 @@ pub fn max_tx_fee_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 
 /// Protocol fee breakdown: inscription fees, runes fees, and other fees as stacked area.
 /// All values in BTC. Requires backfill v10 for inscription_fees/runes_fees data.
-pub fn protocol_fee_breakdown_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+pub fn protocol_fee_breakdown_chart(
+    blocks: &[BlockSummary],
+) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Protocol Fee Breakdown");
     }
 
-    let has_data = blocks.iter().any(|b| b.inscription_fees > 0 || b.runes_fees > 0);
+    let has_data = blocks
+        .iter()
+        .any(|b| b.inscription_fees > 0 || b.runes_fees > 0);
     if !has_data {
         return no_data_chart("Protocol Fee Breakdown");
     }
 
     let other_str = build_data_array_f64(blocks, |b| {
-        let other = b.total_fees.saturating_sub(b.inscription_fees).saturating_sub(b.runes_fees);
+        let other = b
+            .total_fees
+            .saturating_sub(b.inscription_fees)
+            .saturating_sub(b.runes_fees);
         round(other as f64 / 100_000_000.0, 6)
     });
     let other_data = data_array_value(&other_str);

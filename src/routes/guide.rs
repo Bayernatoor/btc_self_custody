@@ -235,7 +235,8 @@ fn render_level_page(
         "Free {} Bitcoin self-custody guide for {}. Learn to secure your own bitcoin with step-by-step wallet setup instructions.",
         level.name.to_lowercase(), platform_display
     );
-    let canonical = format!("https://www.wehodlbtc.com/guides/{}/{}", level.id, platform);
+    let canonical =
+        format!("https://www.wehodlbtc.com/guides/{}/{}", level.id, platform);
 
     view! {
         <Title text=page_title/>
@@ -505,10 +506,8 @@ fn render_step_page(
         "{} - Bitcoin self-custody guide. Step-by-step instructions for {}.",
         step.title, level_name
     );
-    let canonical = format!(
-        "https://www.wehodlbtc.com/guides/{}/{}",
-        level_id, step.id
-    );
+    let canonical =
+        format!("https://www.wehodlbtc.com/guides/{}/{}", level_id, step.id);
 
     view! {
         <Title text=page_title/>

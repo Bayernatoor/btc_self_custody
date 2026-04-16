@@ -190,7 +190,9 @@ pub fn tps_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let mut raw_buf = String::with_capacity(blocks.len() * 30);
     raw_buf.push('[');
     for (i, (b, v)) in blocks.iter().zip(all_vals.iter()).enumerate() {
-        if i > 0 { raw_buf.push(','); }
+        if i > 0 {
+            raw_buf.push(',');
+        }
         let _ = write!(raw_buf, "[{},{},{}]", ts_ms(b.timestamp), v, b.height);
     }
     raw_buf.push(']');
@@ -334,8 +336,16 @@ pub fn block_interval_chart(blocks: &[BlockSummary]) -> serde_json::Value {
             * 100.0)
             .round()
             / 100.0;
-        if i > 1 { dots_buf.push(','); }
-        let _ = write!(dots_buf, "[{},{},{}]", ts_ms(blocks[i].timestamp), mins, blocks[i].height);
+        if i > 1 {
+            dots_buf.push(',');
+        }
+        let _ = write!(
+            dots_buf,
+            "[{},{},{}]",
+            ts_ms(blocks[i].timestamp),
+            mins,
+            blocks[i].height
+        );
         interval_vals.push(mins);
     }
     dots_buf.push(']');
@@ -442,7 +452,9 @@ pub fn weight_utilization_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Weight Utilization");
     }
 
-    let weight_fn = |b: &BlockSummary| (b.weight as f64 / 4_000_000.0 * 100.0 * 1000.0).round() / 1000.0;
+    let weight_fn = |b: &BlockSummary| {
+        (b.weight as f64 / 4_000_000.0 * 100.0 * 1000.0).round() / 1000.0
+    };
     let raw_str = build_data_array_f64(blocks, weight_fn);
     let raw = data_array_value(&raw_str);
 
@@ -792,8 +804,8 @@ pub fn block_fullness_distribution_chart(
     }
 
     let labels: Vec<&str> = vec![
-        "0-10%", "10-20%", "20-30%", "30-40%", "40-50%",
-        "50-60%", "60-70%", "70-80%", "80-90%", "90-100%",
+        "0-10%", "10-20%", "20-30%", "30-40%", "40-50%", "50-60%", "60-70%",
+        "70-80%", "80-90%", "90-100%",
     ];
     let mut counts = [0u64; 10];
 
@@ -840,19 +852,15 @@ pub fn block_time_distribution_chart(
 
     // 61 buckets: 0-1, 1-2, ..., 59-60, 60+
     let mut counts = vec![0u64; 61];
-    let mut labels: Vec<String> = (0..60)
-        .map(|i| format!("{}-{}", i, i + 1))
-        .collect();
+    let mut labels: Vec<String> =
+        (0..60).map(|i| format!("{}-{}", i, i + 1)).collect();
     labels.push("60+".to_string());
 
     for i in 1..blocks.len() {
-        let interval = blocks[i].timestamp.saturating_sub(blocks[i - 1].timestamp);
+        let interval =
+            blocks[i].timestamp.saturating_sub(blocks[i - 1].timestamp);
         let mins = interval as f64 / 60.0;
-        let idx = if mins >= 60.0 {
-            60
-        } else {
-            mins as usize
-        };
+        let idx = if mins >= 60.0 { 60 } else { mins as usize };
         counts[idx] += 1;
     }
 
@@ -891,17 +899,24 @@ pub fn block_fullness_distribution_pct_chart(
     }
 
     let labels: Vec<&str> = vec![
-        "0-10%", "10-20%", "20-30%", "30-40%", "40-50%",
-        "50-60%", "60-70%", "70-80%", "80-90%", "90-100%",
+        "0-10%", "10-20%", "20-30%", "30-40%", "40-50%", "50-60%", "60-70%",
+        "70-80%", "80-90%", "90-100%",
     ];
     let mut counts = [0u64; 10];
     for b in blocks {
         let pct = b.weight as f64 / 4_000_000.0 * 100.0;
-        let idx = if pct >= 100.0 { 9 } else { (pct / 10.0) as usize };
+        let idx = if pct >= 100.0 {
+            9
+        } else {
+            (pct / 10.0) as usize
+        };
         counts[idx] += 1;
     }
     let total = blocks.len() as f64;
-    let data: Vec<f64> = counts.iter().map(|&c| round(c as f64 / total * 100.0, 2)).collect();
+    let data: Vec<f64> = counts
+        .iter()
+        .map(|&c| round(c as f64 / total * 100.0, 2))
+        .collect();
 
     build_option(json!({
         "xAxis": {
@@ -933,20 +948,29 @@ pub fn block_time_distribution_pct_chart(
     }
 
     let mut counts = vec![0u64; 61];
-    let mut labels: Vec<String> = (0..60).map(|i| format!("{}-{}", i, i + 1)).collect();
+    let mut labels: Vec<String> =
+        (0..60).map(|i| format!("{}-{}", i, i + 1)).collect();
     labels.push("60+".to_string());
 
     for i in 1..blocks.len() {
-        let interval = blocks[i].timestamp.saturating_sub(blocks[i - 1].timestamp);
+        let interval =
+            blocks[i].timestamp.saturating_sub(blocks[i - 1].timestamp);
         let mins = interval as f64 / 60.0;
         let idx = if mins >= 60.0 { 60 } else { mins as usize };
         counts[idx] += 1;
     }
 
     let total = blocks.len().saturating_sub(1) as f64;
-    let data: Vec<f64> = counts.iter().map(|&c| {
-        if total > 0.0 { round(c as f64 / total * 100.0, 2) } else { 0.0 }
-    }).collect();
+    let data: Vec<f64> = counts
+        .iter()
+        .map(|&c| {
+            if total > 0.0 {
+                round(c as f64 / total * 100.0, 2)
+            } else {
+                0.0
+            }
+        })
+        .collect();
 
     build_option(json!({
         "xAxis": {
@@ -975,9 +999,7 @@ pub fn block_time_distribution_pct_chart(
 }
 
 /// Scatter plot of rapid consecutive blocks (interval < 60 seconds).
-pub fn block_propagation_chart(
-    blocks: &[BlockSummary],
-) -> serde_json::Value {
+pub fn block_propagation_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Rapid Blocks");
     }
@@ -985,14 +1007,18 @@ pub fn block_propagation_chart(
     let mut dots: Vec<serde_json::Value> = Vec::new();
 
     for i in 1..blocks.len() {
-        let interval = blocks[i].timestamp.saturating_sub(blocks[i - 1].timestamp);
+        let interval =
+            blocks[i].timestamp.saturating_sub(blocks[i - 1].timestamp);
         if interval < 60 {
             dots.push(dp(&blocks[i], interval));
         }
     }
 
     if dots.is_empty() {
-        return no_data_chart_with_hint("No rapid consecutive blocks found", "No blocks arrived within 60 seconds of each other in this range");
+        return no_data_chart_with_hint(
+            "No rapid consecutive blocks found",
+            "No blocks arrived within 60 seconds of each other in this range",
+        );
     }
 
     let count = dots.len();
@@ -1060,7 +1086,10 @@ pub fn block_fullness_histogram_from_buckets_pct(
     }
     let labels: Vec<&str> = buckets.iter().map(|b| b.label.as_str()).collect();
     let total: u64 = buckets.iter().map(|b| b.count).sum();
-    let data: Vec<f64> = buckets.iter().map(|b| round(b.count as f64 / total as f64 * 100.0, 2)).collect();
+    let data: Vec<f64> = buckets
+        .iter()
+        .map(|b| round(b.count as f64 / total as f64 * 100.0, 2))
+        .collect();
 
     build_option(json!({
         "xAxis": {
@@ -1130,16 +1159,17 @@ pub fn difficulty_ribbon_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 
     let windows = [9, 14, 25, 40, 60, 90, 128];
     let colors = [
-        "rgba(173,216,255,0.7)",  // lightest blue
+        "rgba(173,216,255,0.7)", // lightest blue
         "rgba(135,190,255,0.7)",
         "rgba(100,165,255,0.7)",
         "rgba(70,140,240,0.7)",
         "rgba(45,115,220,0.7)",
         "rgba(25,90,200,0.7)",
-        "rgba(10,60,170,0.7)",    // darkest blue
+        "rgba(10,60,170,0.7)", // darkest blue
     ];
 
-    let diff_vals: Vec<f64> = blocks.iter().map(|b| b.difficulty / 1e12).collect();
+    let diff_vals: Vec<f64> =
+        blocks.iter().map(|b| b.difficulty / 1e12).collect();
 
     let mut series = Vec::with_capacity(windows.len());
     for (i, &w) in windows.iter().enumerate() {
@@ -1167,7 +1197,9 @@ pub fn difficulty_ribbon_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 }
 
 /// Difficulty ribbon chart from daily aggregates.
-pub fn difficulty_ribbon_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+pub fn difficulty_ribbon_chart_daily(
+    days: &[DailyAggregate],
+) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Difficulty Ribbon");
     }
@@ -1184,7 +1216,8 @@ pub fn difficulty_ribbon_chart_daily(days: &[DailyAggregate]) -> serde_json::Val
     ];
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let diff_vals: Vec<f64> = days.iter().map(|d| d.avg_difficulty / 1e12).collect();
+    let diff_vals: Vec<f64> =
+        days.iter().map(|d| d.avg_difficulty / 1e12).collect();
 
     let mut series = Vec::with_capacity(windows.len());
     for (i, &w) in windows.iter().enumerate() {
@@ -1238,10 +1271,22 @@ pub fn weekday_activity_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 
     let day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
     let avg_tx: Vec<f64> = (0..7)
-        .map(|i| if counts[i] > 0 { round(tx_sums[i] / counts[i] as f64, 1) } else { 0.0 })
+        .map(|i| {
+            if counts[i] > 0 {
+                round(tx_sums[i] / counts[i] as f64, 1)
+            } else {
+                0.0
+            }
+        })
         .collect();
     let avg_fees: Vec<f64> = (0..7)
-        .map(|i| if counts[i] > 0 { round(fee_sums[i] / counts[i] as f64, 4) } else { 0.0 })
+        .map(|i| {
+            if counts[i] > 0 {
+                round(fee_sums[i] / counts[i] as f64, 4)
+            } else {
+                0.0
+            }
+        })
         .collect();
 
     build_option(json!({
@@ -1285,7 +1330,9 @@ pub fn weekday_activity_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 }
 
 /// Weekday activity from daily aggregates. Groups by day-of-week using the date string.
-pub fn weekday_activity_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
+pub fn weekday_activity_chart_daily(
+    days: &[DailyAggregate],
+) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Weekday Activity");
     }
@@ -1296,7 +1343,8 @@ pub fn weekday_activity_chart_daily(days: &[DailyAggregate]) -> serde_json::Valu
 
     for d in days {
         // Parse date to get day of week
-        if let Ok(date) = chrono::NaiveDate::parse_from_str(&d.date, "%Y-%m-%d") {
+        if let Ok(date) = chrono::NaiveDate::parse_from_str(&d.date, "%Y-%m-%d")
+        {
             let dow = date.weekday().num_days_from_monday() as usize;
             tx_sums[dow] += d.avg_tx_count * d.block_count as f64;
             fee_sums[dow] += d.total_fees as f64 / 100_000_000.0;
@@ -1306,10 +1354,22 @@ pub fn weekday_activity_chart_daily(days: &[DailyAggregate]) -> serde_json::Valu
 
     let day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
     let avg_tx: Vec<f64> = (0..7)
-        .map(|i| if counts[i] > 0 { round(tx_sums[i] / counts[i] as f64, 1) } else { 0.0 })
+        .map(|i| {
+            if counts[i] > 0 {
+                round(tx_sums[i] / counts[i] as f64, 1)
+            } else {
+                0.0
+            }
+        })
         .collect();
     let avg_fees: Vec<f64> = (0..7)
-        .map(|i| if counts[i] > 0 { round(fee_sums[i] / counts[i] as f64, 4) } else { 0.0 })
+        .map(|i| {
+            if counts[i] > 0 {
+                round(fee_sums[i] / counts[i] as f64, 4)
+            } else {
+                0.0
+            }
+        })
         .collect();
 
     build_option(json!({
@@ -1361,7 +1421,10 @@ pub fn block_time_histogram_from_buckets_pct(
     }
     let labels: Vec<&str> = buckets.iter().map(|b| b.label.as_str()).collect();
     let total: u64 = buckets.iter().map(|b| b.count).sum();
-    let data: Vec<f64> = buckets.iter().map(|b| round(b.count as f64 / total as f64 * 100.0, 2)).collect();
+    let data: Vec<f64> = buckets
+        .iter()
+        .map(|b| round(b.count as f64 / total as f64 * 100.0, 2))
+        .collect();
 
     build_option(json!({
         "xAxis": {

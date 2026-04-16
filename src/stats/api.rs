@@ -531,7 +531,8 @@ pub async fn get_tx_detail(
             // Total output value (BTC float -> sats)
             let total_output_sats: u64 = vout
                 .map(|outputs| {
-                    outputs.iter()
+                    outputs
+                        .iter()
                         .filter_map(|o| o["value"].as_f64())
                         .map(|v| (v * 100_000_000.0).round() as u64)
                         .sum()
@@ -542,17 +543,14 @@ pub async fn get_tx_detail(
             // Otherwise check mempool entry for unconfirmed txs.
             let input_total_sats: u64 = vin
                 .map(|inputs| {
-                    inputs.iter()
+                    inputs
+                        .iter()
                         .filter_map(|i| i["prevout"]["value"].as_f64())
                         .map(|v| (v * 100_000_000.0).round() as u64)
                         .sum()
                 })
                 .unwrap_or(0);
-            let fee_sats = if input_total_sats > total_output_sats {
-                input_total_sats - total_output_sats
-            } else {
-                0
-            };
+            let fee_sats = input_total_sats.saturating_sub(total_output_sats);
             let fee_rate = if vsize > 0 && fee_sats > 0 {
                 fee_sats as f64 / vsize as f64
             } else {
@@ -565,30 +563,51 @@ pub async fn get_tx_detail(
             let block_height = tx["blockheight"].as_u64();
 
             // Detect features from vin
-            let is_coinbase = vin.map(|inputs| {
-                inputs.iter().any(|i| !i["coinbase"].is_null())
-            }).unwrap_or(false);
-            let has_witness = vin.map(|inputs| {
-                inputs.iter().any(|i| {
-                    i["txinwitness"].as_array().map(|w| !w.is_empty()).unwrap_or(false)
+            let is_coinbase = vin
+                .map(|inputs| inputs.iter().any(|i| !i["coinbase"].is_null()))
+                .unwrap_or(false);
+            let has_witness = vin
+                .map(|inputs| {
+                    inputs.iter().any(|i| {
+                        i["txinwitness"]
+                            .as_array()
+                            .map(|w| !w.is_empty())
+                            .unwrap_or(false)
+                    })
                 })
-            }).unwrap_or(false);
-            let has_taproot = vin.map(|inputs| {
-                inputs.iter().any(|i| {
-                    i["prevout"]["scriptPubKey"]["type"].as_str() == Some("witness_v1_taproot")
+                .unwrap_or(false);
+            let has_taproot = vin
+                .map(|inputs| {
+                    inputs.iter().any(|i| {
+                        i["prevout"]["scriptPubKey"]["type"].as_str()
+                            == Some("witness_v1_taproot")
+                    })
                 })
-            }).unwrap_or(false);
-            let is_rbf = vin.map(|inputs| {
-                inputs.iter().any(|i| {
-                    i["sequence"].as_u64().map(|s| s < 0xFFFFFFFE).unwrap_or(false)
+                .unwrap_or(false);
+            let is_rbf = vin
+                .map(|inputs| {
+                    inputs.iter().any(|i| {
+                        i["sequence"]
+                            .as_u64()
+                            .map(|s| s < 0xFFFFFFFE)
+                            .unwrap_or(false)
+                    })
                 })
-            }).unwrap_or(false);
+                .unwrap_or(false);
 
             let mut features = Vec::new();
-            if is_coinbase { features.push("Coinbase"); }
-            if has_witness { features.push("SegWit"); }
-            if has_taproot { features.push("Taproot"); }
-            if is_rbf { features.push("RBF"); }
+            if is_coinbase {
+                features.push("Coinbase");
+            }
+            if has_witness {
+                features.push("SegWit");
+            }
+            if has_taproot {
+                features.push("Taproot");
+            }
+            if is_rbf {
+                features.push("RBF");
+            }
 
             Ok(Json(serde_json::json!({
                 "txid": txid,
@@ -656,10 +675,13 @@ pub async fn get_heartbeat_sse(
                 let block_ts = db::max_height(&conn)
                     .ok()
                     .flatten()
-                    .and_then(|h| db::query_block_timestamp(&conn, h).ok().flatten())
+                    .and_then(|h| {
+                        db::query_block_timestamp(&conn, h).ok().flatten()
+                    })
                     .unwrap_or(0);
-                let txs = db::query_recent_mempool_txs(&conn, two_hours_ago, 10000)
-                    .unwrap_or_default();
+                let txs =
+                    db::query_recent_mempool_txs(&conn, two_hours_ago, 10000)
+                        .unwrap_or_default();
                 // Fetch recent notable txs (last 24h, up to 200) for the feed panel.
                 // Includes confirmed txs, unlike mempool_txs query.
                 let filter = db::NotableFilter {
@@ -699,43 +721,42 @@ pub async fn get_heartbeat_sse(
                     ))
                 }
                 Phase::NotableHistory(notables) => {
-                    let data = serde_json::to_string(&notables).unwrap_or_else(|_| "[]".to_string());
+                    let data = serde_json::to_string(&notables)
+                        .unwrap_or_else(|_| "[]".to_string());
                     Some((
-                        Ok(Event::default().event("notable_history").data(data)),
+                        Ok(Event::default()
+                            .event("notable_history")
+                            .data(data)),
                         (Phase::Live, rx),
                     ))
                 }
-                Phase::Live => {
-                    match rx.recv().await {
-                        Ok(event) => {
-                            let event_type = match &event {
+                Phase::Live => match rx.recv().await {
+                    Ok(event) => {
+                        let event_type = match &event {
                             super::zmq_subscriber::HeartbeatEvent::Tx { .. } => "tx",
                             super::zmq_subscriber::HeartbeatEvent::Block { .. } => "block",
                             super::zmq_subscriber::HeartbeatEvent::BlockMining => "block_mining",
                         };
-                            let data = serde_json::to_string(&event)
-                                .unwrap_or_default();
-                            Some((
-                                Ok(Event::default()
-                                    .event(event_type)
-                                    .data(data)),
-                                (Phase::Live, rx),
-                            ))
-                        }
-                        Err(broadcast::error::RecvError::Lagged(n)) => {
-                            tracing::debug!(
-                                "SSE client lagged, skipped {n} events"
-                            );
-                            Some((
-                                Ok(Event::default()
-                                    .event("lag")
-                                    .data(format!("{{\"skipped\":{n}}}"))),
-                                (Phase::Live, rx),
-                            ))
-                        }
-                        Err(broadcast::error::RecvError::Closed) => None,
+                        let data =
+                            serde_json::to_string(&event).unwrap_or_default();
+                        Some((
+                            Ok(Event::default().event(event_type).data(data)),
+                            (Phase::Live, rx),
+                        ))
                     }
-                }
+                    Err(broadcast::error::RecvError::Lagged(n)) => {
+                        tracing::debug!(
+                            "SSE client lagged, skipped {n} events"
+                        );
+                        Some((
+                            Ok(Event::default()
+                                .event("lag")
+                                .data(format!("{{\"skipped\":{n}}}"))),
+                            (Phase::Live, rx),
+                        ))
+                    }
+                    Err(broadcast::error::RecvError::Closed) => None,
+                },
             }
         },
     );

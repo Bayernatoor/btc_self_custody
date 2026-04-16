@@ -152,10 +152,18 @@ pub fn batching_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     }
 
     let out_fn = |b: &BlockSummary| {
-        if b.tx_count > 0 { round(b.output_count as f64 / b.tx_count as f64, 2) } else { 0.0 }
+        if b.tx_count > 0 {
+            round(b.output_count as f64 / b.tx_count as f64, 2)
+        } else {
+            0.0
+        }
     };
     let in_fn = |b: &BlockSummary| {
-        if b.tx_count > 0 { round(b.input_count as f64 / b.tx_count as f64, 2) } else { 0.0 }
+        if b.tx_count > 0 {
+            round(b.input_count as f64 / b.tx_count as f64, 2)
+        } else {
+            0.0
+        }
     };
     let out_raw_str = build_data_array_f64(blocks, out_fn);
     let out_raw = data_array_value(&out_raw_str);
@@ -362,11 +370,14 @@ pub fn rbf_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let mut raw_buf = String::with_capacity(blocks.len() * 30);
     raw_buf.push('[');
     for (i, (b, v)) in blocks.iter().zip(vals.iter()).enumerate() {
-        if i > 0 { raw_buf.push(','); }
+        if i > 0 {
+            raw_buf.push(',');
+        }
         if b.timestamp < BIP125_TIMESTAMP {
             let _ = write!(raw_buf, "[{},null]", ts_ms(b.timestamp));
         } else {
-            let _ = write!(raw_buf, "[{},{},{}]", ts_ms(b.timestamp), v, b.height);
+            let _ =
+                write!(raw_buf, "[{},{},{}]", ts_ms(b.timestamp), v, b.height);
         }
     }
     raw_buf.push(']');
@@ -507,10 +518,15 @@ pub fn utxo_growth_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("UTXO Growth Rate");
     }
 
-    let data_str = build_data_array_i64(blocks, |b| b.output_count as i64 - b.input_count as i64);
+    let data_str = build_data_array_i64(blocks, |b| {
+        b.output_count as i64 - b.input_count as i64
+    });
     let data = data_array_value(&data_str);
 
-    let raw: Vec<f64> = blocks.iter().map(|b| b.output_count as f64 - b.input_count as f64).collect();
+    let raw: Vec<f64> = blocks
+        .iter()
+        .map(|b| b.output_count as f64 - b.input_count as f64)
+        .collect();
     let ma = moving_average(&raw, 144);
     let ma_str = build_ma_array(blocks, &ma);
     let ma_data = data_array_value(&ma_str);
@@ -547,7 +563,8 @@ pub fn utxo_growth_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     let data: Vec<f64> = days
         .iter()
         .map(|d| {
-            let net = (d.avg_output_count - d.avg_input_count) * d.block_count as f64;
+            let net =
+                (d.avg_output_count - d.avg_input_count) * d.block_count as f64;
             round(net, 0)
         })
         .collect();
@@ -662,19 +679,31 @@ pub fn tx_type_evolution_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 
     let legacy_str = build_data_array_f64(blocks, |b| {
         let total = b.legacy_tx_count + b.segwit_tx_count + b.taproot_tx_count;
-        if total > 0 { round(b.legacy_tx_count as f64 / total as f64 * 100.0, 2) } else { 0.0 }
+        if total > 0 {
+            round(b.legacy_tx_count as f64 / total as f64 * 100.0, 2)
+        } else {
+            0.0
+        }
     });
     let legacy_data = data_array_value(&legacy_str);
 
     let segwit_str = build_data_array_f64(blocks, |b| {
         let total = b.legacy_tx_count + b.segwit_tx_count + b.taproot_tx_count;
-        if total > 0 { round(b.segwit_tx_count as f64 / total as f64 * 100.0, 2) } else { 0.0 }
+        if total > 0 {
+            round(b.segwit_tx_count as f64 / total as f64 * 100.0, 2)
+        } else {
+            0.0
+        }
     });
     let segwit_data = data_array_value(&segwit_str);
 
     let taproot_str = build_data_array_f64(blocks, |b| {
         let total = b.legacy_tx_count + b.segwit_tx_count + b.taproot_tx_count;
-        if total > 0 { round(b.taproot_tx_count as f64 / total as f64 * 100.0, 2) } else { 0.0 }
+        if total > 0 {
+            round(b.taproot_tx_count as f64 / total as f64 * 100.0, 2)
+        } else {
+            0.0
+        }
     });
     let taproot_data = data_array_value(&taproot_str);
 

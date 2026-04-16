@@ -458,4 +458,3 @@ pub fn ChartPageLayout(
         <ChartDrawer/>
     }
 }
-

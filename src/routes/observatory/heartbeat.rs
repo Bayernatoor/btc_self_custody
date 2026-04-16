@@ -248,7 +248,8 @@ pub fn HeartbeatPage() -> impl IntoView {
                         avg_u % 60
                     ));
                     let bpm = 600.0 / avg_secs;
-                    set_hr_subtitle.set(format!("{:.0}% of target rate", bpm * 100.0));
+                    set_hr_subtitle
+                        .set(format!("{:.0}% of target rate", bpm * 100.0));
                     let (label, color) = if bpm < BRADYCARDIA_THRESHOLD {
                         ("Bradycardia", "#42a5f5")
                     } else if bpm <= TACHYCARDIA_THRESHOLD {

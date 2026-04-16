@@ -229,11 +229,10 @@ pub fn OnThisDayPage() -> impl IntoView {
                     leptos::prelude::document().get_element_by_id(&target_id)
                 {
                     let rect = el.get_bounding_client_rect();
-                    let offset = leptos::prelude::window()
-                        .scroll_y()
-                        .unwrap_or(0.0)
-                        + rect.top()
-                        - 80.0;
+                    let offset =
+                        leptos::prelude::window().scroll_y().unwrap_or(0.0)
+                            + rect.top()
+                            - 80.0;
                     let _ = leptos::prelude::window()
                         .scroll_to_with_x_and_y(0.0, offset);
                 }

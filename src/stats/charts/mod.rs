@@ -158,11 +158,17 @@ pub(crate) fn y_axis(name: &str) -> serde_json::Value {
 
 /// Fallback chart option when no data is available for the current range.
 pub(crate) fn no_data_chart(title: &str) -> serde_json::Value {
-    no_data_chart_with_hint(title, "Select a shorter range (1M or less) to view per-block data")
+    no_data_chart_with_hint(
+        title,
+        "Select a shorter range (1M or less) to view per-block data",
+    )
 }
 
 /// Fallback chart with a custom hint message.
-pub(crate) fn no_data_chart_with_hint(title: &str, hint: &str) -> serde_json::Value {
+pub(crate) fn no_data_chart_with_hint(
+    title: &str,
+    hint: &str,
+) -> serde_json::Value {
     let mut opt = chart_defaults();
     let m = opt.as_object_mut().unwrap();
     m.insert(
@@ -224,7 +230,9 @@ pub(crate) fn build_data_array_f64(
     let mut buf = String::with_capacity(blocks.len() * 30);
     buf.push('[');
     for (i, b) in blocks.iter().enumerate() {
-        if i > 0 { buf.push(','); }
+        if i > 0 {
+            buf.push(',');
+        }
         let v = value_fn(b);
         let _ = write!(buf, "[{},{},{}]", ts_ms(b.timestamp), v, b.height);
     }
@@ -240,8 +248,16 @@ pub(crate) fn build_data_array_i64(
     let mut buf = String::with_capacity(blocks.len() * 30);
     buf.push('[');
     for (i, b) in blocks.iter().enumerate() {
-        if i > 0 { buf.push(','); }
-        let _ = write!(buf, "[{},{},{}]", ts_ms(b.timestamp), value_fn(b), b.height);
+        if i > 0 {
+            buf.push(',');
+        }
+        let _ = write!(
+            buf,
+            "[{},{},{}]",
+            ts_ms(b.timestamp),
+            value_fn(b),
+            b.height
+        );
     }
     buf.push(']');
     buf
@@ -256,10 +272,16 @@ pub(crate) fn build_ma_array(
     let mut buf = String::with_capacity(blocks.len() * 24);
     buf.push('[');
     for (i, (b, m)) in blocks.iter().zip(ma.iter()).enumerate() {
-        if i > 0 { buf.push(','); }
+        if i > 0 {
+            buf.push(',');
+        }
         match m {
-            Some(v) => { let _ = write!(buf, "[{},{}]", ts_ms(b.timestamp), v); }
-            None => { let _ = write!(buf, "[{},null]", ts_ms(b.timestamp)); }
+            Some(v) => {
+                let _ = write!(buf, "[{},{}]", ts_ms(b.timestamp), v);
+            }
+            None => {
+                let _ = write!(buf, "[{},null]", ts_ms(b.timestamp));
+            }
         }
     }
     buf.push(']');
@@ -559,10 +581,8 @@ fn chart_visible_range(
             let parse = |s: &str| -> u64 {
                 chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d")
                     .map(|d| {
-                        d.and_hms_opt(12, 0, 0)
-                            .unwrap()
-                            .and_utc()
-                            .timestamp() as u64
+                        d.and_hms_opt(12, 0, 0).unwrap().and_utc().timestamp()
+                            as u64
                             * 1000
                     })
                     .unwrap_or(0)
@@ -578,11 +598,14 @@ fn chart_visible_range(
         let mut max_ts = 0u64;
         if let Some(series) = obj.get("series") {
             if let Some(first_s) = series.as_array().and_then(|a| a.first()) {
-                if let Some(data) = first_s.get("data").and_then(|d| d.as_array()) {
+                if let Some(data) =
+                    first_s.get("data").and_then(|d| d.as_array())
+                {
                     for pt in data {
                         if let Some(arr) = pt.as_array() {
                             let ts = arr.first().and_then(|v| {
-                                v.as_u64().or_else(|| v.as_f64().map(|f| f as u64))
+                                v.as_u64()
+                                    .or_else(|| v.as_f64().map(|f| f as u64))
                             });
                             if let Some(ts) = ts {
                                 min_ts = min_ts.min(ts);
@@ -593,7 +616,9 @@ fn chart_visible_range(
                 }
             }
         }
-        if min_ts == u64::MAX { min_ts = 0; }
+        if min_ts == u64::MAX {
+            min_ts = 0;
+        }
         (min_ts, max_ts)
     }
 }
@@ -620,10 +645,14 @@ fn interpolate_overlay_data(
                     "%Y-%m-%d",
                 )
                 .map(|d| {
-                    d.and_hms_opt(12, 0, 0).unwrap().and_utc().timestamp() as u64 * 1000
+                    d.and_hms_opt(12, 0, 0).unwrap().and_utc().timestamp()
+                        as u64
+                        * 1000
                 })
                 .unwrap_or(0);
-                if cat_ms == 0 { return json!(null); }
+                if cat_ms == 0 {
+                    return json!(null);
+                }
                 interpolate_value(filtered, cat_ms, false)
             })
             .collect()
@@ -638,9 +667,9 @@ fn interpolate_overlay_data(
             .map(|pts| {
                 pts.iter()
                     .filter_map(|pt| {
-                        pt.as_array()
-                            .and_then(|a| a.first())
-                            .and_then(|v| v.as_u64().or_else(|| v.as_f64().map(|f| f as u64)))
+                        pt.as_array().and_then(|a| a.first()).and_then(|v| {
+                            v.as_u64().or_else(|| v.as_f64().map(|f| f as u64))
+                        })
                     })
                     .collect()
             })
@@ -658,17 +687,33 @@ fn interpolate_overlay_data(
 }
 
 /// Interpolate a single value from sorted data points at a given timestamp.
-fn interpolate_value(data: &[(u64, f64)], ts: u64, as_array: bool) -> serde_json::Value {
+fn interpolate_value(
+    data: &[(u64, f64)],
+    ts: u64,
+    as_array: bool,
+) -> serde_json::Value {
     match data.binary_search_by_key(&ts, |&(t, _)| t) {
         Ok(idx) => {
-            if as_array { json!([ts, data[idx].1]) } else { json!(data[idx].1) }
+            if as_array {
+                json!([ts, data[idx].1])
+            } else {
+                json!(data[idx].1)
+            }
         }
         Err(idx) => {
             if idx == 0 {
-                if as_array { json!([ts, serde_json::Value::Null]) } else { json!(null) }
+                if as_array {
+                    json!([ts, serde_json::Value::Null])
+                } else {
+                    json!(null)
+                }
             } else if idx >= data.len() {
                 let v = data.last().unwrap().1;
-                if as_array { json!([ts, v]) } else { json!(v) }
+                if as_array {
+                    json!([ts, v])
+                } else {
+                    json!(v)
+                }
             } else {
                 let (t0, v0) = data[idx - 1];
                 let (t1, v1) = data[idx];
@@ -678,7 +723,11 @@ fn interpolate_value(data: &[(u64, f64)], ts: u64, as_array: bool) -> serde_json
                     let frac = (ts - t0) as f64 / (t1 - t0) as f64;
                     ((v0 + frac * (v1 - v0)) * 100.0).round() / 100.0
                 };
-                if as_array { json!([ts, interp]) } else { json!(interp) }
+                if as_array {
+                    json!([ts, interp])
+                } else {
+                    json!(interp)
+                }
             }
         }
     }
@@ -701,7 +750,9 @@ fn add_series_overlay(
         .filter(|&&(ts, _)| ts >= range_min && ts <= range_max)
         .copied()
         .collect();
-    if filtered.is_empty() { return; }
+    if filtered.is_empty() {
+        return;
+    }
 
     // Convert yAxis to array and add secondary axis
     let y_axis = obj.remove("yAxis");
@@ -738,7 +789,10 @@ fn add_series_overlay(
     if let Some(grid) = obj.get_mut("grid") {
         if let Some(g) = grid.as_object_mut() {
             let current = g.get("right").and_then(|v| v.as_u64()).unwrap_or(20);
-            g.insert("right".into(), json!(current.max(70) + if axis_idx > 1 { 60 } else { 0 }));
+            g.insert(
+                "right".into(),
+                json!(current.max(70) + if axis_idx > 1 { 60 } else { 0 }),
+            );
         }
     }
 
@@ -783,7 +837,9 @@ pub fn apply_overlays(
         || !overlays.price_data.is_empty()
         || !overlays.chain_size_data.is_empty();
 
-    if !has_any { return; }
+    if !has_any {
+        return;
+    }
 
     let obj = match opt.as_object_mut() {
         Some(o) => o,
@@ -799,7 +855,14 @@ pub fn apply_overlays(
     if need_right_space {
         if let Some(grid) = obj.get_mut("grid") {
             if let Some(g) = grid.as_object_mut() {
-                g.insert("right".into(), json!(if !overlays.price_data.is_empty() { 70 } else { 60 }));
+                g.insert(
+                    "right".into(),
+                    json!(if !overlays.price_data.is_empty() {
+                        70
+                    } else {
+                        60
+                    }),
+                );
             }
         }
     }
@@ -812,45 +875,80 @@ pub fn apply_overlays(
 
     if overlays.halvings {
         // Halvings use a special label ("½") instead of the name
-        let halving_daily: Vec<(&str, &str)> = HALVING_DATES.iter().map(|&d| (d, "½")).collect();
-        let halving_ts: Vec<(u64, &str)> = HALVINGS.iter().map(|&(_, ts, _)| (ts, "½")).collect();
+        let halving_daily: Vec<(&str, &str)> =
+            HALVING_DATES.iter().map(|&d| (d, "½")).collect();
+        let halving_ts: Vec<(u64, &str)> =
+            HALVINGS.iter().map(|&(_, ts, _)| (ts, "½")).collect();
         mark_lines.extend(make_mark_lines(
-            is_daily, &halving_daily, &halving_ts,
+            is_daily,
+            &halving_daily,
+            &halving_ts,
             &MarkLineStyle {
-                color: "#f7931a", line_type: "dashed", width: 1.5,
-                font_size: 13, font_weight: "bold", rotate: None,
-                bg_alpha: "0.8", padding: [2, 4], border_radius: 2,
+                color: "#f7931a",
+                line_type: "dashed",
+                width: 1.5,
+                font_size: 13,
+                font_weight: "bold",
+                rotate: None,
+                bg_alpha: "0.8",
+                padding: [2, 4],
+                border_radius: 2,
             },
         ));
     }
     if overlays.bip_activations {
-        let ts_data: Vec<(u64, &str)> = BIP_ACTIVATIONS.iter().map(|&(_, ts, n)| (ts, n)).collect();
+        let ts_data: Vec<(u64, &str)> =
+            BIP_ACTIVATIONS.iter().map(|&(_, ts, n)| (ts, n)).collect();
         mark_lines.extend(make_mark_lines(
-            is_daily, BIP_ACTIVATION_DATES, &ts_data,
+            is_daily,
+            BIP_ACTIVATION_DATES,
+            &ts_data,
             &MarkLineStyle {
-                color: "#4ecdc4", line_type: "dotted", width: 1.0,
-                font_size: 11, font_weight: "normal", rotate: Some(90),
-                bg_alpha: "0.8", padding: [2, 4], border_radius: 2,
+                color: "#4ecdc4",
+                line_type: "dotted",
+                width: 1.0,
+                font_size: 11,
+                font_weight: "normal",
+                rotate: Some(90),
+                bg_alpha: "0.8",
+                padding: [2, 4],
+                border_radius: 2,
             },
         ));
     }
     if overlays.core_releases {
         mark_lines.extend(make_mark_lines(
-            is_daily, CORE_RELEASE_DATES, CORE_RELEASES,
+            is_daily,
+            CORE_RELEASE_DATES,
+            CORE_RELEASES,
             &MarkLineStyle {
-                color: "#a855f7", line_type: "dotted", width: 1.0,
-                font_size: 10, font_weight: "normal", rotate: Some(90),
-                bg_alpha: "0.8", padding: [2, 3], border_radius: 2,
+                color: "#a855f7",
+                line_type: "dotted",
+                width: 1.0,
+                font_size: 10,
+                font_weight: "normal",
+                rotate: Some(90),
+                bg_alpha: "0.8",
+                padding: [2, 3],
+                border_radius: 2,
             },
         ));
     }
     if overlays.events {
         mark_lines.extend(make_mark_lines(
-            is_daily, EVENT_DATES, EVENTS,
+            is_daily,
+            EVENT_DATES,
+            EVENTS,
             &MarkLineStyle {
-                color: "#ef4444", line_type: "solid", width: 2.0,
-                font_size: 11, font_weight: "bold", rotate: Some(90),
-                bg_alpha: "0.85", padding: [3, 5], border_radius: 3,
+                color: "#ef4444",
+                line_type: "solid",
+                width: 2.0,
+                font_size: 11,
+                font_weight: "bold",
+                rotate: Some(90),
+                bg_alpha: "0.85",
+                padding: [3, 5],
+                border_radius: 3,
             },
         ));
     }
@@ -873,10 +971,24 @@ pub fn apply_overlays(
 
     // --- Series overlays (price, chain size) ---
     if !overlays.price_data.is_empty() {
-        add_series_overlay(obj, &overlays.price_data, is_daily, "Price (USD)", "USD", "#e6c84e");
+        add_series_overlay(
+            obj,
+            &overlays.price_data,
+            is_daily,
+            "Price (USD)",
+            "USD",
+            "#e6c84e",
+        );
     }
     if !overlays.chain_size_data.is_empty() {
-        add_series_overlay(obj, &overlays.chain_size_data, is_daily, "Chain Size (GB)", "GB", "#10b981");
+        add_series_overlay(
+            obj,
+            &overlays.chain_size_data,
+            is_daily,
+            "Chain Size (GB)",
+            "GB",
+            "#10b981",
+        );
     }
 
     // Reposition toolbox clear of any right-side axes
@@ -1251,26 +1363,35 @@ mod tests {
 
     #[test]
     fn block_subsidy_at_halvings() {
-        assert_eq!(block_subsidy(0), 5_000_000_000);          // 50 BTC
-        assert_eq!(block_subsidy(209_999), 5_000_000_000);    // last block era 0
-        assert_eq!(block_subsidy(210_000), 2_500_000_000);    // 25 BTC
-        assert_eq!(block_subsidy(420_000), 1_250_000_000);    // 12.5 BTC
-        assert_eq!(block_subsidy(630_000), 625_000_000);      // 6.25 BTC
-        assert_eq!(block_subsidy(840_000), 312_500_000);      // 3.125 BTC
+        assert_eq!(block_subsidy(0), 5_000_000_000); // 50 BTC
+        assert_eq!(block_subsidy(209_999), 5_000_000_000); // last block era 0
+        assert_eq!(block_subsidy(210_000), 2_500_000_000); // 25 BTC
+        assert_eq!(block_subsidy(420_000), 1_250_000_000); // 12.5 BTC
+        assert_eq!(block_subsidy(630_000), 625_000_000); // 6.25 BTC
+        assert_eq!(block_subsidy(840_000), 312_500_000); // 3.125 BTC
     }
 
     #[test]
     fn no_data_chart_with_hint_custom_message() {
         let opt = no_data_chart_with_hint("Test", "Custom hint");
         let title = opt.get("title").unwrap();
-        assert_eq!(title.get("subtext").unwrap().as_str().unwrap(), "Custom hint");
+        assert_eq!(
+            title.get("subtext").unwrap().as_str().unwrap(),
+            "Custom hint"
+        );
     }
 
     #[test]
     fn histogram_from_buckets_produces_chart() {
         let buckets = vec![
-            HistogramBucket { label: "0-10%".into(), count: 100 },
-            HistogramBucket { label: "90-100%".into(), count: 5000 },
+            HistogramBucket {
+                label: "0-10%".into(),
+                count: 100,
+            },
+            HistogramBucket {
+                label: "90-100%".into(),
+                count: 5000,
+            },
         ];
         let chart = network::block_fullness_histogram_from_buckets(&buckets);
         let series = chart.get("series").unwrap().as_array().unwrap();

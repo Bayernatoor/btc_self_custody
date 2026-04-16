@@ -86,7 +86,10 @@ pub fn miner_dominance_chart(miners: &[MinerShare]) -> serde_json::Value {
 /// Empty blocks scatter chart.
 pub fn empty_blocks_chart(blocks: &[EmptyBlock]) -> serde_json::Value {
     if blocks.is_empty() {
-        return no_data_chart_with_hint("No empty blocks in this range", "Try a longer range (1Y or ALL) to find empty blocks");
+        return no_data_chart_with_hint(
+            "No empty blocks in this range",
+            "Try a longer range (1Y or ALL) to find empty blocks",
+        );
     }
 
     // Group empty blocks by month for a bar chart
@@ -129,7 +132,10 @@ pub fn empty_blocks_chart(blocks: &[EmptyBlock]) -> serde_json::Value {
 /// coinbase-only blocks as a horizontal bar chart.
 pub fn empty_blocks_by_pool_chart(blocks: &[EmptyBlock]) -> serde_json::Value {
     if blocks.is_empty() {
-        return no_data_chart_with_hint("No empty blocks in this range", "Try a longer range (1Y or ALL) to find empty blocks");
+        return no_data_chart_with_hint(
+            "No empty blocks in this range",
+            "Try a longer range (1Y or ALL) to find empty blocks",
+        );
     }
 
     let mut pool_counts: std::collections::BTreeMap<&str, u64> =
@@ -182,7 +188,8 @@ pub fn mining_diversity_chart(miners: &[MinerShare]) -> serde_json::Value {
 
     // Exclude "Unknown" miners from HHI - early blocks have unidentifiable
     // miners lumped under one label, which inflates concentration artificially.
-    let known: Vec<&MinerShare> = miners.iter().filter(|m| m.miner != "Unknown").collect();
+    let known: Vec<&MinerShare> =
+        miners.iter().filter(|m| m.miner != "Unknown").collect();
     let total: u64 = known.iter().map(|m| m.count).sum();
     if total == 0 {
         return no_data_chart("Mining Diversity");
