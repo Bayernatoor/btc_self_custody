@@ -946,6 +946,16 @@ impl BitcoinRpc {
             .map_err(|e| StatsError::Rpc(e.to_string()))
     }
 
+    /// Fetch a transaction by txid using getrawtransaction with verbose=true.
+    /// Requires txindex=1 on the node. Returns the full decoded tx JSON.
+    pub async fn get_raw_transaction(
+        &self,
+        txid: &str,
+    ) -> Result<Value, StatsError> {
+        self.call("getrawtransaction", &[json!(txid), json!(true)])
+            .await
+    }
+
     /// Fetch BTC/USD price from mempool.space API.
     pub async fn fetch_price(&self) -> Result<PriceInfo, StatsError> {
         let resp = self

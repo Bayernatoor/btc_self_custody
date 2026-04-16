@@ -684,8 +684,8 @@
 
         modal.classList.remove('hidden');
 
-        // Fetch full details from mempool.space API
-        fetch('https://mempool.space/api/tx/' + txid)
+        // Fetch full details from our own node (getrawtransaction via API)
+        fetch('/api/stats/tx/' + txid)
             .then(function(r) { return r.ok ? r.json() : null; })
             .then(function(tx) {
                 if (!tx) {
@@ -703,53 +703,40 @@
                 details.appendChild(bdSection('Transaction Details'));
 
                 // Inputs & outputs
-                if (tx.vin) details.appendChild(bdRow('Inputs', tx.vin.length.toLocaleString()));
-                if (tx.vout) details.appendChild(bdRow('Outputs', tx.vout.length.toLocaleString()));
+                if (tx.inputs) details.appendChild(bdRow('Inputs', tx.inputs.toLocaleString()));
+                if (tx.outputs) details.appendChild(bdRow('Outputs', tx.outputs.toLocaleString()));
 
                 // Size & weight
                 if (tx.size) details.appendChild(bdRow('Size', fmtSize(tx.size)));
                 if (tx.weight) details.appendChild(bdRow('Weight', tx.weight.toLocaleString() + ' WU'));
 
-                // Fee (from API, more accurate)
-                if (tx.fee != null) {
+                // Fee
+                if (tx.fee) {
                     details.appendChild(bdRow('Fee', tx.fee.toLocaleString() + ' sats'));
-                    if (tx.weight) {
-                        var vsize = Math.ceil(tx.weight / 4);
-                        details.appendChild(bdRow('Fee Rate', (tx.fee / vsize).toFixed(1) + ' sat/vB'));
-                    }
+                }
+                if (tx.fee_rate) {
+                    details.appendChild(bdRow('Fee Rate', tx.fee_rate.toFixed(1) + ' sat/vB'));
                 }
 
                 // Total output value
-                if (tx.vout) {
-                    var totalOut = 0;
-                    for (var i = 0; i < tx.vout.length; i++) {
-                        totalOut += tx.vout[i].value || 0;
-                    }
-                    if (totalOut > 0) {
-                        details.appendChild(bdRow('Total Output', (totalOut / 1e8).toFixed(8) + ' BTC'));
-                    }
+                if (tx.total_output) {
+                    details.appendChild(bdRow('Total Output', (tx.total_output / 1e8).toFixed(8) + ' BTC'));
                 }
 
                 // Confirmation status
-                if (tx.status) {
-                    if (tx.status.confirmed) {
-                        details.appendChild(bdRow('Status', 'Confirmed'));
-                        if (tx.status.block_height)
-                            details.appendChild(bdRow('Block', '#' + tx.status.block_height.toLocaleString()));
-                    } else {
-                        details.appendChild(bdRow('Status', 'Unconfirmed'));
-                    }
+                if (tx.confirmed) {
+                    details.appendChild(bdRow('Status', 'Confirmed'));
+                    if (tx.block_height)
+                        details.appendChild(bdRow('Block', '#' + tx.block_height.toLocaleString()));
+                    if (tx.confirmations)
+                        details.appendChild(bdRow('Confirmations', tx.confirmations.toLocaleString()));
+                } else {
+                    details.appendChild(bdRow('Status', 'Unconfirmed'));
                 }
 
                 // Features
-                var features = [];
-                if (tx.vin && tx.vin.some(function(v) { return v.is_coinbase; })) features.push('Coinbase');
-                if (tx.vin && tx.vin.some(function(v) { return v.witness && v.witness.length > 0; })) features.push('SegWit');
-                if (tx.vin && tx.vin.some(function(v) { return v.prevout && v.prevout.scriptpubkey_type === 'v1_p2tr'; })) features.push('Taproot');
-                var isRbf = tx.vin && tx.vin.some(function(v) { return v.sequence != null && v.sequence < 0xFFFFFFFE; });
-                if (isRbf) features.push('RBF');
-                if (features.length > 0) {
-                    details.appendChild(bdRow('Features', features.join(', ')));
+                if (tx.features && tx.features.length > 0) {
+                    details.appendChild(bdRow('Features', tx.features.join(', ')));
                 }
 
                 details.appendChild(bdDivider());

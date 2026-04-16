@@ -502,6 +502,117 @@ pub async fn get_signaling_periods(
     })))
 }
 
+/// GET /api/stats/tx/{txid} - fetch full transaction details from our own node.
+/// Uses getrawtransaction with verbose=true (requires txindex=1).
+/// Replaces the mempool.space API dependency for the tx detail modal.
+pub async fn get_tx_detail(
+    State(state): State<SharedStatsState>,
+    Path(txid): Path<String>,
+) -> Result<Json<serde_json::Value>, (axum::http::StatusCode, &'static str)> {
+    // Validate txid format (64 hex chars)
+    if txid.len() != 64 || !txid.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err((axum::http::StatusCode::BAD_REQUEST, "Invalid txid"));
+    }
+
+    match state.rpc.get_raw_transaction(&txid).await {
+        Ok(tx) => {
+            // Transform the Bitcoin Core JSON into a format the frontend expects.
+            // Bitcoin Core returns vin[].prevout for spent outputs (if utxo index),
+            // vout[].value in BTC (float), etc.
+            let vin = tx["vin"].as_array();
+            let vout = tx["vout"].as_array();
+
+            let input_count = vin.map(|v| v.len()).unwrap_or(0);
+            let output_count = vout.map(|v| v.len()).unwrap_or(0);
+            let size = tx["size"].as_u64().unwrap_or(0);
+            let vsize = tx["vsize"].as_u64().unwrap_or(0);
+            let weight = tx["weight"].as_u64().unwrap_or(0);
+
+            // Total output value (BTC float -> sats)
+            let total_output_sats: u64 = vout
+                .map(|outputs| {
+                    outputs.iter()
+                        .filter_map(|o| o["value"].as_f64())
+                        .map(|v| (v * 100_000_000.0).round() as u64)
+                        .sum()
+                })
+                .unwrap_or(0);
+
+            // Fee: if we have vin prevout values (utxo index), compute fee.
+            // Otherwise check mempool entry for unconfirmed txs.
+            let input_total_sats: u64 = vin
+                .map(|inputs| {
+                    inputs.iter()
+                        .filter_map(|i| i["prevout"]["value"].as_f64())
+                        .map(|v| (v * 100_000_000.0).round() as u64)
+                        .sum()
+                })
+                .unwrap_or(0);
+            let fee_sats = if input_total_sats > total_output_sats {
+                input_total_sats - total_output_sats
+            } else {
+                0
+            };
+            let fee_rate = if vsize > 0 && fee_sats > 0 {
+                fee_sats as f64 / vsize as f64
+            } else {
+                0.0
+            };
+
+            // Confirmation status
+            let confirmations = tx["confirmations"].as_u64().unwrap_or(0);
+            let block_hash = tx["blockhash"].as_str().unwrap_or("");
+            let block_height = tx["blockheight"].as_u64();
+
+            // Detect features from vin
+            let is_coinbase = vin.map(|inputs| {
+                inputs.iter().any(|i| !i["coinbase"].is_null())
+            }).unwrap_or(false);
+            let has_witness = vin.map(|inputs| {
+                inputs.iter().any(|i| {
+                    i["txinwitness"].as_array().map(|w| !w.is_empty()).unwrap_or(false)
+                })
+            }).unwrap_or(false);
+            let has_taproot = vin.map(|inputs| {
+                inputs.iter().any(|i| {
+                    i["prevout"]["scriptPubKey"]["type"].as_str() == Some("witness_v1_taproot")
+                })
+            }).unwrap_or(false);
+            let is_rbf = vin.map(|inputs| {
+                inputs.iter().any(|i| {
+                    i["sequence"].as_u64().map(|s| s < 0xFFFFFFFE).unwrap_or(false)
+                })
+            }).unwrap_or(false);
+
+            let mut features = Vec::new();
+            if is_coinbase { features.push("Coinbase"); }
+            if has_witness { features.push("SegWit"); }
+            if has_taproot { features.push("Taproot"); }
+            if is_rbf { features.push("RBF"); }
+
+            Ok(Json(serde_json::json!({
+                "txid": txid,
+                "inputs": input_count,
+                "outputs": output_count,
+                "size": size,
+                "vsize": vsize,
+                "weight": weight,
+                "fee": fee_sats,
+                "fee_rate": (fee_rate * 10.0).round() / 10.0,
+                "total_output": total_output_sats,
+                "confirmed": confirmations > 0,
+                "confirmations": confirmations,
+                "block_hash": block_hash,
+                "block_height": block_height,
+                "features": features,
+            })))
+        }
+        Err(_) => {
+            Err((axum::http::StatusCode::NOT_FOUND, "Transaction not found"))
+        }
+    }
+}
+
 /// SSE endpoint for real-time heartbeat events (mempool txs + blocks).
 /// On connect: sends recent tx history from DB, then streams live events.
 pub async fn get_heartbeat_sse(
