@@ -1676,6 +1676,24 @@ mod tests {
     }
 
     #[test]
+    fn test_real_runestone_op_return_not_text() {
+        // txid: 3d2b39abe41878bf59b9584afb8e50b20ae177190c7890c8175106099ca7d3a7
+        // Runes protocol tx with OP_RETURN 6a5d... (binary Runestone payload).
+        // Must NOT be detected as op_return_msg (it's binary protocol data).
+        let hex = "0200000000010505f031c7adc676bad15cccf511106c2adf5318a2bba6e6ce4c3a2a39d4535fa30000000000ffffffff5430d727ff536c9292450d421e364e48531242a11d0f0f67a1d66595011565a60000000000ffffffff4376dc10d7e46523e323f569678f2d0245189e69427007f8429e8809c120ffa60100000000fffffffff493a80c3f0c62fcddaf0491a130ad1cbd3db4cd69da55fcc2cd03f49e60e4840200000000ffffffff89989ab646339aad624923851eb69f8ee9f3ca4fe82c23573118b8897d5d01420500000000ffffffff074a01000000000000225120e3552a2c24a4238a7344f655f04ceb0d14f381fbd9a4b90278d88257125444215827040000000000225120c01dcf308ab6e8e0791741beda33a700406a94621eb9a1ee22bc95f3ea7bc1e04a01000000000000225120707233b829840dfa85b440f8d8330e360e1ce32336eba4ff7c0c8b33ff5ea0d73f1306000000000016001457c4f4d8ac5f032d75a9cbf3d9f47537df01b87e4a01000000000000225120c72f0248f2f51b1a27474a748b49dabe2f29d3e2c55cca2d8939931f5b60bd1800000000000000001f6a5d1c00c0a23303fbf5998116000000b7b4f38a1d020000fdf2968dda01044281a80000000000225120f69d1fe8495729022a8777dc6c0572e6539e9c2e0e1adeddda52f8a10a5865c00140b06232f035168b376552877ea1b20ea42f275705417b04cf15aa09637982b91db8f2b9cda7506f78c52a87a9e74cf23cf16405d9668258f224ddb4768e13e344014073f83ee6885197b3a96570e0668d91776b5862c38f703058dc0e406c5f303f8e0a05925d669f4d4d2f6abd0b4542553c2545008b8ee5e07aa4b0f2cc730faeef01401949dd0b8afe961cd76f569075a1604baffec6d8bacb02363a4c66f67089fc9aa00e872cf0514ad25927c04baf182cf2c6b4ff863106521957f1a7fadc9404fc014072e481fe92f5df685bed7bf2ebdd6fdc660740a52eeabaaf4737a4860754bb7c72dba265bc7c3b163b03785f10c6042a7cad2a02644806caf3e302db987f99ac0141f9a1134a8b39c0c8c298eebf08006f3297518cb95e81bdd3c9dafc27e83ccd6e9ad1c9245905c19b072eed140ad12fca63db37aa5d13f8cdcb30fee879c88aa10100000000";
+        let data = hex_decode(hex);
+        let parsed = parse_raw_tx(&data).expect("should parse Runestone tx");
+
+        assert_eq!(parsed.txid, "3d2b39abe41878bf59b9584afb8e50b20ae177190c7890c8175106099ca7d3a7");
+        assert_eq!(parsed.input_count, 5);
+        assert_eq!(parsed.output_count, 7);
+        // OP_RETURN payload is binary Runes data, not readable text
+        assert!(parsed.op_return_text.is_none(), "Runestone binary should NOT be detected as text, got: {:?}", parsed.op_return_text);
+        // Should not be flagged as notable at all
+        assert_eq!(classify_notable(&parsed, 2_000, 3.0, 100_000.0), None);
+    }
+
+    #[test]
     fn test_real_multisig_batch_not_flagged() {
         // txid: 3cd122cb06d492d792ecfd46b4facb798c032ab95d1126a39d73e6f9b71cebba
         // 1 input (multisig) -> 16 outputs. Batch payment but below fan_out
