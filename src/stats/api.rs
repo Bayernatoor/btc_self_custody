@@ -211,6 +211,42 @@ pub async fn get_block_detail(
     }
 }
 
+/// GET /api/stats/cache-stats - per-method RPC cache hit/miss/error counters.
+/// Useful for tuning TTLs in production: if a slot shows low hit rate (<80%)
+/// the TTL may be too short or traffic too bursty; if stale_served > 0 Core
+/// was unreachable at some point and the stale-on-error fallback kicked in.
+pub async fn get_cache_stats(
+    State(state): State<SharedStatsState>,
+) -> Result<CachedResponse, StatsError> {
+    let entries: Vec<serde_json::Value> = state
+        .rpc
+        .cache_stats()
+        .into_iter()
+        .map(|(method, stats)| {
+            let total = stats.hits + stats.misses;
+            let hit_rate = if total == 0 {
+                0.0
+            } else {
+                stats.hits as f64 / total as f64
+            };
+            serde_json::json!({
+                "method": method,
+                "hits": stats.hits,
+                "misses": stats.misses,
+                "errors": stats.errors,
+                "stale_served": stats.stale_served,
+                "hit_rate": (hit_rate * 1000.0).round() / 1000.0,
+                "age_seconds": stats.age_seconds,
+            })
+        })
+        .collect();
+    // 0s cache on this endpoint — we want operators to see current state
+    Ok(cached_json(
+        serde_json::json!({ "slots": entries }),
+        0,
+    ))
+}
+
 /// GET /api/stats - database summary (block count, height range). Cache: 10s.
 pub async fn get_stats(
     State(state): State<SharedStatsState>,

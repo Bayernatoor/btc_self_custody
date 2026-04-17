@@ -88,6 +88,7 @@ pub async fn init(
         .route("/blocks", get(api::get_blocks))
         .route("/blocks/{height}", get(api::get_block_detail))
         .route("/stats", get(api::get_stats))
+        .route("/stats/cache-stats", get(api::get_cache_stats))
         .route("/live", get(api::get_live))
         .route("/op-returns", get(api::get_op_returns))
         .route("/aggregates/daily", get(api::get_daily_aggregates))

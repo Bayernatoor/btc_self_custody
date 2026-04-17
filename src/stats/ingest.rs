@@ -35,7 +35,8 @@ pub async fn run(
     conn: &Connection,
     initial_count: u64,
 ) -> Result<(), StatsError> {
-    let info = rpc.get_blockchain_info().await?;
+    // Ingest path wants the actual latest tip, not a cached one. Bypass cache.
+    let info = rpc.get_blockchain_info_fresh().await?;
     let tip = info.blocks;
     tracing::info!("Chain tip: {} ({})", tip, info.chain);
 
@@ -55,7 +56,9 @@ pub async fn run(
 
 /// Background: check for new blocks and ingest them. Runs every 60 seconds.
 pub async fn poll_new_blocks(rpc: &BitcoinRpc, pool: &DbPool) {
-    let tip = match rpc.get_blockchain_info().await {
+    // Poll path wants actual latest tip; the 1s cache would mask new blocks
+    // during the window between a block arriving and the cache expiring.
+    let tip = match rpc.get_blockchain_info_fresh().await {
         Ok(info) => info.blocks,
         Err(e) => {
             tracing::warn!("Poll: failed to get chain tip: {e}");

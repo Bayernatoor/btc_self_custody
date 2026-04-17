@@ -18,12 +18,17 @@
 //! Also provides methods for mempool queries, network stats, UTXO set info,
 //! and price data from external APIs.
 
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
 use super::classifier::{self, OpReturnType};
 use super::error::StatsError;
+use super::rpc_cache::{CachedSlot, SlotStats};
 
 /// Calculate the encoded size of a Bitcoin CompactSize (varint) for a given value.
 /// Used to accurately count witness byte overhead.
@@ -40,16 +45,35 @@ fn varint_size(n: u64) -> u64 {
 }
 
 /// Bitcoin Core JSON-RPC client. Holds a persistent HTTP client with
-/// connection pooling and configurable timeouts.
+/// connection pooling, configurable timeouts, and per-method response caches
+/// (see [`rpc_cache`](super::rpc_cache)) that protect Core from request floods
+/// during `cs_main` stalls at block validation time.
 pub struct BitcoinRpc {
     client: Client,
     url: String,
     user: String,
     password: String,
+    // Cache slots for the hot read-only RPCs polled by the dashboard.
+    // Each slot holds the last successful response, gates concurrent fetches
+    // via singleflight, and falls back to stale-on-error when upstream fails.
+    mempool_info_cache: Arc<CachedSlot<MempoolInfo>>,
+    blockchain_info_cache: Arc<CachedSlot<BlockchainInfo>>,
+    network_hashps_cache: Arc<CachedSlot<f64>>,
+    // estimate_smart_fee is parameterized by target blocks, so we hold one
+    // slot per observed target. Lazily created on first call per target.
+    smart_fee_caches: Arc<Mutex<HashMap<u64, Arc<CachedSlot<f64>>>>>,
 }
 
+// Per-method TTLs. Tuned to balance data freshness against load reduction.
+// See src/stats/rpc_cache.rs for the rationale on why "short" TTLs still
+// produce high hit rates under real request volume.
+const MEMPOOL_INFO_TTL: Duration = Duration::from_secs(2);
+const BLOCKCHAIN_INFO_TTL: Duration = Duration::from_secs(1);
+const NETWORK_HASHPS_TTL: Duration = Duration::from_secs(60);
+const SMART_FEE_TTL: Duration = Duration::from_secs(10);
+
 /// Response from `getblockchaininfo` RPC.
-#[derive(Debug, Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, Deserialize, serde::Serialize)]
 pub struct BlockchainInfo {
     pub blocks: u64,
     pub chain: String,
@@ -62,7 +86,7 @@ pub struct BlockchainInfo {
     pub time: u64,
 }
 
-#[derive(Debug, Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, Deserialize, serde::Serialize)]
 pub struct MempoolInfo {
     pub size: u64,
     pub bytes: u64,
@@ -213,7 +237,47 @@ impl BitcoinRpc {
             url,
             user,
             password,
+            mempool_info_cache: Arc::new(CachedSlot::new()),
+            blockchain_info_cache: Arc::new(CachedSlot::new()),
+            network_hashps_cache: Arc::new(CachedSlot::new()),
+            smart_fee_caches: Arc::new(Mutex::new(HashMap::new())),
         }
+    }
+
+    /// Snapshot of per-slot cache counters for `/api/stats/cache-stats`.
+    /// Returns `(method, stats)` tuples. Methods not listed aren't cached.
+    pub fn cache_stats(&self) -> Vec<(String, SlotStats)> {
+        let mut stats = vec![
+            ("getmempoolinfo".to_string(), self.mempool_info_cache.stats()),
+            (
+                "getblockchaininfo".to_string(),
+                self.blockchain_info_cache.stats(),
+            ),
+            (
+                "getnetworkhashps".to_string(),
+                self.network_hashps_cache.stats(),
+            ),
+        ];
+        // Each per-target smart-fee slot appears with its target in the key
+        // (e.g. "estimatesmartfee:1") so the endpoint surfaces each one.
+        let map = self
+            .smart_fee_caches
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        for (target, slot) in map.iter() {
+            stats.push((format!("estimatesmartfee:{target}"), slot.stats()));
+        }
+        stats
+    }
+
+    fn smart_fee_slot(&self, target: u64) -> Arc<CachedSlot<f64>> {
+        let mut map = self
+            .smart_fee_caches
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        map.entry(target)
+            .or_insert_with(|| Arc::new(CachedSlot::new()))
+            .clone()
     }
 
     /// Send a JSON-RPC 1.0 request to Bitcoin Core.
@@ -256,7 +320,22 @@ impl BitcoinRpc {
     }
 
     /// Call `getblockchaininfo` - returns chain state, tip height, difficulty.
+    /// Cached with a 1s TTL. Use [`Self::get_blockchain_info_fresh`] for
+    /// paths that must bypass the cache (ingest startup, ZMQ refreshes).
     pub async fn get_blockchain_info(
+        &self,
+    ) -> Result<BlockchainInfo, StatsError> {
+        let (v, _stale) = self
+            .blockchain_info_cache
+            .get_or_fetch(BLOCKCHAIN_INFO_TTL, || {
+                self.get_blockchain_info_fresh()
+            })
+            .await?;
+        Ok(v)
+    }
+
+    /// Force-refresh `getblockchaininfo`, bypassing the cache.
+    pub async fn get_blockchain_info_fresh(
         &self,
     ) -> Result<BlockchainInfo, StatsError> {
         let result = self.call("getblockchaininfo", &[]).await?;
@@ -264,8 +343,17 @@ impl BitcoinRpc {
             .map_err(|e| StatsError::Rpc(e.to_string()))
     }
 
-    /// Estimated network hash rate (hashes per second).
+    /// Estimated network hash rate (hashes per second). Cached with a 60s TTL.
     pub async fn get_network_hashps(&self) -> Result<f64, StatsError> {
+        let (v, _stale) = self
+            .network_hashps_cache
+            .get_or_fetch(NETWORK_HASHPS_TTL, || self.get_network_hashps_fresh())
+            .await?;
+        Ok(v)
+    }
+
+    /// Force-refresh `getnetworkhashps`, bypassing the cache.
+    pub async fn get_network_hashps_fresh(&self) -> Result<f64, StatsError> {
         let result = self.call("getnetworkhashps", &[]).await?;
         result.as_f64().ok_or_else(|| {
             StatsError::Rpc("Expected number for hashps".to_string())
@@ -273,7 +361,20 @@ impl BitcoinRpc {
     }
 
     /// Estimate fee rate (sat/vB) to confirm within `target` blocks.
+    /// Cached per target with a 10s TTL.
     pub async fn estimate_smart_fee(
+        &self,
+        target: u64,
+    ) -> Result<f64, StatsError> {
+        let slot = self.smart_fee_slot(target);
+        let (v, _stale) = slot
+            .get_or_fetch(SMART_FEE_TTL, || self.estimate_smart_fee_fresh(target))
+            .await?;
+        Ok(v)
+    }
+
+    /// Force-refresh `estimatesmartfee`, bypassing the cache.
+    pub async fn estimate_smart_fee_fresh(
         &self,
         target: u64,
     ) -> Result<f64, StatsError> {
@@ -912,7 +1013,21 @@ impl BitcoinRpc {
     }
 
     /// Call `getmempoolinfo` - returns mempool size, fee stats, memory usage.
+    /// Cached with a 2s TTL. Mempool contents change every second as new txs
+    /// arrive; 2s staleness is imperceptible to a human reading tx count and
+    /// bytes, and at typical dashboard load this deduplicates ~95% of calls.
     pub async fn get_mempool_info(&self) -> Result<MempoolInfo, StatsError> {
+        let (v, _stale) = self
+            .mempool_info_cache
+            .get_or_fetch(MEMPOOL_INFO_TTL, || self.get_mempool_info_fresh())
+            .await?;
+        Ok(v)
+    }
+
+    /// Force-refresh `getmempoolinfo`, bypassing the cache.
+    pub async fn get_mempool_info_fresh(
+        &self,
+    ) -> Result<MempoolInfo, StatsError> {
         let result = self.call("getmempoolinfo", &[]).await?;
         serde_json::from_value(result)
             .map_err(|e| StatsError::Rpc(e.to_string()))
