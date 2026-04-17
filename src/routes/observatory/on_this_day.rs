@@ -404,33 +404,76 @@ pub fn OnThisDayPage() -> impl IntoView {
                 let is_today = selected_date.get() == today;
                 let year = now.year();
                 if is_today {
-                    // Already on today — show date picker to jump to any day
+                    // Already on today — show month + day dropdowns to jump to any day
+                    // of the current year. Native <input type="date"> was confusing because
+                    // browsers let users navigate to other years and grey out the days,
+                    // without blocking the navigation itself.
+                    let today_month = now.month() as i32;
+                    let today_day = now.day() as i32;
+                    let is_leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+                    let days_in_month = move |m: i32| -> i32 {
+                        match m {
+                            4 | 6 | 9 | 11 => 30,
+                            2 => if is_leap { 29 } else { 28 },
+                            _ => 31,
+                        }
+                    };
+                    let (picker_month, set_picker_month) = signal(today_month);
+                    let (picker_day, set_picker_day) = signal(today_day);
+                    let emit = move |m: i32, d: i32| {
+                        let md = format!("{m:02}-{d:02}");
+                        set_selected_date.set(md.clone());
+                        reset_notable();
+                        #[cfg(feature = "hydrate")]
+                        {
+                            let window = leptos::prelude::window();
+                            let pathname = window.location().pathname().unwrap_or_default();
+                            let url = format!("{pathname}?date={md}");
+                            let _ = window.history().expect("history").replace_state_with_url(
+                                &wasm_bindgen::JsValue::NULL, "", Some(&url),
+                            );
+                        }
+                    };
+                    let month_names = ["January","February","March","April","May","June","July","August","September","October","November","December"];
                     view! {
-                        <input
-                            type="date"
-                            class="bg-[#0a1a2e] text-white/80 text-xs border border-white/10 rounded-lg px-3 py-1.5 cursor-pointer focus:outline-none focus:border-[#f7931a]/40 transition-colors"
-                            style="color-scheme: dark;"
-                            min=format!("{year}-01-01")
-                            max=format!("{year}-12-31")
-                            on:change=move |ev| {
-                                let val = event_target_value(&ev);
-                                // Extract MM-DD from YYYY-MM-DD
-                                if val.len() >= 10 {
-                                    let md = val[5..10].to_string();
-                                    set_selected_date.set(md.clone());
-                                    reset_notable();
-                                    #[cfg(feature = "hydrate")]
-                                    {
-                                        let window = leptos::prelude::window();
-                                        let pathname = window.location().pathname().unwrap_or_default();
-                                        let url = format!("{pathname}?date={md}");
-                                        let _ = window.history().expect("history").replace_state_with_url(
-                                            &wasm_bindgen::JsValue::NULL, "", Some(&url),
-                                        );
-                                    }
+                        <div class="flex items-center gap-1">
+                            <select
+                                aria-label="Month"
+                                class="appearance-none bg-[#0a1a2e] text-white/80 text-xs border border-white/10 rounded-lg pl-3 pr-7 py-1.5 cursor-pointer focus:outline-none focus:border-[#f7931a]/40 transition-colors bg-no-repeat bg-[right_0.5rem_center] bg-[length:0.75em] bg-[url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 fill=%22none%22 viewBox=%220 0 24 24%22 stroke=%22white%22 opacity=%220.4%22 stroke-width=%222%22><path stroke-linecap=%22round%22 stroke-linejoin=%22round%22 d=%22M19 9l-7 7-7-7%22/></svg>')]"
+                                on:change=move |ev| {
+                                    let m: i32 = event_target_value(&ev).parse().unwrap_or(today_month);
+                                    set_picker_month.set(m);
+                                    let max_d = days_in_month(m);
+                                    let mut d = picker_day.get_untracked();
+                                    if d > max_d { d = max_d; set_picker_day.set(d); }
+                                    emit(m, d);
                                 }
-                            }
-                        />
+                            >
+                                {(1..=12i32).map(|m| view! {
+                                    <option value=m.to_string() selected=move || picker_month.get() == m>
+                                        {month_names[(m - 1) as usize]}
+                                    </option>
+                                }).collect::<Vec<_>>()}
+                            </select>
+                            <select
+                                aria-label="Day"
+                                class="appearance-none bg-[#0a1a2e] text-white/80 text-xs border border-white/10 rounded-lg pl-3 pr-7 py-1.5 cursor-pointer focus:outline-none focus:border-[#f7931a]/40 transition-colors bg-no-repeat bg-[right_0.5rem_center] bg-[length:0.75em] bg-[url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 fill=%22none%22 viewBox=%220 0 24 24%22 stroke=%22white%22 opacity=%220.4%22 stroke-width=%222%22><path stroke-linecap=%22round%22 stroke-linejoin=%22round%22 d=%22M19 9l-7 7-7-7%22/></svg>')]"
+                                on:change=move |ev| {
+                                    let d: i32 = event_target_value(&ev).parse().unwrap_or(today_day);
+                                    set_picker_day.set(d);
+                                    emit(picker_month.get_untracked(), d);
+                                }
+                            >
+                                {move || {
+                                    let max_d = days_in_month(picker_month.get());
+                                    (1..=max_d).map(|d| view! {
+                                        <option value=d.to_string() selected=move || picker_day.get() == d>
+                                            {d.to_string()}
+                                        </option>
+                                    }).collect::<Vec<_>>()
+                                }}
+                            </select>
+                        </div>
                     }.into_any()
                 } else {
                     // Not on today — show Today button
