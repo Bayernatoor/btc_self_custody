@@ -46,7 +46,7 @@ sudo systemctl restart wehodlbtc
 # Give it a moment to either come up cleanly or crash on a port bind / config error
 sleep 3
 
-if ! sudo systemctl is-active --quiet wehodlbtc; then
+if ! sudo systemctl is-active wehodlbtc >/dev/null 2>&1; then
     log "Service failed to start — rolling back"
     rm -f "${BIN_PATH}"
     rm -rf "${SITE_PATH}"
