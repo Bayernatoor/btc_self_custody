@@ -67,6 +67,7 @@ pub struct BitcoinRpc {
 // Per-method TTLs. Tuned to balance data freshness against load reduction.
 // See src/stats/rpc_cache.rs for the rationale on why "short" TTLs still
 // produce high hit rates under real request volume.
+
 // 13s — spans two full 6-second poll intervals, producing a cached
 // miss-hit-hit pattern (67% hit rate single-tab, higher under load).
 // Mempool tx count isn't critical data like the chain tip; users who
@@ -74,7 +75,15 @@ pub struct BitcoinRpc {
 // real-time heartbeat SSE continues to stream per-tx arrivals with
 // no delay regardless of this TTL.
 const MEMPOOL_INFO_TTL: Duration = Duration::from_secs(13);
-const BLOCKCHAIN_INFO_TTL: Duration = Duration::from_secs(1);
+
+// 30s — `getblockchaininfo` returns data that only changes when a new
+// block arrives. The ZMQ `hashblock` handler in zmq_subscriber::subscribe_blocks
+// calls `BitcoinRpc::invalidate_tip_caches()` on every new block so the next
+// poll picks up the fresh tip. 30s is a safety backstop for the rare case
+// where a ZMQ message is dropped (network blip, subscriber restart) — worst
+// case the user sees tip height stale for 30s until the backstop kicks in.
+const BLOCKCHAIN_INFO_TTL: Duration = Duration::from_secs(30);
+
 const NETWORK_HASHPS_TTL: Duration = Duration::from_secs(60);
 const SMART_FEE_TTL: Duration = Duration::from_secs(10);
 
@@ -248,6 +257,23 @@ impl BitcoinRpc {
             network_hashps_cache: Arc::new(CachedSlot::new()),
             smart_fee_caches: Arc::new(Mutex::new(HashMap::new())),
         }
+    }
+
+    /// Invalidate caches whose values change with every new block.
+    ///
+    /// Called from the ZMQ `hashblock` handler so the next poll picks up the
+    /// fresh tip height / difficulty / best block hash. Without this, the
+    /// `getblockchaininfo` cache's 30s TTL would hold stale tip data until
+    /// the backstop expiry fired — users would see the previous block
+    /// height on their dashboard until then.
+    ///
+    /// Currently invalidates: `getblockchaininfo`. Other per-method caches
+    /// either change gradually (smart fee smooths across many blocks,
+    /// hashrate is a long moving average) or get pruned naturally
+    /// (`getmempoolinfo` drops confirmed txs but the TTL is short enough
+    /// that one block of staleness isn't worth the invalidation overhead).
+    pub fn invalidate_tip_caches(&self) {
+        self.blockchain_info_cache.invalidate();
     }
 
     /// Snapshot of per-slot cache counters for `/api/stats/cache-stats`.

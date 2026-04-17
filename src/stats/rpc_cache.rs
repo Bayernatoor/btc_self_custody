@@ -181,7 +181,6 @@ impl<T: Clone + Send + 'static> CachedSlot<T> {
     /// Forcibly invalidates the cached entry so the next caller refetches.
     /// Used by ZMQ `hashblock` handlers to refresh tip-dependent caches as
     /// soon as a new block arrives.
-    #[allow(dead_code)] // will be used in Phase 2 (ZMQ-driven invalidation)
     pub fn invalidate(&self) {
         let mut state = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         state.last = None;

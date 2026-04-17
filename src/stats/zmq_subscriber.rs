@@ -692,6 +692,11 @@ async fn subscribe_blocks(
             block_info.weight,
         );
 
+        // Bust tip-dependent RPC caches now that a new block has been fully
+        // processed. Without this, /api/stats/live would keep returning the
+        // previous block height until BLOCKCHAIN_INFO_TTL (30s) expired.
+        state.rpc.invalidate_tip_caches();
+
         // Broadcast ONE complete block event
         let _ = sender.send(HeartbeatEvent::Block {
             height: block_info.height,
