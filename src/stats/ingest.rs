@@ -158,6 +158,11 @@ pub async fn verify_recent_blocks(
             // Delete the stale block
             let _ = db::delete_block(&conn, height);
 
+            // Drop the pre-reorg entries from the RPC block caches before
+            // re-fetching, otherwise fetch_block_by_height would just return
+            // the cached stale data for this height or hash.
+            rpc.invalidate_block_caches(height, &stored_hash);
+
             // Re-fetch the canonical block
             match rpc.fetch_block_by_height(height).await {
                 Ok(block) => {

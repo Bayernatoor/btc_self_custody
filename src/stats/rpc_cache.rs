@@ -19,7 +19,9 @@
 //! `stale` flag in their response payload. Fresh fetches always bypass cache via
 //! the `_fresh` method variants on [`crate::stats::rpc::BitcoinRpc`].
 
+use std::collections::HashMap;
 use std::future::Future;
+use std::hash::Hash;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -208,6 +210,123 @@ impl<T: Clone + Send + 'static> Default for CachedSlot<T> {
 enum Action {
     Wait,
     Fetch,
+}
+
+// ---------------------------------------------------------------------------
+// LRU cache for immutable RPC responses (historical blocks, block hashes).
+// ---------------------------------------------------------------------------
+
+/// Bounded LRU cache keyed by `K`, values of type `V`. No TTL — entries stay
+/// until evicted by capacity pressure. Used for RPC responses that never
+/// change after confirmation (e.g. `getblockhash(height)`, `getblock(hash)`
+/// for confirmed blocks). On reorg, affected entries must be explicitly
+/// invalidated by callers.
+///
+/// Uses a HashMap + monotonic access-counter approach rather than a proper
+/// doubly-linked-list LRU: eviction is O(n) over capacity but access is O(1).
+/// At the capacities we use (500-10_000) this is negligible and the code is
+/// much simpler than a hand-rolled intrusive list.
+pub struct LruSlot<K, V>
+where
+    K: Eq + Hash + Clone + Send + 'static,
+    V: Clone + Send + 'static,
+{
+    inner: Mutex<LruInner<K, V>>,
+    capacity: usize,
+    hits: AtomicU64,
+    misses: AtomicU64,
+}
+
+struct LruInner<K, V> {
+    entries: HashMap<K, (V, u64)>,
+    counter: u64,
+}
+
+/// Snapshot of an LruSlot's counters for observability.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct LruStats {
+    pub hits: u64,
+    pub misses: u64,
+    pub size: usize,
+    pub capacity: usize,
+}
+
+impl<K, V> LruSlot<K, V>
+where
+    K: Eq + Hash + Clone + Send + 'static,
+    V: Clone + Send + 'static,
+{
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            inner: Mutex::new(LruInner {
+                entries: HashMap::with_capacity(capacity),
+                counter: 0,
+            }),
+            capacity,
+            hits: AtomicU64::new(0),
+            misses: AtomicU64::new(0),
+        }
+    }
+
+    /// Look up a cached value. Hit updates the access-recency counter so
+    /// frequently-used entries are protected from eviction.
+    pub fn get(&self, key: &K) -> Option<V> {
+        let mut state = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        // Bump counter first (releases the immutable view we'll need next),
+        // then get_mut to update the entry's recency marker.
+        state.counter += 1;
+        let counter = state.counter;
+        let result = state.entries.get_mut(key).map(|entry| {
+            entry.1 = counter;
+            entry.0.clone()
+        });
+        drop(state);
+        if result.is_some() {
+            self.hits.fetch_add(1, Ordering::Relaxed);
+        } else {
+            self.misses.fetch_add(1, Ordering::Relaxed);
+        }
+        result
+    }
+
+    /// Insert a value. If at capacity, evicts the least-recently-used entry
+    /// first. Subsequent gets for `key` will hit the cache.
+    pub fn put(&self, key: K, value: V) {
+        let mut state = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        state.counter += 1;
+        let counter = state.counter;
+        if state.entries.len() >= self.capacity
+            && !state.entries.contains_key(&key)
+        {
+            // Find and remove the entry with the lowest access-counter.
+            if let Some(oldest_key) = state
+                .entries
+                .iter()
+                .min_by_key(|(_, (_, c))| *c)
+                .map(|(k, _)| k.clone())
+            {
+                state.entries.remove(&oldest_key);
+            }
+        }
+        state.entries.insert(key, (value, counter));
+    }
+
+    /// Explicit invalidation — used on reorg to drop stale entries for the
+    /// affected heights/hashes.
+    pub fn remove(&self, key: &K) {
+        let mut state = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        state.entries.remove(key);
+    }
+
+    pub fn stats(&self) -> LruStats {
+        let state = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        LruStats {
+            hits: self.hits.load(Ordering::Relaxed),
+            misses: self.misses.load(Ordering::Relaxed),
+            size: state.entries.len(),
+            capacity: self.capacity,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -408,5 +527,64 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(calls.load(Ordering::SeqCst), 2);
+    }
+
+    // ---- LruSlot tests ----
+
+    #[test]
+    fn lru_basic_get_put() {
+        let lru = LruSlot::<u64, String>::new(10);
+        assert!(lru.get(&1).is_none());
+        lru.put(1, "hello".to_string());
+        assert_eq!(lru.get(&1), Some("hello".to_string()));
+
+        let s = lru.stats();
+        assert_eq!(s.hits, 1);
+        assert_eq!(s.misses, 1);
+        assert_eq!(s.size, 1);
+        assert_eq!(s.capacity, 10);
+    }
+
+    #[test]
+    fn lru_evicts_least_recently_used_when_full() {
+        let lru = LruSlot::<u64, String>::new(3);
+        lru.put(1, "a".into());
+        lru.put(2, "b".into());
+        lru.put(3, "c".into());
+        assert_eq!(lru.stats().size, 3);
+
+        // Access 1 — makes it most recent
+        assert_eq!(lru.get(&1), Some("a".into()));
+        // Access 3 — now 2 is the LRU
+        assert_eq!(lru.get(&3), Some("c".into()));
+
+        // Insert 4 — must evict 2 (least recently used)
+        lru.put(4, "d".into());
+        assert!(lru.get(&2).is_none(), "key 2 should have been evicted");
+        assert_eq!(lru.get(&1), Some("a".into()));
+        assert_eq!(lru.get(&3), Some("c".into()));
+        assert_eq!(lru.get(&4), Some("d".into()));
+    }
+
+    #[test]
+    fn lru_overwrite_does_not_evict() {
+        let lru = LruSlot::<u64, String>::new(2);
+        lru.put(1, "a".into());
+        lru.put(2, "b".into());
+        // Overwriting an existing key shouldn't trigger eviction.
+        lru.put(1, "new".into());
+        assert_eq!(lru.stats().size, 2);
+        assert_eq!(lru.get(&1), Some("new".into()));
+        assert_eq!(lru.get(&2), Some("b".into()));
+    }
+
+    #[test]
+    fn lru_remove_drops_entry() {
+        let lru = LruSlot::<u64, String>::new(10);
+        lru.put(1, "a".into());
+        lru.put(2, "b".into());
+        lru.remove(&1);
+        assert!(lru.get(&1).is_none());
+        assert_eq!(lru.get(&2), Some("b".into()));
     }
 }

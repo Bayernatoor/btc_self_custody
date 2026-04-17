@@ -221,7 +221,8 @@ pub async fn get_block_detail(
 pub async fn get_cache_stats(
     State(state): State<SharedStatsState>,
 ) -> Result<CachedResponse, StatsError> {
-    let entries: Vec<serde_json::Value> = state
+    // TTL-based slots (live-stats RPCs): report staleness, errors, age.
+    let slots: Vec<serde_json::Value> = state
         .rpc
         .cache_stats()
         .into_iter()
@@ -243,9 +244,31 @@ pub async fn get_cache_stats(
             })
         })
         .collect();
+    // LRU-based slots (immutable block data): report capacity utilization.
+    let blocks: Vec<serde_json::Value> = state
+        .rpc
+        .block_cache_stats()
+        .into_iter()
+        .map(|(method, stats)| {
+            let total = stats.hits + stats.misses;
+            let hit_rate = if total == 0 {
+                0.0
+            } else {
+                stats.hits as f64 / total as f64
+            };
+            serde_json::json!({
+                "method": method,
+                "hits": stats.hits,
+                "misses": stats.misses,
+                "size": stats.size,
+                "capacity": stats.capacity,
+                "hit_rate": (hit_rate * 1000.0).round() / 1000.0,
+            })
+        })
+        .collect();
     // 0s cache on this endpoint — we want operators to see current state
     Ok(cached_json(
-        serde_json::json!({ "slots": entries }),
+        serde_json::json!({ "slots": slots, "blocks": blocks }),
         0,
     ))
 }

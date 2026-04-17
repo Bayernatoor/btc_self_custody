@@ -28,7 +28,7 @@ use serde_json::{json, Value};
 
 use super::classifier::{self, OpReturnType};
 use super::error::StatsError;
-use super::rpc_cache::{CachedSlot, SlotStats};
+use super::rpc_cache::{CachedSlot, LruSlot, LruStats, SlotStats};
 
 /// Calculate the encoded size of a Bitcoin CompactSize (varint) for a given value.
 /// Used to accurately count witness byte overhead.
@@ -62,6 +62,12 @@ pub struct BitcoinRpc {
     // estimate_smart_fee is parameterized by target blocks, so we hold one
     // slot per observed target. Lazily created on first call per target.
     smart_fee_caches: Arc<Mutex<HashMap<u64, Arc<CachedSlot<f64>>>>>,
+    // LRU caches for immutable block data. Blocks at confirmed heights never
+    // change their content, so we can keep them indefinitely — only capacity
+    // pressure evicts. On reorg detection, specific entries are invalidated
+    // explicitly by the reorg handler.
+    block_hash_cache: Arc<LruSlot<u64, String>>,
+    block_data_cache: Arc<LruSlot<String, Block>>,
 }
 
 // Per-method TTLs. Tuned to balance data freshness against load reduction.
@@ -86,6 +92,14 @@ const BLOCKCHAIN_INFO_TTL: Duration = Duration::from_secs(30);
 
 const NETWORK_HASHPS_TTL: Duration = Duration::from_secs(60);
 const SMART_FEE_TTL: Duration = Duration::from_secs(10);
+
+// Bounded LRU capacities for immutable block data. Block hashes are tiny
+// (~80 bytes each) so 10k fits comfortably in ~1 MB. Parsed Block structs
+// are heavier (~1-2 KB each) so 500 entries is ~1 MB total. These serve
+// the block detail modal, Lookout tx lookups, and any Observatory path
+// that navigates to a specific confirmed block.
+const BLOCK_HASH_CACHE_CAPACITY: usize = 10_000;
+const BLOCK_DATA_CACHE_CAPACITY: usize = 500;
 
 /// Response from `getblockchaininfo` RPC.
 #[derive(Debug, Clone, Deserialize, serde::Serialize)]
@@ -156,7 +170,7 @@ pub struct BlockTxids {
 
 /// Fully parsed block data from `getblock` verbosity=2.
 /// Contains all metrics computed in a single pass over the block's transactions.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Block {
     pub hash: String,
     pub height: u64,
@@ -256,6 +270,8 @@ impl BitcoinRpc {
             blockchain_info_cache: Arc::new(CachedSlot::new()),
             network_hashps_cache: Arc::new(CachedSlot::new()),
             smart_fee_caches: Arc::new(Mutex::new(HashMap::new())),
+            block_hash_cache: Arc::new(LruSlot::new(BLOCK_HASH_CACHE_CAPACITY)),
+            block_data_cache: Arc::new(LruSlot::new(BLOCK_DATA_CACHE_CAPACITY)),
         }
     }
 
@@ -274,6 +290,25 @@ impl BitcoinRpc {
     /// that one block of staleness isn't worth the invalidation overhead).
     pub fn invalidate_tip_caches(&self) {
         self.blockchain_info_cache.invalidate();
+    }
+
+    /// Drop cached entries for a block that's been reorged away. Called from
+    /// `ingest::verify_recent_blocks` after it detects a stored hash no longer
+    /// matches the canonical chain. Without this, subsequent lookups at the
+    /// affected height / old hash would return the stale pre-reorg data from
+    /// the block-hash and block-data LRUs.
+    pub fn invalidate_block_caches(&self, height: u64, hash: &str) {
+        self.block_hash_cache.remove(&height);
+        self.block_data_cache.remove(&hash.to_string());
+    }
+
+    /// Snapshot of block-cache LRU counters for `/api/stats/cache-stats`.
+    /// Reports hits, misses, current size, and capacity per LRU.
+    pub fn block_cache_stats(&self) -> Vec<(&'static str, LruStats)> {
+        vec![
+            ("getblockhash", self.block_hash_cache.stats()),
+            ("getblock", self.block_data_cache.stats()),
+        ]
     }
 
     /// Snapshot of per-slot cache counters for `/api/stats/cache-stats`.
@@ -416,7 +451,25 @@ impl BitcoinRpc {
     }
 
     /// Call `getblockhash` - returns the block hash at a given height.
+    ///
+    /// Cached via [`LruSlot`] since the hash at a given height is immutable
+    /// (absent a reorg, which is handled by explicit invalidation — see
+    /// [`Self::invalidate_block_caches`]). Capacity is 10k entries, enough
+    /// to hold hashes for the last ~70 days of blocks.
     pub async fn get_block_hash(
+        &self,
+        height: u64,
+    ) -> Result<String, StatsError> {
+        if let Some(hash) = self.block_hash_cache.get(&height) {
+            return Ok(hash);
+        }
+        let hash = self.get_block_hash_fresh(height).await?;
+        self.block_hash_cache.put(height, hash.clone());
+        Ok(hash)
+    }
+
+    /// Force-refresh `getblockhash`, bypassing the cache.
+    pub async fn get_block_hash_fresh(
         &self,
         height: u64,
     ) -> Result<String, StatsError> {
@@ -426,10 +479,27 @@ impl BitcoinRpc {
         })
     }
 
-    /// Fetch a block at verbosity=2 and extract all metrics.
-    /// This is the core data extraction function -- parses the full JSON response
-    /// to compute fees, median stats, OP_RETURN classification, and miner ID.
+    /// Fetch a block by hash, preferring the LRU cache for previously-seen
+    /// blocks. Confirmed blocks are immutable, so a cache hit saves a full
+    /// verbosity=2 RPC call and the subsequent single-pass parser. Call
+    /// [`Self::get_block_fresh`] to bypass the cache, or
+    /// [`Self::invalidate_block_caches`] on reorg to drop affected entries.
     pub async fn get_block(&self, hash: &str) -> Result<Block, StatsError> {
+        if let Some(block) = self.block_data_cache.get(&hash.to_string()) {
+            return Ok(block);
+        }
+        let block = self.get_block_fresh(hash).await?;
+        self.block_data_cache.put(block.hash.clone(), block.clone());
+        Ok(block)
+    }
+
+    /// Force-refresh a block, bypassing the cache. The core data extraction
+    /// function — parses the full verbosity=2 JSON response to compute fees,
+    /// median stats, OP_RETURN classification, and miner ID in a single pass.
+    pub async fn get_block_fresh(
+        &self,
+        hash: &str,
+    ) -> Result<Block, StatsError> {
         let result = self.call("getblock", &[json!(hash), json!(2)]).await?;
 
         let hash = result["hash"].as_str().unwrap_or_default().to_string();
