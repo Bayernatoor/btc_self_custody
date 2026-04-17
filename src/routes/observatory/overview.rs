@@ -389,7 +389,10 @@ pub fn ObservatoryOverview() -> impl IntoView {
                                 on:click=move |_| {
                                     if cooldown.get_untracked() > 0 { return; }
                                     set_cooldown.set(10);
-                                    live_ctx.set_countdown.set(30);
+                                    // Reset countdown to the same value the auto-interval uses
+                                    // so the next auto-fetch lands at the normal 6s cadence,
+                                    // not 30s later (leftover from an older 30s poll rhythm).
+                                    live_ctx.set_countdown.set(5);
                                     live_ctx.live.refetch();
                                     live_ctx.set_last_updated.set(format!("updated {}", chrono::Local::now().format("%H:%M:%S")));
                                 }
