@@ -89,8 +89,20 @@ impl<T: Clone + Send + 'static> CachedSlot<T> {
         Fut: Future<Output = Result<T, StatsError>>,
     {
         loop {
+            // Pre-register for notification BEFORE acquiring the lock.
+            // enable() guarantees this future will receive any subsequent
+            // notify_waiters() call even if we haven't reached `.await` yet.
+            // Without this, a waiter that drops the lock can miss the
+            // fetcher's signal if the fetcher finishes in that narrow window,
+            // causing the waiter to park forever — which in testing produced
+            // +1 miss / +0 hits from a burst of 20 concurrent callers instead
+            // of +1 miss / +19 hits.
+            let notified = self.notify.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+
             // Critical section: decide what this caller should do. The lock is
-            // never held across the await below.
+            // never held across an await below.
             let action = {
                 let mut state = self.inner.lock().unwrap_or_else(|e| {
                     // Poisoned mutex — recover rather than crashing the whole
@@ -115,9 +127,16 @@ impl<T: Clone + Send + 'static> CachedSlot<T> {
 
             match action {
                 Action::Wait => {
-                    self.notify.notified().await;
-                    // Loop around; on next iteration we'll likely hit the
-                    // freshly-populated cache entry.
+                    // Bounded wait with timeout as a defense-in-depth backstop.
+                    // enable() above should guarantee no missed signals, but
+                    // the timeout means even in pathological cases we retry
+                    // rather than hanging the request forever. 250ms is
+                    // imperceptible to users and the loop re-checks cache.
+                    let _ = tokio::time::timeout(
+                        Duration::from_millis(250),
+                        notified.as_mut(),
+                    )
+                    .await;
                     continue;
                 }
                 Action::Fetch => {
@@ -276,6 +295,53 @@ mod tests {
 
         // Critical assertion: 20 concurrent callers, exactly 1 upstream call.
         assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    /// Stress-tests the enable()-before-drop race fix. With a fast fetch
+    /// (no artificial delay), the fetcher can complete before waiters reach
+    /// their await point. Before the fix, this produced "1 miss, 0 hits"
+    /// because waiters parked forever on a signal that fired before they
+    /// registered. With enable(), all waiters either see a fresh cache on
+    /// retry OR get the signal even if it was issued between drop-lock and
+    /// the `.await`.
+    #[tokio::test]
+    async fn singleflight_no_race_with_fast_fetch() {
+        for _ in 0..10 {
+            let slot = Arc::new(CachedSlot::<i32>::new());
+            let calls = Arc::new(AtomicU32::new(0));
+            let mut handles = Vec::new();
+            for _ in 0..50 {
+                let slot = slot.clone();
+                let calls = calls.clone();
+                handles.push(tokio::spawn(async move {
+                    slot.get_or_fetch(Duration::from_secs(60), || async move {
+                        calls.fetch_add(1, Ordering::SeqCst);
+                        Ok(42)
+                    })
+                    .await
+                    .unwrap()
+                }));
+            }
+
+            // All 50 callers must complete — none hang.
+            let results = futures::future::join_all(handles).await;
+            assert_eq!(results.len(), 50);
+            for r in results {
+                let (v, _stale) = r.expect("task panicked");
+                assert_eq!(v, 42);
+            }
+
+            // Singleflight: at most 1 upstream call per iteration.
+            // (Could be 1 if all 50 queued cleanly; could be more if some
+            //  arrived after the first completed and TTL hasn't expired.)
+            assert_eq!(calls.load(Ordering::SeqCst), 1);
+
+            let stats = slot.stats();
+            // Critical: hits + misses must equal exactly 50 (no dropped calls).
+            assert_eq!(stats.hits + stats.misses, 50);
+            assert_eq!(stats.misses, 1);
+            assert_eq!(stats.hits, 49);
+        }
     }
 
     #[tokio::test]
