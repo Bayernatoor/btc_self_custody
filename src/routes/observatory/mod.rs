@@ -68,6 +68,23 @@ pub fn ObservatoryPage() -> impl IntoView {
     let location = leptos_router::hooks::use_location();
     let on_dashboard =
         Signal::derive(move || location.pathname.get() == "/observatory");
+    // The overlay toggle only applies to chart pages. Non-chart pages (Lookout,
+    // Heartbeat, Almanac, Archives, Readings) don't render chart series, so the
+    // floating toggle is clutter on those routes.
+    let show_overlay_panel = Signal::derive(move || {
+        let path = location.pathname.get();
+        !matches!(
+            path.as_str(),
+            "/observatory"
+                | "/observatory/whale-watch"
+                | "/observatory/heartbeat"
+                | "/observatory/on-this-day"
+                | "/observatory/hall-of-fame"
+                | "/observatory/learn"
+                | "/observatory/learn/methodology"
+                | "/observatory/learn/protocols"
+        )
+    });
 
     view! {
         // Title and meta description are set per sub-page for SEO
@@ -90,7 +107,9 @@ pub fn ObservatoryPage() -> impl IntoView {
                 </div>
             </Show>
             <ObservatoryNav/>
-            <OverlayPanel/>
+            <Show when=move || show_overlay_panel.get()>
+                <OverlayPanel/>
+            </Show>
             <leptos_router::components::Outlet/>
             <BlockDetailModal/>
         </section>

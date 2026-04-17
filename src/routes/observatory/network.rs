@@ -552,7 +552,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
                 <ChartCard title="Largest Transaction" description=chart_desc(range, "Size of the largest transaction in each block. Large transactions may indicate consolidations or complex scripts", "Largest transaction (per-block ranges only)") chart_id="chart-largest-tx" option=largest_tx_option/>
                 <ChartCard title="Transaction Density" description=chart_desc(range, "Transactions per kilobyte of block space. Higher values indicate smaller, more efficient transactions", "Daily average transaction density (transactions per KB)") chart_id="chart-tx-density" option=tx_density_option info="More transactions per KB means the average transaction is smaller and block space is used more efficiently. SegWit and Taproot tend to improve density by moving signatures to the discounted witness section."/>
                 <ChartCard title="UTXO Growth Rate" description=chart_desc(range, "Net UTXO set change per block (outputs created minus inputs consumed). Positive means the UTXO set is growing, negative means consolidation", "Daily net UTXO change across all blocks") chart_id="chart-utxo-growth" option=utxo_growth_option/>
-                <ChartCard title="Transaction Type Evolution" description="Breakdown of transactions by input type: Legacy (non-witness), SegWit v0, and Taproot" chart_id="chart-tx-type-evolution" option=tx_type_evolution_option coming_soon=true/>
+                <ChartCard title="Transaction Type Evolution" description="Breakdown of transactions by input type: Legacy (non-witness), SegWit v0, and Taproot" chart_id="chart-tx-type-evolution" option=tx_type_evolution_option/>
             </div>
         </ChartPageLayout>
     }
