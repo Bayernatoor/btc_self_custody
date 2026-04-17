@@ -362,7 +362,7 @@ pub fn OnThisDayPage() -> impl IntoView {
             <div class="absolute inset-0 bg-gradient-to-t from-[#123c64] via-[#123c64]/60 to-[#123c64]/30"></div>
             <div class="absolute inset-0 flex flex-col items-center justify-end pb-3 sm:pb-4">
                 <h1 class="text-xl sm:text-2xl lg:text-3xl font-title text-white mb-1 drop-shadow-lg">"Almanac"</h1>
-                <p class="text-xs sm:text-sm lg:text-base text-white/60 max-w-xl mx-auto px-4 text-center drop-shadow">"What happened on this date across every year of Bitcoin \u{b7} All times UTC"</p>
+                <p class="text-xs sm:text-sm text-white/60 max-w-xl mx-auto px-4 text-center drop-shadow">"What happened on this date across every year of Bitcoin \u{b7} All times UTC"</p>
             </div>
         </div>
 
