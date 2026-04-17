@@ -1,7 +1,16 @@
 #!/bin/bash
-# Deploy to production Droplet
-# Triggered automatically by GitHub Actions on push to master
-# Can also be run manually: ssh wehodlbtc@<droplet-ip> 'bash /opt/wehodlbtc/app/scripts/deploy.sh'
+# LEGACY: on-droplet build-and-deploy. Kept as a manual fallback only.
+#
+# The production deploy pipeline now builds on GitHub Actions and rsyncs the
+# release binary + target/site/ into place (see .github/workflows/deploy.yml
+# and scripts/deploy-remote.sh). That path avoids running cargo on the 2GB
+# droplet and keeps target/ from growing unbounded on disk.
+#
+# Use this script only if the GitHub Actions pipeline is broken and you need
+# to recover prod by SSHing in directly:
+#   ssh wehodlbtc@<droplet-ip> 'bash /opt/wehodlbtc/app/scripts/deploy.sh'
+# It assumes the repo is still checked out at /opt/wehodlbtc/app, which may
+# no longer be true once we prune the source tree from the droplet.
 
 set -e
 

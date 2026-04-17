@@ -1,20 +1,90 @@
-name: Deploy to production
+name: Build and deploy to production
 
 on:
   push:
     branches: [master]
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
 
 jobs:
-  deploy:
-    name: Deploy
+  build-and-deploy:
+    name: Build on runner, ship binary to droplet
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable + wasm target
+        uses: dtolnay/rust-toolchain@stable
         with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: wehodlbtc
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          command_timeout: 30m
-          script_stop: true
-          script: bash /opt/wehodlbtc/app/scripts/deploy.sh
+          targets: wasm32-unknown-unknown
+
+      - name: Rust build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-build
+
+      - name: Install cargo-leptos
+        run: cargo install --locked cargo-leptos
+
+      - name: Install tailwindcss
+        run: |
+          curl -sSL -o /tmp/tailwindcss \
+            https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-linux-x64
+          chmod +x /tmp/tailwindcss
+          sudo mv /tmp/tailwindcss /usr/local/bin/tailwindcss
+
+      - name: Run tests
+        run: cargo test --lib
+
+      - name: Bump service-worker cache version
+        run: |
+          DEPLOY_TS=$(date +%s)
+          sed -i "s/var CACHE_NAME = 'wehodlbtc-[^']*'/var CACHE_NAME = 'wehodlbtc-${DEPLOY_TS}'/" assets/sw.js
+
+      - name: Build release with cargo-leptos
+        run: cargo leptos build --release
+
+      - name: Stage artifacts
+        run: |
+          mkdir -p artifact
+          cp target/release/we_hodl_btc artifact/we_hodl_btc
+          strip artifact/we_hodl_btc
+          cp -r target/site artifact/site
+          ls -lah artifact
+          du -sh artifact/site
+
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Rsync artifacts to droplet staging
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          ssh "wehodlbtc@${DEPLOY_HOST}" 'mkdir -p /opt/wehodlbtc/staging'
+          rsync -az --delete --progress \
+            artifact/ \
+            "wehodlbtc@${DEPLOY_HOST}:/opt/wehodlbtc/staging/"
+
+      - name: Copy remote swap script
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          scp scripts/deploy-remote.sh \
+            "wehodlbtc@${DEPLOY_HOST}:/opt/wehodlbtc/staging/deploy-remote.sh"
+
+      - name: Atomic swap + restart + rollback-on-failure
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          ssh "wehodlbtc@${DEPLOY_HOST}" 'bash /opt/wehodlbtc/staging/deploy-remote.sh'
