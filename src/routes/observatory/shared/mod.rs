@@ -153,6 +153,9 @@ macro_rules! chart_memo {
 pub fn OverlayPanel() -> impl IntoView {
     let state = expect_context::<ObservatoryState>();
     let location = use_location();
+    // Overlays only make sense on chart pages. Hide on every other route so
+    // the floating toggle isn't clutter elsewhere. class:hidden keeps the div
+    // in the DOM (no hydration mismatch) while making it invisible.
     let hide_overlays = Signal::derive(move || {
         let path = location.pathname.get();
         path == "/observatory"
@@ -160,6 +163,10 @@ pub fn OverlayPanel() -> impl IntoView {
             || path == "/observatory/on-this-day"
             || path == "/observatory/hall-of-fame"
             || path == "/observatory/heartbeat"
+            || path == "/observatory/whale-watch"
+            || path == "/observatory/learn"
+            || path == "/observatory/learn/methodology"
+            || path == "/observatory/learn/protocols"
     });
 
     view! {
