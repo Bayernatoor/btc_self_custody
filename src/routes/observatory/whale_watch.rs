@@ -94,7 +94,7 @@ impl TypeFilter {
     fn description(self) -> &'static str {
         match self {
             Self::All => "All notable transactions",
-            Self::Whale => "Total output value over $1,000,000 USD. May include exchange self-sends.",
+            Self::Whale => "Total output value over $1,000,000 USD; may include exchange self-sends",
             Self::RoundNumber => "Exact round BTC amounts (1, 10, 100, 1000). Often human-initiated",
             Self::LargeInscription => "Witness data over 100KB (Ordinals, BRC-20, images)",
             Self::Consolidation => "50+ inputs merged into 3 or fewer outputs (UTXO cleanup)",
@@ -293,7 +293,7 @@ pub fn WhaleWatchPage() -> impl IntoView {
             <div class="flex items-center gap-2">
                 <button
                     class="text-white/30 hover:text-[#f7931a] transition-colors cursor-pointer shrink-0"
-                    title="About Whale Watch"
+                    title="About The Lookout"
                     on:click=move |_| set_info_open.update(|v| *v = !*v)
                 >
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
