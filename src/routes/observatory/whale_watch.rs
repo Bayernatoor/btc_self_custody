@@ -290,9 +290,12 @@ pub fn WhaleWatchPage() -> impl IntoView {
 
         // Info button + time window (toolbar row)
         <div class="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-3">
+                // Info button: pill-style with icon + label on desktop so it
+                // reads as an actionable element rather than a subtle glyph.
+                // Mobile keeps the compact icon-only form.
                 <button
-                    class="text-white/30 hover:text-[#f7931a] transition-colors cursor-pointer shrink-0"
+                    class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-[#f7931a]/30 text-[#f7931a]/70 hover:text-[#f7931a] hover:border-[#f7931a]/60 hover:bg-[#f7931a]/5 transition-colors cursor-pointer shrink-0"
                     title="About The Lookout"
                     on:click=move |_| set_info_open.update(|v| *v = !*v)
                 >
@@ -300,6 +303,7 @@ pub fn WhaleWatchPage() -> impl IntoView {
                         <circle cx="12" cy="12" r="10"/>
                         <path d="M12 16v-4M12 8h.01"/>
                     </svg>
+                    <span class="hidden sm:inline text-[11px] font-mono uppercase tracking-wider">"About"</span>
                 </button>
                 <a href="/observatory/heartbeat" class="text-xs text-white/30 hover:text-[#f7931a] transition-colors">
                     "Live on the Heartbeat \u{2192}"

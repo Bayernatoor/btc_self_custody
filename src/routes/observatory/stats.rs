@@ -674,12 +674,15 @@ pub fn StatsSummaryPage() -> impl IntoView {
                         }).unwrap_or_default()
                     }}
                 </p>
+                // Pill with Bitcoin glyph + label on desktop so users notice
+                // the date-range explanation (most missed it as a bare icon).
                 <span
-                    class="hidden sm:inline-flex items-center justify-center w-4 h-4 rounded-full border border-white/20 text-[9px] font-bold text-white/30 hover:text-[#f7931a] hover:border-[#f7931a]/40 transition-colors"
+                    class="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border border-[#f7931a]/30 text-[#f7931a]/70 hover:text-[#f7931a] hover:border-[#f7931a]/60 hover:bg-[#f7931a]/5 transition-colors cursor-help"
                     data-tip="Timestamps reflect the actual first and last block mined in this range, not the query boundaries. Bitcoin blocks are mined at irregular intervals so times won\u{2019}t align exactly with midnight."
                     tabindex="0"
                 >
-                    "\u{20bf}"
+                    <span class="text-[11px] font-bold leading-none">"\u{20bf}"</span>
+                    <span class="text-[10px] font-mono uppercase tracking-wider">"About dates"</span>
                 </span>
             </div>
             <super::shared::RangeSelector/>
