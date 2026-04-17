@@ -420,8 +420,12 @@ pub fn OnThisDayPage() -> impl IntoView {
                     };
                     let (picker_month, set_picker_month) = signal(today_month);
                     let (picker_day, set_picker_day) = signal(today_day);
-                    let emit = move |m: i32, d: i32| {
+                    let go = move |_| {
+                        let m = picker_month.get_untracked();
+                        let d = picker_day.get_untracked();
                         let md = format!("{m:02}-{d:02}");
+                        // Don't thrash state if user hits Go without changing anything
+                        if md == selected_date.get_untracked() { return; }
                         set_selected_date.set(md.clone());
                         reset_notable();
                         #[cfg(feature = "hydrate")]
@@ -443,10 +447,9 @@ pub fn OnThisDayPage() -> impl IntoView {
                                 on:change=move |ev| {
                                     let m: i32 = event_target_value(&ev).parse().unwrap_or(today_month);
                                     set_picker_month.set(m);
+                                    // Clamp the day if the new month has fewer days (e.g. Mar 31 -> Feb)
                                     let max_d = days_in_month(m);
-                                    let mut d = picker_day.get_untracked();
-                                    if d > max_d { d = max_d; set_picker_day.set(d); }
-                                    emit(m, d);
+                                    if picker_day.get_untracked() > max_d { set_picker_day.set(max_d); }
                                 }
                             >
                                 {(1..=12i32).map(|m| view! {
@@ -461,7 +464,6 @@ pub fn OnThisDayPage() -> impl IntoView {
                                 on:change=move |ev| {
                                     let d: i32 = event_target_value(&ev).parse().unwrap_or(today_day);
                                     set_picker_day.set(d);
-                                    emit(picker_month.get_untracked(), d);
                                 }
                             >
                                 {move || {
@@ -473,6 +475,13 @@ pub fn OnThisDayPage() -> impl IntoView {
                                     }).collect::<Vec<_>>()
                                 }}
                             </select>
+                            <button
+                                class="text-xs text-white/70 hover:text-white bg-[#f7931a]/10 hover:bg-[#f7931a]/20 border border-[#f7931a]/30 hover:border-[#f7931a]/60 px-3 py-1.5 rounded-lg cursor-pointer transition-colors"
+                                on:click=go
+                                title="Jump to selected date"
+                            >
+                                "Go"
+                            </button>
                         </div>
                     }.into_any()
                 } else {
