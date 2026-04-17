@@ -312,6 +312,9 @@ pub fn LiveCard(
     #[prop(into)] label: String,
     #[prop(into)] value: Signal<String>,
     #[prop(optional, into)] tooltip: Option<&'static str>,
+    /// Secondary value shown on a second dim line below the main value.
+    /// Useful for pairing related metrics (e.g. vsize vs memory usage).
+    #[prop(optional, into)] sub_value: Option<Signal<String>>,
 ) -> impl IntoView {
     let is_loading = Signal::derive(move || value.get() == "\u{2014}");
     view! {
@@ -337,6 +340,11 @@ pub fn LiveCard(
                     view! { <span class="text-[#f7931a]">{value.get()}</span> }.into_any()
                 }}
             </div>
+            {sub_value.map(|sv| view! {
+                <div class="text-[0.6rem] sm:text-[0.65rem] text-white/40 font-mono truncate mt-0.5" title=move || sv.get()>
+                    {move || sv.get()}
+                </div>
+            })}
         </div>
     }
 }

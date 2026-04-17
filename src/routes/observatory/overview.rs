@@ -62,6 +62,9 @@ pub fn ObservatoryOverview() -> impl IntoView {
     let mempool_bytes = Signal::derive(move || {
         live_field(|s| format!("{:.1} MB", s.mempool.bytes as f64 / 1e6))
     });
+    let mempool_usage = Signal::derive(move || {
+        live_field(|s| format!("{:.0} MB in memory", s.mempool.usage as f64 / 1e6))
+    });
     let price_usd = Signal::derive(move || {
         live_field(|s| {
             format!("${}", format_number_f64(s.network.price_usd, 0))
@@ -419,7 +422,7 @@ pub fn ObservatoryOverview() -> impl IntoView {
                     <h3 class="text-sm font-bold text-[#f7931a] uppercase tracking-widest mb-4">"Mempool"</h3>
                     <div class="grid grid-cols-2 gap-3 mb-3">
                         <LiveCard label="Transactions" value=mempool_size tooltip="Unconfirmed transactions waiting in the mempool"/>
-                        <LiveCard label="Size" value=mempool_bytes tooltip="Total size of all unconfirmed transactions in megabytes"/>
+                        <LiveCard label="Size" value=mempool_bytes sub_value=mempool_usage tooltip="Top line: sum of virtual transaction sizes (what miners care about for block space). Bottom line: memory usage in Bitcoin Core's mempool including bookkeeping overhead. Mempool eviction is based on memory usage against the 300 MB default maxmempool."/>
                         <LiveCard label="Next Block Fee" value=next_fee tooltip="Estimated minimum fee rate to be included in the next block"/>
                     </div>
                     <div class="flex justify-center">
