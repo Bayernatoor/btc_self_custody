@@ -262,7 +262,7 @@ pub fn provide_observatory_state() -> ObservatoryState {
         }
     });
 
-    // Live stats (auto-refresh 30s)
+    // Live stats (auto-refresh every 6s via the countdown interval below)
     #[allow(clippy::redundant_closure)]
     let live = LocalResource::new(move || fetch_live_stats());
 
