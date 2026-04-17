@@ -210,15 +210,10 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
             .await
             .map_err(|e| internal_err("Stats unavailable", e))?;
 
-    // Return cached result if fresh (< 10 seconds old)
-    {
-        let cached = state.live_cache.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some((ref stats, ref ts)) = *cached {
-            if ts.elapsed().as_secs() < 10 {
-                return Ok(stats.clone());
-            }
-        }
-    }
+    // No handler-level cache here — the underlying RPCs are cached in
+    // BitcoinRpc per method (see rpc_cache.rs) with singleflight dedup
+    // and stale-on-error fallback. The price fetch below has its own
+    // 60s cache since it hits an external HTTP API, not Core RPC.
 
     // Get block height + difficulty from the DB (always current from 60s poll).
     // This avoids stale data when getblockchaininfo RPC is slow/fails.
@@ -231,7 +226,10 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
     let db_timestamp =
         db_stats.as_ref().map(|s| s.latest_timestamp).unwrap_or(0);
 
-    // Parallelize RPC calls — all are non-fatal (fall back to defaults)
+    // Parallelize RPC calls — all are non-fatal (fall back to defaults).
+    // Each returns `(value, is_stale)`; we OR the staleness flags together
+    // so the response surfaces a single `stale: true` if any RPC fell back
+    // to its cached-on-error value.
     let (blockchain_res, mempool_res, hashrate_res, fee_res) = tokio::join!(
         state.rpc.get_blockchain_info(),
         state.rpc.get_mempool_info(),
@@ -239,42 +237,72 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
         state.rpc.estimate_smart_fee(1),
     );
 
+    let mut stale = false;
+
     // Use RPC blockchain info if available, but override block height with DB
     // (DB is always up-to-date from the poll, RPC might be stale/failed)
-    let blockchain = blockchain_res.unwrap_or_else(|e| {
-        tracing::warn!("Failed to fetch blockchain info: {e}");
-        super::rpc::BlockchainInfo {
-            blocks: db_height,
-            chain: "main".to_string(),
-            difficulty: 0.0,
-            verification_progress: 1.0,
-            size_on_disk: 0,
-            bestblockhash: String::new(),
-            time: db_timestamp,
+    let blockchain = match blockchain_res {
+        Ok((info, s)) => {
+            stale |= s;
+            info
         }
-    });
+        Err(e) => {
+            tracing::warn!("Failed to fetch blockchain info: {e}");
+            stale = true;
+            super::rpc::BlockchainInfo {
+                blocks: db_height,
+                chain: "main".to_string(),
+                difficulty: 0.0,
+                verification_progress: 1.0,
+                size_on_disk: 0,
+                bestblockhash: String::new(),
+                time: db_timestamp,
+            }
+        }
+    };
     // Always use DB height — it's the source of truth (updated by poll)
     let block_height = db_height.max(blockchain.blocks);
 
-    let mempool = mempool_res.unwrap_or_else(|e| {
-        tracing::warn!("Failed to fetch mempool info: {e}");
-        super::rpc::MempoolInfo {
-            size: 0,
-            bytes: 0,
-            usage: 0,
-            total_fee: 0.0,
-            maxmempool: 300_000_000,
-            mempoolminfee: 0.0,
+    let mempool = match mempool_res {
+        Ok((info, s)) => {
+            stale |= s;
+            info
         }
-    });
-    let hashrate = hashrate_res.unwrap_or_else(|e| {
-        tracing::warn!("Failed to fetch hashrate: {e}");
-        0.0
-    });
-    let next_block_fee = fee_res.unwrap_or_else(|e| {
-        tracing::warn!("Failed to fetch fee estimate: {e}");
-        0.0
-    });
+        Err(e) => {
+            tracing::warn!("Failed to fetch mempool info: {e}");
+            stale = true;
+            super::rpc::MempoolInfo {
+                size: 0,
+                bytes: 0,
+                usage: 0,
+                total_fee: 0.0,
+                maxmempool: 300_000_000,
+                mempoolminfee: 0.0,
+            }
+        }
+    };
+    let hashrate = match hashrate_res {
+        Ok((h, s)) => {
+            stale |= s;
+            h
+        }
+        Err(e) => {
+            tracing::warn!("Failed to fetch hashrate: {e}");
+            stale = true;
+            0.0
+        }
+    };
+    let next_block_fee = match fee_res {
+        Ok((f, s)) => {
+            stale |= s;
+            f
+        }
+        Err(e) => {
+            tracing::warn!("Failed to fetch fee estimate: {e}");
+            stale = true;
+            0.0
+        }
+    };
 
     // Price cache: only fetch from mempool.space if cache is >60s old.
     // Atomic guard prevents multiple concurrent HTTP requests on cache miss.
@@ -333,7 +361,7 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
         .unwrap_or_else(|e| e.into_inner())
         .unwrap_or(0);
 
-    let result = LiveStats {
+    Ok(LiveStats {
         blockchain: LiveBlockchain {
             blocks: block_height,
             chain: blockchain.chain,
@@ -363,13 +391,8 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
             chain_size_gb: (chain_size_gb * 10.0).round() / 10.0,
             hashrate,
         },
-    };
-
-    // Cache the result
-    *state.live_cache.lock().unwrap_or_else(|e| e.into_inner()) =
-        Some((result.clone(), Instant::now()));
-
-    Ok(result)
+        stale,
+    })
 }
 
 #[server(prefix = "/api", endpoint = "stats_op_returns")]

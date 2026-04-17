@@ -617,8 +617,10 @@ pub struct PeriodStats {
     pub signaled_pct: f64,
 }
 
-/// Real-time node, mempool, and network stats. Refreshed every 10 seconds
-/// and cached server-side. Combines data from multiple RPC calls and external APIs.
+/// Real-time node, mempool, and network stats. Combines data from multiple
+/// RPC calls and external APIs. Underlying RPC responses are cached in
+/// `BitcoinRpc` per method with TTLs ranging from 1s (chain tip) to 60s
+/// (hashrate); see `src/stats/rpc_cache.rs`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LiveStats {
     pub blockchain: LiveBlockchain,
@@ -626,6 +628,11 @@ pub struct LiveStats {
     /// Estimated fee rate (sat/vB) to confirm in the next block (estimatesmartfee target=1).
     pub next_block_fee: f64,
     pub network: LiveNetwork,
+    /// True when one or more underlying RPC calls failed and we fell back to
+    /// the cached stale value. Clients can render a "data may be outdated"
+    /// indicator when this is set.
+    #[serde(default)]
+    pub stale: bool,
 }
 
 /// Blockchain state from getblockchaininfo RPC.

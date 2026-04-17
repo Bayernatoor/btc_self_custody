@@ -2,25 +2,30 @@
 //!
 //! These endpoints serve the Axum JSON API (used by external clients).
 //! Leptos frontend components use server functions in `server_fns.rs` instead.
+//! All routes are nested under `/api/stats` by `main.rs`.
 //!
 //! ## Endpoints
 //!
-//! - `GET /api/blocks?from=&to=` - Block data by height range (default: last 144 blocks)
-//! - `GET /api/blocks/:height` - Single block detail
-//! - `GET /api/stats` - DB summary (block count, height range)
-//! - `GET /api/live` - Real-time node + mempool + network stats (10s cache)
-//! - `GET /api/op-returns?from=&to=` - OP_RETURN protocol breakdown (default: last 10k blocks)
-//! - `GET /api/aggregates/daily?from=&to=` - Daily aggregated metrics by timestamp
-//! - `GET /api/signaling?bit=N` or `?method=locktime` - Per-block signaling status
-//! - `GET /api/signaling/periods?bit=N` - Signaling % per 2016-block retarget period
-//! - `GET /api/heartbeat` - SSE stream for real-time mempool txs and block notifications
+//! - `GET /api/stats/blocks?from=&to=` - Block data by height range (default: last 144 blocks)
+//! - `GET /api/stats/blocks/:height` - Single block detail
+//! - `GET /api/stats/stats` - DB summary (block count, height range)
+//! - `GET /api/stats/cache-stats` - Per-method RPC cache hit/miss/error counters
+//! - `GET /api/stats/live` - Real-time node + mempool + network stats
+//! - `GET /api/stats/op-returns?from=&to=` - OP_RETURN protocol breakdown (default: last 10k blocks)
+//! - `GET /api/stats/aggregates/daily?from=&to=` - Daily aggregated metrics by timestamp
+//! - `GET /api/stats/signaling?bit=N` or `?method=locktime` - Per-block signaling status
+//! - `GET /api/stats/signaling/periods?bit=N` - Signaling % per 2016-block retarget period
+//! - `GET /api/stats/heartbeat` - SSE stream for real-time mempool txs and block notifications
 //!
 //! ## Caching Strategy
 //!
-//! Most endpoints use HTTP Cache-Control headers (5-10s max-age). The `/api/live`
-//! endpoint additionally caches the assembled response server-side for 10s. Price
-//! data from mempool.space is cached for 60s with an atomic guard to prevent
-//! concurrent refresh requests.
+//! All handlers use HTTP Cache-Control headers (5-10s max-age) for the browser
+//! / CDN layer. Bitcoin Core RPC calls are cached inside `BitcoinRpc` per method
+//! (see `rpc_cache.rs`) with TTLs of 1-60s, singleflight dedup against
+//! `cs_main`-stall request floods, and stale-on-error fallback. There is no
+//! separate handler-level cache for `/live` — the RPC cache handles it.
+//! External HTTP price data (mempool.space) retains its own 60s cache with an
+//! atomic guard against concurrent refreshes.
 //!
 //! ## SSE Connection Limiting
 //!
@@ -69,8 +74,6 @@ type RangeCache<T> = Mutex<Option<(u64, u64, Vec<T>, Instant)>>;
 pub struct StatsState {
     pub db: DbPool,
     pub rpc: BitcoinRpc,
-    /// Cached live stats result, refreshed at most every 10 seconds.
-    pub live_cache: Mutex<Option<(super::types::LiveStats, Instant)>>,
     /// Cached price with timestamp, refreshed at most every 60 seconds.
     pub price_cache: Mutex<Option<(PriceInfo, Instant)>>,
     /// Guard: prevents multiple concurrent price refreshes.
@@ -274,26 +277,13 @@ pub async fn get_stats(
     }
 }
 
-/// Serve last cached LiveStats with a stale flag when RPC is unreachable.
-fn serve_stale_live(
-    state: &SharedStatsState,
-) -> Option<Result<CachedResponse, StatsError>> {
-    tracing::warn!("RPC unreachable — serving stale LiveStats");
-    let cached = state
-        .live_cache
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .clone();
-    cached.map(|(stats, _ts)| {
-        let mut val = serde_json::to_value(&stats)
-            .unwrap_or_else(|_| serde_json::json!({}));
-        val["stale"] = serde_json::json!(true);
-        Ok(cached_json(val, 5))
-    })
-}
-
-/// GET /api/live - real-time node, mempool, and network stats. Cache: 10s.
-/// Parallelizes RPC calls and serves stale data with a `stale` flag if RPC is down.
+/// GET /api/stats/live - real-time node, mempool, and network stats.
+///
+/// No dedicated handler-level cache. The underlying RPC calls are cached in
+/// `BitcoinRpc` per method (see `rpc_cache.rs`); that layer handles singleflight
+/// dedup, per-method TTLs, and stale-on-error fallback. If any RPC call fell
+/// back to a stale value, the response JSON includes `"stale": true` so the
+/// client can surface a "data may be outdated" indicator.
 pub async fn get_live(
     State(state): State<SharedStatsState>,
 ) -> Result<CachedResponse, StatsError> {
@@ -305,27 +295,23 @@ pub async fn get_live(
         state.rpc.estimate_smart_fee(1),
     );
 
-    // If core RPC calls fail, serve last cached LiveStats with stale flag
-    let blockchain = match blockchain_res {
-        Ok(b) => b,
-        Err(e) => {
-            return serve_stale_live(&state).unwrap_or(Err(e));
-        }
-    };
-    let mempool = match mempool_res {
-        Ok(m) => m,
-        Err(e) => {
-            return serve_stale_live(&state).unwrap_or(Err(e));
-        }
-    };
-    let hashrate = hashrate_res.unwrap_or_else(|e| {
+    // Track staleness across the four RPCs. Any OR-combines to response-level.
+    let mut stale = false;
+
+    let (blockchain, b_stale) = blockchain_res?;
+    stale |= b_stale;
+    let (mempool, m_stale) = mempool_res?;
+    stale |= m_stale;
+    let (hashrate, h_stale) = hashrate_res.unwrap_or_else(|e| {
         tracing::warn!("Failed to fetch hashrate: {e}");
-        0.0
+        (0.0, false)
     });
-    let next_block_fee = fee_res.unwrap_or_else(|e| {
+    stale |= h_stale;
+    let (next_block_fee, f_stale) = fee_res.unwrap_or_else(|e| {
         tracing::warn!("Failed to fetch fee estimate: {e}");
-        0.0
+        (0.0, false)
     });
+    stale |= f_stale;
 
     // Price cache: only fetch from mempool.space if cache is >60s old.
     // Atomic guard prevents multiple concurrent HTTP requests on cache miss.
@@ -395,7 +381,8 @@ pub async fn get_live(
                 "utxo_count": utxo_count,
                 "chain_size_gb": (chain_size_gb * 10.0).round() / 10.0,
                 "hashrate": hashrate
-            }
+            },
+            "stale": stale,
         }),
         10,
     ))

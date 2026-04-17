@@ -320,18 +320,18 @@ impl BitcoinRpc {
     }
 
     /// Call `getblockchaininfo` - returns chain state, tip height, difficulty.
-    /// Cached with a 1s TTL. Use [`Self::get_blockchain_info_fresh`] for
-    /// paths that must bypass the cache (ingest startup, ZMQ refreshes).
+    /// Cached with a 1s TTL. Returns `(info, is_stale)` where `is_stale` is
+    /// true when the upstream call failed and we fell back to the last known
+    /// value. Use [`Self::get_blockchain_info_fresh`] for paths that must
+    /// bypass the cache (ingest, ZMQ refreshes).
     pub async fn get_blockchain_info(
         &self,
-    ) -> Result<BlockchainInfo, StatsError> {
-        let (v, _stale) = self
-            .blockchain_info_cache
+    ) -> Result<(BlockchainInfo, bool), StatsError> {
+        self.blockchain_info_cache
             .get_or_fetch(BLOCKCHAIN_INFO_TTL, || {
                 self.get_blockchain_info_fresh()
             })
-            .await?;
-        Ok(v)
+            .await
     }
 
     /// Force-refresh `getblockchaininfo`, bypassing the cache.
@@ -344,12 +344,13 @@ impl BitcoinRpc {
     }
 
     /// Estimated network hash rate (hashes per second). Cached with a 60s TTL.
-    pub async fn get_network_hashps(&self) -> Result<f64, StatsError> {
-        let (v, _stale) = self
-            .network_hashps_cache
+    /// Returns `(hashrate, is_stale)`.
+    pub async fn get_network_hashps(
+        &self,
+    ) -> Result<(f64, bool), StatsError> {
+        self.network_hashps_cache
             .get_or_fetch(NETWORK_HASHPS_TTL, || self.get_network_hashps_fresh())
-            .await?;
-        Ok(v)
+            .await
     }
 
     /// Force-refresh `getnetworkhashps`, bypassing the cache.
@@ -361,16 +362,14 @@ impl BitcoinRpc {
     }
 
     /// Estimate fee rate (sat/vB) to confirm within `target` blocks.
-    /// Cached per target with a 10s TTL.
+    /// Cached per target with a 10s TTL. Returns `(rate, is_stale)`.
     pub async fn estimate_smart_fee(
         &self,
         target: u64,
-    ) -> Result<f64, StatsError> {
+    ) -> Result<(f64, bool), StatsError> {
         let slot = self.smart_fee_slot(target);
-        let (v, _stale) = slot
-            .get_or_fetch(SMART_FEE_TTL, || self.estimate_smart_fee_fresh(target))
-            .await?;
-        Ok(v)
+        slot.get_or_fetch(SMART_FEE_TTL, || self.estimate_smart_fee_fresh(target))
+            .await
     }
 
     /// Force-refresh `estimatesmartfee`, bypassing the cache.
@@ -1016,12 +1015,13 @@ impl BitcoinRpc {
     /// Cached with a 2s TTL. Mempool contents change every second as new txs
     /// arrive; 2s staleness is imperceptible to a human reading tx count and
     /// bytes, and at typical dashboard load this deduplicates ~95% of calls.
-    pub async fn get_mempool_info(&self) -> Result<MempoolInfo, StatsError> {
-        let (v, _stale) = self
-            .mempool_info_cache
+    /// Returns `(info, is_stale)`.
+    pub async fn get_mempool_info(
+        &self,
+    ) -> Result<(MempoolInfo, bool), StatsError> {
+        self.mempool_info_cache
             .get_or_fetch(MEMPOOL_INFO_TTL, || self.get_mempool_info_fresh())
-            .await?;
-        Ok(v)
+            .await
     }
 
     /// Force-refresh `getmempoolinfo`, bypassing the cache.

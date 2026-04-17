@@ -67,7 +67,6 @@ pub async fn init(
     let state = Arc::new(StatsState {
         db: pool,
         rpc,
-        live_cache: Mutex::new(None),
         price_cache: Mutex::new(None),
         price_refreshing: std::sync::atomic::AtomicBool::new(false),
         utxo_count: Mutex::new(None),
