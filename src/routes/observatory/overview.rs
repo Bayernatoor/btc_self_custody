@@ -354,7 +354,7 @@ pub fn ObservatoryOverview() -> impl IntoView {
                             "w-2.5 h-2.5 rounded-full bg-red-500/60"
                         }
                     ></div>
-                    <span class="text-lg text-white font-bold">"Live Node Stats"</span>
+                    <span class="text-base text-white font-bold">"Live Node Stats"</span>
                     {move || if !live_ctx.connected.get() && cached_live.get().is_some() {
                         view! { <span class="text-xs text-yellow-500/80">"(reconnecting...)"</span> }.into_any()
                     } else if !live_ctx.connected.get() && cached_live.get().is_none() {
@@ -419,7 +419,7 @@ pub fn ObservatoryOverview() -> impl IntoView {
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 // Mempool section
                 <div class="bg-[#0a1a2e] border border-white/10 rounded-xl p-5 overflow-hidden">
-                    <h3 class="text-sm font-bold text-[#f7931a] uppercase tracking-widest mb-4">"Mempool"</h3>
+                    <h3 class="text-xs font-bold text-[#f7931a] uppercase tracking-widest mb-4">"Mempool"</h3>
                     <div class="grid grid-cols-2 gap-3 mb-3">
                         <LiveCard label="Transactions" value=mempool_size tooltip="Unconfirmed transactions waiting in the mempool"/>
                         <LiveCard label="Size" value=mempool_bytes sub_value=mempool_usage tooltip="Top line: sum of virtual transaction sizes (what miners care about for block space). Bottom line: memory usage in Bitcoin Core's mempool including bookkeeping overhead. Mempool eviction is based on memory usage against the 300 MB default maxmempool."/>
@@ -434,7 +434,7 @@ pub fn ObservatoryOverview() -> impl IntoView {
 
                 // Mining section
                 <div class="bg-[#0a1a2e] border border-white/10 rounded-xl p-5">
-                    <h3 class="text-sm font-bold text-[#f7931a] uppercase tracking-widest mb-4">"Mining"</h3>
+                    <h3 class="text-xs font-bold text-[#f7931a] uppercase tracking-widest mb-4">"Mining"</h3>
                     <div class="grid grid-cols-2 gap-3 mb-2">
                         <LiveCard label="Block Height" value=block_height tooltip="The latest confirmed block number in the blockchain"/>
                         <LiveCard label="Difficulty" value=difficulty tooltip="Current mining difficulty in trillions. Adjusts every 2,016 blocks (~2 weeks) to target 10-minute block times"/>
@@ -447,7 +447,7 @@ pub fn ObservatoryOverview() -> impl IntoView {
 
                 // Economic section
                 <div class="bg-[#0a1a2e] border border-white/10 rounded-xl p-5">
-                    <h3 class="text-sm font-bold text-[#f7931a] uppercase tracking-widest mb-4">"Economic"</h3>
+                    <h3 class="text-xs font-bold text-[#f7931a] uppercase tracking-widest mb-4">"Economic"</h3>
                     <div class="grid grid-cols-2 gap-3">
                         <LiveCard label="Price (USD)" value=price_usd tooltip="Current BTC/USD spot price"/>
                         <LiveCard label="Sats/Dollar" value=sats_per_dollar tooltip="How many satoshis (0.00000001 BTC) one US dollar buys"/>
@@ -463,7 +463,7 @@ pub fn ObservatoryOverview() -> impl IntoView {
         // Difficulty adjustment predictor
         <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 mt-8">
             <div class="flex items-baseline justify-between mb-3">
-                <h3 class="text-base sm:text-lg text-white font-semibold">"Next Difficulty Adjustment"</h3>
+                <h3 class="text-sm sm:text-base text-white font-semibold">"Next Difficulty Adjustment"</h3>
                 <span class="text-xs text-white/40 font-mono">{move || diff_est_date.get()}</span>
             </div>
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -505,7 +505,7 @@ pub fn ObservatoryOverview() -> impl IntoView {
         // Halving countdown
         <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6 mt-8">
             <div class="flex items-baseline justify-between mb-3">
-                <h3 class="text-base sm:text-lg text-white font-semibold">"Next Halving"</h3>
+                <h3 class="text-sm sm:text-base text-white font-semibold">"Next Halving"</h3>
                 <span class="text-xs text-white/40 font-mono">{move || halving_est_date.get()}</span>
             </div>
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">

@@ -95,7 +95,7 @@ pub fn SectionHeading(
     #[prop(into)] title: String,
 ) -> impl IntoView {
     view! {
-        <h2 id=id class="text-lg text-white/60 font-semibold pt-4 first:pt-0">{title}</h2>
+        <h2 id=id class="text-base text-white/60 font-semibold pt-4 first:pt-0">{title}</h2>
     }
 }
 
@@ -136,7 +136,7 @@ pub fn ChartCard(
             <div class="flex items-start justify-between mb-4">
                 <div>
                     <h3
-                        class="text-lg text-white font-semibold cursor-pointer hover:text-[#f7931a] transition-colors"
+                        class="text-base text-white font-semibold cursor-pointer hover:text-[#f7931a] transition-colors"
                         title="Click to copy link"
                         on:click={
                             let id = anchor.clone();
@@ -281,7 +281,7 @@ pub fn ChartCard(
                 // Header with close button
                 <div class="flex items-center justify-between mb-2 sm:mb-3 shrink-0">
                     <div class="min-w-0 mr-2">
-                        <h3 class="text-sm sm:text-lg text-white font-semibold truncate">{title.clone()}</h3>
+                        <h3 class="text-sm sm:text-base text-white font-semibold truncate">{title.clone()}</h3>
                         <p class="text-xs sm:text-sm text-white/50 mt-0.5 truncate">{move || description.get()}</p>
                     </div>
                     <button
