@@ -176,7 +176,12 @@ fn YearCard(year: OnThisDayYear) -> impl IntoView {
                     <span data-tip="Block reward per block in this era (halves every 210,000 blocks)" tabindex="0">{
                         let era = year.last_block / 210_000;
                         let subsidy = 50.0_f64 / 2.0_f64.powi(era as i32);
-                        format!("Subsidy: \u{20bf}{}", if subsidy >= 1.0 { format!("{:.0}", subsidy) } else { format!("{:.4}", subsidy) })
+                        // Subsidy is always 50/2^n so the decimal representation terminates.
+                        // Format with enough precision then strip trailing zeros so 50 stays
+                        // "50" but 3.125 shows as "3.125" rather than being rounded to "3".
+                        let formatted = format!("{subsidy:.8}");
+                        let trimmed = formatted.trim_end_matches('0').trim_end_matches('.');
+                        format!("Subsidy: \u{20bf}{trimmed}")
                     }</span>
                     {(year.segwit_pct > 0.0).then(|| view! {
                         <span data-tip="% of non-coinbase transactions using SegWit" tabindex="0">{format!("SegWit: {:.0}%", year.segwit_pct)}</span>
