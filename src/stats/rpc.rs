@@ -67,12 +67,13 @@ pub struct BitcoinRpc {
 // Per-method TTLs. Tuned to balance data freshness against load reduction.
 // See src/stats/rpc_cache.rs for the rationale on why "short" TTLs still
 // produce high hit rates under real request volume.
-// 7s — sits just above the dashboard's 6-second poll cadence
-// (see src/routes/observatory/shared/state.rs) so consecutive polls
-// from a single tab hit the cache. Mempool count / bytes drifting by
-// 7 seconds is imperceptible in the UI; the real-time heartbeat via
-// SSE continues to stream fresh tx arrivals with no delay.
-const MEMPOOL_INFO_TTL: Duration = Duration::from_secs(7);
+// 13s — spans two full 6-second poll intervals, producing a cached
+// miss-hit-hit pattern (67% hit rate single-tab, higher under load).
+// Mempool tx count isn't critical data like the chain tip; users who
+// want up-to-the-second values can click the manual Refresh. The
+// real-time heartbeat SSE continues to stream per-tx arrivals with
+// no delay regardless of this TTL.
+const MEMPOOL_INFO_TTL: Duration = Duration::from_secs(13);
 const BLOCKCHAIN_INFO_TTL: Duration = Duration::from_secs(1);
 const NETWORK_HASHPS_TTL: Duration = Duration::from_secs(60);
 const SMART_FEE_TTL: Duration = Duration::from_secs(10);
