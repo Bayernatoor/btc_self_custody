@@ -694,8 +694,10 @@ async fn subscribe_blocks(
 
         // Bust tip-dependent RPC caches now that a new block has been fully
         // processed. Without this, /api/stats/live would keep returning the
-        // previous block height until BLOCKCHAIN_INFO_TTL (30s) expired.
-        state.rpc.invalidate_tip_caches();
+        // previous block height until BLOCKCHAIN_INFO_TTL (30s) expired, AND
+        // the reorg detector's block-hash LRU could hold pre-reorg hashes
+        // for heights in the reorg window, masking real reorgs.
+        state.rpc.invalidate_tip_caches(block_info.height);
 
         // Broadcast ONE complete block event
         let _ = sender.send(HeartbeatEvent::Block {

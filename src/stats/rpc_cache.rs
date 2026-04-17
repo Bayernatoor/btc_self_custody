@@ -81,6 +81,21 @@ impl<T: Clone + Send + 'static> CachedSlot<T> {
     ///
     /// Returns `(value, is_stale)`. `is_stale` is true when the upstream fetch
     /// failed and we fell back to the last known good value.
+    ///
+    /// # Invariants / caller guarantees
+    ///
+    /// - `ttl` must be non-zero. `Duration::ZERO` treats every call as
+    ///   expired, producing miss-every-time behavior that defeats the cache
+    ///   (no error, just wasted work).
+    /// - `fetch` should be idempotent: if the 250ms wait-timeout fires
+    ///   (defense-in-depth only — the Notified::enable() contract normally
+    ///   guarantees wake-up), the loop retries and may call `fetch` again
+    ///   on a subsequent iteration.
+    /// - `is_stale: true` only appears when `fetch` errors AND a previous
+    ///   value was cached. First-ever errors propagate as `Err`.
+    /// - The stale-on-error path logs a warning via `tracing::warn!` so
+    ///   operators can see when Core is flapping even if clients don't
+    ///   surface the `is_stale` flag.
     pub async fn get_or_fetch<F, Fut>(
         &self,
         ttl: Duration,

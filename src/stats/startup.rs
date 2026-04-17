@@ -231,8 +231,17 @@ pub fn spawn_background_tasks(
                 tokio::time::sleep(std::time::Duration::from_secs(15)).await;
                 ingest::poll_new_blocks(&state.rpc, &state.db).await;
 
-                // Verify last 6 blocks match canonical chain (detect reorgs)
-                ingest::verify_recent_blocks(&state.rpc, &state.db, 6).await;
+                // Verify the last blocks against the canonical chain (detect reorgs).
+                // Depth must match super::rpc::REORG_DETECTION_DEPTH so the
+                // ZMQ hashblock handler invalidates the same window of
+                // block_hash_cache entries — otherwise a reorg at a depth
+                // we verify but don't invalidate would be silently missed.
+                ingest::verify_recent_blocks(
+                    &state.rpc,
+                    &state.db,
+                    super::rpc::REORG_DETECTION_DEPTH,
+                )
+                .await;
 
                 // Check if new blocks were added; if so, clear stale caches
                 let new_height = state

@@ -93,11 +93,24 @@ const BLOCKCHAIN_INFO_TTL: Duration = Duration::from_secs(30);
 const NETWORK_HASHPS_TTL: Duration = Duration::from_secs(60);
 const SMART_FEE_TTL: Duration = Duration::from_secs(10);
 
+// Depth (in blocks) over which the reorg detector in ingest::verify_recent_blocks
+// compares stored hashes against canonical. Kept in sync with the `depth`
+// argument passed from startup.rs. invalidate_tip_caches below uses this to
+// clear block_hash_cache entries in the same window on every hashblock event,
+// so the next reorg sweep sees fresh canonical data — without this, a reorg
+// against a still-cached stale (height → hash) pair would be silently missed.
+pub const REORG_DETECTION_DEPTH: u64 = 6;
+
 // Bounded LRU capacities for immutable block data. Block hashes are tiny
-// (~80 bytes each) so 10k fits comfortably in ~1 MB. Parsed Block structs
-// are heavier (~1-2 KB each) so 500 entries is ~1 MB total. These serve
-// the block detail modal, Lookout tx lookups, and any Observatory path
-// that navigates to a specific confirmed block.
+// (~80 bytes each: HashMap overhead + u64 key + heap-allocated hex string),
+// so 10k fits in well under 1 MB. Parsed Block structs are heavier —
+// ~40 scalar fields plus a few heap strings (hash, miner, coinbase_text),
+// typically 500 bytes to 2 KB depending on coinbase_text length. 500 entries
+// caps worst-case at ~1 MB. These serve the block detail modal, Lookout tx
+// lookups, and any Observatory path that navigates to a specific confirmed
+// block. If a new feature causes heavy block-browsing traffic, bump the
+// data capacity before the hash capacity — each Block use touches both but
+// block_data is the more expensive one to miss.
 const BLOCK_HASH_CACHE_CAPACITY: usize = 10_000;
 const BLOCK_DATA_CACHE_CAPACITY: usize = 500;
 
@@ -277,19 +290,33 @@ impl BitcoinRpc {
 
     /// Invalidate caches whose values change with every new block.
     ///
-    /// Called from the ZMQ `hashblock` handler so the next poll picks up the
-    /// fresh tip height / difficulty / best block hash. Without this, the
-    /// `getblockchaininfo` cache's 30s TTL would hold stale tip data until
-    /// the backstop expiry fired — users would see the previous block
-    /// height on their dashboard until then.
+    /// Called from the ZMQ `hashblock` handler with the new block's height.
+    /// Invalidates:
+    /// - `blockchain_info_cache` so the next `/api/stats/live` poll picks up
+    ///   the fresh tip height / difficulty / best block hash. Without this,
+    ///   the 30s backstop TTL would hold stale tip data for up to 30s.
+    /// - `block_hash_cache` entries within the reorg-detection window
+    ///   `[height - REORG_DETECTION_DEPTH ..= height]`. The reorg detector
+    ///   compares DB's stored hashes against canonical via `get_block_hash`.
+    ///   If a reorged height's cached entry is stale, the comparison silently
+    ///   returns "no reorg" — a correctness bug. Invalidating here forces
+    ///   the next sweep to fetch fresh canonical data.
     ///
-    /// Currently invalidates: `getblockchaininfo`. Other per-method caches
-    /// either change gradually (smart fee smooths across many blocks,
-    /// hashrate is a long moving average) or get pruned naturally
-    /// (`getmempoolinfo` drops confirmed txs but the TTL is short enough
-    /// that one block of staleness isn't worth the invalidation overhead).
-    pub fn invalidate_tip_caches(&self) {
+    /// Not invalidated (and why):
+    /// - `smart_fee` — smoothed across many blocks, one-block staleness invisible.
+    /// - `network_hashps` — long moving average, same reasoning.
+    /// - `mempool_info` — drops confirmed txs naturally; TTL short enough that
+    ///   one block of staleness isn't worth the invalidation bookkeeping.
+    /// - `block_data_cache` — keyed by hash, not height. Historical block data
+    ///   for hashes that still exist is still valid. Reorged hashes are
+    ///   explicitly invalidated via `invalidate_block_caches` when the reorg
+    ///   detector catches them in `ingest::verify_recent_blocks`.
+    pub fn invalidate_tip_caches(&self, new_tip_height: u64) {
         self.blockchain_info_cache.invalidate();
+        let low = new_tip_height.saturating_sub(REORG_DETECTION_DEPTH);
+        for h in low..=new_tip_height {
+            self.block_hash_cache.remove(&h);
+        }
     }
 
     /// Drop cached entries for a block that's been reorged away. Called from
@@ -387,8 +414,11 @@ impl BitcoinRpc {
     }
 
     /// Call `getblockchaininfo` - returns chain state, tip height, difficulty.
-    /// Cached with a 1s TTL. Returns `(info, is_stale)` where `is_stale` is
-    /// true when the upstream call failed and we fell back to the last known
+    /// Cached with a 30s TTL acting as a backstop; the primary freshness
+    /// mechanism is explicit invalidation from the ZMQ `hashblock` handler
+    /// (see [`Self::invalidate_tip_caches`]) which fires every time a new
+    /// block arrives. Returns `(info, is_stale)` where `is_stale` is true
+    /// when the upstream call failed and we fell back to the last known
     /// value. Use [`Self::get_blockchain_info_fresh`] for paths that must
     /// bypass the cache (ingest, ZMQ refreshes).
     pub async fn get_blockchain_info(
@@ -1114,9 +1144,11 @@ impl BitcoinRpc {
     }
 
     /// Call `getmempoolinfo` - returns mempool size, fee stats, memory usage.
-    /// Cached with a 2s TTL. Mempool contents change every second as new txs
-    /// arrive; 2s staleness is imperceptible to a human reading tx count and
-    /// bytes, and at typical dashboard load this deduplicates ~95% of calls.
+    /// Cached with a 13s TTL. Mempool contents change every second as new
+    /// txs arrive, but tx count drifting by 13s is imperceptible in the UI
+    /// and the real-time heartbeat SSE streams per-tx arrivals instantly.
+    /// 13s spans two full 6-second dashboard poll intervals, producing a
+    /// ~67% hit rate for single-tab traffic and higher under concurrent load.
     /// Returns `(info, is_stale)`.
     pub async fn get_mempool_info(
         &self,
