@@ -325,7 +325,7 @@ pub fn LiveCard(
         >
             <div class="text-[0.6rem] sm:text-[0.7rem] text-[#8899aa] uppercase tracking-widest mb-1">{label}</div>
             <div
-                class="text-xs sm:text-lg lg:text-xl font-bold font-mono truncate"
+                class="text-sm sm:text-lg font-bold font-mono truncate"
                 title=move || value.get()
             >
                 {move || if is_loading.get() {
