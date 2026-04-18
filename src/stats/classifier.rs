@@ -151,6 +151,7 @@ pub fn identify_miner(coinbase_hex: &str) -> String {
         ("ckpool", "CKPool"),
         ("solo ck", "CKPool"),
         ("kano", "KanoPool"),
+        ("parasite", "Parasite"),
     ];
 
     for (pattern, name) in pools {
@@ -380,6 +381,13 @@ mod tests {
             .map(|b| format!("{:02x}", b))
             .collect::<String>();
         assert_eq!(identify_miner(&hex), "OCEAN");
+    }
+
+    #[test]
+    fn miner_parasite() {
+        // Real Parasite coinbase pattern: "m^i_9i |parasite|"
+        let hex = hex::encode("m^i_9i |parasite|");
+        assert_eq!(identify_miner(&hex), "Parasite");
     }
 
     #[test]
