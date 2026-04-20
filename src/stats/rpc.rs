@@ -268,12 +268,30 @@ pub struct Block {
 }
 
 impl BitcoinRpc {
-    /// Create a new RPC client with 30s request timeout and 10s connect timeout.
+    /// Create a new RPC client.
+    ///
+    /// Timeout strategy:
+    /// - `timeout(30s)`: per-request total budget. Bitcoin Core can stall up to
+    ///   several seconds during block validation; 30s gives comfortable headroom
+    ///   without letting a dead upstream hang a handler indefinitely.
+    /// - `connect_timeout(10s)`: fail fast when the TCP handshake can't complete
+    ///   (e.g. WireGuard tunnel renegotiating, node offline, routing broken).
+    /// - `pool_idle_timeout(30s)`: drop keep-alive sockets after 30s idle. Without
+    ///   this, if Bitcoin Core's container restarts and its internal IP shifts,
+    ///   the NAT on the intermediate router quietly blackholes our pooled
+    ///   connections — subsequent reuses hit a dead socket and the per-request
+    ///   30s timeout kicks in on EVERY new request. With a 30s pool idle cap,
+    ///   worst-case dead-pool lifetime is bounded.
+    /// - `tcp_keepalive(30s)`: kernel-level probe interval. If the path
+    ///   silently drops (common with NAT table churn), the OS detects a dead
+    ///   socket and marks it ERROR, so reqwest's pool stops handing it out.
     pub fn new(url: String, user: String, password: String) -> Self {
         Self {
             client: Client::builder()
                 .timeout(std::time::Duration::from_secs(30))
                 .connect_timeout(std::time::Duration::from_secs(10))
+                .pool_idle_timeout(std::time::Duration::from_secs(30))
+                .tcp_keepalive(std::time::Duration::from_secs(30))
                 .build()
                 .expect("Failed to build HTTP client"),
             url,

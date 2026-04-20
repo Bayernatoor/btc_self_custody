@@ -157,18 +157,25 @@ impl<T: Clone + Send + 'static> CachedSlot<T> {
                     continue;
                 }
                 Action::Fetch => {
+                    // RAII guard ensures in_flight is cleared and waiters are
+                    // notified on every exit path — including panic, error,
+                    // and future-drop (handler cancellation). See
+                    // `InFlightGuard` for the repro that motivated this.
+                    let _guard = InFlightGuard {
+                        inner: &self.inner,
+                        notify: &self.notify,
+                    };
                     let result = fetch().await;
                     let mut state = self
                         .inner
                         .lock()
                         .unwrap_or_else(|e| e.into_inner());
-                    state.in_flight = false;
 
                     match result {
                         Ok(val) => {
                             state.last = Some((val.clone(), Instant::now()));
-                            drop(state);
-                            self.notify.notify_waiters();
+                            // `state` drops first (releases lock), then
+                            // `_guard` drops (clears in_flight + notifies).
                             return Ok((val, false));
                         }
                         Err(e) => {
@@ -179,7 +186,6 @@ impl<T: Clone + Send + 'static> CachedSlot<T> {
                             // again, giving Core a chance to recover.
                             let stale = state.last.as_ref().map(|(v, _)| v.clone());
                             drop(state);
-                            self.notify.notify_waiters();
                             if let Some(v) = stale {
                                 self.stale_served.fetch_add(1, Ordering::Relaxed);
                                 tracing::warn!(
@@ -225,6 +231,34 @@ impl<T: Clone + Send + 'static> Default for CachedSlot<T> {
 enum Action {
     Wait,
     Fetch,
+}
+
+/// RAII guard that guarantees `in_flight` is cleared and waiters are notified
+/// on every exit path from `Action::Fetch`, including:
+/// - normal success / error returns,
+/// - panics inside the user-supplied fetch future,
+/// - future cancellation (e.g. axum drops the handler when the client
+///   disconnects, or a `tokio::select!` branch loses).
+///
+/// Before this guard existed, a cancelled fetcher left `in_flight=true`
+/// forever. Subsequent callers queued behind it, looped via the 250ms Notify
+/// backstop indefinitely, and the slot was effectively dead until the app
+/// restarted. Repro: observed on prod 2026-04-20 when Bitcoin Core's
+/// container IP shifted, the first live-stats fetch hung on a half-dead
+/// pooled TCP connection, nginx cancelled the handler at its 60s proxy
+/// timeout, and `in_flight` stuck on forever.
+struct InFlightGuard<'a, T: Clone + Send + 'static> {
+    inner: &'a Mutex<SlotInner<T>>,
+    notify: &'a Notify,
+}
+
+impl<'a, T: Clone + Send + 'static> Drop for InFlightGuard<'a, T> {
+    fn drop(&mut self) {
+        let mut state = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        state.in_flight = false;
+        drop(state);
+        self.notify.notify_waiters();
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -514,6 +548,57 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(slot.stats().errors, 1);
         assert_eq!(slot.stats().stale_served, 0);
+    }
+
+    /// Regression test for the in_flight-leak-on-cancellation bug.
+    ///
+    /// Scenario: a fetcher future hangs (e.g. half-dead pooled TCP socket to a
+    /// Bitcoin Core container that silently moved IPs). nginx upstream-times-out
+    /// and the axum handler future is dropped. Before the RAII guard fix,
+    /// this left in_flight=true forever and every subsequent caller looped on
+    /// the 250ms Notify backstop until the app was manually restarted.
+    ///
+    /// With the guard, cancellation triggers Drop which clears in_flight and
+    /// notifies waiters, so the next caller can acquire a fresh fetch slot.
+    #[tokio::test]
+    async fn cancelled_fetch_does_not_leak_inflight_state() {
+        let slot = Arc::new(CachedSlot::<i32>::new());
+
+        // Spawn a fetcher that hangs forever, simulating a stuck RPC.
+        let slot_clone = Arc::clone(&slot);
+        let hanging = tokio::spawn(async move {
+            slot_clone
+                .get_or_fetch(Duration::from_secs(60), || async move {
+                    // Longer than the test could ever wait — we abort before
+                    // this resolves.
+                    tokio::time::sleep(Duration::from_secs(3600)).await;
+                    Ok::<i32, StatsError>(42)
+                })
+                .await
+        });
+
+        // Yield so the spawned task gets scheduled and enters Action::Fetch.
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // Cancel the stuck fetcher (equivalent to the axum handler being
+        // dropped when nginx times out and closes the upstream socket).
+        hanging.abort();
+        let _ = hanging.await; // drain the JoinError
+
+        // The slot must now be usable again. Bound with timeout — if the
+        // guard regressed and in_flight leaked, this would loop on the 250ms
+        // Notify backstop and exceed our 2s budget.
+        let result = tokio::time::timeout(
+            Duration::from_secs(2),
+            slot.get_or_fetch(Duration::from_secs(60), || async { Ok(100) }),
+        )
+        .await;
+
+        let (v, stale) = result
+            .expect("recovery fetch timed out — in_flight leaked")
+            .expect("recovery fetch errored");
+        assert_eq!(v, 100);
+        assert!(!stale);
     }
 
     #[tokio::test]
