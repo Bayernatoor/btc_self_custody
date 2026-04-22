@@ -391,12 +391,47 @@
             }
             applyMobileAdjustments(opts);
             el._chart.setOption(opts, { notMerge: true, lazyUpdate: true });
-            // Click-to-detail: use zrender click to find nearest data point.
-            // Registered once per chart element. Works for both axis and item tooltips.
+            // Activate the toolbox dataZoom brush by default on desktop so a
+            // drag on the chart area immediately box-selects a zoom range —
+            // no need to click the toolbox icon first (Glassnode-style UX).
+            // Skipped on mobile because drag should pan the page, and the
+            // toolbox is hidden there anyway (see applyMobileAdjustments).
+            function activateZoomBrush() {
+                if (window.innerWidth < 640 || !el._chart) return;
+                el._chart.dispatchAction({
+                    type: 'takeGlobalCursor',
+                    key: 'dataZoomSelect',
+                    dataZoomSelectActive: true
+                });
+            }
+            activateZoomBrush();
+            // Click-to-detail + brush co-existence. The brush intercepts
+            // zrender click events, so we detect clicks ourselves by
+            // measuring mousedown→mouseup movement on the container element.
+            // A genuine click (tiny movement, short duration) triggers the
+            // block-detail navigation; larger drags pass through to the
+            // zoom brush. Also re-activate the brush after the user hits
+            // "restore" (reset zoom) in the toolbox, since ECharts clears
+            // the global cursor on restore.
             if (!el._clickRegistered) {
                 el._clickRegistered = true;
-                el._chart.getZr().on('click', function(zrParams) {
-                    var pointInPixel = [zrParams.offsetX, zrParams.offsetY];
+                var downX, downY, downT;
+                el.addEventListener('mousedown', function(e) {
+                    downX = e.offsetX;
+                    downY = e.offsetY;
+                    downT = Date.now();
+                });
+                el.addEventListener('mouseup', function(e) {
+                    if (downX === undefined) return;
+                    var dx = Math.abs(e.offsetX - downX);
+                    var dy = Math.abs(e.offsetY - downY);
+                    var dt = Date.now() - downT;
+                    downX = downY = downT = undefined;
+                    // Click threshold: 5px movement, 400ms duration. Anything
+                    // beyond that is a drag and belongs to the zoom brush.
+                    if (dx >= 5 || dy >= 5 || dt >= 400) return;
+                    if (!el._chart) return;
+                    var pointInPixel = [e.offsetX, e.offsetY];
                     if (!el._chart.containPixel('grid', pointInPixel)) return;
                     var xVal = el._chart.convertFromPixel({ seriesIndex: 0 }, pointInPixel)[0];
                     var model = el._chart.getOption();
@@ -422,6 +457,10 @@
                     var height = data[best][2];
                     if (typeof height === 'number') window.showBlockDetail(height);
                 });
+                // Re-activate the zoom brush after Reset-zoom (restore) fires,
+                // which otherwise leaves the chart in a click-to-open-but-
+                // can't-zoom state until the user clicks the toolbox zoom icon.
+                el._chart.on('restore', activateZoomBrush);
             }
         } catch(e) {
             // Suppress ECharts internal grid/layout errors during init
