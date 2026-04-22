@@ -369,9 +369,25 @@
                     return header + (p.marker || '') + ' ' + val;
                 };
             }
-            // Dark background for PNG downloads only (chart renders transparent)
+            // Dark background for PNG downloads only (chart renders transparent).
+            // Derive a per-chart filename from the element id so saved images
+            // are named "wehodlbtc_<chart>.jpg" instead of the ECharts default
+            // "echarts.jpg" — both improves clarity for the user and acts as
+            // a distribution hook when images are shared.
             if (opts.toolbox && opts.toolbox.feature && opts.toolbox.feature.saveAsImage) {
                 opts.toolbox.feature.saveAsImage.connectedBackgroundColor = '#0d2137';
+                var slug = elementId.replace(/^chart[-_]/, '').replace(/[-\s]+/g, '_');
+                opts.toolbox.feature.saveAsImage.name = 'wehodlbtc_' + slug;
+            }
+            // Scale watermark font to chart width so it fits on mobile without
+            // overflowing. ECharts graphic elements don't auto-scale, so we
+            // compute a size here (8% of chart width, clamped to [20, 56] px).
+            // Desktop charts (~700px+) land at the 56px cap; phone charts
+            // (~340px) scale down to ~28px.
+            if (opts.graphic && opts.graphic[0] && opts.graphic[0].style) {
+                var chartW = el.clientWidth || window.innerWidth;
+                var watermarkPx = Math.max(20, Math.min(56, Math.floor(chartW * 0.08)));
+                opts.graphic[0].style.font = 'bold ' + watermarkPx + 'px Inter, system-ui, sans-serif';
             }
             applyMobileAdjustments(opts);
             el._chart.setOption(opts, { notMerge: true, lazyUpdate: true });

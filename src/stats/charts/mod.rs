@@ -96,14 +96,43 @@ pub(crate) fn chart_defaults() -> serde_json::Value {
         "animation": true,
         "animationDuration": 300,
         "progressive": 500,
-        "progressiveThreshold": 3000
+        "progressiveThreshold": 3000,
+        // Attribution watermark, Glassnode-style: centered behind the data
+        // as a large faded brand mark. Baked into every render, so it shows
+        // up in ECharts PNG exports, OS screenshots, and mobile screenshots
+        // without any export pipeline work. `z: 0` keeps it BEHIND the
+        // series (default z: 2) so data lines remain fully legible.
+        // `silent: true` stops it from intercepting chart mouse events.
+        "graphic": [{
+            "type": "text",
+            "left": "center",
+            "top": "middle",
+            "silent": true,
+            "z": 0,
+            "style": {
+                "text": "wehodlbtc.com",
+                "fill": "rgba(255,255,255,0.06)",
+                "font": "bold 56px Inter, system-ui, sans-serif",
+                "textAlign": "center",
+                "textVerticalAlign": "middle"
+            }
+        }]
     })
 }
 
-/// Standard data zoom config (inside scroll + bottom slider).
+/// Standard data zoom: bottom slider only. No `inside` component.
+///
+/// Rationale: ECharts' `inside` dataZoom intercepts wheel events for the
+/// entire chart area, even when `zoomOnMouseWheel` is disabled or gated
+/// behind a modifier key — it still calls `preventDefault()` to keep the
+/// option available, which traps page scrolling when the cursor passes
+/// over a chart. Removing the `inside` component lets wheel events pass
+/// through to the page untouched. Users can still zoom via the bottom
+/// slider (drag handles to set range) and via the toolbox "zoom" brush
+/// (box-select a region), which cover every use case the inside wheel
+/// zoom did.
 pub(crate) fn data_zoom() -> serde_json::Value {
     json!([
-        { "type": "inside", "start": 0, "end": 100 },
         {
             "type": "slider", "start": 0, "end": 100, "height": 20, "bottom": 8,
             "borderColor": "#333", "fillerColor": "rgba(247,147,26,0.15)",
