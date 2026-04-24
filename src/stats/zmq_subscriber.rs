@@ -927,6 +927,35 @@ fn read_varint(data: &[u8], cursor: &mut usize) -> Option<u64> {
     }
 }
 
+
+/// Delete mempool_txs entries older than 7 days. Runs on startup and then daily.
+/// Keeps the table from growing unbounded since confirmed txs are never cleaned
+/// automatically.
+pub async fn prune_old_txs(state: &Arc<StatsState>) {
+    let seven_days_ago = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+        .saturating_sub(7 * 24 * 3600);
+
+    let pool = state.db.clone();
+    let _ = tokio::task::spawn_blocking(move || {
+        if let Ok(conn) = pool.get() {
+            match db::prune_mempool_txs(&conn, seven_days_ago) {
+                Ok(count) => {
+                    if count > 0 {
+                        tracing::info!(
+                            "ZMQ: pruned {count} old mempool transactions"
+                        );
+                    }
+                }
+                Err(e) => tracing::warn!("ZMQ: prune failed: {e}"),
+            }
+        }
+    })
+    .await;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1460,30 +1489,3 @@ mod tests {
     }
 }
 
-/// Delete mempool_txs entries older than 7 days. Runs on startup and then daily.
-/// Keeps the table from growing unbounded since confirmed txs are never cleaned
-/// automatically.
-pub async fn prune_old_txs(state: &Arc<StatsState>) {
-    let seven_days_ago = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
-        .saturating_sub(7 * 24 * 3600);
-
-    let pool = state.db.clone();
-    let _ = tokio::task::spawn_blocking(move || {
-        if let Ok(conn) = pool.get() {
-            match db::prune_mempool_txs(&conn, seven_days_ago) {
-                Ok(count) => {
-                    if count > 0 {
-                        tracing::info!(
-                            "ZMQ: pruned {count} old mempool transactions"
-                        );
-                    }
-                }
-                Err(e) => tracing::warn!("ZMQ: prune failed: {e}"),
-            }
-        }
-    })
-    .await;
-}
