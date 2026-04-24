@@ -74,10 +74,10 @@ All blockchain data is sourced directly from a full Bitcoin Core node with trans
 - Embedded Data: https://www.wehodlbtc.com/observatory/charts/embedded
 - BIP Signaling: https://www.wehodlbtc.com/observatory/signaling
 - Heartbeat: https://www.wehodlbtc.com/observatory/heartbeat
-- The Lookout: https://www.wehodlbtc.com/observatory/whale-watch
-- The Logbook: https://www.wehodlbtc.com/observatory/stats
-- The Archives: https://www.wehodlbtc.com/observatory/hall-of-fame
-- Almanac: https://www.wehodlbtc.com/observatory/on-this-day
+- The Lookout: https://www.wehodlbtc.com/observatory/lookout
+- The Logbook: https://www.wehodlbtc.com/observatory/logbook
+- The Archives: https://www.wehodlbtc.com/observatory/archives
+- Almanac: https://www.wehodlbtc.com/observatory/almanac
 - Learn: https://www.wehodlbtc.com/observatory/learn
 - Protocol Guide: https://www.wehodlbtc.com/observatory/learn/protocols
 - Data Methodology: https://www.wehodlbtc.com/observatory/learn/methodology

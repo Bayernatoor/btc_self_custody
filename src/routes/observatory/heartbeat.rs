@@ -752,7 +752,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                     <div data-placeholder="1" class="px-4 py-3 text-xs text-white/20 font-mono italic text-center">"Listening for notable transactions..."</div>
                 </div>
                 <div class="px-3 py-1.5 border-t border-white/5 text-[10px] font-mono text-white/30 text-center">
-                    <a href="/observatory/whale-watch" class="hover:text-[#f7931a] transition-colors">"Visit The Lookout for history and stats \u{2192}"</a>
+                    <a href="/observatory/lookout" class="hover:text-[#f7931a] transition-colors">"Visit The Lookout for history and stats \u{2192}"</a>
                 </div>
             </div>
 

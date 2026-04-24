@@ -66,7 +66,7 @@
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://www.wehodlbtc.com/observatory/stats</loc>
+    <loc>https://www.wehodlbtc.com/observatory/logbook</loc>
     <changefreq>hourly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -76,17 +76,17 @@
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://www.wehodlbtc.com/observatory/on-this-day</loc>
+    <loc>https://www.wehodlbtc.com/observatory/almanac</loc>
     <changefreq>daily</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://www.wehodlbtc.com/observatory/hall-of-fame</loc>
+    <loc>https://www.wehodlbtc.com/observatory/archives</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.wehodlbtc.com/observatory/whale-watch</loc>
+    <loc>https://www.wehodlbtc.com/observatory/lookout</loc>
     <changefreq>hourly</changefreq>
     <priority>0.8</priority>
   </url>

@@ -632,7 +632,7 @@ pub fn StatsSummaryPage() -> impl IntoView {
     view! {
         <Title text="The Logbook: Bitcoin Network Statistics by Range | WE HODL BTC"/>
         <Meta name="description" content="Systematic record of Bitcoin network observations across any time range. Total transactions, fees, inscriptions, Runes, SegWit adoption, Taproot usage, and embedded data counters."/>
-        <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/stats"/>
+        <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/logbook"/>
 
         // Page header with range selector
         <div class="relative rounded-2xl overflow-hidden mb-5">

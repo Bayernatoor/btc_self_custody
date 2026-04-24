@@ -18,14 +18,19 @@
 //!   /observatory/charts/fees                 -> Fee charts (total fees, subsidy breakdown)
 //!   /observatory/charts/mining               -> Mining charts (difficulty, pool distribution)
 //!   /observatory/charts/embedded             -> Embedded data charts (OP_RETURN, inscriptions)
-//!   /observatory/signaling                   -> BIP signaling tracker
-//!   /observatory/stats                       -> The Logbook (network observations by range)
-//!   /observatory/on-this-day                 -> Almanac (what happened on any calendar date)
-//!   /observatory/hall-of-fame                -> The Archives (curated notable blocks/transactions)
+//!   /observatory/signaling                   -> Signaling (BIP version-bit tracker)
+//!   /observatory/logbook                     -> The Logbook (network observations by range)
+//!   /observatory/almanac                     -> Almanac (what happened on any calendar date)
+//!   /observatory/archives                    -> The Archives (curated notable blocks/transactions)
 //!   /observatory/heartbeat                   -> Block Heartbeat (live EKG animation)
-//!   /observatory/whale-watch                 -> The Lookout (notable tx browser)
+//!   /observatory/lookout                     -> The Lookout (notable tx browser)
 //!   /observatory/learn/protocols             -> Protocol guide
 //!   /blog, /faq, /about                      -> Static pages
+//!
+//! The following paths are kept alive as 301 permanent redirects to their
+//! renamed counterparts above so existing bookmarks, social shares, and
+//! search-engine-indexed URLs don't break: /stats, /on-this-day,
+//! /hall-of-fame, /whale-watch.
 
 use crate::extras::footer::Footer;
 use crate::extras::navbar::NavBar;
@@ -194,11 +199,23 @@ pub fn App() -> impl IntoView {
                             <Route path=path!("/charts/mining") view=MiningChartsPage/>
                             <Route path=path!("/charts/embedded") view=EmbeddedChartsPage/>
                             <Route path=path!("/signaling") view=SignalingPage/>
-                            <Route path=path!("/stats") view=StatsSummaryPage/>
-                            <Route path=path!("/on-this-day") view=OnThisDayPage/>
-                            <Route path=path!("/hall-of-fame") view=HallOfFamePage/>
+                            <Route path=path!("/logbook") view=StatsSummaryPage/>
+                            <Route path=path!("/almanac") view=OnThisDayPage/>
+                            <Route path=path!("/archives") view=HallOfFamePage/>
                             <Route path=path!("/heartbeat") view=HeartbeatPage/>
-                            <Route path=path!("/whale-watch") view=WhaleWatchPage/>
+                            <Route path=path!("/lookout") view=WhaleWatchPage/>
+                            // 301 redirects from the pre-rename URLs. Each old
+                            // path renders a small "redirecting" view that
+                            // sets the SSR response to 301 + Location header
+                            // AND kicks off a client-side navigate for the
+                            // rare case where someone reaches an old URL via
+                            // an in-app SPA link (all internal links have
+                            // been updated to the new paths, so the
+                            // client-side case is belt-and-suspenders only).
+                            <Route path=path!("/stats") view=|| redirect_permanent("/observatory/logbook")/>
+                            <Route path=path!("/on-this-day") view=|| redirect_permanent("/observatory/almanac")/>
+                            <Route path=path!("/hall-of-fame") view=|| redirect_permanent("/observatory/archives")/>
+                            <Route path=path!("/whale-watch") view=|| redirect_permanent("/observatory/lookout")/>
                             <Route path=path!("/learn") view=LearnIndexPage/>
                             <Route path=path!("/learn/protocols") view=ProtocolGuidePage/>
                             <Route path=path!("/learn/methodology") view=MethodologyPage/>
@@ -220,5 +237,36 @@ pub fn App() -> impl IntoView {
                 <Footer/>
             </div>
         </Router>
+    }
+}
+
+/// Issue a permanent (301) redirect to `target`. Used as the view function
+/// for old URL paths that were renamed. On SSR this sets the HTTP response
+/// status to 301 and the Location header so browsers and crawlers treat
+/// the rename as permanent (preserves SEO equity and search-index
+/// canonical tracking). On client-side SPA navigation it additionally
+/// pushes the new path through the router — normally unreachable since
+/// every internal link was updated, but cheap belt-and-suspenders.
+fn redirect_permanent(target: &'static str) -> impl IntoView {
+    #[cfg(feature = "ssr")]
+    {
+        if let Some(response) =
+            use_context::<leptos_axum::ResponseOptions>()
+        {
+            response.set_status(axum::http::StatusCode::MOVED_PERMANENTLY);
+            response.insert_header(
+                axum::http::header::LOCATION,
+                axum::http::HeaderValue::from_static(target),
+            );
+        }
+    }
+    let navigate = leptos_router::hooks::use_navigate();
+    Effect::new(move |_| {
+        navigate(target, Default::default());
+    });
+    view! {
+        <div class="flex items-center justify-center min-h-[40vh] text-white/60">
+            <p>"Redirecting\u{2026}"</p>
+        </div>
     }
 }

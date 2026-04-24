@@ -159,11 +159,11 @@ pub fn OverlayPanel() -> impl IntoView {
     let hide_overlays = Signal::derive(move || {
         let path = location.pathname.get();
         path == "/observatory"
-            || path == "/observatory/stats"
-            || path == "/observatory/on-this-day"
-            || path == "/observatory/hall-of-fame"
+            || path == "/observatory/logbook"
+            || path == "/observatory/almanac"
+            || path == "/observatory/archives"
             || path == "/observatory/heartbeat"
-            || path == "/observatory/whale-watch"
+            || path == "/observatory/lookout"
             || path == "/observatory/learn"
             || path == "/observatory/learn/methodology"
             || path == "/observatory/learn/protocols"
@@ -255,17 +255,23 @@ fn OverlayCheckbox(
 }
 
 /// Observatory navigation bar with two-tier layout.
-/// Row 1: Experience pages (Dashboard, Overview, On This Day, Heartbeat)
-/// Row 2: Data explorer charts (Network, Fees, Mining, Embedded, Signaling)
+///
+/// Row 1 groups the tabs by "what Bitcoin question are you asking":
+///   live state (Readings, Heartbeat, Lookout) → consensus evolution
+///   (Signaling) → historical records (Logbook, Almanac, Archives).
+/// Row 2 is the pure chart explorer (Network, Fees, Mining, Embedded).
+/// Signaling lives in Row 1 — it's a consensus-layer tab, thematically
+/// distinct from the per-block metric charts in Row 2.
 #[component]
 pub fn ObservatoryNav() -> impl IntoView {
     let pages: Vec<(&'static str, &'static str)> = vec![
         ("/observatory", "Readings"),
-        ("/observatory/stats", "Logbook"),
-        ("/observatory/on-this-day", "Almanac"),
-        ("/observatory/hall-of-fame", "The Archives"),
         ("/observatory/heartbeat", "Heartbeat"),
-        ("/observatory/whale-watch", "The Lookout"),
+        ("/observatory/lookout", "The Lookout"),
+        ("/observatory/signaling", "Signaling"),
+        ("/observatory/logbook", "Logbook"),
+        ("/observatory/almanac", "Almanac"),
+        ("/observatory/archives", "The Archives"),
     ];
 
     let charts: Vec<(&'static str, &'static str)> = vec![
@@ -273,7 +279,6 @@ pub fn ObservatoryNav() -> impl IntoView {
         ("/observatory/charts/fees", "Fees"),
         ("/observatory/charts/mining", "Mining"),
         ("/observatory/charts/embedded", "Embedded"),
-        ("/observatory/signaling", "Signaling"),
     ];
 
     let location = use_location();

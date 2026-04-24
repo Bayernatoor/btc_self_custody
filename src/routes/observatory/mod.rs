@@ -7,17 +7,23 @@
 //!
 //! Routes:
 //!   /observatory                     -> Readings (live network instruments)
+//!   /observatory/heartbeat           -> Heartbeat (live EKG animation)
+//!   /observatory/lookout             -> The Lookout (notable tx watcher)
+//!   /observatory/signaling           -> BIP signaling tracker (version bits + coinbase)
+//!   /observatory/logbook             -> The Logbook (network observations by range)
+//!   /observatory/almanac             -> Almanac (date-based historical lookup)
+//!   /observatory/archives            -> The Archives (curated notable events)
 //!   /observatory/charts/network      -> Network charts (blocks, adoption, tx metrics)
 //!   /observatory/charts/fees         -> Fee charts (total fees, subsidy breakdown)
 //!   /observatory/charts/mining       -> Mining charts (difficulty, pool distribution)
 //!   /observatory/charts/embedded     -> Embedded data charts (OP_RETURN, inscriptions)
-//!   /observatory/signaling           -> BIP signaling tracker (version bits + coinbase)
-//!   /observatory/stats               -> The Logbook (network observations by range)
-//!   /observatory/on-this-day         -> Almanac (date-based historical lookup)
-//!   /observatory/hall-of-fame        -> The Archives (curated notable events)
-//!   /observatory/heartbeat           -> Heartbeat (live EKG animation)
-//!   /observatory/whale-watch         -> The Lookout (notable tx watcher)
 //!   /observatory/learn/protocols     -> Protocol guide
+//!
+//! Legacy paths with 301 redirects (declared in `src/app.rs`):
+//!   /observatory/stats         -> /observatory/logbook
+//!   /observatory/on-this-day   -> /observatory/almanac
+//!   /observatory/hall-of-fame  -> /observatory/archives
+//!   /observatory/whale-watch   -> /observatory/lookout
 
 pub mod components;
 pub mod helpers;

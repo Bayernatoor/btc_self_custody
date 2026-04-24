@@ -127,7 +127,7 @@ pub fn HallOfFamePage() -> impl IntoView {
                     } else {
                         format!("?category={slug}")
                     };
-                    let path = format!("/observatory/hall-of-fame{search}");
+                    let path = format!("/observatory/archives{search}");
                     let _ = history.replace_state_with_url(
                         &web_sys::wasm_bindgen::JsValue::NULL,
                         "",
@@ -161,7 +161,7 @@ pub fn HallOfFamePage() -> impl IntoView {
     view! {
         <Title text="The Archives: Remarkable Blocks & Transactions | WE HODL BTC"/>
         <Meta name="description" content="The Archives: a curated collection of Bitcoin's most remarkable blocks and transactions. Genesis block, Pizza Day, SegWit, Taproot, the 184 billion BTC bug, record-breaking blocks, and more."/>
-        <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/hall-of-fame"/>
+        <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/archives"/>
 
         // Hero
         <div class="relative rounded-2xl overflow-hidden mb-5">
@@ -238,7 +238,7 @@ fn HofEntryCard(entry: &'static HallOfFameEntry) -> impl IntoView {
         .unwrap_or_else(|| entry.date.to_string());
     let on_this_day_link = parsed_date.map(|d| {
         format!(
-            "/observatory/on-this-day?date={:02}-{:02}&year={}",
+            "/observatory/almanac?date={:02}-{:02}&year={}",
             d.month(),
             d.day(),
             d.year()

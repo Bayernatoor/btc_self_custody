@@ -253,7 +253,7 @@ pub fn WhaleWatchPage() -> impl IntoView {
                     } else {
                         format!("?type={slug}")
                     };
-                    let path = format!("/observatory/whale-watch{search}");
+                    let path = format!("/observatory/lookout{search}");
                     let _ = history.replace_state_with_url(
                         &web_sys::wasm_bindgen::JsValue::NULL,
                         "",
@@ -269,7 +269,7 @@ pub fn WhaleWatchPage() -> impl IntoView {
     view! {
         <Title text="The Lookout: Notable Bitcoin Transactions | WE HODL BTC"/>
         <Meta name="description" content="The Lookout: real-time and historical browser for notable Bitcoin transactions. Spots whales, round-number transfers, large inscriptions, consolidations, fan-outs, fee outliers, and on-chain messages as they enter the mempool."/>
-        <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/whale-watch"/>
+        <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/lookout"/>
 
         // SEO text (hidden, crawlable)
         <p class="sr-only">"The Lookout tracks notable Bitcoin transactions in real-time. It detects million-dollar transfers, round-number amounts, UTXO consolidations, exchange batch payouts, large Ordinals inscriptions, extreme fee rates, and readable OP_RETURN messages as they enter the mempool. Browse historical data with filters, leaderboards, and aggregated statistics."</p>
