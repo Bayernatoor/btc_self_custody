@@ -351,7 +351,7 @@ mod tests {
 
     #[test]
     fn whale_no_price_available() {
-        // Price = 0 means we can't detect whales
+        // Price = 0 means whales can't be detected
         let tx = ParsedTx {
             value: 100_0000_0000,
             max_output_value: 100_0000_0000,

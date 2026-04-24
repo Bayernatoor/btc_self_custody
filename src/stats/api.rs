@@ -266,7 +266,7 @@ pub async fn get_cache_stats(
             })
         })
         .collect();
-    // 0s cache on this endpoint — we want operators to see current state
+    // 0s cache on this endpoint — operators need to see current state
     Ok(cached_json(
         serde_json::json!({ "slots": slots, "blocks": blocks }),
         0,
@@ -585,7 +585,7 @@ pub async fn get_tx_detail(
                 })
                 .unwrap_or(0);
 
-            // Fee: if we have vin prevout values (utxo index), compute fee.
+            // Fee: if vin prevout values are present (utxo index), compute fee.
             // Otherwise check mempool entry for unconfirmed txs.
             let input_total_sats: u64 = vin
                 .map(|inputs| {

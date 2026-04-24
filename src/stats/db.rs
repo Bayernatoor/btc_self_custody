@@ -1938,7 +1938,7 @@ pub fn confirm_mempool_txs(
     let mut count = 0u64;
     let chunk_size = 100;
 
-    // Sum fees before confirming (only for txs we have in our mempool)
+    // Sum fees before confirming (only for txs in the local mempool)
     for chunk in txids.chunks(chunk_size) {
         let placeholders: Vec<&str> = chunk.iter().map(|_| "?").collect();
         let sql = format!(

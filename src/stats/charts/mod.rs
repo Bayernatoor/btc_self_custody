@@ -875,7 +875,7 @@ pub fn apply_overlays(
         None => return,
     };
 
-    // Widen grid.right when we have price axis or markLine labels
+    // Widen grid.right when a price axis or markLine labels are present
     let need_right_space = !overlays.price_data.is_empty()
         || overlays.halvings
         || overlays.bip_activations

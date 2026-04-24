@@ -27,6 +27,13 @@ pub type ChartCache = Arc<Mutex<HashMap<String, (u64, String)>>>;
 pub static CHART_CACHE_SEQ: std::sync::atomic::AtomicU64 =
     std::sync::atomic::AtomicU64::new(0);
 
+/// Which tab is active in the unified chart-settings panel.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ChartSettingsTab {
+    Overlays,
+    Range,
+}
+
 // ---------------------------------------------------------------------------
 // Data enum for dashboard
 // ---------------------------------------------------------------------------
@@ -67,9 +74,12 @@ pub struct ObservatoryState {
     pub overlay_events: ReadSignal<bool>,
     pub set_overlay_events: WriteSignal<bool>,
     pub price_loading: Signal<bool>,
-    // overlay panel open state
-    pub overlay_panel_open: ReadSignal<bool>,
-    pub set_overlay_panel_open: WriteSignal<bool>,
+    // Unified chart-settings panel (one floating button, tabs for Overlays + Range).
+    // Replaces the earlier split between OverlayPanel and FloatingRangePicker.
+    pub chart_settings_open: ReadSignal<bool>,
+    pub set_chart_settings_open: WriteSignal<bool>,
+    pub chart_settings_tab: ReadSignal<ChartSettingsTab>,
+    pub set_chart_settings_tab: WriteSignal<ChartSettingsTab>,
     // chart JSON cache — persists across Outlet navigations
     pub chart_cache: ChartCache,
     // true briefly when range changes (before new data arrives)
@@ -210,7 +220,9 @@ pub fn provide_observatory_state() -> ObservatoryState {
         signal(initial_overlays.iter().any(|s| s == "chain_size"));
     let (overlay_events, set_overlay_events) =
         signal(initial_overlays.iter().any(|s| s == "events"));
-    let (overlay_panel_open, set_overlay_panel_open) = signal(false);
+    let (chart_settings_open, set_chart_settings_open) = signal(false);
+    let (chart_settings_tab, set_chart_settings_tab) =
+        signal(ChartSettingsTab::Overlays);
 
     // URL query params are read on mount (above) and synced back via
     // history.replaceState (see Effect at end of function). Direct replaceState
@@ -469,8 +481,10 @@ pub fn provide_observatory_state() -> ObservatoryState {
         overlay_events,
         set_overlay_events,
         price_loading,
-        overlay_panel_open,
-        set_overlay_panel_open,
+        chart_settings_open,
+        set_chart_settings_open,
+        chart_settings_tab,
+        set_chart_settings_tab,
         chart_cache,
         data_loading,
         custom_from,

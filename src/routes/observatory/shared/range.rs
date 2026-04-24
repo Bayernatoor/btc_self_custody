@@ -1,7 +1,9 @@
-//! Range selector components for the Observatory.
+//! Range selector for the Observatory.
 //!
-//! `RangeSelector` renders preset range buttons (1D-ALL + Custom) and a date picker.
-//! `FloatingRangePicker` provides a floating button in the bottom-right corner.
+//! `RangeSelector` renders preset range buttons (1D-ALL + Custom) and a
+//! date picker. Rendered inline in the chart-page toolbar, and inside the
+//! unified `ChartSettingsPanel`'s Range tab (see `shared/mod.rs`) as the
+//! floating-access equivalent.
 
 use leptos::prelude::*;
 
@@ -184,41 +186,7 @@ pub fn RangeSelector() -> impl IntoView {
     }
 }
 
-/// Floating range picker button in the bottom-right corner.
-/// Opens a popover with the full range selector when clicked.
-#[component]
-pub fn FloatingRangePicker() -> impl IntoView {
-    let (open, set_open) = signal(false);
-
-    view! {
-        <div style="z-index: 10000" class="fixed bottom-6 right-6">
-            // Toggle button
-            <button
-                class="w-11 h-11 sm:w-14 sm:h-14 rounded-full bg-[#0d2137] border border-[#f7931a]/30 shadow-lg shadow-black/30 flex items-center justify-center cursor-pointer hover:border-[#f7931a]/60 hover:scale-105 active:scale-95 transition-all"
-                on:click=move |_| set_open.update(|v| *v = !*v)
-                title="Change time range"
-            >
-                <svg class="w-5 h-5 sm:w-6 sm:h-6 text-[#f7931a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                </svg>
-            </button>
-            // Popover
-            <Show when=move || open.get()>
-                <div class="absolute bottom-14 right-0 bg-[#0d2137] border border-white/10 rounded-2xl shadow-2xl shadow-black/50 p-3 min-w-[280px]">
-                    <div class="flex items-center justify-between mb-2">
-                        <span class="text-xs text-white/50 font-medium">"Time Range"</span>
-                        <button
-                            class="text-white/30 hover:text-white/60 cursor-pointer"
-                            on:click=move |_| set_open.set(false)
-                        >
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                            </svg>
-                        </button>
-                    </div>
-                    <RangeSelector/>
-                </div>
-            </Show>
-        </div>
-    }
-}
+// FloatingRangePicker was merged into ChartSettingsPanel (shared/mod.rs)
+// so Overlays + Range share a single floating button in the bottom-right
+// corner instead of two distinct toggles. Kept the diff here as a
+// tombstone comment for the next reader.

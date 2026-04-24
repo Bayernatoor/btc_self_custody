@@ -1,8 +1,8 @@
 //! Shared state, components, and chart memo macro for the Observatory.
 //!
 //! This module re-exports from submodules and contains the remaining components
-//! (OverlayPanel, ObservatoryNav, BlockDetailModal, ChartPageSkeleton, ChartPageLayout)
-//! plus the `chart_memo!` macro.
+//! (ChartSettingsPanel, ObservatoryNav, BlockDetailModal, ChartPageSkeleton,
+//! ChartPageLayout) plus the `chart_memo!` macro.
 
 // Submodules
 mod drawer;
@@ -148,15 +148,21 @@ macro_rules! chart_memo {
 // Reusable components (kept in shared.rs as they're small and tightly coupled)
 // ---------------------------------------------------------------------------
 
-/// Floating overlay panel (hidden on dashboard since there are no charts)
+/// Unified chart-settings floating panel. Replaces the earlier split between
+/// the bottom-left OverlayPanel and the bottom-right FloatingRangePicker:
+/// a single ⚙ button opens a panel with two tabs (Overlays / Range),
+/// matching how users actually reach for these controls together.
+///
+/// Only visible on chart pages — on dashboard/Heartbeat/Lookout/etc. there
+/// are no per-chart settings to adjust, so the button would be noise.
+/// `class:hidden` keeps the div in the DOM to avoid the SSR/hydrate
+/// mismatch that conditional rendering via `<Show>` triggers when
+/// `use_location()` is involved.
 #[component]
-pub fn OverlayPanel() -> impl IntoView {
+pub fn ChartSettingsPanel() -> impl IntoView {
     let state = expect_context::<ObservatoryState>();
     let location = use_location();
-    // Overlays only make sense on chart pages. Hide on every other route so
-    // the floating toggle isn't clutter elsewhere. class:hidden keeps the div
-    // in the DOM (no hydration mismatch) while making it invisible.
-    let hide_overlays = Signal::derive(move || {
+    let hide = Signal::derive(move || {
         let path = location.pathname.get();
         path == "/observatory"
             || path == "/observatory/logbook"
@@ -170,63 +176,116 @@ pub fn OverlayPanel() -> impl IntoView {
     });
 
     view! {
-        <div style="z-index: 10000" class="fixed left-4 bottom-4" class:hidden=hide_overlays>
+        <div style="z-index: 10000" class="fixed right-4 bottom-4" class:hidden=hide>
             <Show
-                when=move || state.overlay_panel_open.get()
+                when=move || state.chart_settings_open.get()
                 fallback=move || view! {
                     <button
                         class="group bg-[#0d2137] border border-[#f7931a]/30 hover:border-[#f7931a]/60 text-[#f7931a]/70 hover:text-[#f7931a] rounded-2xl p-4 shadow-lg shadow-black/30 cursor-pointer transition-all hover:scale-105 animate-fadeinone"
-                        title="Chart Overlays"
-                        aria-label="Toggle chart overlays"
-                        on:click=move |_| state.set_overlay_panel_open.set(true)
+                        title="Chart settings"
+                        aria-label="Open chart settings"
+                        on:click=move |_| state.set_chart_settings_open.set(true)
                     >
+                        // Sliders/settings icon (same family as the old overlays icon).
                         <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M6 13.5V3.75m0 9.75a1.5 1.5 0 0 1 0 3m0-3a1.5 1.5 0 0 0 0 3m0 3.75V16.5m12-3V3.75m0 9.75a1.5 1.5 0 0 1 0 3m0-3a1.5 1.5 0 0 0 0 3m0 3.75V16.5m-6-9V3.75m0 3.75a1.5 1.5 0 0 1 0 3m0-3a1.5 1.5 0 0 0 0 3m0 9.75V10.5"/>
                         </svg>
-                        <span class="absolute left-full ml-2 top-1/2 -translate-y-1/2 bg-[#0d2137] border border-white/10 text-white/60 text-xs px-2.5 py-1 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">"Overlays"</span>
+                        <span class="absolute right-full mr-2 top-1/2 -translate-y-1/2 bg-[#0d2137] border border-white/10 text-white/60 text-xs px-2.5 py-1 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">"Settings"</span>
                     </button>
                 }
             >
-                <div class="bg-[#0d2137] border border-white/10 rounded-xl p-5 shadow-xl min-w-[210px]">
-                    <div class="flex items-center justify-between mb-3">
-                        <span class="text-sm text-white/50 uppercase tracking-widest font-semibold">"Overlays"</span>
+                <div class="bg-[#0d2137] border border-white/10 rounded-xl shadow-xl min-w-[260px]">
+                    // Header: tabs + close
+                    <div class="flex items-center justify-between border-b border-white/5 px-4 pt-3 pb-0">
+                        <div class="flex gap-4">
+                            <ChartSettingsTabButton
+                                tab=ChartSettingsTab::Overlays
+                                label="Overlays"
+                            />
+                            <ChartSettingsTabButton
+                                tab=ChartSettingsTab::Range
+                                label="Range"
+                            />
+                        </div>
                         <button
-                            class="text-white/30 hover:text-white/60 cursor-pointer p-0.5"
-                            on:click=move |_| state.set_overlay_panel_open.set(false)
+                            class="text-white/30 hover:text-white/60 cursor-pointer p-0.5 -mt-1"
+                            aria-label="Close chart settings"
+                            on:click=move |_| state.set_chart_settings_open.set(false)
                         >
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
                             </svg>
                         </button>
                     </div>
-                    <div class="space-y-2.5">
-                        <OverlayCheckbox label="Halvings" color="#f7931a" icon="- -" checked=state.overlay_halvings on_toggle=state.set_overlay_halvings/>
-                        <OverlayCheckbox label="BIP Activations" color="#4ecdc4" icon="\u{2026}" checked=state.overlay_bips on_toggle=state.set_overlay_bips/>
-                        <OverlayCheckbox label="Core Releases" color="#a855f7" icon="\u{2026}" checked=state.overlay_core on_toggle=state.set_overlay_core/>
-                        <OverlayCheckbox label="Events" color="#ef4444" icon="\u{2605}" checked=state.overlay_events on_toggle=state.set_overlay_events/>
-                        <label class="flex items-center gap-2 cursor-pointer group">
-                            <input
-                                type="checkbox"
-                                class="accent-[#e6c84e] w-4 h-4 cursor-pointer"
-                                prop:checked=move || state.overlay_price.get()
-                                on:change=move |_| state.set_overlay_price.update(|v| *v = !*v)
-                            />
-                            <span class="text-[0.9rem] text-white/60 group-hover:text-white/80 transition-colors">"Price (USD)"</span>
-                            {move || if state.price_loading.get() {
-                                view! {
-                                    <svg class="w-4 h-4 ml-auto animate-spin text-[#e6c84e]/60" fill="none" viewBox="0 0 24 24">
-                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                    </svg>
-                                }.into_any()
-                            } else {
-                                view! { <span class="text-sm text-[#e6c84e]/60 ml-auto">"$"</span> }.into_any()
-                            }}
-                        </label>
-                        <OverlayCheckbox label="Chain Size" color="#10b981" icon="GB" checked=state.overlay_chain_size on_toggle=state.set_overlay_chain_size/>
+                    // Body: active tab's content.
+                    <div class="p-4">
+                        {move || match state.chart_settings_tab.get() {
+                            ChartSettingsTab::Overlays => view! {
+                                <OverlaysTabContent/>
+                            }.into_any(),
+                            ChartSettingsTab::Range => view! {
+                                <RangeSelector/>
+                            }.into_any(),
+                        }}
                     </div>
                 </div>
             </Show>
+        </div>
+    }
+}
+
+#[component]
+fn ChartSettingsTabButton(
+    tab: ChartSettingsTab,
+    #[prop(into)] label: &'static str,
+) -> impl IntoView {
+    let state = expect_context::<ObservatoryState>();
+    let active = move || state.chart_settings_tab.get() == tab;
+    view! {
+        <button
+            class=move || {
+                if active() {
+                    "text-sm font-semibold text-[#f7931a] border-b-2 border-[#f7931a] pb-2 transition-colors cursor-pointer"
+                } else {
+                    "text-sm font-medium text-white/40 hover:text-white/70 border-b-2 border-transparent pb-2 transition-colors cursor-pointer"
+                }
+            }
+            on:click=move |_| state.set_chart_settings_tab.set(tab)
+        >
+            {label}
+        </button>
+    }
+}
+
+#[component]
+fn OverlaysTabContent() -> impl IntoView {
+    let state = expect_context::<ObservatoryState>();
+    view! {
+        <div class="space-y-2.5">
+            <OverlayCheckbox label="Halvings" color="#f7931a" icon="- -" checked=state.overlay_halvings on_toggle=state.set_overlay_halvings/>
+            <OverlayCheckbox label="BIP Activations" color="#4ecdc4" icon="\u{2026}" checked=state.overlay_bips on_toggle=state.set_overlay_bips/>
+            <OverlayCheckbox label="Core Releases" color="#a855f7" icon="\u{2026}" checked=state.overlay_core on_toggle=state.set_overlay_core/>
+            <OverlayCheckbox label="Events" color="#ef4444" icon="\u{2605}" checked=state.overlay_events on_toggle=state.set_overlay_events/>
+            <label class="flex items-center gap-2 cursor-pointer group">
+                <input
+                    type="checkbox"
+                    class="accent-[#e6c84e] w-4 h-4 cursor-pointer"
+                    prop:checked=move || state.overlay_price.get()
+                    on:change=move |_| state.set_overlay_price.update(|v| *v = !*v)
+                />
+                <span class="text-[0.9rem] text-white/60 group-hover:text-white/80 transition-colors">"Price (USD)"</span>
+                {move || if state.price_loading.get() {
+                    view! {
+                        <svg class="w-4 h-4 ml-auto animate-spin text-[#e6c84e]/60" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                    }.into_any()
+                } else {
+                    view! { <span class="text-sm text-[#e6c84e]/60 ml-auto">"$"</span> }.into_any()
+                }}
+            </label>
+            <OverlayCheckbox label="Chain Size" color="#10b981" icon="GB" checked=state.overlay_chain_size on_toggle=state.set_overlay_chain_size/>
         </div>
     }
 }
@@ -321,14 +380,15 @@ pub fn ObservatoryNav() -> impl IntoView {
                     }
                 }).collect::<Vec<_>>()}
             </div>
-            // Row 2: Chart explorer tabs (slightly smaller, subtle separator)
-            <div class=move || {
-                if on_charts.get() {
-                    "flex items-center justify-center gap-x-3 sm:gap-x-6 px-3 sm:px-5 py-1.5 rounded-full bg-white/[0.03] border border-white/[0.06]"
-                } else {
-                    "flex items-center justify-center gap-x-3 sm:gap-x-6 px-3 sm:px-5 py-1.5 rounded-full"
-                }
-            }>
+            // Row 2: Chart explorer sub-nav. Only shown when the user is
+            // actually on a /observatory/charts/* page — elsewhere it's
+            // dead pixels. `class:hidden` keeps the div in the DOM to avoid
+            // the SSR/hydrate mismatch that conditional rendering via
+            // <Show> triggers when use_location() is involved.
+            <div
+                class="flex items-center justify-center gap-x-3 sm:gap-x-6 px-3 sm:px-5 py-1.5 rounded-full bg-white/[0.03] border border-white/[0.06]"
+                class:hidden=move || !on_charts.get()
+            >
                 <span class="text-[10px] sm:text-[11px] uppercase tracking-widest text-white/20 mr-1 sm:mr-2">"Charts"</span>
                 {charts.into_iter().map(|(href, label)| {
                     let href_str = href.to_string();
@@ -466,7 +526,9 @@ pub fn ChartPageLayout(
             </div>
         </div>
         {children()}
-        <FloatingRangePicker/>
+        // Note: no FloatingRangePicker here — the floating Range access
+        // lives in `ChartSettingsPanel` (rendered at the ObservatoryPage
+        // parent level) as a tab alongside Overlays.
         <ChartDrawer/>
     }
 }

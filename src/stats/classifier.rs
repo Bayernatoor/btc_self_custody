@@ -57,7 +57,7 @@ pub fn classify(hex: &str, height: u64) -> OpReturnType {
     }
 
     // After OP_RETURN (6a), the next byte(s) are a push length.
-    // We need to check the pushed data payload, which starts after the push opcode(s).
+    // The pushed data payload is what needs to be checked, starting after the push opcode(s).
     // For most protocols, the prefix appears right after "6a" + push length byte(s).
     let payload = &hex[2..]; // skip 6a (OP_RETURN)
 
@@ -106,7 +106,7 @@ fn contains_payload(payload: &str, prefix: &str) -> bool {
 ///
 /// OCEAN template miners: OCEAN lets miners build their own block templates.
 /// Coinbase format: `< OCEAN.XYZ >` followed by the miner's tag (e.g. "234 Alberta",
-/// "Barefoot Mining"). We extract these dynamically as "OCEAN / <miner>".
+/// "Barefoot Mining"). These are extracted dynamically as "OCEAN / <miner>".
 pub fn identify_miner(coinbase_hex: &str) -> String {
     let bytes: Vec<u8> = (0..coinbase_hex.len())
         .step_by(2)

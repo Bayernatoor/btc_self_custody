@@ -628,8 +628,8 @@ pub struct LiveStats {
     /// Estimated fee rate (sat/vB) to confirm in the next block (estimatesmartfee target=1).
     pub next_block_fee: f64,
     pub network: LiveNetwork,
-    /// True when one or more underlying RPC calls failed and we fell back to
-    /// the cached stale value. Clients can render a "data may be outdated"
+    /// True when one or more underlying RPC calls failed and the cache fell
+    /// back to its last known good value. Clients can render a "data may be outdated"
     /// indicator when this is set.
     #[serde(default)]
     pub stale: bool,

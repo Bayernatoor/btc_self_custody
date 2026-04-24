@@ -59,12 +59,12 @@ pub struct BitcoinRpc {
     mempool_info_cache: Arc<CachedSlot<MempoolInfo>>,
     blockchain_info_cache: Arc<CachedSlot<BlockchainInfo>>,
     network_hashps_cache: Arc<CachedSlot<f64>>,
-    // estimate_smart_fee is parameterized by target blocks, so we hold one
-    // slot per observed target. Lazily created on first call per target.
+    // estimate_smart_fee is parameterized by target blocks, so one slot is
+    // held per observed target. Lazily created on first call per target.
     smart_fee_caches: Arc<Mutex<HashMap<u64, Arc<CachedSlot<f64>>>>>,
     // LRU caches for immutable block data. Blocks at confirmed heights never
-    // change their content, so we can keep them indefinitely — only capacity
-    // pressure evicts. On reorg detection, specific entries are invalidated
+    // change their content, so they can stay cached indefinitely — only
+    // capacity pressure evicts. On reorg detection, specific entries are invalidated
     // explicitly by the reorg handler.
     block_hash_cache: Arc<LruSlot<u64, String>>,
     block_data_cache: Arc<LruSlot<String, Block>>,
@@ -436,7 +436,7 @@ impl BitcoinRpc {
     /// mechanism is explicit invalidation from the ZMQ `hashblock` handler
     /// (see [`Self::invalidate_tip_caches`]) which fires every time a new
     /// block arrives. Returns `(info, is_stale)` where `is_stale` is true
-    /// when the upstream call failed and we fell back to the last known
+    /// when the upstream call failed and the cache fell back to the last known
     /// value. Use [`Self::get_blockchain_info_fresh`] for paths that must
     /// bypass the cache (ingest, ZMQ refreshes).
     pub async fn get_blockchain_info(

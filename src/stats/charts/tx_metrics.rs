@@ -344,7 +344,7 @@ pub fn address_type_pct_chart_daily(
 /// RBF adoption — % of transactions signaling RBF (per-block).
 /// BIP-125 opt-in RBF was merged in Core v0.12.0 (2016-02-23).
 /// Pre-BIP-125 nSequence < 0xFFFFFFFE was used for other purposes
-/// (original Satoshi replacement, nLockTime), so we gate to post-BIP-125.
+/// (original Satoshi replacement, nLockTime), so the chart is gated to post-BIP-125.
 const BIP125_TIMESTAMP: u64 = 1456185600; // 2016-02-23 00:00 UTC
 
 pub fn rbf_chart(blocks: &[BlockSummary]) -> serde_json::Value {

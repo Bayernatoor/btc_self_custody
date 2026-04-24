@@ -243,7 +243,7 @@ pub fn spawn_background_tasks(
                 // Depth must match super::rpc::REORG_DETECTION_DEPTH so the
                 // ZMQ hashblock handler invalidates the same window of
                 // block_hash_cache entries — otherwise a reorg at a depth
-                // we verify but don't invalidate would be silently missed.
+                // verified but not invalidated would be silently missed.
                 ingest::verify_recent_blocks(
                     &state.rpc,
                     &state.db,

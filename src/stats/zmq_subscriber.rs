@@ -102,7 +102,7 @@ pub enum HeartbeatEvent {
         max_output_value: u64,
     },
     /// Block found - complete data (fees, size, weight all populated).
-    /// Sent after node finishes validation and we fetch all metadata.
+    /// Sent after node finishes validation and all metadata is fetched.
     #[serde(rename = "block")]
     Block {
         height: u64,
@@ -116,7 +116,7 @@ pub enum HeartbeatEvent {
         size: u64,
         /// Block weight in weight units.
         weight: u64,
-        /// Number of mempool txs we had tracked that were confirmed in this block.
+        /// Number of tracked mempool txs that were confirmed in this block.
         confirmed_count: u64,
     },
     /// Block is being mined/validated - node is processing a new block.
@@ -535,7 +535,7 @@ impl SequenceState {
             }
             'A' => {
                 // Ignore. A events interleave with R events during block
-                // processing, so we let the time window handle expiry.
+                // processing, so the time window handles expiry.
             }
             _ => {}
         }
@@ -575,7 +575,7 @@ async fn subscribe_blocks(
         let block_hash = bytes_to_hex(hash_bytes);
         tracing::info!("ZMQ: hashblock {block_hash} — fetching full data");
 
-        // Show mining overlay immediately while we fetch block data
+        // Show mining overlay immediately while block data is being fetched
         let _ = sender.send(HeartbeatEvent::BlockMining);
 
         // Node just finished validation — RPC is available now.
@@ -677,7 +677,7 @@ async fn subscribe_blocks(
         });
 
         // Don't clear the txid filter here. ZMQ continues re-broadcasting
-        // block txs after we finish processing. If we clear now, those stale
+        // block txs after processing finishes. Clearing now would let those stale
         // txs pass the filter, fail getmempoolentry, and the consecutive_fail
         // throttle can drop a genuine new mempool tx. The set is replaced
         // (clear + repopulate) when the next block arrives at line 268 above.
@@ -741,7 +741,7 @@ fn parse_raw_tx(data: &[u8]) -> Option<ParsedTx> {
     // Input count
     let input_count = read_varint(data, &mut cursor)?;
 
-    // Skip inputs (we don't need their data)
+    // Skip inputs (input data isn't needed for classification)
     for _ in 0..input_count {
         cursor += 32; // prev txid
         cursor += 4; // prev vout
@@ -790,13 +790,13 @@ fn parse_raw_tx(data: &[u8]) -> Option<ParsedTx> {
         return None;
     }
 
-    // For txid: we need the non-witness serialization (version + inputs + outputs + locktime)
-    // Build it by stripping segwit marker/flag and witness data
+    // For txid: use the non-witness serialization (version + inputs + outputs + locktime).
+    // Build it by stripping segwit marker/flag and witness data.
     let mut total_witness_bytes = 0u64;
     let mut has_inscription = false;
     let txid = if is_segwit {
-        // Non-witness serialization: version(4) + vin + vout + locktime(4)
-        // We need to reconstruct this from the original data
+        // Non-witness serialization: version(4) + vin + vout + locktime(4).
+        // Reconstruct it from the original data.
         let mut stripped = Vec::with_capacity(data.len());
         stripped.extend_from_slice(&data[0..4]); // version
 

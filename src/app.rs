@@ -265,7 +265,11 @@ fn redirect_permanent(target: &'static str) -> impl IntoView {
         navigate(target, Default::default());
     });
     view! {
-        <div class="flex items-center justify-center min-h-[40vh] text-white/60">
+        <div
+            class="flex items-center justify-center min-h-[40vh] text-white/60"
+            role="status"
+            aria-live="polite"
+        >
             <p>"Redirecting\u{2026}"</p>
         </div>
     }

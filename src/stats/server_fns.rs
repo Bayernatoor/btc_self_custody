@@ -227,7 +227,7 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
         db_stats.as_ref().map(|s| s.latest_timestamp).unwrap_or(0);
 
     // Parallelize RPC calls — all are non-fatal (fall back to defaults).
-    // Each returns `(value, is_stale)`; we OR the staleness flags together
+    // Each returns `(value, is_stale)`; OR the staleness flags together
     // so the response surfaces a single `stale: true` if any RPC fell back
     // to its cached-on-error value.
     let (blockchain_res, mempool_res, hashrate_res, fee_res) = tokio::join!(
@@ -319,7 +319,7 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
         };
         if need_refresh && !state.price_refreshing.swap(true, Ordering::AcqRel)
         {
-            // We won the refresh race — fetch and update cache
+            // Won the refresh race — fetch and update cache
             let result = match state.rpc.fetch_price().await {
                 Ok(p) => {
                     let usd = p.usd;

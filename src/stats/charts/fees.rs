@@ -307,7 +307,7 @@ pub fn median_fee_rate_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 }
 
 /// Median fee rate over time (daily).
-/// DailyAggregate doesn't store median_fee_rate directly, so we approximate
+/// DailyAggregate doesn't store median_fee_rate directly, so this approximates
 /// using total_fees / total_tx / avg_vsize. This is the average fee rate,
 /// not the true median, but it's a reasonable proxy for daily granularity.
 pub fn median_fee_rate_chart_daily(

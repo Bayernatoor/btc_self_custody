@@ -21,7 +21,7 @@ pub fn MethodologyPage() -> impl IntoView {
             <div class="absolute inset-0 bg-gradient-to-t from-[#123c64] via-[#123c64]/60 to-[#123c64]/30"></div>
             <div class="absolute inset-0 flex flex-col items-center justify-end pb-3 sm:pb-4">
                 <h1 class="text-xl sm:text-2xl lg:text-3xl font-title text-white mb-1 drop-shadow-lg">"Data Methodology"</h1>
-                <p class="text-xs sm:text-sm text-white/60 max-w-xl mx-auto px-4 text-center drop-shadow">"How we source, compute, and classify every metric on the observatory"</p>
+                <p class="text-xs sm:text-sm text-white/60 max-w-xl mx-auto px-4 text-center drop-shadow">"How I source, compute, and classify every metric on the observatory"</p>
             </div>
         </div>
 
@@ -49,7 +49,7 @@ pub fn MethodologyPage() -> impl IntoView {
                 <p class="mt-3 text-white/60">"Inscriptions and OP_RETURN are guaranteed disjoint (different parts of the transaction). BRC-20 is always a subset of Inscriptions. Runes, Omni, Counterparty, and Other are mutually exclusive subsets of OP_RETURN."</p>
             </Section>
 
-            // ── What We Count ────────────────────────────────────
+            // ── What I Count ────────────────────────────────────
             <Section title="What Each Count Means">
                 <MetricRow
                     name="Inscriptions"
@@ -90,7 +90,7 @@ pub fn MethodologyPage() -> impl IntoView {
 
             // ── Byte Accounting ──────────────────────────────────
             <Section title="Byte Accounting">
-                <p>"We track two byte measures for inscriptions and one for OP_RETURN:"</p>
+                <p>"I track two byte measures for inscriptions and one for OP_RETURN:"</p>
                 <div class="space-y-3 mt-3">
                     <ByteRow
                         name="inscription_bytes (payload)"

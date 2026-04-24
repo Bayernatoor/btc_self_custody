@@ -14,8 +14,8 @@
 //!   request is issued. Any other requests that arrive during that window wait on
 //!   the single in-flight call instead of piling on.
 //!
-//! Stale-on-error: if an RPC call fails and we have a previous value cached, we
-//! return the stale value with `is_stale = true`. Callers can surface this via a
+//! Stale-on-error: if an RPC call fails and a previous value is cached, the
+//! cache returns that stale value with `is_stale = true`. Callers can surface this via a
 //! `stale` flag in their response payload. Fresh fetches always bypass cache via
 //! the `_fresh` method variants on [`crate::stats::rpc::BitcoinRpc`].
 
@@ -80,7 +80,7 @@ impl<T: Clone + Send + 'static> CachedSlot<T> {
     /// than issuing their own.
     ///
     /// Returns `(value, is_stale)`. `is_stale` is true when the upstream fetch
-    /// failed and we fell back to the last known good value.
+    /// failed and the cache fell back to the last known good value.
     ///
     /// # Invariants / caller guarantees
     ///
@@ -108,7 +108,7 @@ impl<T: Clone + Send + 'static> CachedSlot<T> {
         loop {
             // Pre-register for notification BEFORE acquiring the lock.
             // enable() guarantees this future will receive any subsequent
-            // notify_waiters() call even if we haven't reached `.await` yet.
+            // notify_waiters() call even if the `.await` hasn't been reached yet.
             // Without this, a waiter that drops the lock can miss the
             // fetcher's signal if the fetcher finishes in that narrow window,
             // causing the waiter to park forever — which in testing produced
@@ -146,7 +146,7 @@ impl<T: Clone + Send + 'static> CachedSlot<T> {
                 Action::Wait => {
                     // Bounded wait with timeout as a defense-in-depth backstop.
                     // enable() above should guarantee no missed signals, but
-                    // the timeout means even in pathological cases we retry
+                    // the timeout means even in pathological cases the loop retries
                     // rather than hanging the request forever. 250ms is
                     // imperceptible to users and the loop re-checks cache.
                     let _ = tokio::time::timeout(
@@ -180,7 +180,7 @@ impl<T: Clone + Send + 'static> CachedSlot<T> {
                         }
                         Err(e) => {
                             self.errors.fetch_add(1, Ordering::Relaxed);
-                            // Stale-on-error: if we have a previous value,
+                            // Stale-on-error: if there's a previous value,
                             // hand it back with is_stale=true. The TTL is
                             // NOT extended — next caller will try upstream
                             // again, giving Core a chance to recover.
@@ -273,7 +273,7 @@ impl<'a, T: Clone + Send + 'static> Drop for InFlightGuard<'a, T> {
 ///
 /// Uses a HashMap + monotonic access-counter approach rather than a proper
 /// doubly-linked-list LRU: eviction is O(n) over capacity but access is O(1).
-/// At the capacities we use (500-10_000) this is negligible and the code is
+/// At the capacities in use (500-10_000) this is negligible and the code is
 /// much simpler than a hand-rolled intrusive list.
 pub struct LruSlot<K, V>
 where
@@ -321,7 +321,7 @@ where
     /// frequently-used entries are protected from eviction.
     pub fn get(&self, key: &K) -> Option<V> {
         let mut state = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        // Bump counter first (releases the immutable view we'll need next),
+        // Bump counter first (releases the immutable view needed next),
         // then get_mut to update the entry's recency marker.
         state.counter += 1;
         let counter = state.counter;
@@ -569,7 +569,7 @@ mod tests {
         let hanging = tokio::spawn(async move {
             slot_clone
                 .get_or_fetch(Duration::from_secs(60), || async move {
-                    // Longer than the test could ever wait — we abort before
+                    // Longer than the test could ever wait — aborted before
                     // this resolves.
                     tokio::time::sleep(Duration::from_secs(3600)).await;
                     Ok::<i32, StatsError>(42)
