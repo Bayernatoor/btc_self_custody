@@ -20,6 +20,8 @@ pub mod error;
 #[cfg(feature = "ssr")]
 pub mod ingest;
 #[cfg(feature = "ssr")]
+pub mod notable;
+#[cfg(feature = "ssr")]
 pub mod rpc;
 #[cfg(feature = "ssr")]
 pub mod rpc_cache;
