@@ -46,6 +46,13 @@ sha2 = { version = "0.10", optional = true }
 tower-http = { version = "0.6", features = ["compression-gzip", "compression-br"], optional = true }
 
 [dev-dependencies]
+# Tower's ServiceExt::oneshot is the canonical way to exercise an Axum
+# Router without binding a TCP socket — construct a Router in-process,
+# call .oneshot(req) to get a Response. Used by the api_integration_tests
+# module inside src/stats.
+tower = { version = "0.5", features = ["util"] }
+# Scoped temp files for per-test isolated SQLite DBs.
+tempfile = "3"
 
 [features]
 default = ["ssr"]

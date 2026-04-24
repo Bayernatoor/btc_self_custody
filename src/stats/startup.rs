@@ -82,8 +82,18 @@ pub async fn init(
         sse_connections: std::sync::atomic::AtomicUsize::new(0),
     });
 
-    // Build the API router
-    let router = Router::new()
+    let router = build_api_router(Arc::clone(&state));
+    Some((state, router, config.zmq_tx_url, config.zmq_block_url))
+}
+
+/// Assemble the stats API router. Extracted from [`init`] so integration
+/// tests can build an identical router (same routes, same handlers) around
+/// a test-owned `StatsState` with a tempfile DB and stub RPC. Keeping the
+/// route list in exactly one place prevents the "tests passed, prod broke"
+/// regression class where a new route is wired in prod but forgotten in
+/// test setup.
+pub(crate) fn build_api_router(state: Arc<StatsState>) -> Router {
+    Router::new()
         .route("/blocks", get(api::get_blocks))
         .route("/blocks/{height}", get(api::get_block_detail))
         .route("/stats", get(api::get_stats))
@@ -95,9 +105,7 @@ pub async fn init(
         .route("/signaling/periods", get(api::get_signaling_periods))
         .route("/heartbeat", get(api::get_heartbeat_sse))
         .route("/tx/{txid}", get(api::get_tx_detail))
-        .with_state(Arc::clone(&state));
-
-    Some((state, router, config.zmq_tx_url, config.zmq_block_url))
+        .with_state(state)
 }
 
 /// Spawn all background tasks. Must be called after the server starts listening
