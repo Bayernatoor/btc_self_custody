@@ -360,14 +360,19 @@ pub fn ChartDrawer() -> impl IntoView {
 
     view! {
         // Toggle tab fixed on the left edge
+        // Section-nav drawer trigger. Deliberately quieter than the primary
+        // Chart Settings FAB on the right — outline-on-dark so it reads as
+        // a secondary aid rather than a primary action. Icon and border both
+        // bumped to full orange (from /70 and /30 opacity) so it's still
+        // clearly clickable without competing with the solid-fill FAB.
         <button
             style="z-index: 10001"
-            class="fixed left-0 top-1/3 bg-[#0d2137] border border-l-0 border-[#f7931a]/30 rounded-r-xl px-2 sm:px-2.5 py-5 sm:py-6 cursor-pointer hover:bg-[#143050] hover:border-[#f7931a]/60 hover:scale-105 transition-all group shadow-lg shadow-black/30"
+            class="fixed left-0 top-1/3 bg-[#0d2137] border sm:border-[3px] border-l-0 sm:border-l-0 border-[#f7931a]/60 rounded-r-xl px-2 sm:px-2.5 py-5 sm:py-6 cursor-pointer hover:bg-[#143050] hover:border-[#f7931a] hover:scale-105 transition-all group shadow-lg shadow-black/30"
             on:click=move |_| set_open.set(true)
             title="Chart index"
         >
-            <svg class="w-5 h-5 sm:w-6 sm:h-6 text-[#f7931a]/70 group-hover:text-[#f7931a] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+            <svg class="w-5 h-5 sm:w-6 sm:h-6 text-[#f7931a]/80 group-hover:text-[#f7931a] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 6h16M4 12h16M4 18h16"/>
             </svg>
         </button>
 

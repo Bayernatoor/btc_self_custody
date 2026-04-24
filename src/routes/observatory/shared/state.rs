@@ -221,8 +221,11 @@ pub fn provide_observatory_state() -> ObservatoryState {
     let (overlay_events, set_overlay_events) =
         signal(initial_overlays.iter().any(|s| s == "events"));
     let (chart_settings_open, set_chart_settings_open) = signal(false);
+    // Default tab is Range — users change the time window far more often
+    // than they toggle overlays, so leading with Range matches their
+    // actual reach-for-this-first behavior.
     let (chart_settings_tab, set_chart_settings_tab) =
-        signal(ChartSettingsTab::Overlays);
+        signal(ChartSettingsTab::Range);
 
     // URL query params are read on mount (above) and synced back via
     // history.replaceState (see Effect at end of function). Direct replaceState

@@ -158,14 +158,55 @@ pub fn SignalingPage() -> impl IntoView {
             </div>
         </div>
 
+        // Skeleton heights are sized to roughly match each loaded section
+        // so the page doesn't shrink → grow on navigation (CLS jank).
+        // Structure mirrors the loaded view: status card, miner breakdown,
+        // block grid, period history chart.
         <Suspense fallback=move || view! {
             <div class="space-y-6">
-                <div class="bg-[#0d2137] border border-white/10 rounded-xl p-4">
-                    <div class="h-3 bg-white/5 rounded-full mb-2"></div>
-                    <div class="h-4 w-2/3 mx-auto bg-white/5 rounded mt-2"></div>
+                // Status card skeleton (~280px — pct number, progress bars, BIP description)
+                <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6">
+                    <div class="flex flex-col lg:flex-row lg:items-start lg:gap-8">
+                        <div class="flex-1 space-y-3 mb-4 lg:mb-0">
+                            <div class="h-8 w-32 bg-white/5 rounded"></div>
+                            <div class="h-2.5 bg-white/5 rounded-full"></div>
+                            <div class="h-1.5 w-3/4 bg-white/5 rounded-full"></div>
+                            <div class="h-3 w-1/2 bg-white/5 rounded"></div>
+                            <div class="h-3 w-1/3 bg-white/5 rounded"></div>
+                        </div>
+                        <div class="lg:max-w-sm lg:border-l lg:border-white/10 lg:pl-8 space-y-2">
+                            <div class="h-4 w-40 bg-white/5 rounded"></div>
+                            <div class="h-3 bg-white/5 rounded"></div>
+                            <div class="h-3 bg-white/5 rounded"></div>
+                            <div class="h-3 w-4/5 bg-white/5 rounded"></div>
+                            <div class="h-3 bg-white/5 rounded"></div>
+                            <div class="h-3 w-3/4 bg-white/5 rounded"></div>
+                        </div>
+                    </div>
                 </div>
-                <div class="bg-[#0d2137] border border-white/10 rounded-xl p-4 flex items-center justify-center h-32">
-                    <span class="text-xs text-white/30">"Loading signaling data..."</span>
+                // Miner breakdown skeleton (~260px — list of 6 pool rows)
+                <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6">
+                    <div class="h-4 w-40 bg-white/5 rounded mb-4"></div>
+                    <div class="space-y-2.5">
+                        <div class="h-4 bg-white/5 rounded"></div>
+                        <div class="h-4 bg-white/5 rounded"></div>
+                        <div class="h-4 bg-white/5 rounded"></div>
+                        <div class="h-4 bg-white/5 rounded"></div>
+                        <div class="h-4 bg-white/5 rounded"></div>
+                        <div class="h-4 bg-white/5 rounded"></div>
+                    </div>
+                </div>
+                // Block grid skeleton (~260px — the 2016-cell grid)
+                <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6">
+                    <div class="h-4 w-32 bg-white/5 rounded mb-4"></div>
+                    <div class="h-[200px] bg-white/5 rounded"></div>
+                </div>
+                // Period history chart skeleton (~520px — the ECharts bar chart)
+                <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6">
+                    <div class="h-4 w-48 bg-white/5 rounded mb-4"></div>
+                    <div class="h-[450px] flex items-center justify-center">
+                        <span class="text-xs text-white/30">"Loading signaling data\u{2026}"</span>
+                    </div>
                 </div>
             </div>
         }>

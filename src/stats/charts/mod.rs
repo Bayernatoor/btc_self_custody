@@ -110,7 +110,7 @@ pub(crate) fn chart_defaults() -> serde_json::Value {
             "silent": true,
             "z": 0,
             "style": {
-                "text": "wehodlbtc.com",
+                "text": "wehodlbtc",
                 "fill": "rgba(255,255,255,0.06)",
                 "font": "bold 56px Inter, system-ui, sans-serif",
                 "textAlign": "center",

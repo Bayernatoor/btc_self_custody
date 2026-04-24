@@ -180,14 +180,20 @@ pub fn ChartSettingsPanel() -> impl IntoView {
             <Show
                 when=move || state.chart_settings_open.get()
                 fallback=move || view! {
+                    // Floating settings button styled to match Basecamp's
+                    // help FAB: dark background circle with a full-opacity
+                    // orange border and a full-opacity orange icon — the
+                    // fill is the site's own surface color, not a bright
+                    // pop. Same treatment as the left-side drawer so the
+                    // two floating affordances read as a matched pair.
                     <button
-                        class="group bg-[#0d2137] border border-[#f7931a]/30 hover:border-[#f7931a]/60 text-[#f7931a]/70 hover:text-[#f7931a] rounded-2xl p-4 shadow-lg shadow-black/30 cursor-pointer transition-all hover:scale-105 animate-fadeinone"
+                        class="group bg-[#0d2137] border sm:border-[3px] border-[#f7931a]/70 hover:border-[#ffa534] text-[#f7931a]/80 hover:text-[#ffa534] rounded-full p-2.5 sm:p-3 shadow-lg shadow-black/30 cursor-pointer transition-all hover:scale-105 animate-fadeinone"
                         title="Chart settings"
                         aria-label="Open chart settings"
                         on:click=move |_| state.set_chart_settings_open.set(true)
                     >
-                        // Sliders/settings icon (same family as the old overlays icon).
-                        <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+                        // Sliders/settings icon.
+                        <svg class="w-5 h-5 sm:w-7 sm:h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M6 13.5V3.75m0 9.75a1.5 1.5 0 0 1 0 3m0-3a1.5 1.5 0 0 0 0 3m0 3.75V16.5m12-3V3.75m0 9.75a1.5 1.5 0 0 1 0 3m0-3a1.5 1.5 0 0 0 0 3m0 3.75V16.5m-6-9V3.75m0 3.75a1.5 1.5 0 0 1 0 3m0-3a1.5 1.5 0 0 0 0 3m0 9.75V10.5"/>
                         </svg>
                         <span class="absolute right-full mr-2 top-1/2 -translate-y-1/2 bg-[#0d2137] border border-white/10 text-white/60 text-xs px-2.5 py-1 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">"Settings"</span>
@@ -199,12 +205,12 @@ pub fn ChartSettingsPanel() -> impl IntoView {
                     <div class="flex items-center justify-between border-b border-white/5 px-4 pt-3 pb-0">
                         <div class="flex gap-4">
                             <ChartSettingsTabButton
-                                tab=ChartSettingsTab::Overlays
-                                label="Overlays"
-                            />
-                            <ChartSettingsTabButton
                                 tab=ChartSettingsTab::Range
                                 label="Range"
+                            />
+                            <ChartSettingsTabButton
+                                tab=ChartSettingsTab::Overlays
+                                label="Overlays"
                             />
                         </div>
                         <button
@@ -317,10 +323,13 @@ fn OverlayCheckbox(
 ///
 /// Row 1 groups the tabs by "what Bitcoin question are you asking":
 ///   live state (Readings, Heartbeat, Lookout) → consensus evolution
-///   (Signaling) → historical records (Logbook, Almanac, Archives).
-/// Row 2 is the pure chart explorer (Network, Fees, Mining, Embedded).
-/// Signaling lives in Row 1 — it's a consensus-layer tab, thematically
-/// distinct from the per-block metric charts in Row 2.
+///   (Signaling) → historical records (Logbook, Almanac, Archives)
+///   → analytical trends (Charts).
+/// Row 2 is the chart explorer sub-nav (Network, Fees, Mining, Embedded),
+/// only shown when the user is actually on a /charts/* page. The main
+/// "Charts" tab in Row 1 provides the entry point so charts are
+/// discoverable from anywhere; once inside, Row 2 handles sub-navigation
+/// between chart categories.
 #[component]
 pub fn ObservatoryNav() -> impl IntoView {
     let pages: Vec<(&'static str, &'static str)> = vec![
@@ -331,6 +340,10 @@ pub fn ObservatoryNav() -> impl IntoView {
         ("/observatory/logbook", "Logbook"),
         ("/observatory/almanac", "Almanac"),
         ("/observatory/archives", "The Archives"),
+        // Charts links to the default sub-page (Network); active-state
+        // highlighting uses `/observatory/charts` as the prefix so any
+        // chart sub-page keeps the tab lit. See the active check below.
+        ("/observatory/charts/network", "Charts"),
     ];
 
     let charts: Vec<(&'static str, &'static str)> = vec![
@@ -365,6 +378,11 @@ pub fn ObservatoryNav() -> impl IntoView {
                                 let path = location.pathname.get();
                                 let active = if href_str == "/observatory" {
                                     path == "/observatory"
+                                } else if href_str == "/observatory/charts/network" {
+                                    // Charts tab highlights on any /charts/*
+                                    // sub-page (Fees/Mining/Embedded), not
+                                    // just on Network.
+                                    path.starts_with("/observatory/charts")
                                 } else {
                                     path.starts_with(&href_str)
                                 };
