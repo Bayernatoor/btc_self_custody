@@ -1532,6 +1532,26 @@ pub fn query_range_summary(
     from_ts: u64,
     to_ts: u64,
 ) -> rusqlite::Result<super::types::RangeSummary> {
+    // Median of per-block total_fees over the range.
+    // For n rows, the median is the average of rows at ranks (n+1)/2 and (n+2)/2
+    // (1-indexed) — collapses to a single row for odd n, two middle rows for even n.
+    let median_fee_per_block: u64 = conn
+        .query_row(
+            "WITH sorted AS (
+                 SELECT total_fees,
+                        ROW_NUMBER() OVER (ORDER BY total_fees) AS rn,
+                        COUNT(*) OVER () AS cnt
+                 FROM blocks
+                 WHERE timestamp >= ?1 AND timestamp <= ?2
+             )
+             SELECT CAST(COALESCE(AVG(total_fees), 0) AS INTEGER)
+             FROM sorted
+             WHERE rn IN ((cnt + 1) / 2, (cnt + 2) / 2)",
+            params![from_ts, to_ts],
+            |row| row.get::<_, Option<i64>>(0).map(|v| v.unwrap_or(0) as u64),
+        )
+        .unwrap_or(0);
+
     conn.query_row(
         "SELECT COUNT(*),
                 SUM(tx_count), SUM(size), SUM(weight),
@@ -1581,6 +1601,7 @@ pub fn query_range_summary(
                     0.0
                 },
                 avg_median_fee: row.get::<_, Option<f64>>(35)?.unwrap_or(0.0),
+                median_fee_per_block,
                 avg_block_time,
                 min_timestamp: min_ts,
                 max_timestamp: max_ts,

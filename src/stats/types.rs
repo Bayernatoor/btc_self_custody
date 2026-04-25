@@ -320,6 +320,8 @@ pub struct RangeSummary {
     pub avg_fee_per_tx: f64,
     /// Average median fee in satoshis per block.
     pub avg_median_fee: f64,
+    /// Median of per-block total fees in satoshis across blocks in range.
+    pub median_fee_per_block: u64,
     /// Average time between blocks in minutes.
     pub avg_block_time: f64,
     /// Total SegWit transactions across all blocks.

@@ -492,6 +492,42 @@ pub fn StatsSummaryPage() -> impl IntoView {
     let avg_median_fee = stat(|s| {
         format!("{} sats", format_number(s.avg_median_fee.round() as u64))
     });
+    let avg_fees_per_block_btc = stat(|s| {
+        if s.block_count > 0 {
+            let sats = s.total_fees as f64 / s.block_count as f64;
+            format!(
+                "\u{20bf}{}",
+                format_number_f64(sats / 100_000_000.0, 4)
+            )
+        } else {
+            "\u{2014}".to_string()
+        }
+    });
+    let avg_fees_per_block_sub = stat(|s| {
+        if s.block_count > 0 {
+            let sats = (s.total_fees as f64 / s.block_count as f64).round() as u64;
+            format!("{} sats", format_number(sats))
+        } else {
+            String::new()
+        }
+    });
+    let median_fees_per_block_btc = stat(|s| {
+        if s.block_count > 0 {
+            format!(
+                "\u{20bf}{}",
+                format_number_f64(s.median_fee_per_block as f64 / 100_000_000.0, 4)
+            )
+        } else {
+            "\u{2014}".to_string()
+        }
+    });
+    let median_fees_per_block_sub = stat(|s| {
+        if s.block_count > 0 {
+            format!("{} sats", format_number(s.median_fee_per_block))
+        } else {
+            String::new()
+        }
+    });
 
     // === Adoption ===
     let segwit_pct = {
@@ -757,6 +793,10 @@ pub fn StatsSummaryPage() -> impl IntoView {
                 tooltip="Total fees divided by non-coinbase transaction count"/>
             <StatCard label="Avg Median Fee" value=avg_median_fee
                 tooltip="Average of per-block median absolute fees in satoshis"/>
+            <StatCard label="Avg Fees/Block" value=avg_fees_per_block_btc sub=avg_fees_per_block_sub
+                tooltip="Total fees in this range divided by the number of blocks"/>
+            <StatCard label="Median Fees/Block" value=median_fees_per_block_btc sub=median_fees_per_block_sub
+                tooltip="Median of per-block total fees across blocks in this range"/>
 
             <SectionHeader title="Adoption" subtitle="SegWit, Taproot, witness data, and UTXO activity"/>
             <StatCard label="SegWit Transactions" value=segwit_pct
