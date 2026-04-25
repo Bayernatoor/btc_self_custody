@@ -29,6 +29,65 @@ fn concurrency() -> usize {
 /// Keeps the DB lock held briefly so API queries are not starved.
 const DB_BATCH_SIZE: usize = 100;
 
+/// Max attempts per block when transient RPC errors occur during a chunk fetch.
+const FETCH_MAX_ATTEMPTS: u32 = 6;
+
+/// Fetch a set of block heights, retrying individual failures with exponential
+/// backoff. Returns the full set of blocks in arbitrary order, or the last
+/// error if any height fails every attempt.
+async fn fetch_heights_with_retry(
+    rpc: &BitcoinRpc,
+    heights: &[u64],
+) -> Result<Vec<Block>, StatsError> {
+    let mut pending: Vec<u64> = heights.to_vec();
+    let mut collected: Vec<Block> = Vec::with_capacity(heights.len());
+    let mut last_err: Option<StatsError> = None;
+
+    for attempt in 1..=FETCH_MAX_ATTEMPTS {
+        let results: Vec<(u64, Result<Block, StatsError>)> =
+            stream::iter(pending.iter().copied())
+                .map(|h| async move {
+                    (h, rpc.fetch_block_by_height(h).await)
+                })
+                .buffer_unordered(concurrency())
+                .collect()
+                .await;
+
+        let mut still_pending: Vec<u64> = Vec::new();
+        for (h, res) in results {
+            match res {
+                Ok(b) => collected.push(b),
+                Err(e) => {
+                    last_err = Some(e);
+                    still_pending.push(h);
+                }
+            }
+        }
+
+        if still_pending.is_empty() {
+            return Ok(collected);
+        }
+
+        if attempt < FETCH_MAX_ATTEMPTS {
+            let backoff_ms = 500u64 * (1u64 << (attempt - 1)).min(32);
+            tracing::warn!(
+                "Block fetch: {} failed on attempt {}/{}; retrying in {}ms (first failed height: {})",
+                still_pending.len(),
+                attempt,
+                FETCH_MAX_ATTEMPTS,
+                backoff_ms,
+                still_pending.first().copied().unwrap_or(0),
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(backoff_ms))
+                .await;
+        }
+
+        pending = still_pending;
+    }
+
+    Err(last_err.expect("failed heights must have produced an error"))
+}
+
 /// Forward ingestion: catch up from max_height+1 to chain tip.
 pub async fn run(
     rpc: &BitcoinRpc,
@@ -397,18 +456,7 @@ async fn ingest_range(
     for chunk in heights.chunks(DB_BATCH_SIZE) {
         let fetched_ref = Arc::clone(&fetched);
 
-        let results: Vec<Result<Block, StatsError>> = stream::iter(
-            chunk.iter().copied(),
-        )
-        .map(|height| async move { rpc.fetch_block_by_height(height).await })
-        .buffer_unordered(concurrency())
-        .collect()
-        .await;
-
-        let mut blocks = Vec::with_capacity(results.len());
-        for result in results {
-            blocks.push(result?);
-        }
+        let mut blocks = fetch_heights_with_retry(rpc, chunk).await?;
 
         blocks.sort_by_key(|b| b.height);
 
