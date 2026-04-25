@@ -22,6 +22,71 @@ use super::components::*;
 use super::helpers::*;
 use crate::stats::server_fns::*;
 
+/// Skeleton placeholder for the signaling page main content. Used both as the
+/// Suspense fallback on initial load and when the resource is refetching after
+/// a BIP switch (stale data shouldn't render against the new BIP's chrome).
+#[component]
+fn SignalingSkeleton() -> impl IntoView {
+    view! {
+        <div class="space-y-6">
+            // Status card skeleton (~280px — pct number, progress bars, BIP description)
+            <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6">
+                <div class="flex flex-col lg:flex-row lg:items-start lg:gap-8">
+                    <div class="flex-1 space-y-3 mb-4 lg:mb-0">
+                        <div class="h-8 w-32 bg-white/5 rounded"></div>
+                        <div class="h-2.5 bg-white/5 rounded-full"></div>
+                        <div class="h-1.5 w-3/4 bg-white/5 rounded-full"></div>
+                        <div class="h-3 w-1/2 bg-white/5 rounded"></div>
+                        <div class="h-3 w-1/3 bg-white/5 rounded"></div>
+                    </div>
+                    <div class="lg:max-w-sm lg:border-l lg:border-white/10 lg:pl-8 space-y-2">
+                        <div class="h-4 w-40 bg-white/5 rounded"></div>
+                        <div class="h-3 bg-white/5 rounded"></div>
+                        <div class="h-3 bg-white/5 rounded"></div>
+                        <div class="h-3 w-4/5 bg-white/5 rounded"></div>
+                        <div class="h-3 bg-white/5 rounded"></div>
+                        <div class="h-3 w-3/4 bg-white/5 rounded"></div>
+                    </div>
+                </div>
+            </div>
+            // Miner breakdown skeleton (~260px — list of 6 pool rows)
+            <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6">
+                <div class="h-4 w-40 bg-white/5 rounded mb-4"></div>
+                <div class="space-y-2.5">
+                    <div class="h-4 bg-white/5 rounded"></div>
+                    <div class="h-4 bg-white/5 rounded"></div>
+                    <div class="h-4 bg-white/5 rounded"></div>
+                    <div class="h-4 bg-white/5 rounded"></div>
+                    <div class="h-4 bg-white/5 rounded"></div>
+                    <div class="h-4 bg-white/5 rounded"></div>
+                </div>
+            </div>
+            // Block grid skeleton (~260px — the 2016-cell grid)
+            <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6">
+                <div class="h-4 w-32 bg-white/5 rounded mb-4"></div>
+                <div class="h-[200px] bg-white/5 rounded"></div>
+            </div>
+            // Period history chart skeleton — block icon + "Mining blocks..." (matches other chart pages).
+            <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6">
+                <div class="h-4 w-48 bg-white/5 rounded mb-4"></div>
+                <div class="h-[450px] flex items-center justify-center">
+                    <div class="flex flex-col items-center gap-3">
+                        <div class="animate-pulse">
+                            <div class="w-12 h-12 rounded-lg bg-[#f7931a]/10 border border-[#f7931a]/20 flex items-center justify-center">
+                                <svg class="w-6 h-6 text-[#f7931a]/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <rect x="3" y="3" width="18" height="18" rx="2"/>
+                                    <path d="M9 3v18M15 3v18M3 9h18M3 15h18"/>
+                                </svg>
+                            </div>
+                        </div>
+                        <span class="text-xs text-white/30">"Mining blocks..."</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+}
+
 /// BIP signaling tracker page. Fetches per-block signaling data and period-level
 /// aggregates, then renders status card, miner breakdown, block grid, and history chart.
 #[component]
@@ -163,63 +228,18 @@ pub fn SignalingPage() -> impl IntoView {
         // so the page doesn't shrink → grow on navigation (CLS jank).
         // Structure mirrors the loaded view: status card, miner breakdown,
         // block grid, period history chart.
-        <Suspense fallback=move || view! {
-            <div class="space-y-6">
-                // Status card skeleton (~280px — pct number, progress bars, BIP description)
-                <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6">
-                    <div class="flex flex-col lg:flex-row lg:items-start lg:gap-8">
-                        <div class="flex-1 space-y-3 mb-4 lg:mb-0">
-                            <div class="h-8 w-32 bg-white/5 rounded"></div>
-                            <div class="h-2.5 bg-white/5 rounded-full"></div>
-                            <div class="h-1.5 w-3/4 bg-white/5 rounded-full"></div>
-                            <div class="h-3 w-1/2 bg-white/5 rounded"></div>
-                            <div class="h-3 w-1/3 bg-white/5 rounded"></div>
-                        </div>
-                        <div class="lg:max-w-sm lg:border-l lg:border-white/10 lg:pl-8 space-y-2">
-                            <div class="h-4 w-40 bg-white/5 rounded"></div>
-                            <div class="h-3 bg-white/5 rounded"></div>
-                            <div class="h-3 bg-white/5 rounded"></div>
-                            <div class="h-3 w-4/5 bg-white/5 rounded"></div>
-                            <div class="h-3 bg-white/5 rounded"></div>
-                            <div class="h-3 w-3/4 bg-white/5 rounded"></div>
-                        </div>
-                    </div>
-                </div>
-                // Miner breakdown skeleton (~260px — list of 6 pool rows)
-                <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6">
-                    <div class="h-4 w-40 bg-white/5 rounded mb-4"></div>
-                    <div class="space-y-2.5">
-                        <div class="h-4 bg-white/5 rounded"></div>
-                        <div class="h-4 bg-white/5 rounded"></div>
-                        <div class="h-4 bg-white/5 rounded"></div>
-                        <div class="h-4 bg-white/5 rounded"></div>
-                        <div class="h-4 bg-white/5 rounded"></div>
-                        <div class="h-4 bg-white/5 rounded"></div>
-                    </div>
-                </div>
-                // Block grid skeleton (~260px — the 2016-cell grid)
-                <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6">
-                    <div class="h-4 w-32 bg-white/5 rounded mb-4"></div>
-                    <div class="h-[200px] bg-white/5 rounded"></div>
-                </div>
-                // Period history chart skeleton (~520px — the ECharts bar chart)
-                <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6">
-                    <div class="h-4 w-48 bg-white/5 rounded mb-4"></div>
-                    <div class="h-[450px] flex items-center justify-center">
-                        <span class="text-xs text-white/30">"Loading signaling data\u{2026}"</span>
-                    </div>
-                </div>
-            </div>
-        }>
+        <Suspense fallback=move || view! { <SignalingSkeleton/> }>
             {move || {
                 signaling_data.get().map(|result| {
                     match result {
                         Ok(((ref blocks, ref period_stats), ref periods, p_start, p_end, _current_p, _target_p, ref data_method)) => {
-                            // Use the method that produced this data (not the live signal).
-                            // Otherwise, while a refetch is pending after a BIP switch the
-                            // chrome (threshold, labels, BIP description) would flip to the
-                            // newly-selected BIP while the data shown is still the previous
-                            // BIP's — making the chart look like it's rendering the wrong BIP.
+                            // If the user has switched BIP but the resource hasn't caught up yet,
+                            // show the same loading skeleton the rest of the page uses. Otherwise
+                            // we'd render new BIP chrome (threshold, labels) against the previous
+                            // BIP's data, which is misleading.
+                            if bip_method.get() != *data_method {
+                                return view! { <SignalingSkeleton/> }.into_any();
+                            }
                             let is_locktime = data_method == "locktime";
                             let threshold = if is_locktime { 95.0 } else { 55.0 };
                             let mined = period_stats.total_blocks;
