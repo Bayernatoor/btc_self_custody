@@ -170,6 +170,7 @@ pub fn ChartSettingsPanel() -> impl IntoView {
             || path == "/observatory/archives"
             || path == "/observatory/heartbeat"
             || path == "/observatory/lookout"
+            || path == "/observatory/signaling"
             || path == "/observatory/learn"
             || path == "/observatory/learn/methodology"
             || path == "/observatory/learn/protocols"
