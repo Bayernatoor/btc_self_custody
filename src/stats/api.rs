@@ -310,13 +310,36 @@ pub async fn get_stats(
 pub async fn get_live(
     State(state): State<SharedStatsState>,
 ) -> Result<CachedResponse, StatsError> {
-    // Parallelize all RPC calls for faster response
-    let (blockchain_res, mempool_res, hashrate_res, fee_res) = tokio::join!(
-        state.rpc.get_blockchain_info(),
-        state.rpc.get_mempool_info(),
-        state.rpc.get_network_hashps(),
-        state.rpc.estimate_smart_fee(1),
+    let t_total = Instant::now();
+
+    // Parallelize all RPC calls for faster response.
+    // Each branch is wrapped to capture per-call latency for slow-request diagnostics.
+    let (br, mr, hr, fr) = tokio::join!(
+        async {
+            let s = Instant::now();
+            let r = state.rpc.get_blockchain_info().await;
+            (r, s.elapsed())
+        },
+        async {
+            let s = Instant::now();
+            let r = state.rpc.get_mempool_info().await;
+            (r, s.elapsed())
+        },
+        async {
+            let s = Instant::now();
+            let r = state.rpc.get_network_hashps().await;
+            (r, s.elapsed())
+        },
+        async {
+            let s = Instant::now();
+            let r = state.rpc.estimate_smart_fee(1).await;
+            (r, s.elapsed())
+        },
     );
+    let (blockchain_res, t_blockchain) = br;
+    let (mempool_res, t_mempool) = mr;
+    let (hashrate_res, t_hashrate) = hr;
+    let (fee_res, t_fee) = fr;
 
     // Track staleness across the four RPCs. Any OR-combines to response-level.
     let mut stale = false;
@@ -338,6 +361,8 @@ pub async fn get_live(
 
     // Price cache: only fetch from mempool.space if cache is >60s old.
     // Atomic guard prevents multiple concurrent HTTP requests on cache miss.
+    let t_price_start = Instant::now();
+    let mut price_did_fetch = false;
     let price_usd = {
         let cached = state
             .price_cache
@@ -350,6 +375,7 @@ pub async fn get_live(
         };
         if need_refresh && !state.price_refreshing.swap(true, Ordering::AcqRel)
         {
+            price_did_fetch = true;
             let result = match state.rpc.fetch_price().await {
                 Ok(p) => {
                     let usd = p.usd;
@@ -371,6 +397,11 @@ pub async fn get_live(
             cached.map(|(p, _)| p.usd).unwrap_or(0.0)
         }
     };
+    let t_price = if price_did_fetch {
+        t_price_start.elapsed()
+    } else {
+        std::time::Duration::ZERO
+    };
 
     let total_supply = super::types::calc_supply(blockchain.blocks);
     let percent_issued = (total_supply / MAX_SUPPLY) * 100.0;
@@ -388,6 +419,31 @@ pub async fn get_live(
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .unwrap_or(0);
+
+    // Slow-request diagnostic: log per-call timings only when the handler
+    // exceeds 1s total or any single upstream call exceeds 500ms. Helps
+    // identify which RPC (or the mempool.space price fetch) is responsible
+    // for the occasional 10+s "pending" hang seen in production.
+    let total = t_total.elapsed();
+    let slow_call = std::time::Duration::from_millis(500);
+    if total > std::time::Duration::from_secs(1)
+        || t_blockchain > slow_call
+        || t_mempool > slow_call
+        || t_hashrate > slow_call
+        || t_fee > slow_call
+        || t_price > slow_call
+    {
+        tracing::warn!(
+            "live_stats slow: total={}ms blockchain={}ms mempool={}ms hashrate={}ms fee={}ms price={}ms (price_fetched={})",
+            total.as_millis(),
+            t_blockchain.as_millis(),
+            t_mempool.as_millis(),
+            t_hashrate.as_millis(),
+            t_fee.as_millis(),
+            t_price.as_millis(),
+            price_did_fetch,
+        );
+    }
 
     Ok(cached_json(
         serde_json::json!({
