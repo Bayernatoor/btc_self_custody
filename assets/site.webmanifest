@@ -6,7 +6,7 @@
     "scope": "/",
     "display": "standalone",
     "theme_color": "#123c64",
-    "background_color": "#123c64",
+    "background_color": "#101729",
     "icons": [
         {
             "src": "/web-app-manifest-192x192.png",
