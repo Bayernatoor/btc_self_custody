@@ -94,6 +94,11 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 <link rel="mask-icon" href="/safari-pinned-tab.svg"/>
                 <meta name="msapplication-TileColor" content="#123c64"/>
                 <meta name="theme-color" content="#123c64"/>
+                // iOS PWA: launch standalone (no Safari chrome) with a
+                // matching status bar when added to home screen.
+                <meta name="apple-mobile-web-app-capable" content="yes"/>
+                <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+                <meta name="apple-mobile-web-app-title" content="HODL BTC"/>
 
                 // ECharts for stats dashboard
                 <script defer src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"
