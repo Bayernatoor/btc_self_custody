@@ -67,6 +67,10 @@ pub async fn init(
     let state = Arc::new(StatsState {
         db: pool,
         rpc,
+        // Empty in PR 1: no caches subscribed yet. The pre-existing
+        // `.take()` block below handles invalidation until caches
+        // migrate to the registry one PR at a time.
+        cache_registry: super::cache::CacheRegistry::new(),
         price_cache: Mutex::new(None),
         price_refreshing: std::sync::atomic::AtomicBool::new(false),
         utxo_count: Mutex::new(None),

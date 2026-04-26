@@ -63,6 +63,7 @@ impl TestApp {
         let state = Arc::new(StatsState {
             db: pool,
             rpc,
+            cache_registry: super::cache::CacheRegistry::new(),
             price_cache: Mutex::new(None),
             price_refreshing: AtomicBool::new(false),
             utxo_count: Mutex::new(None),

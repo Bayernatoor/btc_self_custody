@@ -61,6 +61,7 @@ fn cached_json(
 type CachedResponse =
     ([(header::HeaderName, String); 1], Json<serde_json::Value>);
 
+use super::cache::{CacheRegistry, CacheTag};
 use super::db::{self, DbPool};
 use super::error::StatsError;
 use super::rpc::{BitcoinRpc, PriceInfo};
@@ -71,21 +72,42 @@ type RangeCache<T> = Mutex<Option<(u64, u64, Vec<T>, Instant)>>;
 
 /// Shared application state for the stats module. Holds the DB pool, RPC client,
 /// and all in-memory caches. Wrapped in `Arc` and passed to all handlers.
+///
+/// **Caching policy:** new caches must be added as `Arc<Cache<K, V>>`
+/// (see `super::cache`) and registered via `StatsStateBuilder` (coming
+/// in PR 2 of the cache-registry rollout). The `cache_registry` field
+/// fans out invalidations by tag so trigger paths (block poller, ZMQ
+/// hashblock handler, etc.) call `state.invalidate(tag)` once instead
+/// of maintaining a hand-rolled list of `.take()` calls per cache.
+///
+/// The fields below marked `// DEPRECATED` are pre-existing manually
+/// locked caches scheduled for migration. Do not add new fields in this
+/// shape; use the cache primitive instead.
 pub struct StatsState {
     pub db: DbPool,
     pub rpc: BitcoinRpc,
+    /// Routes `state.invalidate(tag)` to subscribed caches. Empty in
+    /// PR 1 (no caches migrated yet); populated as caches move over.
+    pub cache_registry: CacheRegistry,
+    /// DEPRECATED: migrate to `Cache<(), PriceInfo>` via `StatsStateBuilder::cache`.
     /// Cached price with timestamp, refreshed at most every 60 seconds.
     pub price_cache: Mutex<Option<(PriceInfo, Instant)>>,
     /// Guard: prevents multiple concurrent price refreshes.
+    /// Will be replaced by the cache primitive's singleflight in the A-era refactor.
     pub price_refreshing: AtomicBool,
+    /// DEPRECATED: migrate to `Cache<(), u64>` via `StatsStateBuilder::cache`.
     pub utxo_count: Mutex<Option<u64>>,
+    /// DEPRECATED: migrate to `Cache<(), StatsSummary>` via `StatsStateBuilder::cache`.
     /// Cached stats summary: (result, fetched_at). 60s TTL.
     pub stats_summary_cache:
         Mutex<Option<(super::types::StatsSummary, Instant)>>,
+    /// DEPRECATED: migrate to `Cache<(u64, u64), Vec<DailyAggregate>>`.
     /// Cached daily aggregates: (from_ts, to_ts, results, fetched_at). 120s TTL.
     pub daily_cache: RangeCache<super::types::DailyAggregate>,
-    /// Cached block timestamps: height → timestamp. Immutable data, never expires.
+    /// DEPRECATED: migrate to `Cache<u64, u64>` via `StatsStateBuilder::cache`
+    /// (immutable, use `Cache::permanent()`). Heights -> timestamps.
     pub block_ts_cache: Mutex<std::collections::HashMap<u64, u64>>,
+    /// DEPRECATED: migrate to `Cache<String, (Vec<SignalingBlock>, PeriodStats)>`.
     /// Cached signaling blocks: (cache_key, blocks, period_stats, fetched_at). 60s TTL.
     pub signaling_blocks_cache: Mutex<
         Option<(
@@ -95,14 +117,17 @@ pub struct StatsState {
             Instant,
         )>,
     >,
+    /// DEPRECATED: migrate to `Cache<String, Vec<SignalingPeriod>>`.
     /// Cached signaling periods: (cache_key, results, fetched_at). 60s TTL.
     pub signaling_periods_cache:
         Mutex<Option<(String, Vec<super::db::SignalingPeriod>, Instant)>>,
-    /// Cached price history: (from_ts, to_ts, data, fetched_at).
+    /// DEPRECATED: migrate to `Cache<(u64, u64), Vec<PricePoint>>`.
     pub price_history_cache: RangeCache<PricePoint>,
+    /// DEPRECATED: migrate to `Cache<(u64, u64), RangeSummary>`.
     /// Cached range summary: (from_ts, to_ts, result, fetched_at). 60s TTL.
     pub range_summary_cache:
         Mutex<Option<(u64, u64, super::types::RangeSummary, Instant)>>,
+    /// DEPRECATED: migrate to `Cache<(u64, u64), ExtremesData>`.
     /// Cached extremes: (from_ts, to_ts, result, fetched_at). 60s TTL.
     pub extremes_cache:
         Mutex<Option<(u64, u64, super::types::ExtremesData, Instant)>>,
@@ -110,6 +135,20 @@ pub struct StatsState {
     pub heartbeat_tx: broadcast::Sender<super::zmq_subscriber::HeartbeatEvent>,
     /// Active SSE connection count (guard against connection exhaustion).
     pub sse_connections: AtomicUsize,
+}
+
+impl StatsState {
+    /// Fan an invalidation event out to every cache registered for `tag`.
+    /// Replaces the hand-rolled `.take()` chain that previously lived in
+    /// `startup.rs`. Trigger sites (block poller, ZMQ hashblock handler,
+    /// etc.) call this once per event; the registry handles fan-out.
+    ///
+    /// In PR 1 the registry has no subscribers, so this is a no-op until
+    /// the first cache migrates. The pre-existing `.take()` block in
+    /// `startup.rs` continues to handle invalidation in the meantime.
+    pub fn invalidate(&self, tag: CacheTag) {
+        self.cache_registry.invalidate(tag);
+    }
 }
 
 /// Maximum concurrent SSE connections before rejecting new ones.

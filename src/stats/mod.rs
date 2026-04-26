@@ -10,6 +10,8 @@ pub mod types;
 #[cfg(feature = "ssr")]
 pub mod api;
 #[cfg(feature = "ssr")]
+pub mod cache;
+#[cfg(feature = "ssr")]
 pub mod classifier;
 #[cfg(feature = "ssr")]
 pub mod config;
