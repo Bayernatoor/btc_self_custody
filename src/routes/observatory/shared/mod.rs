@@ -39,7 +39,17 @@ macro_rules! chart_memo {
             $crate::routes::observatory::shared::ObservatoryState,
         >();
         let cache = state.chart_cache.clone();
+        let data_loading = state.data_loading;
         leptos::prelude::Signal::derive(move || {
+            // While the resource is refetching for a new range, dashboard_data
+            // still holds the previous range's payload. Computing here would
+            // serialize a chart from stale rows under the new range key,
+            // wasted because the skeleton covers it and the next eval
+            // overwrites it once fresh data arrives. Returning empty also
+            // leaves the existing canvas alone (Chart Effect skips empty).
+            if data_loading.get() {
+                return String::new();
+            }
             let r = $range.get();
             let flags = $overlays.get();
             // MUST read data to track it as reactive dependency — otherwise

@@ -199,6 +199,41 @@
         }
     }
 
+    // Time-sliced rAF queue for ECharts updates. A range change can hand
+    // us ~29 fresh options in one tick; rendering them synchronously
+    // blocks paint for seconds on mobile and hides the new selector value
+    // and skeletons. Map keying coalesces repeat updates for the same
+    // element to the latest payload (latest wins).
+    var _pendingChartUpdates = new Map();
+    var _pendingRafId = null;
+    // ECharts.setOption is 50-150ms per chart on mobile so one render
+    // blows the budget; that's fine, we still yield between charts.
+    var _RENDER_BUDGET_MS = 12;
+
+    function _processPendingCharts() {
+        _pendingRafId = null;
+        var deadline = (typeof performance !== 'undefined' ? performance.now() : Date.now()) + _RENDER_BUDGET_MS;
+        var keys = Array.from(_pendingChartUpdates.keys());
+        for (var i = 0; i < keys.length; i++) {
+            var el = keys[i];
+            var json = _pendingChartUpdates.get(el);
+            _pendingChartUpdates.delete(el);
+            _renderChartOptionImmediate(el, json);
+            var now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+            if (now >= deadline && _pendingChartUpdates.size > 0) break;
+        }
+        if (_pendingChartUpdates.size > 0 && _pendingRafId === null) {
+            _pendingRafId = requestAnimationFrame(_processPendingCharts);
+        }
+    }
+
+    function _scheduleChartUpdate(el, optionJson) {
+        _pendingChartUpdates.set(el, optionJson);
+        if (_pendingRafId === null) {
+            _pendingRafId = requestAnimationFrame(_processPendingCharts);
+        }
+    }
+
     window.setChartOption = function(elementId, optionJson, isRetry) {
         var el = document.getElementById(elementId);
         if (!el) {
@@ -224,8 +259,17 @@
             setTimeout(function() { window.setChartOption(elementId, optionJson); }, 200);
             return;
         }
-        // ECharts is loaded — reset retry counter and clear any error message
+        // Defer the heavy ECharts work into the rAF queue so a multi-chart
+        // reactive cascade doesn't block the next paint.
         el._echartsRetry = 0;
+        _scheduleChartUpdate(el, optionJson);
+    };
+
+    function _renderChartOptionImmediate(el, optionJson) {
+        // Element may have been removed (route change, fullscreen close)
+        // between scheduling and processing. Bail silently.
+        if (!el || !el.isConnected) return;
+        if (typeof echarts === 'undefined') return;
         if (!el._chart) {
             el.textContent = ''; // clear error message if one was shown
             el._chart = echarts.init(el, null, { renderer: 'canvas' });
@@ -238,6 +282,7 @@
         if (el._lastOptionJson === optionJson) return;
         el._lastOptionJson = optionJson;
         el._storedOptionJson = optionJson; // keep a copy for resize re-apply
+        var elementId = el.id;
 
         try {
             var opts = JSON.parse(optionJson);
