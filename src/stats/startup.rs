@@ -64,19 +64,31 @@ pub async fn init(
     // Broadcast channel for heartbeat events (ZMQ → SSE). 4096 buffer handles bursts.
     let (heartbeat_tx, _) = broadcast::channel(4096);
 
+    // Build the cache layer through StatsStateBuilder so registration
+    // with the invalidation registry happens automatically. Caches not
+    // yet migrated still construct manually below; they keep their
+    // entries in the .take() invalidation block until they migrate too.
+    let mut cb = super::api::StatsStateBuilder::new();
+    let stats_summary_cache = cb
+        .cache::<(), super::types::StatsSummary>(
+            std::time::Duration::from_secs(60),
+            &[super::cache::CacheTag::OnNewBlock],
+        );
+    let block_ts_cache = cb.cache::<u64, u64>(
+        std::time::Duration::MAX, // immutable: timestamps don't change
+        &[],
+    );
+
     let state = Arc::new(StatsState {
         db: pool,
         rpc,
-        // Empty in PR 1: no caches subscribed yet. The pre-existing
-        // `.take()` block below handles invalidation until caches
-        // migrate to the registry one PR at a time.
-        cache_registry: super::cache::CacheRegistry::new(),
+        cache_registry: cb.into_registry(),
         price_cache: Mutex::new(None),
         price_refreshing: std::sync::atomic::AtomicBool::new(false),
         utxo_count: Mutex::new(None),
-        stats_summary_cache: Mutex::new(None),
+        stats_summary_cache,
         daily_cache: Mutex::new(None),
-        block_ts_cache: Mutex::new(std::collections::HashMap::new()),
+        block_ts_cache,
         signaling_blocks_cache: Mutex::new(None),
         signaling_periods_cache: Mutex::new(None),
         price_history_cache: Mutex::new(None),
@@ -264,7 +276,10 @@ pub fn spawn_background_tasks(
                     .unwrap_or(0);
                 if new_height > last_height {
                     last_height = new_height;
-                    // Invalidate server-side caches
+                    // Migrated caches: registry handles fan-out by tag.
+                    state.invalidate(super::cache::CacheTag::OnNewBlock);
+                    // Not-yet-migrated caches: still hand-rolled .take().
+                    // Each line moves to the registry as PR 3 migrates them.
                     state
                         .range_summary_cache
                         .lock()
@@ -272,11 +287,6 @@ pub fn spawn_background_tasks(
                         .take();
                     state
                         .extremes_cache
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner())
-                        .take();
-                    state
-                        .stats_summary_cache
                         .lock()
                         .unwrap_or_else(|e| e.into_inner())
                         .take();

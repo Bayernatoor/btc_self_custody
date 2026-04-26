@@ -61,7 +61,7 @@ fn cached_json(
 type CachedResponse =
     ([(header::HeaderName, String); 1], Json<serde_json::Value>);
 
-use super::cache::{CacheRegistry, CacheTag};
+use super::cache::{Cache, CacheInvalidate, CacheRegistry, CacheTag};
 use super::db::{self, DbPool};
 use super::error::StatsError;
 use super::rpc::{BitcoinRpc, PriceInfo};
@@ -86,8 +86,9 @@ type RangeCache<T> = Mutex<Option<(u64, u64, Vec<T>, Instant)>>;
 pub struct StatsState {
     pub db: DbPool,
     pub rpc: BitcoinRpc,
-    /// Routes `state.invalidate(tag)` to subscribed caches. Empty in
-    /// PR 1 (no caches migrated yet); populated as caches move over.
+    /// Routes `state.invalidate(tag)` to subscribed caches. Constructed
+    /// via `StatsStateBuilder::into_registry()` so every cache built
+    /// through the builder is wired in automatically.
     pub cache_registry: CacheRegistry,
     /// DEPRECATED: migrate to `Cache<(), PriceInfo>` via `StatsStateBuilder::cache`.
     /// Cached price with timestamp, refreshed at most every 60 seconds.
@@ -97,16 +98,14 @@ pub struct StatsState {
     pub price_refreshing: AtomicBool,
     /// DEPRECATED: migrate to `Cache<(), u64>` via `StatsStateBuilder::cache`.
     pub utxo_count: Mutex<Option<u64>>,
-    /// DEPRECATED: migrate to `Cache<(), StatsSummary>` via `StatsStateBuilder::cache`.
-    /// Cached stats summary: (result, fetched_at). 60s TTL.
-    pub stats_summary_cache:
-        Mutex<Option<(super::types::StatsSummary, Instant)>>,
+    /// Stats summary cache. Invalidated on new block via the registry.
+    pub stats_summary_cache: Arc<Cache<(), super::types::StatsSummary>>,
     /// DEPRECATED: migrate to `Cache<(u64, u64), Vec<DailyAggregate>>`.
     /// Cached daily aggregates: (from_ts, to_ts, results, fetched_at). 120s TTL.
     pub daily_cache: RangeCache<super::types::DailyAggregate>,
-    /// DEPRECATED: migrate to `Cache<u64, u64>` via `StatsStateBuilder::cache`
-    /// (immutable, use `Cache::permanent()`). Heights -> timestamps.
-    pub block_ts_cache: Mutex<std::collections::HashMap<u64, u64>>,
+    /// Block height -> timestamp cache. Immutable data so no TTL or
+    /// invalidation; entries are written once and live for the process.
+    pub block_ts_cache: Arc<Cache<u64, u64>>,
     /// DEPRECATED: migrate to `Cache<String, (Vec<SignalingBlock>, PeriodStats)>`.
     /// Cached signaling blocks: (cache_key, blocks, period_stats, fetched_at). 60s TTL.
     pub signaling_blocks_cache: Mutex<
@@ -139,15 +138,59 @@ pub struct StatsState {
 
 impl StatsState {
     /// Fan an invalidation event out to every cache registered for `tag`.
-    /// Replaces the hand-rolled `.take()` chain that previously lived in
-    /// `startup.rs`. Trigger sites (block poller, ZMQ hashblock handler,
-    /// etc.) call this once per event; the registry handles fan-out.
-    ///
-    /// In PR 1 the registry has no subscribers, so this is a no-op until
-    /// the first cache migrates. The pre-existing `.take()` block in
-    /// `startup.rs` continues to handle invalidation in the meantime.
+    /// Trigger sites (block poller, ZMQ hashblock handler, etc.) call
+    /// this once per event; the registry handles fan-out. Replaces the
+    /// hand-rolled `.take()` chain that previously lived in `startup.rs`.
     pub fn invalidate(&self, tag: CacheTag) {
         self.cache_registry.invalidate(tag);
+    }
+}
+
+/// Helper for constructing the cache layer of `StatsState`. Each
+/// `cache(...)` call builds a `Cache<K, V>`, registers it with the
+/// internal `CacheRegistry` under each provided tag, and returns an
+/// `Arc<Cache<K, V>>` the caller stores on the `StatsState` field.
+/// `into_registry()` consumes the builder and yields the populated
+/// registry, which the caller assigns to `StatsState::cache_registry`.
+///
+/// Adding a new cache is one line; the registration step is not
+/// optional, so a cache cannot ship without an invalidation contract.
+#[derive(Default)]
+pub struct StatsStateBuilder {
+    registry: CacheRegistry,
+}
+
+impl StatsStateBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Construct a cache, register it under each tag in `tags`, and
+    /// return the `Arc` for the caller to store on `StatsState`.
+    pub fn cache<K, V>(
+        &mut self,
+        ttl: Duration,
+        tags: &[CacheTag],
+    ) -> Arc<Cache<K, V>>
+    where
+        K: Eq + std::hash::Hash + Send + Sync + 'static,
+        V: Clone + Send + Sync + 'static,
+    {
+        let mut cache = Cache::new(ttl);
+        for &tag in tags {
+            cache = cache.invalidated_by(tag);
+        }
+        let arc = Arc::new(cache);
+        for &tag in tags {
+            self.registry
+                .subscribe(tag, arc.clone() as Arc<dyn CacheInvalidate>);
+        }
+        arc
+    }
+
+    /// Consume the builder and return the populated registry.
+    pub fn into_registry(self) -> CacheRegistry {
+        self.registry
     }
 }
 

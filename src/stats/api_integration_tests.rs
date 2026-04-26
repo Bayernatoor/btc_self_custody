@@ -30,10 +30,12 @@ use tempfile::TempDir;
 use tokio::sync::broadcast;
 use tower::ServiceExt;
 
-use super::api::StatsState;
+use super::api::{StatsState, StatsStateBuilder};
+use super::cache::CacheTag;
 use super::db::{self, DbPool};
 use super::rpc::BitcoinRpc;
 use super::startup::build_api_router;
+use std::time::Duration;
 
 struct TestApp {
     router: Router,
@@ -60,16 +62,25 @@ impl TestApp {
 
         let (heartbeat_tx, _) = broadcast::channel(64);
 
+        let mut cb = StatsStateBuilder::new();
+        let stats_summary_cache = cb
+            .cache::<(), super::types::StatsSummary>(
+                Duration::from_secs(60),
+                &[CacheTag::OnNewBlock],
+            );
+        let block_ts_cache =
+            cb.cache::<u64, u64>(Duration::MAX, &[]);
+
         let state = Arc::new(StatsState {
             db: pool,
             rpc,
-            cache_registry: super::cache::CacheRegistry::new(),
+            cache_registry: cb.into_registry(),
             price_cache: Mutex::new(None),
             price_refreshing: AtomicBool::new(false),
             utxo_count: Mutex::new(None),
-            stats_summary_cache: Mutex::new(None),
+            stats_summary_cache,
             daily_cache: Mutex::new(None),
-            block_ts_cache: Mutex::new(std::collections::HashMap::new()),
+            block_ts_cache,
             signaling_blocks_cache: Mutex::new(None),
             signaling_periods_cache: Mutex::new(None),
             price_history_cache: Mutex::new(None),
@@ -355,4 +366,84 @@ async fn daily_aggregates_empty_range_is_ok() {
     // Locks in that zero-block ranges don't error — historically a
     // regression site when new aggregation columns were added.
     assert!(body.is_object() || body.is_array());
+}
+
+// ---------------------------------------------------------------------------
+// Cache registry integration: simulated block event invalidates the right
+// caches without touching the trigger code (block poller / ZMQ handler).
+// This is the contract that makes the registry safe to ship: adding a new
+// tagged cache means it gets invalidated automatically; an untagged cache
+// is left alone by tag-routed events.
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn invalidate_on_new_block_clears_migrated_caches_via_registry() {
+    use super::types::StatsSummary;
+
+    let app = TestApp::new();
+
+    // Seed the migrated stats_summary_cache directly. Goes through the
+    // cache primitive's insert(); no DB query, no fetcher.
+    app.state.stats_summary_cache.insert(
+        (),
+        StatsSummary {
+            block_count: 1,
+            min_height: 100,
+            max_height: 100,
+            latest_timestamp: 1_700_000_000,
+        },
+    );
+    assert!(
+        app.state.stats_summary_cache.get(&()).is_some(),
+        "stats_summary_cache populated"
+    );
+
+    // Seed block_ts_cache (no tags) so we can verify it survives.
+    app.state.block_ts_cache.insert(800_000, 1_700_000_000);
+    assert_eq!(
+        app.state.block_ts_cache.get(&800_000),
+        Some(1_700_000_000)
+    );
+
+    // Fire the same call the block poller makes. This is the entire
+    // public surface for invalidation; the test does not import or
+    // touch any trigger-side code.
+    app.state.invalidate(CacheTag::OnNewBlock);
+
+    // Tagged: cleared.
+    assert!(
+        app.state.stats_summary_cache.get(&()).is_none(),
+        "stats_summary_cache should be cleared by OnNewBlock"
+    );
+    // Untagged: untouched.
+    assert_eq!(
+        app.state.block_ts_cache.get(&800_000),
+        Some(1_700_000_000),
+        "block_ts_cache has no tags and must not be cleared by OnNewBlock"
+    );
+}
+
+#[tokio::test]
+async fn invalidate_on_price_refresh_does_not_touch_stats_cache() {
+    use super::types::StatsSummary;
+
+    let app = TestApp::new();
+    app.state.stats_summary_cache.insert(
+        (),
+        StatsSummary {
+            block_count: 1,
+            min_height: 100,
+            max_height: 100,
+            latest_timestamp: 1_700_000_000,
+        },
+    );
+
+    // Different tag: stats_summary_cache subscribes only to OnNewBlock,
+    // so OnPriceRefresh must not clear it.
+    app.state.invalidate(CacheTag::OnPriceRefresh);
+
+    assert!(
+        app.state.stats_summary_cache.get(&()).is_some(),
+        "stats_summary_cache must survive a tag it didn't subscribe to"
+    );
 }

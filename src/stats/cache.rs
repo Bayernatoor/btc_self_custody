@@ -18,15 +18,16 @@
 //!
 //! ## B-now-A-later contract
 //!
-//! Today `Cache<K, V>` is a thin single-entry slot
-//! (`Mutex<Option<(K, V, Instant)>>`) matching the pre-existing
-//! semantics. The public API (`get_or_compute`, `invalidate`,
-//! `invalidate_key`) is intentionally also the API a future bounded-LRU
-//! plus singleflight implementation would expose. When that swap
-//! happens, this file changes; call sites do not.
+//! Today `Cache<K, V>` is `Mutex<HashMap<K, (V, Instant)>>` with no
+//! bounding and no singleflight. The public API (`get_or_compute`,
+//! `get`, `insert`, `invalidate`, `invalidate_key`) is intentionally
+//! the same API a future bounded-LRU plus singleflight implementation
+//! would expose. When that swap happens, this file changes; call sites
+//! do not.
 
 use std::collections::HashMap;
 use std::future::Future;
+use std::hash::Hash;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -55,19 +56,27 @@ pub trait CacheInvalidate: Send + Sync {
 
 /// In-memory cache with TTL and tag-based invalidation.
 ///
-/// Single-entry today. Storing under a different key evicts the previous
-/// entry. Matches the `Mutex<Option<(K, V, Instant)>>` shape that
-/// `StatsState` already uses, so migrating an existing cache is a
-/// behavior-preserving rename plus boilerplate deletion.
+/// Multi-key (HashMap-backed): different keys cache independently. Each
+/// entry has its own TTL deadline measured from when it was stored.
+/// `invalidate()` clears all entries; `invalidate_key(k)` clears one.
+///
+/// **Not bounded.** Entries accumulate without LRU eviction. Acceptable
+/// for the current call sites (single-key TTL caches, range-keyed
+/// caches that thrash naturally, and `block_ts_cache` whose worst case
+/// is ~24MB at full chain). The A-era refactor adds bounding.
+///
+/// **No singleflight.** A concurrent miss runs the fetcher twice;
+/// whichever finishes second overwrites. Acceptable at current traffic;
+/// A adds proper singleflight.
 pub struct Cache<K, V> {
-    inner: Mutex<Option<(K, V, Instant)>>,
+    inner: Mutex<HashMap<K, (V, Instant)>>,
     ttl: Duration,
     tags: Vec<CacheTag>,
 }
 
 impl<K, V> Cache<K, V>
 where
-    K: PartialEq + Clone + Send + Sync + 'static,
+    K: Eq + Hash + Send + Sync + 'static,
     V: Clone + Send + Sync + 'static,
 {
     /// Construct a cache that expires entries after `ttl`. Use
@@ -75,7 +84,7 @@ where
     /// (e.g. block timestamps).
     pub fn new(ttl: Duration) -> Self {
         Self {
-            inner: Mutex::new(None),
+            inner: Mutex::new(HashMap::new()),
             ttl,
             tags: Vec::new(),
         }
@@ -102,9 +111,8 @@ where
         &self.tags
     }
 
-    /// Return cached value if (a) present, (b) the stored key matches
-    /// `key`, and (c) the entry is within TTL. Otherwise run `fetcher`,
-    /// store the result, and return it.
+    /// Return cached value for `key` if present and within TTL.
+    /// Otherwise run `fetcher`, store the result, and return it.
     ///
     /// Generic over the fetcher's error type so each call site keeps
     /// its native error (`StatsError`, `ServerFnError`, etc.) without
@@ -124,32 +132,47 @@ where
         // Read fast path. Lock is dropped before the await below.
         {
             let guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-            if let Some((k, v, ts)) = guard.as_ref() {
-                if k == &key && ts.elapsed() < self.ttl {
+            if let Some((v, ts)) = guard.get(&key) {
+                if ts.elapsed() < self.ttl {
                     return Ok(v.clone());
                 }
             }
         }
         // Cache miss or stale. Fetch with the lock RELEASED.
         let fresh = fetcher().await?;
-        // Single-entry semantics: a concurrent miss that fills the slot
-        // before we get back is just overwritten. A's singleflight will
-        // dedupe the fetch upstream.
+        // A concurrent miss may have filled this entry in the meantime;
+        // we just overwrite. A's singleflight will dedupe upstream.
         let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        *guard = Some((key, fresh.clone(), Instant::now()));
+        guard.insert(key, (fresh.clone(), Instant::now()));
         Ok(fresh)
     }
 
-    /// Clear the entry only if its key matches. In single-entry semantics
-    /// this is "clear if stored, else no-op." A's bounded LRU will turn
-    /// this into a real per-key removal.
+    /// Raw read. Returns the cached value for `key` if present and
+    /// within TTL, else `None`. For call sites that conditionally cache
+    /// (e.g. only insert positive lookup results) and need direct
+    /// cache access rather than `get_or_compute`'s fetcher pattern.
+    pub fn get(&self, key: &K) -> Option<V> {
+        let guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        guard.get(key).and_then(|(v, ts)| {
+            if ts.elapsed() < self.ttl {
+                Some(v.clone())
+            } else {
+                None
+            }
+        })
+    }
+
+    /// Raw write. Stores or overwrites the entry for `key` with
+    /// the current timestamp. Pairs with `get` for conditional caching.
+    pub fn insert(&self, key: K, value: V) {
+        let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        guard.insert(key, (value, Instant::now()));
+    }
+
+    /// Clear the entry for `key` if present. No-op otherwise.
     pub fn invalidate_key(&self, key: &K) {
         let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some((k, _, _)) = guard.as_ref() {
-            if k == key {
-                *guard = None;
-            }
-        }
+        guard.remove(key);
     }
 }
 
@@ -160,7 +183,7 @@ where
 {
     fn invalidate(&self) {
         let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        *guard = None;
+        guard.clear();
     }
 }
 
@@ -253,18 +276,41 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn different_key_evicts_single_entry() {
+    async fn different_keys_cache_independently() {
         let cache: Cache<u32, &'static str> =
             Cache::new(Duration::from_secs(60));
         let calls = Arc::new(AtomicUsize::new(0));
 
         let _ = fetch(&cache, 1, "a", &calls).await;
         let _ = fetch(&cache, 2, "b", &calls).await;
-        // Single-entry: going back to key 1 must re-fetch
-        let v = fetch(&cache, 1, "c", &calls).await;
+        // Going back to key 1 should hit cache (multi-key, no thrash)
+        let v1 = fetch(&cache, 1, "c", &calls).await;
+        let v2 = fetch(&cache, 2, "d", &calls).await;
 
-        assert_eq!(v, "c");
-        assert_eq!(calls.load(Ordering::SeqCst), 3);
+        assert_eq!(v1, "a", "key 1 still cached");
+        assert_eq!(v2, "b", "key 2 still cached");
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn raw_get_and_insert_for_conditional_caching() {
+        let cache: Cache<u32, &'static str> = Cache::permanent();
+
+        assert_eq!(cache.get(&1), None);
+        cache.insert(1, "a");
+        assert_eq!(cache.get(&1), Some("a"));
+        // Different key still uncached
+        assert_eq!(cache.get(&2), None);
+    }
+
+    #[tokio::test]
+    async fn raw_get_respects_ttl() {
+        let cache: Cache<u32, &'static str> =
+            Cache::new(Duration::from_millis(10));
+        cache.insert(1, "a");
+        assert_eq!(cache.get(&1), Some("a"));
+        tokio::time::sleep(Duration::from_millis(25)).await;
+        assert_eq!(cache.get(&1), None, "expired entry should not return");
     }
 
     #[tokio::test]

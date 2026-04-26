@@ -40,52 +40,35 @@ fn internal_err(context: &str, err: impl std::fmt::Display) -> ServerFnError {
 
 #[server(prefix = "/api", endpoint = "stats_summary")]
 pub async fn fetch_stats_summary() -> Result<StatsSummary, ServerFnError> {
-    use std::time::Instant;
-
     let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
         leptos_axum::extract()
             .await
             .map_err(|e| internal_err("Stats unavailable", e))?;
 
-    // Return cached result if fresh (< 60 seconds)
-    {
-        let cached = state
-            .stats_summary_cache
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
-        if let Some((ref summary, ref ts)) = *cached {
-            if ts.elapsed().as_secs() < 60 {
-                return Ok(summary.clone());
-            }
-        }
-    }
-
-    let conn = state.db.get().map_err(|e| internal_err("DB pool", e))?;
-    let stats = super::db::query_stats(&conn)
-        .map_err(|e| internal_err("DB query", e))?;
-    let result = match stats {
-        Some(s) => StatsSummary {
-            block_count: s.block_count,
-            min_height: s.min_height,
-            max_height: s.max_height,
-            latest_timestamp: s.latest_timestamp,
-        },
-        None => StatsSummary {
-            block_count: 0,
-            min_height: 0,
-            max_height: 0,
-            latest_timestamp: 0,
-        },
-    };
-
-    // Cache the result
-    *state
+    state
         .stats_summary_cache
-        .lock()
-        .unwrap_or_else(|e| e.into_inner()) =
-        Some((result.clone(), Instant::now()));
-
-    Ok(result)
+        .clone()
+        .get_or_compute((), || async move {
+            let conn =
+                state.db.get().map_err(|e| internal_err("DB pool", e))?;
+            let stats = super::db::query_stats(&conn)
+                .map_err(|e| internal_err("DB query", e))?;
+            Ok::<_, ServerFnError>(match stats {
+                Some(s) => StatsSummary {
+                    block_count: s.block_count,
+                    min_height: s.min_height,
+                    max_height: s.max_height,
+                    latest_timestamp: s.latest_timestamp,
+                },
+                None => StatsSummary {
+                    block_count: 0,
+                    min_height: 0,
+                    max_height: 0,
+                    latest_timestamp: 0,
+                },
+            })
+        })
+        .await
 }
 
 #[server(prefix = "/api", endpoint = "stats_blocks")]
@@ -826,30 +809,18 @@ pub async fn fetch_block_timestamp(
             .await
             .map_err(|e| internal_err("Stats unavailable", e))?;
 
-    // Block timestamps are immutable — cache forever
-    {
-        let cache = state
-            .block_ts_cache
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
-        if let Some(&ts) = cache.get(&height) {
-            return Ok(Some(ts));
-        }
+    // Block timestamps are immutable, cache forever. Conditional cache:
+    // only insert positive results so a not-yet-existent height won't
+    // cache None (the height may exist later as the chain extends).
+    if let Some(ts) = state.block_ts_cache.get(&height) {
+        return Ok(Some(ts));
     }
-
     let conn = state.db.get().map_err(|e| internal_err("DB pool", e))?;
     let result = super::db::query_block_timestamp(&conn, height)
         .map_err(|e| internal_err("DB query", e))?;
-
-    // Cache if found
     if let Some(ts) = result {
-        state
-            .block_ts_cache
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .insert(height, ts);
+        state.block_ts_cache.insert(height, ts);
     }
-
     Ok(result)
 }
 
