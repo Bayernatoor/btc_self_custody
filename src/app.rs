@@ -94,8 +94,10 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 <link rel="mask-icon" href="/safari-pinned-tab.svg"/>
                 <meta name="msapplication-TileColor" content="#123c64"/>
                 <meta name="theme-color" content="#123c64"/>
-                // iOS PWA: launch standalone (no Safari chrome) with a
-                // matching status bar when added to home screen.
+                // PWA standalone launch. The standard `mobile-web-app-capable`
+                // is the modern replacement; the apple-prefixed variant stays
+                // for older iOS versions that don't yet honor the standard one.
+                <meta name="mobile-web-app-capable" content="yes"/>
                 <meta name="apple-mobile-web-app-capable" content="yes"/>
                 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
                 <meta name="apple-mobile-web-app-title" content="HODL BTC"/>
