@@ -82,8 +82,9 @@ pub struct ObservatoryState {
     pub set_chart_settings_tab: WriteSignal<ChartSettingsTab>,
     // chart JSON cache — persists across Outlet navigations
     pub chart_cache: ChartCache,
-    // true briefly when range changes (before new data arrives)
-    pub data_loading: ReadSignal<bool>,
+    // true while the dashboard data resource hasn't yet resolved a value
+    // for the *currently selected* range/custom-window.
+    pub data_loading: Signal<bool>,
     // Custom date range (set when range == "custom")
     pub custom_from: ReadSignal<Option<String>>,
     pub set_custom_from: WriteSignal<Option<String>>,
@@ -187,25 +188,7 @@ pub fn provide_observatory_state() -> ObservatoryState {
     let (custom_from, set_custom_from) = signal(initial_custom_from);
     let (custom_to, set_custom_to) = signal(initial_custom_to);
 
-    // Loading signal: true when range changes, false when data arrives
-    let (data_loading, set_data_loading) = signal(false);
-    {
-        // Set loading=true for heavy ranges (2Y+) so the user sees
-        // immediate feedback. Lighter ranges compute fast enough.
-        let mut first = true;
-        Effect::new(move |_| {
-            let r = range.get();
-            if first {
-                first = false;
-            } else {
-                let n = range_to_blocks(&r);
-                if n >= 105_120 {
-                    // 2Y+ (105,120 blocks)
-                    set_data_loading.set(true);
-                }
-            }
-        });
-    }
+    // `data_loading` is wired further down, once `dashboard_data` exists.
 
     // Overlay toggles — initialized from URL
     let (overlay_halvings, set_overlay_halvings) =
@@ -345,11 +328,36 @@ pub fn provide_observatory_state() -> ObservatoryState {
     let dashboard_data =
         create_dashboard_resource(range, custom_from, custom_to);
 
-    // Clear loading when new data arrives
+    // Loading signal: true while the live (range, custom_from, custom_to)
+    // hasn't yet been resolved by the dashboard_data resource.
+    //
+    // Why this matters: LocalResource.get() returns the *previous* resolved
+    // value while a refetch is in flight (the value cell isn't cleared on
+    // input change), so chart_memo never produces an empty string and the
+    // ChartCard skeleton wouldn't otherwise show. The earlier "n >= 2Y"
+    // gate skipped feedback for shorter range switches entirely — fine on
+    // desktop, painful on slower mobile devices where even a 1Y → 1M
+    // recompute (~28 charts × ~4,320 per-block rows) takes several seconds.
+    //
+    // We track which (range, from, to) the resource last resolved for, and
+    // derive `data_loading` as "those don't match the live values yet."
+    // The snapshotting Effect re-runs only when the resource notifies a new
+    // value (i.e. the new fetch landed), capturing the range/from/to in
+    // effect at that moment.
+    let (last_resolved, set_last_resolved) =
+        signal::<Option<(String, Option<String>, Option<String>)>>(None);
     Effect::new(move |_| {
         if dashboard_data.get().is_some() {
-            set_data_loading.set(false);
+            set_last_resolved.set(Some((
+                range.get_untracked(),
+                custom_from.get_untracked(),
+                custom_to.get_untracked(),
+            )));
         }
+    });
+    let data_loading = Signal::derive(move || {
+        let want = (range.get(), custom_from.get(), custom_to.get());
+        last_resolved.get().map_or(true, |have| have != want)
     });
 
     // Fetch cumulative size offset (total bytes before visible window)
