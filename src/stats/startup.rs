@@ -72,40 +72,48 @@ pub async fn init(
     use super::types;
     let mut cb = super::api::StatsStateBuilder::new();
     let price_cache = cb.cache::<(), super::rpc::PriceInfo>(
+        "price",
         Duration::from_secs(60),
         &[],
     );
-    let utxo_count = cb.cache::<(), u64>(Duration::MAX, &[]);
+    let utxo_count =
+        cb.cache::<(), u64>("utxo_count", Duration::MAX, &[]);
     let stats_summary_cache = cb.cache::<(), types::StatsSummary>(
+        "stats_summary",
         Duration::from_secs(60),
         &[CacheTag::OnNewBlock],
     );
     let daily_cache = cb.cache::<(u64, u64), Vec<types::DailyAggregate>>(
+        "daily_aggregates",
         Duration::from_secs(120),
         &[CacheTag::OnNewBlock],
     );
-    let block_ts_cache = cb.cache::<u64, u64>(Duration::MAX, &[]);
+    let block_ts_cache =
+        cb.cache::<u64, u64>("block_timestamps", Duration::MAX, &[]);
     let signaling_blocks_cache = cb
         .cache::<String, (Vec<types::SignalingBlock>, types::PeriodStats)>(
+            "signaling_blocks",
             Duration::from_secs(60),
             &[],
         );
     let signaling_periods_cache = cb
         .cache::<String, Vec<super::db::SignalingPeriod>>(
+            "signaling_periods",
             Duration::from_secs(60),
             &[],
         );
-    let price_history_cache = cb
-        .cache::<(), Vec<types::PricePoint>>(
-            Duration::from_secs(3600),
-            &[],
-        );
-    let range_summary_cache = cb
-        .cache::<(u64, u64), types::RangeSummary>(
-            Duration::from_secs(60),
-            &[CacheTag::OnNewBlock],
-        );
+    let price_history_cache = cb.cache::<(), Vec<types::PricePoint>>(
+        "price_history",
+        Duration::from_secs(3600),
+        &[],
+    );
+    let range_summary_cache = cb.cache::<(u64, u64), types::RangeSummary>(
+        "range_summary",
+        Duration::from_secs(60),
+        &[CacheTag::OnNewBlock],
+    );
     let extremes_cache = cb.cache::<(u64, u64), types::ExtremesData>(
+        "extremes",
         Duration::from_secs(60),
         &[CacheTag::OnNewBlock],
     );

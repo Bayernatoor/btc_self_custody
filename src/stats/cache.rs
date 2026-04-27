@@ -28,6 +28,7 @@
 use std::collections::HashMap;
 use std::future::Future;
 use std::hash::Hash;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -45,13 +46,40 @@ pub enum CacheTag {
     OnPriceRefresh,
 }
 
-/// Object-safe trait so the registry can hold `Arc<dyn CacheInvalidate>`
-/// across heterogeneous `Cache<K, V>` types. Per-key invalidation is
-/// not exposed here because the registry path is always full-clear; if
-/// a future caller needs targeted clears it should hold an
-/// `Arc<Cache<K, V>>` directly and call `invalidate_key`.
-pub trait CacheInvalidate: Send + Sync {
+/// Snapshot of a cache's runtime metrics. Used by the
+/// `/api/stats/cache-stats` handler to surface per-cache observability.
+#[derive(Clone, Copy, Debug)]
+pub struct CacheStats {
+    /// Stable identifier (matches the `name` passed at construction).
+    pub name: &'static str,
+    /// Current entry count.
+    pub size: usize,
+    /// Total successful reads served from the cache.
+    pub hits: u64,
+    /// Total reads that triggered a fetch.
+    pub misses: u64,
+}
+
+impl CacheStats {
+    pub fn hit_rate(&self) -> f64 {
+        let total = self.hits + self.misses;
+        if total == 0 {
+            0.0
+        } else {
+            self.hits as f64 / total as f64
+        }
+    }
+}
+
+/// Object-safe trait so the registry can hold heterogeneous `Cache<K, V>`
+/// instances behind `Arc<dyn CacheCell>`. Covers both invalidation
+/// (full-clear by tag) and observability (size + hit/miss counters).
+/// Per-key invalidation is not on the trait because the registry path
+/// is always full-clear; callers who need targeted clears hold the
+/// concrete `Arc<Cache<K, V>>` and call `invalidate_key`.
+pub trait CacheCell: Send + Sync {
     fn invalidate(&self);
+    fn stats(&self) -> CacheStats;
 }
 
 /// In-memory cache with TTL and tag-based invalidation.
@@ -69,9 +97,12 @@ pub trait CacheInvalidate: Send + Sync {
 /// whichever finishes second overwrites. Acceptable at current traffic;
 /// A adds proper singleflight.
 pub struct Cache<K, V> {
+    name: &'static str,
     inner: Mutex<HashMap<K, (V, Instant)>>,
     ttl: Duration,
     tags: Vec<CacheTag>,
+    hits: AtomicU64,
+    misses: AtomicU64,
 }
 
 impl<K, V> Cache<K, V>
@@ -79,22 +110,26 @@ where
     K: Eq + Hash + Send + Sync + 'static,
     V: Clone + Send + Sync + 'static,
 {
-    /// Construct a cache that expires entries after `ttl`. Use
-    /// `Cache::permanent()` for caches over immutable data
+    /// Construct a cache that expires entries after `ttl`. `name` is a
+    /// stable identifier surfaced in `/api/stats/cache-stats`. Use
+    /// `Cache::permanent(name)` for caches over immutable data
     /// (e.g. block timestamps).
-    pub fn new(ttl: Duration) -> Self {
+    pub fn new(name: &'static str, ttl: Duration) -> Self {
         Self {
+            name,
             inner: Mutex::new(HashMap::new()),
             ttl,
             tags: Vec::new(),
+            hits: AtomicU64::new(0),
+            misses: AtomicU64::new(0),
         }
     }
 
     /// Construct a cache that never expires by TTL. Still respects
     /// explicit `invalidate()` calls. For data that is genuinely
     /// immutable (block hashes, historical timestamps).
-    pub fn permanent() -> Self {
-        Self::new(Duration::MAX)
+    pub fn permanent(name: &'static str) -> Self {
+        Self::new(name, Duration::MAX)
     }
 
     /// Fluent: register an invalidation tag this cache responds to.
@@ -134,11 +169,13 @@ where
             let guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
             if let Some((v, ts)) = guard.get(&key) {
                 if ts.elapsed() < self.ttl {
+                    self.hits.fetch_add(1, Ordering::Relaxed);
                     return Ok(v.clone());
                 }
             }
         }
         // Cache miss or stale. Fetch with the lock RELEASED.
+        self.misses.fetch_add(1, Ordering::Relaxed);
         let fresh = fetcher().await?;
         // A concurrent miss may have filled this entry in the meantime;
         // we just overwrite. A's singleflight will dedupe upstream.
@@ -153,13 +190,19 @@ where
     /// cache access rather than `get_or_compute`'s fetcher pattern.
     pub fn get(&self, key: &K) -> Option<V> {
         let guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        guard.get(key).and_then(|(v, ts)| {
+        let result = guard.get(key).and_then(|(v, ts)| {
             if ts.elapsed() < self.ttl {
                 Some(v.clone())
             } else {
                 None
             }
-        })
+        });
+        if result.is_some() {
+            self.hits.fetch_add(1, Ordering::Relaxed);
+        } else {
+            self.misses.fetch_add(1, Ordering::Relaxed);
+        }
+        result
     }
 
     /// Raw write. Stores or overwrites the entry for `key` with
@@ -176,7 +219,7 @@ where
     }
 }
 
-impl<K, V> CacheInvalidate for Cache<K, V>
+impl<K, V> CacheCell for Cache<K, V>
 where
     K: Send + Sync + 'static,
     V: Send + Sync + 'static,
@@ -185,15 +228,36 @@ where
         let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         guard.clear();
     }
+
+    fn stats(&self) -> CacheStats {
+        let size = self
+            .inner
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .len();
+        CacheStats {
+            name: self.name,
+            size,
+            hits: self.hits.load(Ordering::Relaxed),
+            misses: self.misses.load(Ordering::Relaxed),
+        }
+    }
 }
 
 /// Routes `invalidate(tag)` calls to all caches registered under that
-/// tag. Caches register at construction via `StatsStateBuilder::cache`,
-/// so registration is not optional and a cache cannot ship without an
-/// invalidation contract.
+/// tag, and exposes an enumeration of every registered cache for
+/// observability. Caches register at construction via
+/// `StatsStateBuilder::cache`, so registration is not optional and a
+/// cache cannot ship without an invalidation contract.
+///
+/// `all` is the de-duplicated flat inventory used for stats; the tag
+/// map can hold the same cache under multiple keys (one per tag) and
+/// invoking it twice is harmless (clear is idempotent), but enumerating
+/// it twice in a stats response would be confusing.
 #[derive(Default)]
 pub struct CacheRegistry {
-    subscribers: HashMap<CacheTag, Vec<Arc<dyn CacheInvalidate>>>,
+    subscribers: HashMap<CacheTag, Vec<Arc<dyn CacheCell>>>,
+    all: Vec<Arc<dyn CacheCell>>,
 }
 
 impl CacheRegistry {
@@ -201,14 +265,22 @@ impl CacheRegistry {
         Self::default()
     }
 
+    /// Add a cache to the flat inventory used for stats enumeration.
+    /// Idempotent on identity (same `Arc` is not added twice).
+    /// `addr_eq` (data-pointer comparison) is required because
+    /// `dyn CacheCell` is a fat pointer; `==` on the raw pointers
+    /// would also compare vtables.
+    pub fn register(&mut self, cache: Arc<dyn CacheCell>) {
+        if !self.all.iter().any(|c| {
+            std::ptr::addr_eq(Arc::as_ptr(c), Arc::as_ptr(&cache))
+        }) {
+            self.all.push(cache);
+        }
+    }
+
     /// Subscribe a cache to a tag. The builder calls this once per tag
-    /// the cache was constructed with; direct callers should generally
-    /// go through the builder rather than registering by hand.
-    pub fn subscribe(
-        &mut self,
-        tag: CacheTag,
-        cache: Arc<dyn CacheInvalidate>,
-    ) {
+    /// the cache was constructed with.
+    pub fn subscribe(&mut self, tag: CacheTag, cache: Arc<dyn CacheCell>) {
         self.subscribers.entry(tag).or_default().push(cache);
     }
 
@@ -220,6 +292,12 @@ impl CacheRegistry {
                 sub.invalidate();
             }
         }
+    }
+
+    /// Snapshot every registered cache. Used by the `/cache-stats`
+    /// handler to surface per-cache hit/miss/size to operators.
+    pub fn all_stats(&self) -> Vec<CacheStats> {
+        self.all.iter().map(|c| c.stats()).collect()
     }
 }
 
@@ -251,7 +329,7 @@ mod tests {
     #[tokio::test]
     async fn cold_hit_runs_fetcher_then_caches() {
         let cache: Cache<u32, &'static str> =
-            Cache::new(Duration::from_secs(60));
+            Cache::new("test", Duration::from_secs(60));
         let calls = Arc::new(AtomicUsize::new(0));
 
         let v1 = fetch(&cache, 1, "a", &calls).await;
@@ -265,7 +343,7 @@ mod tests {
     #[tokio::test]
     async fn ttl_expiry_re_runs_fetcher() {
         let cache: Cache<u32, &'static str> =
-            Cache::new(Duration::from_millis(10));
+            Cache::new("test", Duration::from_millis(10));
         let calls = Arc::new(AtomicUsize::new(0));
 
         let _ = fetch(&cache, 1, "a", &calls).await;
@@ -278,7 +356,7 @@ mod tests {
     #[tokio::test]
     async fn different_keys_cache_independently() {
         let cache: Cache<u32, &'static str> =
-            Cache::new(Duration::from_secs(60));
+            Cache::new("test", Duration::from_secs(60));
         let calls = Arc::new(AtomicUsize::new(0));
 
         let _ = fetch(&cache, 1, "a", &calls).await;
@@ -294,7 +372,7 @@ mod tests {
 
     #[tokio::test]
     async fn raw_get_and_insert_for_conditional_caching() {
-        let cache: Cache<u32, &'static str> = Cache::permanent();
+        let cache: Cache<u32, &'static str> = Cache::permanent("test");
 
         assert_eq!(cache.get(&1), None);
         cache.insert(1, "a");
@@ -306,7 +384,7 @@ mod tests {
     #[tokio::test]
     async fn raw_get_respects_ttl() {
         let cache: Cache<u32, &'static str> =
-            Cache::new(Duration::from_millis(10));
+            Cache::new("test", Duration::from_millis(10));
         cache.insert(1, "a");
         assert_eq!(cache.get(&1), Some("a"));
         tokio::time::sleep(Duration::from_millis(25)).await;
@@ -315,7 +393,7 @@ mod tests {
 
     #[tokio::test]
     async fn permanent_cache_does_not_expire() {
-        let cache: Cache<u32, &'static str> = Cache::permanent();
+        let cache: Cache<u32, &'static str> = Cache::permanent("test");
         let calls = Arc::new(AtomicUsize::new(0));
 
         let _ = fetch(&cache, 1, "a", &calls).await;
@@ -329,7 +407,7 @@ mod tests {
     #[tokio::test]
     async fn full_invalidate_clears_entry() {
         let cache: Cache<u32, &'static str> =
-            Cache::new(Duration::from_secs(60));
+            Cache::new("test", Duration::from_secs(60));
         let calls = Arc::new(AtomicUsize::new(0));
 
         let _ = fetch(&cache, 1, "a", &calls).await;
@@ -342,7 +420,7 @@ mod tests {
     #[tokio::test]
     async fn invalidate_key_only_clears_matching() {
         let cache: Cache<u32, &'static str> =
-            Cache::new(Duration::from_secs(60));
+            Cache::new("test", Duration::from_secs(60));
         let calls = Arc::new(AtomicUsize::new(0));
 
         let _ = fetch(&cache, 1, "a", &calls).await;
@@ -370,22 +448,22 @@ mod tests {
     #[tokio::test]
     async fn registry_routes_only_to_tagged_subscribers() {
         let block_cache: Arc<Cache<(), &'static str>> = Arc::new(
-            Cache::new(Duration::from_secs(60))
+            Cache::new("test", Duration::from_secs(60))
                 .invalidated_by(CacheTag::OnNewBlock),
         );
         let price_cache: Arc<Cache<(), &'static str>> = Arc::new(
-            Cache::new(Duration::from_secs(60))
+            Cache::new("test", Duration::from_secs(60))
                 .invalidated_by(CacheTag::OnPriceRefresh),
         );
 
         let mut registry = CacheRegistry::new();
         registry.subscribe(
             CacheTag::OnNewBlock,
-            block_cache.clone() as Arc<dyn CacheInvalidate>,
+            block_cache.clone() as Arc<dyn CacheCell>,
         );
         registry.subscribe(
             CacheTag::OnPriceRefresh,
-            price_cache.clone() as Arc<dyn CacheInvalidate>,
+            price_cache.clone() as Arc<dyn CacheCell>,
         );
 
         let block_calls = Arc::new(AtomicUsize::new(0));
@@ -487,13 +565,13 @@ mod tests {
     #[tokio::test]
     async fn registry_invalidate_unknown_tag_is_noop() {
         let cache: Arc<Cache<(), &'static str>> = Arc::new(
-            Cache::new(Duration::from_secs(60))
+            Cache::new("test", Duration::from_secs(60))
                 .invalidated_by(CacheTag::OnNewBlock),
         );
         let mut registry = CacheRegistry::new();
         registry.subscribe(
             CacheTag::OnNewBlock,
-            cache.clone() as Arc<dyn CacheInvalidate>,
+            cache.clone() as Arc<dyn CacheCell>,
         );
         // OnPriceRefresh has no subscribers; must not panic
         registry.invalidate(CacheTag::OnPriceRefresh);
@@ -502,13 +580,13 @@ mod tests {
     #[tokio::test]
     async fn one_cache_can_subscribe_to_multiple_tags() {
         let cache: Arc<Cache<(), &'static str>> = Arc::new(
-            Cache::new(Duration::from_secs(60))
+            Cache::new("test", Duration::from_secs(60))
                 .invalidated_by(CacheTag::OnNewBlock)
                 .invalidated_by(CacheTag::OnPriceRefresh),
         );
         let mut registry = CacheRegistry::new();
         for tag in cache.tags() {
-            registry.subscribe(*tag, cache.clone() as Arc<dyn CacheInvalidate>);
+            registry.subscribe(*tag, cache.clone() as Arc<dyn CacheCell>);
         }
 
         let calls = Arc::new(AtomicUsize::new(0));
@@ -536,5 +614,73 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(calls.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn stats_track_hits_and_misses() {
+        let cache: Cache<u32, &'static str> =
+            Cache::new("trk", Duration::from_secs(60));
+        let calls = Arc::new(AtomicUsize::new(0));
+
+        // First call: miss + fetch
+        let _ = fetch(&cache, 1, "a", &calls).await;
+        // Second call same key: hit
+        let _ = fetch(&cache, 1, "a", &calls).await;
+        // Different key: miss + fetch
+        let _ = fetch(&cache, 2, "b", &calls).await;
+
+        let s = cache.stats();
+        assert_eq!(s.name, "trk");
+        assert_eq!(s.size, 2);
+        assert_eq!(s.misses, 2);
+        assert_eq!(s.hits, 1);
+        assert!((s.hit_rate() - 1.0 / 3.0).abs() < 1e-6);
+    }
+
+    #[tokio::test]
+    async fn raw_get_increments_hits_and_misses() {
+        let cache: Cache<u32, &'static str> = Cache::permanent("raw");
+        cache.insert(1, "a");
+        let _ = cache.get(&1); // hit
+        let _ = cache.get(&2); // miss
+
+        let s = cache.stats();
+        assert_eq!(s.hits, 1);
+        assert_eq!(s.misses, 1);
+    }
+
+    #[tokio::test]
+    async fn registry_enumerates_all_caches_once() {
+        let a: Arc<Cache<(), &'static str>> = Arc::new(
+            Cache::new("a", Duration::from_secs(60))
+                .invalidated_by(CacheTag::OnNewBlock)
+                .invalidated_by(CacheTag::OnPriceRefresh),
+        );
+        let b: Arc<Cache<(), &'static str>> = Arc::new(
+            Cache::new("b", Duration::from_secs(60))
+                .invalidated_by(CacheTag::OnNewBlock),
+        );
+        let c: Arc<Cache<(), &'static str>> =
+            Arc::new(Cache::permanent("c"));
+
+        let mut registry = CacheRegistry::new();
+        // Mirror what the builder does: each cache registers once for
+        // the flat inventory, then subscribes per-tag.
+        let a_cell: Arc<dyn CacheCell> = a.clone();
+        let b_cell: Arc<dyn CacheCell> = b.clone();
+        let c_cell: Arc<dyn CacheCell> = c.clone();
+        registry.register(a_cell.clone());
+        registry.register(b_cell.clone());
+        registry.register(c_cell.clone());
+        registry.subscribe(CacheTag::OnNewBlock, a_cell.clone());
+        registry.subscribe(CacheTag::OnPriceRefresh, a_cell);
+        registry.subscribe(CacheTag::OnNewBlock, b_cell);
+
+        let names: Vec<_> =
+            registry.all_stats().into_iter().map(|s| s.name).collect();
+        assert_eq!(names.len(), 3, "no duplicates even though `a` has two tags");
+        assert!(names.contains(&"a"));
+        assert!(names.contains(&"b"));
+        assert!(names.contains(&"c"));
     }
 }

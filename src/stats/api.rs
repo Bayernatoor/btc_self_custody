@@ -61,7 +61,7 @@ fn cached_json(
 type CachedResponse =
     ([(header::HeaderName, String); 1], Json<serde_json::Value>);
 
-use super::cache::{Cache, CacheInvalidate, CacheRegistry, CacheTag};
+use super::cache::{Cache, CacheCell, CacheRegistry, CacheTag};
 use super::db::{self, DbPool};
 use super::error::StatsError;
 use super::rpc::{BitcoinRpc, PriceInfo};
@@ -167,10 +167,13 @@ impl StatsStateBuilder {
         Self::default()
     }
 
-    /// Construct a cache, register it under each tag in `tags`, and
-    /// return the `Arc` for the caller to store on `StatsState`.
+    /// Construct a cache, register it under each tag in `tags` (and in
+    /// the flat inventory used for stats), then return the `Arc` for
+    /// the caller to store on `StatsState`. `name` is a stable string
+    /// surfaced in `/api/stats/cache-stats`.
     pub fn cache<K, V>(
         &mut self,
+        name: &'static str,
         ttl: Duration,
         tags: &[CacheTag],
     ) -> Arc<Cache<K, V>>
@@ -178,14 +181,15 @@ impl StatsStateBuilder {
         K: Eq + std::hash::Hash + Send + Sync + 'static,
         V: Clone + Send + Sync + 'static,
     {
-        let mut cache = Cache::new(ttl);
+        let mut cache = Cache::new(name, ttl);
         for &tag in tags {
             cache = cache.invalidated_by(tag);
         }
         let arc = Arc::new(cache);
+        let cell: Arc<dyn CacheCell> = arc.clone();
+        self.registry.register(cell.clone());
         for &tag in tags {
-            self.registry
-                .subscribe(tag, arc.clone() as Arc<dyn CacheInvalidate>);
+            self.registry.subscribe(tag, cell.clone());
         }
         arc
     }
@@ -350,9 +354,31 @@ pub async fn get_cache_stats(
             })
         })
         .collect();
+    // Application-level caches (Cache<K, V> in cache.rs). Reports the
+    // entry count and hit/miss counters captured by the primitive.
+    // Capacity is omitted because B has no bound; A will add a
+    // capacity field once bounded LRU lands.
+    let application: Vec<serde_json::Value> = state
+        .cache_registry
+        .all_stats()
+        .into_iter()
+        .map(|s| {
+            serde_json::json!({
+                "name": s.name,
+                "size": s.size,
+                "hits": s.hits,
+                "misses": s.misses,
+                "hit_rate": (s.hit_rate() * 1000.0).round() / 1000.0,
+            })
+        })
+        .collect();
     // 0s cache on this endpoint — operators need to see current state
     Ok(cached_json(
-        serde_json::json!({ "slots": slots, "blocks": blocks }),
+        serde_json::json!({
+            "slots": slots,
+            "blocks": blocks,
+            "application": application,
+        }),
         0,
     ))
 }

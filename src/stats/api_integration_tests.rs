@@ -68,44 +68,54 @@ impl TestApp {
         use super::types;
         let mut cb = StatsStateBuilder::new();
         let price_cache = cb.cache::<(), super::rpc::PriceInfo>(
+            "price",
             Duration::from_secs(60),
             &[],
         );
-        let utxo_count = cb.cache::<(), u64>(Duration::MAX, &[]);
+        let utxo_count =
+            cb.cache::<(), u64>("utxo_count", Duration::MAX, &[]);
         let stats_summary_cache = cb.cache::<(), types::StatsSummary>(
+            "stats_summary",
             Duration::from_secs(60),
             &[CacheTag::OnNewBlock],
         );
         let daily_cache = cb
             .cache::<(u64, u64), Vec<types::DailyAggregate>>(
+                "daily_aggregates",
                 Duration::from_secs(120),
                 &[CacheTag::OnNewBlock],
             );
-        let block_ts_cache = cb.cache::<u64, u64>(Duration::MAX, &[]);
+        let block_ts_cache = cb.cache::<u64, u64>(
+            "block_timestamps",
+            Duration::MAX,
+            &[],
+        );
         let signaling_blocks_cache = cb.cache::<
             String,
             (Vec<types::SignalingBlock>, types::PeriodStats),
-        >(Duration::from_secs(60), &[]);
+        >("signaling_blocks", Duration::from_secs(60), &[]);
         let signaling_periods_cache = cb
             .cache::<String, Vec<super::db::SignalingPeriod>>(
+                "signaling_periods",
                 Duration::from_secs(60),
                 &[],
             );
-        let price_history_cache = cb
-            .cache::<(), Vec<types::PricePoint>>(
-                Duration::from_secs(3600),
-                &[],
-            );
+        let price_history_cache = cb.cache::<(), Vec<types::PricePoint>>(
+            "price_history",
+            Duration::from_secs(3600),
+            &[],
+        );
         let range_summary_cache = cb
             .cache::<(u64, u64), types::RangeSummary>(
+                "range_summary",
                 Duration::from_secs(60),
                 &[CacheTag::OnNewBlock],
             );
-        let extremes_cache = cb
-            .cache::<(u64, u64), types::ExtremesData>(
-                Duration::from_secs(60),
-                &[CacheTag::OnNewBlock],
-            );
+        let extremes_cache = cb.cache::<(u64, u64), types::ExtremesData>(
+            "extremes",
+            Duration::from_secs(60),
+            &[CacheTag::OnNewBlock],
+        );
 
         let state = Arc::new(StatsState {
             db: pool,
@@ -355,6 +365,40 @@ async fn cache_stats_cold_start_reports_zero_counters() {
         assert_eq!(slot["misses"], 0);
         assert_eq!(slot["size"], 0);
         assert!(slot["capacity"].as_u64().unwrap() > 0);
+    }
+
+    // Application caches: every Cache<K, V> built through the builder
+    // shows up by name with zeroed counters until something exercises
+    // it. Keeping this list in sync with the production builder is the
+    // contract that catches "added a cache, forgot to surface it" bugs.
+    let application = body["application"]
+        .as_array()
+        .expect("application is array");
+    let names: Vec<_> = application
+        .iter()
+        .filter_map(|c| c["name"].as_str())
+        .collect();
+    for expected in [
+        "price",
+        "utxo_count",
+        "stats_summary",
+        "daily_aggregates",
+        "block_timestamps",
+        "signaling_blocks",
+        "signaling_periods",
+        "price_history",
+        "range_summary",
+        "extremes",
+    ] {
+        assert!(
+            names.contains(&expected),
+            "missing application cache `{expected}` in /cache-stats"
+        );
+    }
+    for c in application {
+        assert_eq!(c["hits"], 0);
+        assert_eq!(c["misses"], 0);
+        assert_eq!(c["size"], 0);
     }
 }
 
