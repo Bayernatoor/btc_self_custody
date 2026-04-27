@@ -344,6 +344,113 @@ pub async fn backfill_extras(rpc: &BitcoinRpc, pool: &DbPool) {
     );
 }
 
+/// Background: detect and refill missing block heights below tip.
+///
+/// Forward-ingestion can leave gaps when the node is unreachable mid
+/// chain-advance. None of the existing backfill paths see this:
+/// `backfill_extras` only re-fetches rows whose `backfill_version` is
+/// stale (the gap rows have no row at all); `backfill_backwards` walks
+/// contiguously from `min_height` so it never reaches gaps near tip;
+/// the 15s poller compares `max(stored) + 1` to current tip and does
+/// nothing when those match even if intermediate heights are missing.
+///
+/// Cheap O(1) `count_missing_heights` runs first; the recursive CTE
+/// only fires when there's actually something to find. Each cycle
+/// fills up to `DB_BATCH_SIZE` blocks; the periodic task that calls
+/// this re-runs on its configured cadence to drain the rest.
+pub async fn backfill_gaps(rpc: &BitcoinRpc, pool: &DbPool) {
+    let missing_count = {
+        let conn = match pool.get() {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!("backfill_gaps: DB pool error: {e}");
+                return;
+            }
+        };
+        db::count_missing_heights(&conn).unwrap_or(0)
+    };
+
+    if missing_count == 0 {
+        return;
+    }
+
+    tracing::info!(
+        "backfill_gaps: {missing_count} missing height(s) below tip"
+    );
+    let started = Instant::now();
+    let mut total_filled = 0u64;
+    let mut total_failed = 0u64;
+
+    loop {
+        let heights = {
+            let conn = match pool.get() {
+                Ok(c) => c,
+                Err(e) => {
+                    tracing::warn!("backfill_gaps: DB pool error: {e}");
+                    return;
+                }
+            };
+            db::find_missing_heights(&conn, DB_BATCH_SIZE as u64)
+                .unwrap_or_default()
+        };
+
+        if heights.is_empty() {
+            break;
+        }
+
+        let results: Vec<Result<Block, _>> =
+            stream::iter(heights.iter().copied())
+                .map(|h| async move { rpc.fetch_block_by_height(h).await })
+                .buffer_unordered(concurrency())
+                .collect()
+                .await;
+
+        let mut blocks = Vec::with_capacity(results.len());
+        for result in results {
+            match result {
+                Ok(b) => blocks.push(b),
+                Err(e) => {
+                    tracing::warn!("backfill_gaps fetch error: {e}");
+                    total_failed += 1;
+                }
+            }
+        }
+
+        if blocks.is_empty() {
+            // All RPCs in this batch failed. Bail out of this cycle so
+            // we don't tight-loop on a sustained RPC outage; the
+            // periodic task will retry on its next tick.
+            break;
+        }
+
+        {
+            let conn = match pool.get() {
+                Ok(c) => c,
+                Err(e) => {
+                    tracing::error!("backfill_gaps: DB pool error: {e}");
+                    return;
+                }
+            };
+            if let Err(e) = db::insert_blocks(&conn, &blocks) {
+                tracing::error!("backfill_gaps DB error: {e}");
+                return;
+            }
+        }
+        total_filled += blocks.len() as u64;
+    }
+
+    if total_failed > 0 {
+        tracing::warn!(
+            "backfill_gaps: {total_filled} filled, {total_failed} failed (will retry next cycle)"
+        );
+    } else {
+        tracing::info!(
+            "backfill_gaps: filled {total_filled} block(s) in {:.1}s",
+            started.elapsed().as_secs_f64()
+        );
+    }
+}
+
 /// Background: ingest blocks before current min_height down to genesis.
 pub async fn backfill_backwards(rpc: &BitcoinRpc, pool: &DbPool) {
     // Wait a bit for forward ingestion and extras backfill to settle

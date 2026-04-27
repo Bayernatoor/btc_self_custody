@@ -568,6 +568,43 @@ pub fn heights_needing_backfill(
     rows.collect()
 }
 
+/// O(1) gating check: how many heights in [MIN(height), MAX(height)]
+/// have no row in `blocks`. Cheap because it's just a row count.
+/// Pair with `find_missing_heights` to enumerate them only when this
+/// returns non-zero.
+pub fn count_missing_heights(conn: &Connection) -> rusqlite::Result<u64> {
+    conn.query_row(
+        "SELECT IFNULL(MAX(height) - MIN(height) + 1 - COUNT(*), 0) \
+         FROM blocks",
+        [],
+        |row| row.get::<_, i64>(0).map(|n| n.max(0) as u64),
+    )
+}
+
+/// Up to `limit` heights between 0 and MAX(height) that have no row
+/// in `blocks`, in ascending order. Recursive CTE walks the range
+/// once and anti-joins against the `blocks` table; cheap on a few-
+/// hundred-thousand-row table. Used by `ingest::backfill_gaps` to
+/// fill forward-ingestion misses that the version-based and
+/// contiguous-from-min backfill paths don't see.
+pub fn find_missing_heights(
+    conn: &Connection,
+    limit: u64,
+) -> rusqlite::Result<Vec<u64>> {
+    let mut stmt = conn.prepare(
+        "WITH RECURSIVE r(n) AS (\
+            SELECT 0 \
+            UNION ALL \
+            SELECT n + 1 FROM r WHERE n < (SELECT MAX(height) FROM blocks)\
+         ) \
+         SELECT n FROM r WHERE n NOT IN (SELECT height FROM blocks) \
+         ORDER BY n LIMIT ?1",
+    )?;
+    let rows = stmt
+        .query_map(params![limit], |row| row.get::<_, i64>(0).map(|n| n as u64))?;
+    rows.collect()
+}
+
 /// Re-write all computed columns for existing blocks and bump their
 /// backfill_version to BACKFILL_VERSION. Used by the extras backfill task.
 pub fn update_block_extras(
@@ -3085,5 +3122,66 @@ mod tests {
             query_daily_aggregates_fast(&conn, 0, 9_999_999_999).unwrap();
         assert_eq!(rows[0].block_count, 2);
         assert_eq!(rows[0].total_fees, 6000); // 1000 + 5000
+    }
+
+    /// Insert just enough columns to satisfy NOT NULL constraints; the
+    /// missing-heights queries care only about presence and `height`.
+    fn seed_height(conn: &Connection, h: u64) {
+        conn.execute(
+            "INSERT INTO blocks \
+             (height, hash, timestamp, tx_count, size, weight, difficulty) \
+             VALUES (?1, ?2, 0, 0, 0, 0, 0.0)",
+            params![h, format!("h{:016x}", h)],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn count_missing_heights_zero_when_contiguous() {
+        let conn = setup_db();
+        for h in 100..=110u64 {
+            seed_height(&conn, h);
+        }
+        assert_eq!(count_missing_heights(&conn).unwrap(), 0);
+    }
+
+    #[test]
+    fn count_missing_heights_zero_when_table_empty() {
+        let conn = setup_db();
+        assert_eq!(count_missing_heights(&conn).unwrap(), 0);
+    }
+
+    #[test]
+    fn count_and_find_missing_heights_with_gaps() {
+        let conn = setup_db();
+        // [100, 101, _, _, 104, _, 106] — 3 missing inside [min, max].
+        // count_missing_heights is anchored on MIN(height), so it
+        // reports only the in-range gaps (3), not the 0..=99 pre-min
+        // gap.
+        for h in [100u64, 101, 104, 106] {
+            seed_height(&conn, h);
+        }
+        assert_eq!(count_missing_heights(&conn).unwrap(), 3);
+
+        // find_missing_heights walks from 0, so we need a limit large
+        // enough that the mid-range gaps survive the cutoff. Filter to
+        // the ones above min for the assertion since those are the
+        // ones the helper exists to surface (forward-ingestion misses
+        // near tip).
+        let missing = find_missing_heights(&conn, 1000).unwrap();
+        let mid_range_missing: Vec<u64> =
+            missing.into_iter().filter(|&h| h > 100).collect();
+        assert_eq!(mid_range_missing, vec![102, 103, 105]);
+    }
+
+    #[test]
+    fn find_missing_heights_respects_limit() {
+        let conn = setup_db();
+        seed_height(&conn, 100);
+        seed_height(&conn, 110); // 9 missing in [100, 110]
+        let missing = find_missing_heights(&conn, 3).unwrap();
+        assert_eq!(missing.len(), 3, "limit caps the result");
+        // Returned in ascending order
+        assert!(missing.windows(2).all(|w| w[0] < w[1]));
     }
 }

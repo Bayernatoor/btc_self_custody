@@ -307,6 +307,21 @@ pub fn spawn_background_tasks(
         });
     }
 
+    // Periodic gap-detection: re-fills missing heights below tip that
+    // forward-ingestion can leave when the node is unreachable mid
+    // chain-advance. Runs immediately on startup, then every 5 minutes.
+    // Cheap when there's nothing to do (one O(1) COUNT query).
+    {
+        let state = Arc::clone(&state);
+        tokio::spawn(async move {
+            loop {
+                ingest::backfill_gaps(&state.rpc, &state.db).await;
+                tokio::time::sleep(std::time::Duration::from_secs(300))
+                    .await;
+            }
+        });
+    }
+
     // Seed mempool_txs table with current mempool (getrawmempool verbose).
     // ZMQ only sends NEW txs, so without this, the table is empty after
     // restart and the SSE history has no bricks to show.
