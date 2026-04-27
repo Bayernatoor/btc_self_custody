@@ -18,6 +18,14 @@ path = "src/lib.rs"
 path = "src/main.rs"
 name = "we_hodl_btc"
 
+# One-shot maintenance utility. Skipped from the WASM build since it
+# imports ssr-only modules (rpc, db, config). Run as
+# `cargo run --bin backfill_missing_heights`.
+[[bin]]
+path = "src/bin/backfill_missing_heights.rs"
+name = "backfill_missing_heights"
+required-features = ["ssr"]
+
 [dependencies]
 axum = { version = "0.8", optional = true }
 console_error_panic_hook = "0.1"
@@ -60,6 +68,10 @@ hydrate = ["leptos/hydrate"]
 ssr = ["dep:axum", "dep:leptos_axum", "dep:tokio", "leptos/ssr", "leptos-use/ssr", "dep:rusqlite", "dep:r2d2", "dep:r2d2_sqlite", "dep:reqwest", "dep:futures", "dep:thiserror", "dep:tracing-subscriber", "dep:zeromq", "dep:sha2", "dep:tower-http"]
 
 [package.metadata.leptos]
+# Required once a second [[bin]] target exists in this crate, so
+# cargo-leptos knows which binary to watch and serve. The other bins
+# are maintenance utilities, not the Leptos server.
+bin-target = "we_hodl_btc"
 output-name = "we_hodl_btc"
 site-root = "target/site"
 site-pkg-dir = "pkg"
