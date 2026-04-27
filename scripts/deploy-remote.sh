@@ -43,30 +43,40 @@ chmod +x "${BIN_PATH}"
 log "Restarting service"
 sudo systemctl restart wehodlbtc
 
-# Give it a moment to either come up cleanly or crash on a port bind / config error
-sleep 3
+# Give systemd a moment to surface an immediate-startup crash
+# (port-bind failure, config error) before we inspect state.
+sleep 5
 
-if ! sudo systemctl is-active wehodlbtc >/dev/null 2>&1; then
-    log "Service failed to start — rolling back"
+rollback() {
+    log "$1 — rolling back"
     rm -f "${BIN_PATH}"
     rm -rf "${SITE_PATH}"
     [ -f "${BIN_PATH}.prev" ] && mv "${BIN_PATH}.prev" "${BIN_PATH}"
     [ -d "${SITE_PATH}.prev" ] && mv "${SITE_PATH}.prev" "${SITE_PATH}"
     sudo systemctl restart wehodlbtc
     die "rolled back to previous release; check: sudo journalctl -u wehodlbtc -n 50"
+}
+
+if ! sudo systemctl is-active wehodlbtc >/dev/null 2>&1; then
+    rollback "Service failed to start"
 fi
 
-# Optional HTTP health check — confirms the app is actually serving, not just running
+# HTTP health check with bounded retry. Server startup is not instant:
+# RPC client init, ZMQ subscribe, mempool seed, and forward-ingestion
+# catch-up all run before /  serves. A single shot gambled against
+# variable startup time; previous deploys flagged a failure when the
+# binary was simply still warming up. Poll up to ~30s before giving up.
 if command -v curl >/dev/null 2>&1; then
-    if ! curl -fsS -o /dev/null -m 10 http://127.0.0.1:8000/; then
-        log "HTTP health check failed — rolling back"
-        rm -f "${BIN_PATH}"
-        rm -rf "${SITE_PATH}"
-        [ -f "${BIN_PATH}.prev" ] && mv "${BIN_PATH}.prev" "${BIN_PATH}"
-        [ -d "${SITE_PATH}.prev" ] && mv "${SITE_PATH}.prev" "${SITE_PATH}"
-        sudo systemctl restart wehodlbtc
-        die "rolled back to previous release; check: sudo journalctl -u wehodlbtc -n 50"
-    fi
+    HEALTHY=0
+    for attempt in $(seq 1 15); do
+        if curl -fsS -o /dev/null -m 5 http://127.0.0.1:8000/; then
+            HEALTHY=1
+            log "Health check passed on attempt ${attempt}"
+            break
+        fi
+        sleep 2
+    done
+    [ "${HEALTHY}" = "1" ] || rollback "HTTP health check failed after retries"
 fi
 
 log "Cleaning up previous release"
