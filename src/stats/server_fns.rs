@@ -285,32 +285,24 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
         }
     };
 
-    // Price cache: 60s TTL is enforced inside Cache; the manual guard
-    // prevents *multiple concurrent* refreshes on miss (the cache
-    // primitive in B has no singleflight). The 90s background refresh
-    // task writes independently.
+    // Price cache: 60s TTL + per-key singleflight inside Cache. The
+    // 90s background refresh task writes independently. On fetch
+    // failure we surface 0.0 since the TTL-evicted cache has nothing
+    // to fall back to; the next background refresh recovers within 90s.
     let price_usd = {
-        use std::sync::atomic::Ordering;
-        let cached = state.price_cache.get(&());
-        let need_refresh = cached.is_none();
-        if need_refresh && !state.price_refreshing.swap(true, Ordering::AcqRel)
-        {
-            let result = match state.rpc.fetch_price().await {
-                Ok(p) => {
-                    let usd = p.usd;
-                    state.price_cache.insert((), p);
-                    usd
-                }
-                Err(e) => {
-                    tracing::warn!("Failed to fetch price: {e}");
-                    state.price_cache.get(&()).map(|p| p.usd).unwrap_or(0.0)
-                }
-            };
-            state.price_refreshing.store(false, Ordering::Release);
-            result
-        } else {
-            cached.map(|p| p.usd).unwrap_or(0.0)
-        }
+        let state_for_price = std::sync::Arc::clone(&state);
+        state
+            .price_cache
+            .clone()
+            .get_or_compute((), move || async move {
+                state_for_price.rpc.fetch_price().await
+            })
+            .await
+            .map(|p| p.usd)
+            .unwrap_or_else(|e| {
+                tracing::warn!("Failed to fetch price: {e}");
+                0.0
+            })
     };
 
     const MAX_SUPPLY: f64 = 21_000_000.0;

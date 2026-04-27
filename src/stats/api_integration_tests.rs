@@ -20,7 +20,7 @@
 //!   endpoints exercise the connection-refused path deterministically,
 //!   DB-backed endpoints are unaffected.
 
-use std::sync::atomic::{AtomicBool, AtomicUsize};
+use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -122,7 +122,6 @@ impl TestApp {
             rpc,
             cache_registry: cb.into_registry(),
             price_cache,
-            price_refreshing: AtomicBool::new(false),
             utxo_count,
             stats_summary_cache,
             daily_cache,

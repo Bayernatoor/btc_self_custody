@@ -82,23 +82,33 @@ pub trait CacheCell: Send + Sync {
     fn stats(&self) -> CacheStats;
 }
 
-/// In-memory cache with TTL and tag-based invalidation.
+/// In-memory cache with TTL, tag-based invalidation, and per-key
+/// singleflight on fetches.
 ///
 /// Multi-key (HashMap-backed): different keys cache independently. Each
 /// entry has its own TTL deadline measured from when it was stored.
 /// `invalidate()` clears all entries; `invalidate_key(k)` clears one.
 ///
+/// **Singleflight on `get_or_compute`.** When N concurrent callers all
+/// see a cache miss for the same key, only one runs the fetcher; the
+/// others wait on a per-key `OnceCell` and observe the same result.
+/// On fetcher error, the slot is dropped so the next caller can retry.
+/// Eliminates thundering-herd to upstream services (mempool.space,
+/// SQLite long queries) when traffic spikes against a cold key.
+///
 /// **Not bounded.** Entries accumulate without LRU eviction. Acceptable
 /// for the current call sites (single-key TTL caches, range-keyed
 /// caches that thrash naturally, and `block_ts_cache` whose worst case
-/// is ~24MB at full chain). The A-era refactor adds bounding.
-///
-/// **No singleflight.** A concurrent miss runs the fetcher twice;
-/// whichever finishes second overwrites. Acceptable at current traffic;
-/// A adds proper singleflight.
+/// is ~24MB at full chain). Bounded LRU is the A.2 follow-up.
 pub struct Cache<K, V> {
     name: &'static str,
     inner: Mutex<HashMap<K, (V, Instant)>>,
+    /// Per-key singleflight slots. A `OnceCell` initializes exactly
+    /// once; concurrent callers all observe the same result. On
+    /// initialization failure the cell stays empty and subsequent
+    /// callers retry. Slots are removed after the value lands in
+    /// `inner` (and the entry is no longer needed).
+    inflight: Mutex<HashMap<K, Arc<tokio::sync::OnceCell<V>>>>,
     ttl: Duration,
     tags: Vec<CacheTag>,
     hits: AtomicU64,
@@ -107,7 +117,7 @@ pub struct Cache<K, V> {
 
 impl<K, V> Cache<K, V>
 where
-    K: Eq + Hash + Send + Sync + 'static,
+    K: Eq + Hash + Clone + Send + Sync + 'static,
     V: Clone + Send + Sync + 'static,
 {
     /// Construct a cache that expires entries after `ttl`. `name` is a
@@ -118,6 +128,7 @@ where
         Self {
             name,
             inner: Mutex::new(HashMap::new()),
+            inflight: Mutex::new(HashMap::new()),
             ttl,
             tags: Vec::new(),
             hits: AtomicU64::new(0),
@@ -149,11 +160,16 @@ where
     /// Return cached value for `key` if present and within TTL.
     /// Otherwise run `fetcher`, store the result, and return it.
     ///
+    /// **Singleflight:** if multiple callers hit the same key while a
+    /// fetch is in flight, only one fetcher runs; the others wait on
+    /// a `OnceCell` and observe the same value. On fetcher error the
+    /// cell remains uninitialized and the next caller's fetcher takes
+    /// over (so transient failures don't permanently poison the slot).
+    ///
     /// Generic over the fetcher's error type so each call site keeps
     /// its native error (`StatsError`, `ServerFnError`, etc.) without
-    /// wrapping. The `E: Send + 'static` bound is forward-looking: a
-    /// future singleflight implementation will share an in-flight
-    /// future across tasks, which requires a sendable error type.
+    /// wrapping. `E: Send + 'static` is required because the in-flight
+    /// future is shared across tasks via `OnceCell`.
     pub async fn get_or_compute<F, Fut, E>(
         &self,
         key: K,
@@ -164,7 +180,7 @@ where
         Fut: Future<Output = Result<V, E>>,
         E: Send + 'static,
     {
-        // Read fast path. Lock is dropped before the await below.
+        // Read fast path. Lock is dropped before any await below.
         {
             let guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
             if let Some((v, ts)) = guard.get(&key) {
@@ -174,14 +190,47 @@ where
                 }
             }
         }
-        // Cache miss or stale. Fetch with the lock RELEASED.
         self.misses.fetch_add(1, Ordering::Relaxed);
-        let fresh = fetcher().await?;
-        // A concurrent miss may have filled this entry in the meantime;
-        // we just overwrite. A's singleflight will dedupe upstream.
-        let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        guard.insert(key, (fresh.clone(), Instant::now()));
-        Ok(fresh)
+
+        // Singleflight: get-or-create the per-key slot. The first
+        // caller's fetcher runs; concurrent callers' fetchers are
+        // dropped without running (the OnceCell observes the first
+        // initialization).
+        let slot: Arc<tokio::sync::OnceCell<V>> = {
+            let mut inflight =
+                self.inflight.lock().unwrap_or_else(|e| e.into_inner());
+            inflight
+                .entry(key.clone())
+                .or_insert_with(|| Arc::new(tokio::sync::OnceCell::new()))
+                .clone()
+        };
+
+        let result = slot
+            .get_or_try_init(|| async {
+                let fresh = fetcher().await?;
+                let mut guard =
+                    self.inner.lock().unwrap_or_else(|e| e.into_inner());
+                guard.insert(key.clone(), (fresh.clone(), Instant::now()));
+                Ok::<V, E>(fresh)
+            })
+            .await
+            .cloned();
+
+        // Remove the slot now that the value (or error) has been
+        // observed. A subsequent caller will create a fresh slot.
+        // Compare data pointers (dyn-fat-pointer-safe via addr_eq)
+        // to avoid removing a different slot installed after ours.
+        {
+            let mut inflight =
+                self.inflight.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(current) = inflight.get(&key) {
+                if Arc::ptr_eq(current, &slot) {
+                    inflight.remove(&key);
+                }
+            }
+        }
+
+        result
     }
 
     /// Raw read. Returns the cached value for `key` if present and
@@ -682,5 +731,118 @@ mod tests {
         assert!(names.contains(&"a"));
         assert!(names.contains(&"b"));
         assert!(names.contains(&"c"));
+    }
+
+    /// Headline singleflight test: many concurrent callers hitting the
+    /// same key on a cold cache should share one fetcher invocation.
+    /// This is the contract that lets us delete the manual AtomicBool
+    /// guard around the price cache and have the same protection
+    /// extend to every other cache automatically.
+    #[tokio::test]
+    async fn singleflight_dedups_concurrent_missers() {
+        let cache: Arc<Cache<u32, &'static str>> = Arc::new(Cache::new(
+            "sf",
+            Duration::from_secs(60),
+        ));
+        let calls = Arc::new(AtomicUsize::new(0));
+
+        // Fire 50 concurrent get_or_compute calls for the SAME key. The
+        // fetcher pauses briefly to ensure all callers race the cold
+        // path before the first one finishes; with singleflight, only
+        // the first registers the fetcher and the rest wait on the
+        // OnceCell.
+        let mut handles = Vec::with_capacity(50);
+        for _ in 0..50 {
+            let cache = cache.clone();
+            let calls = calls.clone();
+            handles.push(tokio::spawn(async move {
+                cache
+                    .get_or_compute(1u32, || async move {
+                        calls.fetch_add(1, Ordering::SeqCst);
+                        // Just enough delay for other tasks to enqueue.
+                        tokio::time::sleep(Duration::from_millis(20)).await;
+                        Ok::<_, std::convert::Infallible>("v")
+                    })
+                    .await
+                    .unwrap()
+            }));
+        }
+        for h in handles {
+            assert_eq!(h.await.unwrap(), "v");
+        }
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            1,
+            "fetcher must run exactly once across 50 concurrent missers"
+        );
+    }
+
+    /// Singleflight on errors must NOT permanently poison the slot:
+    /// after a failed fetch, the next caller's fetcher takes over.
+    #[tokio::test]
+    async fn singleflight_retries_after_fetcher_error() {
+        let cache: Arc<Cache<u32, &'static str>> = Arc::new(Cache::new(
+            "sf-err",
+            Duration::from_secs(60),
+        ));
+        let attempts = Arc::new(AtomicUsize::new(0));
+
+        // First call: fetcher fails.
+        let res1: Result<&'static str, &'static str> = cache
+            .get_or_compute(1u32, {
+                let attempts = attempts.clone();
+                || async move {
+                    attempts.fetch_add(1, Ordering::SeqCst);
+                    Err("boom")
+                }
+            })
+            .await;
+        assert!(res1.is_err());
+
+        // Second call: a fresh fetcher runs and succeeds.
+        let res2: Result<&'static str, &'static str> = cache
+            .get_or_compute(1u32, {
+                let attempts = attempts.clone();
+                || async move {
+                    attempts.fetch_add(1, Ordering::SeqCst);
+                    Ok("v")
+                }
+            })
+            .await;
+        assert_eq!(res2.unwrap(), "v");
+        assert_eq!(attempts.load(Ordering::SeqCst), 2);
+    }
+
+    /// Different keys never share a singleflight slot.
+    #[tokio::test]
+    async fn singleflight_does_not_collapse_distinct_keys() {
+        let cache: Arc<Cache<u32, &'static str>> = Arc::new(Cache::new(
+            "sf-keys",
+            Duration::from_secs(60),
+        ));
+        let calls = Arc::new(AtomicUsize::new(0));
+
+        let mut handles = Vec::with_capacity(10);
+        for k in 0..10u32 {
+            let cache = cache.clone();
+            let calls = calls.clone();
+            handles.push(tokio::spawn(async move {
+                cache
+                    .get_or_compute(k, || async move {
+                        calls.fetch_add(1, Ordering::SeqCst);
+                        Ok::<_, std::convert::Infallible>("v")
+                    })
+                    .await
+                    .unwrap()
+            }));
+        }
+        for h in handles {
+            let _ = h.await;
+        }
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            10,
+            "each distinct key gets its own fetcher invocation"
+        );
     }
 }

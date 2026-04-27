@@ -33,7 +33,7 @@
 //! `AtomicUsize` counter with an RAII guard that decrements on drop.
 
 use std::convert::Infallible;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -86,13 +86,10 @@ pub struct StatsState {
     pub cache_registry: CacheRegistry,
     /// Latest BTC/USD price. 60s TTL. Background task at startup.rs
     /// refreshes every 90s; no invalidation tag because the refresh
-    /// task owns the freshness contract.
+    /// task owns the freshness contract. Singleflight is handled by
+    /// `Cache::get_or_compute` so concurrent readers on cold cache
+    /// share one upstream HTTP request.
     pub price_cache: Arc<Cache<(), PriceInfo>>,
-    /// Guard: prevents multiple concurrent reader-driven price refreshes
-    /// when the cache is stale. The 90s background refresh writes
-    /// independently. Stays manual in B because the cache primitive
-    /// has no singleflight yet; A folds this into Cache itself.
-    pub price_refreshing: AtomicBool,
     /// UTXO set size. Background task at startup.rs overwrites every
     /// 10 minutes; readers do not refresh on miss (return 0 instead).
     /// `permanent` because TTL doesn't apply, the background task is
@@ -178,7 +175,7 @@ impl StatsStateBuilder {
         tags: &[CacheTag],
     ) -> Arc<Cache<K, V>>
     where
-        K: Eq + std::hash::Hash + Send + Sync + 'static,
+        K: Eq + std::hash::Hash + Clone + Send + Sync + 'static,
         V: Clone + Send + Sync + 'static,
     {
         let mut cache = Cache::new(name, ttl);
@@ -469,35 +466,30 @@ pub async fn get_live(
     });
     stale |= f_stale;
 
-    // Price cache: 60s TTL is enforced inside Cache; the manual guard
-    // prevents *multiple concurrent* refreshes on miss (the cache
-    // primitive in B has no singleflight). The 90s background task
-    // also refreshes independently.
+    // Price cache: 60s TTL + per-key singleflight inside Cache.
+    // Concurrent missers all wait on the same fetch, so only one HTTP
+    // call to mempool.space goes out per stale window. The 90s
+    // background task refreshes independently. On fetch failure we
+    // surface 0.0 (caller treats price=0 as unavailable); the cache
+    // has already TTL-evicted, so no stale fallback. Mempool.space
+    // outages are rare and the next background refresh recovers
+    // within 90s.
     let t_price_start = Instant::now();
-    let mut price_did_fetch = false;
-    let price_usd = {
-        let cached = state.price_cache.get(&());
-        let need_refresh = cached.is_none();
-        if need_refresh && !state.price_refreshing.swap(true, Ordering::AcqRel)
-        {
-            price_did_fetch = true;
-            let result = match state.rpc.fetch_price().await {
-                Ok(p) => {
-                    let usd = p.usd;
-                    state.price_cache.insert((), p);
-                    usd
-                }
-                Err(e) => {
-                    tracing::warn!("Failed to fetch price: {e}");
-                    state.price_cache.get(&()).map(|p| p.usd).unwrap_or(0.0)
-                }
-            };
-            state.price_refreshing.store(false, Ordering::Release);
-            result
-        } else {
-            cached.map(|p| p.usd).unwrap_or(0.0)
-        }
-    };
+    let cache_was_warm = state.price_cache.get(&()).is_some();
+    let state_for_price = Arc::clone(&state);
+    let price_usd = state
+        .price_cache
+        .clone()
+        .get_or_compute((), move || async move {
+            state_for_price.rpc.fetch_price().await
+        })
+        .await
+        .map(|p| p.usd)
+        .unwrap_or_else(|e| {
+            tracing::warn!("Failed to fetch price: {e}");
+            0.0
+        });
+    let price_did_fetch = !cache_was_warm;
     let t_price = if price_did_fetch {
         t_price_start.elapsed()
     } else {
