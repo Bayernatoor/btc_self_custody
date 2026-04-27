@@ -20,7 +20,7 @@
 
 use axum::routing::get;
 use axum::Router;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tokio::sync::broadcast;
 
 use super::api::{self, StatsState};
@@ -64,36 +64,67 @@ pub async fn init(
     // Broadcast channel for heartbeat events (ZMQ → SSE). 4096 buffer handles bursts.
     let (heartbeat_tx, _) = broadcast::channel(4096);
 
-    // Build the cache layer through StatsStateBuilder so registration
-    // with the invalidation registry happens automatically. Caches not
-    // yet migrated still construct manually below; they keep their
-    // entries in the .take() invalidation block until they migrate too.
+    // Every cache built through StatsStateBuilder is auto-registered
+    // with the invalidation registry under each provided tag. Adding
+    // a new cache is one line; the wiring cannot be forgotten.
+    use std::time::Duration;
+    use super::cache::CacheTag;
+    use super::types;
     let mut cb = super::api::StatsStateBuilder::new();
-    let stats_summary_cache = cb
-        .cache::<(), super::types::StatsSummary>(
-            std::time::Duration::from_secs(60),
-            &[super::cache::CacheTag::OnNewBlock],
-        );
-    let block_ts_cache = cb.cache::<u64, u64>(
-        std::time::Duration::MAX, // immutable: timestamps don't change
+    let price_cache = cb.cache::<(), super::rpc::PriceInfo>(
+        Duration::from_secs(60),
         &[],
+    );
+    let utxo_count = cb.cache::<(), u64>(Duration::MAX, &[]);
+    let stats_summary_cache = cb.cache::<(), types::StatsSummary>(
+        Duration::from_secs(60),
+        &[CacheTag::OnNewBlock],
+    );
+    let daily_cache = cb.cache::<(u64, u64), Vec<types::DailyAggregate>>(
+        Duration::from_secs(120),
+        &[CacheTag::OnNewBlock],
+    );
+    let block_ts_cache = cb.cache::<u64, u64>(Duration::MAX, &[]);
+    let signaling_blocks_cache = cb
+        .cache::<String, (Vec<types::SignalingBlock>, types::PeriodStats)>(
+            Duration::from_secs(60),
+            &[],
+        );
+    let signaling_periods_cache = cb
+        .cache::<String, Vec<super::db::SignalingPeriod>>(
+            Duration::from_secs(60),
+            &[],
+        );
+    let price_history_cache = cb
+        .cache::<(), Vec<types::PricePoint>>(
+            Duration::from_secs(3600),
+            &[],
+        );
+    let range_summary_cache = cb
+        .cache::<(u64, u64), types::RangeSummary>(
+            Duration::from_secs(60),
+            &[CacheTag::OnNewBlock],
+        );
+    let extremes_cache = cb.cache::<(u64, u64), types::ExtremesData>(
+        Duration::from_secs(60),
+        &[CacheTag::OnNewBlock],
     );
 
     let state = Arc::new(StatsState {
         db: pool,
         rpc,
         cache_registry: cb.into_registry(),
-        price_cache: Mutex::new(None),
+        price_cache,
         price_refreshing: std::sync::atomic::AtomicBool::new(false),
-        utxo_count: Mutex::new(None),
+        utxo_count,
         stats_summary_cache,
-        daily_cache: Mutex::new(None),
+        daily_cache,
         block_ts_cache,
-        signaling_blocks_cache: Mutex::new(None),
-        signaling_periods_cache: Mutex::new(None),
-        price_history_cache: Mutex::new(None),
-        range_summary_cache: Mutex::new(None),
-        extremes_cache: Mutex::new(None),
+        signaling_blocks_cache,
+        signaling_periods_cache,
+        price_history_cache,
+        range_summary_cache,
+        extremes_cache,
         heartbeat_tx,
         sse_connections: std::sync::atomic::AtomicUsize::new(0),
     });
@@ -151,34 +182,18 @@ pub fn spawn_background_tasks(
                 return;
             }
             tracing::info!("Pre-warming caches for ALL range...");
-            // Warm extremes cache
             if let Ok(conn) = state.db.get() {
                 if let Ok(extremes) =
                     db::query_extremes_with_heights(&conn, from_ts, to_ts)
                 {
-                    *state
-                        .extremes_cache
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner()) = Some((
-                        from_ts,
-                        to_ts,
-                        extremes,
-                        std::time::Instant::now(),
-                    ));
+                    state.extremes_cache.insert((from_ts, to_ts), extremes);
                 }
-                // Warm range summary cache
                 if let Ok(summary) =
                     db::query_range_summary(&conn, from_ts, to_ts)
                 {
-                    *state
+                    state
                         .range_summary_cache
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner()) = Some((
-                        from_ts,
-                        to_ts,
-                        summary,
-                        std::time::Instant::now(),
-                    ));
+                        .insert((from_ts, to_ts), summary);
                 }
                 tracing::info!("Cache pre-warm complete");
             }
@@ -191,9 +206,7 @@ pub fn spawn_background_tasks(
         tokio::spawn(async move {
             loop {
                 match state.rpc.get_txout_set_info().await {
-                    Ok(info) => {
-                        *state.utxo_count.lock().unwrap() = Some(info.txouts)
-                    }
+                    Ok(info) => state.utxo_count.insert((), info.txouts),
                     Err(e) => tracing::warn!("UTXO refresh failed: {e}"),
                 }
                 tokio::time::sleep(std::time::Duration::from_secs(600)).await;
@@ -215,24 +228,14 @@ pub fn spawn_background_tasks(
                         "Price cache initialized: ${:.2}",
                         price.usd
                     );
-                    *state
-                        .price_cache
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner()) =
-                        Some((price, std::time::Instant::now()));
+                    state.price_cache.insert((), price);
                 }
                 Err(e) => tracing::warn!("Initial price fetch failed: {e}"),
             }
             loop {
                 tokio::time::sleep(std::time::Duration::from_secs(90)).await;
                 match state.rpc.fetch_price().await {
-                    Ok(price) => {
-                        *state
-                            .price_cache
-                            .lock()
-                            .unwrap_or_else(|e| e.into_inner()) =
-                            Some((price, std::time::Instant::now()));
-                    }
+                    Ok(price) => state.price_cache.insert((), price),
                     Err(e) => tracing::debug!("Price refresh failed: {e}"),
                 }
             }
@@ -276,25 +279,10 @@ pub fn spawn_background_tasks(
                     .unwrap_or(0);
                 if new_height > last_height {
                     last_height = new_height;
-                    // Migrated caches: registry handles fan-out by tag.
+                    // All caches that depend on chain tip subscribe to
+                    // OnNewBlock at construction (see startup builder
+                    // above); the registry fans this out.
                     state.invalidate(super::cache::CacheTag::OnNewBlock);
-                    // Not-yet-migrated caches: still hand-rolled .take().
-                    // Each line moves to the registry as PR 3 migrates them.
-                    state
-                        .range_summary_cache
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner())
-                        .take();
-                    state
-                        .extremes_cache
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner())
-                        .take();
-                    state
-                        .daily_cache
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner())
-                        .take();
                     // Update today's pre-computed daily aggregate
                     if let Ok(conn) = state.db.get() {
                         let today = db::timestamp_to_date(

@@ -346,13 +346,8 @@ async fn subscribe_tx_and_sequence(
         };
 
         // Get cached price once for all USD-based detections
-        let price_usd = state
-            .price_cache
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .as_ref()
-            .map(|(p, _)| p.usd)
-            .unwrap_or(0.0);
+        let price_usd =
+            state.price_cache.get(&()).map(|p| p.usd).unwrap_or(0.0);
 
         // Classify this tx. The returned flags expose every category
         // directly so the SSE broadcast doesn't have to re-run the threshold

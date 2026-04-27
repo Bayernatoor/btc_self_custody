@@ -21,7 +21,8 @@
 //!   DB-backed endpoints are unaffected.
 
 use std::sync::atomic::{AtomicBool, AtomicUsize};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use std::time::Duration;
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
@@ -35,7 +36,6 @@ use super::cache::CacheTag;
 use super::db::{self, DbPool};
 use super::rpc::BitcoinRpc;
 use super::startup::build_api_router;
-use std::time::Duration;
 
 struct TestApp {
     router: Router,
@@ -62,30 +62,66 @@ impl TestApp {
 
         let (heartbeat_tx, _) = broadcast::channel(64);
 
+        // Mirror the production cache layer constructed in startup.rs.
+        // Same builder, same tags; if the production list grows or shifts,
+        // mirror it here to keep tests honest.
+        use super::types;
         let mut cb = StatsStateBuilder::new();
-        let stats_summary_cache = cb
-            .cache::<(), super::types::StatsSummary>(
+        let price_cache = cb.cache::<(), super::rpc::PriceInfo>(
+            Duration::from_secs(60),
+            &[],
+        );
+        let utxo_count = cb.cache::<(), u64>(Duration::MAX, &[]);
+        let stats_summary_cache = cb.cache::<(), types::StatsSummary>(
+            Duration::from_secs(60),
+            &[CacheTag::OnNewBlock],
+        );
+        let daily_cache = cb
+            .cache::<(u64, u64), Vec<types::DailyAggregate>>(
+                Duration::from_secs(120),
+                &[CacheTag::OnNewBlock],
+            );
+        let block_ts_cache = cb.cache::<u64, u64>(Duration::MAX, &[]);
+        let signaling_blocks_cache = cb.cache::<
+            String,
+            (Vec<types::SignalingBlock>, types::PeriodStats),
+        >(Duration::from_secs(60), &[]);
+        let signaling_periods_cache = cb
+            .cache::<String, Vec<super::db::SignalingPeriod>>(
+                Duration::from_secs(60),
+                &[],
+            );
+        let price_history_cache = cb
+            .cache::<(), Vec<types::PricePoint>>(
+                Duration::from_secs(3600),
+                &[],
+            );
+        let range_summary_cache = cb
+            .cache::<(u64, u64), types::RangeSummary>(
                 Duration::from_secs(60),
                 &[CacheTag::OnNewBlock],
             );
-        let block_ts_cache =
-            cb.cache::<u64, u64>(Duration::MAX, &[]);
+        let extremes_cache = cb
+            .cache::<(u64, u64), types::ExtremesData>(
+                Duration::from_secs(60),
+                &[CacheTag::OnNewBlock],
+            );
 
         let state = Arc::new(StatsState {
             db: pool,
             rpc,
             cache_registry: cb.into_registry(),
-            price_cache: Mutex::new(None),
+            price_cache,
             price_refreshing: AtomicBool::new(false),
-            utxo_count: Mutex::new(None),
+            utxo_count,
             stats_summary_cache,
-            daily_cache: Mutex::new(None),
+            daily_cache,
             block_ts_cache,
-            signaling_blocks_cache: Mutex::new(None),
-            signaling_periods_cache: Mutex::new(None),
-            price_history_cache: Mutex::new(None),
-            range_summary_cache: Mutex::new(None),
-            extremes_cache: Mutex::new(None),
+            signaling_blocks_cache,
+            signaling_periods_cache,
+            price_history_cache,
+            range_summary_cache,
+            extremes_cache,
             heartbeat_tx,
             sse_connections: AtomicUsize::new(0),
         });

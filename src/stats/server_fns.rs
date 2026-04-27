@@ -186,8 +186,6 @@ pub async fn fetch_cumulative_size_before_ts(
 
 #[server(prefix = "/api", endpoint = "stats_live")]
 pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
-    use std::time::Instant;
-
     let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
         leptos_axum::extract()
             .await
@@ -287,42 +285,31 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
         }
     };
 
-    // Price cache: only fetch from mempool.space if cache is >60s old.
-    // Atomic guard prevents multiple concurrent HTTP requests on cache miss.
+    // Price cache: 60s TTL is enforced inside Cache; the manual guard
+    // prevents *multiple concurrent* refreshes on miss (the cache
+    // primitive in B has no singleflight). The 90s background refresh
+    // task writes independently.
     let price_usd = {
         use std::sync::atomic::Ordering;
-        let cached = state
-            .price_cache
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone();
-        let need_refresh = match &cached {
-            Some((_, ts)) => ts.elapsed().as_secs() > 60,
-            None => true,
-        };
+        let cached = state.price_cache.get(&());
+        let need_refresh = cached.is_none();
         if need_refresh && !state.price_refreshing.swap(true, Ordering::AcqRel)
         {
-            // Won the refresh race — fetch and update cache
             let result = match state.rpc.fetch_price().await {
                 Ok(p) => {
                     let usd = p.usd;
-                    *state
-                        .price_cache
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner()) =
-                        Some((p, Instant::now()));
+                    state.price_cache.insert((), p);
                     usd
                 }
                 Err(e) => {
                     tracing::warn!("Failed to fetch price: {e}");
-                    cached.map(|(p, _)| p.usd).unwrap_or(0.0)
+                    state.price_cache.get(&()).map(|p| p.usd).unwrap_or(0.0)
                 }
             };
             state.price_refreshing.store(false, Ordering::Release);
             result
         } else {
-            // Cache hit or another request is already refreshing — use cached value
-            cached.map(|(p, _)| p.usd).unwrap_or(0.0)
+            cached.map(|p| p.usd).unwrap_or(0.0)
         }
     };
 
@@ -338,11 +325,7 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
     };
     let market_cap = price_usd * total_supply;
     let chain_size_gb = blockchain.size_on_disk as f64 / 1_000_000_000.0;
-    let utxo_count = state
-        .utxo_count
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .unwrap_or(0);
+    let utxo_count = state.utxo_count.get(&()).unwrap_or(0);
 
     Ok(LiveStats {
         blockchain: LiveBlockchain {
@@ -416,8 +399,6 @@ pub async fn fetch_daily_aggregates(
     from_ts: u64,
     to_ts: u64,
 ) -> Result<Vec<DailyAggregate>, ServerFnError> {
-    use std::time::Instant;
-
     if from_ts > to_ts {
         return Err(ServerFnError::new("Invalid timestamp range"));
     }
@@ -427,81 +408,76 @@ pub async fn fetch_daily_aggregates(
             .await
             .map_err(|e| internal_err("Stats unavailable", e))?;
 
-    // Return cached result if same range requested within 30s
-    {
-        let cached =
-            state.daily_cache.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some((ref f, ref t, ref data, ref ts)) = *cached {
-            if *f == from_ts && *t == to_ts && ts.elapsed().as_secs() < 120 {
-                return Ok(data.clone());
-            }
-        }
-    }
-
-    let conn = state.db.get().map_err(|e| internal_err("DB pool", e))?;
-    let rows = super::db::query_daily_aggregates_fast(&conn, from_ts, to_ts)
-        .map_err(|e| internal_err("DB query", e))?;
-    let result: Vec<DailyAggregate> = rows
-        .into_iter()
-        .map(|r| DailyAggregate {
-            date: r.date,
-            block_count: r.block_count,
-            avg_size: r.avg_size,
-            avg_weight: r.avg_weight,
-            avg_tx_count: r.avg_tx_count,
-            avg_difficulty: r.avg_difficulty,
-            total_op_return_count: r.total_op_return_count,
-            total_op_return_bytes: r.total_op_return_bytes,
-            total_runes_count: r.total_runes_count,
-            total_runes_bytes: r.total_runes_bytes,
-            total_omni_count: r.total_omni_count,
-            total_omni_bytes: r.total_omni_bytes,
-            total_counterparty_count: r.total_counterparty_count,
-            total_counterparty_bytes: r.total_counterparty_bytes,
-            total_data_carrier_count: r.total_data_carrier_count,
-            total_data_carrier_bytes: r.total_data_carrier_bytes,
-            total_fees: r.total_fees,
-            avg_segwit_spend_count: r.avg_segwit_spend_count,
-            avg_taproot_spend_count: r.avg_taproot_spend_count,
-            avg_p2pk_count: r.avg_p2pk_count,
-            avg_p2pkh_count: r.avg_p2pkh_count,
-            avg_p2sh_count: r.avg_p2sh_count,
-            avg_p2wpkh_count: r.avg_p2wpkh_count,
-            avg_p2wsh_count: r.avg_p2wsh_count,
-            avg_p2tr_count: r.avg_p2tr_count,
-            avg_multisig_count: r.avg_multisig_count,
-            avg_unknown_script_count: r.avg_unknown_script_count,
-            avg_input_count: r.avg_input_count,
-            avg_output_count: r.avg_output_count,
-            avg_rbf_count: r.avg_rbf_count,
-            avg_witness_bytes: r.avg_witness_bytes,
-            avg_inscription_count: r.avg_inscription_count,
-            avg_inscription_bytes: r.avg_inscription_bytes,
-            avg_brc20_count: r.avg_brc20_count,
-            avg_taproot_keypath_count: r.avg_taproot_keypath_count,
-            avg_taproot_scriptpath_count: r.avg_taproot_scriptpath_count,
-            avg_fee_rate_p10: r.avg_fee_rate_p10,
-            avg_fee_rate_p90: r.avg_fee_rate_p90,
-            avg_stamps_count: r.avg_stamps_count,
-            avg_median_fee_rate: r.avg_median_fee_rate,
-            total_output_value: r.total_output_value,
-            total_input_value: r.total_input_value,
-            avg_inscription_envelope_bytes: r.avg_inscription_envelope_bytes,
-            total_inscription_fees: r.total_inscription_fees,
-            total_runes_fees: r.total_runes_fees,
-            avg_legacy_tx_count: r.avg_legacy_tx_count,
-            avg_segwit_tx_count: r.avg_segwit_tx_count,
-            avg_taproot_tx_count: r.avg_taproot_tx_count,
-            avg_fee_rate_p25: r.avg_fee_rate_p25,
-            avg_fee_rate_p75: r.avg_fee_rate_p75,
+    state
+        .daily_cache
+        .clone()
+        .get_or_compute((from_ts, to_ts), || async move {
+            let conn =
+                state.db.get().map_err(|e| internal_err("DB pool", e))?;
+            let rows =
+                super::db::query_daily_aggregates_fast(&conn, from_ts, to_ts)
+                    .map_err(|e| internal_err("DB query", e))?;
+            Ok::<_, ServerFnError>(
+                rows.into_iter()
+                    .map(|r| DailyAggregate {
+                        date: r.date,
+                        block_count: r.block_count,
+                        avg_size: r.avg_size,
+                        avg_weight: r.avg_weight,
+                        avg_tx_count: r.avg_tx_count,
+                        avg_difficulty: r.avg_difficulty,
+                        total_op_return_count: r.total_op_return_count,
+                        total_op_return_bytes: r.total_op_return_bytes,
+                        total_runes_count: r.total_runes_count,
+                        total_runes_bytes: r.total_runes_bytes,
+                        total_omni_count: r.total_omni_count,
+                        total_omni_bytes: r.total_omni_bytes,
+                        total_counterparty_count: r.total_counterparty_count,
+                        total_counterparty_bytes: r.total_counterparty_bytes,
+                        total_data_carrier_count: r.total_data_carrier_count,
+                        total_data_carrier_bytes: r.total_data_carrier_bytes,
+                        total_fees: r.total_fees,
+                        avg_segwit_spend_count: r.avg_segwit_spend_count,
+                        avg_taproot_spend_count: r.avg_taproot_spend_count,
+                        avg_p2pk_count: r.avg_p2pk_count,
+                        avg_p2pkh_count: r.avg_p2pkh_count,
+                        avg_p2sh_count: r.avg_p2sh_count,
+                        avg_p2wpkh_count: r.avg_p2wpkh_count,
+                        avg_p2wsh_count: r.avg_p2wsh_count,
+                        avg_p2tr_count: r.avg_p2tr_count,
+                        avg_multisig_count: r.avg_multisig_count,
+                        avg_unknown_script_count: r.avg_unknown_script_count,
+                        avg_input_count: r.avg_input_count,
+                        avg_output_count: r.avg_output_count,
+                        avg_rbf_count: r.avg_rbf_count,
+                        avg_witness_bytes: r.avg_witness_bytes,
+                        avg_inscription_count: r.avg_inscription_count,
+                        avg_inscription_bytes: r.avg_inscription_bytes,
+                        avg_brc20_count: r.avg_brc20_count,
+                        avg_taproot_keypath_count: r
+                            .avg_taproot_keypath_count,
+                        avg_taproot_scriptpath_count: r
+                            .avg_taproot_scriptpath_count,
+                        avg_fee_rate_p10: r.avg_fee_rate_p10,
+                        avg_fee_rate_p90: r.avg_fee_rate_p90,
+                        avg_stamps_count: r.avg_stamps_count,
+                        avg_median_fee_rate: r.avg_median_fee_rate,
+                        total_output_value: r.total_output_value,
+                        total_input_value: r.total_input_value,
+                        avg_inscription_envelope_bytes: r
+                            .avg_inscription_envelope_bytes,
+                        total_inscription_fees: r.total_inscription_fees,
+                        total_runes_fees: r.total_runes_fees,
+                        avg_legacy_tx_count: r.avg_legacy_tx_count,
+                        avg_segwit_tx_count: r.avg_segwit_tx_count,
+                        avg_taproot_tx_count: r.avg_taproot_tx_count,
+                        avg_fee_rate_p25: r.avg_fee_rate_p25,
+                        avg_fee_rate_p75: r.avg_fee_rate_p75,
+                    })
+                    .collect(),
+            )
         })
-        .collect();
-
-    // Cache the result
-    *state.daily_cache.lock().unwrap_or_else(|e| e.into_inner()) =
-        Some((from_ts, to_ts, result.clone(), Instant::now()));
-
-    Ok(result)
+        .await
 }
 
 #[server(prefix = "/api", endpoint = "stats_signaling")]
@@ -511,8 +487,6 @@ pub async fn fetch_signaling(
     from: u64,
     to: u64,
 ) -> Result<(Vec<SignalingBlock>, PeriodStats), ServerFnError> {
-    use std::time::Instant;
-
     let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
         leptos_axum::extract()
             .await
@@ -525,80 +499,72 @@ pub async fn fetch_signaling(
         format!("bit:{bit}:{from}:{to}")
     };
 
-    // Return cached result if fresh (< 60 seconds)
-    {
-        let cached = state
-            .signaling_blocks_cache
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
-        if let Some((ref key, ref blocks, ref stats, ref ts)) = *cached {
-            if key == &cache_key && ts.elapsed().as_secs() < 60 {
-                return Ok((blocks.clone(), stats.clone()));
-            }
-        }
-    }
-
-    let conn = state.db.get().map_err(|e| internal_err("DB pool", e))?;
-    let use_locktime = method == "locktime";
-
-    let blocks = if use_locktime {
-        super::db::query_signaling_locktime(&conn, from, to)
-    } else {
-        super::db::query_signaling_bit(&conn, bit, from, to)
-    }
-    .map_err(|e| internal_err("DB query", e))?;
-
-    // Period stats: retarget block boundary
-    let period_start = (to / 2016) * 2016;
-    let period_end = period_start + 2015;
-    let period_blocks = if use_locktime {
-        super::db::query_signaling_locktime(&conn, period_start, period_end)
-    } else {
-        super::db::query_signaling_bit(&conn, bit, period_start, period_end)
-    }
-    .map_err(|e| internal_err("DB query", e))?;
-
-    let signaled_count =
-        period_blocks.iter().filter(|b| b.signaled).count() as u64;
-    let raw_total = period_blocks.len() as u64;
-    // "Blocks since adjustment" excludes the retarget block itself (matches mempool.space)
-    let mined = if raw_total > 0 { raw_total - 1 } else { 0 };
-    let pct = if mined > 0 {
-        signaled_count as f64 / mined as f64 * 100.0
-    } else {
-        0.0
-    };
-
-    let signaling_blocks: Vec<SignalingBlock> = blocks
-        .into_iter()
-        .map(|b| SignalingBlock {
-            height: b.height,
-            timestamp: b.timestamp,
-            signaled: b.signaled,
-            miner: b.miner,
-        })
-        .collect();
-
-    let period_stats = PeriodStats {
-        period_start,
-        period_end,
-        total_blocks: mined,
-        signaled_count,
-        signaled_pct: pct,
-    };
-
-    // Cache the result
-    *state
+    state
         .signaling_blocks_cache
-        .lock()
-        .unwrap_or_else(|e| e.into_inner()) = Some((
-        cache_key,
-        signaling_blocks.clone(),
-        period_stats.clone(),
-        Instant::now(),
-    ));
+        .clone()
+        .get_or_compute(cache_key, || async move {
+            let conn =
+                state.db.get().map_err(|e| internal_err("DB pool", e))?;
+            let use_locktime = method == "locktime";
 
-    Ok((signaling_blocks, period_stats))
+            let blocks = if use_locktime {
+                super::db::query_signaling_locktime(&conn, from, to)
+            } else {
+                super::db::query_signaling_bit(&conn, bit, from, to)
+            }
+            .map_err(|e| internal_err("DB query", e))?;
+
+            let period_start = (to / 2016) * 2016;
+            let period_end = period_start + 2015;
+            let period_blocks = if use_locktime {
+                super::db::query_signaling_locktime(
+                    &conn,
+                    period_start,
+                    period_end,
+                )
+            } else {
+                super::db::query_signaling_bit(
+                    &conn,
+                    bit,
+                    period_start,
+                    period_end,
+                )
+            }
+            .map_err(|e| internal_err("DB query", e))?;
+
+            let signaled_count =
+                period_blocks.iter().filter(|b| b.signaled).count() as u64;
+            let raw_total = period_blocks.len() as u64;
+            // "Blocks since adjustment" excludes the retarget block itself
+            // (matches mempool.space).
+            let mined = if raw_total > 0 { raw_total - 1 } else { 0 };
+            let pct = if mined > 0 {
+                signaled_count as f64 / mined as f64 * 100.0
+            } else {
+                0.0
+            };
+
+            let signaling_blocks: Vec<SignalingBlock> = blocks
+                .into_iter()
+                .map(|b| SignalingBlock {
+                    height: b.height,
+                    timestamp: b.timestamp,
+                    signaled: b.signaled,
+                    miner: b.miner,
+                })
+                .collect();
+
+            let period_stats = PeriodStats {
+                period_start,
+                period_end,
+                total_blocks: mined,
+                signaled_count,
+                signaled_pct: pct,
+            };
+
+            Ok::<_, ServerFnError>((signaling_blocks, period_stats))
+        })
+        .await
 }
 
 #[server(prefix = "/api", endpoint = "stats_signaling_periods")]
@@ -606,8 +572,6 @@ pub async fn fetch_signaling_periods(
     bit: u32,
     method: String,
 ) -> Result<Vec<SignalingPeriod>, ServerFnError> {
-    use std::time::Instant;
-
     let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
         leptos_axum::extract()
             .await
@@ -620,44 +584,25 @@ pub async fn fetch_signaling_periods(
         format!("bit:{bit}")
     };
 
-    // Return cached result if fresh (< 60 seconds)
-    {
-        let cached = state
-            .signaling_periods_cache
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
-        if let Some((ref key, ref data, ref ts)) = *cached {
-            if key == &cache_key && ts.elapsed().as_secs() < 60 {
-                return Ok(data
-                    .iter()
-                    .map(|p| SignalingPeriod {
-                        start_height: p.start_height,
-                        end_height: p.end_height,
-                        signaled_count: p.signaled_count,
-                        total_blocks: p.total_blocks,
-                        signaled_pct: p.signaled_pct,
-                    })
-                    .collect());
-            }
-        }
-    }
-
-    let conn = state.db.get().map_err(|e| internal_err("DB pool", e))?;
-    let use_locktime = method == "locktime";
-
-    let periods = if use_locktime {
-        super::db::query_signaling_periods_locktime(&conn)
-    } else {
-        super::db::query_signaling_periods_bit(&conn, bit)
-    }
-    .map_err(|e| internal_err("DB query", e))?;
-
-    // Cache the result
-    *state
+    // Cache stores the DB rows (Vec<db::SignalingPeriod>); we map to the
+    // public type only on the way out so cache hits and misses share one
+    // storage shape.
+    let periods = state
         .signaling_periods_cache
-        .lock()
-        .unwrap_or_else(|e| e.into_inner()) =
-        Some((cache_key, periods.clone(), Instant::now()));
+        .clone()
+        .get_or_compute(cache_key, || async move {
+            let conn =
+                state.db.get().map_err(|e| internal_err("DB pool", e))?;
+            let use_locktime = method == "locktime";
+            let rows = if use_locktime {
+                super::db::query_signaling_periods_locktime(&conn)
+            } else {
+                super::db::query_signaling_periods_bit(&conn, bit)
+            }
+            .map_err(|e| internal_err("DB query", e))?;
+            Ok::<_, ServerFnError>(rows)
+        })
+        .await?;
 
     Ok(periods
         .into_iter()
@@ -752,8 +697,6 @@ pub async fn fetch_price_history(
     from_ts: u64,
     to_ts: u64,
 ) -> Result<Vec<PricePoint>, ServerFnError> {
-    use std::time::Instant;
-
     // Silence unused warnings — range filtering now happens client-side
     let _ = (from_ts, to_ts);
 
@@ -762,42 +705,29 @@ pub async fn fetch_price_history(
             .await
             .map_err(|e| internal_err("Stats unavailable", e))?;
 
-    // Return cached full dataset if fresh (< 1 hour old)
-    {
-        let cached = state
-            .price_history_cache
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
-        if let Some((_, _, ref data, ref ts)) = *cached {
-            if ts.elapsed().as_secs() < 3600 {
-                return Ok(data.clone());
-            }
-        }
-    }
-
-    // Fetch full history from blockchain.info (daily granularity, all time)
-    let prices = state
-        .rpc
-        .fetch_price_history_all()
-        .await
-        .map_err(|e| internal_err("Price history", e))?;
-
-    let all_points: Vec<PricePoint> = prices
-        .into_iter()
-        .map(|(ts_ms, price)| PricePoint {
-            timestamp_ms: ts_ms,
-            price_usd: price,
-        })
-        .collect();
-
-    // Cache full dataset
-    *state
+    // Full dataset cached as a singleton; the from/to args are
+    // accepted for API stability but the cache returns the entire
+    // set regardless and clients filter as needed.
+    state
         .price_history_cache
-        .lock()
-        .unwrap_or_else(|e| e.into_inner()) =
-        Some((0, u64::MAX, all_points.clone(), Instant::now()));
-
-    Ok(all_points)
+        .clone()
+        .get_or_compute((), || async move {
+            let prices = state
+                .rpc
+                .fetch_price_history_all()
+                .await
+                .map_err(|e| internal_err("Price history", e))?;
+            Ok::<_, ServerFnError>(
+                prices
+                    .into_iter()
+                    .map(|(ts_ms, price)| PricePoint {
+                        timestamp_ms: ts_ms,
+                        price_usd: price,
+                    })
+                    .collect(),
+            )
+        })
+        .await
 }
 
 #[server(prefix = "/api", endpoint = "stats_block_timestamp")]
@@ -1177,8 +1107,6 @@ pub async fn fetch_range_summary(
     from_ts: u64,
     to_ts: u64,
 ) -> Result<RangeSummary, ServerFnError> {
-    use std::time::Instant;
-
     if from_ts > to_ts {
         return Err(ServerFnError::new("Invalid timestamp range"));
     }
@@ -1188,30 +1116,16 @@ pub async fn fetch_range_summary(
             .await
             .map_err(|e| internal_err("Stats unavailable", e))?;
 
-    // Check cache (60s TTL). Exact range match only - summaries are range-specific.
-    {
-        let cached = state
-            .range_summary_cache
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
-        if let Some((cf, ct, ref result, ref ts)) = *cached {
-            if cf == from_ts && ct == to_ts && ts.elapsed().as_secs() < 60 {
-                return Ok(result.clone());
-            }
-        }
-    }
-
-    let conn = state.db.get().map_err(|e| internal_err("DB pool", e))?;
-    let result = super::db::query_range_summary(&conn, from_ts, to_ts)
-        .map_err(|e| internal_err("DB query", e))?;
-
-    *state
+    state
         .range_summary_cache
-        .lock()
-        .unwrap_or_else(|e| e.into_inner()) =
-        Some((from_ts, to_ts, result.clone(), Instant::now()));
-
-    Ok(result)
+        .clone()
+        .get_or_compute((from_ts, to_ts), || async move {
+            let conn =
+                state.db.get().map_err(|e| internal_err("DB pool", e))?;
+            super::db::query_range_summary(&conn, from_ts, to_ts)
+                .map_err(|e| internal_err("DB query", e))
+        })
+        .await
 }
 
 #[server(prefix = "/api", endpoint = "extremes")]
@@ -1219,8 +1133,6 @@ pub async fn fetch_extremes(
     from_ts: u64,
     to_ts: u64,
 ) -> Result<ExtremesData, ServerFnError> {
-    use std::time::Instant;
-
     if from_ts > to_ts {
         return Err(ServerFnError::new("Invalid timestamp range"));
     }
@@ -1230,31 +1142,16 @@ pub async fn fetch_extremes(
             .await
             .map_err(|e| internal_err("Stats unavailable", e))?;
 
-    // Check cache (60s TTL). Exact range match only - extremes are range-specific
-    // (the largest block in 1M is different from the largest block in ALL).
-    {
-        let cached = state
-            .extremes_cache
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
-        if let Some((cf, ct, ref result, ref ts)) = *cached {
-            if cf == from_ts && ct == to_ts && ts.elapsed().as_secs() < 60 {
-                return Ok(result.clone());
-            }
-        }
-    }
-
-    let conn = state.db.get().map_err(|e| internal_err("DB pool", e))?;
-    let result = super::db::query_extremes_with_heights(&conn, from_ts, to_ts)
-        .map_err(|e| internal_err("DB query", e))?;
-
-    *state
+    state
         .extremes_cache
-        .lock()
-        .unwrap_or_else(|e| e.into_inner()) =
-        Some((from_ts, to_ts, result.clone(), Instant::now()));
-
-    Ok(result)
+        .clone()
+        .get_or_compute((from_ts, to_ts), || async move {
+            let conn =
+                state.db.get().map_err(|e| internal_err("DB pool", e))?;
+            super::db::query_extremes_with_heights(&conn, from_ts, to_ts)
+                .map_err(|e| internal_err("DB query", e))
+        })
+        .await
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

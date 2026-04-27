@@ -34,7 +34,7 @@
 
 use std::convert::Infallible;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use tokio::sync::broadcast;
@@ -67,22 +67,16 @@ use super::error::StatsError;
 use super::rpc::{BitcoinRpc, PriceInfo};
 use super::types::PricePoint;
 
-/// Generic cache type for range queries: (from, to, results, fetched_at).
-type RangeCache<T> = Mutex<Option<(u64, u64, Vec<T>, Instant)>>;
-
-/// Shared application state for the stats module. Holds the DB pool, RPC client,
-/// and all in-memory caches. Wrapped in `Arc` and passed to all handlers.
+/// Shared application state for the stats module. Holds the DB pool,
+/// RPC client, and all in-memory caches. Wrapped in `Arc` and passed
+/// to all handlers.
 ///
-/// **Caching policy:** new caches must be added as `Arc<Cache<K, V>>`
-/// (see `super::cache`) and registered via `StatsStateBuilder` (coming
-/// in PR 2 of the cache-registry rollout). The `cache_registry` field
-/// fans out invalidations by tag so trigger paths (block poller, ZMQ
-/// hashblock handler, etc.) call `state.invalidate(tag)` once instead
-/// of maintaining a hand-rolled list of `.take()` calls per cache.
-///
-/// The fields below marked `// DEPRECATED` are pre-existing manually
-/// locked caches scheduled for migration. Do not add new fields in this
-/// shape; use the cache primitive instead.
+/// All caches go through `Cache<K, V>` (see `super::cache`) and are
+/// constructed via `StatsStateBuilder` (below). Trigger sites for
+/// invalidation (block poller, ZMQ `hashblock` handler) call
+/// `state.invalidate(tag)`; the registry fans out to every cache
+/// subscribed to that tag. Adding a new cache is one line and the
+/// invalidation wiring cannot be forgotten.
 pub struct StatsState {
     pub db: DbPool,
     pub rpc: BitcoinRpc,
@@ -90,46 +84,54 @@ pub struct StatsState {
     /// via `StatsStateBuilder::into_registry()` so every cache built
     /// through the builder is wired in automatically.
     pub cache_registry: CacheRegistry,
-    /// DEPRECATED: migrate to `Cache<(), PriceInfo>` via `StatsStateBuilder::cache`.
-    /// Cached price with timestamp, refreshed at most every 60 seconds.
-    pub price_cache: Mutex<Option<(PriceInfo, Instant)>>,
-    /// Guard: prevents multiple concurrent price refreshes.
-    /// Will be replaced by the cache primitive's singleflight in the A-era refactor.
+    /// Latest BTC/USD price. 60s TTL. Background task at startup.rs
+    /// refreshes every 90s; no invalidation tag because the refresh
+    /// task owns the freshness contract.
+    pub price_cache: Arc<Cache<(), PriceInfo>>,
+    /// Guard: prevents multiple concurrent reader-driven price refreshes
+    /// when the cache is stale. The 90s background refresh writes
+    /// independently. Stays manual in B because the cache primitive
+    /// has no singleflight yet; A folds this into Cache itself.
     pub price_refreshing: AtomicBool,
-    /// DEPRECATED: migrate to `Cache<(), u64>` via `StatsStateBuilder::cache`.
-    pub utxo_count: Mutex<Option<u64>>,
+    /// UTXO set size. Background task at startup.rs overwrites every
+    /// 10 minutes; readers do not refresh on miss (return 0 instead).
+    /// `permanent` because TTL doesn't apply, the background task is
+    /// the freshness mechanism.
+    pub utxo_count: Arc<Cache<(), u64>>,
     /// Stats summary cache. Invalidated on new block via the registry.
     pub stats_summary_cache: Arc<Cache<(), super::types::StatsSummary>>,
-    /// DEPRECATED: migrate to `Cache<(u64, u64), Vec<DailyAggregate>>`.
-    /// Cached daily aggregates: (from_ts, to_ts, results, fetched_at). 120s TTL.
-    pub daily_cache: RangeCache<super::types::DailyAggregate>,
+    /// Daily aggregate cache, keyed by (from_ts, to_ts). 120s TTL.
+    /// Invalidated on new block (today's bucket may shift).
+    pub daily_cache:
+        Arc<Cache<(u64, u64), Vec<super::types::DailyAggregate>>>,
     /// Block height -> timestamp cache. Immutable data so no TTL or
     /// invalidation; entries are written once and live for the process.
     pub block_ts_cache: Arc<Cache<u64, u64>>,
-    /// DEPRECATED: migrate to `Cache<String, (Vec<SignalingBlock>, PeriodStats)>`.
-    /// Cached signaling blocks: (cache_key, blocks, period_stats, fetched_at). 60s TTL.
-    pub signaling_blocks_cache: Mutex<
-        Option<(
+    /// Signaling per-block cache, keyed by `"bit:N:from:to"` or
+    /// `"locktime:from:to"`. 60s TTL, no invalidation tag (preserves
+    /// pre-existing TTL-only behavior; the cache key already changes
+    /// when from/to advance).
+    pub signaling_blocks_cache: Arc<
+        Cache<
             String,
-            Vec<super::types::SignalingBlock>,
-            super::types::PeriodStats,
-            Instant,
-        )>,
+            (Vec<super::types::SignalingBlock>, super::types::PeriodStats),
+        >,
     >,
-    /// DEPRECATED: migrate to `Cache<String, Vec<SignalingPeriod>>`.
-    /// Cached signaling periods: (cache_key, results, fetched_at). 60s TTL.
+    /// Signaling-periods cache, keyed by `"bit:N"` or `"locktime"`.
+    /// 60s TTL, no invalidation tag (TTL-only, matches pre-existing).
     pub signaling_periods_cache:
-        Mutex<Option<(String, Vec<super::db::SignalingPeriod>, Instant)>>,
-    /// DEPRECATED: migrate to `Cache<(u64, u64), Vec<PricePoint>>`.
-    pub price_history_cache: RangeCache<PricePoint>,
-    /// DEPRECATED: migrate to `Cache<(u64, u64), RangeSummary>`.
-    /// Cached range summary: (from_ts, to_ts, result, fetched_at). 60s TTL.
+        Arc<Cache<String, Vec<super::db::SignalingPeriod>>>,
+    /// Full price-history dataset (singleton). 1h TTL, no invalidation
+    /// tag. Pre-existing code keyed by `(0, u64::MAX)` and ignored
+    /// the key on read; collapsed to `()` here.
+    pub price_history_cache: Arc<Cache<(), Vec<PricePoint>>>,
+    /// Range summary cache, keyed by (from_ts, to_ts). 60s TTL.
+    /// Invalidated on new block.
     pub range_summary_cache:
-        Mutex<Option<(u64, u64, super::types::RangeSummary, Instant)>>,
-    /// DEPRECATED: migrate to `Cache<(u64, u64), ExtremesData>`.
-    /// Cached extremes: (from_ts, to_ts, result, fetched_at). 60s TTL.
-    pub extremes_cache:
-        Mutex<Option<(u64, u64, super::types::ExtremesData, Instant)>>,
+        Arc<Cache<(u64, u64), super::types::RangeSummary>>,
+    /// Extremes cache, keyed by (from_ts, to_ts). 60s TTL.
+    /// Invalidated on new block.
+    pub extremes_cache: Arc<Cache<(u64, u64), super::types::ExtremesData>>,
     /// Broadcast channel for real-time heartbeat events (ZMQ → SSE).
     pub heartbeat_tx: broadcast::Sender<super::zmq_subscriber::HeartbeatEvent>,
     /// Active SSE connection count (guard against connection exhaustion).
@@ -441,42 +443,33 @@ pub async fn get_live(
     });
     stale |= f_stale;
 
-    // Price cache: only fetch from mempool.space if cache is >60s old.
-    // Atomic guard prevents multiple concurrent HTTP requests on cache miss.
+    // Price cache: 60s TTL is enforced inside Cache; the manual guard
+    // prevents *multiple concurrent* refreshes on miss (the cache
+    // primitive in B has no singleflight). The 90s background task
+    // also refreshes independently.
     let t_price_start = Instant::now();
     let mut price_did_fetch = false;
     let price_usd = {
-        let cached = state
-            .price_cache
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone();
-        let need_refresh = match &cached {
-            Some((_, ts)) => ts.elapsed().as_secs() > 60,
-            None => true,
-        };
+        let cached = state.price_cache.get(&());
+        let need_refresh = cached.is_none();
         if need_refresh && !state.price_refreshing.swap(true, Ordering::AcqRel)
         {
             price_did_fetch = true;
             let result = match state.rpc.fetch_price().await {
                 Ok(p) => {
                     let usd = p.usd;
-                    *state
-                        .price_cache
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner()) =
-                        Some((p, Instant::now()));
+                    state.price_cache.insert((), p);
                     usd
                 }
                 Err(e) => {
                     tracing::warn!("Failed to fetch price: {e}");
-                    cached.map(|(p, _)| p.usd).unwrap_or(0.0)
+                    state.price_cache.get(&()).map(|p| p.usd).unwrap_or(0.0)
                 }
             };
             state.price_refreshing.store(false, Ordering::Release);
             result
         } else {
-            cached.map(|(p, _)| p.usd).unwrap_or(0.0)
+            cached.map(|p| p.usd).unwrap_or(0.0)
         }
     };
     let t_price = if price_did_fetch {
@@ -496,11 +489,7 @@ pub async fn get_live(
     let market_cap = price_usd * total_supply;
     let chain_size_gb = blockchain.size_on_disk as f64 / 1_000_000_000.0;
 
-    let utxo_count = state
-        .utxo_count
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .unwrap_or(0);
+    let utxo_count = state.utxo_count.get(&()).unwrap_or(0);
 
     // Slow-request diagnostic: log per-call timings only when the handler
     // exceeds 1s total or any single upstream call exceeds 500ms. Helps
