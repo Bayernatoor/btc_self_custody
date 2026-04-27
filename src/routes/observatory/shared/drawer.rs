@@ -367,7 +367,7 @@ pub fn ChartDrawer() -> impl IntoView {
         // clearly clickable without competing with the solid-fill FAB.
         <button
             style="z-index: 10001"
-            class="fixed left-0 top-1/3 bg-[#0d2137] border sm:border-[3px] border-l-0 sm:border-l-0 border-[#f7931a]/60 rounded-r-xl px-2 sm:px-2.5 py-5 sm:py-6 cursor-pointer hover:bg-[#143050] hover:border-[#f7931a] hover:scale-105 transition-all group shadow-lg shadow-black/30"
+            class="fixed left-0 top-1/3 bg-[#0d2137] border sm:border-[3px] border-l-0 sm:border-l-0 border-[#f7931a]/60 rounded-r-xl px-2 sm:px-2.5 py-2.5 sm:py-6 cursor-pointer hover:bg-[#143050] hover:border-[#f7931a] hover:scale-105 transition-all group shadow-lg shadow-black/30"
             on:click=move |_| set_open.set(true)
             title="Chart index"
         >
