@@ -347,6 +347,10 @@ pub fn ObservatoryOverview() -> impl IntoView {
                 <div class="flex items-center gap-2">
                     <div
                         class=move || {
+                            let resolved = live_ctx.live.get().is_some();
+                            if !resolved {
+                                return "w-2.5 h-2.5 rounded-full bg-white/20 animate-pulse";
+                            }
                             let connected = live_ctx.connected.get();
                             let cached = cached_live.get();
                             let stale = cached.as_ref().map(|s| s.stale).unwrap_or(false);
@@ -361,6 +365,9 @@ pub fn ObservatoryOverview() -> impl IntoView {
                     ></div>
                     <span class="text-base text-white font-bold">"Live Node Stats"</span>
                     {move || {
+                        if live_ctx.live.get().is_none() {
+                            return view! { <span></span> }.into_any();
+                        }
                         let connected = live_ctx.connected.get();
                         let cached = cached_live.get();
                         let stale = cached.as_ref().map(|s| s.stale).unwrap_or(false);
