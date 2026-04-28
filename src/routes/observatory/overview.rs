@@ -346,21 +346,33 @@ pub fn ObservatoryOverview() -> impl IntoView {
             <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 mb-3">
                 <div class="flex items-center gap-2">
                     <div
-                        class=move || if live_ctx.connected.get() {
-                            "w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"
-                        } else if cached_live.get().is_some() {
-                            "w-2.5 h-2.5 rounded-full bg-yellow-500 animate-pulse"
-                        } else {
-                            "w-2.5 h-2.5 rounded-full bg-red-500/60"
+                        class=move || {
+                            let connected = live_ctx.connected.get();
+                            let cached = cached_live.get();
+                            let stale = cached.as_ref().map(|s| s.stale).unwrap_or(false);
+                            if connected && !stale {
+                                "w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"
+                            } else if cached.is_some() {
+                                "w-2.5 h-2.5 rounded-full bg-yellow-500 animate-pulse"
+                            } else {
+                                "w-2.5 h-2.5 rounded-full bg-red-500/60"
+                            }
                         }
                     ></div>
                     <span class="text-base text-white font-bold">"Live Node Stats"</span>
-                    {move || if !live_ctx.connected.get() && cached_live.get().is_some() {
-                        view! { <span class="text-xs text-yellow-500/80">"(reconnecting...)"</span> }.into_any()
-                    } else if !live_ctx.connected.get() && cached_live.get().is_none() {
-                        view! { <span class="text-xs text-red-400/80">"(disconnected)"</span> }.into_any()
-                    } else {
-                        view! { <span></span> }.into_any()
+                    {move || {
+                        let connected = live_ctx.connected.get();
+                        let cached = cached_live.get();
+                        let stale = cached.as_ref().map(|s| s.stale).unwrap_or(false);
+                        if !connected && cached.is_none() {
+                            view! { <span class="text-xs text-red-400/80">"(disconnected)"</span> }.into_any()
+                        } else if !connected {
+                            view! { <span class="text-xs text-yellow-500/80">"(reconnecting...)"</span> }.into_any()
+                        } else if stale {
+                            view! { <span class="text-xs text-yellow-500/80">"(stale data)"</span> }.into_any()
+                        } else {
+                            view! { <span></span> }.into_any()
+                        }
                     }}
                 </div>
                 <div class="flex items-center gap-2 sm:ml-auto">
