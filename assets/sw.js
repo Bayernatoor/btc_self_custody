@@ -1,7 +1,7 @@
 // Service Worker for WE HODL BTC PWA
 // Strategy: cache static assets (app shell), network-first for API/pages
 
-var CACHE_NAME = 'wehodlbtc-v1';
+var CACHE_NAME = 'wehodlbtc-v2';
 // Small assets to pre-cache on install (large files like WASM cache on first use)
 // Only precache truly static assets. JS files that change on deploy
 // (stats.js, lightbox.js) are cached on first use instead.
@@ -118,7 +118,11 @@ self.addEventListener('fetch', function(event) {
     });
     event.respondWith(
         networkWithTimeout.catch(function() {
-            return caches.match(event.request).then(function(cached) {
+            // ignoreSearch: any cached variant of this path (e.g. /observatory)
+            // serves as the offline fallback for query-string variants
+            // (?range=10y, ?from=...&to=...), so users see the styled shell
+            // and disconnected indicator instead of bare "Offline" text.
+            return caches.match(event.request, { ignoreSearch: true }).then(function(cached) {
                 return cached || new Response('Offline', { status: 503, headers: { 'Content-Type': 'text/plain' } });
             });
         })
