@@ -96,6 +96,7 @@ pub fn ObservatoryPage() -> impl IntoView {
                 </div>
             </Show>
             <ObservatoryNav/>
+            <components::NodeStatusBanner/>
             <ChartSettingsPanel/>
             <leptos_router::components::Outlet/>
             <BlockDetailModal/>
