@@ -106,12 +106,19 @@ pub fn DataLoadError(#[prop(into)] on_retry: Callback<()>) -> impl IntoView {
 /// so the banner is informational rather than a global blocker.
 #[component]
 pub fn NodeStatusBanner() -> impl IntoView {
-    let live = expect_context::<super::shared::LiveContext>();
+    let live_ctx = expect_context::<super::shared::LiveContext>();
     let state = expect_context::<super::shared::ObservatoryState>();
-    let connected = live.connected;
-    let last_updated = live.last_updated;
+    let connected = live_ctx.connected;
+    let last_updated = live_ctx.last_updated;
+    let live = live_ctx.live;
     let cached_live = state.cached_live;
+    // Suppress until the live resource has resolved at least once, so the
+    // banner does not flash during the brief initial-load window where
+    // `connected` is still its default `false`.
     let show = Signal::derive(move || {
+        if live.get().is_none() {
+            return false;
+        }
         let stale = cached_live.get().map(|s| s.stale).unwrap_or(false);
         !connected.get() || stale
     });
