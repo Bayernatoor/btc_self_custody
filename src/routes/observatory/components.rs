@@ -86,6 +86,57 @@ pub fn DataLoadError(#[prop(into)] on_retry: Callback<()>) -> impl IntoView {
 }
 
 // ---------------------------------------------------------------------------
+// Node status banner
+// ---------------------------------------------------------------------------
+
+/// Banner shown across the observatory when the home node is unreachable
+/// or returning stale data.
+///
+/// Two outage states the user should know about:
+///   1. Live polling itself is failing (`!connected`). The server can't
+///      reach the home node and even the RPC stale-on-error fallback
+///      has nothing fresh.
+///   2. Polling succeeds but the cached payload's `stale` flag is set.
+///      The RPC layer served a stale fallback because Core was
+///      unreachable; surface that honestly so users know live numbers
+///      are not current.
+///
+/// Both render the same banner. Historical data on the page is still
+/// authoritative (it lives on the droplet's SQLite, not the home node),
+/// so the banner is informational rather than a global blocker.
+#[component]
+pub fn NodeStatusBanner() -> impl IntoView {
+    let live = expect_context::<super::shared::LiveContext>();
+    let state = expect_context::<super::shared::ObservatoryState>();
+    let connected = live.connected;
+    let last_updated = live.last_updated;
+    let cached_live = state.cached_live;
+    let show = Signal::derive(move || {
+        let stale = cached_live.get().map(|s| s.stale).unwrap_or(false);
+        !connected.get() || stale
+    });
+    view! {
+        <Show when=move || show.get()>
+            <div
+                role="status"
+                aria-live="polite"
+                class="flex items-center gap-3 mb-4 px-4 py-2.5 rounded-xl border border-amber-400/30 bg-amber-400/10 text-amber-200/90"
+            >
+                <svg class="w-4 h-4 shrink-0 text-amber-300/80" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m0 3.75h.007M5.13 19.5h13.74c1.54 0 2.5-1.67 1.73-3L13.73 4.5c-.77-1.33-2.69-1.33-3.46 0L3.4 16.5c-.77 1.33.19 3 1.73 3z"/>
+                </svg>
+                <span class="text-xs sm:text-sm">
+                    "Home node not currently responding. Live readings may be stale; historical data is unaffected."
+                </span>
+                <span class="ml-auto text-[10px] sm:text-xs text-amber-200/50 font-mono whitespace-nowrap">
+                    {move || last_updated.get()}
+                </span>
+            </div>
+        </Show>
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Section heading (anchor target for drawer navigation)
 // ---------------------------------------------------------------------------
 
