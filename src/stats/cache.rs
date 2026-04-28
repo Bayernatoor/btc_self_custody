@@ -58,6 +58,11 @@ pub struct CacheStats {
     pub hits: u64,
     /// Total reads that triggered a fetch.
     pub misses: u64,
+    /// Total direct writes via `insert()` (background warmup, periodic
+    /// refresh tasks). These bypass the request path so they don't
+    /// count as misses; tracking them separately makes
+    /// `size > misses` legible for caches with background warmup.
+    pub refreshes: u64,
 }
 
 impl CacheStats {
@@ -113,6 +118,7 @@ pub struct Cache<K, V> {
     tags: Vec<CacheTag>,
     hits: AtomicU64,
     misses: AtomicU64,
+    refreshes: AtomicU64,
 }
 
 impl<K, V> Cache<K, V>
@@ -133,6 +139,7 @@ where
             tags: Vec::new(),
             hits: AtomicU64::new(0),
             misses: AtomicU64::new(0),
+            refreshes: AtomicU64::new(0),
         }
     }
 
@@ -256,9 +263,12 @@ where
 
     /// Raw write. Stores or overwrites the entry for `key` with
     /// the current timestamp. Pairs with `get` for conditional caching.
+    /// Counted as a `refresh` (not a miss) since it bypasses the
+    /// request path.
     pub fn insert(&self, key: K, value: V) {
         let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         guard.insert(key, (value, Instant::now()));
+        self.refreshes.fetch_add(1, Ordering::Relaxed);
     }
 
     /// Clear the entry for `key` if present. No-op otherwise.
@@ -289,6 +299,7 @@ where
             size,
             hits: self.hits.load(Ordering::Relaxed),
             misses: self.misses.load(Ordering::Relaxed),
+            refreshes: self.refreshes.load(Ordering::Relaxed),
         }
     }
 }

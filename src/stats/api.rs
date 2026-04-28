@@ -365,6 +365,7 @@ pub async fn get_cache_stats(
                 "size": s.size,
                 "hits": s.hits,
                 "misses": s.misses,
+                "refreshes": s.refreshes,
                 "hit_rate": (s.hit_rate() * 1000.0).round() / 1000.0,
             })
         })
