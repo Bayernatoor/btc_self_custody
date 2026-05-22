@@ -8,9 +8,8 @@ pkg
 
 # node e2e test tools and outputs
 node_modules/
-test-results/
-end2end/playwright-report/
-playwright/.cache/
+e2e/test-results/
+e2e/playwright-report/
 
 # OS / IDE
 .DS_Store
