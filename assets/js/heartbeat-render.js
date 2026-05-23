@@ -1103,6 +1103,13 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                         ctx.shadowBlur = 12 + Math.sin(nowSec * 2) * 4;
                         ctx.shadowColor = 'rgba(255, 165, 0, 0.85)';
                     }
+                    // Shadow glow only at mid-zoom where bricks are visible but
+                    // not outlined. Skip at low zoom (sub-pixel, too expensive
+                    // with thousands of bricks) and high zoom (outlines instead).
+                    else if (zoom >= 1.0 && zoom < 4) {
+                        ctx.shadowBlur = 4;
+                        ctx.shadowColor = blipColor + (bOpacity * 0.4) + ')';
+                    }
                     if (useRound) {
                         ctx.beginPath();
                         roundRect(ctx, rx, ry, rw, rh, cornerR);
