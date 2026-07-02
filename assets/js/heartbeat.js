@@ -484,6 +484,69 @@ window.addEventListener('beforeunload', _hbBeforeUnload);
 // When tab regains focus, preserve existing timeline and resume live flow.
 // If hidden for > 5 minutes, do a full reset instead of trying to reconcile
 // stale timeline state (blocks bunched up, flatline position wrong).
+// Replay a single block (from _blockQueue or a catch-up fetch) as a live block.
+function replayQueuedBlock(qb) {
+    window.pushHeartbeatBlocks(JSON.stringify([{
+        height: qb.height,
+        timestamp: qb.timestamp || Math.floor(Date.now() / 1000),
+        tx_count: qb.tx_count || qb.confirmed_count || 3000,
+        total_fees: qb.total_fees || 0,
+        size: qb.size || 0,
+        weight: qb.weight || 3000000
+    }]), false);
+}
+
+// After a tab return, make the timeline end at the live tip. SSE-queued blocks
+// (delivered while hidden) are the freshest, most complete source, so replay
+// those first; if the timeline is still behind the tip, fetch /api/stats/blocks
+// once and replay the remainder. pushHeartbeatBlocks dedups by height, so an
+// overlap between the queue and the fetch cannot double-render a block.
+function catchUpBlocks(queued, tipHeight) {
+    var _hb = getState();
+    if (!_hb) return;
+
+    function timelineMaxHeight() {
+        for (var i = _hb.timeline.length - 1; i >= 0; i--) {
+            if (_hb.timeline[i].type === 'block') return _hb.timeline[i].height;
+        }
+        return 0;
+    }
+
+    var maxH = timelineMaxHeight();
+    var q = (queued || [])
+        .filter(function(b) { return b && b.height; })
+        .sort(function(a, b) { return a.height - b.height; });
+    var replayed = 0;
+    for (var i = 0; i < q.length; i++) {
+        if (q[i].height <= maxH) continue;
+        replayQueuedBlock(q[i]);
+        maxH = q[i].height;
+        replayed++;
+    }
+    if (replayed > 0) {
+        console.log('[heartbeat] tab return: replayed', replayed, 'queued blocks (tip ' + tipHeight + ')');
+    }
+
+    // Still behind the tip? The queue missed some (e.g. SSE reconnected while
+    // hidden). Fetch the canonical list once and replay the gap.
+    if (tipHeight > maxH) {
+        var fromH = maxH;
+        fetch('/api/stats/blocks')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!getState()) return;
+                var blocks = (data.blocks || [])
+                    .filter(function(b) { return b.height > fromH; })
+                    .sort(function(a, b) { return a.height - b.height; });
+                for (var j = 0; j < blocks.length; j++) replayQueuedBlock(blocks[j]);
+                if (blocks.length > 0) {
+                    console.log('[heartbeat] tab return: filled', blocks.length, 'blocks from fetch');
+                }
+            })
+            .catch(function() {});
+    }
+}
+
 function _hbVisibilityChange() {
     var _hb = getState();
     if (!_hb) return;
@@ -492,6 +555,13 @@ function _hbVisibilityChange() {
         return;
     }
     var now = Date.now() / 1000;
+
+    // Blocks that arrived via SSE while hidden (the freshest source) plus the
+    // live tip height from LiveStats. Captured before any reset so we can catch
+    // the timeline up to the real tip on return (see catchUpBlocks).
+    var queuedBlocks = (_hb._blockQueue || []).slice();
+    var tipHeight = _hb.blockHeight || 0;
+    _hb._blockQueue = [];
 
     // Full reset if hidden for more than 5 minutes
     if (_hb._hiddenSince > 0 && (now - _hb._hiddenSince) > 300) {
@@ -519,6 +589,11 @@ function _hbVisibilityChange() {
                         console.log('[heartbeat] replaying', blocks.length, 'blocks after reset');
                         window.pushHeartbeatBlocks(JSON.stringify(blocks), true);
                     }
+                    // /api/stats/blocks can trail the ZMQ tip (the 15s poller
+                    // writes it; the ZMQ block path does not), so the fetched
+                    // rebuild may be behind. Catch up from the SSE-queued blocks
+                    // captured before the reset, then fetch-fill if still short.
+                    catchUpBlocks(queuedBlocks, tipHeight);
                     if (s) s._suppressAnnounce = false;
                 })
                 .catch(function(err) {
@@ -602,40 +677,9 @@ function _hbVisibilityChange() {
     _hb._hiddenTxBuffer = [];
     _hb._txBatchQueue = [];
 
-    // Replay any blocks that arrived while hidden as LIVE blocks (not compressed
-    // replay). This places them at the correct virtualX positions with proper
-    // inter-block flatlines sized by real timestamps.
-    var queued = _hb._blockQueue || [];
-    _hb._blockQueue = [];
-
-    if (queued.length > 0) {
-        console.log('[heartbeat] replaying', queued.length, 'queued blocks from background');
-        for (var qi = 0; qi < queued.length; qi++) {
-            var qb = queued[qi];
-            var blockTs = qb.timestamp || Math.floor(now);
-            // Compute inter-block from timeline's last block (same as processLiveBlock)
-            var inter = 600;
-            for (var pi = _hb.timeline.length - 1; pi >= 0; pi--) {
-                if (_hb.timeline[pi].type === 'block') {
-                    var prevTs = _hb.timeline[pi].timestamp;
-                    if (prevTs > 0 && blockTs >= prevTs) {
-                        inter = Math.max(1, blockTs - prevTs);
-                    }
-                    break;
-                }
-            }
-            var blockJson = JSON.stringify([{
-                height: qb.height,
-                timestamp: blockTs,
-                tx_count: qb.tx_count || qb.confirmed_count || 3000,
-                total_fees: qb.total_fees || 0,
-                size: qb.size || 0,
-                weight: qb.weight || 3000000,
-                inter_block_seconds: inter
-            }]);
-            window.pushHeartbeatBlocks(blockJson, false);
-        }
-    }
+    // Catch the timeline up to the live tip: replay the SSE-queued blocks that
+    // arrived while hidden, then fetch-fill any remaining gap (see catchUpBlocks).
+    catchUpBlocks(queuedBlocks, tipHeight);
 
     // Sync frame timing so the draw loop doesn't try to catch up
     _hb.lastFrameTime = now;
