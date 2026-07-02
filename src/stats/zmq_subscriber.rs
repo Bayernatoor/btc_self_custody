@@ -583,7 +583,13 @@ async fn subscribe_blocks(
         // the DB. Slow over WireGuard, but not on the spike's critical path.
         // poll_new_blocks does NOT confirm mempool txs, so this is the only
         // place that marks tracked txs confirmed.
-        spawn_block_confirm(state, block_hash, header.height);
+        //
+        // If getblockstats was unavailable in the fast path (size/weight 0, e.g.
+        // the node blipped mid-outage), the deferred task also re-broadcasts the
+        // block with authoritative data once the node answers; the frontend
+        // replaces the estimated spike via its total_fees==0 dedup path.
+        let estimated = size == 0 || weight == 0;
+        spawn_block_confirm(state, sender, block_hash, header.height, estimated);
     }
 }
 
@@ -643,13 +649,47 @@ async fn get_block_fast(
 /// Background task: fetch the block's full txid list and mark the matching
 /// mempool_txs + notable_txs rows confirmed. Runs detached so the ~20-90s
 /// getblock(hash, 1) over WireGuard never delays the spike broadcast.
-fn spawn_block_confirm(state: &Arc<StatsState>, hash: String, height: u64) {
+fn spawn_block_confirm(
+    state: &Arc<StatsState>,
+    sender: &broadcast::Sender<HeartbeatEvent>,
+    hash: String,
+    height: u64,
+    estimated: bool,
+) {
     let state = Arc::clone(state);
+    let sender = sender.clone();
     tokio::spawn(async move {
         let info = match get_block_info(&state, &hash).await {
             Some(i) => i,
             None => return, // logged inside get_block_info; poller will backfill
         };
+
+        // getblock(hash,1) gives authoritative size/weight. If the fast broadcast
+        // was estimated (getblockstats was down), re-broadcast now with real
+        // size/weight + getblockstats totalfee so the frontend can replace the
+        // zero-data spike. Idempotent: a healthy block was never estimated, so
+        // this only fires after a node blip.
+        if estimated {
+            let total_fees =
+                state.rpc.get_block_total_fee(height).await.unwrap_or(0);
+            let _ = sender.send(HeartbeatEvent::Block {
+                height,
+                hash: hash.clone(),
+                timestamp: info.timestamp,
+                tx_count: info.tx_count,
+                total_fees,
+                size: info.size,
+                weight: info.weight,
+                confirmed_count: 0,
+            });
+            tracing::info!(
+                "ZMQ: block {height} re-broadcast with authoritative data (size={}, weight={}, {:.4} BTC fees)",
+                info.size,
+                info.weight,
+                total_fees as f64 / 100_000_000.0
+            );
+        }
+
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
