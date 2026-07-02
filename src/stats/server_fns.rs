@@ -71,6 +71,32 @@ pub async fn fetch_stats_summary() -> Result<StatsSummary, ServerFnError> {
         .await
 }
 
+/// Fetch the most recent `count` blocks straight from the DB (droplet-local),
+/// deriving the tip from `db::max_height` — NO node RPC. The heartbeat's initial
+/// timeline uses this so the page renders the historical EKG immediately even
+/// when the home node is unreachable, instead of blocking on live stats.
+#[server(prefix = "/api", endpoint = "stats_recent_blocks")]
+pub async fn fetch_recent_blocks(
+    count: u64,
+) -> Result<Vec<BlockSummary>, ServerFnError> {
+    let count = count.min(4500); // matches fetch_blocks range guard
+    let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
+        leptos_axum::extract()
+            .await
+            .map_err(|e| internal_err("Stats unavailable", e))?;
+    let conn = state.db.get().map_err(|e| internal_err("DB pool", e))?;
+    let tip = super::db::max_height(&conn)
+        .map_err(|e| internal_err("DB query", e))?
+        .unwrap_or(0);
+    if tip == 0 {
+        return Ok(Vec::new());
+    }
+    let from = tip.saturating_sub(count);
+    let rows = super::db::query_blocks(&conn, from, tip)
+        .map_err(|e| internal_err("DB query", e))?;
+    Ok(rows.into_iter().map(BlockSummary::from).collect())
+}
+
 #[server(prefix = "/api", endpoint = "stats_blocks")]
 pub async fn fetch_blocks(
     from: u64,

@@ -172,16 +172,13 @@ pub fn HeartbeatPage() -> impl IntoView {
             .unwrap_or(0)
     });
 
-    // Fetch blocks for initial timeline (current retarget period = 2016 blocks)
+    // Fetch blocks for the initial timeline (current retarget period = 2016).
+    // DB-only (fetch_recent_blocks derives the tip from db::max_height, no node
+    // RPC), and NOT gated on cached_live — so the historical EKG renders
+    // immediately on load even when the home node is unreachable. The live parts
+    // (SSE txs, vitals, STALE indicator) fill in separately once/if the node is up.
     let initial_blocks = LocalResource::new(move || async move {
-        let height =
-            cached_live.get().map(|s| s.blockchain.blocks).unwrap_or(0);
-        if height == 0 {
-            return Vec::new();
-        }
-        // Fetch last 2016 blocks for timeline history
-        let from = height.saturating_sub(RETARGET_PERIOD);
-        crate::stats::server_fns::fetch_blocks(from, height)
+        crate::stats::server_fns::fetch_recent_blocks(RETARGET_PERIOD)
             .await
             .unwrap_or_default()
     });
