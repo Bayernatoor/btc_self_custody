@@ -483,12 +483,17 @@ export function flushTxBatch() {
     _hb._txBatchQueue = [];
 
     // Place ALL txs as individual bricks so every tx is searchable/inspectable.
-    // Spread scales with visible virtual width to prevent stacking.
-    // Clamp to actual flatline width so bricks don't all pile at the start
-    // of a narrow flatline (e.g., right after a block).
+    // Spread them behind the head so a burst doesn't wall up in one column.
+    // The head sits at HEAD_POSITION_FRAC (0.85) of the viewport, so most of the
+    // visible width is to the LEFT of the head and free to fill — hence the 0.7
+    // viewport cap (the old 0.15 crammed everything into ~16 columns at zoom).
+    // Spread also scales with burst size: calm flushes stay tight (live feel);
+    // truly heavy sustained volume still stacks past the cap (intentional busy signal).
     var visibleVirtW = (_hb.width || 800) / (_hb.zoom || 1);
     var flatlineWidth = _hb.virtualX - liveSeg.x_start;
-    var spread = Math.max(10, Math.min(flatlineWidth * 0.8, visibleVirtW * 0.15, 300));
+    var burstFactor = Math.min(batch.length / 25, 4); // ramps 0→4 by ~100 txs/flush
+    var spreadCap = 150 + burstFactor * 250;          // ~150px calm → ~1150px heavy
+    var spread = Math.max(10, Math.min(flatlineWidth * 0.8, visibleVirtW * 0.7, spreadCap));
     var medianFee = _hb._wsMedianFee || 5;
 
     for (var i = 0; i < batch.length; i++) {
