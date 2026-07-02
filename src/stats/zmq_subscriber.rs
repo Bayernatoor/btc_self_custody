@@ -34,11 +34,12 @@
 //! to SSE clients via a tokio broadcast channel.
 
 use std::collections::HashSet;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
 use sha2::{Digest, Sha256};
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, Semaphore};
 use zeromq::{Socket, SocketRecv, SubSocket};
 
 use super::api::StatsState;
@@ -220,10 +221,18 @@ async fn subscribe_tx_and_sequence(
     socket.subscribe("sequence").await?;
     tracing::info!("ZMQ: subscribed to rawtx+sequence");
 
-    let mut tx_count = 0u64;
+    // Each incoming rawtx needs one `getmempoolentry` RPC (for the fee — the
+    // only field not derivable from the raw bytes). Over the WireGuard tunnel
+    // that round-trip dominates, so doing it inline in the recv loop caps
+    // throughput at ~1/latency and drops txs under load. Instead the recv loop
+    // only parses + filters, then hands each tx to a bounded pool of workers.
+    // The semaphore both bounds concurrent RPCs and applies backpressure:
+    // when all permits are out, `acquire_owned().await` parks the recv loop
+    // (ZMQ buffers) until a worker finishes.
+    let sem = Arc::new(Semaphore::new(RAWTX_CONCURRENCY));
+    let tx_count = Arc::new(AtomicU64::new(0));
+    let rpc_fail = Arc::new(AtomicU64::new(0));
     let mut parse_fail = 0u64;
-    let mut rpc_fail = 0u64;
-    let mut consecutive_fail = 0u32;
     let mut seq_state = SequenceState::default();
     let mut seq_event_count = 0u64;
 
@@ -269,7 +278,7 @@ async fn subscribe_tx_and_sequence(
 
         // Skip non-rawtx topics (e.g. hashtx which shares the port)
         if topic != "rawtx" {
-            if tx_count == 0 && seq_event_count == 0 {
+            if seq_event_count == 0 && tx_count.load(Ordering::Relaxed) == 0 {
                 tracing::debug!(
                     "ZMQ: unexpected topic '{}' (len={})",
                     topic,
@@ -302,158 +311,213 @@ async fn subscribe_tx_and_sequence(
 
         // During block processing, ZMQ re-broadcasts every tx in the block.
         // Skip those (they're in the block_txids set) but let genuine new
-        // mempool txs through so the SSE stream doesn't go silent.
+        // mempool txs through so the SSE stream doesn't go silent. Cheap
+        // check kept inline so no worker/RPC is spent on known block txs.
         if let Ok(set) = block_txids.lock() {
             if !set.is_empty() && set.contains(&parsed.txid) {
                 continue;
             }
         }
 
-        // Self-throttle: if 5+ consecutive RPC failures, a block likely arrived
-        // before the hashblock event. Skip to let the flood drain.
-        if consecutive_fail >= 5 {
-            consecutive_fail = 0;
-            tracing::debug!(
-                "ZMQ: skipped rawtx (consecutive failures, likely block flood)"
-            );
-            continue;
-        }
+        // Dispatch to a worker. `acquire_owned` parks here (backpressure) when
+        // RAWTX_CONCURRENCY lookups are already in flight.
+        let permit = match Arc::clone(&sem).acquire_owned().await {
+            Ok(p) => p,
+            Err(_) => break, // semaphore closed — shouldn't happen
+        };
+        let state = Arc::clone(state);
+        let sender = sender.clone();
+        let tx_count = Arc::clone(&tx_count);
+        let rpc_fail = Arc::clone(&rpc_fail);
+        tokio::spawn(async move {
+            let _permit = permit; // released when the worker returns
+            process_rawtx(&state, &sender, parsed, now, &tx_count, &rpc_fail)
+                .await;
+        });
+    }
 
-        // Look up fee + authoritative vsize from mempool entry
-        let (fee, vsize) = match state.rpc.get_mempool_entry(&parsed.txid).await
-        {
-            Ok(entry) => {
-                consecutive_fail = 0;
-                (entry.fee, entry.vsize)
+    Ok(())
+}
+
+/// Number of concurrent `getmempoolentry` lookups in flight. Bounds RPC load
+/// on the node and applies backpressure to the recv loop when saturated.
+const RAWTX_CONCURRENCY: usize = 16;
+
+/// Enrich a parsed mempool tx into an SSE event plus the fields the DB
+/// persistence path needs. Pure function of its inputs (unit-tested): all
+/// notable classification and USD math lives here, so the broadcast and the
+/// DB write can never disagree about a tx's flags.
+struct EnrichedTx {
+    event: HeartbeatEvent,
+    /// Highest-priority notable label, if any.
+    notable_type: Option<&'static str>,
+    /// Whether any notable flag fired.
+    is_notable: bool,
+    /// Total output value in USD (0.0 when not notable or price unknown).
+    value_usd: f64,
+}
+
+fn enrich_tx(
+    parsed: &ParsedTx,
+    fee: u64,
+    vsize: u32,
+    price_usd: f64,
+    now: u64,
+) -> EnrichedTx {
+    let fee_rate = if vsize > 0 {
+        fee as f64 / vsize as f64
+    } else {
+        0.0
+    };
+
+    let flags = classify_notable(parsed, fee, fee_rate, price_usd);
+    let notable_type = flags.primary_type();
+    let is_notable = flags.is_notable();
+
+    // Total output value (what users expect to see); the whale threshold
+    // check itself already happened inside classify_notable.
+    let value_usd = if is_notable && price_usd > 0.0 {
+        parsed.value as f64 * price_usd / 100_000_000.0
+    } else {
+        0.0
+    };
+
+    let event = HeartbeatEvent::Tx {
+        txid: parsed.txid.clone(),
+        fee,
+        vsize,
+        value: parsed.value,
+        fee_rate,
+        timestamp: now,
+        whale: flags.whale,
+        value_usd,
+        fee_outlier: flags.fee_outlier,
+        consolidation: flags.consolidation,
+        fan_out: flags.fan_out,
+        large_inscription: flags.large_inscription,
+        round_number: flags.round_number,
+        op_return_msg: flags.op_return_msg,
+        op_return_text: parsed.op_return_text.clone().unwrap_or_default(),
+        input_count: parsed.input_count,
+        output_count: parsed.output_count,
+        max_output_value: parsed.max_output_value,
+    };
+
+    EnrichedTx {
+        event,
+        notable_type,
+        is_notable,
+        value_usd,
+    }
+}
+
+/// Process one rawtx: fetch its fee, broadcast to SSE, then persist. Runs in a
+/// spawned task under a semaphore permit. Broadcasts BEFORE persisting so the
+/// visual path is gated only by the fee RPC, not by SQLite. A failed lookup
+/// (tx already confirmed/evicted) simply drops the tx.
+async fn process_rawtx(
+    state: &Arc<StatsState>,
+    sender: &broadcast::Sender<HeartbeatEvent>,
+    parsed: ParsedTx,
+    now: u64,
+    tx_count: &AtomicU64,
+    rpc_fail: &AtomicU64,
+) {
+    let (fee, vsize) = match state.rpc.get_mempool_entry(&parsed.txid).await {
+        Ok(entry) => (entry.fee, entry.vsize),
+        Err(_) => {
+            let n = rpc_fail.fetch_add(1, Ordering::Relaxed) + 1;
+            if n <= 5 {
+                tracing::debug!(
+                    "ZMQ: getmempoolentry failed for {} (may be already confirmed)",
+                    parsed.txid
+                );
             }
-            Err(_) => {
-                rpc_fail += 1;
-                consecutive_fail += 1;
-                if rpc_fail <= 5 {
-                    tracing::debug!(
-                        "ZMQ: getmempoolentry failed for {} (may be already confirmed)",
-                        parsed.txid
-                    );
-                }
-                continue;
-            }
-        };
-
-        let fee_rate = if vsize > 0 {
-            fee as f64 / vsize as f64
-        } else {
-            0.0
-        };
-
-        // Get cached price once for all USD-based detections
-        let price_usd =
-            state.price_cache.get(&()).map(|p| p.usd).unwrap_or(0.0);
-
-        // Classify this tx. The returned flags expose every category
-        // directly so the SSE broadcast doesn't have to re-run the threshold
-        // checks (a previous hand-rolled duplicate got out of sync once).
-        let flags = classify_notable(&parsed, fee, fee_rate, price_usd);
-        let notable_type = flags.primary_type();
-
-        if let Some(nt) = notable_type {
-            tracing::info!(
-                "ZMQ: notable tx [{}] {} — {:.4} BTC, {fee} sat fee, {fee_rate:.1} sat/vB, {}in/{}out, {}B witness",
-                nt,
-                parsed.txid,
-                parsed.value as f64 / 100_000_000.0,
-                parsed.input_count,
-                parsed.output_count,
-                parsed.witness_bytes,
-            );
+            return;
         }
+    };
 
-        // Compute USD value for any notable tx for broadcast/persistence.
-        // Uses total output value (what users expect to see); the whale
-        // threshold check itself already happened inside classify_notable.
-        let is_notable = flags.is_notable();
-        let broadcast_usd = if is_notable && price_usd > 0.0 {
-            parsed.value as f64 * price_usd / 100_000_000.0
-        } else {
-            0.0
+    let price_usd = state.price_cache.get(&()).map(|p| p.usd).unwrap_or(0.0);
+    let enriched = enrich_tx(&parsed, fee, vsize, price_usd, now);
+
+    if let Some(nt) = enriched.notable_type {
+        tracing::info!(
+            "ZMQ: notable tx [{}] {} — {:.4} BTC, {fee} sat fee, {}in/{}out, {}B witness",
+            nt,
+            parsed.txid,
+            parsed.value as f64 / 100_000_000.0,
+            parsed.input_count,
+            parsed.output_count,
+            parsed.witness_bytes,
+        );
+    }
+
+    // Broadcast first — the SSE visual path shouldn't wait on the DB.
+    let _ = sender.send(enriched.event);
+
+    let n = tx_count.fetch_add(1, Ordering::Relaxed) + 1;
+    if n == 1 {
+        tracing::info!("ZMQ: first tx processed — {fee} sats fee, {vsize} vB");
+    } else if n.is_multiple_of(100) {
+        tracing::info!(
+            "ZMQ: processed {n} transactions (rpc_fail={})",
+            rpc_fail.load(Ordering::Relaxed)
+        );
+    }
+
+    // Persist off the hot path. r2d2 checkout + SQLite write are blocking, so
+    // run them on the blocking pool rather than an async worker thread.
+    let db = state.db.clone();
+    let notable_type = enriched.notable_type;
+    let is_notable = enriched.is_notable;
+    let value_usd = enriched.value_usd;
+    tokio::task::spawn_blocking(move || {
+        let conn = match db.get() {
+            Ok(c) => c,
+            Err(_) => return,
         };
+        let value_usd_opt = if is_notable && value_usd > 0.0 {
+            Some(value_usd)
+        } else {
+            None
+        };
+        let _ = db::insert_mempool_tx(
+            &conn,
+            &db::MempoolTxInsert {
+                txid: &parsed.txid,
+                fee,
+                vsize,
+                value: parsed.value,
+                first_seen: now,
+                notable_type,
+                value_usd: value_usd_opt,
+                input_count: parsed.input_count,
+                output_count: parsed.output_count,
+                op_return_text: parsed.op_return_text.as_deref(),
+            },
+        );
 
-        // Store in DB (with notable info for persistence across restarts)
-        if let Ok(conn) = state.db.get() {
-            let value_usd_opt = if is_notable && broadcast_usd > 0.0 {
-                Some(broadcast_usd)
-            } else {
-                None
-            };
-            let _ = db::insert_mempool_tx(
+        // Also persist to notable_txs (separate table, never pruned).
+        if is_notable {
+            let _ = db::insert_notable_tx(
                 &conn,
-                &db::MempoolTxInsert {
+                &db::NotableTxInsert {
                     txid: &parsed.txid,
+                    notable_type: notable_type.unwrap_or(""),
                     fee,
                     vsize,
                     value: parsed.value,
-                    first_seen: now,
-                    notable_type,
-                    value_usd: value_usd_opt,
+                    max_output_value: parsed.max_output_value,
+                    value_usd,
                     input_count: parsed.input_count,
                     output_count: parsed.output_count,
+                    witness_bytes: parsed.witness_bytes,
                     op_return_text: parsed.op_return_text.as_deref(),
+                    first_seen: now,
                 },
             );
-
-            // Also persist to notable_txs table (separate from mempool_txs, never pruned).
-            if is_notable {
-                let _ = db::insert_notable_tx(
-                    &conn,
-                    &db::NotableTxInsert {
-                        txid: &parsed.txid,
-                        notable_type: notable_type.unwrap_or(""),
-                        fee,
-                        vsize,
-                        value: parsed.value,
-                        max_output_value: parsed.max_output_value,
-                        value_usd: broadcast_usd,
-                        input_count: parsed.input_count,
-                        output_count: parsed.output_count,
-                        witness_bytes: parsed.witness_bytes,
-                        op_return_text: parsed.op_return_text.as_deref(),
-                        first_seen: now,
-                    },
-                );
-            }
         }
-
-        // Broadcast to SSE clients
-        let _ = sender.send(HeartbeatEvent::Tx {
-            txid: parsed.txid,
-            fee,
-            vsize,
-            value: parsed.value,
-            fee_rate,
-            timestamp: now,
-            whale: flags.whale,
-            value_usd: broadcast_usd,
-            fee_outlier: flags.fee_outlier,
-            consolidation: flags.consolidation,
-            fan_out: flags.fan_out,
-            large_inscription: flags.large_inscription,
-            round_number: flags.round_number,
-            op_return_msg: flags.op_return_msg,
-            op_return_text: parsed.op_return_text.unwrap_or_default(),
-            input_count: parsed.input_count,
-            output_count: parsed.output_count,
-            max_output_value: parsed.max_output_value,
-        });
-
-        tx_count += 1;
-        if tx_count == 1 {
-            tracing::info!(
-                "ZMQ: first tx processed — {fee} sats fee, {vsize} vB"
-            );
-        }
-        if tx_count.is_multiple_of(100) {
-            tracing::info!("ZMQ: processed {tx_count} transactions (parse_fail={parse_fail}, rpc_fail={rpc_fail})");
-        }
-    }
+    });
 }
 
 /// Minimum R events within the time window to trigger a BlockMining event.
@@ -1481,6 +1545,109 @@ mod tests {
         // Each R starts a new window since the previous one expired (4s > 3s window)
         assert!(!state.mining_sent);
         assert_eq!(state.r_count, 1); // only the last one counts
+    }
+
+    // --- enrich_tx: pure classification → SSE event assembly ---
+
+    fn parsed_fixture() -> ParsedTx {
+        ParsedTx {
+            txid: "a".repeat(64),
+            value: 100_000, // 0.001 BTC
+            input_count: 1,
+            output_count: 2,
+            witness_bytes: 0,
+            has_inscription: false,
+            max_output_value: 90_000,
+            op_return_text: None,
+        }
+    }
+
+    /// Destructure the Tx variant for assertions (panics on other variants).
+    fn as_tx(
+        event: &HeartbeatEvent,
+    ) -> (u64, u32, f64, bool, bool, f64, u64) {
+        match event {
+            HeartbeatEvent::Tx {
+                fee,
+                vsize,
+                fee_rate,
+                whale,
+                fee_outlier,
+                value_usd,
+                timestamp,
+                ..
+            } => (
+                *fee, *vsize, *fee_rate, *whale, *fee_outlier, *value_usd,
+                *timestamp,
+            ),
+            other => panic!("expected Tx, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_enrich_plain_tx_no_flags() {
+        let p = parsed_fixture();
+        let e = enrich_tx(&p, 1_000, 250, 50_000.0, 1_700_000_000);
+        assert!(!e.is_notable);
+        assert_eq!(e.notable_type, None);
+        assert_eq!(e.value_usd, 0.0);
+        let (fee, vsize, fee_rate, whale, outlier, value_usd, ts) =
+            as_tx(&e.event);
+        assert_eq!(fee, 1_000);
+        assert_eq!(vsize, 250);
+        assert_eq!(fee_rate, 4.0); // 1000 / 250
+        assert!(!whale);
+        assert!(!outlier);
+        assert_eq!(value_usd, 0.0);
+        assert_eq!(ts, 1_700_000_000);
+    }
+
+    #[test]
+    fn test_enrich_whale_sets_value_usd() {
+        let mut p = parsed_fixture();
+        p.value = 20_000_000_000; // 200 BTC
+        // 200 BTC * $50k = $10M >= $1M whale threshold
+        let e = enrich_tx(&p, 1_000, 250, 50_000.0, 1_700_000_000);
+        assert!(e.is_notable);
+        assert_eq!(e.notable_type, Some("whale"));
+        assert_eq!(e.value_usd, 10_000_000.0);
+        let (_, _, _, whale, _, value_usd, _) = as_tx(&e.event);
+        assert!(whale);
+        assert_eq!(value_usd, 10_000_000.0);
+    }
+
+    #[test]
+    fn test_enrich_fee_outlier_by_rate() {
+        let p = parsed_fixture();
+        // fee_rate = 1_000_000 / 250 = 4000 >= 2000 sat/vB outlier threshold
+        let e = enrich_tx(&p, 1_000_000, 250, 50_000.0, 1_700_000_000);
+        assert!(e.is_notable);
+        assert_eq!(e.notable_type, Some("fee_outlier"));
+        let (_, _, fee_rate, whale, outlier, value_usd, _) = as_tx(&e.event);
+        assert_eq!(fee_rate, 4000.0);
+        assert!(!whale);
+        assert!(outlier);
+        // notable → USD populated even for a non-whale (tiny) value
+        assert!(value_usd > 0.0);
+    }
+
+    #[test]
+    fn test_enrich_zero_vsize_no_divide_by_zero() {
+        let p = parsed_fixture();
+        let e = enrich_tx(&p, 1_000, 0, 50_000.0, 1_700_000_000);
+        let (_, vsize, fee_rate, ..) = as_tx(&e.event);
+        assert_eq!(vsize, 0);
+        assert_eq!(fee_rate, 0.0); // guarded, not NaN/inf
+    }
+
+    #[test]
+    fn test_enrich_no_price_disables_usd_flags() {
+        let mut p = parsed_fixture();
+        p.value = 20_000_000_000; // 200 BTC — would be a whale if price known
+        let e = enrich_tx(&p, 1_000, 250, 0.0, 1_700_000_000);
+        // price 0 → whale/round_number cannot fire; this tx has no other flags
+        assert!(!e.is_notable);
+        assert_eq!(e.value_usd, 0.0);
     }
 }
 
