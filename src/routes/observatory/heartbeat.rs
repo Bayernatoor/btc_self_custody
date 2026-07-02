@@ -62,6 +62,10 @@ extern "C" {
     // TX search
     #[wasm_bindgen(js_name = heartbeatSearchTx)]
     fn heartbeat_search_tx(txid: &str) -> bool;
+
+    // Freshest block on the SSE/ZMQ-driven timeline (JSON {height, timestamp})
+    #[wasm_bindgen(js_name = getHeartbeatLatestBlock)]
+    fn get_heartbeat_latest_block() -> String;
 }
 
 #[cfg(not(feature = "hydrate"))]
@@ -93,6 +97,11 @@ fn heartbeat_download_capture(_: &str) {}
 #[allow(dead_code)]
 fn heartbeat_search_tx(_: &str) -> bool {
     false
+}
+#[cfg(not(feature = "hydrate"))]
+#[allow(dead_code)]
+fn get_heartbeat_latest_block() -> String {
+    "{}".to_string()
 }
 
 const RETARGET_PERIOD: u64 = 2016;
@@ -374,29 +383,51 @@ pub fn HeartbeatPage() -> impl IntoView {
         destroy_heartbeat();
     });
 
+    // Freshest block seen on the SSE/ZMQ-driven timeline (JS), polled each tick
+    // below. ZMQ is faster and more reliable than the LiveStats RPC poll, so the
+    // header reflects whichever source is ahead — otherwise it lags the timeline
+    // during a node RPC hiccup.
+    #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
+    let (sse_height, set_sse_height) = signal(0u64);
+    #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
+    let (sse_ts, set_sse_ts) = signal(0u64);
+
     // Reactive display values
     let block_height = Signal::derive(move || {
-        cached_live
-            .get()
-            .map(|s| {
-                format!(
-                    "#{}",
-                    super::helpers::format_number(s.blockchain.blocks)
-                )
-            })
-            .unwrap_or_else(|| "---".to_string())
+        let live =
+            cached_live.get().map(|s| s.blockchain.blocks).unwrap_or(0);
+        let height = live.max(sse_height.get());
+        if height == 0 {
+            "---".to_string()
+        } else {
+            format!("#{}", super::helpers::format_number(height))
+        }
     });
 
-    // Tick counter that increments every second for live countdown.
-    // Only used in hydrate builds; suppress unused warnings for the server build.
+    // Tick counter that increments every second for the live countdown, and
+    // polls the freshest block from the SSE/ZMQ timeline into the sse_* signals.
+    // Only runs in hydrate builds; suppress unused warnings for the server build.
     #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
     let (tick, set_tick) = signal(0u64);
-    let (last_block_ts, set_last_block_ts) = signal(0u64);
 
     #[cfg(feature = "hydrate")]
     {
         let handle = leptos::prelude::set_interval_with_handle(
-            move || set_tick.update(|t| *t += 1),
+            move || {
+                set_tick.update(|t| *t += 1);
+                // Poll the freshest block from the SSE/ZMQ timeline. Monotonic:
+                // only advance, never regress, so a lagging source can't flicker
+                // the header backwards.
+                let latest = get_heartbeat_latest_block();
+                let h = extract_json_f64(&latest, "height") as u64;
+                let t = extract_json_f64(&latest, "timestamp") as u64;
+                if h > sse_height.get_untracked() {
+                    set_sse_height.set(h);
+                }
+                if t > sse_ts.get_untracked() {
+                    set_sse_ts.set(t);
+                }
+            },
             std::time::Duration::from_secs(1),
         );
         on_cleanup(move || {
@@ -406,16 +437,18 @@ pub fn HeartbeatPage() -> impl IntoView {
         });
     }
 
-    // Update stored timestamp when LiveStats refreshes
-    Effect::new(move || {
-        if let Some(s) = cached_live.get() {
-            set_last_block_ts.set(s.blockchain.time);
-        }
-    });
-
     let time_since = Signal::derive(move || {
         let _ = tick.get(); // re-run every tick
-        let ts = last_block_ts.get();
+        // Use the timestamp from whichever source reports the newer block, so
+        // the "last block" timer follows the SSE/ZMQ stream during node hiccups.
+        let live = cached_live.get();
+        let live_h = live.as_ref().map(|s| s.blockchain.blocks).unwrap_or(0);
+        let live_t = live.as_ref().map(|s| s.blockchain.time).unwrap_or(0);
+        let ts = if sse_height.get() > live_h {
+            sse_ts.get()
+        } else {
+            live_t
+        };
         if ts == 0 {
             return "waiting...".to_string();
         }

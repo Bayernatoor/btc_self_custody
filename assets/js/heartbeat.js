@@ -691,6 +691,20 @@ document.addEventListener('visibilitychange', _hbVisibilityChange);
 window.getHeartbeatVitals = function() { return getHeartbeatVitals(); };
 window.renderRhythmStrip = function(id, json) { renderRhythmStrip(id, json); };
 window.getHeartbeatRecentBlocks = function() { return getHeartbeatRecentBlocks(); };
+// Freshest block on the timeline (height + on-chain timestamp), from the
+// SSE/ZMQ stream. The Rust header polls this so the block height and
+// "last block" timer follow the fastest source, not just the LiveStats RPC.
+window.getHeartbeatLatestBlock = function() {
+    var _hb = getState();
+    if (!_hb || !_hb.timeline) return '{"height":0,"timestamp":0}';
+    for (var i = _hb.timeline.length - 1; i >= 0; i--) {
+        var seg = _hb.timeline[i];
+        if (seg.type === 'block') {
+            return JSON.stringify({ height: seg.height || 0, timestamp: seg.timestamp || 0 });
+        }
+    }
+    return '{"height":0,"timestamp":0}';
+};
 window.heartbeatCenter = function() { heartbeatCenter(); };
 window.heartbeatSearchTx = function(txid) { return heartbeatSearchTx(txid); };
 window.heartbeatPulse = function() { heartbeatPulse(); };
