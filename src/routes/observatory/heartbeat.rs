@@ -66,6 +66,10 @@ extern "C" {
     // Freshest block on the SSE/ZMQ-driven timeline (JSON {height, timestamp})
     #[wasm_bindgen(js_name = getHeartbeatLatestBlock)]
     fn get_heartbeat_latest_block() -> String;
+
+    // SSE connection state: "live" | "stale" | "disconnected"
+    #[wasm_bindgen(js_name = getHeartbeatConnectionState)]
+    fn get_heartbeat_connection_state() -> String;
 }
 
 #[cfg(not(feature = "hydrate"))]
@@ -102,6 +106,11 @@ fn heartbeat_search_tx(_: &str) -> bool {
 #[allow(dead_code)]
 fn get_heartbeat_latest_block() -> String {
     "{}".to_string()
+}
+#[cfg(not(feature = "hydrate"))]
+#[allow(dead_code)]
+fn get_heartbeat_connection_state() -> String {
+    "live".to_string()
 }
 
 const RETARGET_PERIOD: u64 = 2016;
@@ -391,6 +400,11 @@ pub fn HeartbeatPage() -> impl IntoView {
     let (sse_height, set_sse_height) = signal(0u64);
     #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
     let (sse_ts, set_sse_ts) = signal(0u64);
+    // SSE connection state for the LIVE indicator: "live" | "stale" | "disconnected".
+    // Polled from the JS feed on the tick below; the timeline's SSE stream is the
+    // most direct freshness signal (a node RPC stall makes it go silent).
+    #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
+    let (conn_state, set_conn_state) = signal("live".to_string());
 
     // Reactive display values
     let block_height = Signal::derive(move || {
@@ -402,6 +416,21 @@ pub fn HeartbeatPage() -> impl IntoView {
         } else {
             format!("#{}", super::helpers::format_number(height))
         }
+    });
+
+    // LIVE indicator colour + label, derived from the SSE connection state.
+    let status_color = Signal::derive(move || match conn_state.get().as_str() {
+        "disconnected" => "#f44336", // red
+        "stale" => "#f7931a",        // amber
+        _ => "#00e676",              // green (live)
+    });
+    let status_label = Signal::derive(move || {
+        match conn_state.get().as_str() {
+            "disconnected" => "RECONNECTING",
+            "stale" => "STALE",
+            _ => "LIVE",
+        }
+        .to_string()
     });
 
     // Tick counter that increments every second for the live countdown, and
@@ -426,6 +455,11 @@ pub fn HeartbeatPage() -> impl IntoView {
                 }
                 if t > sse_ts.get_untracked() {
                     set_sse_ts.set(t);
+                }
+                // Reflect the SSE feed's connection state in the LIVE indicator.
+                let cs = get_heartbeat_connection_state();
+                if cs != conn_state.get_untracked() {
+                    set_conn_state.set(cs);
                 }
             },
             std::time::Duration::from_secs(1),
@@ -514,10 +548,16 @@ pub fn HeartbeatPage() -> impl IntoView {
                     <div class="flex items-center gap-2 sm:gap-3">
                         <div class="flex items-center gap-1.5">
                             <span class="relative flex h-2 w-2">
-                                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#00e676] opacity-60"></span>
-                                <span class="relative inline-flex rounded-full h-2 w-2 bg-[#00e676]"></span>
+                                <span
+                                    class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-60"
+                                    style=move || format!("background-color: {}", status_color.get())
+                                ></span>
+                                <span
+                                    class="relative inline-flex rounded-full h-2 w-2"
+                                    style=move || format!("background-color: {}", status_color.get())
+                                ></span>
                             </span>
-                            <span class="text-xs text-white/50 font-mono">"LIVE"</span>
+                            <span class="text-xs text-white/50 font-mono">{status_label}</span>
                         </div>
                         <span class="text-xs sm:text-base text-[#00e676] font-mono font-semibold">{block_height}</span>
                     </div>

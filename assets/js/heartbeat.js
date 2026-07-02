@@ -17,6 +17,11 @@ import {
     heartbeatDownloadCapture
 } from './heartbeat-vitals.js';
 
+// Seconds of SSE silence (no tx/block) before the feed is considered stale.
+// Txs normally arrive within seconds even in a quiet mempool, so this only
+// trips when the node/stream has genuinely gone quiet (e.g. an RPC stall).
+var HEARTBEAT_STALL_SECS = 60;
+
 // ── Public API ─────────────────────────────────────────────
 
 window.initHeartbeat = function(canvasId) {
@@ -704,6 +709,17 @@ window.getHeartbeatLatestBlock = function() {
         }
     }
     return '{"height":0,"timestamp":0}';
+};
+// Connection state for the header LIVE indicator: 'disconnected' when the SSE
+// EventSource errored, 'stale' when it's open but silent past the threshold
+// (node RPC stall), otherwise 'live'. The Rust header polls this on its 1s tick.
+window.getHeartbeatConnectionState = function() {
+    var _hb = getState();
+    if (!_hb) return 'live';
+    if (_hb._sseDisconnected) return 'disconnected';
+    var last = _hb._lastSseEventTs || 0;
+    if (last > 0 && (Date.now() / 1000 - last) > HEARTBEAT_STALL_SECS) return 'stale';
+    return 'live';
 };
 window.heartbeatCenter = function() { heartbeatCenter(); };
 window.heartbeatSearchTx = function(txid) { return heartbeatSearchTx(txid); };

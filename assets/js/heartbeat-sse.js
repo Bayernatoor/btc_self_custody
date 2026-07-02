@@ -339,6 +339,7 @@ export function connectOwnFeed() {
             try {
                 var tx = JSON.parse(e.data);
                 _hb._hasTxStream = true;
+                _hb._lastSseEventTs = Date.now() / 1000; // liveness (before hidden buffering)
                 _hb._sseTxCount++;
                 // When hidden: buffer txs. virtualX is advanced in bulk
                 // on visibility return (browsers throttle SSE events in
@@ -376,6 +377,7 @@ export function connectOwnFeed() {
             try {
                 var block = JSON.parse(e.data);
                 if (!block.height) return;
+                _hb._lastSseEventTs = Date.now() / 1000; // liveness
                 console.log('SSE block:', block.height, block.hash);
 
                 // When tab is hidden, queue blocks for replay on return
@@ -423,6 +425,7 @@ export function connectOwnFeed() {
             _hb.wsConnected = true;
             _hb._sseDisconnected = false;
             _hb._sseDisconnectedSince = 0;
+            _hb._lastSseEventTs = Date.now() / 1000; // reset stall clock on connect
             _hb._sseRetries = 0;
             // Clear mining overlay and delay on reconnect
             _hb._blockMiningOverlay = false;
