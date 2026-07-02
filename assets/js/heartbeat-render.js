@@ -1,7 +1,7 @@
 // heartbeat-render.js — Main draw loop and all drawing helpers for the heartbeat canvas.
 
 import { getState, COLORS, BG_COLOR, GRID_COLOR, POINT_WIDTH, FLATLINE_PX_PER_SEC, HEAD_POSITION_FRAC, MAX_BLIPS_PER_SEGMENT } from './heartbeat-state.js';
-import { computeColor, lerpColor, drawGrid, hexToRgb, lerp, feeRateColor, cellRadiusForVsize } from './heartbeat-timeline.js';
+import { computeColor, lerpColor, drawGrid, hexToRgb, lerp, feeRateColor, cellRadiusForVsize, fmtBtc, formatDuration } from './heartbeat-timeline.js';
 import { canvasToVirtual, virtualToCanvas, blockAtVirtualX, flatlineAtVirtualX, blipAtCanvasXY } from './heartbeat-blips.js';
 import { stopMomentum } from './heartbeat-interaction.js';
 import { flushTxBatch } from './heartbeat-sse.js';
@@ -218,34 +218,6 @@ export function drawFlatlineTooltip(ctx, info, canvasX, baseline) {
     });
 }
 
-// Format BTC with enough precision to avoid rounding artifacts.
-// 99.99998 BTC must NOT display as "100.0000 BTC" (misleading round number).
-function fmtBtc(btc) {
-    if (btc >= 100) {
-        // 6 decimals with trailing zero trim (min 2 decimals shown)
-        var s = btc.toFixed(6);
-        s = s.replace(/0+$/, '');
-        if (s.endsWith('.')) s += '00';
-        // Ensure at least 2 decimals after point
-        var dot = s.indexOf('.');
-        if (dot >= 0 && s.length - dot - 1 < 2) s = btc.toFixed(2);
-        return s;
-    }
-    if (btc >= 1) return btc.toFixed(4);
-    if (btc >= 0.01) return btc.toFixed(6);
-    return btc.toFixed(8);
-}
-
-export function formatDuration(sec) {
-    if (sec <= 1) return '< 1s';
-    if (sec < 60) return sec + 's';
-    var m = Math.floor(sec / 60);
-    var s = sec % 60;
-    if (m < 60) return m + 'm ' + s + 's';
-    var h = Math.floor(m / 60);
-    m = m % 60;
-    return h + 'h ' + m + 'm';
-}
 
 // ── Control bar (bottom center) ──────────────────────────────
 export function drawControlBar(ctx, w, h) {

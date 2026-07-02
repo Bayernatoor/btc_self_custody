@@ -200,3 +200,33 @@ export function createFlatlineSegment(xStart, xEnd) {
         blips: []
     };
 }
+
+// ── Shared formatting helpers ──────────────────────────────
+
+// Format BTC preserving precision — avoids 99.99998 showing as "100.0000"
+// (a misleading round number). Shared by the canvas tooltips and the feed.
+export function fmtBtc(btc) {
+    if (btc >= 100) {
+        // 6 decimals with trailing-zero trim (min 2 decimals shown)
+        var s = btc.toFixed(6).replace(/0+$/, '');
+        if (s.endsWith('.')) s += '00';
+        var dot = s.indexOf('.');
+        if (dot >= 0 && s.length - dot - 1 < 2) s = btc.toFixed(2);
+        return s;
+    }
+    if (btc >= 1) return btc.toFixed(4);
+    if (btc >= 0.01) return btc.toFixed(6);
+    return btc.toFixed(8);
+}
+
+// Human-readable duration from seconds (e.g. "9m 42s", "1h 03m").
+export function formatDuration(sec) {
+    if (sec <= 1) return '< 1s';
+    if (sec < 60) return sec + 's';
+    var m = Math.floor(sec / 60);
+    var s = sec % 60;
+    if (m < 60) return m + 'm ' + s + 's';
+    var h = Math.floor(m / 60);
+    m = m % 60;
+    return h + 'h ' + m + 'm';
+}

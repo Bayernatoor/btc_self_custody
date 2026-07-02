@@ -1,6 +1,42 @@
 // heartbeat-sse.js — SSE connection, tx batching, and mempool fallback
 import { getState, FLATLINE_PX_PER_SEC } from './heartbeat-state.js';
-import { feeRateColor } from './heartbeat-timeline.js';
+import { feeRateColor, fmtBtc } from './heartbeat-timeline.js';
+
+// ── Notable-tx classification (shared by history placement, live flush, feed) ──
+// Accepts both the live SSE shape (boolean flags) and the persisted notable_txs
+// shape (notable_type string). For live txs notable_type is absent, so each
+// check reduces to the boolean.
+function notableFlags(tx) {
+    var nt = tx.notable_type || null;
+    return {
+        whale: tx.whale || nt === 'whale',
+        feeOutlier: tx.fee_outlier || nt === 'fee_outlier',
+        consolidation: tx.consolidation || nt === 'consolidation',
+        fanOut: tx.fan_out || nt === 'fan_out',
+        largeInscription: tx.large_inscription || nt === 'large_inscription',
+        roundNumber: tx.round_number || nt === 'round_number',
+        opReturnMsg: tx.op_return_msg || nt === 'op_return_msg'
+    };
+}
+
+function anyNotable(f) {
+    return f.whale || f.feeOutlier || f.consolidation || f.fanOut
+        || f.largeInscription || f.roundNumber || f.opReturnMsg;
+}
+
+// Blip color prefix + notableType label, priority order matching the backend
+// (value > structural > fee > data). Returns null when not notable (caller
+// falls back to feeRateColor).
+function notableStyle(f) {
+    if (f.whale) return { color: 'rgba(255, 215, 0, ', type: 'whale' };
+    if (f.roundNumber) return { color: 'rgba(144, 238, 144, ', type: 'round_number' };
+    if (f.largeInscription) return { color: 'rgba(255, 0, 200, ', type: 'large_inscription' };
+    if (f.consolidation) return { color: 'rgba(168, 85, 247, ', type: 'consolidation' };
+    if (f.fanOut) return { color: 'rgba(0, 210, 255, ', type: 'fan_out' };
+    if (f.feeOutlier) return { color: 'rgba(255, 68, 68, ', type: 'fee_outlier' };
+    if (f.opReturnMsg) return { color: 'rgba(255, 165, 0, ', type: 'op_return_msg' };
+    return null;
+}
 
 // Place SSE history txs on the live flatline
 export function placeHistoryTxs(txs, lastBlockTs, instant) {
@@ -73,17 +109,13 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
         var tx = txs[i];
         if (!tx.fee || !tx.vsize) continue;
 
-        // Detect notable type from history data (notable_type field) or live flags
-        var nt = tx.notable_type || null;
-        var isWhale = tx.whale || nt === 'whale';
-        var isFeeOutlier = tx.fee_outlier || nt === 'fee_outlier';
-        var isConsolidation = tx.consolidation || nt === 'consolidation';
-        var isFanOut = tx.fan_out || nt === 'fan_out';
-        var isLargeInscription = tx.large_inscription || nt === 'large_inscription';
-        var isRoundNumber = tx.round_number || nt === 'round_number';
-        var isOpReturnMsg = tx.op_return_msg || nt === 'op_return_msg';
-        var isNotable = isWhale || isFeeOutlier || isConsolidation || isFanOut
-            || isLargeInscription || isRoundNumber || isOpReturnMsg;
+        // Notable classification (shared helper; handles history + live shapes)
+        var flags = notableFlags(tx);
+        var isWhale = flags.whale, isFeeOutlier = flags.feeOutlier,
+            isConsolidation = flags.consolidation, isFanOut = flags.fanOut,
+            isLargeInscription = flags.largeInscription,
+            isRoundNumber = flags.roundNumber, isOpReturnMsg = flags.opReturnMsg;
+        var isNotable = anyNotable(flags);
 
         // Spread randomly across the flatline, leaving last 20px for live txs.
         var usableSpan = Math.max(10, flatlineSpan - 20);
@@ -102,24 +134,9 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
         if (stackY > histMaxStack && !isNotable) continue;
         stackMap[gridX] = stackY + brickH;
 
-        var blipColor, notableType;
-        if (isWhale) {
-            blipColor = 'rgba(255, 215, 0, '; notableType = 'whale';
-        } else if (isRoundNumber) {
-            blipColor = 'rgba(144, 238, 144, '; notableType = 'round_number';
-        } else if (isLargeInscription) {
-            blipColor = 'rgba(255, 0, 200, '; notableType = 'large_inscription';
-        } else if (isConsolidation) {
-            blipColor = 'rgba(168, 85, 247, '; notableType = 'consolidation';
-        } else if (isFanOut) {
-            blipColor = 'rgba(0, 210, 255, '; notableType = 'fan_out';
-        } else if (isFeeOutlier) {
-            blipColor = 'rgba(255, 68, 68, '; notableType = 'fee_outlier';
-        } else if (isOpReturnMsg) {
-            blipColor = 'rgba(255, 165, 0, '; notableType = 'op_return_msg';
-        } else {
-            blipColor = feeRateColor(feeRate, medianFee); notableType = null;
-        }
+        var style = notableStyle(flags);
+        var blipColor = style ? style.color : feeRateColor(feeRate, medianFee);
+        var notableType = style ? style.type : null;
 
         // Stagger: left-most bricks appear first, sweeping right
         var xFrac = flatlineSpan > 0 ? (txVX - liveSeg.x_start) / flatlineSpan : 0;
@@ -561,15 +578,9 @@ export function flushTxBatch() {
         var tx = batch[i];
         var feeRate = tx.fee && tx.vsize ? tx.fee / tx.vsize : 1;
         var feeNorm = Math.min(Math.log2(feeRate + 1) / 6, 1.0);
-        var isWhale = tx.whale || false;
-        var isFeeOutlier = tx.fee_outlier || false;
-        var isConsolidation = tx.consolidation || false;
-        var isFanOut = tx.fan_out || false;
-        var isLargeInscription = tx.large_inscription || false;
-        var isRoundNumber = tx.round_number || false;
-        var isOpReturnMsg = tx.op_return_msg || false;
-        var isNotable = isWhale || isFeeOutlier || isConsolidation || isFanOut
-            || isLargeInscription || isRoundNumber || isOpReturnMsg;
+        var flags = notableFlags(tx);
+        var isWhale = flags.whale, isFeeOutlier = flags.feeOutlier;
+        var isNotable = anyNotable(flags);
 
         // Notable txs: slightly wider and taller, but not so tall they fill columns fast.
         // Reduced from 35-60px (which caused tx drops) to 22-38px.
@@ -627,25 +638,9 @@ export function flushTxBatch() {
             }
         }
 
-        // Priority order matches backend (structural > value > fee > data)
-        var blipColor, notableType;
-        if (isWhale) {
-            blipColor = 'rgba(255, 215, 0, '; notableType = 'whale';
-        } else if (isRoundNumber) {
-            blipColor = 'rgba(144, 238, 144, '; notableType = 'round_number';
-        } else if (isLargeInscription) {
-            blipColor = 'rgba(255, 0, 200, '; notableType = 'large_inscription';
-        } else if (isConsolidation) {
-            blipColor = 'rgba(168, 85, 247, '; notableType = 'consolidation';
-        } else if (isFanOut) {
-            blipColor = 'rgba(0, 210, 255, '; notableType = 'fan_out';
-        } else if (isFeeOutlier) {
-            blipColor = 'rgba(255, 68, 68, '; notableType = 'fee_outlier';
-        } else if (isOpReturnMsg) {
-            blipColor = 'rgba(255, 165, 0, '; notableType = 'op_return_msg';
-        } else {
-            blipColor = feeRateColor(feeRate, medianFee); notableType = null;
-        }
+        var style = notableStyle(flags);
+        var blipColor = style ? style.color : feeRateColor(feeRate, medianFee);
+        var notableType = style ? style.type : null;
 
         liveSeg.blips.push({
             x: brickX,
@@ -806,33 +801,16 @@ var MAX_WHALE_ENTRIES = 100;
 // Track seen txids to prevent duplicates when history replays + live arrives
 window._seenNotableTxids = window._seenNotableTxids || new Set();
 
-// Format BTC preserving precision - avoids 99.99998 showing as "100.0000".
-function _fmtBtcFeed(btc) {
-    if (btc >= 100) {
-        var s = btc.toFixed(6).replace(/0+$/, '');
-        if (s.endsWith('.')) s += '00';
-        var dot = s.indexOf('.');
-        if (dot >= 0 && s.length - dot - 1 < 2) s = btc.toFixed(2);
-        return s;
-    }
-    if (btc >= 1) return btc.toFixed(4);
-    if (btc >= 0.01) return btc.toFixed(6);
-    return btc.toFixed(8);
-}
-
 // Build the feed row HTML and styling from a tx object.
 // Accepts both live SSE format (whale/fee_outlier/... booleans) and
 // persistent notable_txs format (notable_type string).
 function _buildNotableRow(tx) {
-    // Support both formats: explicit flags (live) and notable_type string (history)
-    var nt = tx.notable_type || null;
-    var isWhale = tx.whale || nt === 'whale';
-    var isFeeOutlier = tx.fee_outlier || nt === 'fee_outlier';
-    var isConsolidation = tx.consolidation || nt === 'consolidation';
-    var isFanOut = tx.fan_out || nt === 'fan_out';
-    var isLargeInscription = tx.large_inscription || nt === 'large_inscription';
-    var isRoundNumber = tx.round_number || nt === 'round_number';
-    var isOpReturnMsg = tx.op_return_msg || nt === 'op_return_msg';
+    // Accepts both live (boolean flags) and history (notable_type) shapes.
+    var flags = notableFlags(tx);
+    var isWhale = flags.whale, isFeeOutlier = flags.feeOutlier,
+        isConsolidation = flags.consolidation, isFanOut = flags.fanOut,
+        isLargeInscription = flags.largeInscription,
+        isRoundNumber = flags.roundNumber, isOpReturnMsg = flags.opReturnMsg;
 
     var btcVal = (tx.value || 0) / 100000000;
     var feeRate = tx.fee && tx.vsize ? (tx.fee / tx.vsize).toFixed(1) : '?';
@@ -841,7 +819,7 @@ function _buildNotableRow(tx) {
     var time = new Date(timestamp * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     var txidShort = tx.txid ? tx.txid.substring(0, 12) + '...' : '?';
     var usdVal = Math.round(tx.value_usd || 0);
-    var usdStr = usdVal > 0 ? '$' + usdVal.toLocaleString() : _fmtBtcFeed(btcVal) + ' BTC';
+    var usdStr = usdVal > 0 ? '$' + usdVal.toLocaleString() : fmtBtc(btcVal) + ' BTC';
     var isConfirmed = !!tx.confirmed_height;
     var statusIcon = isConfirmed ? '<span class="text-white/40 text-[10px] shrink-0" title="Confirmed">\u2713</span>' : '';
 
@@ -855,11 +833,11 @@ function _buildNotableRow(tx) {
         // Show the round output value (the part that triggered detection), not total
         var roundBtc = (tx.max_output_value || tx.value || 0) / 100000000;
         labelHtml = '<span class="text-[#90ee90] font-bold shrink-0">ROUND #</span>' +
-            '<span class="text-white/60 shrink-0">' + _fmtBtcFeed(roundBtc) + ' BTC out</span>';
+            '<span class="text-white/60 shrink-0">' + fmtBtc(roundBtc) + ' BTC out</span>';
     } else if (isLargeInscription) {
         feedType = 'inscription';
         labelHtml = '<span class="text-[#ff00c8] font-bold shrink-0">INSCRIPTION</span>' +
-            '<span class="text-white/50 shrink-0">' + _fmtBtcFeed(btcVal) + ' BTC</span>';
+            '<span class="text-white/50 shrink-0">' + fmtBtc(btcVal) + ' BTC</span>';
     } else if (isConsolidation) {
         feedType = 'consolidation';
         var ioC = (tx.input_count || '?') + '->' + (tx.output_count || '?');

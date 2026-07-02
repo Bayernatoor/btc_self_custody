@@ -1,22 +1,10 @@
 // heartbeat-vitals.js — Vital signs, rhythm strip, search, effects, sound, capture
 import { getState, COLORS, POINT_WIDTH, HEAD_POSITION_FRAC, FLATLINE_PX_PER_SEC, RHYTHM_STRIP_BLOCKS, BG_COLOR, GRID_COLOR } from './heartbeat-state.js';
-import { generatePQRST, computeColor, hexToRgb } from './heartbeat-timeline.js';
+import { generatePQRST, computeColor, hexToRgb, formatDuration } from './heartbeat-timeline.js';
 
 // ── Module-level audio state ─────────────────────────────
 var _audioCtx = null;
 var _soundEnabled = false;
-
-// ── Helper ───────────────────────────────────────────────
-function formatDuration(sec) {
-    if (sec <= 1) return '< 1s';
-    if (sec < 60) return sec + 's';
-    var m = Math.floor(sec / 60);
-    var s = sec % 60;
-    if (m < 60) return m + 'm ' + s + 's';
-    var h = Math.floor(m / 60);
-    m = m % 60;
-    return h + 'h ' + m + 'm';
-}
 
 // ── Vital Signs Computation ──────────────────────────────
 

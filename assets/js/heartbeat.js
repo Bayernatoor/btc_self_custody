@@ -266,10 +266,8 @@ window.pushHeartbeatBlocks = function(json, replay) {
             }
 
             var interBlock = b.inter_block_seconds || 600;
-            // For live blocks, compute real interval from the previous block's timestamp
-            if (!isReplay && _hb._prevBlockTime > 0 && b.timestamp > _hb._prevBlockTime) {
-                interBlock = b.timestamp - _hb._prevBlockTime;
-            } else if (!isReplay && _hb.lastBlockTime > 0 && b.timestamp > _hb.lastBlockTime) {
+            // For live blocks, compute the real interval from the last block's timestamp.
+            if (!isReplay && _hb.lastBlockTime > 0 && b.timestamp > _hb.lastBlockTime) {
                 interBlock = b.timestamp - _hb.lastBlockTime;
             }
 
