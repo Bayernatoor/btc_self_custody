@@ -33,7 +33,7 @@
 //! Transactions are stored in SQLite (`mempool_txs` table) and broadcast
 //! to SSE clients via a tokio broadcast channel.
 
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -147,26 +147,19 @@ pub fn spawn(
     zmq_tx_url: String,
     zmq_block_url: String,
 ) {
-    // Shared set: block subscriber populates with block txids so the tx
-    // subscriber can skip them (block tx flood) while still processing
-    // genuine new mempool txs.
-    let block_txids: Arc<std::sync::Mutex<HashSet<String>>> =
-        Arc::new(std::sync::Mutex::new(HashSet::new()));
-
     // Transaction + Sequence subscriber (both on port 28333, SAME socket).
     // Must share a single socket — ZMQ PUB distributes messages across
     // separate SUB sockets, so two connections would split the stream.
+    // Re-broadcast/duplicate txs are de-duplicated inside the task via a
+    // local seen-txid set (see SeenTxids) — no cross-task state needed.
     {
         let state = Arc::clone(&state);
         let sender = tx_sender.clone();
         let url = zmq_tx_url.clone();
-        let bt = Arc::clone(&block_txids);
         tokio::spawn(async move {
             loop {
                 tracing::info!("ZMQ: connecting to rawtx+sequence at {url}");
-                match subscribe_tx_and_sequence(&state, &sender, &url, &bt)
-                    .await
-                {
+                match subscribe_tx_and_sequence(&state, &sender, &url).await {
                     Ok(()) => tracing::warn!(
                         "ZMQ rawtx+sequence stream ended, reconnecting..."
                     ),
@@ -184,11 +177,10 @@ pub fn spawn(
         let state = Arc::clone(&state);
         let sender = tx_sender;
         let url = zmq_block_url.clone();
-        let bt = block_txids;
         tokio::spawn(async move {
             loop {
                 tracing::info!("ZMQ: connecting to hashblock at {url}");
-                match subscribe_blocks(&state, &sender, &url, &bt).await {
+                match subscribe_blocks(&state, &sender, &url).await {
                     Ok(()) => tracing::warn!(
                         "ZMQ hashblock stream ended, reconnecting..."
                     ),
@@ -213,7 +205,6 @@ async fn subscribe_tx_and_sequence(
     state: &Arc<StatsState>,
     sender: &broadcast::Sender<HeartbeatEvent>,
     url: &str,
-    block_txids: &std::sync::Mutex<HashSet<String>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut socket = SubSocket::new();
     socket.connect(url).await?;
@@ -235,6 +226,11 @@ async fn subscribe_tx_and_sequence(
     let mut parse_fail = 0u64;
     let mut seq_state = SequenceState::default();
     let mut seq_event_count = 0u64;
+    // De-dup recently broadcast txids. Bitcoin Core re-emits a block's txs on
+    // rawtx after confirmation, and ZMQ can deliver duplicates; skipping repeats
+    // here means no worker/RPC is spent on them. Bounded, task-local — replaces
+    // the old cross-task block_txids mutex.
+    let mut seen = SeenTxids::new(SEEN_TXID_CAP);
 
     loop {
         let msg = socket.recv().await?;
@@ -309,14 +305,10 @@ async fn subscribe_tx_and_sequence(
             .unwrap_or_default()
             .as_secs();
 
-        // During block processing, ZMQ re-broadcasts every tx in the block.
-        // Skip those (they're in the block_txids set) but let genuine new
-        // mempool txs through so the SSE stream doesn't go silent. Cheap
-        // check kept inline so no worker/RPC is spent on known block txs.
-        if let Ok(set) = block_txids.lock() {
-            if !set.is_empty() && set.contains(&parsed.txid) {
-                continue;
-            }
+        // Skip txids we've already broadcast (block re-broadcasts + duplicate
+        // ZMQ delivery). Cheap, inline, so no worker/RPC is spent on repeats.
+        if !seen.insert(&parsed.txid) {
+            continue;
         }
 
         // Dispatch to a worker. `acquire_owned` parks here (backpressure) when
@@ -342,6 +334,48 @@ async fn subscribe_tx_and_sequence(
 /// Number of concurrent `getmempoolentry` lookups in flight. Bounds RPC load
 /// on the node and applies backpressure to the recv loop when saturated.
 const RAWTX_CONCURRENCY: usize = 16;
+
+/// How many recently-seen txids to remember for de-duplication. A block holds
+/// ~3-4k txs, so this covers ~10+ blocks of history — far more than the window
+/// in which Core re-broadcasts or ZMQ redelivers a tx. Evicting an older txid
+/// only risks a rare duplicate brick, never a correctness problem.
+const SEEN_TXID_CAP: usize = 50_000;
+
+/// Bounded FIFO set of recently-broadcast txids. `insert` returns whether the
+/// txid is new (should be processed) or a repeat (should be skipped). When over
+/// capacity the oldest txid is evicted. Task-local — no locking — because it is
+/// only touched by the single-threaded rawtx recv loop.
+struct SeenTxids {
+    set: HashSet<String>,
+    order: VecDeque<String>,
+    cap: usize,
+}
+
+impl SeenTxids {
+    fn new(cap: usize) -> Self {
+        Self {
+            set: HashSet::with_capacity(cap),
+            order: VecDeque::with_capacity(cap),
+            cap,
+        }
+    }
+
+    /// Record a txid. Returns `true` if it was not seen before (caller should
+    /// process it), `false` if it is a duplicate (caller should skip).
+    fn insert(&mut self, txid: &str) -> bool {
+        if self.set.contains(txid) {
+            return false;
+        }
+        self.set.insert(txid.to_string());
+        self.order.push_back(txid.to_string());
+        if self.order.len() > self.cap {
+            if let Some(evicted) = self.order.pop_front() {
+                self.set.remove(&evicted);
+            }
+        }
+        true
+    }
+}
 
 /// Enrich a parsed mempool tx into an SSE event plus the fields the DB
 /// persistence path needs. Pure function of its inputs (unit-tested): all
@@ -602,14 +636,16 @@ impl SequenceState {
     }
 }
 
-/// Subscribe to block hashes. After hashblock fires (validation complete),
-/// fetch all block data synchronously then broadcast ONE complete event.
-/// The sequence subscriber handles the mining overlay during the wait.
+/// Subscribe to block hashes. On hashblock (validation complete), broadcast the
+/// spike ASAP from two small RPCs (getblockheader + getblockstats), then defer
+/// the full txid list + mempool-tx confirmation to a background task. The txid
+/// list from `getblock(hash, 1)` is 200-400KB and takes tens of seconds over
+/// WireGuard for a busy block — waiting on it before broadcasting was the whole
+/// reason the spike lagged 20-90s behind the block.
 async fn subscribe_blocks(
     state: &Arc<StatsState>,
     sender: &broadcast::Sender<HeartbeatEvent>,
     url: &str,
-    block_txids: &Arc<std::sync::Mutex<HashSet<String>>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut socket = SubSocket::new();
     socket.connect(url).await?;
@@ -632,117 +668,143 @@ async fn subscribe_blocks(
             continue;
         }
         let block_hash = bytes_to_hex(hash_bytes);
-        tracing::info!("ZMQ: hashblock {block_hash} — fetching full data");
+        tracing::info!("ZMQ: hashblock {block_hash} — fetching spike metadata");
 
-        // Show mining overlay immediately while block data is being fetched
+        // Show mining overlay immediately while metadata is being fetched.
         let _ = sender.send(HeartbeatEvent::BlockMining);
 
-        // Node just finished validation — RPC is available now.
-        // Fetch all data synchronously for a single complete broadcast.
-        let block_info = match get_block_info(state, &block_hash).await {
-            Some(info) => info,
-            None => continue,
-        };
+        // Fast path: header (height/timestamp/tx_count) + getblockstats
+        // (size/weight/total_fees). Both small — the spike appears in ~1-2s.
+        let (header, size, weight, total_fees) =
+            match get_block_fast(state, &block_hash).await {
+                Some(v) => v,
+                None => continue,
+            };
 
-        // Populate the txid filter so the tx subscriber skips block txs
-        if let Ok(mut set) = block_txids.lock() {
-            set.clear();
-            for txid in &block_info.txids {
-                set.insert(txid.clone());
+        tracing::info!(
+            "ZMQ: block {} ({block_hash}) — {} tx, {:.4} BTC fees, size={size}, weight={weight}",
+            header.height,
+            header.tx_count,
+            total_fees as f64 / 100_000_000.0,
+        );
+
+        // Bust tip-dependent RPC caches now that a new block is the tip.
+        // Without this, /api/stats/live would keep returning the previous
+        // block height until BLOCKCHAIN_INFO_TTL (30s) expired, AND the reorg
+        // detector's block-hash LRU could hold pre-reorg hashes for heights in
+        // the reorg window, masking real reorgs. Only needs the height.
+        state.rpc.invalidate_tip_caches(header.height);
+
+        // Broadcast the spike. confirmed_count is 0 here: the frontend uses
+        // tx_count first (confirmed_count is only its fallback), and the DB
+        // confirmation is deferred below and off the visual path.
+        let _ = sender.send(HeartbeatEvent::Block {
+            height: header.height,
+            hash: block_hash.clone(),
+            timestamp: header.timestamp,
+            tx_count: header.tx_count,
+            total_fees,
+            size,
+            weight,
+            confirmed_count: 0,
+        });
+
+        // Deferred: fetch the full txid list and confirm mempool/notable txs in
+        // the DB. Slow over WireGuard, but not on the spike's critical path.
+        // poll_new_blocks does NOT confirm mempool txs, so this is the only
+        // place that marks tracked txs confirmed.
+        spawn_block_confirm(state, block_hash, header.height);
+    }
+}
+
+/// Fetch the minimal metadata needed to draw a block spike, with retry
+/// (hashblock fires right as validation completes, so RPC may be briefly busy).
+/// The header is essential; getblockstats is best-effort — if it never returns,
+/// the block still broadcasts with zero size/weight/fees rather than vanishing.
+/// Returns `(header, size, weight, total_fees)` or `None` if the header failed.
+async fn get_block_fast(
+    state: &Arc<StatsState>,
+    hash: &str,
+) -> Option<(super::rpc::BlockTxids, u64, u64, u64)> {
+    let mut header_only: Option<super::rpc::BlockTxids> = None;
+    for attempt in 0..3 {
+        if attempt > 0 {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+        let (header_res, stats_res) = tokio::join!(
+            state.rpc.get_block_header(hash),
+            state.rpc.get_block_stats_brief(hash),
+        );
+        let header = match header_res {
+            Ok(h) => h,
+            Err(e) => {
+                if attempt < 2 {
+                    tracing::debug!(
+                        "ZMQ: block {hash} header not ready (attempt {}), retrying...",
+                        attempt + 1
+                    );
+                } else {
+                    tracing::error!(
+                        "ZMQ: getblockheader failed for {hash} after 3 attempts: {e}"
+                    );
+                }
+                continue;
+            }
+        };
+        match stats_res {
+            Ok((size, weight, total_fees)) => {
+                return Some((header, size, weight, total_fees));
+            }
+            Err(_) => {
+                // Header is good; keep it and retry for stats.
+                header_only = Some(header);
             }
         }
+    }
+    // Stats never came back — broadcast the block anyway from the header.
+    if header_only.is_some() {
+        tracing::warn!(
+            "ZMQ: getblockstats unavailable for {hash}; broadcasting with zero size/weight/fees"
+        );
+    }
+    header_only.map(|h| (h, 0, 0, 0))
+}
 
+/// Background task: fetch the block's full txid list and mark the matching
+/// mempool_txs + notable_txs rows confirmed. Runs detached so the ~20-90s
+/// getblock(hash, 1) over WireGuard never delays the spike broadcast.
+fn spawn_block_confirm(state: &Arc<StatsState>, hash: String, height: u64) {
+    let state = Arc::clone(state);
+    tokio::spawn(async move {
+        let info = match get_block_info(&state, &hash).await {
+            Some(i) => i,
+            None => return, // logged inside get_block_info; poller will backfill
+        };
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
-
-        // Confirm mempool txs + get authoritative fees in parallel
         let db = state.db.clone();
-        let txids = block_info.txids.clone();
-        let height = block_info.height;
-        let txid_count = txids.len();
-
-        let confirm_fut = tokio::task::spawn_blocking(move || {
-            match db.get() {
-                Ok(conn) => {
-                    // Also mark notable txs as confirmed
-                    let _ = db::confirm_notable_txs(&conn, &txids, height, now);
-                    db::confirm_mempool_txs(&conn, &txids, height, now)
-                }
-                Err(e) => {
-                    tracing::error!("ZMQ: DB error for block {height}: {e}");
-                    Ok((0, 0))
-                }
-            }
-        });
-        let fees_fut = state.rpc.get_block_total_fee(block_info.height);
-
-        let (confirm_result, fees_result) = tokio::join!(confirm_fut, fees_fut);
-
-        let confirmed_count = match confirm_result {
-            Ok(Ok((count, _))) => count,
-            Ok(Err(e)) => {
-                tracing::error!(
-                    "ZMQ: DB error confirming txs for block {}: {e}",
-                    block_info.height
-                );
-                0
+        let txid_count = info.txids.len();
+        let txids = info.txids;
+        let confirmed = tokio::task::spawn_blocking(move || match db.get() {
+            Ok(conn) => {
+                let _ = db::confirm_notable_txs(&conn, &txids, height, now);
+                db::confirm_mempool_txs(&conn, &txids, height, now)
+                    .map(|(count, _)| count)
+                    .unwrap_or(0)
             }
             Err(e) => {
-                tracing::error!(
-                    "ZMQ: spawn_blocking panicked for block {}: {e}",
-                    block_info.height
-                );
+                tracing::error!("ZMQ: DB error confirming block {height}: {e}");
                 0
             }
-        };
-        let total_fees = match fees_result {
-            Ok(fees) => fees,
-            Err(e) => {
-                tracing::warn!(
-                    "ZMQ: getblockstats failed for block {}: {e}",
-                    block_info.height
-                );
-                0
-            }
-        };
-
+        })
+        .await
+        .unwrap_or(0);
         tracing::info!(
-            "ZMQ: block {} ({block_hash}) — {confirmed_count}/{txid_count} confirmed, {:.4} BTC fees, size={}, weight={}",
-            block_info.height,
-            total_fees as f64 / 100_000_000.0,
-            block_info.size,
-            block_info.weight,
+            "ZMQ: block {height} DB-confirmed {confirmed}/{txid_count} tracked txs"
         );
-
-        // Bust tip-dependent RPC caches now that a new block has been fully
-        // processed. Without this, /api/stats/live would keep returning the
-        // previous block height until BLOCKCHAIN_INFO_TTL (30s) expired, AND
-        // the reorg detector's block-hash LRU could hold pre-reorg hashes
-        // for heights in the reorg window, masking real reorgs.
-        state.rpc.invalidate_tip_caches(block_info.height);
-
-        // Broadcast ONE complete block event
-        let _ = sender.send(HeartbeatEvent::Block {
-            height: block_info.height,
-            hash: block_hash,
-            timestamp: block_info.timestamp,
-            tx_count: block_info.tx_count,
-            total_fees,
-            size: block_info.size,
-            weight: block_info.weight,
-            confirmed_count,
-        });
-
-        // Don't clear the txid filter here. ZMQ continues re-broadcasting
-        // block txs after processing finishes. Clearing now would let those stale
-        // txs pass the filter, fail getmempoolentry, and the consecutive_fail
-        // throttle can drop a genuine new mempool tx. The set is replaced
-        // (clear + repopulate) when the next block arrives at line 268 above.
-        // Between blocks the set harmlessly contains the previous block's
-        // txids — no new mempool tx can collide (txids are unique).
-    }
+    });
 }
 
 /// Get block metadata and txid list from RPC, with retry.
@@ -1648,6 +1710,41 @@ mod tests {
         // price 0 → whale/round_number cannot fire; this tx has no other flags
         assert!(!e.is_notable);
         assert_eq!(e.value_usd, 0.0);
+    }
+
+    // --- SeenTxids: bounded FIFO de-dup for rawtx re-broadcasts ---
+
+    #[test]
+    fn test_seen_txids_new_then_duplicate() {
+        let mut seen = SeenTxids::new(10);
+        assert!(seen.insert("aaa"), "first sighting is new");
+        assert!(!seen.insert("aaa"), "second sighting is a duplicate");
+        assert!(seen.insert("bbb"), "a different txid is new");
+        assert!(!seen.insert("bbb"));
+    }
+
+    #[test]
+    fn test_seen_txids_evicts_oldest_over_cap() {
+        let mut seen = SeenTxids::new(3);
+        for id in ["t0", "t1", "t2"] {
+            assert!(seen.insert(id));
+        }
+        // Inserting t3 evicts t0 (the oldest).
+        assert!(seen.insert("t3"));
+        // t0 was evicted, so it now reads as new again.
+        assert!(seen.insert("t0"), "evicted txid is treated as new again");
+        // t2 is still within the window → still a duplicate.
+        assert!(!seen.insert("t2"));
+    }
+
+    #[test]
+    fn test_seen_txids_stays_bounded() {
+        let mut seen = SeenTxids::new(5);
+        for i in 0..1000 {
+            seen.insert(&format!("tx{i}"));
+        }
+        assert_eq!(seen.set.len(), 5);
+        assert_eq!(seen.order.len(), 5);
     }
 }
 

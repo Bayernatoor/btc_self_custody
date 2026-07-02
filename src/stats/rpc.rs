@@ -1161,6 +1161,30 @@ impl BitcoinRpc {
         Ok(result["totalfee"].as_u64().unwrap_or(0))
     }
 
+    /// Get (size, weight, total_fees) for a block via a single getblockstats
+    /// call by hash. The response is small (a few scalars), so this is fast
+    /// even over WireGuard — used together with `get_block_header` to broadcast
+    /// the heartbeat block spike immediately, without waiting on the full txid
+    /// list from `getblock(hash, 1)`.
+    pub async fn get_block_stats_brief(
+        &self,
+        hash: &str,
+    ) -> Result<(u64, u64, u64), StatsError> {
+        let result = self
+            .call(
+                "getblockstats",
+                &[
+                    json!(hash),
+                    json!(["total_size", "total_weight", "totalfee"]),
+                ],
+            )
+            .await?;
+        let size = result["total_size"].as_u64().unwrap_or(0);
+        let weight = result["total_weight"].as_u64().unwrap_or(0);
+        let total_fees = result["totalfee"].as_u64().unwrap_or(0);
+        Ok((size, weight, total_fees))
+    }
+
     /// Call `getmempoolinfo` - returns mempool size, fee stats, memory usage.
     /// Cached with a 13s TTL. Mempool contents change every second as new
     /// txs arrive, but tx count drifting by 13s is imperceptible in the UI
