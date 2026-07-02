@@ -7,28 +7,18 @@
 //!   Parsed to extract txid and total output value, then enriched with fee/vsize
 //!   from `getmempoolentry` RPC.
 //! - `hashblock` (port 28332): 32-byte block hash after validation completes.
-//!   Triggers full block data fetch and mempool tx confirmation.
-//! - `sequence` (port 28333): Mempool event stream with single-character type codes:
-//!   - `A` = tx added to mempool
-//!   - `R` = tx removed from mempool (block or conflict)
-//!   - `C` = block connected
-//!   - `D` = block disconnected (reorg)
-//!
-//! ## Mining Detection via Sequence Events
-//!
-//! When a new block arrives, Bitcoin Core removes transactions from the mempool in
-//! a rapid burst of `R` (removed) events. By counting R events within a short time
-//! window (3 seconds), the subscriber detects block processing before the slower
-//! `hashblock` event fires. This triggers the `BlockMining` SSE event, which shows
-//! a mining overlay in the frontend UI.
+//!   Triggers the block spike broadcast and (deferred) mempool tx confirmation.
+//!   Also emits `BlockMining` immediately so the frontend can show a mining
+//!   overlay during the brief metadata fetch.
 //!
 //! ## Heartbeat Event Types
 //!
 //! - `Tx`: New mempool transaction with fee, vsize, value, and fee rate.
-//! - `Block`: Complete block data (height, hash, fees, size, confirmed tx count).
-//!   Sent after full validation and data fetch - all fields populated.
-//! - `BlockMining`: Lightweight signal that block processing has started.
-//!   Detected via R-event burst. Frontend shows mining animation until Block arrives.
+//! - `Block`: Block spike data (height, hash, fees, size, weight, tx_count).
+//!   Broadcast from getblockheader + getblockstats; the full txid list and DB
+//!   confirmation happen off the critical path.
+//! - `BlockMining`: Lightweight signal that a block arrived; fired on `hashblock`.
+//!   Frontend shows a mining overlay until the `Block` event lands.
 //!
 //! Transactions are stored in SQLite (`mempool_txs` table) and broadcast
 //! to SSE clients via a tokio broadcast channel.
@@ -117,12 +107,14 @@ pub enum HeartbeatEvent {
         size: u64,
         /// Block weight in weight units.
         weight: u64,
-        /// Number of tracked mempool txs that were confirmed in this block.
+        /// Number of tracked mempool txs confirmed in this block. Always 0 in
+        /// the broadcast — DB confirmation is deferred off the spike's critical
+        /// path, and the frontend uses `tx_count` first anyway.
         confirmed_count: u64,
     },
-    /// Block is being mined/validated - node is processing a new block.
-    /// Detected via ZMQ sequence `R` burst (txs being removed from mempool).
-    /// Frontend shows mining overlay until the complete Block event arrives.
+    /// A new block arrived — fired on the `hashblock` notification, before the
+    /// (fast) metadata fetch. Frontend shows a mining overlay until the `Block`
+    /// event lands.
     #[serde(rename = "block_mining")]
     BlockMining,
 }
@@ -137,34 +129,30 @@ fn is_zero(v: &u64) -> bool {
     *v == 0
 }
 
-/// Spawn the ZMQ subscriber tasks. Both tx/sequence topics share a single socket
-/// on port 28333 (ZMQ PUB distributes across separate SUB sockets, so splitting
-/// would cause each to see only a fraction of messages). Block notifications use
-/// a separate socket on port 28332.
+/// Spawn the ZMQ subscriber tasks. `rawtx` is on port 28333, block
+/// notifications (`hashblock`) on a separate socket on port 28332.
 pub fn spawn(
     state: Arc<StatsState>,
     tx_sender: broadcast::Sender<HeartbeatEvent>,
     zmq_tx_url: String,
     zmq_block_url: String,
 ) {
-    // Transaction + Sequence subscriber (both on port 28333, SAME socket).
-    // Must share a single socket — ZMQ PUB distributes messages across
-    // separate SUB sockets, so two connections would split the stream.
-    // Re-broadcast/duplicate txs are de-duplicated inside the task via a
-    // local seen-txid set (see SeenTxids) — no cross-task state needed.
+    // rawtx subscriber (port 28333). Re-broadcast/duplicate txs are
+    // de-duplicated inside the task via a local seen-txid set (see SeenTxids)
+    // — no cross-task state needed.
     {
         let state = Arc::clone(&state);
         let sender = tx_sender.clone();
         let url = zmq_tx_url.clone();
         tokio::spawn(async move {
             loop {
-                tracing::info!("ZMQ: connecting to rawtx+sequence at {url}");
-                match subscribe_tx_and_sequence(&state, &sender, &url).await {
+                tracing::info!("ZMQ: connecting to rawtx at {url}");
+                match subscribe_txs(&state, &sender, &url).await {
                     Ok(()) => tracing::warn!(
-                        "ZMQ rawtx+sequence stream ended, reconnecting..."
+                        "ZMQ rawtx stream ended, reconnecting..."
                     ),
                     Err(e) => tracing::error!(
-                        "ZMQ rawtx+sequence error: {e}, reconnecting in 5s..."
+                        "ZMQ rawtx error: {e}, reconnecting in 5s..."
                     ),
                 }
                 tokio::time::sleep(Duration::from_secs(5)).await;
@@ -198,10 +186,8 @@ pub fn spawn(
     );
 }
 
-/// Subscribe to both rawtx and sequence topics on a single socket.
-/// Must share one socket because ZMQ PUB distributes messages across
-/// separate SUB connections, causing each to see only a fraction.
-async fn subscribe_tx_and_sequence(
+/// Subscribe to the `rawtx` topic and broadcast each new mempool tx.
+async fn subscribe_txs(
     state: &Arc<StatsState>,
     sender: &broadcast::Sender<HeartbeatEvent>,
     url: &str,
@@ -209,8 +195,7 @@ async fn subscribe_tx_and_sequence(
     let mut socket = SubSocket::new();
     socket.connect(url).await?;
     socket.subscribe("rawtx").await?;
-    socket.subscribe("sequence").await?;
-    tracing::info!("ZMQ: subscribed to rawtx+sequence");
+    tracing::info!("ZMQ: subscribed to rawtx");
 
     // Each incoming rawtx needs one `getmempoolentry` RPC (for the fee — the
     // only field not derivable from the raw bytes). Over the WireGuard tunnel
@@ -224,8 +209,6 @@ async fn subscribe_tx_and_sequence(
     let tx_count = Arc::new(AtomicU64::new(0));
     let rpc_fail = Arc::new(AtomicU64::new(0));
     let mut parse_fail = 0u64;
-    let mut seq_state = SequenceState::default();
-    let mut seq_event_count = 0u64;
     // De-dup recently broadcast txids. Bitcoin Core re-emits a block's txs on
     // rawtx after confirmation, and ZMQ can deliver duplicates; skipping repeats
     // here means no worker/RPC is spent on them. Bounded, task-local — replaces
@@ -239,42 +222,11 @@ async fn subscribe_tx_and_sequence(
             continue;
         }
 
-        // First frame is the topic: "rawtx" or "sequence"
+        // First frame is the topic. We only subscribe to rawtx, but guard
+        // against anything else the socket might surface.
         let topic = std::str::from_utf8(&frames[0]).unwrap_or("");
-
-        // Handle sequence events (block mining detection)
-        if topic == "sequence" {
-            seq_event_count += 1;
-            if seq_event_count == 1 {
-                tracing::info!(
-                    "ZMQ: first sequence event received (body len={})",
-                    frames[1].len()
-                );
-            }
-            let body = &frames[1];
-            if body.len() >= 33 {
-                let event_type = body[32] as char;
-                // Log sequence stats periodically and on state changes
-                if event_type == 'C' || event_type == 'D' {
-                    tracing::info!(
-                        "ZMQ: sequence event '{event_type}' (total={seq_event_count}, r_count={}, mining_sent={})",
-                        seq_state.r_count, seq_state.mining_sent
-                    );
-                }
-                if seq_state.process(event_type) {
-                    tracing::info!(
-                        "ZMQ: sequence detected block processing ({}+ R events)",
-                        seq_state.r_count
-                    );
-                    let _ = sender.send(HeartbeatEvent::BlockMining);
-                }
-            }
-            continue;
-        }
-
-        // Skip non-rawtx topics (e.g. hashtx which shares the port)
         if topic != "rawtx" {
-            if seq_event_count == 0 && tx_count.load(Ordering::Relaxed) == 0 {
+            if tx_count.load(Ordering::Relaxed) == 0 {
                 tracing::debug!(
                     "ZMQ: unexpected topic '{}' (len={})",
                     topic,
@@ -552,88 +504,6 @@ async fn process_rawtx(
             );
         }
     });
-}
-
-/// Minimum R events within the time window to trigger a BlockMining event.
-const SEQUENCE_R_THRESHOLD: u32 = 5;
-/// Time window in seconds to accumulate R events before resetting.
-const SEQUENCE_R_WINDOW_SECS: f64 = 3.0;
-
-/// Time-window based state machine for detecting block processing via ZMQ sequence events.
-///
-/// Counts `R` (removed from mempool) events within a rolling window. When the count
-/// crosses `SEQUENCE_R_THRESHOLD`, a `BlockMining` event is emitted once. The state
-/// resets on `C` (block connected) or `D` (block disconnected/reorg). `A` (added)
-/// events are ignored since they interleave with R events during block processing
-/// on slower hardware.
-#[derive(Default)]
-struct SequenceState {
-    /// Number of R events in the current time window.
-    r_count: u32,
-    /// Start of the current time window (None = no active window).
-    window_start: Option<std::time::Instant>,
-    /// Whether BlockMining has already been sent for this window.
-    mining_sent: bool,
-}
-
-impl SequenceState {
-    /// Process a sequence event type character. Returns true if BlockMining
-    /// should be broadcast (first time threshold is crossed in a time window).
-    fn process(&mut self, event_type: char) -> bool {
-        self.process_with_time(event_type, std::time::Instant::now())
-    }
-
-    /// Testable version that accepts an explicit timestamp.
-    fn process_with_time(
-        &mut self,
-        event_type: char,
-        now: std::time::Instant,
-    ) -> bool {
-        match event_type {
-            'R' => {
-                match self.window_start {
-                    Some(start)
-                        if now.duration_since(start).as_secs_f64()
-                            <= SEQUENCE_R_WINDOW_SECS =>
-                    {
-                        self.r_count += 1;
-                    }
-                    _ => {
-                        // Start new window
-                        self.window_start = Some(now);
-                        self.r_count = 1;
-                    }
-                }
-                if self.r_count >= SEQUENCE_R_THRESHOLD && !self.mining_sent {
-                    self.mining_sent = true;
-                    return true;
-                }
-            }
-            'C' => {
-                if self.r_count > 0 || self.mining_sent {
-                    tracing::info!(
-                        "ZMQ: sequence block connected ({} R events in window, mining_sent={})",
-                        self.r_count, self.mining_sent
-                    );
-                }
-                self.r_count = 0;
-                self.window_start = None;
-                self.mining_sent = false;
-            }
-            'D' => {
-                tracing::warn!("ZMQ: sequence block disconnected (reorg)");
-                self.r_count = 0;
-                self.window_start = None;
-                self.mining_sent = false;
-            }
-            'A' => {
-                // Ignore. A events interleave with R events during block
-                // processing, so the time window handles expiry.
-            }
-            _ => {}
-        }
-        false
-    }
 }
 
 /// Subscribe to block hashes. On hashblock (validation complete), broadcast the
@@ -1485,128 +1355,6 @@ mod tests {
         let mut cursor = 0;
         assert_eq!(read_u64_le(&data, &mut cursor), Some(42));
         assert_eq!(cursor, 8);
-    }
-
-    // --- SequenceState tests (time-window based) ---
-
-    use std::time::{Duration, Instant};
-
-    #[test]
-    fn test_sequence_block_detection_within_window() {
-        let mut state = SequenceState::default();
-        let t0 = Instant::now();
-        // 4 R events within window, should not trigger (threshold=5)
-        for i in 0..4 {
-            let t = t0 + Duration::from_millis(i * 100);
-            assert!(!state.process_with_time('R', t));
-        }
-        assert_eq!(state.r_count, 4);
-        assert!(!state.mining_sent);
-        // 5th R triggers
-        assert!(state.process_with_time('R', t0 + Duration::from_millis(400)));
-        assert!(state.mining_sent);
-        assert_eq!(state.r_count, 5);
-        // Further R events don't re-trigger
-        assert!(!state.process_with_time('R', t0 + Duration::from_millis(500)));
-    }
-
-    #[test]
-    fn test_sequence_r_events_outside_window_reset() {
-        let mut state = SequenceState::default();
-        let t0 = Instant::now();
-        // 3 R events
-        for i in 0..3 {
-            state.process_with_time('R', t0 + Duration::from_millis(i * 100));
-        }
-        assert_eq!(state.r_count, 3);
-        // Gap of 5 seconds (outside 3s window), new R starts fresh
-        state.process_with_time('R', t0 + Duration::from_secs(5));
-        assert_eq!(state.r_count, 1);
-    }
-
-    #[test]
-    fn test_sequence_a_does_not_reset_r_count() {
-        let mut state = SequenceState::default();
-        let t0 = Instant::now();
-        // R events interleaved with A events (real-world pattern)
-        state.process_with_time('R', t0);
-        state.process_with_time('R', t0 + Duration::from_millis(50));
-        state.process_with_time('A', t0 + Duration::from_millis(80));
-        state.process_with_time('R', t0 + Duration::from_millis(100));
-        state.process_with_time('A', t0 + Duration::from_millis(130));
-        state.process_with_time('R', t0 + Duration::from_millis(150));
-        assert_eq!(state.r_count, 4);
-        // 5th R triggers even with A interleaving
-        assert!(state.process_with_time('R', t0 + Duration::from_millis(200)));
-        assert!(state.mining_sent);
-    }
-
-    #[test]
-    fn test_sequence_c_resets_state() {
-        let mut state = SequenceState::default();
-        let t0 = Instant::now();
-        for i in 0..10 {
-            state.process_with_time('R', t0 + Duration::from_millis(i * 50));
-        }
-        assert!(state.mining_sent);
-        assert!(!state.process_with_time('C', t0 + Duration::from_millis(600)));
-        assert_eq!(state.r_count, 0);
-        assert!(!state.mining_sent);
-        assert!(state.window_start.is_none());
-    }
-
-    #[test]
-    fn test_sequence_reorg_resets() {
-        let mut state = SequenceState::default();
-        let t0 = Instant::now();
-        for i in 0..10 {
-            state.process_with_time('R', t0 + Duration::from_millis(i * 50));
-        }
-        assert!(state.mining_sent);
-        state.process_with_time('D', t0 + Duration::from_millis(600));
-        assert_eq!(state.r_count, 0);
-        assert!(!state.mining_sent);
-    }
-
-    #[test]
-    fn test_sequence_multiple_blocks() {
-        let mut state = SequenceState::default();
-        let t0 = Instant::now();
-        // First block: 10 R events in 500ms
-        for i in 0..10 {
-            state.process_with_time('R', t0 + Duration::from_millis(i * 50));
-        }
-        assert!(state.mining_sent);
-        state.process_with_time('C', t0 + Duration::from_secs(1));
-        // Normal txs between blocks
-        state.process_with_time('A', t0 + Duration::from_secs(2));
-        state.process_with_time('A', t0 + Duration::from_secs(3));
-        // Second block: 8 R events in 400ms
-        let t1 = t0 + Duration::from_secs(600);
-        let mut triggered = false;
-        for i in 0..8 {
-            if state.process_with_time('R', t1 + Duration::from_millis(i * 50))
-            {
-                triggered = true;
-            }
-        }
-        assert!(triggered);
-        assert!(state.mining_sent);
-        state.process_with_time('C', t1 + Duration::from_secs(1));
-        assert!(!state.mining_sent);
-    }
-
-    #[test]
-    fn test_sequence_slow_evictions_no_false_positive() {
-        let mut state = SequenceState::default();
-        let t0 = Instant::now();
-        // 10 R events spread over 40 seconds (normal evictions, not a block)
-        for i in 0..10 {
-            state.process_with_time('R', t0 + Duration::from_secs(i * 4));
-        }
-        // Each R starts a new window since the previous one expired (4s > 3s window)
-        assert!(!state.mining_sent);
-        assert_eq!(state.r_count, 1); // only the last one counts
     }
 
     // --- enrich_tx: pure classification → SSE event assembly ---
