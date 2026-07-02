@@ -443,106 +443,20 @@ export function connectOwnFeed() {
             }
             es.close();
             _hb._sseRetries = (_hb._sseRetries || 0) + 1;
-            if (_hb._sseRetries <= 3) {
-                // Retry SSE with backoff: 3s, 6s, 12s
-                var delay = 3000 * Math.pow(2, _hb._sseRetries - 1);
-                console.log('[heartbeat] SSE error, retry', _hb._sseRetries, 'in', delay / 1000 + 's');
-                setTimeout(function() {
-                    if (_hb) connectOwnFeed();
-                }, delay);
-            } else {
-                console.log('[heartbeat] SSE failed after 3 retries, falling back to mempool.space WS');
-                connectMempoolFallback();
-            }
+            // Reconnect the primary feed INDEFINITELY with capped backoff
+            // (2s → 15s), so a deploy or node blip reconnects within one interval
+            // of the server returning — no giving up, no fallback stranding.
+            var delay = Math.min(2000 * Math.pow(1.5, Math.min(_hb._sseRetries - 1, 8)), 15000);
+            console.log('[heartbeat] SSE error, retry', _hb._sseRetries, 'in', Math.round(delay / 1000) + 's');
+            setTimeout(function() {
+                if (_hb) connectOwnFeed();
+            }, delay);
         };
         _hb._sse = es;
     } catch (err) {
-        connectMempoolFallback();
+        // EventSource construction failed — retry shortly.
+        setTimeout(function() { if (getState()) connectOwnFeed(); }, 3000);
     }
-}
-
-// Mempool.space WebSocket fallback
-export function connectMempoolFallback() {
-    var _hb = getState();
-    if (!_hb) return;
-    _hb._lastMempoolTxCount = 0;
-
-    // Periodically try to reconnect to SSE while on WS fallback
-    if (_hb._sseReconnectTimer) clearInterval(_hb._sseReconnectTimer);
-    _hb._sseReconnectTimer = setInterval(function() {
-        if (!_hb) return;
-        // Try SSE silently — if it connects, close WS and cancel this timer
-        var testEs = new EventSource('/api/stats/heartbeat');
-        testEs.onopen = function() {
-            console.log('[heartbeat] SSE recovered, switching back from WS');
-            testEs.close();
-            if (_hb.ws) { try { _hb.ws.close(); } catch(e) {} }
-            if (_hb._sseReconnectTimer) { clearInterval(_hb._sseReconnectTimer); _hb._sseReconnectTimer = null; }
-            _hb._sseRetries = 0;
-            connectOwnFeed();
-        };
-        testEs.onerror = function() { testEs.close(); };
-    }, 60000); // try every 60s
-
-    try {
-        var ws = new WebSocket('wss://mempool.space/api/v1/ws');
-        ws.onopen = function() {
-            ws.send(JSON.stringify({ action: 'want', data: ['mempool-blocks', 'stats'] }));
-            _hb.wsConnected = true;
-            _hb._sseDisconnected = false; // WS fallback provides data, clear overlay
-            _hb._wsRetryDelay = 5000;
-            _hb._txThrottleTime = 0;
-            _hb._txBatchQueue = [];
-        };
-        ws.onmessage = function(e) {
-            if (!_hb) return;
-            try {
-                var data = JSON.parse(e.data);
-                var txArr = data.transactions || data.txs || null;
-                if (!txArr && data.tx && data.tx.txid) {
-                    txArr = [data.tx];
-                }
-                if (txArr && Array.isArray(txArr) && txArr.length > 0) {
-                    _hb._hasTxStream = true;
-                    for (var ti = 0; ti < txArr.length; ti++) {
-                        _hb._txBatchQueue.push(txArr[ti]);
-                    }
-                    var now = Date.now();
-                    if (now - _hb._txThrottleTime > 200) {
-                        _hb._txThrottleTime = now;
-                        flushTxBatch();
-                    }
-                }
-                if (data['mempool-blocks']) {
-                    var mblocks = data['mempool-blocks'];
-                    var totalTx = 0;
-                    for (var i = 0; i < mblocks.length; i++) {
-                        totalTx += mblocks[i].nTx || 0;
-                    }
-                    var newTx = 0;
-                    if (_hb._lastMempoolTxCount > 0) {
-                        newTx = Math.max(0, totalTx - _hb._lastMempoolTxCount);
-                    }
-                    _hb._lastMempoolTxCount = totalTx;
-                    _hb._wsMedianFee = Math.max(1, mblocks[0] ? mblocks[0].medianFee || 5 : 5);
-                    if (!_hb._hasTxStream && newTx > 0) {
-                        var topFee = Math.max(2, mblocks[0] ? (mblocks[0].feeRange || [1, 5, 10])[2] || 10 : 5);
-                        addMempoolTxs(newTx, _hb._wsMedianFee, topFee);
-                    }
-                }
-            } catch (err) {}
-        };
-        ws.onclose = function() {
-            if (!_hb) return;
-            _hb.wsConnected = false;
-            _hb._wsRetryDelay = Math.min((_hb._wsRetryDelay || 5000) * 2, 300000);
-            setTimeout(function() {
-                if (_hb) connectMempoolFallback();
-            }, _hb._wsRetryDelay);
-        };
-        ws.onerror = function() { ws.close(); };
-        _hb.ws = ws;
-    } catch (err) {}
 }
 
 // Flush queued individual transactions into visual bricks
@@ -731,70 +645,6 @@ export function flushTxBatch() {
                 _hb.hoveredBlip = null;
             }
         }
-    }
-}
-
-// Fallback: add aggregate blips when individual tx stream isn't available
-export function addMempoolTxs(newTxCount, medianFeeRate, topFeeRate) {
-    var _hb = getState();
-    if (!_hb) return;
-    var liveSeg = _hb.timeline[_hb.timeline.length - 1];
-    if (!liveSeg || liveSeg.type !== 'flatline') return;
-
-    // Visual blips: 1 blip per ~15 txs, cap at 15 per update
-    var n = Math.min(Math.max(1, Math.ceil(newTxCount / 15)), 15);
-    var txPerBlip = Math.ceil(newTxCount / n);
-
-    for (var i = 0; i < n; i++) {
-        // Vary fee rate per blip: use wider random range to show diversity
-        // even in calm periods. Mix of min-fee txs and higher-fee txs.
-        var roll = Math.random();
-        var feeRate;
-        if (roll < 0.5) {
-            // Half at or below median
-            feeRate = medianFeeRate * (0.3 + Math.random() * 0.7);
-        } else if (roll < 0.85) {
-            // 35% between median and top
-            feeRate = medianFeeRate + Math.random() * (topFeeRate - medianFeeRate);
-        } else {
-            // 15% outliers (2-5x top fee) - these are the urgent/RBF txs
-            feeRate = topFeeRate * (2 + Math.random() * 3);
-        }
-        feeRate = Math.max(0.5, feeRate);
-
-        // Normalize: use log scale so low-fee differences are visible
-        var feeNorm = Math.min(Math.log2(feeRate + 1) / 6, 1.0); // log2(64)=6
-
-        var brickW = 4;
-        var brickH = 3 + feeNorm * 14 + Math.random() * 3; // 3-20px tall
-
-        // Place at the live head, snap to tight grid for clean columns
-        var brickX = _hb.virtualX - Math.random() * 15;
-        var gridX = Math.round(brickX / 5) * 5; // snap to 5px grid (matches brick width)
-
-        // Stack: O(1) column height lookup
-        if (!liveSeg._colHeights) liveSeg._colHeights = {};
-        var stackY = Math.min(liveSeg._colHeights[gridX] || 0, 150);
-
-        liveSeg.blips.push({
-            x: brickX,
-            gridX: gridX,
-            height: brickH + stackY,
-            brickH: brickH,
-            brickW: brickW,
-            stackY: stackY,
-            color: feeRateColor(feeRate, medianFeeRate),
-            opacity: 0.6 + feeNorm * 0.3,
-            txCount: txPerBlip,
-            feeRate: Math.round(feeRate * 10) / 10,
-            timestamp: Date.now() / 1000,
-            fadeStart: 0,
-            bobPhase: Math.random() * Math.PI * 2,
-            bobSpeed: 1.2 + feeNorm * 0.8,
-            lane: Math.floor(Math.random() * 5) - 2,
-            feeRatio: (medianFeeRate || 5) > 0 ? feeRate / (medianFeeRate || 5) : 1
-        });
-        liveSeg._colHeights[gridX] = (liveSeg._colHeights[gridX] || 0) + brickH;
     }
 }
 
