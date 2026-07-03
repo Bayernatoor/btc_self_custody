@@ -558,6 +558,27 @@ function catchUpBlocks(queued, tipHeight) {
     }
 }
 
+// Safety net for blocks queued while the tab was hidden (see the SSE 'block'
+// handler). Normally _hbVisibilityChange drains the queue on return, but if that
+// event doesn't fire — a brief/edge-case hide, a focus race, or the block event
+// landing with document.hidden===true just before the tab is shown — the queued
+// block would strand: the canvas stays on the old block while the header (fed by
+// LiveStats, which updates regardless of visibility) shows the new height.
+// drawFrame calls this every frame, and RAF only runs at full rate when the tab
+// is genuinely visible, so a stranded block is replayed within a frame of the
+// tab being shown — no dependence on visibilitychange. Cheap: no-ops instantly
+// when the queue is empty (the normal case).
+window._hbDrainBlockQueue = function() {
+    var _hb = getState();
+    if (!_hb || document.hidden) return;
+    if (!_hb._blockQueue || _hb._blockQueue.length === 0) return;
+    var queued = _hb._blockQueue.slice();
+    var tipHeight = _hb.blockHeight || 0;
+    _hb._blockQueue = [];
+    console.log('[heartbeat] draining', queued.length, 'queued block(s) on visible frame');
+    catchUpBlocks(queued, tipHeight);
+};
+
 function _hbVisibilityChange() {
     var _hb = getState();
     if (!_hb) return;

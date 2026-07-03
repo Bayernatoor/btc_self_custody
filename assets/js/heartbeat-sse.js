@@ -86,10 +86,14 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
     var flatlineSpan = _hb.virtualX - liveSeg.x_start;
     var stackMap = {};
 
-    // Place all history txs — cull threshold is 30K so there's plenty of room.
-    // Only cap by available grid columns to prevent extreme stacking.
-    var gridCols = Math.max(1, Math.floor(flatlineSpan / 5));
-    var maxBricks = gridCols * 3;
+    // Place all received history txs; density is governed ONLY by the per-column
+    // stack cap (histMaxStack, 35% of canvas height) below — the exact limiter
+    // live flushTxBatch uses. The old `gridCols * 3` cap allowed just 3 bricks
+    // per 5px column (~10x sparser than live), so a refresh reconstructed far
+    // fewer bricks than a live tab had, and the count scaled with time-since-last
+    // -block (wider flatline → higher cap) rather than actual tx volume. Letting
+    // the column cap govern makes a refresh match live density.
+    var maxBricks = txs.length;
 
     console.log('[heartbeat] placeHistoryTxs: flatlineSpan=' + Math.round(flatlineSpan) +
         'px, virtualX=' + Math.round(_hb.virtualX) +
@@ -197,9 +201,12 @@ export function processLiveBlock(block) {
     _hb._blockProcessing = true;
 
     // Collapse the dead processing gap: the backend suppresses txs while
-    // building block data (~2-5s), so virtualX has advanced past the last
-    // brick. Find the rightmost blip and snap virtualX to just past it.
-    // This is exact — no time-based estimation that can overshoot.
+    // building block data (~2-5s, longer on a node stall), so virtualX has
+    // advanced past the last brick with nothing placed. Find the rightmost blip
+    // and snap virtualX to just past it. This is exact — no time-based
+    // estimation that can overshoot. `collapsedPx` = the width of that no-brick
+    // window; we re-add it after the spike below so the backlog can spread.
+    var collapsedPx = 0;
     var liveSeg = _hb.timeline[_hb.timeline.length - 1];
     if (liveSeg && liveSeg.type === 'flatline' && liveSeg.x_end === null && liveSeg.blips.length > 0) {
         var rightmost = liveSeg.x_start;
@@ -210,8 +217,9 @@ export function processLiveBlock(block) {
         }
         var closeAt = rightmost + 5; // one grid unit past last brick
         if (closeAt < _hb.virtualX) {
+            collapsedPx = _hb.virtualX - closeAt;
             console.log('[heartbeat] gap collapse: ' + Math.round(_hb.virtualX) + ' -> ' + Math.round(closeAt) +
-                ' (' + Math.round(_hb.virtualX - closeAt) + 'px removed, block=' + block.height + ')');
+                ' (' + Math.round(collapsedPx) + 'px removed, block=' + block.height + ')');
             _hb.virtualX = closeAt;
         }
     } else {
@@ -244,10 +252,25 @@ export function processLiveBlock(block) {
     }]);
     window.pushHeartbeatBlocks(blockJson, false);
 
-    // Fast-forward the fresh post-block flatline to the block's real age so the
-    // backlog of txs that arrived while it was being found spreads across that
-    // time instead of piling in one column at the head.
-    fastForwardLiveFlatline(blockTs);
+    // Re-add the collapsed gap AFTER the spike. The gap we just removed is the
+    // no-brick window — the node suppressed tx broadcast while validating (and
+    // for longer on a stall). The backlog of txs that piled during it arrives as
+    // a burst right after the spike; giving the fresh post-block flatline that
+    // same width, and telling flushTxBatch to spread the burst across it (see
+    // _backlogSpreadPx there), lets the backlog fan out instead of walling in one
+    // column at the head. Only for real windows (>40px ≈ 8s) — small validation
+    // gaps are already covered by the flush's normal spread. (Camera easing in
+    // drawFrame turns the resulting virtualX jump into a smooth slide.)
+    if (collapsedPx > 40) {
+        var newSeg = _hb.timeline[_hb.timeline.length - 1];
+        if (newSeg && newSeg.type === 'flatline' && newSeg.x_end === null) {
+            _hb.virtualX += collapsedPx;
+            _hb._backlogSpreadPx = collapsedPx;
+            _hb._backlogSpreadStart = Date.now() / 1000;
+            console.log('[heartbeat] post-block backlog: re-added ' + Math.round(collapsedPx) +
+                'px for the burst to spread across');
+        }
+    }
 
     // Clear mining overlay and cancel pending delay (block arrived)
     _hb._sseDisconnected = false;
@@ -458,12 +481,14 @@ export function connectOwnFeed() {
 }
 
 // Widen the live flatline so its width reflects the real time since `blockTs`
-// (the newest block's age). A block is shown some seconds after it's actually
-// found (validation/propagation), and the backlog of txs from that window
-// arrives in a burst — this gives them a flatline as wide as that window to
-// spread across, instead of piling in one column at the head. Only ever moves
-// virtualX forward; clamped for miner-clock skew. (Camera easing in drawFrame
-// turns the resulting virtualX jump into a smooth slide.)
+// (the newest block's age). Used ONLY by the tab-return catch-up path
+// (catchUpBlocks), where real wall-clock time genuinely elapsed while the tab
+// was hidden, so the resumed live tx flow needs a flatline that wide to spread
+// across instead of piling at the head. The live path (processLiveBlock) does
+// NOT use this — it re-adds the exact collapsed gap instead (block age is ~0 for
+// a fresh block, so it would never widen there). Only ever moves virtualX
+// forward; clamped for miner-clock skew. (Camera easing in drawFrame turns the
+// resulting virtualX jump into a smooth slide.)
 export function fastForwardLiveFlatline(blockTs) {
     var _hb = getState();
     if (!_hb || !blockTs) return;
@@ -508,6 +533,23 @@ export function flushTxBatch() {
     var burstFactor = Math.min(batch.length / 25, 4); // ramps 0→4 by ~100 txs/flush
     var spreadCap = 150 + burstFactor * 250;          // ~150px calm → ~1150px heavy
     var spread = Math.max(10, Math.min(flatlineWidth * 0.8, visibleVirtW * 0.7, spreadCap));
+
+    // Post-block backlog: right after a block, processLiveBlock re-adds the
+    // collapsed no-brick gap to the flatline and sets _backlogSpreadPx. Widen the
+    // spread to that full width so the burst fans across the re-added region
+    // instead of walling at the head (the normal 0.8×flatlineWidth cap is tiny on
+    // a fresh flatline). Ramp back to normal over BACKLOG_SPREAD_SECS as the
+    // backlog drains and genuine live txs take over at the head.
+    if (_hb._backlogSpreadPx > 0) {
+        var BACKLOG_SPREAD_SECS = 2.5;
+        var bsElapsed = (Date.now() / 1000) - (_hb._backlogSpreadStart || 0);
+        if (bsElapsed < BACKLOG_SPREAD_SECS) {
+            var bsWide = Math.min(_hb._backlogSpreadPx * (1 - bsElapsed / BACKLOG_SPREAD_SECS), flatlineWidth);
+            if (bsWide > spread) spread = bsWide;
+        } else {
+            _hb._backlogSpreadPx = 0;
+        }
+    }
     var medianFee = _hb._wsMedianFee || 5;
 
     for (var i = 0; i < batch.length; i++) {

@@ -308,6 +308,15 @@ export function drawFrame(frameTime) {
     if (dt > 0.5) dt = 0.5; // clamp to avoid huge jumps on tab switch
     _hb.lastFrameTime = now;
 
+    // Safety net: replay any block that arrived while the tab was hidden but
+    // wasn't drained by visibilitychange (would otherwise strand — canvas stuck
+    // on the old block while the header shows the new one). RAF only runs at full
+    // rate when visible, so this catches up within a frame of the tab showing.
+    // Cheap guard: the queue is empty in normal operation.
+    if (_hb._blockQueue && _hb._blockQueue.length > 0 && !document.hidden && window._hbDrainBlockQueue) {
+        window._hbDrainBlockQueue();
+    }
+
     // ── Advance live flatline ──────────────────────────────
     var liveSeg = _hb.timeline.length > 0 ? _hb.timeline[_hb.timeline.length - 1] : null;
     if (liveSeg && liveSeg.type === 'flatline' && liveSeg.x_end === null) {
