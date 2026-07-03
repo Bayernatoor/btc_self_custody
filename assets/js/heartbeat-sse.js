@@ -357,16 +357,9 @@ export function connectOwnFeed() {
                     _hb._recentFeeRates.push(tx.fee_rate);
                     if (_hb._recentFeeRates.length > 200) _hb._recentFeeRates.shift();
                 }
-                var now = Date.now();
-                if (now - _hb._txThrottleTime > 200) {
-                    _hb._txThrottleTime = now;
-                    // Recompute median on flush cadence instead of every tx
-                    if (_hb._recentFeeRates && _hb._recentFeeRates.length >= 20) {
-                        var sorted = _hb._recentFeeRates.slice().sort(function(a, b) { return a - b; });
-                        _hb._wsMedianFee = Math.max(1, sorted[Math.floor(sorted.length / 2)]);
-                    }
-                    flushTxBatch();
-                }
+                // Bricks are laid down by the RAF loop (drawFrame → flushTxBatch),
+                // which spreads the work per frame instead of a 200ms off-RAF burst
+                // that hitched the scroll ("pause + pull"). The handler just queues.
                 if (_hb._sseTxCount % 100 === 0) {
                     console.log('[heartbeat] SSE live txs:', _hb._sseTxCount);
                 }
@@ -468,15 +461,14 @@ export function flushTxBatch() {
     var liveSeg = _hb.timeline[_hb.timeline.length - 1];
     if (!liveSeg || liveSeg.type !== 'flatline') return;
 
-    // Advance virtualX here too — RAF may be throttled (e.g. OS workspace
-    // switch) but SSE events keep flowing and triggering flushes.
-    if (liveSeg.x_end === null) {
-        var now = Date.now() / 1000;
-        var dt = _hb.lastFrameTime > 0 ? (now - _hb.lastFrameTime) : 0;
-        if (dt > 0.05 && dt < 10) {
-            _hb.virtualX += dt * FLATLINE_PX_PER_SEC;
-            _hb.lastFrameTime = now;
-        }
+    // virtualX is advanced ONLY by the RAF loop (drawFrame) now — this used to
+    // advance it too, a second out-of-phase clock that nudged virtualX between
+    // frames and drifted it ahead. Single clock = smoother scroll.
+
+    // Rolling median fee for colour thresholds (recomputed as batches flush).
+    if (_hb._recentFeeRates && _hb._recentFeeRates.length >= 20) {
+        var sortedFees = _hb._recentFeeRates.slice().sort(function(a, b) { return a - b; });
+        _hb._wsMedianFee = Math.max(1, sortedFees[Math.floor(sortedFees.length / 2)]);
     }
 
     var batch = _hb._txBatchQueue;

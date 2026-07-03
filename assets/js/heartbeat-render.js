@@ -328,6 +328,11 @@ export function drawFrame(frameTime) {
         }
     }
 
+    // Lay down queued mempool-tx bricks once per frame (RAF-driven), spreading
+    // the work across frames instead of a 200ms off-RAF burst that hitched the
+    // scroll. Placed after the virtualX advance so bricks land at the live head.
+    flushTxBatch();
+
     // If auto-following, keep viewport pinned to the head (zoom-aware).
     // Skip during drag so the user isn't fighting the snap-back.
     if (_hb.autoFollow && !_hb.isDragging) {
@@ -366,16 +371,10 @@ export function drawFrame(frameTime) {
     var viewRight = _hb.viewOffset + w / _hb.zoom;
 
     // ── Draw timeline segments ─────────────────────────────
-    // Smooth organic tremor on long waits (sine-based, not random)
+    // No vertical tremor on long waits — the flatline color shift (via
+    // computeColor on elapsed) + the "last block" timer already convey the
+    // wait, and a heaving baseline added motion without information.
     var jitter = 0;
-    if (elapsed > 600) {
-        // Gradually increases: starts subtle at 10min, more pronounced at 30min+
-        var intensity = Math.min((elapsed - 600) / 1200, 1.0) * 2.5;
-        // Layered sine waves for organic feel (not mechanical)
-        jitter = Math.sin(now * 2.3) * intensity
-               + Math.sin(now * 5.7) * intensity * 0.4
-               + Math.sin(now * 0.8) * intensity * 0.6;
-    }
 
     for (var si = 0; si < _hb.timeline.length; si++) {
         var seg = _hb.timeline[si];
@@ -787,12 +786,7 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                 ctx.beginPath();
                 ctx.arc(0, 0, bsCellR, 0, Math.PI * 2);
                 ctx.fillStyle = 'rgba(' + bsR + ',' + bsG + ',' + bsB + ',' + bsAlpha + ')';
-                if (zoom >= 1.0) {
-                    ctx.shadowBlur = 4 + bsEase * 14;
-                    ctx.shadowColor = 'rgba(' + bsR + ',' + bsG + ',' + bsB + ',' + (bsAlpha * 0.5) + ')';
-                }
-                ctx.fill();
-                ctx.shadowBlur = 0;
+                ctx.fill(); // no shadowBlur (see brick-rendering note)
                 ctx.restore();
                 continue;
             }
@@ -868,14 +862,9 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                     var pOpacity = pt < 0.7 ? blip.opacity : blip.opacity * (1 - (pt - 0.7) / 0.3 * 0.8);
                     pOpacity = Math.max(0, Math.min(1, pOpacity));
 
-                    // Draw particle — skip expensive shadowBlur at low zoom
+                    // Draw particle (no shadowBlur — see brick-rendering note)
                     ctx.fillStyle = blipColor + pOpacity + ')';
-                    if (zoom >= 1.0) {
-                        ctx.shadowBlur = 3 + pEase * 10;
-                        ctx.shadowColor = blipColor + (pOpacity * 0.4) + ')';
-                    }
                     ctx.fillRect(px - pSize / 2, py - pSize / 2, pSize, pSize);
-                    ctx.shadowBlur = 0;
                 }
             } else if (blip.fadeStart > 0) {
                 // Simple fade for blips without absorption target (edge case)
@@ -983,15 +972,6 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                         ctx.fill();
                     }
 
-                    // Subtle glow for high-fee cells
-                    if (feeRatio > 2.0) {
-                        ctx.shadowBlur = 3 + Math.min(feeRatio, 6);
-                        ctx.shadowColor = cellColorStr + '0.3)';
-                        ctx.beginPath();
-                        ctx.arc(cellCX, cellCY, cellRadius, 0, Math.PI * 2);
-                        ctx.fill();
-                        ctx.shadowBlur = 0;
-                    }
 
                     // Cell outline for separation at zoom > 3
                     if (zoom > 3 && cellRadius > 3) {
@@ -1017,11 +997,16 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                     // strokeRect bleeds half its lineWidth outside the rect,
                     // so the gap must exceed that to remain visible.
                     var lw = zoom > 10 ? 1.5 : zoom > 6 ? 1 : 0.5;
-                    var gap = zoom > 8 ? 1.5 : zoom > 4 ? 1 : 0;
+                    // Gap between bricks (mempool.space-style separation) at ALL
+                    // zooms, not just high zoom, so dense bricks read as a crisp
+                    // grid instead of a blob. Based on the smaller dimension so it
+                    // never eats a thin brick; 0 when bricks are sub-pixel small.
+                    var minDim = Math.min(bw, bh);
+                    var gap = minDim > 2.5 ? Math.min(Math.max(minDim * 0.13, 0.5), 1.1) : 0;
                     var rx = bx - bw / 2 + gap;
                     var ry = baseline - sy - bh + gap - dropOffset;
-                    var rw = bw - gap * 2;
-                    var rh = bh - gap * 2;
+                    var rw = Math.max(bw - gap * 2, 0.5);
+                    var rh = Math.max(bh - gap * 2, 0.5);
 
                     var useRound = zoom > 6 && rw > 4 && rh > 4;
                     var cornerR = useRound ? Math.min(3, rw * 0.12, rh * 0.12) : 0;
@@ -1051,37 +1036,11 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                         ctx.fillStyle = blipColor + bOpacity + ')';
                     }
 
-                    // Notable tx glow: strong pulsing halo at ALL zoom levels
-                    var nt = blip.notableType;
-                    if (nt === 'whale') {
-                        ctx.shadowBlur = 20 + Math.sin(nowSec * 2.5) * 8;
-                        ctx.shadowColor = 'rgba(255, 215, 0, 0.95)';
-                    } else if (nt === 'round_number') {
-                        ctx.shadowBlur = 16 + Math.sin(nowSec * 2.2) * 6;
-                        ctx.shadowColor = 'rgba(144, 238, 144, 0.9)';
-                    } else if (nt === 'large_inscription') {
-                        ctx.shadowBlur = 16 + Math.sin(nowSec * 2.5) * 6;
-                        ctx.shadowColor = 'rgba(255, 0, 200, 0.85)';
-                    } else if (nt === 'consolidation') {
-                        ctx.shadowBlur = 14 + Math.sin(nowSec * 2) * 5;
-                        ctx.shadowColor = 'rgba(168, 85, 247, 0.85)';
-                    } else if (nt === 'fan_out') {
-                        ctx.shadowBlur = 14 + Math.sin(nowSec * 2) * 5;
-                        ctx.shadowColor = 'rgba(0, 210, 255, 0.85)';
-                    } else if (nt === 'fee_outlier') {
-                        ctx.shadowBlur = 16 + Math.sin(nowSec * 3) * 6;
-                        ctx.shadowColor = 'rgba(255, 68, 68, 0.9)';
-                    } else if (nt === 'op_return_msg') {
-                        ctx.shadowBlur = 12 + Math.sin(nowSec * 2) * 4;
-                        ctx.shadowColor = 'rgba(255, 165, 0, 0.85)';
-                    }
-                    // Shadow glow only at mid-zoom where bricks are visible but
-                    // not outlined. Skip at low zoom (sub-pixel, too expensive
-                    // with thousands of bricks) and high zoom (outlines instead).
-                    else if (zoom >= 1.0 && zoom < 4) {
-                        ctx.shadowBlur = 4;
-                        ctx.shadowColor = blipColor + (bOpacity * 0.4) + ')';
-                    }
+                    // No shadowBlur. The glow was the dominant render cost (an
+                    // offscreen blur pass per brick per frame — the "lag on large
+                    // flushes") and it bled across the gaps into a blob. Notables
+                    // now stand out via size + colour + a crisp bright outline
+                    // (below); normal bricks via colour + the inter-brick gap.
                     if (useRound) {
                         ctx.beginPath();
                         roundRect(ctx, rx, ry, rw, rh, cornerR);
@@ -1111,7 +1070,9 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                             'op_return_msg': 'rgba(255, 165, 0, 0.7)'
                         };
                         ctx.strokeStyle = outlineColors[blip.notableType] || 'rgba(255, 255, 255, 0.5)';
-                        ctx.lineWidth = Math.max(1, zoom * 0.4);
+                        // Slightly heavier than before to keep notables prominent
+                        // now that the glow halo is gone.
+                        ctx.lineWidth = Math.max(1.5, zoom * 0.5);
                         if (useRound) {
                             ctx.beginPath();
                             roundRect(ctx, rx, ry, rw, rh, cornerR);
