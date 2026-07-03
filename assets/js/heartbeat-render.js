@@ -336,7 +336,17 @@ export function drawFrame(frameTime) {
     // If auto-following, keep viewport pinned to the head (zoom-aware).
     // Skip during drag so the user isn't fighting the snap-back.
     if (_hb.autoFollow && !_hb.isDragging) {
-        _hb.viewOffset = _hb.virtualX - (w * HEAD_POSITION_FRAC) / _hb.zoom;
+        var targetOffset = _hb.virtualX - (w * HEAD_POSITION_FRAC) / _hb.zoom;
+        var offDiff = targetOffset - _hb.viewOffset;
+        // Ease the head-follow so a post-block fast-forward (or a frame-hitch
+        // catch-up) slides into place instead of lurching. Snap only for very
+        // large repositions (long tab-hide, initial load), where a slide would
+        // be a disorienting blur. Frame-rate independent (dt-scaled).
+        if (Math.abs(offDiff) > 1500) {
+            _hb.viewOffset = targetOffset;
+        } else {
+            _hb.viewOffset += offDiff * Math.min(1, dt * 8);
+        }
     } else if (!_hb.paused && !_hb.isDragging && !_hb._pinching) {
         // Play mode: scroll at the same rate as time (don't jump to head)
         _hb.viewOffset += dt * FLATLINE_PX_PER_SEC;

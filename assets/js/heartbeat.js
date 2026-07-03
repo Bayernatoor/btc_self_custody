@@ -6,7 +6,7 @@ import { getState, setState, COLORS, BG_COLOR, FLATLINE_PX_PER_SEC, HEAD_POSITIO
 import { drawGrid, createBlockSegment, createFlatlineSegment, computeColor, historyFlatlineWidth, feeRateColor } from './heartbeat-timeline.js';
 import { setupInputHandlers, handleControlClick } from './heartbeat-interaction.js';
 import { stopMomentum } from './heartbeat-interaction.js';
-import { connectOwnFeed, placeHistoryTxs } from './heartbeat-sse.js';
+import { connectOwnFeed, placeHistoryTxs, fastForwardLiveFlatline } from './heartbeat-sse.js';
 import { drawFrame } from './heartbeat-render.js';
 import {
     getHeartbeatVitals, renderRhythmStrip, getHeartbeatRecentBlocks,
@@ -522,14 +522,19 @@ function catchUpBlocks(queued, tipHeight) {
         .filter(function(b) { return b && b.height; })
         .sort(function(a, b) { return a.height - b.height; });
     var replayed = 0;
+    var newestTs = 0;
     for (var i = 0; i < q.length; i++) {
         if (q[i].height <= maxH) continue;
         replayQueuedBlock(q[i]);
         maxH = q[i].height;
+        newestTs = q[i].timestamp || newestTs;
         replayed++;
     }
     if (replayed > 0) {
         console.log('[heartbeat] tab return: replayed', replayed, 'queued blocks (tip ' + tipHeight + ')');
+        // Widen the post-block flatline to the newest block's age so the resumed
+        // live tx flow spreads instead of piling (same as processLiveBlock).
+        fastForwardLiveFlatline(newestTs);
     }
 
     // Still behind the tip? The queue missed some (e.g. SSE reconnected while
@@ -546,6 +551,7 @@ function catchUpBlocks(queued, tipHeight) {
                 for (var j = 0; j < blocks.length; j++) replayQueuedBlock(blocks[j]);
                 if (blocks.length > 0) {
                     console.log('[heartbeat] tab return: filled', blocks.length, 'blocks from fetch');
+                    fastForwardLiveFlatline(blocks[blocks.length - 1].timestamp);
                 }
             })
             .catch(function() {});

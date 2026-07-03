@@ -244,6 +244,11 @@ export function processLiveBlock(block) {
     }]);
     window.pushHeartbeatBlocks(blockJson, false);
 
+    // Fast-forward the fresh post-block flatline to the block's real age so the
+    // backlog of txs that arrived while it was being found spreads across that
+    // time instead of piling in one column at the head.
+    fastForwardLiveFlatline(blockTs);
+
     // Clear mining overlay and cancel pending delay (block arrived)
     _hb._sseDisconnected = false;
     _hb._sseDisconnectedSince = 0;
@@ -450,6 +455,23 @@ export function connectOwnFeed() {
         // EventSource construction failed — retry shortly.
         setTimeout(function() { if (getState()) connectOwnFeed(); }, 3000);
     }
+}
+
+// Widen the live flatline so its width reflects the real time since `blockTs`
+// (the newest block's age). A block is shown some seconds after it's actually
+// found (validation/propagation), and the backlog of txs from that window
+// arrives in a burst — this gives them a flatline as wide as that window to
+// spread across, instead of piling in one column at the head. Only ever moves
+// virtualX forward; clamped for miner-clock skew. (Camera easing in drawFrame
+// turns the resulting virtualX jump into a smooth slide.)
+export function fastForwardLiveFlatline(blockTs) {
+    var _hb = getState();
+    if (!_hb || !blockTs) return;
+    var liveSeg = _hb.timeline[_hb.timeline.length - 1];
+    if (!liveSeg || liveSeg.type !== 'flatline' || liveSeg.x_end !== null) return;
+    var age = Math.max(0, Math.min(Date.now() / 1000 - blockTs, 1800));
+    var wanted = liveSeg.x_start + age * FLATLINE_PX_PER_SEC;
+    if (wanted > _hb.virtualX) _hb.virtualX = wanted;
 }
 
 // Flush queued individual transactions into visual bricks
