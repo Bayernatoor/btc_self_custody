@@ -1149,18 +1149,6 @@ impl BitcoinRpc {
         Ok(entries)
     }
 
-    /// Get total fee for a block via getblockstats (returns sats).
-    /// Used as fallback when mempool_txs table is sparsely populated.
-    pub async fn get_block_total_fee(
-        &self,
-        height: u64,
-    ) -> Result<u64, StatsError> {
-        let result = self
-            .call("getblockstats", &[json!(height), json!(["totalfee"])])
-            .await?;
-        Ok(result["totalfee"].as_u64().unwrap_or(0))
-    }
-
     /// Get (size, weight, total_fees) for a block via a single getblockstats
     /// call by hash. The response is small (a few scalars), so this is fast
     /// even over WireGuard — used together with `get_block_header` to broadcast

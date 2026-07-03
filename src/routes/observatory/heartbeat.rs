@@ -194,13 +194,30 @@ pub fn HeartbeatPage() -> impl IntoView {
         }
         if let Some(blocks) = initial_blocks.get() {
             let blocks = blocks.clone();
-            if blocks.is_empty() {
-                return;
-            }
 
+            // Always init the canvas and connect the SSE stream once the resource
+            // resolves, EVEN IF the DB returned no blocks (empty DB, or a
+            // transient DB pool/query error that unwrap_or_default() collapsed to
+            // []). connectOwnFeed() lives inside init_heartbeat and needs no DB;
+            // the live feed, vitals and STALE indicator must work regardless of DB
+            // state, and the historical EKG simply starts empty and fills from the
+            // SSE stream + tab-return catch-up. Gating init on non-empty blocks
+            // would strand the whole page behind the loading overlay on a DB blip.
             init_heartbeat("heartbeat-canvas");
             initialized.set(true);
             set_loading.set(false);
+
+            // Seed last height from LiveStats regardless; the replay path below
+            // maxes it with the freshest replayed block when history is present.
+            let live_height = cached_live
+                .get_untracked()
+                .map(|s| s.blockchain.blocks)
+                .unwrap_or(0);
+
+            if blocks.is_empty() {
+                last_height.set(live_height);
+                return;
+            }
 
             // Store period start timestamp for heart rate calculation
             // Use the block at the retarget boundary, not the first fetched block
@@ -225,10 +242,6 @@ pub fn HeartbeatPage() -> impl IntoView {
 
             // Store last height — use the latest from LiveStats (not the last replayed block)
             // to avoid missing blocks that arrived between fetch and now
-            let live_height = cached_live
-                .get_untracked()
-                .map(|s| s.blockchain.blocks)
-                .unwrap_or(0);
             let replay_height = blocks.last().map(|b| b.height).unwrap_or(0);
             last_height.set(std::cmp::max(live_height, replay_height));
 

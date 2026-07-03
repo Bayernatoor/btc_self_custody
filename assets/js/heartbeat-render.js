@@ -393,8 +393,6 @@ export function drawFrame(frameTime) {
     // No vertical tremor on long waits — the flatline color shift (via
     // computeColor on elapsed) + the "last block" timer already convey the
     // wait, and a heaving baseline added motion without information.
-    var jitter = 0;
-
     for (var si = 0; si < _hb.timeline.length; si++) {
         var seg = _hb.timeline[si];
         var segStart = seg.x_start;
@@ -408,7 +406,7 @@ export function drawFrame(frameTime) {
             drawBlockSegment(ctx, seg, viewLeft, baseline, liveColor);
         } else {
             var flatColor = (seg.x_end === null) ? liveColor : (seg.color || COLORS.healthy);
-            drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, baseline, flatColor, jitter, seg.x_end === null, now);
+            drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, baseline, flatColor, seg.x_end === null, now);
         }
     }
 
@@ -649,7 +647,7 @@ export function drawBlockSegment(ctx, seg, viewLeft, baseline, fallbackColor) {
 }
 
 // Draw a flatline segment (with optional blips)
-export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, baseline, color, jitter, isLive, nowSec) {
+export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, baseline, color, isLive, nowSec) {
     var _hb = getState();
     // Clamp to visible range
     var drawStart = Math.max(seg.x_start, viewLeft);
@@ -659,7 +657,7 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
 
     var cx1 = virtualToCanvas(drawStart);
     var cx2 = virtualToCanvas(drawEnd);
-    var y = baseline + (isLive ? jitter : 0);
+    var y = baseline;
 
     // Draw the flatline
     ctx.beginPath();

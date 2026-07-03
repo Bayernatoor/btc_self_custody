@@ -91,7 +91,9 @@ pub async fn fetch_recent_blocks(
     if tip == 0 {
         return Ok(Vec::new());
     }
-    let from = tip.saturating_sub(count);
+    // query_blocks is inclusive on both ends, so subtract count-1 to return
+    // exactly `count` blocks (tip-count+1 ..= tip), matching the doc contract.
+    let from = tip.saturating_sub(count.saturating_sub(1));
     let rows = super::db::query_blocks(&conn, from, tip)
         .map_err(|e| internal_err("DB query", e))?;
     Ok(rows.into_iter().map(BlockSummary::from).collect())

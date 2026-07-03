@@ -86,14 +86,17 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
     var flatlineSpan = _hb.virtualX - liveSeg.x_start;
     var stackMap = {};
 
-    // Place all received history txs; density is governed ONLY by the per-column
-    // stack cap (histMaxStack, 35% of canvas height) below — the exact limiter
-    // live flushTxBatch uses. The old `gridCols * 3` cap allowed just 3 bricks
-    // per 5px column (~10x sparser than live), so a refresh reconstructed far
-    // fewer bricks than a live tab had, and the count scaled with time-since-last
-    // -block (wider flatline → higher cap) rather than actual tx volume. Letting
-    // the column cap govern makes a refresh match live density.
-    var maxBricks = txs.length;
+    // Density is governed by the per-column stack cap (histMaxStack, 35% of canvas
+    // height) below — the exact limiter live flushTxBatch uses. The old
+    // `gridCols * 3` cap allowed just 3 bricks per 5px column (~10x sparser than
+    // live), so a refresh reconstructed far fewer bricks than a live tab had, and
+    // the count scaled with time-since-last-block rather than tx volume. We still
+    // keep an ABSOLUTE ceiling: this loop runs synchronously (unlike the live
+    // queue, bounded to 500/frame), and the history feed can carry up to 10k txs,
+    // so an uncapped pass would push ~10k brick objects in one shot and weigh down
+    // every subsequent drawFrame. 3000 fills any realistic flatline to the column
+    // cap while bounding the one-shot cost.
+    var maxBricks = Math.min(txs.length, 3000);
 
     console.log('[heartbeat] placeHistoryTxs: flatlineSpan=' + Math.round(flatlineSpan) +
         'px, virtualX=' + Math.round(_hb.virtualX) +
@@ -198,7 +201,10 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
 export function processLiveBlock(block) {
     var _hb = getState();
     if (!_hb) return;
-    _hb._blockProcessing = true;
+    // Start each block from a clean backlog-spread state so a previous block's
+    // spread (still within its 2.5s ramp) can't bleed into this block's flatline.
+    _hb._backlogSpreadPx = 0;
+    _hb._backlogSpreadStart = 0;
 
     // Collapse the dead processing gap: the backend suppresses txs while
     // building block data (~2-5s, longer on a node stall), so virtualX has
@@ -289,9 +295,9 @@ export function processLiveBlock(block) {
     if (window.renderRhythmStrip && window.getHeartbeatRecentBlocks) {
         window.renderRhythmStrip('rhythm-strip-canvas', window.getHeartbeatRecentBlocks());
     }
-
-    // Resume tx flow — new txs will now flush to the new post-block flatline
-    _hb._blockProcessing = false;
+    // New txs flush to the new post-block flatline on the next RAF frame.
+    // (No _blockProcessing gate needed: this function is fully synchronous, so it
+    // always completes — creating the new flatline — before any drawFrame runs.)
 }
 
 // Own node SSE feed (primary)
@@ -303,6 +309,8 @@ export function connectOwnFeed() {
         try { _hb._sse.close(); } catch(e) {}
         _hb._sse = null;
     }
+    // Cancel any pending reconnect timer so retries can't stack.
+    if (_hb._sseRetryTimer) { clearTimeout(_hb._sseRetryTimer); _hb._sseRetryTimer = null; }
     console.log('[heartbeat] connecting to SSE /api/stats/heartbeat');
     _hb._txThrottleTime = 0;
     _hb._txBatchQueue = [];
@@ -377,7 +385,11 @@ export function connectOwnFeed() {
                     if (_hb._hiddenTxBuffer.length < 3000) _hb._hiddenTxBuffer.push(tx);
                     return;
                 }
-                if (_hb._txBatchQueue.length > 500) _hb._txBatchQueue.length = 500;
+                // Bound the queue during a backlog; keep the NEWEST (setting
+                // .length truncates the tail, which dropped the freshest arrivals).
+                if (_hb._txBatchQueue.length >= 500) {
+                    _hb._txBatchQueue = _hb._txBatchQueue.slice(-499);
+                }
                 _hb._txBatchQueue.push(tx);
                 // Track fee rates for rolling median (computed on flush, not per-tx)
                 if (tx.fee_rate) {
@@ -439,6 +451,10 @@ export function connectOwnFeed() {
         //     console.log('[heartbeat] block mining detected');
         // });
         es.addEventListener('lag', function(e) {
+            // A lag event proves the byte stream is live (client just fell behind
+            // the broadcast channel), so refresh the stall clock — otherwise a
+            // perpetually-lagging client would falsely read as 'stale'.
+            if (_hb) _hb._lastSseEventTs = Date.now() / 1000;
             console.log('SSE lag:', e.data);
         });
         es.onopen = function() {
@@ -469,14 +485,17 @@ export function connectOwnFeed() {
             // of the server returning — no giving up, no fallback stranding.
             var delay = Math.min(2000 * Math.pow(1.5, Math.min(_hb._sseRetries - 1, 8)), 15000);
             console.log('[heartbeat] SSE error, retry', _hb._sseRetries, 'in', Math.round(delay / 1000) + 's');
-            setTimeout(function() {
-                if (_hb) connectOwnFeed();
+            // Track the handle so destroyHeartbeat can cancel it, and re-check
+            // getState() (not the captured _hb, which stays truthy after destroy)
+            // so a stale retry can't fire connectOwnFeed after teardown/reset.
+            _hb._sseRetryTimer = setTimeout(function() {
+                if (getState()) connectOwnFeed();
             }, delay);
         };
         _hb._sse = es;
     } catch (err) {
         // EventSource construction failed — retry shortly.
-        setTimeout(function() { if (getState()) connectOwnFeed(); }, 3000);
+        _hb._sseRetryTimer = setTimeout(function() { if (getState()) connectOwnFeed(); }, 3000);
     }
 }
 
@@ -503,8 +522,6 @@ export function fastForwardLiveFlatline(blockTs) {
 export function flushTxBatch() {
     var _hb = getState();
     if (!_hb || !_hb._txBatchQueue || _hb._txBatchQueue.length === 0) return;
-    // During block processing, keep txs queued — they'll flush to the new flatline
-    if (_hb._blockProcessing) return;
     var liveSeg = _hb.timeline[_hb.timeline.length - 1];
     if (!liveSeg || liveSeg.type !== 'flatline') return;
 

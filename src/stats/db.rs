@@ -2092,8 +2092,9 @@ pub struct MempoolTxRow {
     pub value: u64,
     /// Unix timestamp when the transaction was first observed via ZMQ.
     pub first_seen: u64,
-    /// Notable transaction type: "whale", "fee_outlier", "consolidation", "fan_out",
-    /// "large_inscription", "ancient_spend", or null for normal transactions.
+    /// Notable transaction type (matches notable::primary_type): "whale",
+    /// "round_number", "large_inscription", "consolidation", "fan_out",
+    /// "fee_outlier", "op_return_msg", or null for normal transactions.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub notable_type: Option<String>,
     /// Estimated USD value at time of detection (for whale txs).

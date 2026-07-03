@@ -57,13 +57,16 @@ pub enum HeartbeatEvent {
         fee_rate: f64,
         /// Unix timestamp when this tx was observed.
         timestamp: u64,
-        /// Whether this tx's total output value exceeds the whale threshold ($500K USD).
+        /// Whether this tx's total output value exceeds the whale threshold
+        /// (WHALE_THRESHOLD_USD in notable.rs, currently $1M USD).
         #[serde(skip_serializing_if = "std::ops::Not::not")]
         whale: bool,
         /// Estimated USD value of outputs (value * cached_price / 1e8). Only set for whale txs.
         #[serde(skip_serializing_if = "is_zero_f64")]
         value_usd: f64,
-        /// Whether this tx has an unusually high fee rate (>500 sat/vB) or absolute fee (>0.05 BTC).
+        /// Whether this tx has an unusually high fee rate or absolute fee
+        /// (FEE_RATE_OUTLIER_THRESHOLD / FEE_ABSOLUTE_OUTLIER_THRESHOLD in
+        /// notable.rs, currently >2000 sat/vB or >0.1 BTC).
         #[serde(skip_serializing_if = "std::ops::Not::not")]
         fee_outlier: bool,
         /// Consolidation: many inputs (>50) funneled into few outputs.
@@ -670,8 +673,16 @@ fn spawn_block_confirm(
         // zero-data spike. Idempotent: a healthy block was never estimated, so
         // this only fires after a node blip.
         if estimated {
-            let total_fees =
-                state.rpc.get_block_total_fee(height).await.unwrap_or(0);
+            // Fetch fees by HASH, not height: this runs 20-90s after the fast
+            // broadcast, and getblockstats-by-height would resolve against the
+            // current best chain, so a reorg in that window would attribute the
+            // wrong block's fees to `hash`. get_block_stats_brief(&hash) pins it.
+            let total_fees = state
+                .rpc
+                .get_block_stats_brief(&hash)
+                .await
+                .map(|(_, _, fees)| fees)
+                .unwrap_or(0);
             let _ = sender.send(HeartbeatEvent::Block {
                 height,
                 hash: hash.clone(),
@@ -772,13 +783,14 @@ fn parse_raw_tx(data: &[u8]) -> Option<ParsedTx> {
     // Input count
     let input_count = read_varint(data, &mut cursor)?;
 
-    // Skip inputs (input data isn't needed for classification)
+    // Skip inputs (input data isn't needed for classification).
+    // Use checked_add so a garbage varint can't wrap the cursor past data.len()
+    // and bypass the bounds check (mirrors the output loop's pre-advance check).
     for _ in 0..input_count {
-        cursor += 32; // prev txid
-        cursor += 4; // prev vout
+        cursor = cursor.checked_add(36)?; // prev txid (32) + prev vout (4)
         let script_len = read_varint(data, &mut cursor)? as usize;
-        cursor += script_len; // scriptSig
-        cursor += 4; // sequence
+        cursor = cursor.checked_add(script_len)?; // scriptSig
+        cursor = cursor.checked_add(4)?; // sequence
         if cursor > data.len() {
             return None;
         }

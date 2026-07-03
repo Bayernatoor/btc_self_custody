@@ -232,8 +232,14 @@ window.pushHeartbeatBlocks = function(json, replay) {
         for (var i = 0; i < blocks.length; i++) {
             var b = blocks[i];
 
-            // Deduplicate: skip if this block height is already in the timeline
-            // Exception: if existing block was estimated (total_fees=0), replace with real data
+            // Deduplicate: skip if this block height is already in the timeline.
+            // Exception: an estimated spike (getblockstats was down in the fast
+            // path, so size/weight/fees were broadcast as 0) gets re-broadcast
+            // with authoritative data. Trigger the replace when the incoming
+            // event materializes structural data the existing one lacks \u2014 keyed
+            // on weight OR fees, matching the backend `estimated = size==0||weight==0`
+            // definition. (Keying on total_fees alone missed the case where the
+            // fee RPC stayed down but getblock gave real size/weight.)
             if (!isReplay && b.height) {
                 var existingSeg = null;
                 for (var di = _hb.timeline.length - 1; di >= Math.max(0, _hb.timeline.length - 30); di--) {
@@ -243,8 +249,9 @@ window.pushHeartbeatBlocks = function(json, replay) {
                     }
                 }
                 if (existingSeg) {
-                    // Replace estimated waveform with real data
-                    if (existingSeg.total_fees === 0 && b.total_fees > 0) {
+                    var existingMissing = (existingSeg.weight === 0 || existingSeg.total_fees === 0);
+                    var incomingHasData = (b.weight > 0 || b.total_fees > 0);
+                    if (existingMissing && incomingHasData) {
                         var replacement = createBlockSegment(b, existingSeg.x_start);
                         replacement.x_start = existingSeg.x_start;
                         replacement.x_end = existingSeg.x_end;
@@ -254,13 +261,15 @@ window.pushHeartbeatBlocks = function(json, replay) {
                         existingSeg.total_fees = replacement.total_fees;
                         existingSeg.weight = replacement.weight;
                         existingSeg.inter_block_seconds = replacement.inter_block_seconds;
-                        // Now show the announcement with real data
-                        var feeBtc = b.total_fees / 100000000;
+                        // Announce with whatever real data landed. Fees may still be
+                        // unknown (0) if getblockstats stayed down \u2014 omit them rather
+                        // than show "0.0000 BTC".
                         var heightStr = b.height.toLocaleString();
+                        var feePart = b.total_fees > 0 ? (b.total_fees / 100000000).toFixed(4) + ' BTC fees \u00b7 ' : '';
                         var nowAnn = Date.now() / 1000;
                         _hb._announcement = {
                             title: 'Block #' + heightStr + ' found',
-                            subtitle: feeBtc.toFixed(4) + ' BTC fees \u00b7 ' + (b.tx_count || 0).toLocaleString() + ' txs',
+                            subtitle: feePart + (b.tx_count || 0).toLocaleString() + ' txs',
                             color: replacement.color || _hb.currentColor || COLORS.healthy,
                             start: nowAnn,
                             end: nowAnn + 12.0
@@ -458,7 +467,9 @@ window.destroyHeartbeat = function() {
     if (_hb.rafId) cancelAnimationFrame(_hb.rafId);
     if (_hb._flashTimer) clearTimeout(_hb._flashTimer);
     if (_hb.resizeObs) _hb.resizeObs.disconnect();
-    if (_hb._sseReconnectTimer) clearInterval(_hb._sseReconnectTimer);
+    // Cancel the pending SSE reconnect timeout so it can't fire connectOwnFeed
+    // after teardown (its closure's captured _hb stays truthy post-destroy).
+    if (_hb._sseRetryTimer) { clearTimeout(_hb._sseRetryTimer); _hb._sseRetryTimer = null; }
     if (_hb._sse) {
         try { _hb._sse.close(); } catch(e) {}
     }
@@ -544,11 +555,26 @@ function catchUpBlocks(queued, tipHeight) {
         fetch('/api/stats/blocks')
             .then(function(r) { return r.json(); })
             .then(function(data) {
-                if (!getState()) return;
+                // Re-read state fresh: a full reset could have replaced it while
+                // the fetch was in flight. Advancing virtualX must target the same
+                // object replayQueuedBlock writes to.
+                var s = getState();
+                if (!s) return;
                 var blocks = (data.blocks || [])
                     .filter(function(b) { return b.height > fromH; })
                     .sort(function(a, b) { return a.height - b.height; });
-                for (var j = 0; j < blocks.length; j++) replayQueuedBlock(blocks[j]);
+                for (var j = 0; j < blocks.length; j++) {
+                    // Give inner gap blocks a proportional (compressed) lead-in
+                    // flatline from their real inter-block time, so a multi-block
+                    // fetch-fill doesn't collapse to ~30px per block. The first
+                    // block's lead-in is the existing live flatline (already sized
+                    // to time since the last known block), so only widen for j>0.
+                    if (j > 0) {
+                        var gap = Math.max(0, blocks[j].timestamp - blocks[j - 1].timestamp);
+                        s.virtualX += historyFlatlineWidth(gap);
+                    }
+                    replayQueuedBlock(blocks[j]);
+                }
                 if (blocks.length > 0) {
                     console.log('[heartbeat] tab return: filled', blocks.length, 'blocks from fetch');
                     fastForwardLiveFlatline(blocks[blocks.length - 1].timestamp);
