@@ -462,9 +462,18 @@ pub fn HeartbeatPage() -> impl IntoView {
                 let t = extract_json_f64(&latest, "timestamp") as u64;
                 if h > sse_height.get_untracked() {
                     set_sse_height.set(h);
-                }
-                if t > sse_ts.get_untracked() {
-                    set_sse_ts.set(t);
+                    // Stamp the block's timestamp CLAMPED to our wall clock at
+                    // arrival. Block timestamps are the miner's clock and often run
+                    // seconds-to-minutes ahead of real time; using the raw value
+                    // would freeze the "Ns ago" timer at 0 (saturating_sub) until
+                    // wall-clock catches up. Clamping at arrival makes it count from
+                    // 0, while a genuinely old tip (loaded from history) keeps its
+                    // real age since t < now there. Tied to the height bump so it's
+                    // stamped once per block, not re-clamped every tick.
+                    let now = chrono::Utc::now().timestamp() as u64;
+                    if t > 0 {
+                        set_sse_ts.set(t.min(now));
+                    }
                 }
                 // Reflect the SSE feed's connection state in the LIVE indicator.
                 let cs = get_heartbeat_connection_state();
