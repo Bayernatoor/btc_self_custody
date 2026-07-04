@@ -86,17 +86,15 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
     var flatlineSpan = _hb.virtualX - liveSeg.x_start;
     var stackMap = {};
 
-    // Density is governed by the per-column stack cap (histMaxStack, 35% of canvas
-    // height) below — the exact limiter live flushTxBatch uses. The old
-    // `gridCols * 3` cap allowed just 3 bricks per 5px column (~10x sparser than
-    // live), so a refresh reconstructed far fewer bricks than a live tab had, and
-    // the count scaled with time-since-last-block rather than tx volume. We still
-    // keep an ABSOLUTE ceiling: this loop runs synchronously (unlike the live
-    // queue, bounded to 500/frame), and the history feed can carry up to 10k txs,
-    // so an uncapped pass would push ~10k brick objects in one shot and weigh down
-    // every subsequent drawFrame. 3000 fills any realistic flatline to the column
-    // cap while bounding the one-shot cost.
-    var maxBricks = Math.min(txs.length, 3000);
+    // Place ALL received history txs (the server caps the feed — see
+    // HEARTBEAT_HISTORY_LIMIT in api.rs). Density is still governed by the
+    // per-column stack cap (histMaxStack, 35% of canvas height) below — the exact
+    // limiter live flushTxBatch uses — so a wide flatline fills naturally and a
+    // narrow one won't over-stack. Placement is one synchronous pass; at ~10-20k
+    // that's a brief sub-frame cost on load. If the server limit is raised much
+    // further and load starts to hitch, chunk this across RAF frames like the
+    // live queue (bounded to 500/frame).
+    var maxBricks = txs.length;
 
     console.log('[heartbeat] placeHistoryTxs: flatlineSpan=' + Math.round(flatlineSpan) +
         'px, virtualX=' + Math.round(_hb.virtualX) +

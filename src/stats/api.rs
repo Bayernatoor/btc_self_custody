@@ -200,6 +200,15 @@ impl StatsStateBuilder {
 /// Maximum concurrent SSE connections before rejecting new ones.
 const MAX_SSE_CONNECTIONS: usize = 256;
 
+/// How many recent unconfirmed mempool txs to send as the heartbeat history
+/// (the initial brick fill on connect/refresh), newest-first from the last 2h.
+/// The client places all of them, bounded only by its per-column density cap, so
+/// this is effectively "how many bricks a fresh load shows". Tradeoff: each ~10k
+/// adds ~2-4MB to the one-time SSE history payload and a synchronous placement
+/// pass on the client. Raise cautiously; if the client load starts to hitch,
+/// chunk placeHistoryTxs across frames before pushing this higher.
+const HEARTBEAT_HISTORY_LIMIT: u64 = 20_000;
+
 /// Arc-wrapped stats state, used as Axum extractor in all handlers.
 pub type SharedStatsState = Arc<StatsState>;
 
@@ -871,9 +880,12 @@ pub async fn get_heartbeat_sse(
                         db::query_block_timestamp(&conn, h).ok().flatten()
                     })
                     .unwrap_or(0);
-                let txs =
-                    db::query_recent_mempool_txs(&conn, two_hours_ago, 10000)
-                        .unwrap_or_default();
+                let txs = db::query_recent_mempool_txs(
+                    &conn,
+                    two_hours_ago,
+                    HEARTBEAT_HISTORY_LIMIT,
+                )
+                .unwrap_or_default();
                 // Fetch recent notable txs (last 24h, up to 200) for the feed panel.
                 // Includes confirmed txs, unlike mempool_txs query.
                 let filter = db::NotableFilter {
