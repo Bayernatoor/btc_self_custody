@@ -14,9 +14,18 @@ use std::time::Instant;
 use futures::stream::{self, StreamExt};
 use rusqlite::Connection;
 
+use tokio::sync::broadcast;
+
 use super::db::DbPool;
 use super::rpc::{BitcoinRpc, Block};
+use super::zmq_subscriber::HeartbeatEvent;
 use super::{db, error::StatsError};
+
+/// Max newly-ingested blocks the poller will re-broadcast as heartbeat spikes in
+/// one tick. A ZMQ-only hiccup misses 1-2 blocks; a larger batch is a startup /
+/// post-outage catch-up, which the frontend picks up from history instead — we
+/// don't want to fire dozens of spikes at connected clients at once.
+const MAX_POLLER_BROADCAST: usize = 3;
 
 /// Number of concurrent RPC fetch tasks. Env: `BITCOIN_STATS_RPC_CONCURRENCY` (default: 8).
 fn concurrency() -> usize {
@@ -113,8 +122,16 @@ pub async fn run(
     ingest_range(rpc, conn, start, tip, "Ingesting").await
 }
 
-/// Background: check for new blocks and ingest them. Runs every 60 seconds.
-pub async fn poll_new_blocks(rpc: &BitcoinRpc, pool: &DbPool) {
+/// Background: check for new blocks and ingest them. Runs every 15 seconds.
+/// `heartbeat_tx` lets the poller re-broadcast a block the ZMQ hashblock path
+/// missed (ZMQ doesn't replay events; a hiccup would otherwise leave no spike
+/// until the next block). The frontend dedups by height, so a block ZMQ already
+/// broadcast is a harmless no-op on the client.
+pub async fn poll_new_blocks(
+    rpc: &BitcoinRpc,
+    pool: &DbPool,
+    heartbeat_tx: &broadcast::Sender<HeartbeatEvent>,
+) {
     // Poll path wants actual latest tip; the 1s cache would mask new blocks
     // during the window between a block arriving and the cache expiring.
     let tip = match rpc.get_blockchain_info_fresh().await {
@@ -169,6 +186,30 @@ pub async fn poll_new_blocks(rpc: &BitcoinRpc, pool: &DbPool) {
     }
 
     tracing::info!("Poll: ingested {} blocks up to {tip}", blocks.len());
+
+    // Re-broadcast newly-ingested blocks as heartbeat spikes so a ZMQ-missed
+    // block still appears (late). Only for small batches: a large catch-up
+    // (startup / post-outage) is not a live ZMQ hiccup, and the frontend gets
+    // those from history — firing dozens of spikes at once would look broken.
+    if !blocks.is_empty() && blocks.len() <= MAX_POLLER_BROADCAST {
+        for b in &blocks {
+            let _ = heartbeat_tx.send(HeartbeatEvent::Block {
+                height: b.height,
+                hash: b.hash.clone(),
+                timestamp: b.time,
+                tx_count: b.n_tx,
+                total_fees: b.total_fees,
+                size: b.size,
+                weight: b.weight,
+                confirmed_count: 0,
+            });
+        }
+    } else if blocks.len() > MAX_POLLER_BROADCAST {
+        tracing::info!(
+            "Poll: skipped heartbeat broadcast for {} blocks (catch-up, not a live miss)",
+            blocks.len()
+        );
+    }
 }
 
 /// Verify the last `depth` blocks in the DB match the canonical chain.
