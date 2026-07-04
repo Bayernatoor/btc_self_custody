@@ -83,7 +83,7 @@ will appear each time you enter your prefix. They confirm that your Coldcard has
 
 <h5>Adding a Passphrase</h5>
 
-**1\.** A Passphrase acts as a **"25th word"** and helps add additional security to your seed words. Adding a Passphrase would help prevent access to your wallet if someone was able to obtain your 24 words. Remember, the original 24 words result in a valid wallet, adding a 25th word creates an entirely new wallet.
+**1\.** A Passphrase is an extra secret you choose (sometimes nicknamed a **"25th word"**, though it isn't actually a word from your seed list). It's a string of your choosing, up to 100 characters, that gets combined with your 24 words during key derivation. This adds a strong extra layer of security: even if someone obtained your 24 words, they could not access your bitcoin without the Passphrase. Remember, your 24 words alone open one wallet, and adding a Passphrase creates an entirely separate wallet.
 
 **2\.** Adding a Passphrase to your 24 seed words will result in a new Extended Fingerprint. It's important to write this down since the Coldcard cannot confirm if you've entered the correct Passphrase. But you can confirm it via the unique Extended Fingerprint.
 

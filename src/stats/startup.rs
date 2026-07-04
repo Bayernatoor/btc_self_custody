@@ -263,7 +263,8 @@ pub fn spawn_background_tasks(
             };
             loop {
                 tokio::time::sleep(std::time::Duration::from_secs(15)).await;
-                ingest::poll_new_blocks(&state.rpc, &state.db).await;
+                ingest::poll_new_blocks(&state.rpc, &state.db, &state.heartbeat_tx)
+                    .await;
 
                 // Verify the last blocks against the canonical chain (detect reorgs).
                 // Depth must match super::rpc::REORG_DETECTION_DEPTH so the
@@ -335,38 +336,52 @@ pub fn spawn_background_tasks(
     {
         let state = Arc::clone(&state);
         tokio::spawn(async move {
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs();
-            match state.rpc.get_raw_mempool_verbose().await {
-                Ok(entries) => {
-                    let count = entries.len();
-                    if let Ok(conn) = state.db.get() {
-                        let mut inserted = 0u64;
-                        for (txid, fee, vsize) in &entries {
-                            if db::insert_mempool_tx(
-                                &conn,
-                                &db::MempoolTxInsert {
-                                    txid,
-                                    fee: *fee,
-                                    vsize: *vsize,
-                                    first_seen: now,
-                                    ..Default::default()
-                                },
-                            )
-                            .is_ok()
-                            {
-                                inserted += 1;
+            // Retry until the seed succeeds: if the node is down at boot, a
+            // one-shot seed would leave the tx history empty (SSE history: 0)
+            // until ZMQ slowly refills. Retrying every 45s means a restart
+            // during a node outage self-heals once the node returns. Stops after
+            // the first success (ZMQ keeps the table current from there).
+            loop {
+                match state.rpc.get_raw_mempool_verbose().await {
+                    Ok(entries) => {
+                        let count = entries.len();
+                        // Stamp first_seen at insert time (not before the retry
+                        // loop), so late seeds record accurate observation times.
+                        let now = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs();
+                        if let Ok(conn) = state.db.get() {
+                            let mut inserted = 0u64;
+                            for (txid, fee, vsize) in &entries {
+                                if db::insert_mempool_tx(
+                                    &conn,
+                                    &db::MempoolTxInsert {
+                                        txid,
+                                        fee: *fee,
+                                        vsize: *vsize,
+                                        first_seen: now,
+                                        ..Default::default()
+                                    },
+                                )
+                                .is_ok()
+                                {
+                                    inserted += 1;
+                                }
                             }
+                            tracing::info!(
+                                "Mempool seed: {inserted}/{count} txs inserted from getrawmempool"
+                            );
                         }
-                        tracing::info!(
-                            "Mempool seed: {inserted}/{count} txs inserted from getrawmempool"
-                        );
+                        break;
                     }
-                }
-                Err(e) => {
-                    tracing::warn!("Mempool seed failed: {e}");
+                    Err(e) => {
+                        tracing::warn!(
+                            "Mempool seed failed: {e}; retrying in 45s"
+                        );
+                        tokio::time::sleep(std::time::Duration::from_secs(45))
+                            .await;
+                    }
                 }
             }
         });

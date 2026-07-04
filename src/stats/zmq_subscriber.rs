@@ -200,6 +200,19 @@ async fn subscribe_txs(
     socket.subscribe("rawtx").await?;
     tracing::info!("ZMQ: subscribed to rawtx");
 
+    // Warm-up: wait briefly for the price cache before classifying. Whale
+    // detection needs value_usd (= value x price), and the price refresh task
+    // fetches immediately at startup but runs concurrently with this subscriber,
+    // so the first rawtx can arrive before the price lands and miss its gold
+    // flag. Bounded (~5s) so a dead price source never blocks tx flow; on
+    // reconnect the cache is already warm and this returns instantly.
+    for _ in 0..25 {
+        if state.price_cache.get(&()).is_some() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+
     // Each incoming rawtx needs one `getmempoolentry` RPC (for the fee — the
     // only field not derivable from the raw bytes). Over the WireGuard tunnel
     // that round-trip dominates, so doing it inline in the recv loop caps
@@ -219,7 +232,23 @@ async fn subscribe_txs(
     let mut seen = SeenTxids::new(SEEN_TXID_CAP);
 
     loop {
-        let msg = socket.recv().await?;
+        // Inactivity watchdog: a half-dead TCP connection leaves recv() parked
+        // forever with no error. Bounding it means we return (and the outer loop
+        // reconnects) instead of silently going stale.
+        let msg = match tokio::time::timeout(
+            Duration::from_secs(RAWTX_RECV_TIMEOUT_SECS),
+            socket.recv(),
+        )
+        .await
+        {
+            Ok(r) => r?,
+            Err(_) => {
+                return Err(format!(
+                    "ZMQ rawtx: no message in {RAWTX_RECV_TIMEOUT_SECS}s — connection likely dead"
+                )
+                .into())
+            }
+        };
         let frames: Vec<_> = msg.into_vec();
         if frames.len() < 2 {
             continue;
@@ -289,6 +318,14 @@ async fn subscribe_txs(
 /// Number of concurrent `getmempoolentry` lookups in flight. Bounds RPC load
 /// on the node and applies backpressure to the recv loop when saturated.
 const RAWTX_CONCURRENCY: usize = 16;
+
+/// Inactivity watchdog for the rawtx recv loop. Txs flow constantly even in a
+/// quiet mempool, so this much silence means a half-dead TCP connection (the
+/// socket stays "connected" but delivers nothing); returning an error triggers
+/// the outer reconnect. NOT applied to hashblock — blocks are ~10min apart, so a
+/// short timeout there would reconnect constantly; a missed block is instead
+/// covered by the 15s poller re-broadcasting it (see ingest::poll_new_blocks).
+const RAWTX_RECV_TIMEOUT_SECS: u64 = 90;
 
 /// How many recently-seen txids to remember for de-duplication. A block holds
 /// ~3-4k txs, so this covers ~10+ blocks of history — far more than the window
