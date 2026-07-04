@@ -694,56 +694,44 @@ export function flushTxBatch() {
         }
     }
 
-    // Priority culling: only when truly excessive. Viewport culling already
-    // skips off-screen blips during rendering, so memory is the only concern.
-    var CULL_THRESHOLD = 30000;
-    var CULL_TARGET = 25000;
+    // Memory backstop only — NOT a visual density limiter (the draw loop already
+    // viewport-culls). Runs inside the RAF flush, so it must be cheap and must
+    // NOT reorder by fee: this segment is "the mempool", and the old fee-score
+    // sort (a) hitched the frame with an O(n log n) sort of tens of thousands and
+    // (b) evicted the low-fee tail — the exact thing the visualization exists to
+    // show. Instead evict the OLDEST (leftmost / furthest behind the head) bricks
+    // in a single O(n) partition: no sort, fee-neutral, and when following the
+    // head those are already off-screen. Threshold is high so it only fires as a
+    // true memory guard (well above a full mempool + inter-block accumulation).
+    var CULL_THRESHOLD = 50000;
+    var CULL_TARGET = 40000;
     if (liveSeg.blips.length > CULL_THRESHOLD) {
-        // Score each active blip: lower score = evict first
-        // Priority: low fee + small vsize evicted first
-        var scored = [];
-        for (var ci = 0; ci < liveSeg.blips.length; ci++) {
-            var cb = liveSeg.blips[ci];
-            if (cb.fadeStart > 0) continue; // already fading, skip
-            if (cb.notableType) continue; // never cull notable blips
-            var score = (cb.feeRate || 0.1) * Math.log2((cb.vsize || 100) + 1);
-            scored.push({ idx: ci, score: score });
+        var over = liveSeg.blips.length - CULL_TARGET;
+        var flatW = Math.max(1, _hb.virtualX - liveSeg.x_start);
+        // Cutoff x below which (leftmost/oldest) non-notable bricks are dropped.
+        // Estimate by fraction of the flatline width, with a little overshoot so
+        // one pass gets us under target even with a non-uniform distribution.
+        var cutoffX = liveSeg.x_start + Math.min(0.95, (over / liveSeg.blips.length) * 1.15) * flatW;
+        var kept = [];
+        liveSeg._colHeights = {};
+        for (var ki = 0; ki < liveSeg.blips.length; ki++) {
+            var cb = liveSeg.blips[ki];
+            var keep = cb.notableType || cb.fadeStart > 0
+                || (cb.gridX !== undefined ? cb.gridX : cb.x) >= cutoffX;
+            if (!keep) continue;
+            kept.push(cb);
+            // Restack kept, non-fading bricks against the rebuilt column map.
+            if (cb.fadeStart > 0 || cb.gridX === undefined) continue;
+            var newStackY = liveSeg._colHeights[cb.gridX] || 0;
+            cb.stackY = newStackY;
+            cb.height = (cb.brickH || 0) + newStackY;
+            liveSeg._colHeights[cb.gridX] = newStackY + (cb.brickH || 0);
         }
-        if (scored.length > CULL_TARGET) {
-            scored.sort(function(a, b) { return a.score - b.score; });
-            var toEvict = scored.length - CULL_TARGET;
-            console.log('[heartbeat] culling:', liveSeg.blips.length, '->', CULL_TARGET,
-                '(evicting', toEvict, ', threshold=' + CULL_THRESHOLD + ')');
-            // Mark lowest-scored blips for immediate removal
-            var evictSet = {};
-            for (var ei = 0; ei < toEvict; ei++) {
-                evictSet[scored[ei].idx] = true;
-            }
-            var kept = [];
-            liveSeg._colHeights = {};
-            for (var ki = 0; ki < liveSeg.blips.length; ki++) {
-                if (!evictSet[ki]) {
-                    kept.push(liveSeg.blips[ki]);
-                }
-            }
-            // Restack: recalculate stackY/height for all kept blips
-            for (var ri = 0; ri < kept.length; ri++) {
-                var rb = kept[ri];
-                if (rb.fadeStart > 0 || rb.gridX === undefined) continue;
-                var newStackY = liveSeg._colHeights[rb.gridX] || 0;
-                rb.stackY = newStackY;
-                rb.height = (rb.brickH || 0) + newStackY;
-                liveSeg._colHeights[rb.gridX] = newStackY + (rb.brickH || 0);
-            }
-            liveSeg.blips = kept;
-            // Clear pinned/hovered blip if it was evicted
-            if (_hb._pinnedBlip && kept.indexOf(_hb._pinnedBlip) === -1) {
-                _hb._pinnedBlip = null;
-            }
-            if (_hb.hoveredBlip && kept.indexOf(_hb.hoveredBlip) === -1) {
-                _hb.hoveredBlip = null;
-            }
-        }
+        console.log('[heartbeat] cull (memory): ' + liveSeg.blips.length + ' -> ' + kept.length +
+            ' (dropped oldest left of x=' + Math.round(cutoffX) + ')');
+        liveSeg.blips = kept;
+        if (_hb._pinnedBlip && kept.indexOf(_hb._pinnedBlip) === -1) _hb._pinnedBlip = null;
+        if (_hb.hoveredBlip && kept.indexOf(_hb.hoveredBlip) === -1) _hb.hoveredBlip = null;
     }
 }
 

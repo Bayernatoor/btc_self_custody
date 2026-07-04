@@ -205,9 +205,6 @@ window.initHeartbeat = function(canvasId) {
         // Pause icon (inner span, so the tooltip sibling survives)
         var pb = document.getElementById('heartbeat-btn-pause-icon');
         if (pb) pb.textContent = s.paused ? '\u25B6' : '\u23F8';
-        // Mode icon
-        var mb = document.getElementById('heartbeat-btn-mode');
-        if (mb) mb.textContent = s.renderMode === 'bricks' ? '\u25A0' : '\u2B24';
         // LIVE pill: glows green while following the head, dims when free-panned.
         var lb = document.getElementById('heartbeat-btn-live');
         var dot = document.getElementById('heartbeat-live-dot');

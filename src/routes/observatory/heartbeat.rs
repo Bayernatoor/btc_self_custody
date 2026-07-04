@@ -717,11 +717,6 @@ pub fn HeartbeatPage() -> impl IntoView {
                             <span id="heartbeat-btn-pause-icon">"\u{23F8}"</span>
                             <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded bg-[#0a1929] border border-white/10 text-[10px] text-white/80 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-10">"Pause / play"</span>
                         </button>
-                        <button aria-label="Toggle brick or cell view" onclick="handleControlClick('mode')"
-                            class="group relative w-8 h-8 rounded-md bg-white/5 text-white/70 hover:bg-white/15 hover:text-white transition-all cursor-pointer flex items-center justify-center text-sm">
-                            <span id="heartbeat-btn-mode">"\u{25A0}"</span>
-                            <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded bg-[#0a1929] border border-white/10 text-[10px] text-white/80 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-10">"Brick / cell view"</span>
-                        </button>
                     </div>
                 </div>
 
