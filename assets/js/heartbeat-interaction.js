@@ -399,16 +399,29 @@ export function handleControlClick(id) {
             _hb.viewOffset = _hb.virtualX - (_hb.width * HEAD_POSITION_FRAC) / _hb.zoom;
             _hb.viewOffsetY = 0;
             break;
+        case 'fit':
+            // Frame the whole current mempool (the live flatline span) and follow.
+            var fseg = _hb.timeline[_hb.timeline.length - 1];
+            var fstart = (fseg && fseg.type === 'flatline' && fseg.x_end === null)
+                ? fseg.x_start : (_hb.virtualX - 100);
+            var fspan = Math.max(50, _hb.virtualX - fstart);
+            _hb.zoom = Math.max(_hb.minZoom, Math.min((_hb.width * 0.8) / fspan, _hb.maxZoom));
+            _hb.autoFollow = true;
+            _hb.paused = false;
+            _hb.viewOffsetY = 0;
+            _hb.viewOffset = _hb.virtualX - (_hb.width * HEAD_POSITION_FRAC) / _hb.zoom;
+            break;
         case 'mode':
             _hb.renderMode = _hb.renderMode === 'bricks' ? 'bloodstream' : 'bricks';
             break;
         case 'live':
-            // Jump to live: snap viewport to the live head immediately
+            // Re-engage head-follow at the CURRENT zoom (Fit is the separate
+            // "frame the whole mempool" action — Live shouldn't fight it by
+            // snapping back to a fixed zoom).
             _hb.autoFollow = true;
             _hb.paused = false;
-            _hb.zoom = 1.9;
             _hb.viewOffsetY = 0;
-            _hb.viewOffset = _hb.virtualX - (_hb.width * HEAD_POSITION_FRAC) / 1.9;
+            _hb.viewOffset = _hb.virtualX - (_hb.width * HEAD_POSITION_FRAC) / _hb.zoom;
             _hb.hoveredBlock = null;
             _hb.hoveredBlip = null;
             _hb._pinnedBlip = null;

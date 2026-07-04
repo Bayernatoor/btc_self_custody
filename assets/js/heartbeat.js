@@ -64,7 +64,10 @@ window.initHeartbeat = function(canvasId) {
         paused: false,
         renderMode: 'bricks',
         zoom: 1.9,
-        minZoom: 0.1,
+        // minZoom must go low enough to fit the whole mempool ribbon + spikes on
+        // one screen even at large mempools (volume-sized flatline grows with tx
+        // count). 0.03 fits ~60-80k txs in a typical viewport.
+        minZoom: 0.03,
         maxZoom: 50.0,
 
         // Rendering
@@ -196,24 +199,31 @@ window.initHeartbeat = function(canvasId) {
     _hb._syncControls = function() {
         var s = getState();
         if (!s) return;
-        // Zoom label
+        // Zoom label (2 decimals when zoomed out past 1x so 0.03x-0.1x reads)
         var zl = document.getElementById('heartbeat-zoom-label');
-        if (zl) zl.textContent = s.zoom.toFixed(1) + 'x';
-        // Pause button
-        var pb = document.getElementById('heartbeat-btn-pause');
+        if (zl) zl.textContent = s.zoom.toFixed(s.zoom < 1 ? 2 : 1) + 'x';
+        // Pause icon (inner span, so the tooltip sibling survives)
+        var pb = document.getElementById('heartbeat-btn-pause-icon');
         if (pb) pb.textContent = s.paused ? '\u25B6' : '\u23F8';
-        // Mode button
+        // Mode icon
         var mb = document.getElementById('heartbeat-btn-mode');
         if (mb) mb.textContent = s.renderMode === 'bricks' ? '\u25A0' : '\u2B24';
-        // Live button visibility
+        // LIVE pill: glows green while following the head, dims when free-panned.
         var lb = document.getElementById('heartbeat-btn-live');
+        var dot = document.getElementById('heartbeat-live-dot');
         if (lb) {
             if (s.autoFollow) {
-                lb.classList.add('hidden');
-                lb.classList.remove('flex');
+                lb.style.color = '#00e676';
+                lb.style.background = 'rgba(0,230,118,0.12)';
+                lb.style.borderColor = 'rgba(0,230,118,0.4)';
+                lb.style.opacity = '1';
+                if (dot) dot.style.background = '#00e676';
             } else {
-                lb.classList.remove('hidden');
-                lb.classList.add('flex');
+                lb.style.color = 'rgba(255,255,255,0.55)';
+                lb.style.background = 'rgba(255,255,255,0.05)';
+                lb.style.borderColor = 'rgba(255,255,255,0.12)';
+                lb.style.opacity = '0.9';
+                if (dot) dot.style.background = 'rgba(255,255,255,0.4)';
             }
         }
     };
@@ -226,6 +236,10 @@ window.pushHeartbeatBlocks = function(json, replay) {
     var _hb = getState();
     if (!_hb) return;
     var isReplay = !!replay;
+    // Harvest only for genuine live blocks (set by processLiveBlock), not replay
+    // /history/tab-return. Consume the one-shot flag.
+    var harvestLive = !!_hb._harvestLive;
+    _hb._harvestLive = false;
     try {
         var blocks = JSON.parse(json);
         if (!Array.isArray(blocks)) return;
@@ -307,39 +321,69 @@ window.pushHeartbeatBlocks = function(json, replay) {
                 if (!isReplay) {
                     lastSeg.color = _hb._preFlashColor || _hb.currentColor || COLORS.healthy;
                 }
-                // Shatter all blips into particles — they get absorbed into the spike
+                // A block confirms some mempool txs and leaves the rest waiting.
+                // HARVEST (live blocks): split the active bricks by fee rate — the
+                // top `tx_count` (≈ what the block took) shatter into the spike;
+                // the lower-fee remainder is carried forward onto the new flatline
+                // (still unconfirmed = still in the mempool). Replay/history blocks
+                // shatter everything (no live mempool to carry).
+                var carriedLeftovers = [];
                 if (lastSeg.blips) {
                     var absorbX = _hb.virtualX;
                     var absorbNow = Date.now() / 1000;
-                    var activeBlips = 0;
+                    var activeList = [];
                     for (var ci = 0; ci < lastSeg.blips.length; ci++) {
-                        if (lastSeg.blips[ci].fadeStart === 0) activeBlips++;
+                        if (lastSeg.blips[ci].fadeStart === 0) activeList.push(lastSeg.blips[ci]);
                     }
+                    var activeBlips = activeList.length;
                     var zoom = _hb.zoom;
                     var maxPartsPerBlip;
                     if (zoom < 0.5 || activeBlips > 1000) maxPartsPerBlip = 1;
                     else if (zoom < 1.0 || activeBlips > 500) maxPartsPerBlip = 2;
                     else maxPartsPerBlip = 3 + Math.floor(Math.random() * 3);
 
+                    // Which active bricks did the block confirm? Top fee-rate, up to
+                    // the block's tx_count. If it took >= what we show, everything is
+                    // confirmed (confirmSet stays null → shatter all, prior behavior).
+                    var confirmSet = null;
+                    if (harvestLive && !isReplay && activeBlips > 0) {
+                        var harvestCount = Math.min(b.tx_count || activeBlips, activeBlips);
+                        if (harvestCount < activeBlips) {
+                            var byFee = activeList.slice().sort(function(a, c) {
+                                return (c.feeRate || 0) - (a.feeRate || 0);
+                            });
+                            confirmSet = new Set(byFee.slice(0, harvestCount));
+                        }
+                    }
+
                     for (var bi = 0; bi < lastSeg.blips.length; bi++) {
                         var blp = lastSeg.blips[bi];
-                        if (blp.fadeStart === 0) {
-                            blp.fadeStart = absorbNow;
-                            blp.absorbTargetX = absorbX;
-                            blp.absorbOriginX = blp.x;
-                            var nParts = maxPartsPerBlip;
-                            blp.particles = [];
-                            for (var pi = 0; pi < nParts; pi++) {
-                                blp.particles.push({
-                                    offsetX: (Math.random() - 0.5) * 8,
-                                    offsetY: Math.random() * blp.height * 0.8,
-                                    speed: 0.7 + Math.random() * 0.6,
-                                    arcHeight: 20 + Math.random() * 60,
-                                    delay: Math.random() * 0.3,
-                                    size: 1.5 + Math.random() * 2.5
-                                });
-                            }
+                        if (blp.fadeStart !== 0) continue; // already fading
+                        if (confirmSet && !confirmSet.has(blp)) {
+                            carriedLeftovers.push(blp); // leftover: carry forward
+                            continue;
                         }
+                        blp.fadeStart = absorbNow;
+                        blp.absorbTargetX = absorbX;
+                        blp.absorbOriginX = blp.x;
+                        blp.particles = [];
+                        for (var pi = 0; pi < maxPartsPerBlip; pi++) {
+                            blp.particles.push({
+                                offsetX: (Math.random() - 0.5) * 8,
+                                offsetY: Math.random() * blp.height * 0.8,
+                                speed: 0.7 + Math.random() * 0.6,
+                                arcHeight: 20 + Math.random() * 60,
+                                delay: Math.random() * 0.3,
+                                size: 1.5 + Math.random() * 2.5
+                            });
+                        }
+                    }
+
+                    // Detach leftovers from the closing (historical) segment; they're
+                    // re-placed on the new live flatline below.
+                    if (carriedLeftovers.length > 0) {
+                        var carriedSet = new Set(carriedLeftovers);
+                        lastSeg.blips = lastSeg.blips.filter(function(b2) { return !carriedSet.has(b2); });
                     }
                 }
             }
@@ -357,6 +401,13 @@ window.pushHeartbeatBlocks = function(json, replay) {
 
             // Create a new live flatline after this block
             _hb.timeline.push(createFlatlineSegment(_hb.virtualX, null));
+
+            // Carry unconfirmed leftovers onto the new (current-mempool) flatline,
+            // widening it to fit them. The block harvested the high-fee txs; these
+            // are still waiting. New txs continue dropping at the head past them.
+            if (harvestLive && !isReplay && carriedLeftovers.length > 0) {
+                placeCarriedLeftovers(carriedLeftovers);
+            }
 
             // Maintain recentBlocks list (up to 2016 for period history)
             _hb.recentBlocks.push({
@@ -436,6 +487,54 @@ function pruneTimeline() {
     if (cutIdx > 0) {
         _hb.timeline = _hb.timeline.slice(cutIdx);
     }
+}
+
+// Re-drop carried-forward (unconfirmed) leftover bricks onto the current live
+// flatline right after a block, widening it to fit them. Reuses each brick's own
+// object (color/size/txid/fee preserved) — same mempool txs, moved to the new
+// mempool segment with a staggered drop-in. Density mirrors live/history: ~10
+// bricks per 5px column, skip a column once it hits the 35%-height cap.
+function placeCarriedLeftovers(leftovers) {
+    var _hb = getState();
+    if (!_hb) return;
+    var seg = _hb.timeline[_hb.timeline.length - 1];
+    if (!seg || seg.type !== 'flatline' || seg.x_end !== null) return;
+
+    var n = leftovers.length;
+    var maxStack = (_hb.height || 400) * 0.35;
+    var width = Math.max(30, Math.ceil(n / 10) * 5); // ~10 bricks/column
+    _hb.virtualX = seg.x_start + width;
+
+    if (!seg._colHeights) seg._colHeights = {};
+    var usable = Math.max(10, width - 20);
+    var now = Date.now() / 1000;
+    var placed = 0;
+    for (var i = 0; i < n; i++) {
+        var src = leftovers[i];
+        var txVX = seg.x_start + Math.random() * usable;
+        var gridX = Math.round(txVX / 5) * 5;
+        var stackY = seg._colHeights[gridX] || 0;
+        var isNotable = !!src.notableType;
+        if (stackY > maxStack && !isNotable) continue; // column full
+        var brickH = src.brickH || 6;
+        seg._colHeights[gridX] = stackY + brickH;
+        // Reposition + reset the existing blip object for a staggered drop-in.
+        src.x = txVX;
+        src.gridX = gridX;
+        src.stackY = stackY;
+        src.height = brickH + stackY;
+        src.fadeStart = 0;
+        src.particles = null;
+        src.absorbTargetX = undefined;
+        src.absorbOriginX = undefined;
+        src.isDrop = true;
+        var xFrac = width > 0 ? (txVX - seg.x_start) / width : 0;
+        src.timestamp = now + xFrac * 1.0; // sweep left→right over ~1s
+        seg.blips.push(src);
+        placed++;
+    }
+    console.log('[heartbeat] harvest: carried ' + placed + '/' + n +
+        ' unconfirmed leftovers onto new flatline (width ' + Math.round(width) + 'px)');
 }
 
 window.updateHeartbeatLive = function(json) {

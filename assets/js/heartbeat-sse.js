@@ -1,5 +1,5 @@
 // heartbeat-sse.js — SSE connection, tx batching, and mempool fallback
-import { getState, FLATLINE_PX_PER_SEC } from './heartbeat-state.js';
+import { getState, FLATLINE_PX_PER_SEC, HEAD_POSITION_FRAC } from './heartbeat-state.js';
 import { feeRateColor, fmtBtc } from './heartbeat-timeline.js';
 
 // ── Notable-tx classification (shared by history placement, live flush, feed) ──
@@ -53,20 +53,20 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
         _hb.lastBlockTime = effectiveBlockTs;
     }
 
-    // Fast-forward virtualX to match real elapsed time since last block.
-    // On page load, replay creates compressed flatlines, so virtualX is only
-    // a few pixels past the last block. But real time may have passed (e.g. 10min).
-    // Without this, history txs cluster at the head because flatlineSpan is tiny.
+    // Widen the flatline to hold the mempool by VOLUME, not just elapsed time.
+    // Elapsed time alone (elapsed * 5px/s) is far too narrow for a full mempool:
+    // e.g. 20k txs across 143s of width (717px) stacks ~40 high and the column
+    // cap drops most of them. Size it to ~10 bricks per 5px column (same density
+    // as the live flush + the post-block harvest) so the mempool lays out
+    // long-and-low and (nearly) all of it fits. Take the max with the time-based
+    // width so a small mempool still reflects real elapsed time.
     var nowSec = Date.now() / 1000;
     var elapsedSinceBlock = effectiveBlockTs > 0 ? nowSec - effectiveBlockTs : 0;
-    if (elapsedSinceBlock > 0) {
-        var neededX = liveSeg.x_start + elapsedSinceBlock * FLATLINE_PX_PER_SEC;
-        if (neededX > _hb.virtualX) {
-            console.log('[heartbeat] fast-forwarding virtualX for history:',
-                Math.round(_hb.virtualX), '->', Math.round(neededX),
-                '(' + Math.round(elapsedSinceBlock) + 's since last block)');
-            _hb.virtualX = neededX;
-        }
+    var timeWidth = elapsedSinceBlock > 0 ? elapsedSinceBlock * FLATLINE_PX_PER_SEC : 0;
+    var volumeWidth = Math.ceil(txs.length / 10) * 5;
+    var neededX = liveSeg.x_start + Math.max(timeWidth, volumeWidth);
+    if (neededX > _hb.virtualX) {
+        _hb.virtualX = neededX;
     }
 
     // Compute median fee from history txs so colors match live bricks
@@ -131,7 +131,7 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
 
         var brickW = isNotable ? 6 : 4;
         var brickH = isNotable
-            ? 35 + feeNorm * 20 + Math.random() * 5
+            ? 22 + feeNorm * 12 + Math.random() * 4
             : 3 + feeNorm * 14 + Math.random() * 3;
         var gridX = Math.round(txVX / 5) * 5;
         var stackY = stackMap[gridX] || 0;
@@ -193,6 +193,26 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
     // Seed the segment's column height map so live blips stack correctly
     liveSeg._colHeights = stackMap;
     console.log('[heartbeat] placed', placed, 'history bricks on timeline');
+
+    // Auto-fit zoom on first load so the whole mempool + recent spikes frame
+    // themselves, instead of opening at 1.9x showing only a tiny head slice.
+    // Only on the first history (not reconnect, where the user may have zoomed).
+    // autoFollow stays on, so head-following continues at the fitted zoom.
+    if (!instant && _hb.width) {
+        var span = _hb.virtualX - liveSeg.x_start;
+        if (span > 10) {
+            // Fit the flatline into ~80% of the viewport (head sits at
+            // HEAD_POSITION_FRAC, leaving room on the right). Never zoom IN past
+            // the 1.9x default for a small mempool — only out to fit a big one.
+            var fit = (_hb.width * 0.8) / span;
+            _hb.zoom = Math.max(_hb.minZoom, Math.min(fit, 1.9));
+            if (_hb.autoFollow) {
+                _hb.viewOffset = _hb.virtualX - (_hb.width * HEAD_POSITION_FRAC) / _hb.zoom;
+            }
+            console.log('[heartbeat] auto-fit zoom to ' + _hb.zoom.toFixed(3) +
+                'x (mempool span ' + Math.round(span) + 'px)');
+        }
+    }
 }
 
 // Process a live block from SSE (shared by live handler + queue replay)
@@ -254,6 +274,9 @@ export function processLiveBlock(block) {
         weight: block.weight || 3000000,
         inter_block_seconds: inter
     }]);
+    // Mark this as a genuine live block so pushHeartbeatBlocks runs the fee-rate
+    // harvest (confirm top-fee bricks into the spike, carry the rest forward).
+    _hb._harvestLive = true;
     window.pushHeartbeatBlocks(blockJson, false);
 
     // Re-add the collapsed gap AFTER the spike. The gap we just removed is the

@@ -669,30 +669,60 @@ pub fn HeartbeatPage() -> impl IntoView {
 
                 </div>
 
-                // Control bar (HTML, outside canvas)
-                <div class="flex items-center justify-center gap-1.5 px-3 py-1.5 border-t border-white/5">
-                    <span id="heartbeat-zoom-label" class="text-[10px] text-white/30 font-mono mr-2 w-8">"1.9x"</span>
-                    <button class="w-7 h-7 sm:w-8 sm:h-8 rounded bg-white/10 text-white/70 hover:bg-white/20 hover:text-white transition-all text-xs sm:text-sm cursor-pointer flex items-center justify-center" title="Toggle cell/brick view" onclick="handleControlClick('mode')">
-                        <span id="heartbeat-btn-mode">"\u{25A0}"</span>
-                    </button>
-                    <button class="w-7 h-7 sm:w-8 sm:h-8 rounded bg-white/10 text-white/70 hover:bg-white/20 hover:text-white transition-all text-xs sm:text-sm cursor-pointer flex items-center justify-center" title="Previous block" onclick="handleControlClick('prev')">
-                        "\u{23EE}"
-                    </button>
-                    <button id="heartbeat-btn-pause" class="w-7 h-7 sm:w-8 sm:h-8 rounded bg-[#f7931a]/20 text-[#f7931a] hover:bg-[#f7931a]/30 transition-all text-xs sm:text-sm cursor-pointer flex items-center justify-center" title="Pause/Play" onclick="handleControlClick('pause')">
-                        "\u{23F8}"
-                    </button>
-                    <button class="w-7 h-7 sm:w-8 sm:h-8 rounded bg-white/10 text-white/70 hover:bg-white/20 hover:text-white transition-all text-xs sm:text-sm cursor-pointer flex items-center justify-center" title="Zoom out" onclick="handleControlClick('zoomOut')">
-                        "\u{2212}"
-                    </button>
-                    <button class="w-7 h-7 sm:w-8 sm:h-8 rounded bg-white/10 text-white/70 hover:bg-white/20 hover:text-white transition-all text-xs sm:text-sm cursor-pointer flex items-center justify-center" title="Zoom in" onclick="handleControlClick('zoomIn')">
-                        "+"
-                    </button>
-                    <button class="w-7 h-7 sm:w-8 sm:h-8 rounded bg-white/10 text-white/70 hover:bg-white/20 hover:text-white transition-all text-xs sm:text-sm cursor-pointer flex items-center justify-center" title="Center on live" onclick="handleControlClick('center')">
-                        "\u{2316}"
-                    </button>
-                    <button id="heartbeat-btn-live" class="w-7 h-7 sm:w-8 sm:h-8 rounded bg-white/10 text-white/70 hover:bg-white/20 hover:text-white transition-all text-xs sm:text-sm cursor-pointer hidden items-center justify-center" title="Jump to live" onclick="handleControlClick('live')">
-                        "\u{25C9}"
-                    </button>
+                // Control bar (HTML, outside canvas) — grouped icon buttons with
+                // fast CSS tooltips, a LIVE state pill (glows green when following
+                // the head), and a Fit-whole-mempool action.
+                <div class="flex items-center justify-center px-3 py-2 border-t border-white/5">
+                    <div class="flex items-center gap-1 rounded-lg bg-[#0a1929]/70 border border-white/10 px-1.5 py-1 backdrop-blur-sm">
+
+                        // ── View: LIVE follow-state pill + Fit ──
+                        <button id="heartbeat-btn-live" aria-label="Follow the live head" onclick="handleControlClick('live')"
+                            class="group relative flex items-center gap-1.5 h-8 px-2.5 rounded-md border text-[11px] font-mono font-semibold tracking-wider cursor-pointer transition-all"
+                            style="color:#00e676;background:rgba(0,230,118,0.12);border-color:rgba(0,230,118,0.4)">
+                            <span id="heartbeat-live-dot" class="w-1.5 h-1.5 rounded-full" style="background:#00e676"></span>
+                            "LIVE"
+                            <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded bg-[#0a1929] border border-white/10 text-[10px] text-white/80 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-10">"Follow the live head"</span>
+                        </button>
+                        <button aria-label="Fit whole mempool" onclick="handleControlClick('fit')"
+                            class="group relative w-8 h-8 rounded-md bg-white/5 text-white/70 hover:bg-white/15 hover:text-white transition-all cursor-pointer flex items-center justify-center text-sm">
+                            "\u{26F6}"
+                            <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded bg-[#0a1929] border border-white/10 text-[10px] text-white/80 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-10">"Fit whole mempool"</span>
+                        </button>
+
+                        <div class="w-px h-5 bg-white/10 mx-1"></div>
+
+                        // ── Zoom ──
+                        <button aria-label="Zoom out" onclick="handleControlClick('zoomOut')"
+                            class="group relative w-8 h-8 rounded-md bg-white/5 text-white/70 hover:bg-white/15 hover:text-white transition-all cursor-pointer flex items-center justify-center text-sm">
+                            "\u{2212}"
+                            <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded bg-[#0a1929] border border-white/10 text-[10px] text-white/80 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-10">"Zoom out"</span>
+                        </button>
+                        <span id="heartbeat-zoom-label" class="text-[10px] text-white/40 font-mono w-9 text-center select-none">"1.9x"</span>
+                        <button aria-label="Zoom in" onclick="handleControlClick('zoomIn')"
+                            class="group relative w-8 h-8 rounded-md bg-white/5 text-white/70 hover:bg-white/15 hover:text-white transition-all cursor-pointer flex items-center justify-center text-sm">
+                            "+"
+                            <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded bg-[#0a1929] border border-white/10 text-[10px] text-white/80 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-10">"Zoom in"</span>
+                        </button>
+
+                        <div class="w-px h-5 bg-white/10 mx-1"></div>
+
+                        // ── Playback ──
+                        <button aria-label="Previous block" onclick="handleControlClick('prev')"
+                            class="group relative w-8 h-8 rounded-md bg-white/5 text-white/70 hover:bg-white/15 hover:text-white transition-all cursor-pointer flex items-center justify-center text-sm">
+                            "\u{23EE}"
+                            <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded bg-[#0a1929] border border-white/10 text-[10px] text-white/80 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-10">"Previous block"</span>
+                        </button>
+                        <button id="heartbeat-btn-pause" aria-label="Pause or play" onclick="handleControlClick('pause')"
+                            class="group relative w-8 h-8 rounded-md bg-[#f7931a]/20 text-[#f7931a] hover:bg-[#f7931a]/30 transition-all cursor-pointer flex items-center justify-center text-sm">
+                            <span id="heartbeat-btn-pause-icon">"\u{23F8}"</span>
+                            <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded bg-[#0a1929] border border-white/10 text-[10px] text-white/80 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-10">"Pause / play"</span>
+                        </button>
+                        <button aria-label="Toggle brick or cell view" onclick="handleControlClick('mode')"
+                            class="group relative w-8 h-8 rounded-md bg-white/5 text-white/70 hover:bg-white/15 hover:text-white transition-all cursor-pointer flex items-center justify-center text-sm">
+                            <span id="heartbeat-btn-mode">"\u{25A0}"</span>
+                            <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded bg-[#0a1929] border border-white/10 text-[10px] text-white/80 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-10">"Brick / cell view"</span>
+                        </button>
+                    </div>
                 </div>
 
                 // Bottom info bar with TX search
