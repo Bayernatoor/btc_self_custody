@@ -566,6 +566,7 @@ window.destroyHeartbeat = function() {
     // Cancel the pending SSE reconnect timeout so it can't fire connectOwnFeed
     // after teardown (its closure's captured _hb stays truthy post-destroy).
     if (_hb._sseRetryTimer) { clearTimeout(_hb._sseRetryTimer); _hb._sseRetryTimer = null; }
+    if (_hb._historyRaf) { cancelAnimationFrame(_hb._historyRaf); _hb._historyRaf = null; }
     if (_hb._sse) {
         try { _hb._sse.close(); } catch(e) {}
     }

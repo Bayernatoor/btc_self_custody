@@ -203,11 +203,12 @@ const MAX_SSE_CONNECTIONS: usize = 256;
 /// How many recent unconfirmed mempool txs to send as the heartbeat history
 /// (the initial brick fill on connect/refresh), newest-first from the last 2h.
 /// The client places all of them, bounded only by its per-column density cap, so
-/// this is effectively "how many bricks a fresh load shows". Tradeoff: each ~10k
-/// adds ~2-4MB to the one-time SSE history payload and a synchronous placement
-/// pass on the client. Raise cautiously; if the client load starts to hitch,
-/// chunk placeHistoryTxs across frames before pushing this higher.
-const HEARTBEAT_HISTORY_LIMIT: u64 = 20_000;
+/// this is effectively "how many bricks a fresh load shows" — set for near-full
+/// mempool coverage (mempools commonly sit at 40-60k). Tradeoff: each ~10k adds
+/// ~1.5-2MB to the one-time SSE history payload. The client fills these in chunks
+/// across RAF frames (placeHistoryTxs), so a big load no longer stalls; and the
+/// blip cull threshold is set above this so the shown mempool isn't evicted.
+const HEARTBEAT_HISTORY_LIMIT: u64 = 60_000;
 
 /// Arc-wrapped stats state, used as Axum extractor in all handlers.
 pub type SharedStatsState = Arc<StatsState>;

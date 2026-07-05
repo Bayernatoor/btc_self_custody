@@ -85,134 +85,138 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
 
     var flatlineSpan = _hb.virtualX - liveSeg.x_start;
     var stackMap = {};
+    // Share the column map immediately so live-tx flushes stack correctly against
+    // the (progressively filled) history during chunked placement below.
+    liveSeg._colHeights = stackMap;
+    var histMaxStack = (_hb.height || 400) * 0.35;
 
-    // Place ALL received history txs (the server caps the feed — see
-    // HEARTBEAT_HISTORY_LIMIT in api.rs). Density is still governed by the
-    // per-column stack cap (histMaxStack, 35% of canvas height) below — the exact
-    // limiter live flushTxBatch uses — so a wide flatline fills naturally and a
-    // narrow one won't over-stack. Placement is one synchronous pass; at ~10-20k
-    // that's a brief sub-frame cost on load. If the server limit is raised much
-    // further and load starts to hitch, chunk this across RAF frames like the
-    // live queue (bounded to 500/frame).
-    var maxBricks = txs.length;
+    console.log('[heartbeat] placeHistoryTxs: ' + txs.length + ' txs, flatlineSpan=' +
+        Math.round(flatlineSpan) + 'px, elapsed=' + Math.round(elapsedSinceBlock) + 's');
 
-    console.log('[heartbeat] placeHistoryTxs: flatlineSpan=' + Math.round(flatlineSpan) +
-        'px, virtualX=' + Math.round(_hb.virtualX) +
-        ', segStart=' + Math.round(liveSeg.x_start) +
-        ', effectiveBlockTs=' + effectiveBlockTs +
-        ', elapsed=' + Math.round(elapsedSinceBlock) + 's');
+    // Auto-fit zoom NOW (before filling) so the view frames the whole mempool
+    // while the bricks stream in. Only on first load (not reconnect, where the
+    // user may have zoomed); autoFollow stays on so head-following continues.
+    if (!instant && _hb.width && flatlineSpan > 10) {
+        var fit = (_hb.width * 0.8) / flatlineSpan;
+        _hb.zoom = Math.max(_hb.minZoom, Math.min(fit, 1.9));
+        if (_hb.autoFollow) {
+            _hb.viewOffset = _hb.virtualX - (_hb.width * HEAD_POSITION_FRAC) / _hb.zoom;
+        }
+        console.log('[heartbeat] auto-fit zoom to ' + _hb.zoom.toFixed(3) + 'x');
+    }
 
-    // Stagger history bricks so they animate in from left to right over ~1.5s.
-    // On reconnect (instant=true), place bricks immediately with no animation.
+    // Stagger bricks in left-to-right over ~1.5s (instant on reconnect).
     var dropNow = Date.now() / 1000;
     var DROP_DURATION = instant ? 0 : 1.5;
-
-    // Collect notable txs from history for the feed panel
     var notableTxs = [];
 
-    for (var i = 0; i < txs.length && placed < maxBricks; i++) {
-        var tx = txs[i];
-        if (!tx.fee || !tx.vsize) continue;
+    // Fill in CHUNKS across RAF frames rather than one synchronous pass: at 20k
+    // (soon ~55k) a single loop stalls the main thread for tens of ms on load.
+    // Bricks stream in over a few frames; the flatline width + fit are already
+    // set so the framing is correct — it just fills. Cancel any in-flight job.
+    if (_hb._historyRaf) { cancelAnimationFrame(_hb._historyRaf); _hb._historyRaf = null; }
+    var HISTORY_CHUNK = 2000;
+    var i = 0;
 
-        // Notable classification (shared helper; handles history + live shapes)
-        var flags = notableFlags(tx);
-        var isWhale = flags.whale, isFeeOutlier = flags.feeOutlier,
-            isConsolidation = flags.consolidation, isFanOut = flags.fanOut,
-            isLargeInscription = flags.largeInscription,
-            isRoundNumber = flags.roundNumber, isOpReturnMsg = flags.opReturnMsg;
-        var isNotable = anyNotable(flags);
-
-        // Spread randomly across the flatline, leaving last 20px for live txs.
-        var usableSpan = Math.max(10, flatlineSpan - 20);
-        var txVX = liveSeg.x_start + Math.random() * usableSpan;
-
-        var feeRate = tx.fee / tx.vsize;
-        var feeNorm = Math.min(Math.log2(feeRate + 1) / 6, 1.0);
-
-        var brickW = isNotable ? 6 : 4;
-        var brickH = isNotable
-            ? 22 + feeNorm * 12 + Math.random() * 4
-            : 3 + feeNorm * 14 + Math.random() * 3;
-        var gridX = Math.round(txVX / 5) * 5;
-        var stackY = stackMap[gridX] || 0;
-        var histMaxStack = (_hb.height || 400) * 0.35;
-        if (stackY > histMaxStack && !isNotable) continue;
-        stackMap[gridX] = stackY + brickH;
-
-        var style = notableStyle(flags);
-        var blipColor = style ? style.color : feeRateColor(feeRate, medianFee);
-        var notableType = style ? style.type : null;
-
-        // Stagger: left-most bricks appear first, sweeping right
-        var xFrac = flatlineSpan > 0 ? (txVX - liveSeg.x_start) / flatlineSpan : 0;
-        var dropDelay = instant ? 0 : xFrac * DROP_DURATION;
-
-        liveSeg.blips.push({
-            x: txVX, gridX: gridX,
-            height: brickH + stackY, brickH: brickH, brickW: brickW, stackY: stackY,
-            color: blipColor, opacity: isNotable ? 1.0 : 0.75 + feeNorm * 0.2,
-            txCount: 1, txid: tx.txid || null,
-            feeRate: Math.round(feeRate * 10) / 10,
-            vsize: tx.vsize || 0, value: tx.value || 0,
-            timestamp: dropNow + dropDelay, isDrop: !instant, fadeStart: 0,
-            bobPhase: Math.random() * Math.PI * 2,
-            bobSpeed: isNotable ? 0.6 : 1.2 + feeNorm * 0.8,
-            lane: Math.floor(Math.random() * 5) - 2,
-            feeRatio: medianFee > 0 ? feeRate / medianFee : 1,
-            whale: isWhale,
-            feeOutlier: isFeeOutlier,
-            notableType: notableType,
-            valueUsd: tx.value_usd || 0,
-            opReturnText: tx.op_return_text || '',
-            inputCount: tx.input_count || 0,
-            outputCount: tx.output_count || 0
-        });
-        placed++;
-
-        if (isNotable) {
-            notableTxs.push({
-                txid: tx.txid, fee: tx.fee, vsize: tx.vsize, value: tx.value,
-                whale: isWhale, fee_outlier: isFeeOutlier,
-                consolidation: isConsolidation, fan_out: isFanOut,
-                large_inscription: isLargeInscription,
-                round_number: isRoundNumber, op_return_msg: isOpReturnMsg,
-                op_return_text: tx.op_return_text || '',
-                value_usd: tx.value_usd || 0,
-                input_count: tx.input_count || 0,
-                output_count: tx.output_count || 0
-            });
-        }
-    }
-
-    // Populate feed panel with notable txs from history
-    if (notableTxs.length > 0 && window._notableFeed) {
-        for (var ni = notableTxs.length - 1; ni >= 0; ni--) {
-            window._notableFeed(notableTxs[ni]);
-        }
-    }
-    // Seed the segment's column height map so live blips stack correctly
-    liveSeg._colHeights = stackMap;
-    console.log('[heartbeat] placed', placed, 'history bricks on timeline');
-
-    // Auto-fit zoom on first load so the whole mempool + recent spikes frame
-    // themselves, instead of opening at 1.9x showing only a tiny head slice.
-    // Only on the first history (not reconnect, where the user may have zoomed).
-    // autoFollow stays on, so head-following continues at the fitted zoom.
-    if (!instant && _hb.width) {
-        var span = _hb.virtualX - liveSeg.x_start;
-        if (span > 10) {
-            // Fit the flatline into ~80% of the viewport (head sits at
-            // HEAD_POSITION_FRAC, leaving room on the right). Never zoom IN past
-            // the 1.9x default for a small mempool — only out to fit a big one.
-            var fit = (_hb.width * 0.8) / span;
-            _hb.zoom = Math.max(_hb.minZoom, Math.min(fit, 1.9));
-            if (_hb.autoFollow) {
-                _hb.viewOffset = _hb.virtualX - (_hb.width * HEAD_POSITION_FRAC) / _hb.zoom;
+    var finishHistory = function() {
+        // Notable feed newest-first (server sends newest-first, so iterate back).
+        if (notableTxs.length > 0 && window._notableFeed) {
+            for (var ni = notableTxs.length - 1; ni >= 0; ni--) {
+                window._notableFeed(notableTxs[ni]);
             }
-            console.log('[heartbeat] auto-fit zoom to ' + _hb.zoom.toFixed(3) +
-                'x (mempool span ' + Math.round(span) + 'px)');
         }
-    }
+        console.log('[heartbeat] placed ' + placed + ' history bricks on timeline');
+    };
+
+    var placeHistoryChunk = function() {
+        var s = getState();
+        // Abort if torn down, or the live flatline closed/changed (a block
+        // arrived mid-fill) — remaining history would be stale.
+        if (!s || s.timeline[s.timeline.length - 1] !== liveSeg || liveSeg.x_end !== null) {
+            _hb._historyRaf = null;
+            finishHistory();
+            return;
+        }
+        var end = Math.min(i + HISTORY_CHUNK, txs.length);
+        for (; i < end; i++) {
+            var tx = txs[i];
+            if (!tx.fee || !tx.vsize) continue;
+
+            var flags = notableFlags(tx);
+            var isWhale = flags.whale, isFeeOutlier = flags.feeOutlier,
+                isConsolidation = flags.consolidation, isFanOut = flags.fanOut,
+                isLargeInscription = flags.largeInscription,
+                isRoundNumber = flags.roundNumber, isOpReturnMsg = flags.opReturnMsg;
+            var isNotable = anyNotable(flags);
+
+            // Spread randomly across the flatline, leaving last 20px for live txs.
+            var usableSpan = Math.max(10, flatlineSpan - 20);
+            var txVX = liveSeg.x_start + Math.random() * usableSpan;
+
+            var feeRate = tx.fee / tx.vsize;
+            var feeNorm = Math.min(Math.log2(feeRate + 1) / 6, 1.0);
+
+            var brickW = isNotable ? 6 : 4;
+            var brickH = isNotable
+                ? 22 + feeNorm * 12 + Math.random() * 4
+                : 3 + feeNorm * 14 + Math.random() * 3;
+            var gridX = Math.round(txVX / 5) * 5;
+            var stackY = stackMap[gridX] || 0;
+            if (stackY > histMaxStack && !isNotable) continue;
+            stackMap[gridX] = stackY + brickH;
+
+            var style = notableStyle(flags);
+            var blipColor = style ? style.color : feeRateColor(feeRate, medianFee);
+            var notableType = style ? style.type : null;
+
+            var xFrac = flatlineSpan > 0 ? (txVX - liveSeg.x_start) / flatlineSpan : 0;
+            var dropDelay = instant ? 0 : xFrac * DROP_DURATION;
+
+            liveSeg.blips.push({
+                x: txVX, gridX: gridX,
+                height: brickH + stackY, brickH: brickH, brickW: brickW, stackY: stackY,
+                color: blipColor, opacity: isNotable ? 1.0 : 0.75 + feeNorm * 0.2,
+                txCount: 1, txid: tx.txid || null,
+                feeRate: Math.round(feeRate * 10) / 10,
+                vsize: tx.vsize || 0, value: tx.value || 0,
+                timestamp: dropNow + dropDelay, isDrop: !instant, fadeStart: 0,
+                bobPhase: Math.random() * Math.PI * 2,
+                bobSpeed: isNotable ? 0.6 : 1.2 + feeNorm * 0.8,
+                lane: Math.floor(Math.random() * 5) - 2,
+                feeRatio: medianFee > 0 ? feeRate / medianFee : 1,
+                whale: isWhale,
+                feeOutlier: isFeeOutlier,
+                notableType: notableType,
+                valueUsd: tx.value_usd || 0,
+                opReturnText: tx.op_return_text || '',
+                inputCount: tx.input_count || 0,
+                outputCount: tx.output_count || 0
+            });
+            placed++;
+
+            if (isNotable) {
+                notableTxs.push({
+                    txid: tx.txid, fee: tx.fee, vsize: tx.vsize, value: tx.value,
+                    whale: isWhale, fee_outlier: isFeeOutlier,
+                    consolidation: isConsolidation, fan_out: isFanOut,
+                    large_inscription: isLargeInscription,
+                    round_number: isRoundNumber, op_return_msg: isOpReturnMsg,
+                    op_return_text: tx.op_return_text || '',
+                    value_usd: tx.value_usd || 0,
+                    input_count: tx.input_count || 0,
+                    output_count: tx.output_count || 0
+                });
+            }
+        }
+        if (i < txs.length) {
+            _hb._historyRaf = requestAnimationFrame(placeHistoryChunk);
+        } else {
+            _hb._historyRaf = null;
+            finishHistory();
+        }
+    };
+
+    placeHistoryChunk();
 }
 
 // Process a live block from SSE (shared by live handler + queue replay)
@@ -701,10 +705,12 @@ export function flushTxBatch() {
     // (b) evicted the low-fee tail — the exact thing the visualization exists to
     // show. Instead evict the OLDEST (leftmost / furthest behind the head) bricks
     // in a single O(n) partition: no sort, fee-neutral, and when following the
-    // head those are already off-screen. Threshold is high so it only fires as a
-    // true memory guard (well above a full mempool + inter-block accumulation).
-    var CULL_THRESHOLD = 50000;
-    var CULL_TARGET = 40000;
+    // head those are already off-screen. Threshold sits ABOVE the history limit
+    // (HEARTBEAT_HISTORY_LIMIT=60k) + inter-block live accumulation, so a full
+    // mempool we intentionally show is never evicted — this only fires as a true
+    // memory guard.
+    var CULL_THRESHOLD = 75000;
+    var CULL_TARGET = 60000;
     if (liveSeg.blips.length > CULL_THRESHOLD) {
         var over = liveSeg.blips.length - CULL_TARGET;
         var flatW = Math.max(1, _hb.virtualX - liveSeg.x_start);

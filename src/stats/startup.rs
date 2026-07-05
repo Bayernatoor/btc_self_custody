@@ -15,6 +15,9 @@
 //! - **Extras backfill**: re-fetches blocks with outdated backfill_version
 //! - **Backward backfill**: fills historical blocks from min_height down to genesis
 //! - **Mempool seed**: loads current mempool via `getrawmempool` on startup
+//! - **Mempool reconcile**: every 60s, prunes mempool_txs rows for txs no longer
+//!   in the node's mempool (RBF/eviction/missed-confirm), so the heartbeat shows
+//!   the node's real mempool instead of accumulated ghosts
 //! - **ZMQ subscriber**: real-time tx and block notifications (if configured)
 //! - **Mempool pruner**: deletes old mempool_txs entries daily
 
@@ -383,6 +386,80 @@ pub fn spawn_background_tasks(
                             .await;
                     }
                 }
+            }
+        });
+    }
+
+    // Reconcile mempool_txs against the node's live mempool every 60s. ZMQ only
+    // ever ADDS txs; txs that leave the mempool another way (RBF-replaced, fee-
+    // evicted, or confirmed in a block our ZMQ missed) keep confirmed_height NULL
+    // and pile up as "ghost" unconfirmed rows — inflating the heartbeat brick
+    // count above the node's real mempool. This prunes them so the timeline shows
+    // the node's actual mempool. Cheap: getrawmempool (txid list) + a set-diff
+    // delete off the DB thread. Runs immediately, then every 60s.
+    {
+        let state = Arc::clone(&state);
+        tokio::spawn(async move {
+            loop {
+                match state.rpc.get_raw_mempool().await {
+                    // Skip an empty result: the node is restarting / mempool not
+                    // loaded, and pruning against {} would wipe the whole table.
+                    Ok(txids) if !txids.is_empty() => {
+                        let current: std::collections::HashSet<String> =
+                            txids.into_iter().collect();
+                        let db = state.db.clone();
+                        // Cap deletions per cycle so a large first-time backlog
+                        // can't hold a long write lock / exhaust the pool. The
+                        // remainder clears over subsequent 60s cycles.
+                        let max_delete = 5000usize;
+                        // Confirmed rows have left the mempool and aren't shown;
+                        // prune them ~1h after confirmation so they don't pile up
+                        // to millions (the DB-bloat cause).
+                        let confirmed_before = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs()
+                            .saturating_sub(3600);
+                        let _ = tokio::task::spawn_blocking(move || match db.get() {
+                            Ok(conn) => {
+                                match db::prune_departed_mempool_txs(
+                                    &conn, &current, max_delete,
+                                ) {
+                                    Ok(n) if n > 0 => tracing::info!(
+                                        "Mempool reconcile: pruned {n} departed txs (node mempool now {})",
+                                        current.len()
+                                    ),
+                                    Ok(_) => {}
+                                    Err(e) => tracing::warn!(
+                                        "Mempool reconcile: prune failed: {e}"
+                                    ),
+                                }
+                                match db::prune_confirmed_mempool_txs(
+                                    &conn, confirmed_before, max_delete,
+                                ) {
+                                    Ok(n) if n > 0 => tracing::info!(
+                                        "Mempool reconcile: pruned {n} old confirmed txs"
+                                    ),
+                                    Ok(_) => {}
+                                    Err(e) => tracing::warn!(
+                                        "Mempool reconcile: confirmed prune failed: {e}"
+                                    ),
+                                }
+                            }
+                            Err(e) => tracing::warn!(
+                                "Mempool reconcile: DB pool error: {e}"
+                            ),
+                        })
+                        .await;
+                    }
+                    Ok(_) => tracing::debug!(
+                        "Mempool reconcile: getrawmempool empty, skipping prune"
+                    ),
+                    Err(e) => tracing::debug!(
+                        "Mempool reconcile: getrawmempool failed: {e}"
+                    ),
+                }
+                tokio::time::sleep(std::time::Duration::from_secs(60)).await;
             }
         });
     }

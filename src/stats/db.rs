@@ -2038,6 +2038,107 @@ pub fn confirm_mempool_txs(
     Ok((count, total_fees))
 }
 
+/// Reconcile mempool_txs against the node's live mempool: delete unconfirmed rows
+/// whose txid is no longer in the mempool (RBF-replaced, fee-evicted, or confirmed
+/// in a block we never marked). Keeps the table ≈ the node's real mempool so the
+/// heartbeat brick count reflects reality, not accumulated ghosts. `current` is
+/// the node's getrawmempool txid set. Returns the number of rows deleted.
+pub fn prune_departed_mempool_txs(
+    conn: &Connection,
+    current: &std::collections::HashSet<String>,
+    max_delete: usize,
+) -> rusqlite::Result<u64> {
+    // SAFETY: never prune against an empty set — an empty getrawmempool means the
+    // node is restarting / mempool not loaded, and deleting everything would wipe
+    // the table. The caller also guards this, belt-and-suspenders here.
+    if current.is_empty() {
+        return Ok(0);
+    }
+    // Currently-unconfirmed txids in the table (uses idx_mempool_unconfirmed).
+    let table_txids: Vec<String> = {
+        let mut stmt = conn.prepare_cached(
+            "SELECT txid FROM mempool_txs WHERE confirmed_height IS NULL",
+        )?;
+        let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+        rows.filter_map(|r| r.ok()).collect()
+    };
+    // Departed = unconfirmed in the table but gone from the node's mempool.
+    let mut departed: Vec<&str> = table_txids
+        .iter()
+        .filter(|t| !current.contains(*t))
+        .map(|s| s.as_str())
+        .collect();
+    if departed.is_empty() {
+        return Ok(0);
+    }
+    // Bound work per call: a large first-time backlog deleted in one shot would
+    // hold a long write lock, back up ZMQ inserts, and exhaust the connection
+    // pool. Trim to max_delete; the rest clears over subsequent cycles.
+    if departed.len() > max_delete {
+        departed.truncate(max_delete);
+    }
+    let tx = conn.unchecked_transaction()?;
+    let mut deleted = 0u64;
+    for chunk in departed.chunks(100) {
+        let placeholders: Vec<&str> = chunk.iter().map(|_| "?").collect();
+        let sql = format!(
+            "DELETE FROM mempool_txs WHERE confirmed_height IS NULL AND txid IN ({})",
+            placeholders.join(",")
+        );
+        let mut stmt = tx.prepare(&sql)?;
+        for (i, txid) in chunk.iter().enumerate() {
+            stmt.raw_bind_parameter(i + 1, *txid)?;
+        }
+        deleted += stmt.raw_execute()? as u64;
+    }
+    tx.commit()?;
+    Ok(deleted)
+}
+
+/// Delete a bounded batch of CONFIRMED mempool_txs rows older than
+/// `confirmed_before`. Confirmed txs have left the mempool and are never shown as
+/// bricks (the history query filters confirmed_height IS NULL), so keeping them
+/// (previously 7 days) just bloated the table to millions of rows. Capped per
+/// call to avoid a long write lock. Unconfirmed rows are handled separately by
+/// prune_departed_mempool_txs (the reconcile). Returns rows deleted.
+pub fn prune_confirmed_mempool_txs(
+    conn: &Connection,
+    confirmed_before: u64,
+    max_delete: usize,
+) -> rusqlite::Result<u64> {
+    let txids: Vec<String> = {
+        let mut stmt = conn.prepare_cached(
+            "SELECT txid FROM mempool_txs
+             WHERE confirmed_height IS NOT NULL AND confirmed_at < ?1
+             LIMIT ?2",
+        )?;
+        let rows = stmt.query_map(
+            params![confirmed_before as i64, max_delete as i64],
+            |row| row.get::<_, String>(0),
+        )?;
+        rows.filter_map(|r| r.ok()).collect()
+    };
+    if txids.is_empty() {
+        return Ok(0);
+    }
+    let tx = conn.unchecked_transaction()?;
+    let mut deleted = 0u64;
+    for chunk in txids.chunks(100) {
+        let placeholders: Vec<&str> = chunk.iter().map(|_| "?").collect();
+        let sql = format!(
+            "DELETE FROM mempool_txs WHERE txid IN ({})",
+            placeholders.join(",")
+        );
+        let mut stmt = tx.prepare(&sql)?;
+        for (i, txid) in chunk.iter().enumerate() {
+            stmt.raw_bind_parameter(i + 1, txid.as_str())?;
+        }
+        deleted += stmt.raw_execute()? as u64;
+    }
+    tx.commit()?;
+    Ok(deleted)
+}
+
 /// Query recent unconfirmed mempool transactions (for SSE history).
 pub fn query_recent_mempool_txs(
     conn: &Connection,

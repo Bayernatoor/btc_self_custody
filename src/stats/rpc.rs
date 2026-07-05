@@ -1149,6 +1149,24 @@ impl BitcoinRpc {
         Ok(entries)
     }
 
+    /// Get the current mempool as a plain txid list (`getrawmempool false`).
+    /// Much lighter than the verbose form — used to reconcile the mempool_txs
+    /// table against the node's real mempool (prune txs that left via RBF /
+    /// eviction / confirmation).
+    pub async fn get_raw_mempool(&self) -> Result<Vec<String>, StatsError> {
+        let result = self.call("getrawmempool", &[json!(false)]).await?;
+        let arr = result
+            .as_array()
+            .ok_or_else(|| StatsError::Rpc("expected array".to_string()))?;
+        let mut txids = Vec::with_capacity(arr.len());
+        for v in arr {
+            if let Some(s) = v.as_str() {
+                txids.push(s.to_string());
+            }
+        }
+        Ok(txids)
+    }
+
     /// Get (size, weight, total_fees) for a block via a single getblockstats
     /// call by hash. The response is small (a few scalars), so this is fast
     /// even over WireGuard — used together with `get_block_header` to broadcast
