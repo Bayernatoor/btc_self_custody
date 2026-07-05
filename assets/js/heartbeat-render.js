@@ -646,6 +646,67 @@ export function drawBlockSegment(ctx, seg, viewLeft, baseline, fallbackColor) {
     ctx.shadowBlur = 0;
 }
 
+// ── P2: Level-of-detail blip rendering ────────────────────────
+// When zoomed out so far that grid columns are sub-pixel, drawing every brick
+// (fillRect + gap math + gradient + outline, per brick, per frame) is the
+// dominant cost — tens of thousands of ops that produced the ~141ms RAF
+// violation at full-mempool zoom-out. Instead aggregate each segment's bricks
+// into per-canvas-column density bars: one bar per pixel column, its height the
+// tallest stack in that column, colored by the column's standout tx (notables
+// win so they still punch through the ribbon, else the highest-fee brick). At
+// this scale it's visually near-identical to the packed bricks, but the draw is
+// O(visible columns) instead of O(bricks). One O(n) aggregation pass replaces
+// the O(n) heavy-draw pass, so per-frame cost stays flat as N grows past 45k.
+export function drawFlatlineBlipsLOD(ctx, seg, viewLeft, viewRight, baseline, zoom, nowSec) {
+    var _hb = getState();
+    var blips = seg.blips;
+    // Bucket in VIRTUAL space (vx*zoom), not canvas space. Canvas-space buckets
+    // shift every frame as the auto-follow view eases, so bricks near a boundary
+    // hop columns frame-to-frame — and since each bar's height is the tallest
+    // brick in its column, that hopping made bars jump up/down = the flicker.
+    // Virtual buckets are stable under panning; apply the view offset once, here.
+    var offPx = _hb.viewOffset * zoom;
+    var colW = Math.max(1, 5 * zoom); // grid pitch in canvas px, floored at 1
+    var cols = {};                    // stable virtual bucket -> aggregate
+    for (var i = 0; i < blips.length; i++) {
+        var b = blips[i];
+        if (b.fadeStart > 0) continue; // skip absorbing/fading particles
+        var vx = b.gridX !== undefined ? b.gridX : b.x;
+        if (vx < viewLeft || vx > viewRight) continue;
+        // Honour the drop-in: bricks arrive left-to-right on first load
+        // (dropDelay baked into timestamp), so the ribbon sweeps in instead of
+        // popping up all at once. After load ages are large → fadeIn=1 (static).
+        var age = nowSec - b.timestamp;
+        if (age < 0) continue; // staggered brick not yet visible
+        var fadeIn = age < 0.6 ? age / 0.6 : 1;
+        var k = (vx * zoom) | 0;
+        var top = (b.height || b.brickH || 4) * fadeIn;
+        var c = cols[k];
+        if (!c) c = cols[k] = { h: 0, notable: false, ncolor: null, counts: {}, topN: 0, topColor: null };
+        if (top > c.h) c.h = top;
+        if (b.notableType) {
+            // Notables punch through: any notable in the column colours it (they
+            // read as the sparse coloured bars among the ribbon, like the
+            // individual notable bricks in the zoomed-in view).
+            if (!c.notable) { c.notable = true; c.ncolor = b.color; }
+        } else {
+            // Colour by the DOMINANT (mode) fee tier, so the ribbon reads by the
+            // majority of txs in the column (mostly low-fee/blue) rather than its
+            // single hottest tx, which biased every column toward red/orange.
+            var cc = (c.counts[b.color] || 0) + 1;
+            c.counts[b.color] = cc;
+            if (cc > c.topN) { c.topN = cc; c.topColor = b.color; }
+        }
+    }
+    for (var key in cols) {
+        var col = cols[key];
+        // blip.color is an "rgba(r, g, b, " prefix awaiting an alpha + ")".
+        var color = col.notable ? col.ncolor : (col.topColor || 'rgba(0, 230, 118, ');
+        ctx.fillStyle = color + (col.notable ? 0.95 : 0.72) + ')';
+        ctx.fillRect(Number(key) - offPx, baseline - col.h, colW, col.h);
+    }
+}
+
 // Draw a flatline segment (with optional blips)
 export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, baseline, color, isLive, nowSec) {
     var _hb = getState();
@@ -728,9 +789,40 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
     // Draw blips
     if (seg.blips && seg.blips.length > 0) {
         var zoom = _hb.zoom;
-        for (var bi = 0; bi < seg.blips.length; bi++) {
+        if (5 * zoom < 1.5 && seg.blips.length > 3000) {
+            // Deep zoom-out (below ~0.3x, bricks well sub-pixel) AND the segment
+            // is dense enough to warrant it: aggregate into per-column density
+            // bars instead of drawing each one (P2). Above this zoom we keep
+            // drawing individual bricks (nicer, and we can afford it at current
+            // counts) — nudge this trigger up later if higher volumes need it.
+            // Below 3000 bricks the full draw is cheap, so always keep bricks.
+            drawFlatlineBlipsLOD(ctx, seg, viewLeft, viewRight, baseline, zoom, nowSec);
+        } else {
+        // P3: for closed (immutable) segments, lazily sort blips by x once and
+        // binary-search the visible window so a zoomed-in view of a dense
+        // historical region only iterates on-screen bricks. The live (open)
+        // segment mutates every flush, so we don't sort it — its per-blip cull
+        // below is already cheap.
+        var _wStart = 0;
+        var _wSorted = false;
+        if (seg.x_end !== null && seg.blips.length > 512) {
+            if (!seg._sortedByX) {
+                seg.blips.sort(function(a, b) { return (a.x || 0) - (b.x || 0); });
+                seg._sortedByX = true;
+            }
+            _wSorted = true;
+            var _lo = 0, _hi = seg.blips.length;
+            while (_lo < _hi) {
+                var _mid = (_lo + _hi) >> 1;
+                if ((seg.blips[_mid].x || 0) < viewLeft) _lo = _mid + 1; else _hi = _mid;
+            }
+            _wStart = _lo;
+        }
+        for (var bi = _wStart; bi < seg.blips.length; bi++) {
             var blip = seg.blips[bi];
-            // Skip blips outside visible range
+            // Skip blips outside visible range. When sorted, everything past the
+            // right edge is too, so stop iterating.
+            if (_wSorted && blip.x > viewRight) break;
             if (blip.x < viewLeft || blip.x > viewRight) continue;
 
             var blipX = blip.x;
@@ -1184,11 +1276,16 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
             }
             ctx.shadowBlur = 0;
         }
+        } // end else (non-LOD per-blip draw)
 
         // Prune blips — never prune the live (open) flatline so txs persist
         // until the next block. Only prune closed (historical) segments.
         var isLiveSeg = (seg.type === 'flatline' && seg.x_end === null);
         if (!isLiveSeg && seg.blips.length > MAX_BLIPS_PER_SEGMENT) {
+            // This block reassigns/reorders seg.blips (the concat below is not
+            // x-ordered), so invalidate the P3 sort cache — the next draw will
+            // re-sort lazily before binary-searching.
+            seg._sortedByX = false;
             var cutoff = nowSec;
             // Always remove faded absorption particles
             seg.blips = seg.blips.filter(function(b) {

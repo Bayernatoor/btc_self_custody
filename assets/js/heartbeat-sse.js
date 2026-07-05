@@ -69,12 +69,16 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
         _hb.virtualX = neededX;
     }
 
-    // Compute median fee from history txs so colors match live bricks
+    // Median fee for colour thresholds. Sample ~2000 txs with a stride instead of
+    // building + sorting a 45k-element array on the load path: the median of a
+    // 2000-sample stride is indistinguishable from the exact one, and the full
+    // sort was most of the old ~171ms 'history' handler cost.
+    var SAMPLE_TARGET = 2000;
+    var stride = Math.max(1, Math.floor(txs.length / SAMPLE_TARGET));
     var historyRates = [];
-    for (var hi = 0; hi < txs.length; hi++) {
-        if (txs[hi].fee && txs[hi].vsize) {
-            historyRates.push(txs[hi].fee / txs[hi].vsize);
-        }
+    for (var hi = 0; hi < txs.length; hi += stride) {
+        var htx = txs[hi];
+        if (htx.fee && htx.vsize) historyRates.push(htx.fee / htx.vsize);
     }
     if (historyRates.length >= 20) {
         historyRates.sort(function(a, b) { return a - b; });
