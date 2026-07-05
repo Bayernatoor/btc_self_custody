@@ -541,7 +541,11 @@ pub fn HeartbeatPage() -> impl IntoView {
         <Meta name="description" content="Watch Bitcoin breathe. A live EKG visualization of block arrivals, where every spike tells a story of transactions, fees, and network activity."/>
         <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/heartbeat"/>
 
-        <div class="space-y-6">
+        // On large screens (>1800px viewport) the whole heartbeat page breaks out
+        // of the 1750px observatory container to ~95vw, centered on the viewport,
+        // so the banner, EKG, vitals, rhythm strip and feed all align to one
+        // impactful wide column. Below 1800px it's unchanged (fills the container).
+        <div class="space-y-6 relative min-[1800px]:w-[95vw] min-[1800px]:left-1/2 min-[1800px]:-translate-x-1/2">
             // Hero banner
             <div class="relative rounded-2xl overflow-hidden">
                 <img
@@ -561,7 +565,13 @@ pub fn HeartbeatPage() -> impl IntoView {
             // EKG Canvas card
             // Mobile (<640px): viewport-filling so canvas stretches to just above controls.
             // Desktop: no height constraint; canvas wrap uses fixed 40vh instead.
-            <div id="heartbeat-card" class="relative bg-[#0d2137] border border-white/10 rounded-2xl overflow-hidden flex flex-col max-sm:h-[calc(100vh-180px)] max-sm:min-h-[350px]">
+            // Card fills the viewport below the nav + hero so ONLY the EKG is in
+            // view on load; the vitals/rhythm/feed sit just below the fold. The
+            // canvas flexes to fill the card minus the status + control + info
+            // bars. (~210px subtracts nav + hero + top padding + the space-y gap;
+            // dial it if the fit is slightly off.) min-h keeps it usable on short
+            // screens (they scroll a little).
+            <div id="heartbeat-card" class="relative bg-[#0d2137] border border-white/10 rounded-2xl overflow-hidden flex flex-col max-sm:h-[calc(100vh-180px)] max-sm:min-h-[350px] sm:h-[calc(100vh-210px)] sm:min-h-[420px]">
                 // Status bar
                 <div class="flex flex-wrap items-center justify-between px-3 sm:px-4 py-2 sm:py-2.5 gap-x-3 gap-y-1 border-b border-white/5">
                     <div class="flex items-center gap-2 sm:gap-3">
@@ -607,11 +617,11 @@ pub fn HeartbeatPage() -> impl IntoView {
                 </div>
 
                 // Canvas with overlays
-                // Mobile (<640px): flex-1 fills remaining card space above controls
-                // (card is viewport-height, so flex-1 absorbs all leftover space).
-                // Desktop: fixed h-[40vh] with min-h-[250px]. flex-1 kicks in during
-                // fullscreen when JS sets card to 100vh.
-                <div id="heartbeat-canvas-wrap" class="relative flex-1 min-h-0 sm:h-[40vh] sm:min-h-[250px]">
+                // The canvas flexes to fill all card space left over after the
+                // status/control/info bars — on both mobile and desktop the card
+                // is now viewport-height, so flex-1 absorbs the remainder. (Also
+                // how it fills during fullscreen when JS sets the card to 100vh.)
+                <div id="heartbeat-canvas-wrap" class="relative flex-1 min-h-0 sm:min-h-[250px]">
                     <canvas
                         id="heartbeat-canvas"
                         class="w-full h-full"
@@ -669,28 +679,10 @@ pub fn HeartbeatPage() -> impl IntoView {
 
                 </div>
 
-                // Control bar (HTML, outside canvas) — grouped icon buttons with
-                // fast CSS tooltips, a LIVE state pill (glows green when following
-                // the head), and a Fit-whole-mempool action.
+                // Control bar (HTML, outside canvas): one centered cluster — zoom,
+                // then playback, then the LIVE follow-pill + Fit at the right end.
                 <div class="flex items-center justify-center px-3 py-2 border-t border-white/5">
                     <div class="flex items-center gap-1 rounded-lg bg-[#0a1929]/70 border border-white/10 px-1.5 py-1 backdrop-blur-sm">
-
-                        // ── View: LIVE follow-state pill + Fit ──
-                        <button id="heartbeat-btn-live" aria-label="Follow the live head" onclick="handleControlClick('live')"
-                            class="group relative flex items-center gap-1.5 h-8 px-2.5 rounded-md border text-[11px] font-mono font-semibold tracking-wider cursor-pointer transition-all"
-                            style="color:#00e676;background:rgba(0,230,118,0.12);border-color:rgba(0,230,118,0.4)">
-                            <span id="heartbeat-live-dot" class="w-1.5 h-1.5 rounded-full" style="background:#00e676"></span>
-                            "LIVE"
-                            <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded bg-[#0a1929] border border-white/10 text-[10px] text-white/80 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-10">"Follow the live head"</span>
-                        </button>
-                        <button aria-label="Fit whole mempool" onclick="handleControlClick('fit')"
-                            class="group relative w-8 h-8 rounded-md bg-white/5 text-white/70 hover:bg-white/15 hover:text-white transition-all cursor-pointer flex items-center justify-center text-sm">
-                            "\u{26F6}"
-                            <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded bg-[#0a1929] border border-white/10 text-[10px] text-white/80 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-10">"Fit whole mempool"</span>
-                        </button>
-
-                        <div class="w-px h-5 bg-white/10 mx-1"></div>
-
                         // ── Zoom ──
                         <button aria-label="Zoom out" onclick="handleControlClick('zoomOut')"
                             class="group relative w-8 h-8 rounded-md bg-white/5 text-white/70 hover:bg-white/15 hover:text-white transition-all cursor-pointer flex items-center justify-center text-sm">
@@ -716,6 +708,22 @@ pub fn HeartbeatPage() -> impl IntoView {
                             class="group relative w-8 h-8 rounded-md bg-[#f7931a]/20 text-[#f7931a] hover:bg-[#f7931a]/30 transition-all cursor-pointer flex items-center justify-center text-sm">
                             <span id="heartbeat-btn-pause-icon">"\u{23F8}"</span>
                             <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded bg-[#0a1929] border border-white/10 text-[10px] text-white/80 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-10">"Pause / play"</span>
+                        </button>
+
+                        <div class="w-px h-5 bg-white/10 mx-1"></div>
+
+                        // ── View: LIVE follow-pill + Fit (right end) ──
+                        <button id="heartbeat-btn-live" aria-label="Follow the live head" onclick="handleControlClick('live')"
+                            class="group relative flex items-center gap-1.5 h-8 px-2.5 rounded-md border text-[11px] font-mono font-semibold tracking-wider cursor-pointer transition-all"
+                            style="color:#00e676;background:rgba(0,230,118,0.12);border-color:rgba(0,230,118,0.4)">
+                            <span id="heartbeat-live-dot" class="w-1.5 h-1.5 rounded-full" style="background:#00e676"></span>
+                            "LIVE"
+                            <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded bg-[#0a1929] border border-white/10 text-[10px] text-white/80 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-10">"Follow the live head"</span>
+                        </button>
+                        <button aria-label="Fit whole mempool" onclick="handleControlClick('fit')"
+                            class="group relative w-8 h-8 rounded-md bg-white/5 text-white/70 hover:bg-white/15 hover:text-white transition-all cursor-pointer flex items-center justify-center text-sm">
+                            "\u{26F6}"
+                            <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded bg-[#0a1929] border border-white/10 text-[10px] text-white/80 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-10">"Fit whole mempool"</span>
                         </button>
                     </div>
                 </div>
