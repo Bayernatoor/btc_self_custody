@@ -133,6 +133,22 @@ pub fn HeartbeatPage() -> impl IntoView {
     let initialized = std::rc::Rc::new(std::cell::Cell::new(false));
     let (loading, set_loading) = signal(true);
 
+    // First-visit hint overlay. Starts visible so it renders in the SSR HTML
+    // and hydrates with its dismiss handler attached — starting false and
+    // toggling after init breaks hydration (the <Show> body never gets its
+    // click handler, leaving an undismissable overlay). For returning visitors
+    // we hide it immediately on hydration via a localStorage flag (below), and
+    // the (i) button in the control bar reopens it on demand.
+    let (show_hint, set_show_hint) = signal(true);
+    #[cfg(feature = "hydrate")]
+    {
+        Effect::new(move || {
+            if hint_already_seen() {
+                set_show_hint.set(false);
+            }
+        });
+    }
+
     // Signals for vital signs display
     let (hr_display, set_hr_display) = signal("--:--".to_string());
     let (hr_label, set_hr_label) = signal("Waiting...".to_string());
@@ -647,35 +663,36 @@ pub fn HeartbeatPage() -> impl IntoView {
                             "New block found..."
                         </p>
                     </div>
-                    // First-visit hint overlay (starts visible, dismissed on click)
-                    {
-                        let (show_hint, set_show_hint) = signal(true);
-                        view! {
-                            <Show when=move || show_hint.get()>
-                                <div
-                                    class="absolute inset-0 z-20 flex items-center justify-center bg-[#0d2137]/90 cursor-pointer"
-                                    on:click=move |_| set_show_hint.set(false)
-                                >
-                                    <div class="max-w-sm mx-4 bg-[#0a1a2e] border border-white/15 rounded-xl p-5 sm:p-6 shadow-2xl space-y-4 text-center">
-                                        <p class="text-white/90 text-sm sm:text-base leading-relaxed">
-                                            "Each "
-                                            <span class="text-[#f7931a] font-semibold">"spike"</span>
-                                            " is a block. Each "
-                                            <span class="text-[#f7931a] font-semibold">"brick"</span>
-                                            " is a transaction."
-                                        </p>
-                                        <div class="text-white/50 text-xs sm:text-sm space-y-1.5">
-                                            <p>"Drag to scroll through history"</p>
-                                            <p>"Scroll wheel or pinch to zoom"</p>
-                                            <p>"Click a spike for block details"</p>
-                                            <p>"Click a brick for transaction info"</p>
-                                        </div>
-                                        <p class="text-white/30 text-[10px] sm:text-xs pt-2 border-t border-white/10">"Tap anywhere to dismiss"</p>
-                                    </div>
+                    // First-visit hint overlay (see show_hint above). Dismissing
+                    // it stamps the localStorage flag so it never auto-shows again;
+                    // the (i) button in the control bar reopens it.
+                    <Show when=move || show_hint.get()>
+                        <div
+                            class="absolute inset-0 z-20 flex items-center justify-center bg-[#0d2137]/90 cursor-pointer"
+                            on:click=move |_| {
+                                #[cfg(feature = "hydrate")]
+                                mark_hint_seen();
+                                set_show_hint.set(false);
+                            }
+                        >
+                            <div class="max-w-sm mx-4 bg-[#0a1a2e] border border-white/15 rounded-xl p-5 sm:p-6 shadow-2xl space-y-4 text-center">
+                                <p class="text-white/90 text-sm sm:text-base leading-relaxed">
+                                    "Each "
+                                    <span class="text-[#f7931a] font-semibold">"spike"</span>
+                                    " is a block. Each "
+                                    <span class="text-[#f7931a] font-semibold">"brick"</span>
+                                    " is a transaction."
+                                </p>
+                                <div class="text-white/50 text-xs sm:text-sm space-y-1.5">
+                                    <p>"Drag to scroll through history"</p>
+                                    <p>"Scroll wheel or pinch to zoom"</p>
+                                    <p>"Click a spike for block details"</p>
+                                    <p>"Click a brick for transaction info"</p>
                                 </div>
-                            </Show>
-                        }
-                    }
+                                <p class="text-white/30 text-[10px] sm:text-xs pt-2 border-t border-white/10">"Tap anywhere to dismiss"</p>
+                            </div>
+                        </div>
+                    </Show>
 
                 </div>
 
@@ -724,6 +741,16 @@ pub fn HeartbeatPage() -> impl IntoView {
                             class="group relative w-8 h-8 rounded-md bg-white/5 text-white/70 hover:bg-white/15 hover:text-white transition-all cursor-pointer flex items-center justify-center text-sm">
                             "\u{26F6}"
                             <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded bg-[#0a1929] border border-white/10 text-[10px] text-white/80 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-10">"Fit whole mempool"</span>
+                        </button>
+
+                        <div class="w-px h-5 bg-white/10 mx-1"></div>
+
+                        // ── Help: reopen the intro hint ──
+                        <button aria-label="How to read this" title="How to read this"
+                            on:click=move |_| set_show_hint.set(true)
+                            class="group relative w-8 h-8 rounded-md bg-white/5 text-white/70 hover:bg-white/15 hover:text-white transition-all cursor-pointer flex items-center justify-center text-sm font-serif italic">
+                            "i"
+                            <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded bg-[#0a1929] border border-white/10 text-[10px] text-white/80 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-10">"How to read this"</span>
                         </button>
                     </div>
                 </div>
@@ -982,6 +1009,27 @@ fn VitalTile(
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/// Whether the visitor has already dismissed the intro hint (localStorage flag).
+/// Hydrate-only — the server never reads browser storage.
+#[cfg(feature = "hydrate")]
+fn hint_already_seen() -> bool {
+    leptos::prelude::window()
+        .local_storage()
+        .ok()
+        .flatten()
+        .and_then(|s| s.get_item("hb_intro_seen").ok().flatten())
+        .as_deref()
+        == Some("1")
+}
+
+/// Persist that the intro hint has been dismissed so it never auto-shows again.
+#[cfg(feature = "hydrate")]
+fn mark_hint_seen() {
+    if let Ok(Some(s)) = leptos::prelude::window().local_storage() {
+        let _ = s.set_item("hb_intro_seen", "1");
+    }
+}
 
 /// Serialize blocks to JSON for the JS animation engine.
 /// Computes inter-block time from consecutive block timestamps.
