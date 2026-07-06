@@ -103,6 +103,13 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
     liveSeg._colHeights = stackMap;
     var histMaxStack = (_hb.height || 400) * 0.35;
 
+    // Tell the renderer the eventual size of this segment up front, so the LOD
+    // decision (density-columns vs individual bricks) is made from the KNOWN
+    // mempool count — not the running blips.length as it fills. Without this a
+    // >60k-tx first load renders bricks until the fill crosses LOD_MIN_BLIPS, then
+    // pops to columns mid-fill (a jarring switch). Cleared in finishHistory.
+    liveSeg._loadFillCount = txs.length;
+
     console.log('[heartbeat] placeHistoryTxs: ' + txs.length + ' txs, flatlineSpan=' +
         Math.round(flatlineSpan) + 'px, elapsed=' + Math.round(elapsedSinceBlock) + 's');
 
@@ -138,6 +145,9 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
     var i = 0;
 
     var finishHistory = function() {
+        // Fill done: drop the up-front count so the LOD gate reverts to the real
+        // (now complete) blips.length for this segment.
+        liveSeg._loadFillCount = 0;
         // Notable feed newest-first (server sends newest-first, so iterate back).
         if (notableTxs.length > 0 && window._notableFeed) {
             for (var ni = notableTxs.length - 1; ni >= 0; ni--) {
@@ -439,6 +449,7 @@ function setupBlockReveal(_hb, pr) {
     // Kill any in-flight momentum scroll so it can't fight the reveal's viewOffset
     // (both write it per frame). The momentum tick stops itself once vel < 0.5.
     _hb._momentumVel = 0;
+    _hb.viewOffsetY = 0; // start the reveal vertically centered (drop any prior vertical pan)
     _hb._intro = null; // a real block supersedes the first-load intro
     _hb._reveal = {
         phase: 'form',              // form → harvest → relay (see runBlockReveal)
@@ -873,11 +884,12 @@ export function flushTxBatch() {
     // show. Instead evict the OLDEST (leftmost / furthest behind the head) bricks
     // in a single O(n) partition: no sort, fee-neutral, and when following the
     // head those are already off-screen. Threshold sits ABOVE the history limit
-    // (HEARTBEAT_HISTORY_LIMIT=60k) + inter-block live accumulation, so a full
+    // (HEARTBEAT_HISTORY_LIMIT=150k) + inter-block live accumulation, so a full
     // mempool we intentionally show is never evicted — this only fires as a true
-    // memory guard.
-    var CULL_THRESHOLD = 75000;
-    var CULL_TARGET = 60000;
+    // memory guard. TARGET matches the history ceiling so a culled session still
+    // shows the full mempool it loaded.
+    var CULL_THRESHOLD = 170000;
+    var CULL_TARGET = 150000;
     if (liveSeg.blips.length > CULL_THRESHOLD) {
         var over = liveSeg.blips.length - CULL_TARGET;
         var flatW = Math.max(1, _hb.virtualX - liveSeg.x_start);

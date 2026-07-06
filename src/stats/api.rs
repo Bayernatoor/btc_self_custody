@@ -203,12 +203,17 @@ const MAX_SSE_CONNECTIONS: usize = 256;
 /// How many recent unconfirmed mempool txs to send as the heartbeat history
 /// (the initial brick fill on connect/refresh), newest-first from the last 2h.
 /// The client places all of them, bounded only by its per-column density cap, so
-/// this is effectively "how many bricks a fresh load shows" — set for near-full
-/// mempool coverage (mempools commonly sit at 40-60k). Tradeoff: each ~10k adds
-/// ~1.5-2MB to the one-time SSE history payload. The client fills these in chunks
-/// across RAF frames (placeHistoryTxs), so a big load no longer stalls; and the
-/// blip cull threshold is set above this so the shown mempool isn't evicted.
-const HEARTBEAT_HISTORY_LIMIT: u64 = 60_000;
+/// this is effectively "how many bricks a fresh load shows". Set as a CEILING for
+/// full-mempool coverage even during congestion — the point of the mempool-as-
+/// timeline. It must sit ABOVE the client's LOD threshold (LOD_MIN_BLIPS=60k) so a
+/// >60k mempool actually loads in full and LOD (density columns) engages, instead
+/// of being clipped to exactly 60k (which left LOD unreachable). This is a cap, not
+/// a fixed size: the payload scales with the ACTUAL mempool, so a normal 40-60k
+/// mempool is unaffected; only genuine congestion approaches the ceiling (~1.5-2MB
+/// of SSE payload per 10k txs). The client fills these in chunks across RAF frames
+/// (placeHistoryTxs) so a big load doesn't stall, renders them via LOD above 60k,
+/// and its cull threshold is set above this so the shown mempool isn't evicted.
+const HEARTBEAT_HISTORY_LIMIT: u64 = 150_000;
 
 /// Arc-wrapped stats state, used as Axum extractor in all handlers.
 pub type SharedStatsState = Arc<StatsState>;

@@ -92,6 +92,8 @@ export function drawTooltip(ctx, seg, canvasX, canvasY, baseline) {
         var d = new Date(seg.timestamp * 1000);
         lines.push(d.toISOString().replace('T', ' ').slice(0, 19) + ' UTC');
     }
+    var _hbt = getState();
+    if (_hbt && _hbt._isTouch) lines.push('→ Tap again to expand');
     drawTooltipBox(ctx, lines, canvasX, canvasY - 12, seg.color);
 }
 
@@ -155,9 +157,9 @@ export function drawBlipTooltip(ctx, blip, canvasX, baseline) {
         var d = new Date(blip.timestamp * 1000);
         lines.push(d.toLocaleTimeString());
     }
-    // Show link hint for pinned blips with txid
+    // Show the "open detail" hint for the pinned blip (touch first-tap also pins it).
     if (blip.txid && _hb._pinnedBlip === blip) {
-        lines.push('\u2192 Click again to view on mempool.space');
+        lines.push(_hb._isTouch ? '\u2192 Tap again for details' : '\u2192 Click again to view on mempool.space');
     }
     var tooltipColors = {
         'whale': 'rgba(255,215,0,0.8)',
@@ -1049,7 +1051,10 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
         // zoomed out (bricks sub-pixel). Below that we always draw individual bricks
         // — tested smooth to ~55k, and full-fit-at-congestion is rare. The console
         // toggle (_hbToggleLod) forces bricks always (or LOD).
-        if (_hb._lodEnabled !== false && 5 * zoom < 1.5 && seg.blips.length > LOD_MIN_BLIPS) {
+        // Use the load-fill target count (if a first-load fill is in progress) so
+        // the choice is stable from the first frame; otherwise the real blips count.
+        var lodCount = seg._loadFillCount || seg.blips.length;
+        if (_hb._lodEnabled !== false && 5 * zoom < 1.5 && lodCount > LOD_MIN_BLIPS) {
             drawFlatlineBlipsLOD(ctx, seg, viewLeft, viewRight, baseline, zoom, nowSec);
         } else {
         // P3: for closed (immutable) segments, lazily sort blips by x once and

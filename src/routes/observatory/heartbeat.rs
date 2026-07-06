@@ -149,6 +149,11 @@ pub fn HeartbeatPage() -> impl IntoView {
         });
     }
 
+    // Mobile: the txid search collapses behind an icon to keep the bottom bar to a
+    // single row on small screens; tapping the icon expands the input. On sm+ the
+    // input is always inline, so this only gates the mobile-collapsed state.
+    let (search_open, set_search_open) = signal(false);
+
     // Signals for vital signs display
     let (hr_display, set_hr_display) = signal("--:--".to_string());
     let (hr_label, set_hr_label) = signal("Waiting...".to_string());
@@ -706,7 +711,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                             "\u{2212}"
                             <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded bg-[#0a1929] border border-white/10 text-[10px] text-white/80 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-10">"Zoom out"</span>
                         </button>
-                        <span id="heartbeat-zoom-label" class="text-[10px] text-white/40 font-mono w-9 text-center select-none">"1.9x"</span>
+                        <span id="heartbeat-zoom-label" class="hidden sm:inline text-[10px] text-white/40 font-mono w-9 text-center select-none">"1.9x"</span>
                         <button aria-label="Zoom in" onclick="handleControlClick('zoomIn')"
                             class="group relative w-8 h-8 rounded-md bg-white/5 text-white/70 hover:bg-white/15 hover:text-white transition-all cursor-pointer flex items-center justify-center text-sm">
                             "+"
@@ -755,15 +760,32 @@ pub fn HeartbeatPage() -> impl IntoView {
                     </div>
                 </div>
 
-                // Bottom info bar with TX search
-                <div class="flex flex-col sm:flex-row items-center justify-between px-3 sm:px-4 py-1.5 sm:py-2 gap-1 sm:gap-2 border-t border-white/5 text-xs sm:text-base text-[#00e676] font-mono">
-                    <span>{mempool_display}</span>
-                    <div class="flex items-center gap-1.5" title="Searches visible txs on the timeline. Only recent mempool transactions that arrived since the last block are shown.">
+                // Bottom info bar. On mobile the two stats stack left-aligned (so they
+                // line up) with the search icon to the right; tapping it expands the txid
+                // search onto its own full-width row below. On sm+ the stats sit inline
+                // on the left and the search input is inline on the right.
+                <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 px-3 sm:px-4 py-1.5 sm:py-2 border-t border-white/5 text-xs sm:text-base text-[#00e676] font-mono">
+                    // Mobile: this wrapper is a flex-col so the two stats stack left-
+                    // aligned. Desktop: `sm:contents` dissolves the wrapper so mempool and
+                    // next-block become direct children of the bar again — mempool at the
+                    // left, next-block pushed to the right (sm:order-last), search between
+                    // them via justify-between (unchanged desktop layout).
+                    <div class="flex flex-col sm:contents gap-y-0.5 min-w-0">
+                        <span class="whitespace-nowrap">{mempool_display}</span>
+                        <span class="whitespace-nowrap sm:order-last">"Next block: " {fee_display}</span>
+                    </div>
+                    <div
+                        class=move || format!(
+                            "{} sm:flex items-center gap-1.5 order-last w-full sm:w-auto sm:order-none",
+                            if search_open.get() { "flex" } else { "hidden" }
+                        )
+                        title="Searches visible txs on the timeline. Only recent mempool transactions that arrived since the last block are shown."
+                    >
                         <input
                             id="heartbeat-tx-search"
                             type="text"
                             placeholder="Search txid..."
-                            class="w-28 sm:w-48 px-2 py-0.5 rounded bg-white/5 border border-white/10 text-xs font-mono text-white/70 placeholder-white/30 focus:border-[#00e676]/50 focus:outline-none"
+                            class="w-full sm:w-48 px-2 py-1 sm:py-0.5 rounded bg-white/5 border border-white/10 text-xs font-mono text-white/70 placeholder-white/30 focus:border-[#00e676]/50 focus:outline-none"
                             on:keydown=move |e: leptos::ev::KeyboardEvent| {
                                 if e.key() == "Enter" {
                                     #[cfg(feature = "hydrate")]
@@ -787,7 +809,14 @@ pub fn HeartbeatPage() -> impl IntoView {
                             }
                         />
                     </div>
-                    <span>"Next block: " {fee_display}</span>
+                    // Search toggle — mobile only (the input is inline on sm+).
+                    <button
+                        aria-label="Search transactions"
+                        on:click=move |_| set_search_open.update(|v| *v = !*v)
+                        class="sm:hidden w-7 h-7 shrink-0 rounded-md bg-white/5 text-white/60 hover:bg-white/15 hover:text-white transition-colors flex items-center justify-center"
+                    >
+                        "\u{1F50D}"
+                    </button>
                 </div>
             </div>
 

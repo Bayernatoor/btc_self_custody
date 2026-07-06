@@ -2,6 +2,28 @@
 import { getState, HEAD_POSITION_FRAC, FLATLINE_PX_PER_SEC } from './heartbeat-state.js';
 import { canvasToVirtual, virtualToCanvas, blockAtVirtualX, flatlineAtVirtualX, blipAtCanvasXY, blipAtVirtualX } from './heartbeat-blips.js';
 
+// Clamp vertical pan so the tallest brick stack can be pulled into view but the
+// timeline can't be dragged off into empty space. Bricks stack to ~35% of canvas
+// height and grow past 4x zoom (heightScale in the renderer), so the reachable
+// range depends on zoom. viewOffsetY shifts the baseline DOWN (positive) to bring
+// higher bricks into view; 0 is the resting position (whole EKG framed).
+export function clampViewOffsetY(_hb) {
+    if (!_hb) return;
+    var h = _hb.height || 400;
+    var base = (h < 350 ? h * 0.78 : h * 0.55);
+    var zoom = _hb.zoom;
+    var heightScale = zoom > 4 ? 1 + (zoom - 4) * 0.15 : 1;
+    var maxContentTop = (h * 0.35) * heightScale; // tallest possible stack (screen px)
+    var topMargin = 8;
+    // How far the baseline must travel down to bring the tallest brick's top to
+    // topMargin below the canvas top. Zero when the stack already fits.
+    var upMax = Math.max(0, (topMargin - base) + maxContentTop);
+    var v = _hb.viewOffsetY || 0;
+    if (v > upMax) v = upMax;
+    if (v < 0) v = 0;
+    _hb.viewOffsetY = v;
+}
+
 // Momentum scrolling
 export function startMomentum(velocity) {
     var _hb = getState();
@@ -80,6 +102,61 @@ export function listen(target, evt, fn, opts) {
     _hb._listeners.push({ target: target, evt: evt, fn: fn, opts: opts });
 }
 
+// Handle a canvas tap (touch). Two-stage: the first tap on a brick or block spike
+// SELECTS it (shows the tooltip, which carries a "tap again" hint on touch); a
+// second tap on the same target opens its detail modal. Mirrors the desktop
+// hover+click affordance for touch, where there's no hover.
+function handleCanvasTap(mx, my) {
+    var _hb = getState();
+    if (!_hb) return;
+    var vx = canvasToVirtual(mx);
+    var baseline = (_hb.height < 350 ? _hb.height * 0.78 : _hb.height * 0.55) + (_hb.viewOffsetY || 0);
+
+    // Brick (blip) hit-test above the baseline — mirror the hover zoom thresholds:
+    // 2D at high zoom, x-only at moderate zoom, none when too dense/zoomed out.
+    var blip = null;
+    if (my < baseline) {
+        if (_hb.zoom >= 4) blip = blipAtCanvasXY(mx, my, baseline);
+        if (!blip && _hb.zoom >= 1.5) blip = blipAtVirtualX(vx, 6 / _hb.zoom);
+    }
+    if (blip && blip.txid) {
+        if (_hb._pinnedBlip === blip || _hb.hoveredBlip === blip) {
+            // Second tap on the same brick -> open the tx detail modal.
+            if (typeof window.showTxDetail === 'function') {
+                window.showTxDetail(blip.txid, {
+                    fee: blip.fee, vsize: blip.vsize, value: blip.value, feeRate: blip.feeRate
+                });
+            }
+            _hb._pinnedBlip = null; _hb.hoveredBlip = null;
+        } else {
+            // First tap -> select + show the tooltip.
+            _hb._pinnedBlip = blip; _hb.hoveredBlip = blip; _hb.hoverCanvasX = mx;
+            _hb.hoveredBlock = null;
+        }
+        return;
+    }
+
+    // Block spike.
+    var tapped = blockAtVirtualX(vx);
+    if (tapped) {
+        if (_hb.hoveredBlock === tapped) {
+            // Second tap on the same spike -> open the block detail modal.
+            if (tapped.height > 0 && typeof window.showBlockDetail === 'function') {
+                window.showBlockDetail(tapped.height);
+            }
+            _hb.hoveredBlock = null;
+        } else {
+            // First tap -> select + show the tooltip.
+            _hb.hoveredBlock = tapped;
+            _hb._pinnedBlip = null; _hb.hoveredBlip = null;
+        }
+        return;
+    }
+
+    // Tapped empty space -> clear any selection.
+    _hb.hoveredBlock = null; _hb._pinnedBlip = null; _hb.hoveredBlip = null;
+}
+
 export function setupInputHandlers(canvas) {
     var _hb = getState();
     // Track listeners for cleanup in destroyHeartbeat
@@ -116,6 +193,9 @@ export function setupInputHandlers(canvas) {
 
             // Adjust viewOffset so the virtual point under cursor stays put
             _hb.viewOffset = vxUnderCursor - mx / _hb.zoom;
+            // Re-clamp vertical pan: zooming out shrinks the reachable range, so a
+            // prior vertical pan could otherwise strand the timeline off-screen.
+            clampViewOffsetY(_hb);
 
             _hb.autoFollow = false;
             // Don't checkAutoFollow here - zooming should stay where you aimed
@@ -150,6 +230,7 @@ export function setupInputHandlers(canvas) {
             var dy = e.clientY - (_hb.dragStartY || e.clientY);
             _hb.viewOffset = _hb.dragStartOffset - dx / _hb.zoom;
             _hb.viewOffsetY = (_hb.dragStartOffsetY || 0) + dy;
+            clampViewOffsetY(_hb);
             _hb.autoFollow = false;
             // Track velocity for momentum (clamped to prevent flyaway on tiny dt)
             var now = Date.now();
@@ -244,12 +325,14 @@ export function setupInputHandlers(canvas) {
     // Touch support: 1 finger = pan with momentum, 2 fingers = pinch-to-zoom
     listen(canvas, 'touchstart', function(e) {
         if (!_hb) return;
+        _hb._isTouch = true; // enables tap-to-select tooltips + "tap again" hints
         if (_hb._reveal && window._hbEndReveal) window._hbEndReveal(); // user takes over
         stopMomentum();
 
         if (e.touches.length === 2) {
             // Pinch start
             _hb._pinching = true;
+            _hb._gestureWasPinch = true; // don't fire a tap when fingers lift
             _hb.isDragging = false;
             _hb._touchLocked = 'pinch';
             _hb._pinchStartDist = touchDistance(e.touches[0], e.touches[1]);
@@ -257,9 +340,11 @@ export function setupInputHandlers(canvas) {
             var rect = canvas.getBoundingClientRect();
             _hb._pinchMid = touchMidpoint(e.touches[0], e.touches[1], rect);
             _hb._pinchVx = canvasToVirtual(_hb._pinchMid.x);
+            _hb._pinchLastMidY = _hb._pinchMid.y; // track finger travel for vertical pan
         } else if (e.touches.length === 1) {
             // Pan start — don't commit to horizontal drag yet
             _hb._pinching = false;
+            _hb._gestureWasPinch = false; // a fresh single-finger touch can be a tap
             _hb.isDragging = false;
             _hb._touchLocked = null; // null = undecided, 'h' = horizontal, 'v' = vertical
             _hb._touchStartX = e.touches[0].clientX;
@@ -277,12 +362,22 @@ export function setupInputHandlers(canvas) {
 
         if (_hb._pinching && e.touches.length === 2) {
             e.preventDefault();
-            // Pinch zoom
+            // Two-finger gesture = pinch-zoom AND 2D pan in one motion (maps-style).
+            var rect = canvas.getBoundingClientRect();
             var dist = touchDistance(e.touches[0], e.touches[1]);
+            var mid = touchMidpoint(e.touches[0], e.touches[1], rect);
             var scale = dist / _hb._pinchStartDist;
             var newZoom = Math.max(_hb.minZoom, Math.min(_hb.maxZoom, _hb._pinchStartZoom * scale));
             _hb.zoom = newZoom;
-            _hb.viewOffset = _hb._pinchVx - _hb._pinchMid.x / newZoom;
+            // Horizontal: keep the virtual point grabbed at gesture start glued under
+            // the CURRENT finger midpoint, so the gesture zooms and pans left/right.
+            _hb.viewOffset = _hb._pinchVx - mid.x / newZoom;
+            // Vertical: accumulate the midpoint's y travel into viewOffsetY. It's a
+            // screen-space offset (not zoom-scaled) to match the baseline convention
+            // and the mouse-drag path. Clamp so you can reach the tallest stack only.
+            _hb.viewOffsetY = (_hb.viewOffsetY || 0) + (mid.y - _hb._pinchLastMidY);
+            _hb._pinchLastMidY = mid.y;
+            clampViewOffsetY(_hb);
             _hb.autoFollow = false;
         } else if (e.touches.length === 1) {
             // Decide direction on first significant move
@@ -317,6 +412,7 @@ export function setupInputHandlers(canvas) {
 
     listen(canvas, 'touchend', function(e) {
         if (!_hb) return;
+        var wasDragging = _hb.isDragging;
         _hb._touchLocked = null; // reset direction lock for next touch
         _hb._touchTapped = false; // reset per touchend
 
@@ -326,43 +422,29 @@ export function setupInputHandlers(canvas) {
             return;
         }
 
-        if (_hb.isDragging) {
+        if (wasDragging) {
             _hb.isDragging = false;
-
             // Momentum
             var vel = _hb._dragVelocity || 0;
             if (Math.abs(vel) > 0.1) {
                 startMomentum(vel);
             }
+        }
 
-            // Tap detection (minimal drag distance = click)
-            if (e.changedTouches && e.changedTouches.length > 0) {
-                var dx = Math.abs(e.changedTouches[0].clientX - _hb.dragStartX);
-                if (dx < 10) {
-                    // Treat as tap
-                    var rect = canvas.getBoundingClientRect();
-                    var mx = e.changedTouches[0].clientX - rect.left;
-                    var vx = canvasToVirtual(mx);
-                    var tapped = blockAtVirtualX(vx);
-
-                    var my = e.changedTouches[0].clientY - rect.top;
-
-                    if (tapped) {
-                        if (_hb.hoveredBlock === tapped) {
-                            // Second tap on same spike: open block detail
-                            if (tapped.height > 0 && typeof window.showBlockDetail === 'function') {
-                                window.showBlockDetail(tapped.height);
-                            }
-                            _hb.hoveredBlock = null;
-                        } else {
-                            // First tap: show tooltip
-                            _hb.hoveredBlock = tapped;
-                        }
-                        _hb._touchTapped = true; // suppress click event
-                    } else {
-                        _hb.hoveredBlock = null;
-                    }
-                }
+        // Tap detection: a single-finger touch that barely moved. Runs regardless of
+        // whether it locked into a drag — a real finger tap always has micro-jitter,
+        // which used to lock 'h'/'v' and skip tap handling entirely (so a tap either
+        // did nothing or fell through to the synthetic click against stale state).
+        // Skip if this gesture was ever a pinch: lifting the last finger of a pinch
+        // fires a 1-touch touchend with a stale _touchStartX that would false-tap.
+        if (!_hb._gestureWasPinch && e.changedTouches && e.changedTouches.length === 1) {
+            var rect = canvas.getBoundingClientRect();
+            var ex = e.changedTouches[0].clientX, ey = e.changedTouches[0].clientY;
+            var movedX = Math.abs(ex - (_hb._touchStartX != null ? _hb._touchStartX : ex));
+            var movedY = Math.abs(ey - (_hb._touchStartY != null ? _hb._touchStartY : ey));
+            if (movedX < 12 && movedY < 12) {
+                handleCanvasTap(ex - rect.left, ey - rect.top);
+                _hb._touchTapped = true; // suppress the synthetic click that follows
             }
         }
     });
@@ -404,6 +486,7 @@ export function handleControlClick(id) {
             var vx = canvasToVirtual(cx);
             _hb.zoom = Math.min(_hb.maxZoom, _hb.zoom * 1.2); // 20%/click (was 40% — too coarse)
             _hb.viewOffset = vx - cx / _hb.zoom;
+            clampViewOffsetY(_hb); // keep vertical pan in range as the reachable range changes
             _hb.autoFollow = false;
             break;
         case 'zoomOut':
@@ -411,6 +494,7 @@ export function handleControlClick(id) {
             var vx2 = canvasToVirtual(cx2);
             _hb.zoom = Math.max(_hb.minZoom, _hb.zoom / 1.2);
             _hb.viewOffset = vx2 - cx2 / _hb.zoom;
+            clampViewOffsetY(_hb); // zoom-out shrinks the range — avoid stranding the timeline
             break;
         case 'center':
             // Center viewport on the live head and reset vertical pan
