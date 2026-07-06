@@ -1,6 +1,15 @@
 // heartbeat-sse.js — SSE connection, tx batching, and mempool fallback
-import { getState, FLATLINE_PX_PER_SEC, HEAD_POSITION_FRAC } from './heartbeat-state.js';
+import { getState, FLATLINE_PX_PER_SEC, HEAD_POSITION_FRAC, POINT_WIDTH } from './heartbeat-state.js';
 import { feeRateColor, fmtBtc } from './heartbeat-timeline.js';
+
+// Run the SEQUENCED block reveal up to this entry zoom. It works across the whole
+// normal viewing range: the spike stays at the head, the unfurl zooms OUT to frame
+// the whole timeline (so no blur even from a close entry zoom), then it returns to
+// the entry zoom. 9x ≈ where per-brick fee/value labels start rendering (zoom>8), so
+// below it nobody's reading tx details = no "real work" to interrupt. Above it the
+// reveal is skipped for the instant flow (block appears, mempool re-lays, no camera
+// hijack; a pinned tx shows "confirmed in block #N" if it got mined). Tunable.
+var REVEAL_MAX_ENTRY_ZOOM = 9.0;
 
 // ── Notable-tx classification (shared by history placement, live flush, feed) ──
 // Accepts both the live SSE shape (boolean flags) and the persisted notable_txs
@@ -107,6 +116,12 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
             _hb.viewOffset = _hb.virtualX - (_hb.width * HEAD_POSITION_FRAC) / _hb.zoom;
         }
         console.log('[heartbeat] auto-fit zoom to ' + _hb.zoom.toFixed(3) + 'x');
+        // First-load intro: if there's a zoom-IN worth doing (fit is well below the
+        // resting ~1.5x — i.e. a sizeable mempool), arm the "load reveal" — hold on
+        // the whole mempool, then slow-zoom to the head (runIntro in drawFrame).
+        if (_hb.autoFollow && _hb.zoom < 1.5) {
+            _hb._intro = { phase: 'hold', start: Date.now() / 1000, fromZoom: _hb.zoom };
+        }
     }
 
     // Stagger bricks in left-to-right over ~1.5s (instant on reconnect).
@@ -227,10 +242,28 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
 export function processLiveBlock(block) {
     var _hb = getState();
     if (!_hb) return;
+
+    // If a block reveal is running: ignore a re-broadcast of the SAME block (poller
+    // re-send / estimated→real replace) so it can't restart or cut the reveal short;
+    // finalize the reveal first if a genuinely NEW block arrives mid-reveal.
+    if (_hb._reveal && block && block.height) {
+        if (_hb._reveal.height === block.height) return;
+        if (window._hbEndReveal) window._hbEndReveal();
+    }
+
     // Start each block from a clean backlog-spread state so a previous block's
     // spread (still within its 2.5s ramp) can't bleed into this block's flatline.
     _hb._backlogSpreadPx = 0;
     _hb._backlogSpreadStart = 0;
+
+    // Reveal-eligible unless the timeline is PAUSED. autoFollow/LIVE is NOT required:
+    // "not anchored to the head" (play mode — the canvas still moves with time) is
+    // still a live, watchable view, so the reveal should play. Only pause (or mid-
+    // drag/pinch, or the toggle off, or >5x inspection) suppresses it.
+    var revealEligible = _hb._revealEnabled !== false
+        && !_hb.paused && !_hb.isDragging && !_hb._pinching
+        && _hb.width > 0 && _hb.zoom > 0
+        && _hb.zoom <= REVEAL_MAX_ENTRY_ZOOM;
 
     // Collapse the dead processing gap: the backend suppresses txs while
     // building block data (~2-5s, longer on a node stall), so virtualX has
@@ -284,19 +317,27 @@ export function processLiveBlock(block) {
     }]);
     // Mark this as a genuine live block so pushHeartbeatBlocks runs the fee-rate
     // harvest (confirm top-fee bricks into the spike, carry the rest forward).
+    // _revealPending tells it to DEFER the leftover re-lay to the sequencer.
     _hb._harvestLive = true;
+    _hb._revealPending = revealEligible;
     window.pushHeartbeatBlocks(blockJson, false);
+    _hb._revealPending = false;
 
-    // Re-add the collapsed gap AFTER the spike. The gap we just removed is the
-    // no-brick window — the node suppressed tx broadcast while validating (and
-    // for longer on a stall). The backlog of txs that piled during it arrives as
-    // a burst right after the spike; giving the fresh post-block flatline that
-    // same width, and telling flushTxBatch to spread the burst across it (see
-    // _backlogSpreadPx there), lets the backlog fan out instead of walling in one
-    // column at the head. Only for real windows (>40px ≈ 8s) — small validation
-    // gaps are already covered by the flush's normal spread. (Camera easing in
-    // drawFrame turns the resulting virtualX jump into a smooth slide.)
-    if (collapsedPx > 40) {
+    // Consume the deferred-reveal handoff unconditionally so a stale one (e.g. a
+    // block that produced no leftovers) can never carry into a later block and
+    // re-lay an old leftover set.
+    var pending = _hb._pendingReveal;
+    _hb._pendingReveal = null;
+    if (revealEligible && pending) {
+        // Sequenced reveal: the spike now sits at the current head; the leftovers
+        // are still visible in the old segment. Hand off to the sequencer (drawFrame
+        // runs it) — form → harvest → relay. Skip the collapsed-gap re-add: the
+        // reveal owns the post-block flow.
+        setupBlockReveal(_hb, pending);
+    } else if (collapsedPx > 40) {
+        // Instant path: re-add the collapsed gap AFTER the spike so the backlog of
+        // validation-suppressed txs fans across it (see _backlogSpreadPx in
+        // flushTxBatch) instead of walling at the head.
         var newSeg = _hb.timeline[_hb.timeline.length - 1];
         if (newSeg && newSeg.type === 'flatline' && newSeg.x_end === null) {
             _hb.virtualX += collapsedPx;
@@ -324,9 +365,112 @@ export function processLiveBlock(block) {
     if (window.renderRhythmStrip && window.getHeartbeatRecentBlocks) {
         window.renderRhythmStrip('rhythm-strip-canvas', window.getHeartbeatRecentBlocks());
     }
+
     // New txs flush to the new post-block flatline on the next RAF frame.
-    // (No _blockProcessing gate needed: this function is fully synchronous, so it
-    // always completes — creating the new flatline — before any drawFrame runs.)
+    // (During a sequenced reveal, drawFrame suppresses the flush so they queue.)
+}
+
+// DEV: fire a fake block on demand so the reveal can be tested without waiting for a
+// real block. Runs the full live path (harvest + reveal) against the CURRENT real
+// mempool. Localhost-only so it can't pollute a deployed timeline. Console:
+//   window._hbFakeBlock()        — a ~3000-tx block
+//   window._hbFakeBlock(20000)   — a big block (harvests more, carries less)
+window._hbFakeBlock = function(txCount) {
+    if (location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+        console.warn('[heartbeat] _hbFakeBlock is dev-only (localhost)');
+        return;
+    }
+    var _hb = getState();
+    if (!_hb) return;
+    var h = 0;
+    for (var i = _hb.timeline.length - 1; i >= 0; i--) {
+        if (_hb.timeline[i].type === 'block') { h = _hb.timeline[i].height; break; }
+    }
+    var tc = txCount || 3000;
+    processLiveBlock({
+        height: (h || _hb.blockHeight || 900000) + 1,
+        timestamp: Math.floor(Date.now() / 1000),
+        tx_count: tc,
+        total_fees: 12000000, // 0.12 BTC — plausible so fees/announcement render
+        size: 1500000,
+        weight: 3990000
+    });
+    console.log('[heartbeat] fake block injected (tx_count=' + tc + ') — reveal should play');
+};
+
+// Arm the block-reveal SEQUENCER from the deferred-leftover handoff (pr, built in
+// pushHeartbeatBlocks). The sequencer itself runs in drawFrame (runBlockReveal):
+// the form beat zooms into the spike-at-head; the harvest beat flies the confirmed
+// bricks in and fades the leftovers; the relay beat re-lays the leftovers and
+// follows the placement to the new head.
+// P5 exact harvest: re-partition an armed (pre-shatter) reveal's active bricks by
+// the block's ACTUAL txids — bricks in the block shatter into the spike, the rest
+// carry forward. Replaces the top-fee approximation from pushHeartbeatBlocks. No-op
+// once the shatter has started (r.harvested) — too late to change what's flying.
+// All the active bricks are still in the old segment during the form beat, so this
+// only re-labels which shatter vs carry; the harvest beat then acts on the new sets.
+function applyExactHarvest(r, blockSet) {
+    if (!r || r.harvested) return;
+    var all = r.confirmed.concat(r.leftovers);
+    var conf = [], left = [];
+    for (var i = 0; i < all.length; i++) {
+        var b = all[i];
+        if (b.txid && blockSet.has(b.txid)) conf.push(b); else left.push(b);
+    }
+    r.confirmed = conf;
+    r.leftovers = left;
+    r._exact = true;
+    console.log('[heartbeat] exact harvest: ' + conf.length + ' confirmed / ' + left.length + ' carried');
+}
+
+function setupBlockReveal(_hb, pr) {
+    var spikeSeg = pr.spikeSeg;
+    if (!spikeSeg || !spikeSeg.points) return;
+    // One reveal per block height (backstop against a post-reveal re-broadcast
+    // re-arming it; the active-reveal dupe is handled at the top of processLiveBlock).
+    if (_hb._lastRevealHeight === spikeSeg.height) return;
+    _hb._lastRevealHeight = spikeSeg.height;
+
+    // Focal point = the R peak (highest = most-negative y offset).
+    var peakIdx = 0, peakY = 0;
+    for (var p = 0; p < spikeSeg.points.length; p++) {
+        if (spikeSeg.points[p] < peakY) { peakY = spikeSeg.points[p]; peakIdx = p; }
+    }
+    // Kill any in-flight momentum scroll so it can't fight the reveal's viewOffset
+    // (both write it per frame). The momentum tick stops itself once vel < 0.5.
+    _hb._momentumVel = 0;
+    _hb._intro = null; // a real block supersedes the first-load intro
+    _hb._reveal = {
+        phase: 'form',              // form → harvest → relay (see runBlockReveal)
+        start: Date.now() / 1000,
+        height: spikeSeg.height,
+        entryZoom: _hb.zoom,
+        spikeVX: spikeSeg.x_start + peakIdx * POINT_WIDTH,
+        oldSeg: pr.oldSeg,
+        newSeg: pr.newSeg,
+        leftovers: pr.leftovers,
+        confirmed: pr.confirmed,    // bricks to shatter (harvest beat sets fadeStart)
+        absorbX: pr.absorbX,
+        maxParts: pr.maxParts,
+        // Block stats for the reveal-managed banners (block-found → remaining-count).
+        blockFees: spikeSeg.total_fees || 0,
+        blockTxCount: spikeSeg.tx_count || 0,
+        blockColor: spikeSeg.color || null,
+        _bannerBlockSet: false,     // block-found banner shown once (form beat)
+        _bannerRemainSet: false,    // remaining-count banner shown once (unfurl beat)
+        harvested: false,
+        laid: false,
+        unfurlSecs: 0,              // set at the harvest→unfurl transition (rate-based)
+        fitZoom: 0,                 // set there too (frames the whole timeline)
+        width: 0,
+        fromZoom: undefined,
+        fromOffset: undefined
+    };
+    // If the block's exact txids already arrived (out-of-order before this block
+    // event), refine the harvest immediately.
+    if (_hb._blockTxids && _hb._blockTxids.height === spikeSeg.height) {
+        applyExactHarvest(_hb._reveal, _hb._blockTxids.set);
+    }
 }
 
 // Own node SSE feed (primary)
@@ -454,6 +598,25 @@ export function connectOwnFeed() {
                 }
 
                 processLiveBlock(block);
+            } catch (err) {}
+        });
+        // The block's exact txids (P5): refine the reveal's harvest to shatter
+        // EXACTLY the mined bricks instead of the top-fee approximation.
+        es.addEventListener('block_txids', function(e) {
+            if (!_hb) return;
+            try {
+                var data = JSON.parse(e.data); // { type, height, txids: [...] }
+                if (!data || !data.height || !Array.isArray(data.txids)) return;
+                var set = new Set(data.txids);
+                // Stash for setupBlockReveal (covers txids arriving before the block
+                // event, e.g. out-of-order on the broadcast channel).
+                _hb._blockTxids = { height: data.height, set: set };
+                // If a reveal for this block is already armed (and hasn't shattered),
+                // refine it now.
+                if (_hb._reveal && _hb._reveal.height === data.height) {
+                    applyExactHarvest(_hb._reveal, set);
+                }
+                console.log('[heartbeat] SSE block_txids:', data.txids.length, 'for block', data.height);
             } catch (err) {}
         });
         // TODO: block_mining overlay disabled — triggers at wrong times, needs review.

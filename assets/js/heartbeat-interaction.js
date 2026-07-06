@@ -10,14 +10,18 @@ export function startMomentum(velocity) {
     _hb._momentumId = null;
 
     function tick() {
-        if (!_hb || Math.abs(_hb._momentumVel) < 0.5) {
-            _hb._momentumId = null;
+        // Re-read state each tick (not the captured _hb): after destroyHeartbeat's
+        // setState(null) the captured ref stays truthy, so a stale tick would
+        // reschedule forever. getState() goes null on teardown → the loop stops.
+        var s = getState();
+        if (!s || Math.abs(s._momentumVel) < 0.5) {
+            if (s) s._momentumId = null;
             checkAutoFollow();
             return;
         }
-        _hb.viewOffset -= _hb._momentumVel / _hb.zoom;
-        _hb._momentumVel *= 0.92; // friction
-        _hb._momentumId = requestAnimationFrame(tick);
+        s.viewOffset -= s._momentumVel / s.zoom;
+        s._momentumVel *= 0.92; // friction
+        s._momentumId = requestAnimationFrame(tick);
     }
     tick();
 }
@@ -84,6 +88,9 @@ export function setupInputHandlers(canvas) {
     // Mouse wheel: zoom (centered on cursor). Shift+wheel: pan.
     listen(canvas, 'wheel', function(e) {
         if (!_hb) return;
+        // End an in-progress block reveal — a wheel-zoom doesn't flip
+        // isDragging/paused/pinching, so runBlockReveal wouldn't catch it otherwise.
+        if (_hb._reveal && window._hbEndReveal) window._hbEndReveal();
         e.preventDefault();
 
         if (e.shiftKey) {
@@ -98,8 +105,13 @@ export function setupInputHandlers(canvas) {
             // Virtual x under the cursor before zoom
             var vxUnderCursor = canvasToVirtual(mx);
 
-            // Apply zoom
-            var zoomDelta = e.deltaY > 0 ? 0.85 : 1.18; // scroll down = zoom out
+            // Apply zoom. Scale the step by the wheel delta (exp) rather than a
+            // fixed factor per event, so it's consistent + fine across devices (a
+            // mouse notch ≈ deltaY 100 → ~12%; a trackpad's many small deltas each
+            // nudge a little instead of compounding to a big jump). Clamp so one
+            // large delta can't leap multiple increments.
+            var zoomDelta = Math.exp(-e.deltaY * 0.0012);
+            zoomDelta = Math.max(0.5, Math.min(2, zoomDelta));
             _hb.zoom = Math.max(_hb.minZoom, Math.min(_hb.maxZoom, _hb.zoom * zoomDelta));
 
             // Adjust viewOffset so the virtual point under cursor stays put
@@ -113,6 +125,7 @@ export function setupInputHandlers(canvas) {
     // Mouse drag: click and drag to pan
     listen(canvas, 'mousedown', function(e) {
         if (!_hb) return;
+        if (_hb._reveal && window._hbEndReveal) window._hbEndReveal(); // user takes over
 
         var rect = canvas.getBoundingClientRect();
         var mx = e.clientX - rect.left, my = e.clientY - rect.top;
@@ -231,6 +244,7 @@ export function setupInputHandlers(canvas) {
     // Touch support: 1 finger = pan with momentum, 2 fingers = pinch-to-zoom
     listen(canvas, 'touchstart', function(e) {
         if (!_hb) return;
+        if (_hb._reveal && window._hbEndReveal) window._hbEndReveal(); // user takes over
         stopMomentum();
 
         if (e.touches.length === 2) {
@@ -357,6 +371,10 @@ export function setupInputHandlers(canvas) {
 export function handleControlClick(id) {
     var _hb = getState();
     if (!_hb) return;
+    // Any explicit control press ends an in-progress block reveal (finalizing the
+    // leftover placement) or first-load intro so neither fights the user's view.
+    if (_hb._reveal && window._hbEndReveal) window._hbEndReveal();
+    _hb._intro = null;
     switch (id) {
         case 'pause':
             _hb.paused = !_hb.paused;
@@ -384,14 +402,14 @@ export function handleControlClick(id) {
         case 'zoomIn':
             var cx = _hb.width / 2;
             var vx = canvasToVirtual(cx);
-            _hb.zoom = Math.min(_hb.maxZoom, _hb.zoom * 1.4);
+            _hb.zoom = Math.min(_hb.maxZoom, _hb.zoom * 1.2); // 20%/click (was 40% — too coarse)
             _hb.viewOffset = vx - cx / _hb.zoom;
             _hb.autoFollow = false;
             break;
         case 'zoomOut':
             var cx2 = _hb.width / 2;
             var vx2 = canvasToVirtual(cx2);
-            _hb.zoom = Math.max(_hb.minZoom, _hb.zoom / 1.4);
+            _hb.zoom = Math.max(_hb.minZoom, _hb.zoom / 1.2);
             _hb.viewOffset = vx2 - cx2 / _hb.zoom;
             break;
         case 'center':

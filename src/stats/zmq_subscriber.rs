@@ -115,6 +115,13 @@ pub enum HeartbeatEvent {
         /// path, and the frontend uses `tx_count` first anyway.
         confirmed_count: u64,
     },
+    /// The block's transaction ids, broadcast shortly after the `Block` event
+    /// (from spawn_block_confirm, which fetches them anyway to mark mempool_txs
+    /// confirmed). The frontend uses these to shatter EXACTLY the mempool bricks
+    /// that got mined during the block reveal (instead of a top-fee approximation).
+    /// Sent as its own event so it doesn't delay the fast spike broadcast.
+    #[serde(rename = "block_txids")]
+    BlockTxids { height: u64, txids: Vec<String> },
     /// A new block arrived — fired on the `hashblock` notification, before the
     /// (fast) metadata fetch. Frontend shows a mining overlay until the `Block`
     /// event lands.
@@ -703,6 +710,16 @@ fn spawn_block_confirm(
             Some(i) => i,
             None => return, // logged inside get_block_info; poller will backfill
         };
+
+        // Broadcast the block's txids ASAP (before the estimated re-broadcast + DB
+        // work) so the frontend's block reveal can shatter EXACTLY the mined bricks.
+        // The reveal's harvest beat is ~2.5s after the block event and getblock is
+        // usually <2s after validation, so these typically land in time; if not, the
+        // frontend keeps its top-fee approximation.
+        let _ = sender.send(HeartbeatEvent::BlockTxids {
+            height,
+            txids: info.txids.clone(),
+        });
 
         // getblock(hash,1) gives authoritative size/weight. If the fast broadcast
         // was estimated (getblockstats was down), re-broadcast now with real

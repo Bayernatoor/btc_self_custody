@@ -63,6 +63,16 @@ window.initHeartbeat = function(canvasId) {
         autoFollow: true,
         paused: false,
         renderMode: 'bricks',
+        // Level-of-detail: when zoomed way out (<0.3x) with a very full mempool
+        // (>3000 bricks), draw per-column density bars instead of every brick, to
+        // avoid redrawing ~45k+ rects/frame. Toggle at runtime with
+        // window._hbToggleLod() (persisted in localStorage) — off = individual
+        // bricks always (nicer, but can jank at a very full mempool zoomed out).
+        _lodEnabled: (function() { try { return localStorage.getItem('hb_lod') !== 'off'; } catch (e) { return true; } })(),
+        // Cinematic block reveal (form→harvest→unfurl→hold→return). Off = instant
+        // flow (spike appears, harvest, mempool re-lays, no camera hijack; follow
+        // state respected). Toggle via window._hbToggleReveal(); persisted.
+        _revealEnabled: (function() { try { return localStorage.getItem('hb_reveal') !== 'off'; } catch (e) { return true; } })(),
         zoom: 1.9,
         // minZoom must go low enough to fit the whole mempool ribbon + spikes on
         // one screen even at large mempools (volume-sized flatline grows with tx
@@ -237,6 +247,12 @@ window.pushHeartbeatBlocks = function(json, replay) {
     // /history/tab-return. Consume the one-shot flag.
     var harvestLive = !!_hb._harvestLive;
     _hb._harvestLive = false;
+    // When set (by processLiveBlock for a reveal-eligible live block), defer the
+    // leftover re-lay to the block-reveal sequencer and keep the leftovers in the
+    // closing segment so they stay visible through the form beat (they fade during
+    // the harvest beat, then re-lay during the relay beat).
+    var revealPending = !!_hb._revealPending;
+    _hb._revealPending = false;
     try {
         var blocks = JSON.parse(json);
         if (!Array.isArray(blocks)) return;
@@ -328,39 +344,85 @@ window.pushHeartbeatBlocks = function(json, replay) {
                 if (lastSeg.blips) {
                     var absorbX = _hb.virtualX;
                     var absorbNow = Date.now() / 1000;
-                    var activeList = [];
-                    for (var ci = 0; ci < lastSeg.blips.length; ci++) {
-                        if (lastSeg.blips[ci].fadeStart === 0) activeList.push(lastSeg.blips[ci]);
-                    }
-                    var activeBlips = activeList.length;
                     var zoom = _hb.zoom;
+
+                    // Count active (non-fading) bricks. maxPartsPerBlip scales the
+                    // shatter down when there's a lot to keep the frame cheap.
+                    var activeCount = 0;
+                    for (var ci = 0; ci < lastSeg.blips.length; ci++) {
+                        if (lastSeg.blips[ci].fadeStart === 0) activeCount++;
+                    }
                     var maxPartsPerBlip;
-                    if (zoom < 0.5 || activeBlips > 1000) maxPartsPerBlip = 1;
-                    else if (zoom < 1.0 || activeBlips > 500) maxPartsPerBlip = 2;
+                    if (zoom < 0.5 || activeCount > 1000) maxPartsPerBlip = 1;
+                    else if (zoom < 1.0 || activeCount > 500) maxPartsPerBlip = 2;
                     else maxPartsPerBlip = 3 + Math.floor(Math.random() * 3);
 
-                    // Which active bricks did the block confirm? Top fee-rate, up to
-                    // the block's tx_count. If it took >= what we show, everything is
-                    // confirmed (confirmSet stays null → shatter all, prior behavior).
-                    var confirmSet = null;
-                    if (harvestLive && !isReplay && activeBlips > 0) {
-                        var harvestCount = Math.min(b.tx_count || activeBlips, activeBlips);
-                        if (harvestCount < activeBlips) {
-                            var byFee = activeList.slice().sort(function(a, c) {
-                                return (c.feeRate || 0) - (a.feeRate || 0);
-                            });
-                            confirmSet = new Set(byFee.slice(0, harvestCount));
+                    // Which active bricks did the block confirm? The top `tx_count`
+                    // by fee rate. Rather than sort the (up to ~45k) brick OBJECTS
+                    // and build a Set — a multi-ms stall right as the reveal camera
+                    // starts moving — sort just their fee rates (numbers, cheap) to
+                    // find the cutoff, then partition by comparing each brick's rate
+                    // to it. feeThreshold = -Infinity confirms everything (block took
+                    // >= what we show), matching prior behavior.
+                    var feeThreshold = -Infinity;
+                    var tieBudget = Infinity; // confirmations allowed AT the threshold
+                    if (harvestLive && !isReplay && activeCount > 0) {
+                        var harvestCount = Math.min(b.tx_count || activeCount, activeCount);
+                        if (harvestCount < activeCount) {
+                            var rates = new Float64Array(activeCount);
+                            var ri = 0;
+                            for (var fi = 0; fi < lastSeg.blips.length; fi++) {
+                                if (lastSeg.blips[fi].fadeStart === 0) {
+                                    rates[ri++] = lastSeg.blips[fi].feeRate || 0;
+                                }
+                            }
+                            rates.sort(); // TypedArray sorts numerically ascending
+                            // The harvestCount-th highest rate is the cutoff. Bricks
+                            // strictly above it all confirm; bricks exactly at it fill
+                            // the remaining budget (feeRate is stored rounded to 1dp,
+                            // so equality is exact — no float epsilon). Capping at
+                            // harvestCount stops a mass of equal low-fee bricks (a
+                            // quiet 1 sat/vB mempool) from all confirming at once.
+                            feeThreshold = rates[activeCount - harvestCount];
+                            var above = 0;
+                            for (var k = activeCount - 1; k >= 0 && rates[k] > feeThreshold; k--) above++;
+                            tieBudget = harvestCount - above; // >= 0 by construction
                         }
                     }
 
+                    // Single partition pass: confirmed bricks shatter into the spike;
+                    // the rest carry forward. Rebuild lastSeg.blips in place = kept
+                    // (already-fading + confirmed), dropping the carried — no separate
+                    // filter pass or Sets.
+                    var kept = [];
+                    var revealConfirmed = revealPending ? [] : null;
                     for (var bi = 0; bi < lastSeg.blips.length; bi++) {
                         var blp = lastSeg.blips[bi];
-                        if (blp.fadeStart !== 0) continue; // already fading
-                        if (confirmSet && !confirmSet.has(blp)) {
+                        if (blp.fadeStart !== 0) { kept.push(blp); continue; } // already fading
+                        var confirm;
+                        if (blp.feeRate > feeThreshold) {
+                            confirm = true;
+                        } else if (blp.feeRate === feeThreshold && tieBudget > 0) {
+                            confirm = true;
+                            tieBudget--;
+                        } else {
+                            confirm = false;
+                        }
+                        if (!confirm) {
                             carriedLeftovers.push(blp); // leftover: carry forward
+                            if (revealPending) kept.push(blp); // keep visible during the reveal (fades, then re-laid)
+                            continue;
+                        }
+                        if (revealPending) {
+                            // Defer the shatter to the reveal's harvest beat: keep the
+                            // brick visible (normal) in the old segment until then; the
+                            // sequencer sets fadeStart + particles when that beat opens.
+                            revealConfirmed.push(blp);
+                            kept.push(blp);
                             continue;
                         }
                         blp.fadeStart = absorbNow;
+                        blp._confirmedHeight = b.height; // pinned/hovered tx shows "confirmed in block #N"
                         blp.absorbTargetX = absorbX;
                         blp.absorbOriginX = blp.x;
                         blp.particles = [];
@@ -374,14 +436,9 @@ window.pushHeartbeatBlocks = function(json, replay) {
                                 size: 1.5 + Math.random() * 2.5
                             });
                         }
+                        kept.push(blp);
                     }
-
-                    // Detach leftovers from the closing (historical) segment; they're
-                    // re-placed on the new live flatline below.
-                    if (carriedLeftovers.length > 0) {
-                        var carriedSet = new Set(carriedLeftovers);
-                        lastSeg.blips = lastSeg.blips.filter(function(b2) { return !carriedSet.has(b2); });
-                    }
+                    lastSeg.blips = kept;
                 }
             }
 
@@ -399,11 +456,24 @@ window.pushHeartbeatBlocks = function(json, replay) {
             // Create a new live flatline after this block
             _hb.timeline.push(createFlatlineSegment(_hb.virtualX, null));
 
-            // Carry unconfirmed leftovers onto the new (current-mempool) flatline,
-            // widening it to fit them. The block harvested the high-fee txs; these
-            // are still waiting. New txs continue dropping at the head past them.
+            // Carry unconfirmed leftovers onto the new (current-mempool) flatline.
+            // For a reveal-eligible live block, DEFER: stash them for the reveal
+            // sequencer, which re-lays them progressively during the relay beat (they stay
+            // visible in the old segment meanwhile). Otherwise re-lay now (instant).
             if (harvestLive && !isReplay && carriedLeftovers.length > 0) {
-                placeCarriedLeftovers(carriedLeftovers);
+                if (revealPending) {
+                    _hb._pendingReveal = {
+                        leftovers: carriedLeftovers,
+                        confirmed: revealConfirmed,   // shatter deferred to the harvest beat
+                        absorbX: absorbX,             // spike location the particles fly to
+                        maxParts: maxPartsPerBlip,
+                        oldSeg: lastSeg,
+                        newSeg: _hb.timeline[_hb.timeline.length - 1],
+                        spikeSeg: blockSeg
+                    };
+                } else {
+                    placeCarriedLeftovers(carriedLeftovers);
+                }
             }
 
             // Maintain recentBlocks list (up to 2016 for period history)
@@ -417,8 +487,11 @@ window.pushHeartbeatBlocks = function(json, replay) {
                 inter_block_seconds: b.inter_block_seconds
             });
 
-            // Show block arrival announcement (live blocks with real data only)
-            if (!isReplay && !_hb._suppressAnnounce && b.height && b.total_fees > 0) {
+            // Show block arrival announcement. When a cinematic reveal is running
+            // it OWNS the banners (block-found \u2192 remaining-count, timed to the
+            // beats), so skip here. The instant path (>9x / off / tab-return) shows
+            // it as before, trimmed ~1s.
+            if (!isReplay && !revealPending && !_hb._suppressAnnounce && b.height && b.total_fees > 0) {
                 var feeBtc2 = b.total_fees / 100000000;
                 var heightStr2 = b.height.toLocaleString();
                 var nowAnn2 = Date.now() / 1000;
@@ -427,7 +500,7 @@ window.pushHeartbeatBlocks = function(json, replay) {
                     subtitle: feeBtc2.toFixed(4) + ' BTC fees \u00b7 ' + (b.tx_count || 0).toLocaleString() + ' txs',
                     color: blockSeg.color || _hb.currentColor || COLORS.healthy,
                     start: nowAnn2,
-                    end: nowAnn2 + 12.0
+                    end: nowAnn2 + 11.0
                 };
             }
         }
@@ -469,7 +542,11 @@ window.pushHeartbeatBlocks = function(json, replay) {
 // Prune timeline segments that are far behind the viewport to limit memory
 function pruneTimeline() {
     var _hb = getState();
-    if (!_hb || _hb.timeline.length < 5000) return;
+    // Don't prune while a block reveal is running: it holds refs to the two newest
+    // segments (oldSeg/newSeg) and slicing the array out from under it would drop
+    // the fading old segment mid-beat. (They're at the head, so this only matters
+    // defensively; the reveal is short.)
+    if (!_hb || _hb.timeline.length < 5000 || _hb._reveal) return;
     var minX = _hb.viewOffset - _hb.width * 10 / Math.max(_hb.zoom, 0.1);
     var cutIdx = 0;
     for (var i = 0; i < _hb.timeline.length; i++) {
@@ -491,48 +568,110 @@ function pruneTimeline() {
 // object (color/size/txid/fee preserved) — same mempool txs, moved to the new
 // mempool segment with a staggered drop-in. Density mirrors live/history: ~10
 // bricks per 5px column, skip a column once it hits the 35%-height cap.
-function placeCarriedLeftovers(leftovers) {
+function placeCarriedLeftovers(leftovers, staggerSecs) {
     var _hb = getState();
     if (!_hb) return;
     var seg = _hb.timeline[_hb.timeline.length - 1];
     if (!seg || seg.type !== 'flatline' || seg.x_end !== null) return;
 
     var n = leftovers.length;
+    // Drop-in sweep duration: the reveal sequencer passes the (rate-based) relay
+    // duration so the bricks appear in step with the camera; the non-reveal path
+    // uses 2.5s; 0 finalizes instantly (abort / new block).
+    var stagger = staggerSecs !== undefined ? staggerSecs : 2.5;
     var maxStack = (_hb.height || 400) * 0.35;
     var width = Math.max(30, Math.ceil(n / 10) * 5); // ~10 bricks/column
+    // Set the geometry UP FRONT (before placing), so the flatline width, virtualX,
+    // and the reveal-camera gate that reads them are all correct immediately — the
+    // bricks then stream in over the frames below.
     _hb.virtualX = seg.x_start + width;
-
     if (!seg._colHeights) seg._colHeights = {};
     var usable = Math.max(10, width - 20);
     var now = Date.now() / 1000;
+
+    // Place in CHUNKS across RAF frames instead of one synchronous pass. A
+    // full-mempool carry (~40k bricks) in a single loop stalls the frame the block
+    // lands on — which is exactly when the reveal camera starts moving, so the
+    // stall reads as jank at the start of the animation. Chunking also spreads the
+    // drop-in over the reveal so the camera visibly "follows" the placement. Each
+    // brick's drop timing stays keyed to its x (now + xFrac), so the left→right
+    // sweep holds regardless of which chunk placed it. Cancel any in-flight job.
+    if (_hb._carryRaf) { cancelAnimationFrame(_hb._carryRaf); _hb._carryRaf = null; }
+    var CARRY_CHUNK = 2000;
+    var i = 0;
     var placed = 0;
-    for (var i = 0; i < n; i++) {
-        var src = leftovers[i];
-        var txVX = seg.x_start + Math.random() * usable;
-        var gridX = Math.round(txVX / 5) * 5;
-        var stackY = seg._colHeights[gridX] || 0;
-        var isNotable = !!src.notableType;
-        if (stackY > maxStack && !isNotable) continue; // column full
-        var brickH = src.brickH || 6;
-        seg._colHeights[gridX] = stackY + brickH;
-        // Reposition + reset the existing blip object for a staggered drop-in.
-        src.x = txVX;
-        src.gridX = gridX;
-        src.stackY = stackY;
-        src.height = brickH + stackY;
-        src.fadeStart = 0;
-        src.particles = null;
-        src.absorbTargetX = undefined;
-        src.absorbOriginX = undefined;
-        src.isDrop = true;
-        var xFrac = width > 0 ? (txVX - seg.x_start) / width : 0;
-        src.timestamp = now + xFrac * 1.0; // sweep left→right over ~1s
-        seg.blips.push(src);
-        placed++;
-    }
-    console.log('[heartbeat] harvest: carried ' + placed + '/' + n +
-        ' unconfirmed leftovers onto new flatline (width ' + Math.round(width) + 'px)');
+    var placeChunk = function() {
+        var s = getState();
+        // Abort if torn down, or the flatline closed/changed (a new block arrived
+        // mid-carry) — the remaining leftovers would land on a stale segment.
+        if (!s || s.timeline[s.timeline.length - 1] !== seg || seg.x_end !== null) {
+            _hb._carryRaf = null;
+            return;
+        }
+        var end = Math.min(i + CARRY_CHUNK, n);
+        for (; i < end; i++) {
+            var src = leftovers[i];
+            var txVX = seg.x_start + Math.random() * usable;
+            var gridX = Math.round(txVX / 5) * 5;
+            var stackY = seg._colHeights[gridX] || 0;
+            var isNotable = !!src.notableType;
+            if (stackY > maxStack && !isNotable) continue; // column full
+            var brickH = src.brickH || 6;
+            seg._colHeights[gridX] = stackY + brickH;
+            // Reposition + reset the existing blip object for a staggered drop-in.
+            src.x = txVX;
+            src.gridX = gridX;
+            src.stackY = stackY;
+            src.height = brickH + stackY;
+            src.fadeStart = 0;
+            src.particles = null;
+            src.absorbTargetX = undefined;
+            src.absorbOriginX = undefined;
+            src.isDrop = true;
+            var xFrac = width > 0 ? (txVX - seg.x_start) / width : 0;
+            src.timestamp = now + xFrac * stagger; // sweep left→right over `stagger`
+            seg.blips.push(src);
+            placed++;
+        }
+        if (i < n) {
+            _hb._carryRaf = requestAnimationFrame(placeChunk);
+        } else {
+            _hb._carryRaf = null;
+            console.log('[heartbeat] harvest: carried ' + placed + '/' + n +
+                ' unconfirmed leftovers onto new flatline (width ' + Math.round(width) + 'px, chunked)');
+        }
+    };
+    placeChunk();
 }
+// Exposed for the block-reveal sequencer (heartbeat-render.js), which re-lays the
+// carried leftovers during the relay beat with a stagger matched to the camera follow.
+window._hbPlaceCarried = placeCarriedLeftovers;
+
+// Toggle LOD (density-column) rendering vs always-individual-bricks, for A/B
+// testing look vs perf. Persists to localStorage so it survives reloads. Call
+// from the console: window._hbToggleLod().
+window._hbToggleLod = function() {
+    var s = getState();
+    if (!s) return;
+    s._lodEnabled = !s._lodEnabled;
+    try { localStorage.setItem('hb_lod', s._lodEnabled ? 'on' : 'off'); } catch (e) {}
+    console.log('[heartbeat] LOD ' + (s._lodEnabled
+        ? 'ENABLED — density columns when zoomed out (<0.3x) + full (>3000 bricks)'
+        : 'DISABLED — individual bricks always'));
+    return s._lodEnabled;
+};
+
+// Toggle the cinematic block reveal on/off. Off = the instant flow (spike appears,
+// harvest, mempool re-lays, no camera hijack; follow state respected). Persists to
+// localStorage. Call from the console: window._hbToggleReveal().
+window._hbToggleReveal = function() {
+    var s = getState();
+    if (!s) return;
+    s._revealEnabled = !s._revealEnabled;
+    try { localStorage.setItem('hb_reveal', s._revealEnabled ? 'on' : 'off'); } catch (e) {}
+    console.log('[heartbeat] cinematic reveal ' + (s._revealEnabled ? 'ENABLED' : 'DISABLED (instant flow)'));
+    return s._revealEnabled;
+};
 
 window.updateHeartbeatLive = function(json) {
     var _hb = getState();
@@ -567,6 +706,7 @@ window.destroyHeartbeat = function() {
     // after teardown (its closure's captured _hb stays truthy post-destroy).
     if (_hb._sseRetryTimer) { clearTimeout(_hb._sseRetryTimer); _hb._sseRetryTimer = null; }
     if (_hb._historyRaf) { cancelAnimationFrame(_hb._historyRaf); _hb._historyRaf = null; }
+    if (_hb._carryRaf) { cancelAnimationFrame(_hb._carryRaf); _hb._carryRaf = null; }
     if (_hb._sse) {
         try { _hb._sse.close(); } catch(e) {}
     }
@@ -598,7 +738,14 @@ window.addEventListener('beforeunload', _hbBeforeUnload);
 // If hidden for > 5 minutes, do a full reset instead of trying to reconcile
 // stale timeline state (blocks bunched up, flatline position wrong).
 // Replay a single block (from _blockQueue or a catch-up fetch) as a live block.
+// Harvest ON so the mempool is carried forward (top-fee shatters into the spike,
+// the rest re-lays on the new flatline) — same as a live block, but INSTANT (this
+// isn't processLiveBlock, so no cinematic reveal is armed). Without harvest the fee
+// threshold is -Infinity and the WHOLE mempool shatters into the spike, leaving the
+// new flatline empty — a block you were away for would wipe the mempool.
 function replayQueuedBlock(qb) {
+    var _hb = getState();
+    if (_hb) _hb._harvestLive = true;
     window.pushHeartbeatBlocks(JSON.stringify([{
         height: qb.height,
         timestamp: qb.timestamp || Math.floor(Date.now() / 1000),
@@ -710,6 +857,13 @@ function _hbVisibilityChange() {
         return;
     }
     var now = Date.now() / 1000;
+
+    // Finalize any in-progress block reveal FIRST. Its beats are keyed to a
+    // wall-clock start (now - r.start); resuming after a hide would make elapsed
+    // huge, teleporting through the beats and snapping the camera back to a spike
+    // that's now far behind the advanced head. Ending it settles the state cleanly
+    // before the catch-up below.
+    if (_hb._reveal && window._hbEndReveal) window._hbEndReveal();
 
     // Blocks that arrived via SSE while hidden (the freshest source) plus the
     // live tip height from LiveStats. Captured before any reset so we can catch

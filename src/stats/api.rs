@@ -862,11 +862,6 @@ pub async fn get_heartbeat_sse(
     // Load unconfirmed txs for the current flatline + recent notable txs (including confirmed)
     // for the whale watch feed. mempool_txs only holds unconfirmed; notable_txs holds both.
     let (history, notable_history, last_block_ts) = {
-        let two_hours_ago = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs()
-            .saturating_sub(7200);
         let twenty_four_hours_ago = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
@@ -881,9 +876,15 @@ pub async fn get_heartbeat_sse(
                         db::query_block_timestamp(&conn, h).ok().flatten()
                     })
                     .unwrap_or(0);
+                // No first_seen floor (0): the mempool reconcile keeps
+                // mempool_txs' unconfirmed rows == the node's live mempool, so
+                // confirmed_height IS NULL alone is correct. A time floor here
+                // wrongly hid long-resident low-fee txs that are still in the
+                // mempool (most of a quiet mempool). ORDER BY first_seen DESC
+                // LIMIT caps the payload to the newest HEARTBEAT_HISTORY_LIMIT.
                 let txs = db::query_recent_mempool_txs(
                     &conn,
-                    two_hours_ago,
+                    0,
                     HEARTBEAT_HISTORY_LIMIT,
                 )
                 .unwrap_or_default();
@@ -940,6 +941,7 @@ pub async fn get_heartbeat_sse(
                         let event_type = match &event {
                             super::zmq_subscriber::HeartbeatEvent::Tx { .. } => "tx",
                             super::zmq_subscriber::HeartbeatEvent::Block { .. } => "block",
+                            super::zmq_subscriber::HeartbeatEvent::BlockTxids { .. } => "block_txids",
                             super::zmq_subscriber::HeartbeatEvent::BlockMining => "block_mining",
                         };
                         let data =
