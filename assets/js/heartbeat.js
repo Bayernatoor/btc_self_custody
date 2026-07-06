@@ -64,7 +64,7 @@ window.initHeartbeat = function(canvasId) {
         paused: false,
         renderMode: 'bricks',
         // Level-of-detail: when zoomed way out (<0.3x) with a very full mempool
-        // (>3000 bricks), draw per-column density bars instead of every brick, to
+        // (>60k bricks), draw per-column density bars instead of every brick, to
         // avoid redrawing ~45k+ rects/frame. Toggle at runtime with
         // window._hbToggleLod() (persisted in localStorage) — off = individual
         // bricks always (nicer, but can jank at a very full mempool zoomed out).
@@ -656,7 +656,7 @@ window._hbToggleLod = function() {
     s._lodEnabled = !s._lodEnabled;
     try { localStorage.setItem('hb_lod', s._lodEnabled ? 'on' : 'off'); } catch (e) {}
     console.log('[heartbeat] LOD ' + (s._lodEnabled
-        ? 'ENABLED — density columns when zoomed out (<0.3x) + full (>3000 bricks)'
+        ? 'ENABLED — density columns when zoomed out (<0.3x) + full (>60k bricks)'
         : 'DISABLED — individual bricks always'));
     return s._lodEnabled;
 };

@@ -893,6 +893,11 @@ export function drawBlockSegment(ctx, seg, viewLeft, baseline, fallbackColor) {
     ctx.shadowBlur = 0;
 }
 
+// LOD engages only when a segment has more than this many bricks (≈ the mempool
+// size) AND is zoomed out. DEFAULT 60000: individual bricks up to ~60k (preferred,
+// tested smooth to ~55k), LOD as the safety valve above that. Tune in prod.
+var LOD_MIN_BLIPS = 60000;
+
 // ── P2: Level-of-detail blip rendering ────────────────────────
 // When zoomed out so far that grid columns are sub-pixel, drawing every brick
 // (fillRect + gap math + gradient + outline, per brick, per frame) is the
@@ -1039,13 +1044,12 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
     // Draw blips
     if (seg.blips && seg.blips.length > 0) {
         var zoom = _hb.zoom;
-        if (_hb._lodEnabled !== false && 5 * zoom < 1.5 && seg.blips.length > 3000) {
-            // Deep zoom-out (below ~0.3x, bricks well sub-pixel) AND the segment
-            // is dense enough to warrant it: aggregate into per-column density
-            // bars instead of drawing each one (P2). Above this zoom we keep
-            // drawing individual bricks (nicer, and we can afford it at current
-            // counts) — nudge this trigger up later if higher volumes need it.
-            // Below 3000 bricks the full draw is cheap, so always keep bricks.
+        // DEFAULT (2026-07-06): individual bricks are preferred; LOD only engages as
+        // a performance safety valve above LOD_MIN_BLIPS (~the mempool size) AND when
+        // zoomed out (bricks sub-pixel). Below that we always draw individual bricks
+        // — tested smooth to ~55k, and full-fit-at-congestion is rare. The console
+        // toggle (_hbToggleLod) forces bricks always (or LOD).
+        if (_hb._lodEnabled !== false && 5 * zoom < 1.5 && seg.blips.length > LOD_MIN_BLIPS) {
             drawFlatlineBlipsLOD(ctx, seg, viewLeft, viewRight, baseline, zoom, nowSec);
         } else {
         // P3: for closed (immutable) segments, lazily sort blips by x once and
