@@ -133,6 +133,14 @@ pub struct StatsState {
     pub heartbeat_tx: broadcast::Sender<super::zmq_subscriber::HeartbeatEvent>,
     /// Active SSE connection count (guard against connection exhaustion).
     pub sse_connections: AtomicUsize,
+    /// Cached heartbeat history payload (the big initial mempool-fill JSON, up to
+    /// HEARTBEAT_HISTORY_LIMIT txs). Shared across concurrent SSE connects via the
+    /// cache's singleflight + short TTL: a burst of page loads during congestion
+    /// builds it ONCE (one DB read + serialize) and hands out `Arc<str>` clones
+    /// (shared buffer), instead of each connect re-querying and re-serializing tens
+    /// of MB. TTL-only — the mempool view is intentionally approximate, so a few
+    /// seconds of staleness on the initial fill is invisible (live txs stream after).
+    pub heartbeat_history_cache: Arc<Cache<(), Arc<str>>>,
 }
 
 impl StatsState {
@@ -864,9 +872,62 @@ pub async fn get_heartbeat_sse(
 
     let rx = state.heartbeat_tx.subscribe();
 
-    // Load unconfirmed txs for the current flatline + recent notable txs (including confirmed)
-    // for the whale watch feed. mempool_txs only holds unconfirmed; notable_txs holds both.
-    let (history, notable_history, last_block_ts) = {
+    // Big initial mempool-fill payload: built ONCE and shared across concurrent
+    // connects via the cache (singleflight + short TTL), so a burst of page loads
+    // during congestion doesn't re-query + re-serialize tens of MB per connection.
+    // The cached value is an Arc<str>, so concurrent connects share one buffer.
+    let history_data: Arc<str> = state
+        .heartbeat_history_cache
+        .get_or_compute((), || async {
+            let data: Arc<str> = match state.db.get() {
+                Ok(conn) => {
+                    let block_ts = db::max_height(&conn)
+                        .ok()
+                        .flatten()
+                        .and_then(|h| {
+                            db::query_block_timestamp(&conn, h).ok().flatten()
+                        })
+                        .unwrap_or(0);
+                    // No first_seen floor (0): the mempool reconcile keeps
+                    // mempool_txs' unconfirmed rows == the node's live mempool, so
+                    // confirmed_height IS NULL alone is correct. A time floor here
+                    // wrongly hid long-resident low-fee txs that are still in the
+                    // mempool. ORDER BY first_seen DESC LIMIT caps the payload to
+                    // the newest HEARTBEAT_HISTORY_LIMIT.
+                    let txs = db::query_recent_mempool_txs(
+                        &conn,
+                        0,
+                        HEARTBEAT_HISTORY_LIMIT,
+                    )
+                    .unwrap_or_default();
+                    let s = if txs.is_empty() {
+                        format!("{{\"txs\":[],\"last_block_ts\":{block_ts}}}")
+                    } else {
+                        let txs_json =
+                            serde_json::to_string(&txs).unwrap_or_default();
+                        format!("{{\"txs\":{txs_json},\"last_block_ts\":{block_ts}}}")
+                    };
+                    // One line per actual (re)build — gated by the cache's TTL +
+                    // singleflight, so a burst of connects should log this ONCE, not
+                    // once per connect. Also surfaces the payload size (the droplet
+                    // memory concern: ~KB scales with the mempool).
+                    tracing::info!(
+                        "heartbeat history built: {} txs, {} KB",
+                        txs.len(),
+                        s.len() / 1024
+                    );
+                    Arc::from(s)
+                }
+                Err(_) => Arc::from("{\"txs\":[],\"last_block_ts\":0}"),
+            };
+            Ok::<Arc<str>, std::convert::Infallible>(data)
+        })
+        .await
+        .unwrap_or_else(|_| Arc::from("{\"txs\":[],\"last_block_ts\":0}"));
+
+    // Recent notable txs (last 24h, up to 200) for the whale-watch feed. Small, so
+    // fetched per connect (not cached). notable_txs holds confirmed too, unlike mempool_txs.
+    let notable_history = {
         let twenty_four_hours_ago = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
@@ -874,58 +935,29 @@ pub async fn get_heartbeat_sse(
             .saturating_sub(86400);
         match state.db.get() {
             Ok(conn) => {
-                let block_ts = db::max_height(&conn)
-                    .ok()
-                    .flatten()
-                    .and_then(|h| {
-                        db::query_block_timestamp(&conn, h).ok().flatten()
-                    })
-                    .unwrap_or(0);
-                // No first_seen floor (0): the mempool reconcile keeps
-                // mempool_txs' unconfirmed rows == the node's live mempool, so
-                // confirmed_height IS NULL alone is correct. A time floor here
-                // wrongly hid long-resident low-fee txs that are still in the
-                // mempool (most of a quiet mempool). ORDER BY first_seen DESC
-                // LIMIT caps the payload to the newest HEARTBEAT_HISTORY_LIMIT.
-                let txs = db::query_recent_mempool_txs(
-                    &conn,
-                    0,
-                    HEARTBEAT_HISTORY_LIMIT,
-                )
-                .unwrap_or_default();
-                // Fetch recent notable txs (last 24h, up to 200) for the feed panel.
-                // Includes confirmed txs, unlike mempool_txs query.
                 let filter = db::NotableFilter {
                     since: Some(twenty_four_hours_ago),
                     ..Default::default()
                 };
-                let notables = db::query_notable_txs(&conn, &filter, 200, 0)
-                    .unwrap_or_default();
-                (txs, notables, block_ts)
+                db::query_notable_txs(&conn, &filter, 200, 0)
+                    .unwrap_or_default()
             }
-            Err(_) => (vec![], vec![], 0),
+            Err(_) => vec![],
         }
     };
 
     // State machine: history → notable history → live events
     enum Phase {
-        History(Vec<db::MempoolTxRow>, Vec<db::NotableTx>, u64),
+        History(Arc<str>, Vec<db::NotableTx>),
         NotableHistory(Vec<db::NotableTx>),
         Live,
     }
 
     let stream = futures::stream::unfold(
-        (Phase::History(history, notable_history, last_block_ts), rx),
+        (Phase::History(history_data, notable_history), rx),
         |(phase, mut rx)| async move {
             match phase {
-                Phase::History(txs, notables, block_ts) => {
-                    let data = if txs.is_empty() {
-                        format!("{{\"txs\":[],\"last_block_ts\":{block_ts}}}")
-                    } else {
-                        let txs_json =
-                            serde_json::to_string(&txs).unwrap_or_default();
-                        format!("{{\"txs\":{txs_json},\"last_block_ts\":{block_ts}}}")
-                    };
+                Phase::History(data, notables) => {
                     Some((
                         Ok(Event::default().event("history").data(data)),
                         (Phase::NotableHistory(notables), rx),

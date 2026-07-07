@@ -120,6 +120,13 @@ pub async fn init(
         Duration::from_secs(60),
         &[CacheTag::OnNewBlock],
     );
+    // Short TTL: shares one built payload across a burst of connects (singleflight),
+    // rebuilt at most every few seconds. TTL-only — a stale initial fill is fine.
+    let heartbeat_history_cache = cb.cache::<(), std::sync::Arc<str>>(
+        "heartbeat_history",
+        Duration::from_secs(3),
+        &[],
+    );
 
     let state = Arc::new(StatsState {
         db: pool,
@@ -137,6 +144,7 @@ pub async fn init(
         extremes_cache,
         heartbeat_tx,
         sse_connections: std::sync::atomic::AtomicUsize::new(0),
+        heartbeat_history_cache,
     });
 
     let router = build_api_router(Arc::clone(&state));
