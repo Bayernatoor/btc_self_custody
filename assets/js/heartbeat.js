@@ -849,17 +849,20 @@ window._hbDrainBlockQueue = function() {
     catchUpBlocks(queued, tipHeight);
 };
 
-function _hbVisibilityChange() {
+// Recover the timeline after a gap where the draw loop wasn't advancing virtualX
+// while SSE kept flowing. Two triggers share this: a hidden tab (visibilitychange,
+// below) and a throttled/paused rAF with the tab still "visible" — window occluded,
+// on another monitor, or the machine slept — which fires NO visibilitychange and is
+// caught by the gap detector in drawFrame. Without recovery the backlog grinds into
+// a few columns at a frozen virtualX (tall stacks + clustered block spikes).
+// `gapSecs` = how long the loop was effectively stalled.
+function recoverTimeline(gapSecs) {
     var _hb = getState();
     if (!_hb) return;
-    if (document.hidden) {
-        _hb._hiddenSince = Date.now() / 1000;
-        return;
-    }
     var now = Date.now() / 1000;
 
     // Finalize any in-progress block reveal FIRST. Its beats are keyed to a
-    // wall-clock start (now - r.start); resuming after a hide would make elapsed
+    // wall-clock start (now - r.start); resuming after a stall would make elapsed
     // huge, teleporting through the beats and snapping the camera back to a spike
     // that's now far behind the advanced head. Ending it settles the state cleanly
     // before the catch-up below.
@@ -867,15 +870,18 @@ function _hbVisibilityChange() {
 
     // Blocks that arrived via SSE while hidden (the freshest source) plus the
     // live tip height from LiveStats. Captured before any reset so we can catch
-    // the timeline up to the real tip on return (see catchUpBlocks).
+    // the timeline up to the real tip on return (see catchUpBlocks). During an
+    // occlusion stall blocks are processed live (not queued), so this is usually
+    // empty there and catchUpBlocks no-ops.
     var queuedBlocks = (_hb._blockQueue || []).slice();
     var tipHeight = _hb.blockHeight || 0;
     _hb._blockQueue = [];
 
-    // Full reset if hidden for more than 5 minutes
-    if (_hb._hiddenSince > 0 && (now - _hb._hiddenSince) > 300) {
+    // Full reset for a long gap (>5 min): the mempool is stale and blocks were
+    // likely missed. Rebuild from the canonical block list + fresh SSE history.
+    if (gapSecs > 300) {
         var canvasId = _hb.canvas ? _hb.canvas.id : null;
-        console.log('[heartbeat] tab return after', Math.round(now - _hb._hiddenSince), 's - full reset');
+        console.log('[heartbeat] timeline resume after', Math.round(gapSecs), 's - full reset');
         if (canvasId) {
             // Fetch blocks FIRST, then destroy/init/replay so SSE (which starts
             // inside initHeartbeat) can't deliver blocks before history is loaded.
@@ -915,15 +921,11 @@ function _hbVisibilityChange() {
         return;
     }
 
-    // Advance virtualX by full elapsed hidden time
-    if (_hb._hiddenSince > 0) {
-        var hiddenDuration = now - _hb._hiddenSince;
-        if (hiddenDuration > 0) {
-            _hb.virtualX += hiddenDuration * FLATLINE_PX_PER_SEC;
-            console.log('[heartbeat] tab return: advanced virtualX by', Math.round(hiddenDuration), 's (',
-                Math.round(hiddenDuration * FLATLINE_PX_PER_SEC), 'px)');
-        }
-        _hb._hiddenSince = 0;
+    // Advance virtualX by the full gap so the flatline reflects real elapsed time.
+    if (gapSecs > 0) {
+        _hb.virtualX += gapSecs * FLATLINE_PX_PER_SEC;
+        console.log('[heartbeat] timeline resume: advanced virtualX by', Math.round(gapSecs), 's (',
+            Math.round(gapSecs * FLATLINE_PX_PER_SEC), 'px)');
     }
 
     // Place buffered txs across the gap (the region between old bricks and
@@ -978,7 +980,7 @@ function _hbVisibilityChange() {
                     placed++;
                 }
                 if (placed > 0) {
-                    console.log('[heartbeat] tab return: placed', placed, 'buffered txs across gap');
+                    console.log('[heartbeat] timeline resume: placed', placed, 'buffered txs across gap');
                 }
             }
         }
@@ -992,6 +994,26 @@ function _hbVisibilityChange() {
 
     // Sync frame timing so the draw loop doesn't try to catch up
     _hb.lastFrameTime = now;
+}
+// Exposed so drawFrame (render.js) can invoke the same recovery when it detects a
+// throttled/paused rAF gap (occluded window / other monitor / sleep) — no
+// visibilitychange fires for those.
+window._hbRecoverTimeline = function(gapSecs) { recoverTimeline(gapSecs); };
+
+// Hidden-tab path: mark the hide time going out; on return, recover with the
+// elapsed hidden duration. The occlusion path is handled by drawFrame's gap
+// detector, which excludes the hidden case (guards on !_hb._hiddenSince) so the
+// two never double-fire.
+function _hbVisibilityChange() {
+    var _hb = getState();
+    if (!_hb) return;
+    if (document.hidden) {
+        _hb._hiddenSince = Date.now() / 1000;
+        return;
+    }
+    var gapSecs = _hb._hiddenSince > 0 ? (Date.now() / 1000 - _hb._hiddenSince) : 0;
+    _hb._hiddenSince = 0;
+    recoverTimeline(gapSecs);
 }
 document.addEventListener('visibilitychange', _hbVisibilityChange);
 

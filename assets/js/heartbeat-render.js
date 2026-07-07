@@ -531,17 +531,39 @@ function runIntro(_hb, dt, now, w) {
 }
 
 // ── Main draw loop ─────────────────────────────────────────
+// Seconds without a frame that count as a "stall": the rAF loop was throttled or
+// paused (window occluded, on another monitor, or the machine slept) while SSE kept
+// flowing. Set well above any legitimate frame hitch — the dt clamp below already
+// absorbs sub-second hitches, and nothing on an active tab stalls the loop for
+// seconds — so this only fires on a genuine background/sleep gap.
+var GAP_RECOVERY_SECS = 5;
+
 export function drawFrame(frameTime) {
     var _hb = getState();
     if (!_hb) return;
+
+    var now = Date.now() / 1000;
+
+    // Gap-aware recovery: if the loop was stalled for GAP_RECOVERY_SECS+ while the
+    // tab stayed "visible" (no visibilitychange fired), virtualX froze while SSE kept
+    // delivering — recover the same way a tab return does instead of grinding the
+    // backlog into one column (tall stacks + clustered spikes). The hidden-tab case
+    // is owned by visibilitychange (it sets _hiddenSince); exclude it here via
+    // !_hb._hiddenSince so the two paths never double-fire.
+    var realDt = _hb.lastFrameTime > 0 ? (now - _hb.lastFrameTime) : 0;
+    if (realDt > GAP_RECOVERY_SECS && !document.hidden && !_hb._hiddenSince && window._hbRecoverTimeline) {
+        window._hbRecoverTimeline(realDt);
+        _hb = getState();
+        if (!_hb) return;         // a long-gap reset can tear down + rebuild state
+        now = Date.now() / 1000;  // recovery reset lastFrameTime to ~now
+    }
 
     var ctx = _hb.ctx;
     var w = _hb.width;
     var h = _hb.height;
     var baseline = (h < 350 ? h * 0.78 : h * 0.55) + (_hb.viewOffsetY || 0);
 
-    // Compute time delta
-    var now = Date.now() / 1000;
+    // Compute time delta (small after a recovery, since it reset lastFrameTime)
     var dt = _hb.lastFrameTime > 0 ? (now - _hb.lastFrameTime) : 0;
     if (dt > 0.5) dt = 0.5; // clamp to avoid huge jumps on tab switch
     _hb.lastFrameTime = now;
