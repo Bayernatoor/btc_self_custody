@@ -164,6 +164,10 @@ window.initHeartbeat = function(canvasId) {
                 s._modalOrigNext = modal.nextSibling;
                 card.appendChild(modal);
             }
+            // Center the timeline in the tall fullscreen canvas. Deferred to the
+            // ResizeObserver (below) since s.height isn't updated until the canvas
+            // relayouts to fullscreen.
+            s._recenterPending = true;
         } else {
             card.style.width = '';
             card.style.height = '';
@@ -185,6 +189,9 @@ window.initHeartbeat = function(canvasId) {
                 s._modalOrigParent = null;
                 s._modalOrigNext = null;
             }
+            // Back to the card: reset the vertical offset to the default framing.
+            s.viewOffsetY = 0;
+            s._recenterPending = false;
         }
     }
     document.addEventListener('fullscreenchange', _hbFullscreenChange);
@@ -203,6 +210,14 @@ window.initHeartbeat = function(canvasId) {
             s.ctx.scale(dpr, dpr);
             s.width = r.width;
             s.height = r.height;
+            // On fullscreen-enter the canvas gets much taller; drop the baseline to
+            // ~0.60h so the timeline sits centered (default 0.55h read top-heavy,
+            // 0.66h too low — 0.60 is the midpoint). Tunable knob.
+            if (s._recenterPending && r.height > 0) {
+                s._recenterPending = false;
+                var base = (s.height < 350 ? s.height * 0.78 : s.height * 0.55);
+                s.viewOffsetY = s.height * 0.60 - base;
+            }
         });
         _hb.resizeObs.observe(container);
     }

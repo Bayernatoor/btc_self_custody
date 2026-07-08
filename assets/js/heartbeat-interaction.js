@@ -2,11 +2,13 @@
 import { getState, HEAD_POSITION_FRAC, FLATLINE_PX_PER_SEC } from './heartbeat-state.js';
 import { canvasToVirtual, virtualToCanvas, blockAtVirtualX, flatlineAtVirtualX, blipAtCanvasXY, blipAtVirtualX } from './heartbeat-blips.js';
 
-// Clamp vertical pan so the tallest brick stack can be pulled into view but the
-// timeline can't be dragged off into empty space. Bricks stack to ~35% of canvas
-// height and grow past 4x zoom (heightScale in the renderer), so the reachable
-// range depends on zoom. viewOffsetY shifts the baseline DOWN (positive) to bring
-// higher bricks into view; 0 is the resting position (whole EKG framed).
+// Clamp vertical pan (viewOffsetY shifts the baseline DOWN when positive). Two
+// regimes: when the tallest brick stack FITS above the baseline (low zoom, and
+// always in tall fullscreen) the timeline can be freely repositioned up/down within
+// the canvas — bounded so the tallest brick top stays visible (>= topMargin) and the
+// baseline stays on-screen (>= bottomMargin from the bottom). When a stack is TALLER
+// than the canvas (high zoom) you can only pan DOWN from the default to reveal the
+// tops. 0 is the resting position; center/live/fit reset to it.
 export function clampViewOffsetY(_hb) {
     if (!_hb) return;
     var h = _hb.height || 400;
@@ -15,12 +17,20 @@ export function clampViewOffsetY(_hb) {
     var heightScale = zoom > 4 ? 1 + (zoom - 4) * 0.15 : 1;
     var maxContentTop = (h * 0.35) * heightScale; // tallest possible stack (screen px)
     var topMargin = 8;
-    // How far the baseline must travel down to bring the tallest brick's top to
-    // topMargin below the canvas top. Zero when the stack already fits.
-    var upMax = Math.max(0, (topMargin - base) + maxContentTop);
+    var bottomMargin = 40;
+    // lo: baseline pushed UP until the tallest stack's top reaches topMargin
+    //     (negative when the stack fits with room above — the fullscreen case).
+    // hi: baseline pushed DOWN to bottomMargin off the bottom.
+    var lo = topMargin + maxContentTop - base;
+    var hi = h - bottomMargin - base;           // baseline never past the bottom margin
+    // Stack taller than the canvas (high zoom): don't allow pushing the baseline UP
+    // past default (would hide it); you reveal upper bricks by panning DOWN toward
+    // the bottom margin. hi stays on-screen so the timeline can't vanish off-bottom.
+    if (lo > hi) lo = 0;
+    if (lo > hi) lo = hi;                        // guard for a very short canvas (hi < 0)
     var v = _hb.viewOffsetY || 0;
-    if (v > upMax) v = upMax;
-    if (v < 0) v = 0;
+    if (v < lo) v = lo;
+    if (v > hi) v = hi;
     _hb.viewOffsetY = v;
 }
 

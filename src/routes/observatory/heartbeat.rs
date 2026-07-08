@@ -100,6 +100,7 @@ fn get_organism_status() -> String {
     "{}".to_string()
 }
 #[cfg(not(feature = "hydrate"))]
+#[allow(dead_code)] // used only by the commented-out Capture Moment button (kept for later)
 fn heartbeat_download_capture(_: &str) {}
 #[cfg(not(feature = "hydrate"))]
 #[allow(dead_code)]
@@ -974,8 +975,8 @@ pub fn HeartbeatPage() -> impl IntoView {
                 </div>
             </div>
 
-            // ── Phase 5: Capture controls ────────────────────
-            <div class="flex flex-wrap items-center justify-center gap-3">
+            // ── Phase 5: Capture controls (commented out; code kept for later) ──
+            /* <div class="flex flex-wrap items-center justify-center gap-3">
                 // Capture moment
                 <button
                     class="flex items-center gap-2 px-4 py-2 rounded-lg border border-white/10 bg-[#0d2137]/60 text-xs font-mono text-white/50 hover:text-white/80 hover:border-white/20 transition-colors"
@@ -987,7 +988,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                     <span class="text-base">{"\u{1F4F7}"}</span>
                     <span>"Capture Moment"</span>
                 </button>
-            </div>
+            </div> */
 
             // Legend
             <div class="space-y-2">
