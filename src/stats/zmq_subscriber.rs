@@ -127,6 +127,13 @@ pub enum HeartbeatEvent {
     /// event lands.
     #[serde(rename = "block_mining")]
     BlockMining,
+    /// Txids that left the mempool for a NON-block reason (RBF replacement,
+    /// eviction, expiry) — the `R` events from the ZMQ `sequence` topic. Batched.
+    /// Block-confirmed txs are NOT included (Core excludes them from `R`), so this
+    /// never overlaps the block harvest. The frontend removes the matching live
+    /// bricks so the timeline tracks the real mempool instead of drifting upward.
+    #[serde(rename = "tx_removed")]
+    TxRemoved { txids: Vec<String> },
 }
 
 // Detection thresholds, classifier, and ParsedTx now live in `super::notable`.
@@ -146,6 +153,7 @@ pub fn spawn(
     tx_sender: broadcast::Sender<HeartbeatEvent>,
     zmq_tx_url: String,
     zmq_block_url: String,
+    zmq_sequence_url: Option<String>,
 ) {
     // rawtx subscriber (port 28333). Re-broadcast/duplicate txs are
     // de-duplicated inside the task via a local seen-txid set (see SeenTxids)
@@ -170,6 +178,10 @@ pub fn spawn(
         });
     }
 
+    // Clone for the optional sequence subscriber before the block subscriber
+    // moves tx_sender.
+    let tx_sender_seq = tx_sender.clone();
+
     // Block subscriber (hashblock on port 28332)
     {
         let state = Arc::clone(&state);
@@ -191,9 +203,133 @@ pub fn spawn(
         });
     }
 
+    // Sequence subscriber (mempool add/remove; only the `R` removals are used).
+    // Optional — enabled only when configured AND the node runs -zmqpubsequence.
+    if let Some(seq_url) = zmq_sequence_url.clone() {
+        let sender = tx_sender_seq;
+        tokio::spawn(async move {
+            loop {
+                tracing::info!("ZMQ: connecting to sequence at {seq_url}");
+                match subscribe_sequence(&sender, &seq_url).await {
+                    Ok(()) => tracing::warn!(
+                        "ZMQ sequence stream ended, reconnecting..."
+                    ),
+                    Err(e) => tracing::error!(
+                        "ZMQ sequence error: {e}, reconnecting in 5s..."
+                    ),
+                }
+                tokio::time::sleep(Duration::from_secs(5)).await;
+            }
+        });
+    }
+
     tracing::info!(
-        "ZMQ subscriber spawned (tx: {zmq_tx_url}, block: {zmq_block_url})"
+        "ZMQ subscriber spawned (tx: {zmq_tx_url}, block: {zmq_block_url}, sequence: {})",
+        zmq_sequence_url.as_deref().unwrap_or("disabled")
     );
+}
+
+/// Batch removed-txid broadcasts at most this often (ms). Keeps a burst of RBF
+/// churn to one SSE message per tick instead of one per tx.
+const SEQ_FLUSH_MS: u64 = 500;
+/// Flush early if a single window accumulates this many removals, to bound the
+/// SSE message size during heavy churn.
+const SEQ_BATCH_CAP: usize = 2000;
+/// Reconnect the sequence socket after this much silence. The `sequence` topic
+/// also carries `A` (add) events on every mempool arrival, so any real node is
+/// near-constantly chatty here; prolonged silence means a half-dead TCP link.
+const SEQ_RECV_TIMEOUT_SECS: u64 = 120;
+
+/// Subscribe to the `sequence` topic and broadcast mempool REMOVALS (the `R`
+/// events: RBF replacement, eviction, expiry). Message body layout:
+///   [0..32]  txid, little-endian internal byte order
+///   [32]     event type: 'A' add | 'R' remove | 'C' block connect | 'D' disconnect
+///   [33..41] mempool sequence (u64 LE) for A/R only
+/// We act only on `R` — Core excludes block-confirmed txs from `R`, so this never
+/// overlaps the block harvest. Adds keep coming via `rawtx` (with fee/size data),
+/// so `A`/`C`/`D` are ignored here. Removals are batched (SEQ_FLUSH_MS) into one
+/// `TxRemoved` event. `sender`-only: no DB writes (the 60s reconcile owns the DB).
+async fn subscribe_sequence(
+    sender: &broadcast::Sender<HeartbeatEvent>,
+    url: &str,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut socket = SubSocket::new();
+    socket.connect(url).await?;
+    socket.subscribe("sequence").await?;
+    tracing::info!("ZMQ: subscribed to sequence (mempool removals)");
+
+    let mut batch: Vec<String> = Vec::new();
+    let mut flush =
+        tokio::time::interval(Duration::from_millis(SEQ_FLUSH_MS));
+    let mut last_msg = std::time::Instant::now();
+    let mut removed_total: u64 = 0;
+    let mut msg_total: u64 = 0;
+
+    loop {
+        tokio::select! {
+            recvd = socket.recv() => {
+                let msg = recvd?;
+                last_msg = std::time::Instant::now();
+                let frames: Vec<_> = msg.into_vec();
+                if frames.len() < 2 {
+                    continue;
+                }
+                // We only subscribed to "sequence", but guard defensively.
+                let topic = std::str::from_utf8(&frames[0]).unwrap_or("");
+                if topic != "sequence" {
+                    continue;
+                }
+                let body = &frames[1];
+                if body.len() < 33 {
+                    continue;
+                }
+                let kind = body[32];
+                // One-time proof the node is actually publishing `sequence` here
+                // (A adds fire on every mempool arrival, so this lands immediately
+                // if the topic is wired up). If this never logs, the endpoint isn't
+                // publishing sequence — check the node's -zmqpubsequence port.
+                msg_total += 1;
+                if msg_total == 1 {
+                    tracing::info!(
+                        "ZMQ sequence: receiving messages (first type='{}')",
+                        kind as char
+                    );
+                }
+                if kind == b'R' {
+                    // ZMQ-provided hashes are already display byte order here (same as
+                    // hashblock in subscribe_blocks, which uses bytes_to_hex directly).
+                    // Use the direct encoding so these match the display-order txids on
+                    // the client bricks; the reversed helper is only for hashes we
+                    // compute ourselves (rawtx's double-SHA).
+                    let txid = bytes_to_hex(&body[0..32]);
+                    removed_total += 1;
+                    // One-time canary that removals are flowing (pairs with the
+                    // "receiving messages" line); sample later ones at debug.
+                    if removed_total == 1 {
+                        tracing::info!("ZMQ sequence: removals flowing");
+                    } else if removed_total % 500 == 0 {
+                        tracing::debug!("ZMQ sequence R #{removed_total}: {txid}");
+                    }
+                    batch.push(txid);
+                    if batch.len() >= SEQ_BATCH_CAP {
+                        let txids = std::mem::take(&mut batch);
+                        let _ = sender.send(HeartbeatEvent::TxRemoved { txids });
+                    }
+                }
+            }
+            _ = flush.tick() => {
+                if !batch.is_empty() {
+                    let txids = std::mem::take(&mut batch);
+                    let _ = sender.send(HeartbeatEvent::TxRemoved { txids });
+                }
+                if last_msg.elapsed().as_secs() > SEQ_RECV_TIMEOUT_SECS {
+                    return Err(
+                        "ZMQ sequence: no message in timeout — connection likely dead".into(),
+                    );
+                }
+            }
+        }
+    }
 }
 
 /// Subscribe to the `rawtx` topic and broadcast each new mempool tx.

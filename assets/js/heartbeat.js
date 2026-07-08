@@ -1036,6 +1036,27 @@ window.getHeartbeatLatestBlock = function() {
     }
     return '{"height":0,"timestamp":0}';
 };
+// Live mempool stats from the SSE-driven timeline: the count of active (non-
+// fading) bricks on the current flatline + their total vsize as vMB. With the
+// ZMQ `sequence` removals (C) the brick set tracks the node's real mempool, so
+// this reads real-time AND accurate — the Rust bottom bar polls it on the 1s tick
+// to replace the ~15s RPC getmempoolinfo value. One O(n) pass over the live
+// segment (~tens of k) once/sec is negligible. Returns {tx, vmb}; tx=0 signals
+// "not ready" so the caller falls back to the RPC value.
+window.getHeartbeatMempoolStats = function() {
+    var _hb = getState();
+    if (!_hb || !_hb.timeline || _hb.timeline.length === 0) return '{"tx":0,"vmb":0}';
+    var seg = _hb.timeline[_hb.timeline.length - 1];
+    if (!seg || seg.type !== 'flatline' || seg.x_end !== null || !seg.blips) return '{"tx":0,"vmb":0}';
+    var tx = 0, vbytes = 0;
+    for (var i = 0; i < seg.blips.length; i++) {
+        var b = seg.blips[i];
+        if (b.fadeStart !== 0) continue; // skip fading/harvesting bricks
+        tx++;
+        vbytes += b.vsize || 0;
+    }
+    return JSON.stringify({ tx: tx, vmb: Math.round(vbytes / 1000) / 1000 });
+};
 // Connection state for the header LIVE indicator: 'disconnected' when the SSE
 // EventSource errored, 'stale' when it's open but silent past the threshold
 // (node RPC stall), otherwise 'live'. The Rust header polls this on its 1s tick.

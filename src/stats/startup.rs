@@ -34,9 +34,15 @@ use super::rpc::BitcoinRpc;
 use super::zmq_subscriber;
 
 /// Initialize the stats module. Returns `None` if `BITCOIN_STATS_RPC_URL` is not set
-/// (dormant mode). Otherwise returns (shared_state, router, zmq_tx_url, zmq_block_url).
-pub async fn init(
-) -> Option<(Arc<StatsState>, Router, Option<String>, Option<String>)> {
+/// (dormant mode). Otherwise returns
+/// (shared_state, router, zmq_tx_url, zmq_block_url, zmq_sequence_url).
+pub async fn init() -> Option<(
+    Arc<StatsState>,
+    Router,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+)> {
     let config = StatsConfig::load()?;
 
     tracing::info!("Stats module: connecting to {}", config.rpc_url);
@@ -148,7 +154,13 @@ pub async fn init(
     });
 
     let router = build_api_router(Arc::clone(&state));
-    Some((state, router, config.zmq_tx_url, config.zmq_block_url))
+    Some((
+        state,
+        router,
+        config.zmq_tx_url,
+        config.zmq_block_url,
+        config.zmq_sequence_url,
+    ))
 }
 
 /// Assemble the stats API router. Extracted from [`init`] so integration
@@ -179,6 +191,7 @@ pub fn spawn_background_tasks(
     state: Arc<StatsState>,
     zmq_tx_url: Option<String>,
     zmq_block_url: Option<String>,
+    zmq_sequence_url: Option<String>,
 ) {
     // Pre-warm caches for ALL range (the slowest queries).
     // Runs in background so it doesn't block server startup.
@@ -479,6 +492,7 @@ pub fn spawn_background_tasks(
             state.heartbeat_tx.clone(),
             tx_url,
             block_url,
+            zmq_sequence_url,
         );
 
         // Prune old mempool txs immediately then daily

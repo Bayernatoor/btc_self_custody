@@ -11,6 +11,15 @@ import { feeRateColor, fmtBtc } from './heartbeat-timeline.js';
 // hijack; a pinned tx shows "confirmed in block #N" if it got mined). Tunable.
 var REVEAL_MAX_ENTRY_ZOOM = 9.0;
 
+// Mempool-removal sweep (ZMQ `sequence` R events → bricks for txs that left the
+// mempool via RBF/eviction). The sweep is an O(n) pass over the live segment, so
+// throttle it: run when at least this many removals are pending, or when this many
+// seconds have passed since the last sweep (whichever comes first) — never every
+// frame. The txid-filter on incoming adds runs every flush (cheap) so an add for an
+// already-removed tx is skipped even before the next sweep (RBF R-before-A race).
+var REMOVAL_SWEEP_MIN = 50;
+var REMOVAL_SWEEP_SECS = 1.0;
+
 // ── Notable-tx classification (shared by history placement, live flush, feed) ──
 // Accepts both the live SSE shape (boolean flags) and the persisted notable_txs
 // shape (notable_type string). For live txs notable_type is absent, so each
@@ -630,6 +639,23 @@ export function connectOwnFeed() {
                 console.log('[heartbeat] SSE block_txids:', data.txids.length, 'for block', data.height);
             } catch (err) {}
         });
+        // Mempool removals (ZMQ `sequence` R events): txids that left the mempool
+        // for a NON-block reason (RBF/eviction/expiry). Accumulate into a Set; the
+        // per-frame flush sweeps matching live bricks (applyRemovals) and filters
+        // pending adds, so the timeline tracks the real mempool instead of drifting
+        // upward. Block-confirmed txs are handled by the harvest, not here.
+        es.addEventListener('tx_removed', function(e) {
+            if (!_hb) return;
+            try {
+                var data = JSON.parse(e.data); // { type, txids: [...] }
+                if (!data || !Array.isArray(data.txids) || data.txids.length === 0) return;
+                _hb._lastSseEventTs = Date.now() / 1000; // liveness
+                if (!_hb._removedTxids) _hb._removedTxids = new Set();
+                for (var ri = 0; ri < data.txids.length; ri++) {
+                    _hb._removedTxids.add(data.txids[ri]);
+                }
+            } catch (err) {}
+        });
         // TODO: block_mining overlay disabled — triggers at wrong times, needs review.
         // See tasks/todo.md "Heartbeat > Review block_mining overlay trigger logic".
         // es.addEventListener('block_mining', function(e) {
@@ -721,12 +747,57 @@ export function fastForwardLiveFlatline(blockTs) {
     if (wanted > _hb.virtualX) _hb.virtualX = wanted;
 }
 
+// Remove bricks for txs that left the mempool (ZMQ `sequence` R events). One O(n)
+// pass over the LIVE segment only (closed segments are frozen history), rebuilding
+// the column map like the memory cull. Throttled: runs when enough removals are
+// pending or REMOVAL_SWEEP_SECS elapsed. Only drops ACTIVE (non-fading) bricks —
+// a brick mid-harvest/fade is left alone. Clears the set when it runs.
+function applyRemovals(_hb, liveSeg) {
+    var removed = _hb._removedTxids;
+    if (!removed || removed.size === 0) return;
+    var now = Date.now() / 1000;
+    if (removed.size < REMOVAL_SWEEP_MIN &&
+        (now - (_hb._lastRemovalSweep || 0)) < REMOVAL_SWEEP_SECS) {
+        return; // defer — the add-queue filter still runs every flush meanwhile
+    }
+    _hb._lastRemovalSweep = now;
+
+    if (!liveSeg.blips || liveSeg.blips.length === 0) { removed.clear(); return; }
+
+    var kept = [];
+    var dropped = 0;
+    liveSeg._colHeights = {};
+    for (var i = 0; i < liveSeg.blips.length; i++) {
+        var b = liveSeg.blips[i];
+        if (b.fadeStart === 0 && b.txid && removed.has(b.txid)) { dropped++; continue; }
+        kept.push(b);
+        // Restack kept, non-fading bricks against the rebuilt column map.
+        if (b.fadeStart > 0 || b.gridX === undefined) continue;
+        var sy = liveSeg._colHeights[b.gridX] || 0;
+        b.stackY = sy;
+        b.height = (b.brickH || 0) + sy;
+        liveSeg._colHeights[b.gridX] = sy + (b.brickH || 0);
+    }
+    if (dropped > 0) {
+        liveSeg.blips = kept;
+        if (_hb._pinnedBlip && kept.indexOf(_hb._pinnedBlip) === -1) _hb._pinnedBlip = null;
+        if (_hb.hoveredBlip && kept.indexOf(_hb.hoveredBlip) === -1) _hb.hoveredBlip = null;
+    }
+    removed.clear();
+}
+
 // Flush queued individual transactions into visual bricks
 export function flushTxBatch() {
     var _hb = getState();
-    if (!_hb || !_hb._txBatchQueue || _hb._txBatchQueue.length === 0) return;
+    if (!_hb) return;
     var liveSeg = _hb.timeline[_hb.timeline.length - 1];
     if (!liveSeg || liveSeg.type !== 'flatline') return;
+
+    // Sweep mempool removals first (independent of the add queue — R events arrive
+    // on their own cadence). Throttled internally so it's not an O(n) pass/frame.
+    applyRemovals(_hb, liveSeg);
+
+    if (!_hb._txBatchQueue || _hb._txBatchQueue.length === 0) return;
 
     // virtualX is advanced ONLY by the RAF loop (drawFrame) now — this used to
     // advance it too, a second out-of-phase clock that nudged virtualX between
@@ -772,8 +843,14 @@ export function flushTxBatch() {
     }
     var medianFee = _hb._wsMedianFee || 5;
 
+    var removedSet = _hb._removedTxids;
     for (var i = 0; i < batch.length; i++) {
         var tx = batch[i];
+        // Skip an add whose tx already left the mempool (RBF R-before-A race): the
+        // removal landed before we laid the brick, so never lay it.
+        if (removedSet && removedSet.size > 0 && tx.txid && removedSet.has(tx.txid)) {
+            continue;
+        }
         var feeRate = tx.fee && tx.vsize ? tx.fee / tx.vsize : 1;
         var feeNorm = Math.min(Math.log2(feeRate + 1) / 6, 1.0);
         var flags = notableFlags(tx);

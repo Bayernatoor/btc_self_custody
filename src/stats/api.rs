@@ -980,6 +980,7 @@ pub async fn get_heartbeat_sse(
                             super::zmq_subscriber::HeartbeatEvent::Block { .. } => "block",
                             super::zmq_subscriber::HeartbeatEvent::BlockTxids { .. } => "block_txids",
                             super::zmq_subscriber::HeartbeatEvent::BlockMining => "block_mining",
+                            super::zmq_subscriber::HeartbeatEvent::TxRemoved { .. } => "tx_removed",
                         };
                         let data =
                             serde_json::to_string(&event).unwrap_or_default();

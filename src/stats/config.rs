@@ -27,6 +27,13 @@ pub struct StatsConfig {
     /// ZMQ endpoint for block hashes (e.g. "tcp://127.0.0.1:28332").
     /// Env: `BITCOIN_STATS_ZMQ_BLOCK` (optional - disables heartbeat if unset).
     pub zmq_block_url: Option<String>,
+    /// ZMQ endpoint for the `sequence` topic (mempool add/remove notifications;
+    /// commonly the same endpoint as rawtx, e.g. "tcp://127.0.0.1:28333").
+    /// Env: `BITCOIN_STATS_ZMQ_SEQUENCE` (optional). When set AND the node runs
+    /// with `-zmqpubsequence`, the heartbeat removes bricks for txs that leave the
+    /// mempool via RBF/eviction (the `R` events), keeping the live view honest.
+    /// Unset (or the node not publishing it) = the feature is simply off.
+    pub zmq_sequence_url: Option<String>,
 }
 
 impl StatsConfig {
@@ -48,6 +55,8 @@ impl StatsConfig {
 
         let zmq_tx_url = std::env::var("BITCOIN_STATS_ZMQ_TX").ok();
         let zmq_block_url = std::env::var("BITCOIN_STATS_ZMQ_BLOCK").ok();
+        let zmq_sequence_url =
+            std::env::var("BITCOIN_STATS_ZMQ_SEQUENCE").ok();
 
         Some(Self {
             rpc_url,
@@ -57,6 +66,7 @@ impl StatsConfig {
             initial_ingest_count,
             zmq_tx_url,
             zmq_block_url,
+            zmq_sequence_url,
         })
     }
 }

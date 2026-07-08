@@ -70,6 +70,10 @@ extern "C" {
     // SSE connection state: "live" | "stale" | "disconnected"
     #[wasm_bindgen(js_name = getHeartbeatConnectionState)]
     fn get_heartbeat_connection_state() -> String;
+
+    // Live mempool stats from the SSE timeline (JSON {tx, vmb}); tx=0 = not ready.
+    #[wasm_bindgen(js_name = getHeartbeatMempoolStats)]
+    fn get_heartbeat_mempool_stats() -> String;
 }
 
 #[cfg(not(feature = "hydrate"))]
@@ -111,6 +115,11 @@ fn get_heartbeat_latest_block() -> String {
 #[allow(dead_code)]
 fn get_heartbeat_connection_state() -> String {
     "live".to_string()
+}
+#[cfg(not(feature = "hydrate"))]
+#[allow(dead_code)]
+fn get_heartbeat_mempool_stats() -> String {
+    "{\"tx\":0,\"vmb\":0}".to_string()
 }
 
 const RETARGET_PERIOD: u64 = 2016;
@@ -437,6 +446,16 @@ pub fn HeartbeatPage() -> impl IntoView {
     #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
     let (conn_state, set_conn_state) = signal("live".to_string());
 
+    // Live mempool size from the SSE timeline (polled on the 1s tick below). With
+    // the ZMQ `sequence` removals in place the brick set tracks the real mempool,
+    // so this drives the bottom bar in real time instead of the ~15s RPC value.
+    // tx=0 means "not ready yet" → the display falls back to the RPC figure.
+    // (setters are only touched in the hydrate-only poll below.)
+    #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
+    let (sse_mempool_tx, set_sse_mempool_tx) = signal(0u64);
+    #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
+    let (sse_mempool_vmb, set_sse_mempool_vmb) = signal(0.0f64);
+
     // Reactive display values
     let block_height = Signal::derive(move || {
         let live =
@@ -501,6 +520,14 @@ pub fn HeartbeatPage() -> impl IntoView {
                 if cs != conn_state.get_untracked() {
                     set_conn_state.set(cs);
                 }
+                // Live mempool size from the timeline (real-time, and accurate now
+                // that removals are tracked). tx=0 => not ready, keep the RPC value.
+                let ms = get_heartbeat_mempool_stats();
+                let mtx = extract_json_f64(&ms, "tx") as u64;
+                if mtx > 0 {
+                    set_sse_mempool_tx.set(mtx);
+                    set_sse_mempool_vmb.set(extract_json_f64(&ms, "vmb"));
+                }
             },
             std::time::Duration::from_secs(1),
         );
@@ -536,6 +563,16 @@ pub fn HeartbeatPage() -> impl IntoView {
     });
 
     let mempool_display = Signal::derive(move || {
+        // Prefer the live SSE-timeline count (real-time + accurate via `sequence`
+        // removals); fall back to the RPC getmempoolinfo value until it's ready.
+        let live_tx = sse_mempool_tx.get();
+        if live_tx > 0 {
+            return format!(
+                "{} tx ({:.1} vMB)",
+                super::helpers::format_number(live_tx),
+                sse_mempool_vmb.get()
+            );
+        }
         cached_live
             .get()
             .filter(|s| s.mempool.size > 0 || s.network.hashrate > 0.0)
