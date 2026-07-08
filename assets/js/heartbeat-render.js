@@ -364,8 +364,8 @@ var SPIKE_SHOCKWAVE_MAX_R = 130;  // ring max radius, screen px (zoom-independen
 // First-load fade: the whole timeline (grid + spikes + bricks) eases up from the
 // background over this window instead of hard-cutting in. Paired with the brick
 // drop-stagger, the structure fades in and the txs settle onto it.
-var LOAD_FADE_SECS = 3.5; // long enough that the fade clearly extends past the loader +
-                          // the ~1.5s brick drop-in; nudge toward ~5 for more drama, down for snappier
+var LOAD_FADE_SECS = 2.5; // extends past the loader + the ~1.5s brick drop-in so it reads;
+                          // nudge up for more drama, down for snappier
 
 // Spike strike shape: a slow, accelerating BUILD to a low level for the first
 // SPIKE_BAM_AT of the duration (you see the wave forming), then a snap up past full
@@ -1231,6 +1231,10 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
             }
             _wStart = _lo;
         }
+        // Zoom-invariant per-frame constants, hoisted out of the per-brick loop
+        // (recomputing these ~40k times/frame at a full zoomed-out mempool is waste).
+        var heightScale = zoom > 4 ? 1 + (zoom - 4) * 0.15 : 1;
+        var lw = zoom > 10 ? 1.5 : zoom > 6 ? 1 : 0.5;
         for (var bi = _wStart; bi < seg.blips.length; bi++) {
             var blip = seg.blips[bi];
             // Skip blips outside visible range. When sorted, everything past the
@@ -1402,7 +1406,6 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                 var blipColor = blip.color || 'rgba(0, 230, 118, ';
                 // Both width and height scale with zoom so bricks become large tiles
                 var bw = (blip.brickW || 4) * zoom;
-                var heightScale = zoom > 4 ? 1 + (zoom - 4) * 0.15 : 1; // height grows at high zoom
                 var bh = (blip.brickH || blipH) * heightScale;
                 var sy = (blip.stackY || 0) * heightScale;
 
@@ -1413,20 +1416,20 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                 // Fall duration — bumped a touch so the higher drop (below) reads as
                 // a graceful rain rather than a streak.
                 var fadeTime = isNotable ? 1.1 : 0.8;
-                var fadeIn = Math.min(age / fadeTime, 1.0);
-                // Drop from above with bounce easing. Raised so bricks visibly rain
-                // down (was 50/120 — too subtle at a full mempool). Notable = higher.
-                var dropHeight = isNotable ? 220 : 120;
-                // Cubic ease-out with subtle overshoot for a bouncy feel.
-                var inv = 1 - fadeIn;
-                var dropEase = inv * inv * inv;
-                // Subtle bounce near landing (last 25%) for all bricks, stronger for notable
-                var bounceAmt = isNotable ? 0.35 : 0.15;
-                if (fadeIn > 0.75) {
-                    var bouncePhase = (fadeIn - 0.75) * 4; // 0..1
-                    dropEase += bounceAmt * Math.sin(bouncePhase * Math.PI) * 0.08;
+                var fadeIn = age >= fadeTime ? 1 : age / fadeTime;
+                // Bouncy drop-in (cubic ease-out + a sin bounce near landing). Only
+                // computed while a brick is still FALLING — the settled majority (the
+                // bulk of the cost at a full zoomed-out mempool) skips the trig/cubic.
+                var dropOffset = 0;
+                if (fadeIn < 1 && _hb.renderMode !== 'bloodstream') {
+                    var inv = 1 - fadeIn;
+                    var dropEase = inv * inv * inv;
+                    if (fadeIn > 0.75) {
+                        var bounceAmt = isNotable ? 0.35 : 0.15;
+                        dropEase += bounceAmt * Math.sin((fadeIn - 0.75) * 4 * Math.PI) * 0.08;
+                    }
+                    dropOffset = dropEase * (isNotable ? 220 : 120); // notable = higher drop
                 }
-                var dropOffset = _hb.renderMode !== 'bloodstream' ? dropEase * dropHeight : 0;
                 bh *= fadeIn;
                 bOpacity *= fadeIn;
                 // During a block reveal, the old segment's leftovers fade out
@@ -1523,8 +1526,7 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                     // Draw filled rectangle with 1px gap for separation
                     // Gap scales with zoom so bricks stay visually separated.
                     // strokeRect bleeds half its lineWidth outside the rect,
-                    // so the gap must exceed that to remain visible.
-                    var lw = zoom > 10 ? 1.5 : zoom > 6 ? 1 : 0.5;
+                    // so the gap must exceed that to remain visible. (lw hoisted above.)
                     // Gap between bricks (mempool.space-style separation) at ALL
                     // zooms, not just high zoom, so dense bricks read as a crisp
                     // grid instead of a blob. Based on the smaller dimension so it
