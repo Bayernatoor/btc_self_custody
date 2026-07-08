@@ -83,6 +83,11 @@ window.initHeartbeat = function(canvasId) {
         // Rendering
         rafId: null,
         lastFrameTime: 0,
+        // First-load fade veil start (drawFrame eases the timeline up from the bg
+        // over LOAD_FADE_SECS). Set at init so the fade begins when the canvas
+        // appears (loader dismissed right after) and covers the spikes + bricks
+        // streaming in; re-armed after a big gap-recovery so a resume also fades.
+        _loadFadeStart: Date.now() / 1000,
 
         // Live state
         lastBlockTime: 0,
@@ -445,6 +450,16 @@ window.pushHeartbeatBlocks = function(json, replay) {
             // Create block segment with corrected inter-block time
             b.inter_block_seconds = interBlock;
             var blockSeg = createBlockSegment(b, _hb.virtualX);
+            // Spike strike ("BAM"). Live INSTANT blocks strike immediately. For a
+            // cinematic reveal we instead mark the spike _strikePending (drawn FLAT)
+            // and let the reveal fire the strike — right away if the view is already
+            // at the head, or on ARRIVAL if the camera has to travel there, so the
+            // pop lands when you're looking at it, not mid-scroll. Replay/history
+            // appear settled (neither flag).
+            if (!isReplay) {
+                if (revealPending) blockSeg._strikePending = true;
+                else blockSeg._strikeStart = Date.now() / 1000;
+            }
             _hb.timeline.push(blockSeg);
             _hb.virtualX = blockSeg.x_end;
 
@@ -927,6 +942,9 @@ function recoverTimeline(gapSecs) {
         console.log('[heartbeat] timeline resume: advanced virtualX by', Math.round(gapSecs), 's (',
             Math.round(gapSecs * FLATLINE_PX_PER_SEC), 'px)');
     }
+    // Re-arm the fade-in on a big resume (occlusion / sleep / long throttle) so the
+    // timeline eases back up instead of hard-cutting. Skip tiny tab-flicks.
+    if (gapSecs > 10) _hb._loadFadeStart = now;
 
     // Place buffered txs across the gap (the region between old bricks and
     // new virtualX). Timing is unreliable when hidden, but random spread

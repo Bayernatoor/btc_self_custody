@@ -337,6 +337,69 @@ var REVEAL_FIT_MARGIN = 0.82;   // fraction of width the whole timeline fills at
 // Ease-in-out (smoothstep): 0 at t=0, 1 at t=1, zero slope at both ends — a
 // deliberate cinematic glide, vs an abrupt fast start.
 function smoothstep(t) { t = t < 0 ? 0 : (t > 1 ? 1 : t); return t * t * (3 - 2 * t); }
+// smootherstep (Ken Perlin's 6t^5-15t^4+10t^3): like smoothstep but with zero
+// FIRST AND SECOND derivative at both ends, so the ease in/out is even gentler —
+// used for the reveal's big camera moves (pan-out + zoom-back) so they glide
+// rather than ramp.
+function smootherstep(t) { t = t < 0 ? 0 : (t > 1 ? 1 : t); return t * t * t * (t * (t * 6 - 15) + 10); }
+// easeOutBack: 0 -> 1 with an overshoot past 1 near the end, settling exactly to 1.
+// Gives the spike its "BAM" — shoots up, overshoots, snaps to rest.
+function easeOutBack(t) {
+    if (t <= 0) return 0;
+    if (t >= 1) return 1;
+    var c1 = 1.70158, c3 = c1 + 1, x = t - 1;
+    return 1 + c3 * x * x * x + c1 * x * x;
+}
+
+// ── Block-spike strike ("BAM") ────────────────────────────────
+// A live block's spike shoots up from the baseline with an overshoot, plus a
+// radiating shockwave from the peak. Driven by seg._strikeStart (set on live
+// blocks in pushHeartbeatBlocks) so it plays on both the cinematic reveal AND the
+// instant path, and never on history/replay (which have no _strikeStart).
+var SPIKE_STRIKE_SECS = 0.75;     // total strike duration (build + snap + settle)
+var SPIKE_BAM_AT = 0.6;           // fraction of the strike spent on the slow build
+                                  // before the snap; the shockwave/flash fire here
+var SPIKE_SHOCKWAVE_SECS = 0.6;   // expanding ring lifetime (from the BAM moment)
+var SPIKE_SHOCKWAVE_MAX_R = 130;  // ring max radius, screen px (zoom-independent)
+// First-load fade: the whole timeline (grid + spikes + bricks) eases up from the
+// background over this window instead of hard-cutting in. Paired with the brick
+// drop-stagger, the structure fades in and the txs settle onto it.
+var LOAD_FADE_SECS = 3.5; // long enough that the fade clearly extends past the loader +
+                          // the ~1.5s brick drop-in; nudge toward ~5 for more drama, down for snappier
+
+// Spike strike shape: a slow, accelerating BUILD to a low level for the first
+// SPIKE_BAM_AT of the duration (you see the wave forming), then a snap up past full
+// with overshoot (the "BAM"), settling to exactly 1. Continuous at the seam.
+function spikeStrike(t) {
+    if (t <= 0) return 0;
+    if (t >= 1) return 1;
+    var BUILD_TO = 0.32;
+    if (t < SPIKE_BAM_AT) {
+        var u = t / SPIKE_BAM_AT;
+        return BUILD_TO * u * u; // ease-in build, slow then quickening
+    }
+    var v = (t - SPIKE_BAM_AT) / (1 - SPIKE_BAM_AT);
+    return BUILD_TO + (1 - BUILD_TO) * easeOutBack(v); // snap + overshoot
+}
+
+// Two expanding, fading rings from the impact point — the shockwave. globalAlpha
+// (save/restore) so it works with any strokeStyle color format.
+function drawShockwave(ctx, cx, cy, t, color) {
+    var eo = 1 - (1 - t) * (1 - t); // easeOut on the radius
+    var r = SPIKE_SHOCKWAVE_MAX_R * eo;
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = (1 - t) * 0.55;
+    ctx.lineWidth = Math.max(1, 3 * (1 - t));
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = (1 - t) * 0.3;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 0.62, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+}
 
 // Kick off the harvest: the confirmed bricks (marked but left in place during the
 // form beat) begin flying up into the spike from `now`. Kept in the sequencer (not
@@ -385,6 +448,10 @@ function endBlockReveal(_hb) {
     var r = _hb._reveal;
     if (!r) return;
     var now = Date.now() / 1000;
+    // Fire a still-deferred strike so an aborted-mid-travel spike doesn't stay flat.
+    if (r._deferStrike && r.spikeSeg && !r.spikeSeg._strikeStart) {
+        r.spikeSeg._strikeStart = now;
+    }
     startRevealHarvest(r, now);     // shatter confirmed if we hadn't yet
     relayRevealLeftovers(_hb, r, 0); // lay leftovers instantly if we hadn't yet
     _hb._reveal = null;
@@ -430,6 +497,11 @@ function runBlockReveal(_hb, dt, now, w) {
         _hb.zoom = r.fromZoom + (working - r.fromZoom) * tf;
         _hb.viewOffset = r.fromOffset + (headOff(r.spikeVX, _hb.zoom) - r.fromOffset) * tf;
         if (elapsed >= REVEAL_FORM_SECS) {
+            // Camera has arrived at the head. If the strike was deferred (we had to
+            // travel here), fire it NOW so the spike pops on arrival, then harvest.
+            if (r._deferStrike && r.spikeSeg && !r.spikeSeg._strikeStart) {
+                r.spikeSeg._strikeStart = now;
+            }
             startRevealHarvest(r, now); // the shatter begins as the harvest beat opens
             r.phase = 'harvest'; r.start = now; r.fromZoom = undefined;
         }
@@ -456,7 +528,7 @@ function runBlockReveal(_hb, dt, now, w) {
         // Ease the offset OUT from where harvest ended (r.fromOffset) so there's no
         // pop as the framing shifts from the spike peak to the advancing front.
         var tu = elapsed / r.unfurlSecs; if (tu > 1) tu = 1;
-        var su = smoothstep(tu);
+        var su = smootherstep(tu); // gentler glide on the big pan-out + zoom-out
         _hb.zoom = working + (r.fitZoom - working) * su;
         var frontVX = r.newSeg.x_start + tu * r.width;
         _hb.viewOffset = r.fromOffset + (headOff(frontVX, _hb.zoom) - r.fromOffset) * su;
@@ -481,7 +553,7 @@ function runBlockReveal(_hb, dt, now, w) {
         if (elapsed >= REVEAL_HOLD_SECS) { r.phase = 'return'; r.start = now; r.fromZoom = undefined; }
     } else { // return
         // Zoom back IN to the head at the ORIGINAL entry zoom — back where you were.
-        var tr = smoothstep(elapsed / REVEAL_RETURN_SECS);
+        var tr = smootherstep(elapsed / REVEAL_RETURN_SECS); // gentle settle back to the head
         _hb.zoom = r.fitZoom + (r.entryZoom - r.fitZoom) * tr;
         _hb.viewOffset = headOff(_hb.virtualX, _hb.zoom);
         if (elapsed >= REVEAL_RETURN_SECS) {
@@ -651,6 +723,15 @@ export function drawFrame(frameTime) {
         ? lerpColor(_hb.prevColor, _hb.targetColor, _hb.colorLerp)
         : _hb.currentColor;
 
+    // First-load fade-in: _loadFadeStart is set at canvas init (and re-armed after a
+    // big gap-recovery), so the veil covers the spikes + bricks as they stream in and
+    // eases the whole timeline up from the bg over LOAD_FADE_SECS.
+    var loadFade = 1;
+    if (_hb._loadFadeStart) {
+        var lfe = now - _hb._loadFadeStart;
+        if (lfe < LOAD_FADE_SECS) loadFade = smootherstep(lfe / LOAD_FADE_SECS);
+    }
+
     // ── Clear and draw background ──────────────────────────
     ctx.fillStyle = BG_COLOR;
     ctx.fillRect(0, 0, w, h);
@@ -674,7 +755,7 @@ export function drawFrame(frameTime) {
         if (segStart > viewRight) break;   // past viewport — all further segments are too
 
         if (seg.type === 'block') {
-            drawBlockSegment(ctx, seg, viewLeft, baseline, liveColor);
+            drawBlockSegment(ctx, seg, viewLeft, baseline, liveColor, now);
         } else {
             var flatColor = (seg.x_end === null) ? liveColor : (seg.color || COLORS.healthy);
             drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, baseline, flatColor, seg.x_end === null, now);
@@ -818,6 +899,18 @@ export function drawFrame(frameTime) {
         }
     }
 
+    // First-load / resume fade veil: covers the whole timeline SCENE — grid, spikes,
+    // bricks AND the live head dot — with the bg color, retreating over LOAD_FADE_SECS
+    // so it all eases up from black together. Drawn here (after the head dot, before
+    // the disconnect overlay) so nothing in the scene is left un-faded. (A blanket
+    // globalAlpha won't work — per-element draws set their own alpha.)
+    if (loadFade < 1) {
+        ctx.globalAlpha = 1 - loadFade;
+        ctx.fillStyle = BG_COLOR;
+        ctx.fillRect(0, 0, w, h);
+        ctx.globalAlpha = 1;
+    }
+
     // SSE disconnection overlay — semi-transparent with mining animation
     if (_hb._sseDisconnected) {
         drawDisconnectedOverlay(ctx, w, h, now);
@@ -890,23 +983,51 @@ export function drawDisconnectedOverlay(ctx, w, h, nowSec) {
 }
 
 // Draw a single block waveform segment
-export function drawBlockSegment(ctx, seg, viewLeft, baseline, fallbackColor) {
+export function drawBlockSegment(ctx, seg, viewLeft, baseline, fallbackColor, now) {
     var _hb = getState();
     var pts = seg.points;
     var color = seg.color || fallbackColor;
-    var zoom = _hb.zoom;
-
     var isHovered = (_hb.hoveredBlock === seg);
+
+    // Strike animation: for a live block's spike, scale the whole QRS from the
+    // baseline up — a slow build then a snap with overshoot (spikeStrike). amp=1
+    // (settled) after the window and for any segment without _strikeStart
+    // (history/replay draw at full amplitude immediately).
+    var amp = 1;
+    if (seg._strikeStart && now) {
+        var se = now - seg._strikeStart;
+        if (se >= 0 && se < SPIKE_STRIKE_SECS) amp = spikeStrike(se / SPIKE_STRIKE_SECS);
+    } else if (seg._strikePending) {
+        // Reveal spike awaiting its strike. Stay flat only while an active reveal
+        // still owns it (camera traveling to the head); otherwise it's orphaned
+        // (reveal ended/never armed) — strike it now so it can never stay flat.
+        if (_hb._reveal && _hb._reveal.spikeSeg === seg) {
+            amp = 0;
+        } else {
+            seg._strikeStart = now;
+            amp = 0; // = spikeStrike(0); animates from the next frame
+        }
+    }
+
+    // The shockwave + flash fire at the BAM moment (offset into the strike, when the
+    // wave snaps up), not at creation, and outlive the strike slightly.
+    var shockT = -1;
+    if (seg._strikeStart && now) {
+        var we = now - (seg._strikeStart + SPIKE_STRIKE_SECS * SPIKE_BAM_AT);
+        if (we >= 0 && we < SPIKE_SHOCKWAVE_SECS) shockT = we / SPIKE_SHOCKWAVE_SECS;
+    }
+
     ctx.beginPath();
     ctx.strokeStyle = color;
     ctx.lineWidth = isHovered ? 3 : 2;
-    ctx.shadowBlur = isHovered ? 24 : 14;
     ctx.shadowColor = color;
+    // Flash: extra glow peaking at the BAM and decaying.
+    ctx.shadowBlur = (isHovered ? 24 : 14) + (shockT >= 0 ? (1 - shockT) * 34 : 0);
 
     for (var i = 0; i < pts.length; i++) {
         var vx = seg.x_start + i * POINT_WIDTH;
         var cx = virtualToCanvas(vx);
-        var cy = baseline + pts[i];
+        var cy = baseline + pts[i] * amp;
         if (i === 0) {
             ctx.moveTo(cx, cy);
         } else {
@@ -915,6 +1036,17 @@ export function drawBlockSegment(ctx, seg, viewLeft, baseline, fallbackColor) {
     }
     ctx.stroke();
     ctx.shadowBlur = 0;
+
+    // Radiating shockwave from the peak, fired at the BAM. Peak scan only here (not
+    // per-frame for every settled/history spike).
+    if (shockT >= 0) {
+        var peakIdx = 0, peakY = 0;
+        for (var pk = 0; pk < pts.length; pk++) {
+            if (pts[pk] < peakY) { peakY = pts[pk]; peakIdx = pk; }
+        }
+        var peakX = virtualToCanvas(seg.x_start + peakIdx * POINT_WIDTH);
+        drawShockwave(ctx, peakX, baseline + peakY * amp, shockT, color);
+    }
 }
 
 // LOD engages only when a segment has more than this many bricks (≈ the mempool

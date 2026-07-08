@@ -1,7 +1,13 @@
 // Service Worker for WE HODL BTC PWA
 // Strategy: cache static assets (app shell), network-first for API/pages
 
-var CACHE_NAME = 'wehodlbtc-v2';
+// BUMP THIS on every deploy that ships client asset changes (JS/CSS/WASM). Changing
+// sw.js bytes is the ONLY thing that makes the browser see the worker as updated ->
+// fires the "Update available" banner (app.rs) -> Refresh reloads into fresh assets,
+// and activate() purges the old cache. Without a bump, a deploy that changes /js but
+// not sw.js is invisible to the update flow (files are network-first so they still
+// refresh on a manual reload, but returning users get no prompt).
+var CACHE_NAME = 'wehodlbtc-v3';
 // Small assets to pre-cache on install (large files like WASM cache on first use)
 // Only precache truly static assets. JS files that change on deploy
 // (stats.js, lightbox.js) are cached on first use instead.

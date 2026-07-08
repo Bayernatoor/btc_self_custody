@@ -465,6 +465,7 @@ function setupBlockReveal(_hb, pr) {
         start: Date.now() / 1000,
         height: spikeSeg.height,
         entryZoom: _hb.zoom,
+        spikeSeg: spikeSeg,         // the block segment (for the arrival-fired strike)
         spikeVX: spikeSeg.x_start + peakIdx * POINT_WIDTH,
         oldSeg: pr.oldSeg,
         newSeg: pr.newSeg,
@@ -484,8 +485,28 @@ function setupBlockReveal(_hb, pr) {
         fitZoom: 0,                 // set there too (frames the whole timeline)
         width: 0,
         fromZoom: undefined,
-        fromOffset: undefined
+        fromOffset: undefined,
+        _deferStrike: false         // set below: strike on arrival vs immediately
     };
+
+    // Should the spike strike NOW or wait until the camera arrives? If the spike is
+    // already near the head on screen and we're not about to zoom in much, the view
+    // is effectively centered → strike immediately (pop + admire during the form
+    // beat). Otherwise (scrolled away / zoomed elsewhere) keep it FLAT and let the
+    // form beat fire the strike on arrival, so the "BAM" lands when you get there.
+    var spikeVX = _hb._reveal.spikeVX;
+    var workingZoom = Math.max(_hb.zoom, 1); // mirrors REVEAL_ZOOM=1 in render.js
+    var spikeScreenX = (spikeVX - _hb.viewOffset) * _hb.zoom;
+    var headScreenX = _hb.width * HEAD_POSITION_FRAC;
+    var nearHead = spikeScreenX > 0 && spikeScreenX < _hb.width
+        && Math.abs(spikeScreenX - headScreenX) < _hb.width * 0.35;
+    var zoomingIn = workingZoom / _hb.zoom > 1.25;
+    if (nearHead && !zoomingIn) {
+        spikeSeg._strikeStart = Date.now() / 1000; // centered → pop now
+    } else {
+        _hb._reveal._deferStrike = true;           // travel → pop on arrival (form beat)
+    }
+
     // If the block's exact txids already arrived (out-of-order before this block
     // event), refine the harvest immediately.
     if (_hb._blockTxids && _hb._blockTxids.height === spikeSeg.height) {
