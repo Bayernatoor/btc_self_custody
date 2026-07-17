@@ -149,7 +149,7 @@ pub fn FeeChartsPage() -> impl IntoView {
     );
 
     view! {
-        <Title text="Bitcoin Fee Charts: Miner Revenue & Subsidy Breakdown | WE HODL BTC"/>
+        <Title text="Bitcoin Fee Charts: Miner Revenue & Subsidy Breakdown | We Hodl BTC"/>
         <Meta name="description" content="Bitcoin transaction fee analytics showing total fees per block in BTC and sats, daily averages, and the block reward breakdown of subsidy versus fee revenue across all halving eras."/>
         <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/charts/fees"/>
         <ChartPageLayout

@@ -1,4 +1,4 @@
-//! WE HODL BTC - Bitcoin self-custody guide website and blockchain analytics observatory.
+//! We Hodl BTC - Bitcoin self-custody guide website and blockchain analytics observatory.
 //!
 //! Leptos 0.8 fullstack app (SSR + WASM hydration) with Axum backend.
 //!
@@ -15,6 +15,7 @@
 pub mod app;
 pub mod extras;
 pub mod guides;
+pub mod guides_v2;
 pub mod helpers;
 pub mod routes;
 pub mod stats;

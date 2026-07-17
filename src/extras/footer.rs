@@ -9,8 +9,8 @@ pub fn Footer() -> impl IntoView {
 
                     // Column 1 - Branding
                     <div class="col-span-2 sm:col-span-1">
-                        <div class="text-base font-semibold text-white uppercase tracking-wide">"WE HODL BTC"</div>
-                        <p class="text-sm text-white/40 mt-2 leading-relaxed">
+                        <div class="text-lg font-title font-semibold text-white tracking-wide">"We Hodl BTC"</div>
+                        <p class="text-sm text-white/55 mt-2 leading-relaxed">
                             "A free resource to help bitcoiners easily take self-custody, whether it\u{2019}s 100 sats or 100 bitcoin. Also, dive into the Bitcoin rabbit hole and observe the network in real time, with live charts and 900,000+ blocks of history."
                         </p>
                         // Social icons
@@ -19,7 +19,7 @@ pub fn Footer() -> impl IntoView {
                                 href="https://github.com/Bayernatoor/btc_self_custody"
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                class="p-1.5 rounded-lg text-white/30 hover:text-[#f7931a] hover:bg-white/5 transition-all duration-200"
+                                class="p-1.5 rounded-lg text-white/50 hover:text-[#f7931a] hover:bg-white/5 transition-all duration-200"
                                 aria-label="GitHub"
                             >
                                 <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 496 512">
@@ -30,7 +30,7 @@ pub fn Footer() -> impl IntoView {
                                 href="https://primal.net/Bayer"
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                class="p-1.5 rounded-lg text-white/30 hover:text-[#f7931a] hover:bg-white/5 transition-all duration-200"
+                                class="p-1.5 rounded-lg text-white/50 hover:text-[#f7931a] hover:bg-white/5 transition-all duration-200"
                                 aria-label="Nostr"
                             >
                                 <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 512 512">
@@ -41,7 +41,7 @@ pub fn Footer() -> impl IntoView {
                                 href="https://x.com/Bayernatoor"
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                class="p-1.5 rounded-lg text-white/30 hover:text-[#f7931a] hover:bg-white/5 transition-all duration-200"
+                                class="p-1.5 rounded-lg text-white/50 hover:text-[#f7931a] hover:bg-white/5 transition-all duration-200"
                                 aria-label="X"
                             >
                                 <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
@@ -50,7 +50,7 @@ pub fn Footer() -> impl IntoView {
                             </a>
                             <a
                                 href="mailto:wehodlbtc@pm.me"
-                                class="p-1.5 rounded-lg text-white/30 hover:text-[#f7931a] hover:bg-white/5 transition-all duration-200"
+                                class="p-1.5 rounded-lg text-white/50 hover:text-[#f7931a] hover:bg-white/5 transition-all duration-200"
                                 aria-label="Email"
                             >
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -62,51 +62,44 @@ pub fn Footer() -> impl IntoView {
 
                     // Column 2 - Observatory
                     <div>
-                        <h3 class="text-xs font-semibold text-white/60 uppercase tracking-wider mb-3">"Observatory"</h3>
+                        <h3 class="font-title text-xs font-semibold text-white uppercase tracking-wider mb-3">"Observatory"</h3>
                         <ul class="space-y-2">
-                            <li><a href="/observatory" class="text-sm text-white/30 hover:text-[#f7931a] transition-colors">"Readings"</a></li>
-                            <li><a href="/observatory/heartbeat" class="text-sm text-white/30 hover:text-[#f7931a] transition-colors">"Heartbeat"</a></li>
-                            <li><a href="/observatory/lookout" class="text-sm text-white/30 hover:text-[#f7931a] transition-colors">"The Lookout"</a></li>
-                            <li><a href="/observatory/signaling" class="text-sm text-white/30 hover:text-[#f7931a] transition-colors">"Signaling"</a></li>
-                            <li><a href="/observatory/logbook" class="text-sm text-white/30 hover:text-[#f7931a] transition-colors">"The Logbook"</a></li>
-                            <li><a href="/observatory/almanac" class="text-sm text-white/30 hover:text-[#f7931a] transition-colors">"Almanac"</a></li>
-                            <li><a href="/observatory/archives" class="text-sm text-white/30 hover:text-[#f7931a] transition-colors">"The Archives"</a></li>
-                            <li><a href="/observatory/charts/network" class="text-sm text-white/30 hover:text-[#f7931a] transition-colors">"Network Charts"</a></li>
-                            <li><a href="/observatory/charts/fees" class="text-sm text-white/30 hover:text-[#f7931a] transition-colors">"Fee Charts"</a></li>
-                            <li><a href="/observatory/charts/mining" class="text-sm text-white/30 hover:text-[#f7931a] transition-colors">"Mining Charts"</a></li>
-                            <li><a href="/observatory/charts/embedded" class="text-sm text-white/30 hover:text-[#f7931a] transition-colors">"Embedded Data"</a></li>
-                            <li><a href="/observatory/learn" class="text-sm text-white/30 hover:text-[#f7931a] transition-colors">"Learn"</a></li>
+                            <li><a href="/observatory" class="text-sm text-white/55 hover:text-[#f7931a] transition-colors">"Readings"</a></li>
+                            <li><a href="/observatory/heartbeat" class="text-sm text-white/55 hover:text-[#f7931a] transition-colors">"Heartbeat"</a></li>
+                            <li><a href="/observatory/logbook" class="text-sm text-white/55 hover:text-[#f7931a] transition-colors">"The Logbook"</a></li>
+                            <li><a href="/observatory/almanac" class="text-sm text-white/55 hover:text-[#f7931a] transition-colors">"Almanac"</a></li>
+                            <li><a href="/observatory/charts/network" class="text-sm text-white/55 hover:text-[#f7931a] transition-colors">"Network Charts"</a></li>
                         </ul>
                     </div>
 
                     // Column 3 - Guides & Resources
                     <div>
-                        <h3 class="text-xs font-semibold text-white/60 uppercase tracking-wider mb-3">"Resources"</h3>
+                        <h3 class="font-title text-xs font-semibold text-white uppercase tracking-wider mb-3">"Resources"</h3>
                         <ul class="space-y-2">
-                            <li><a href="/guides" class="text-sm text-white/30 hover:text-[#f7931a] transition-colors">"Self-Custody Guides"</a></li>
-                            <li><a href="/observatory/learn/protocols" class="text-sm text-white/30 hover:text-[#f7931a] transition-colors">"Protocol Guide"</a></li>
-                            <li><a href="/faq" class="text-sm text-white/30 hover:text-[#f7931a] transition-colors">"FAQ"</a></li>
-                            <li><a href="/about" class="text-sm text-white/30 hover:text-[#f7931a] transition-colors">"About"</a></li>
+                            <li><a href="/guides" class="text-sm text-white/55 hover:text-[#f7931a] transition-colors">"Self-Custody Guides"</a></li>
+                            <li><a href="/observatory/learn/protocols" class="text-sm text-white/55 hover:text-[#f7931a] transition-colors">"Protocol Guide"</a></li>
+                            <li><a href="/faq" class="text-sm text-white/55 hover:text-[#f7931a] transition-colors">"FAQ"</a></li>
+                            <li><a href="/about" class="text-sm text-white/55 hover:text-[#f7931a] transition-colors">"About"</a></li>
                         </ul>
                     </div>
 
                     // Column 4 - Open Source
                     <div>
-                        <h3 class="text-xs font-semibold text-white/60 uppercase tracking-wider mb-3">"Open Source"</h3>
+                        <h3 class="font-title text-xs font-semibold text-white uppercase tracking-wider mb-3">"Open Source"</h3>
                         <ul class="space-y-2">
-                            <li><a href="https://github.com/Bayernatoor/btc_self_custody" target="_blank" rel="noopener noreferrer" class="text-sm text-white/30 hover:text-[#f7931a] transition-colors">"Source Code"</a></li>
-                            <li><a href="https://github.com/Bayernatoor/btc_self_custody/blob/master/LICENSE" target="_blank" rel="noopener noreferrer" class="text-sm text-white/30 hover:text-[#f7931a] transition-colors">"GPLv3 License"</a></li>
-                            <li><a href="https://github.com/Bayernatoor/btc_self_custody/issues" target="_blank" rel="noopener noreferrer" class="text-sm text-white/30 hover:text-[#f7931a] transition-colors">"Report a Bug"</a></li>
+                            <li><a href="https://github.com/Bayernatoor/btc_self_custody" target="_blank" rel="noopener noreferrer" class="text-sm text-white/55 hover:text-[#f7931a] transition-colors">"Source Code"</a></li>
+                            <li><a href="https://github.com/Bayernatoor/btc_self_custody/blob/master/LICENSE" target="_blank" rel="noopener noreferrer" class="text-sm text-white/55 hover:text-[#f7931a] transition-colors">"GPLv3 License"</a></li>
+                            <li><a href="https://github.com/Bayernatoor/btc_self_custody/issues" target="_blank" rel="noopener noreferrer" class="text-sm text-white/55 hover:text-[#f7931a] transition-colors">"Report a Bug"</a></li>
                         </ul>
                     </div>
                 </div>
 
                 // Bottom bar
                 <div class="mt-8 pt-5 border-t border-white/5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                    <span class="text-xs text-white/25">
-                        "\u{00a9} " {chrono::Utc::now().format("%Y").to_string()} " WE HODL BTC"
+                    <span class="text-xs text-white/45">
+                        "\u{00a9} " {chrono::Utc::now().format("%Y").to_string()} " We Hodl BTC"
                     </span>
-                    <span class="text-xs text-white/25">
+                    <span class="text-xs text-white/45">
                         "Built with "
                         <a href="https://github.com/leptos-rs/leptos" target="_blank" rel="noopener noreferrer" class="hover:text-[#f7931a] transition-colors">"Leptos"</a>
                         " + "

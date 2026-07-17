@@ -29,7 +29,7 @@ const ARTICLES: &[Article] = &[
 #[component]
 pub fn LearnIndexPage() -> impl IntoView {
     view! {
-        <Title text="Learn | WE HODL BTC"/>
+        <Title text="Learn | We Hodl BTC"/>
         <Meta name="description" content="Educational articles about Bitcoin data analysis: protocol guides, methodology documentation, and how to interpret observatory charts."/>
         <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/learn"/>
 

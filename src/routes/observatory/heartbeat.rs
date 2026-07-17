@@ -596,7 +596,7 @@ pub fn HeartbeatPage() -> impl IntoView {
     });
 
     view! {
-        <Title text="Block Heartbeat | WE HODL BTC"/>
+        <Title text="Block Heartbeat | We Hodl BTC"/>
         <Meta name="description" content="Watch Bitcoin breathe. A live EKG visualization of block arrivals, where every spike tells a story of transactions, fees, and network activity."/>
         <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/heartbeat"/>
 

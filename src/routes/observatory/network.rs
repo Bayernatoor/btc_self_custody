@@ -484,7 +484,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
     );
 
     view! {
-        <Title text="Bitcoin Network Charts: Blocks, Adoption & Transactions | WE HODL BTC"/>
+        <Title text="Bitcoin Network Charts: Blocks, Adoption & Transactions | We Hodl BTC"/>
         <Meta name="description" content="Bitcoin network analytics with block size, weight utilization, transaction count, block intervals, chain size growth, SegWit adoption, Taproot usage, witness versions, address types, and RBF trends."/>
         <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/charts/network"/>
         <ChartPageLayout

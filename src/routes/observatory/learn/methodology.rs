@@ -7,8 +7,8 @@ use leptos_meta::*;
 #[component]
 pub fn MethodologyPage() -> impl IntoView {
     view! {
-        <Title text="Data Methodology | WE HODL BTC"/>
-        <Meta name="description" content="Complete data methodology for WE HODL BTC observatory: block metrics, fee calculations, address type classification, mining pool identification, embedded protocol detection, price data sourcing, and daily aggregation."/>
+        <Title text="Data Methodology | We Hodl BTC"/>
+        <Meta name="description" content="Complete data methodology for We Hodl BTC observatory: block metrics, fee calculations, address type classification, mining pool identification, embedded protocol detection, price data sourcing, and daily aggregation."/>
         <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/learn/methodology"/>
 
         // Hero (matches other Observatory pages)

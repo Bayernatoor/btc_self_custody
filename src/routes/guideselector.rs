@@ -8,6 +8,7 @@ use leptos::prelude::*;
 use leptos_meta::*;
 
 use crate::guides;
+use crate::routes::guide::Breadcrumbs;
 
 fn platform_icon(platform: &str) -> &'static str {
     match platform {
@@ -39,41 +40,12 @@ fn os_icon(os: &str) -> &'static str {
     }
 }
 
-/// Step indicator pills.
-#[component]
-fn StepIndicator(step: Signal<u8>, total_steps: Signal<u8>) -> impl IntoView {
-    view! {
-        <div class="flex items-center gap-1.5 mb-6">
-            {move || {
-                let total = total_steps.get();
-                let current = step.get();
-                (1..=total).map(|i| {
-                    view! {
-                        <div class=move || {
-                            if i == current {
-                                "w-8 h-1.5 rounded-full bg-[#f7931a] transition-all duration-300"
-                            } else if i < current {
-                                "w-4 h-1.5 rounded-full bg-[#f7931a] opacity-40 transition-all duration-300"
-                            } else {
-                                "w-4 h-1.5 rounded-full bg-white/15 transition-all duration-300"
-                            }
-                        }></div>
-                    }
-                }).collect::<Vec<_>>()
-            }}
-        </div>
-    }
-}
-
 fn back_button_view(
     label: &'static str,
     on_click: impl Fn(leptos::ev::MouseEvent) + 'static,
 ) -> impl IntoView {
     view! {
-        <button
-            class="mt-6 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium text-white/60 border border-white/10 hover:text-white hover:border-white/30 hover:bg-white/5 transition-all duration-200 cursor-pointer"
-            on:click=on_click
-        >
+        <button class="g2-btn-ghost mt-8" on:click=on_click>
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
             </svg>
@@ -150,14 +122,34 @@ pub fn guide_selector_view(
         }
     });
 
+    // Breadcrumb reflects selection depth; progress fills by depth, leaving
+    // headroom so it reads as "the guide continues after selection".
+    let crumbs = move || {
+        let mut v: Vec<(String, String)> = Vec::new();
+        if let Some(lid) = selected_level.get() {
+            if let Some(l) = guides::find_level(lid) {
+                v.push((l.name.to_string(), format!("/guides/{lid}")));
+            }
+        }
+        if selected_platform.get() == Some("desktop") {
+            v.push(("Desktop".to_string(), String::new()));
+        }
+        v
+    };
+    let prog =
+        move || (step.get() as f32 / (total_steps.get() + 1) as f32 * 100.0).round();
+
     view! {
-        <Title text="Choose Your Bitcoin Self-Custody Guide | WE HODL BTC"/>
+        <Title text="Choose Your Bitcoin Self-Custody Guide | We Hodl BTC"/>
         <Meta name="description" content="Choose your Bitcoin self-custody guide: Basic (mobile wallets), Intermediate (hardware wallet + own node), or Advanced (2-of-3 multisig with geographic separation)."/>
         <Link rel="canonical" href="https://www.wehodlbtc.com/guides"/>
-        <div class="flex flex-col items-center justify-center min-h-[70vh] px-6 opacity-0 animate-fadeinone">
-            <StepIndicator step=step total_steps=total_steps/>
-
-            <div class="w-full max-w-lg lg:max-w-2xl">
+        <div class="g2-shell">
+            {move || view! { <Breadcrumbs crumbs=crumbs()/> }}
+            <div class="g2-prog">
+                <div class="g2-prog-fill" style=move || format!("width:{}%", prog())></div>
+            </div>
+            <div class="g2-flow">
+                <div class="g2-flow-inner">
                 {move || {
                     let level_sel = selected_level.get();
                     let platform_sel = selected_platform.get();
@@ -185,12 +177,12 @@ pub fn guide_selector_view(
                                             let delay = format!("animation-delay: {}ms", i * 80);
                                             view! {
                                                 <a href=path class="block opacity-0 animate-slideup" style=delay>
-                                                    <button class="group flex items-center gap-4 w-full px-5 py-4 lg:py-5 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 hover:border-white/25 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer">
-                                                        <div class="w-10 h-10 rounded-lg bg-[#f7931a]/10 flex items-center justify-center text-[#f7931a] group-hover:bg-[#f7931a]/20 transition-colors" inner_html=icon_html></div>
+                                                    <button class="g2-card group">
+                                                        <div class="g2-card-ic" inner_html=icon_html></div>
                                                         <div class="flex-1 text-left">
-                                                            <div class="text-base font-semibold text-white group-hover:text-[#f4a949] transition-colors">{*os_name}</div>
+                                                            <div class="text-lg font-semibold text-white group-hover:text-[#f4a949] transition-colors">{*os_name}</div>
                                                         </div>
-                                                        <svg class="w-5 h-5 text-white/30 group-hover:text-white/60 group-hover:translate-x-0.5 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <svg class="w-5 h-5 g2-card-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
                                                         </svg>
                                                     </button>
@@ -232,14 +224,14 @@ pub fn guide_selector_view(
                                                         view! {
                                                             <div class="opacity-0 animate-slideup" style=delay>
                                                                 <button
-                                                                    class="group flex items-center gap-4 w-full px-5 py-4 lg:py-5 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 hover:border-white/25 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer"
+                                                                    class="g2-card group"
                                                                     on:click=move |_| set_selected_platform.set(Some("desktop"))
                                                                 >
-                                                                    <div class="w-10 h-10 rounded-lg bg-[#f7931a]/10 flex items-center justify-center text-[#f7931a] group-hover:bg-[#f7931a]/20 transition-colors" inner_html=icon_html></div>
+                                                                    <div class="g2-card-ic" inner_html=icon_html></div>
                                                                     <div class="flex-1 text-left">
-                                                                        <div class="text-base font-semibold text-white group-hover:text-[#f4a949] transition-colors">{display}</div>
+                                                                        <div class="text-lg font-semibold text-white group-hover:text-[#f4a949] transition-colors">{display}</div>
                                                                     </div>
-                                                                    <svg class="w-5 h-5 text-white/30 group-hover:text-white/60 group-hover:translate-x-0.5 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <svg class="w-5 h-5 g2-card-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
                                                                     </svg>
                                                                 </button>
@@ -250,12 +242,12 @@ pub fn guide_selector_view(
                                                         let path = format!("/guides/{}/{}", lid, platform_str);
                                                         view! {
                                                             <a href=path class="block opacity-0 animate-slideup" style=delay>
-                                                                <button class="group flex items-center gap-4 w-full px-5 py-4 lg:py-5 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 hover:border-white/25 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer">
-                                                                    <div class="w-10 h-10 rounded-lg bg-[#f7931a]/10 flex items-center justify-center text-[#f7931a] group-hover:bg-[#f7931a]/20 transition-colors" inner_html=icon_html></div>
+                                                                <button class="g2-card group">
+                                                                    <div class="g2-card-ic" inner_html=icon_html></div>
                                                                     <div class="flex-1 text-left">
-                                                                        <div class="text-base font-semibold text-white group-hover:text-[#f4a949] transition-colors">{display}</div>
+                                                                        <div class="text-lg font-semibold text-white group-hover:text-[#f4a949] transition-colors">{display}</div>
                                                                     </div>
-                                                                    <svg class="w-5 h-5 text-white/30 group-hover:text-white/60 group-hover:translate-x-0.5 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <svg class="w-5 h-5 g2-card-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
                                                                     </svg>
                                                                 </button>
@@ -290,15 +282,15 @@ pub fn guide_selector_view(
                                             let delay = format!("animation-delay: {}ms", i * 80);
                                             view! {
                                                 <button
-                                                    class="opacity-0 animate-slideup group flex items-center w-full px-5 py-4 lg:py-5 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 hover:border-white/25 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer"
+                                                    class="opacity-0 animate-slideup g2-card group"
                                                     style=delay
                                                     on:click=move |_| set_selected_level.set(Some(level_id))
                                                 >
                                                     <div class="flex-1 text-left">
-                                                        <div class="text-base font-semibold text-[#f7931a] group-hover:text-[#f4a949] transition-colors">{level.name}</div>
-                                                        <p class="text-sm text-white/50 mt-0.5">{level.subtitle}</p>
+                                                        <div class="text-lg font-semibold text-[#f7931a] group-hover:text-[#f4a949] transition-colors">{level.name}</div>
+                                                        <p class="text-[0.9rem] text-white/50 mt-0.5">{level.subtitle}</p>
                                                     </div>
-                                                    <svg class="w-5 h-5 text-white/30 group-hover:text-white/60 group-hover:translate-x-0.5 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <svg class="w-5 h-5 g2-card-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
                                                     </svg>
                                                 </button>
@@ -312,6 +304,7 @@ pub fn guide_selector_view(
                         _ => view! { <div></div> }.into_any()
                     }
                 }}
+                </div>
             </div>
         </div>
     }

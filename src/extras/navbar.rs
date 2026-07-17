@@ -25,7 +25,7 @@ pub fn NavBar() -> impl IntoView {
             <div class="mx-auto px-6 py-3 2xl:px-8 2xl:py-4 flex justify-between items-center border-b border-white/15">
                 // Logo
                 <a href="/" class="text-xl 2xl:text-2xl font-medium font-title hover:text-[#f7931a] transition-colors">
-                    "WE HODL BTC"
+                    "We Hodl BTC"
                 </a>
 
                 // Desktop nav

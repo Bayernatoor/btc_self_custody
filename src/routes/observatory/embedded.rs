@@ -20,7 +20,7 @@ pub fn EmbeddedChartsPage() -> impl IntoView {
     let dashboard_data = state.dashboard_data;
 
     view! {
-        <Title text="Bitcoin Embedded Data: OP_RETURN, Inscriptions & Runes | WE HODL BTC"/>
+        <Title text="Bitcoin Embedded Data: OP_RETURN, Inscriptions & Runes | We Hodl BTC"/>
         <Meta name="description" content="Track non-financial data embedded in Bitcoin blocks: OP_RETURN protocols (Runes, Omni, Counterparty), Ordinals inscriptions, BRC-20 tokens, and Stamps usage with counts, volumes, and block share over time."/>
         <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/charts/embedded"/>
         <ChartPageLayout

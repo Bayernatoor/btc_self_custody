@@ -1,10 +1,10 @@
-# WE HODL BTC
+# We Hodl BTC
 
 > Free Bitcoin self-custody guides and The Bitcoin Observatory - live blockchain analytics powered by a full Bitcoin Core node.
 
 ## About
 
-WE HODL BTC is a Bitcoin education and analytics platform. It provides:
+We Hodl BTC is a Bitcoin education and analytics platform. It provides:
 - Step-by-step self-custody guides (beginner to advanced: mobile wallets, hardware wallets, multisig)
 - The Bitcoin Observatory: a live blockchain analytics dashboard with 30+ charts
 

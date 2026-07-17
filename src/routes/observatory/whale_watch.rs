@@ -267,7 +267,7 @@ pub fn WhaleWatchPage() -> impl IntoView {
     let (info_open, set_info_open) = signal(false);
 
     view! {
-        <Title text="The Lookout: Notable Bitcoin Transactions | WE HODL BTC"/>
+        <Title text="The Lookout: Notable Bitcoin Transactions | We Hodl BTC"/>
         <Meta name="description" content="The Lookout: real-time and historical browser for notable Bitcoin transactions. Spots whales, round-number transfers, large inscriptions, consolidations, fan-outs, fee outliers, and on-chain messages as they enter the mempool."/>
         <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/lookout"/>
 

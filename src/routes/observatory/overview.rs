@@ -337,7 +337,7 @@ pub fn ObservatoryOverview() -> impl IntoView {
     });
 
     view! {
-        <Title text="The Bitcoin Observatory: Live Network Readings | WE HODL BTC"/>
+        <Title text="The Bitcoin Observatory: Live Network Readings | We Hodl BTC"/>
         <Meta name="description" content="Current readings from the Bitcoin network: real-time block height, difficulty, hashrate, mempool stats, price, supply, UTXO count, halving countdown, and difficulty adjustment predictions."/>
         <Link rel="canonical" href="https://www.wehodlbtc.com/observatory"/>
 

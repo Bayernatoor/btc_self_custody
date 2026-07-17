@@ -125,7 +125,7 @@ pub fn ProtocolGuidePage() -> impl IntoView {
     let (active_protocol, set_active_protocol) = signal(String::new());
 
     view! {
-        <Title text="Bitcoin Embedding Protocols: Runes, Ordinals, BRC-20, Stamps | WE HODL BTC"/>
+        <Title text="Bitcoin Embedding Protocols: Runes, Ordinals, BRC-20, Stamps | We Hodl BTC"/>
         <Meta name="description" content="Technical guide to data embedding protocols on Bitcoin. Compare Omni Layer, Counterparty, Stamps, Ordinals inscriptions, BRC-20, and Runes with timelines, trade-offs, and pruning characteristics."/>
         <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/learn/protocols"/>
 

@@ -5,7 +5,7 @@ use leptos_meta::*;
 #[component]
 pub fn HomePage() -> impl IntoView {
     view! {
-        <Title text="WE HODL BTC - Bitcoin Self-Custody Guides & Live Blockchain Analytics"/>
+        <Title text="We Hodl BTC - Bitcoin Self-Custody Guides & Live Blockchain Analytics"/>
         <Meta name="description" content="Free Bitcoin self-custody guides for every level, from mobile wallets to multisig. Plus The Bitcoin Observatory: live blockchain analytics with 30+ charts powered by a full Bitcoin Core node."/>
         <Link rel="canonical" href="https://www.wehodlbtc.com/"/>
 
@@ -26,7 +26,7 @@ pub fn HomePage() -> impl IntoView {
                 <a href="/guides">
                     <button
                         role="button"
-                        class="text-sm lg:text-base text-center bg-[#f79231] w-36 lg:w-40 mx-auto font-semibold no-underline border-none rounded-lg py-2.5 lg:py-3 px-4 lg:px-5 hover:bg-[#f4a949] cursor-pointer shadow-md hover:shadow-lg transition-all duration-300 lg:mx-0"
+                        class="inline-flex items-center justify-center gap-2 text-sm lg:text-base font-semibold text-[#f7931a] bg-[#f7931a]/10 border border-[#f7931a]/40 rounded-lg py-2.5 lg:py-3 px-6 hover:bg-[#f7931a]/20 hover:border-[#f7931a]/60 hover:-translate-y-px cursor-pointer transition-all duration-200"
                     >
                         <span>"Start Hodling"</span>
                     </button>
