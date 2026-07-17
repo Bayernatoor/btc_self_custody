@@ -44,6 +44,31 @@ fn varint_size(n: u64) -> u64 {
     }
 }
 
+/// JSON-RPC response envelope for [`BitcoinRpc::call_typed`]. `result` is
+/// deserialized straight into the caller's `T`; `result` is `None` on an error
+/// response (Core sets it null), which is why it's `Option`.
+#[derive(serde::Deserialize)]
+struct RpcResponse<T> {
+    result: Option<T>,
+    error: Option<Value>,
+}
+
+/// Minimal subset of a `getrawmempool true` entry — only the two fields the
+/// heartbeat backfill needs. serde skips the ~dozen other fields (wtxid, weight,
+/// time, ancestor/descendant accounting, depends, spentby, flags) without
+/// allocating them, so deserializing into this via [`BitcoinRpc::call_typed`]
+/// costs a fraction of the full Value tree.
+#[derive(serde::Deserialize)]
+struct RawMempoolEntry {
+    vsize: u32,
+    fees: RawMempoolFees,
+}
+
+#[derive(serde::Deserialize)]
+struct RawMempoolFees {
+    base: f64,
+}
+
 /// Bitcoin Core JSON-RPC client. Holds a persistent HTTP client with
 /// connection pooling, configurable timeouts, and per-method response caches
 /// (see [`rpc_cache`](super::rpc_cache)) that protect Core from request floods
@@ -429,6 +454,54 @@ impl BitcoinRpc {
         }
 
         Ok(result["result"].take())
+    }
+
+    /// Like [`Self::call`] but deserializes the response body DIRECTLY into `T`
+    /// instead of into a generic `serde_json::Value` first. For a large,
+    /// known-shape response this avoids materializing a Value node per field:
+    /// serde only allocates what `T` declares and silently skips the rest. Used
+    /// for `getrawmempool verbose`, which is tens of MB of mostly-discarded
+    /// fields — a full Value tree of that is a ~50-90MB transient spike on the
+    /// memory-tight droplet. `call` stays for the small / dynamically-shaped
+    /// responses where a Value is fine.
+    async fn call_typed<T: serde::de::DeserializeOwned>(
+        &self,
+        method: &str,
+        params: &[Value],
+    ) -> Result<T, StatsError> {
+        let body = json!({
+            "jsonrpc": "1.0",
+            "id": "bitcoin_stats",
+            "method": method,
+            "params": params,
+        });
+
+        let resp = self
+            .client
+            .post(&self.url)
+            .basic_auth(&self.user, Some(&self.password))
+            .json(&body)
+            .send()
+            .await?;
+
+        if !resp.status().is_success() {
+            return Err(StatsError::Rpc(format!(
+                "RPC returned status {}",
+                resp.status()
+            )));
+        }
+
+        // reqwest buffers the body then `from_slice`s straight into T — no
+        // intermediate Value tree.
+        let parsed: RpcResponse<T> = resp.json().await?;
+        if let Some(error) = parsed.error {
+            if !error.is_null() {
+                return Err(StatsError::Rpc(format!("RPC error: {error}")));
+            }
+        }
+        parsed
+            .result
+            .ok_or_else(|| StatsError::Rpc("RPC response missing result".to_string()))
     }
 
     /// Call `getblockchaininfo` - returns chain state, tip height, difficulty.
@@ -1133,17 +1206,18 @@ impl BitcoinRpc {
     pub async fn get_raw_mempool_verbose(
         &self,
     ) -> Result<Vec<(String, u64, u32)>, StatsError> {
-        let result = self.call("getrawmempool", &[json!(true)]).await?;
-        let obj = result
-            .as_object()
-            .ok_or_else(|| StatsError::Rpc("expected object".to_string()))?;
-        let mut entries = Vec::with_capacity(obj.len());
-        for (txid, info) in obj {
-            let fee_btc = info["fees"]["base"].as_f64().unwrap_or(0.0);
-            let fee_sats = (fee_btc * 100_000_000.0).round() as u64;
-            let vsize = info["vsize"].as_u64().unwrap_or(0) as u32;
-            if vsize > 0 {
-                entries.push((txid.clone(), fee_sats, vsize));
+        // Deserialize straight into the typed subset (RawMempoolEntry) via
+        // call_typed rather than a serde_json::Value: the verbose response is
+        // tens of MB of mostly-discarded fields, and a full Value tree of that
+        // is a ~50-90MB transient allocation spike on the memory-tight droplet.
+        // This keeps only vsize + fees.base.
+        let map: std::collections::HashMap<String, RawMempoolEntry> =
+            self.call_typed("getrawmempool", &[json!(true)]).await?;
+        let mut entries = Vec::with_capacity(map.len());
+        for (txid, entry) in map {
+            let fee_sats = (entry.fees.base * 100_000_000.0).round() as u64;
+            if entry.vsize > 0 {
+                entries.push((txid, fee_sats, entry.vsize));
             }
         }
         Ok(entries)
