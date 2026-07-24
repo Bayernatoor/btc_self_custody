@@ -28,12 +28,14 @@ jobs:
           shared-key: release-build
 
       - name: Cache cargo-leptos binary
+        id: cache-cargo-leptos
         uses: actions/cache@v4
         with:
           path: ~/.cargo/bin/cargo-leptos
           key: cargo-leptos-${{ runner.os }}
 
       - name: Install cargo-leptos (no-op if cache hit)
+        if: steps.cache-cargo-leptos.outputs.cache-hit != 'true'
         run: cargo install --locked cargo-leptos
 
       - name: Set up Node.js

@@ -2095,6 +2095,66 @@ pub fn prune_departed_mempool_txs(
     Ok(deleted)
 }
 
+/// Insert txs that are in the node's mempool (`entries`, from getrawmempool
+/// verbose) but MISSING from the table. The reconcile's counterpart to
+/// [`prune_departed_mempool_txs`]: ZMQ `rawtx` can miss txs (send high-water-mark
+/// drops under load, a reconnect gap while the subscriber was down, or a
+/// `getmempoolentry` failure that drops the tx) and nothing else re-adds them, so
+/// the table drifts BELOW the node's real mempool. This backfills that gap so the
+/// heartbeat brick count tracks the node instead of under-reporting.
+///
+/// Only txid/fee/vsize are known from the verbose mempool, so backfilled rows
+/// carry no notable enrichment (value_usd / notable_type / op_return_text) —
+/// identical to how the startup seed inserts. `first_seen` is stamped by the
+/// caller. Capped at `max_insert` per call so a large first-time backlog can't
+/// hold a long write lock or exhaust the pool; the remainder clears over
+/// subsequent reconcile cycles. Returns the number of rows inserted.
+pub fn insert_missing_mempool_txs(
+    conn: &Connection,
+    entries: &[(String, u64, u32)],
+    first_seen: u64,
+    max_insert: usize,
+) -> rusqlite::Result<u64> {
+    if entries.is_empty() {
+        return Ok(0);
+    }
+    // Currently-unconfirmed txids already in the table (uses idx_mempool_unconfirmed).
+    // Filtering against this up front means the max_insert cap counts real inserts,
+    // not no-op INSERT OR IGNOREs against rows we already have.
+    let existing: std::collections::HashSet<String> = {
+        let mut stmt = conn.prepare_cached(
+            "SELECT txid FROM mempool_txs WHERE confirmed_height IS NULL",
+        )?;
+        let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+        rows.filter_map(|r| r.ok()).collect()
+    };
+    let tx = conn.unchecked_transaction()?;
+    let mut inserted = 0u64;
+    for (txid, fee, vsize) in entries {
+        if existing.contains(txid) {
+            continue;
+        }
+        // INSERT OR IGNORE (via insert_mempool_tx) so a txid that exists as a
+        // CONFIRMED row (rare: reorg back into mempool) is left untouched.
+        insert_mempool_tx(
+            &tx,
+            &MempoolTxInsert {
+                txid,
+                fee: *fee,
+                vsize: *vsize,
+                first_seen,
+                ..Default::default()
+            },
+        )?;
+        inserted += 1;
+        if inserted as usize >= max_insert {
+            break;
+        }
+    }
+    tx.commit()?;
+    Ok(inserted)
+}
+
 /// Delete a bounded batch of CONFIRMED mempool_txs rows older than
 /// `confirmed_before`. Confirmed txs have left the mempool and are never shown as
 /// bricks (the history query filters confirmed_height IS NULL), so keeping them
@@ -2565,6 +2625,20 @@ pub fn query_unconfirmed_txids(
     rows.collect()
 }
 
+/// Count currently-unconfirmed rows in mempool_txs. Cheap (uses
+/// idx_mempool_unconfirmed). The reconcile compares this against the node's
+/// mempool size to measure how far the table has drifted below the node before
+/// deciding whether to run the heavier verbose backfill.
+pub fn count_unconfirmed_mempool_txs(
+    conn: &Connection,
+) -> rusqlite::Result<u64> {
+    conn.query_row(
+        "SELECT COUNT(*) FROM mempool_txs WHERE confirmed_height IS NULL",
+        [],
+        |row| row.get(0),
+    )
+}
+
 /// Query extreme records with the block heights where each MAX occurred.
 /// Uses subqueries to find the specific block for each extreme.
 /// Query extreme records for a time range.
@@ -3032,6 +3106,41 @@ mod tests {
         assert!(unconfirmed.contains(&"tx1".to_string()));
         assert!(unconfirmed.contains(&"tx3".to_string()));
         assert!(!unconfirmed.contains(&"tx2".to_string()));
+    }
+
+    #[test]
+    fn test_insert_missing_mempool_txs() {
+        let conn = setup_db();
+        // tx1 already in the table (simulates a tx ZMQ did capture).
+        insert_test_tx(&conn, "tx1", 100, 150, 500_000, 1700000000);
+
+        // Node's mempool (getrawmempool verbose) has tx1, tx2, tx3 — tx2 and tx3
+        // are the ones ZMQ missed.
+        let entries = vec![
+            ("tx1".to_string(), 100u64, 150u32),
+            ("tx2".to_string(), 200u64, 250u32),
+            ("tx3".to_string(), 300u64, 350u32),
+        ];
+        let inserted =
+            insert_missing_mempool_txs(&conn, &entries, 1700009999, 5000).unwrap();
+        assert_eq!(inserted, 2); // only the two missing txs, tx1 skipped
+
+        let unconfirmed = query_unconfirmed_txids(&conn, 100).unwrap();
+        assert_eq!(unconfirmed.len(), 3);
+        assert!(unconfirmed.contains(&"tx2".to_string()));
+        assert!(unconfirmed.contains(&"tx3".to_string()));
+
+        // Idempotent: a second pass with the same node set inserts nothing.
+        let again =
+            insert_missing_mempool_txs(&conn, &entries, 1700009999, 5000).unwrap();
+        assert_eq!(again, 0);
+
+        // Cap is respected: only max_insert new rows per call.
+        let big: Vec<(String, u64, u32)> = (0..10)
+            .map(|i| (format!("new{i}"), 10u64, 20u32))
+            .collect();
+        let capped = insert_missing_mempool_txs(&conn, &big, 1700009999, 4).unwrap();
+        assert_eq!(capped, 4);
     }
 
     #[test]

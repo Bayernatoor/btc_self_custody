@@ -15,9 +15,12 @@
 //! - **Extras backfill**: re-fetches blocks with outdated backfill_version
 //! - **Backward backfill**: fills historical blocks from min_height down to genesis
 //! - **Mempool seed**: loads current mempool via `getrawmempool` on startup
-//! - **Mempool reconcile**: every 60s, prunes mempool_txs rows for txs no longer
-//!   in the node's mempool (RBF/eviction/missed-confirm), so the heartbeat shows
-//!   the node's real mempool instead of accumulated ghosts
+//! - **Mempool reconcile**: every 60s, syncs mempool_txs to the node's mempool in
+//!   both directions — prunes rows for txs no longer in it (RBF/eviction/missed-
+//!   confirm ghosts) via the cheap txid list, AND, only when the table has drifted
+//!   below the node, backfills txs the ZMQ `rawtx` feed missed (HWM drops /
+//!   reconnect gaps) via a drift-gated verbose fetch, so the heartbeat brick count
+//!   tracks the node's real mempool instead of drifting above OR below it
 //! - **ZMQ subscriber**: real-time tx and block notifications (if configured)
 //! - **Mempool pruner**: deletes old mempool_txs entries daily
 
@@ -411,70 +414,132 @@ pub fn spawn_background_tasks(
         });
     }
 
-    // Reconcile mempool_txs against the node's live mempool every 60s. ZMQ only
-    // ever ADDS txs; txs that leave the mempool another way (RBF-replaced, fee-
-    // evicted, or confirmed in a block our ZMQ missed) keep confirmed_height NULL
-    // and pile up as "ghost" unconfirmed rows — inflating the heartbeat brick
-    // count above the node's real mempool. This prunes them so the timeline shows
-    // the node's actual mempool. Cheap: getrawmempool (txid list) + a set-diff
-    // delete off the DB thread. Runs immediately, then every 60s.
+    // Reconcile mempool_txs against the node's live mempool every 60s, in BOTH
+    // directions:
+    //   - PRUNE departed txs: txs that left the mempool another way than a block
+    //     (RBF-replaced, fee-evicted, or confirmed in a block our ZMQ missed) keep
+    //     confirmed_height NULL and would pile up as "ghost" rows.
+    //   - INSERT missing txs: ZMQ `rawtx` does NOT capture every tx — the send
+    //     high-water mark drops messages under burst, a subscriber reconnect loses
+    //     whatever arrived during the gap, and a failed getmempoolentry drops the
+    //     tx outright. Nothing else re-adds those, so the table drifts BELOW the
+    //     node's real mempool (observed ~24k rows vs a ~43k node mempool) and the
+    //     heartbeat brick count under-reports.
+    // The prune runs every cycle off the cheap `getrawmempool` txid list. The
+    // backfill needs fee/vsize (only in the far heavier `getrawmempool verbose`,
+    // which the node serializes under cs_main and which is tens of MB to parse on
+    // a memory-tight box), so it is DRIFT-GATED: verbose is fetched only when the
+    // table has fallen at least BACKFILL_DRIFT_THRESHOLD below the node. In steady
+    // state (ZMQ keeping up) that never fires, so the ongoing cost is just the
+    // txid-list prune — the same as before this feature. After pruning, every DB
+    // unconfirmed row is guaranteed present in the node set, so
+    // `node_count - db_count` is exactly the count of txs ZMQ missed. Both
+    // directions are capped per cycle so a large first-time backlog can't hold a
+    // long write lock / exhaust the pool; the remainder clears over later cycles.
     {
         let state = Arc::clone(&state);
         tokio::spawn(async move {
+            // Below this drift we don't bother with the verbose fetch: it absorbs
+            // normal in-flight churn (a few hundred txs the node has that we're
+            // still processing) so verbose only fires on a real ZMQ shortfall.
+            const BACKFILL_DRIFT_THRESHOLD: u64 = 1000;
             loop {
                 match state.rpc.get_raw_mempool().await {
                     // Skip an empty result: the node is restarting / mempool not
                     // loaded, and pruning against {} would wipe the whole table.
                     Ok(txids) if !txids.is_empty() => {
+                        let node_count = txids.len() as u64;
                         let current: std::collections::HashSet<String> =
                             txids.into_iter().collect();
                         let db = state.db.clone();
-                        // Cap deletions per cycle so a large first-time backlog
-                        // can't hold a long write lock / exhaust the pool. The
-                        // remainder clears over subsequent 60s cycles.
                         let max_delete = 5000usize;
+                        let now = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs();
                         // Confirmed rows have left the mempool and aren't shown;
                         // prune them ~1h after confirmation so they don't pile up
                         // to millions (the DB-bloat cause).
-                        let confirmed_before = std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap_or_default()
-                            .as_secs()
-                            .saturating_sub(3600);
-                        let _ = tokio::task::spawn_blocking(move || match db.get() {
-                            Ok(conn) => {
-                                match db::prune_departed_mempool_txs(
-                                    &conn, &current, max_delete,
-                                ) {
-                                    Ok(n) if n > 0 => tracing::info!(
-                                        "Mempool reconcile: pruned {n} departed txs (node mempool now {})",
-                                        current.len()
-                                    ),
-                                    Ok(_) => {}
-                                    Err(e) => tracing::warn!(
-                                        "Mempool reconcile: prune failed: {e}"
-                                    ),
+                        let confirmed_before = now.saturating_sub(3600);
+                        // Prune both directions off the DB thread, then report the
+                        // post-prune unconfirmed count so we can measure drift.
+                        let db_count = tokio::task::spawn_blocking(move || {
+                            let conn = match db.get() {
+                                Ok(c) => c,
+                                Err(e) => {
+                                    tracing::warn!(
+                                        "Mempool reconcile: DB pool error: {e}"
+                                    );
+                                    return None;
                                 }
-                                match db::prune_confirmed_mempool_txs(
-                                    &conn, confirmed_before, max_delete,
-                                ) {
-                                    Ok(n) if n > 0 => tracing::info!(
-                                        "Mempool reconcile: pruned {n} old confirmed txs"
-                                    ),
-                                    Ok(_) => {}
-                                    Err(e) => tracing::warn!(
-                                        "Mempool reconcile: confirmed prune failed: {e}"
-                                    ),
-                                }
+                            };
+                            match db::prune_departed_mempool_txs(
+                                &conn, &current, max_delete,
+                            ) {
+                                Ok(n) if n > 0 => tracing::info!(
+                                    "Mempool reconcile: pruned {n} departed txs (node mempool now {node_count})"
+                                ),
+                                Ok(_) => {}
+                                Err(e) => tracing::warn!(
+                                    "Mempool reconcile: prune failed: {e}"
+                                ),
                             }
-                            Err(e) => tracing::warn!(
-                                "Mempool reconcile: DB pool error: {e}"
-                            ),
+                            match db::prune_confirmed_mempool_txs(
+                                &conn, confirmed_before, max_delete,
+                            ) {
+                                Ok(n) if n > 0 => tracing::info!(
+                                    "Mempool reconcile: pruned {n} old confirmed txs"
+                                ),
+                                Ok(_) => {}
+                                Err(e) => tracing::warn!(
+                                    "Mempool reconcile: confirmed prune failed: {e}"
+                                ),
+                            }
+                            db::count_unconfirmed_mempool_txs(&conn).ok()
                         })
-                        .await;
+                        .await
+                        .ok()
+                        .flatten();
+
+                        // Backfill ZMQ-missed txs, but only when the table has
+                        // drifted far enough below the node to be worth the heavy
+                        // verbose fetch (see the block comment above).
+                        let drift =
+                            db_count.map_or(0, |c| node_count.saturating_sub(c));
+                        if drift >= BACKFILL_DRIFT_THRESHOLD {
+                            match state.rpc.get_raw_mempool_verbose().await {
+                                Ok(entries) if !entries.is_empty() => {
+                                    let db = state.db.clone();
+                                    let max_insert = 5000usize;
+                                    let _ = tokio::task::spawn_blocking(
+                                        move || match db.get() {
+                                            Ok(conn) => match db::insert_missing_mempool_txs(
+                                                &conn, &entries, now, max_insert,
+                                            ) {
+                                                Ok(n) if n > 0 => tracing::info!(
+                                                    "Mempool reconcile: backfilled {n} missing txs (drift was {drift})"
+                                                ),
+                                                Ok(_) => {}
+                                                Err(e) => tracing::warn!(
+                                                    "Mempool reconcile: backfill failed: {e}"
+                                                ),
+                                            },
+                                            Err(e) => tracing::warn!(
+                                                "Mempool reconcile: backfill DB pool error: {e}"
+                                            ),
+                                        },
+                                    )
+                                    .await;
+                                }
+                                Ok(_) => {}
+                                Err(e) => tracing::debug!(
+                                    "Mempool reconcile: getrawmempool verbose failed: {e}"
+                                ),
+                            }
+                        }
                     }
                     Ok(_) => tracing::debug!(
-                        "Mempool reconcile: getrawmempool empty, skipping prune"
+                        "Mempool reconcile: getrawmempool empty, skipping reconcile"
                     ),
                     Err(e) => tracing::debug!(
                         "Mempool reconcile: getrawmempool failed: {e}"
