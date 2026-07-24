@@ -348,7 +348,7 @@ pub fn OnThisDayPage() -> impl IntoView {
     use chrono::Datelike;
 
     view! {
-        <Title text=move || format!("The Bitcoin Almanac: {} | WE HODL BTC", display_date.get())/>
+        <Title text=move || format!("The Bitcoin Almanac: {} | We Hodl BTC", display_date.get())/>
         <Meta name="description" content="The Bitcoin Almanac: what happened on any calendar date across every year of Bitcoin's existence. Compare blocks, fees, prices, and milestones from 2009 to present."/>
         <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/almanac"/>
 

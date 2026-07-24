@@ -58,7 +58,7 @@ pub fn MiningChartsPage() -> impl IntoView {
     });
 
     view! {
-        <Title text="Bitcoin Mining Charts: Difficulty & Pool Distribution | WE HODL BTC"/>
+        <Title text="Bitcoin Mining Charts: Difficulty & Pool Distribution | We Hodl BTC"/>
         <Meta name="description" content="Bitcoin mining analytics with difficulty adjustment history, mining pool dominance distribution including OCEAN template miners, and empty block tracking across the network."/>
         <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/charts/mining"/>
         <ChartPageLayout

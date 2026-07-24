@@ -8,41 +8,37 @@ use leptos::prelude::*;
 use leptos_meta::*;
 
 use crate::extras::stepper::Stepper;
+use crate::extras::stepper_v2::{inline, StepperV2};
 use crate::guides::{
     self, DownloadLink, GuideLevelDef, ProductLink, WalletDef,
 };
+use crate::guides_v2;
 use crate::routes::guideselector::guide_selector_view;
 
 // =============================================================================
 // Shared sub-components
 // =============================================================================
 
-/// Breadcrumb trail: Guides > Level > Platform > Wallet
+/// Breadcrumb trail: Guides > Level > Platform > Wallet. Shared wizard chrome,
+/// used by the selector and every guide page. Safe when `crumbs` is empty (root):
+/// an empty `href` renders the label as the current (non-link) crumb.
 #[component]
-fn Breadcrumbs(crumbs: Vec<(String, String)>) -> impl IntoView {
-    let last = crumbs.len() - 1;
+pub fn Breadcrumbs(crumbs: Vec<(String, String)>) -> impl IntoView {
+    let last = crumbs.len().saturating_sub(1);
     view! {
-        <nav aria-label="Breadcrumb" class="w-full mb-4">
-            <ol class="flex items-center gap-1.5 text-xs text-white/40">
-                <li>
-                    <a href="/guides" class="hover:text-white/70 transition-colors">"Guides"</a>
-                </li>
-                {crumbs.into_iter().enumerate().map(|(i, (label, href))| {
-                    let is_last = i == last;
-                    view! {
-                        <li class="flex items-center gap-1.5">
-                            <svg class="w-3 h-3 text-white/20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-                            </svg>
-                            {if is_last {
-                                view! { <span class="text-white/60">{label}</span> }.into_any()
-                            } else {
-                                view! { <a href=href class="hover:text-white/70 transition-colors">{label}</a> }.into_any()
-                            }}
-                        </li>
-                    }
-                }).collect::<Vec<_>>()}
-            </ol>
+        <nav aria-label="Breadcrumb" class="g2-crumbs">
+            <a href="/guides">"Guides"</a>
+            {crumbs.into_iter().enumerate().map(|(i, (label, href))| {
+                let is_last = i == last;
+                view! {
+                    <span class="g2-crumb-sep" aria-hidden="true">"›"</span>
+                    {if is_last || href.is_empty() {
+                        view! { <span class="g2-crumb-cur">{label}</span> }.into_any()
+                    } else {
+                        view! { <a href=href>{label}</a> }.into_any()
+                    }}
+                }
+            }).collect::<Vec<_>>()}
         </nav>
     }
 }
@@ -114,22 +110,25 @@ fn WalletCard(
     level: String,
 ) -> impl IntoView {
     let path = format!("/guides/{}/{}/{}", level, platform, wallet.id);
-    let color = wallet.color;
+    // The card is a <div> (not a link) so trait chips can carry their own links
+    // (e.g. BDK). The "Choose" link stretches over the whole card via ::after, so
+    // the card stays fully clickable while inner links remain independently usable.
     view! {
-        <a href=path class="block">
-            <button class="group flex items-center gap-4 w-full px-5 py-4 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 hover:border-white/25 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer">
-                <div class="w-11 h-11 rounded-lg bg-white/10 flex items-center justify-center shrink-0 group-hover:bg-white/15 transition-colors">
+        <div class="g2-wcard">
+            <div class="g2-wcard-head">
+                <div class="g2-wcard-ic">
                     <img class="h-8 w-8 rounded-md" src=wallet.logo alt=wallet.logo_alt/>
                 </div>
-                <div class="flex-1 text-left">
-                    <h3 class="text-base lg:text-lg font-semibold" style=format!("color: {color}")>{wallet.name}</h3>
-                    <p class="text-sm text-white/50 mt-0.5">{wallet.tagline}</p>
-                </div>
-                <svg class="w-5 h-5 text-white/30 group-hover:text-white/60 group-hover:translate-x-0.5 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-                </svg>
-            </button>
-        </a>
+                <h3 class="g2-wcard-name">{wallet.name}</h3>
+            </div>
+            <p class="g2-wcard-why">{wallet.tagline}</p>
+            <ul class="g2-wcard-traits">
+                {wallet.highlights.iter().map(|h| view! {
+                    <li><span class="g2-wcard-ck">"\u{2713}"</span><span>{inline(h)}</span></li>
+                }).collect::<Vec<_>>()}
+            </ul>
+            <a href=path class="g2-wcard-go">"Choose "<span class="g2-wcard-arrow">"\u{2192}"</span></a>
+        </div>
     }
 }
 
@@ -150,7 +149,10 @@ fn ProductCard(product: &'static ProductLink) -> impl IntoView {
 }
 
 fn centered_layout() -> &'static str {
-    "flex flex-col items-center max-w-2xl mx-auto px-6 mt-10 mb-24 opacity-0 animate-fadeinone lg:px-8 lg:max-w-3xl md:my-20"
+    // Fills the viewport (minus navbar) and centers short content, so the footer
+    // is consistently pushed below the fold and pages don't jump when clicking
+    // through. Long content (steppers) exceeds the min-height and top-aligns.
+    "flex flex-col items-center justify-center min-h-[calc(100vh-4rem)] max-w-2xl mx-auto px-6 py-10 opacity-0 animate-fadeinone lg:px-8 lg:max-w-3xl"
 }
 
 // =============================================================================
@@ -208,7 +210,7 @@ fn render_level_page(
     platform: &str,
 ) -> impl IntoView {
     let platform_display = guides::platform_display(platform);
-    let page_title = format!("{} | WE HODL BTC", level.title);
+    let page_title = format!("{} | We Hodl BTC", level.title);
     let wallets = guides::wallets_for(level, platform);
     let platform_owned = platform.to_string();
     let full_title = if level.id == "basic" {
@@ -237,40 +239,82 @@ fn render_level_page(
     );
     let canonical =
         format!("https://www.wehodlbtc.com/guides/{}/{}", level.id, platform);
+    // A wallet picker is a choose-one panel (like the selector), so it gets the
+    // slim progress bar; the intermediate/advanced level pages don't.
+    let has_picker = !wallets.is_empty();
+    // The basic level's intro is mobile-framed ("mobile wallet", "carry cash");
+    // the desktop path (Sparrow, single-sig + passphrase) needs its own framing.
+    let picker_lede = if level.id == "basic" && is_desktop {
+        "This basic desktop setup is a sturdier base than a phone wallet. You will create a single-signature Sparrow wallet, protected by a passphrase, and take possession of your own keys. It is a great everyday setup, and a solid foundation to grow into a hardware wallet or multisig as your stack grows."
+    } else {
+        level.intro
+    };
+    // Opinionated framing: these are curated recommendations, not a neutral list.
+    let wallet_title = if wallets.len() == 1 { "Recommended Wallet" } else { "Recommended Wallets" };
+    let single_wallet = wallets.len() == 1;
 
     view! {
         <Title text=page_title/>
         <Meta name="description" content=meta_desc/>
         <Link rel="canonical" href=canonical/>
-        <div class=centered_layout()>
-            <Breadcrumbs crumbs=crumbs/>
-            <PageHeader
-                title=full_title
-                quote=level.quote.to_string()
-                quote_author=level.quote_author.to_string()
-            />
-
-            // OS badge for desktop variants
-            {is_desktop.then(|| view! {
-                <div class="flex justify-center mb-4">
-                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-[#f7931a]/10 text-[#f7931a] border border-[#f7931a]/20">
-                        {pd.clone()}
-                    </span>
+        {match guides_v2::find_level_guide_v2(level.id) {
+            // A level with a v2 guide (e.g. Intermediate) renders the wizard directly.
+            Some(guide) => view! {
+                <div class="g2-shell">
+                    <Breadcrumbs crumbs=crumbs.clone()/>
+                    <StepperV2 guide=guide downloads=Vec::new()/>
                 </div>
+            }.into_any(),
+            None => view! {
+        <div class="g2-shell">
+            <Breadcrumbs crumbs=crumbs/>
+            {has_picker.then(|| view! {
+                <div class="g2-prog"><div class="g2-prog-fill" style="width:45%"></div></div>
             })}
-
-            // Intro
-            <div class="w-full mb-8 animate-slideup" style="animation-delay: 100ms">
-                {render_level_intro(level, platform)}
-            </div>
+            <div class="g2-flow">
+            <div class="g2-flow-inner">
+            {if has_picker {
+                // Refined "choose a wallet" header — matches the selector + guide intro
+                // (eyebrow + white Oswald title + muted lede). No orange title / underline
+                // / quote / boxed definition; the OS is carried by the eyebrow.
+                view! {
+                    <header class="text-center mb-8">
+                        <h1 class="g2-h">{full_title.clone()}</h1>
+                        {(!level.quote.is_empty()).then(|| view! {
+                            <p class="text-[0.95rem] text-[#f7931a] italic max-w-md mx-auto mt-1">{level.quote}</p>
+                            <p class="text-xs text-[#f7931a] opacity-70 mt-0.5">{level.quote_author}</p>
+                        })}
+                        <p class="g2-lede g2-center mt-5">{picker_lede}</p>
+                    </header>
+                }.into_any()
+            } else {
+                // v1 header for the intermediate/advanced level pages (migrated later).
+                view! {
+                    <PageHeader
+                        title=full_title.clone()
+                        quote=level.quote.to_string()
+                        quote_author=level.quote_author.to_string()
+                    />
+                    {is_desktop.then(|| view! {
+                        <div class="flex justify-center mb-4">
+                            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-[#f7931a]/10 text-[#f7931a] border border-[#f7931a]/20">
+                                {pd.clone()}
+                            </span>
+                        </div>
+                    })}
+                    <div class="w-full mb-8 animate-slideup" style="animation-delay: 100ms">
+                        {render_level_intro(level, platform)}
+                    </div>
+                }.into_any()
+            }}
 
             // Wallet picker / step nav / stepper
             <div class="w-full">
                 {if !wallets.is_empty() {
                     view! {
                         <div class="animate-slideup" style="animation-delay: 200ms">
-                            <h2 class="text-base text-[#f7931a] font-semibold text-center mb-4">"Pick a Wallet"</h2>
-                            <div class="flex flex-col gap-3">
+                            <h2 class="font-title uppercase tracking-wider text-[0.8rem] text-[#f7931a] text-center mb-4">{wallet_title}</h2>
+                            <div class=if single_wallet { "g2-wcards g2-wcards-one" } else { "g2-wcards" }>
                                 {wallets.iter().enumerate().map(|(i, w)| {
                                     let delay = format!("animation-delay: {}ms", 250 + i * 80);
                                     view! {
@@ -295,7 +339,11 @@ fn render_level_page(
                     view! { <div></div> }.into_any()
                 }}
             </div>
+            </div>
+            </div>
         </div>
+            }.into_any(),
+        }}
     }
 }
 
@@ -404,14 +452,10 @@ fn render_wallet_page(
     level_id: &str,
     level: Option<&'static GuideLevelDef>,
 ) -> impl IntoView {
-    let page_title = format!("{} Guide | WE HODL BTC", wallet.name);
+    let page_title = format!("{} Guide | We Hodl BTC", wallet.name);
     let downloads = guides::downloads_for(wallet, platform);
     let level_name = level.map(|l| l.name).unwrap_or("Guide");
     let platform_display = guides::platform_display(platform);
-    let os_tip =
-        guides::os_tip(platform).map(|(t, b)| (t.to_string(), b.to_string()));
-    let is_desktop = guides::is_desktop_os(platform);
-    let platform_display_owned = platform_display.to_string();
 
     let crumbs = vec![
         (level_name.to_string(), "/guides".to_string()),
@@ -434,55 +478,73 @@ fn render_wallet_page(
         level_id, platform, wallet.id
     );
 
+    // v2 wallets render the refined wizard; everything else keeps the v1 layout.
+    let guide_v2 = guides_v2::find_guide_v2(wallet.id);
+
     view! {
         <Title text=page_title/>
         <Meta name="description" content=meta_desc/>
         <Link rel="canonical" href=canonical/>
-        <div class=centered_layout()>
-            <Breadcrumbs crumbs=crumbs/>
-            <PageHeader
-                title=wallet.name.to_string()
-                subtitle=wallet.tagline.to_string()
-                quote=wallet.description.to_string()
-            />
-
-            // OS badge
-            {is_desktop.then(|| view! {
-                <div class="flex justify-center mb-4 opacity-0 animate-slideup" style="animation-delay: 50ms">
-                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-[#f7931a]/10 text-[#f7931a] border border-[#f7931a]/20">
-                        {platform_display_owned.clone()}
-                    </span>
+        {match guide_v2 {
+            Some(guide) => view! {
+                <div class="g2-shell">
+                    <Breadcrumbs crumbs=crumbs/>
+                    <StepperV2 guide=guide downloads=downloads/>
                 </div>
-            })}
+            }.into_any(),
+            None => {
+                let os_tip = guides::os_tip(platform).map(|(t, b)| (t.to_string(), b.to_string()));
+                let is_desktop = guides::is_desktop_os(platform);
+                let platform_display_owned = platform_display.to_string();
+                view! {
+                    <div class=centered_layout()>
+                        <Breadcrumbs crumbs=crumbs/>
+                        <PageHeader
+                            title=wallet.name.to_string()
+                            subtitle=wallet.tagline.to_string()
+                            quote=wallet.description.to_string()
+                        />
 
-            // OS-specific tip
-            {os_tip.map(|(title, body)| view! {
-                <div class="w-full mb-6 opacity-0 animate-slideup" style="animation-delay: 80ms">
-                    <div class="flex gap-3 p-4 bg-[#f7931a]/5 border border-[#f7931a]/10 rounded-xl">
-                        <svg class="w-5 h-5 text-[#f7931a] shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                        </svg>
-                        <div>
-                            <p class="text-sm font-medium text-[#f7931a] mb-1">{title}</p>
-                            <p class="text-[0.8rem] text-white/60 leading-relaxed">{body}</p>
+                        // OS badge
+                        {is_desktop.then(|| view! {
+                            <div class="flex justify-center mb-4 opacity-0 animate-slideup" style="animation-delay: 50ms">
+                                <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-[#f7931a]/10 text-[#f7931a] border border-[#f7931a]/20">
+                                    {platform_display_owned.clone()}
+                                </span>
+                            </div>
+                        })}
+
+                        // OS-specific tip
+                        {os_tip.map(|(title, body)| view! {
+                            <div class="w-full mb-6 opacity-0 animate-slideup" style="animation-delay: 80ms">
+                                <div class="flex gap-3 p-4 bg-[#f7931a]/5 border border-[#f7931a]/10 rounded-xl">
+                                    <svg class="w-5 h-5 text-[#f7931a] shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                    </svg>
+                                    <div>
+                                        <p class="text-sm font-medium text-[#f7931a] mb-1">{title}</p>
+                                        <p class="text-[0.8rem] text-white/60 leading-relaxed">{body}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        })}
+
+                        // Downloads
+                        <div class="w-full max-w-sm mx-auto flex flex-col gap-3 mb-8 opacity-0 animate-slideup" style="animation-delay: 100ms">
+                            {downloads.iter().map(|d| {
+                                view! { <DownloadButton download=d/> }
+                            }).collect::<Vec<_>>()}
+                        </div>
+
+                        // Stepper
+                        <div class="w-full opacity-0 animate-slideup" style="animation-delay: 200ms">
+                            <h2 class="text-base text-[#f7931a] font-semibold text-center mb-4">"Get Started"</h2>
+                            <Stepper faq_name=wallet.faq_dir.to_string()/>
                         </div>
                     </div>
-                </div>
-            })}
-
-            // Downloads
-            <div class="w-full max-w-sm mx-auto flex flex-col gap-3 mb-8 opacity-0 animate-slideup" style="animation-delay: 100ms">
-                {downloads.iter().map(|d| {
-                    view! { <DownloadButton download=d/> }
-                }).collect::<Vec<_>>()}
-            </div>
-
-            // Stepper
-            <div class="w-full opacity-0 animate-slideup" style="animation-delay: 200ms">
-                <h2 class="text-base text-[#f7931a] font-semibold text-center mb-4">"Get Started"</h2>
-                <Stepper faq_name=wallet.faq_dir.to_string()/>
-            </div>
-        </div>
+                }.into_any()
+            }
+        }}
     }
 }
 
@@ -490,7 +552,7 @@ fn render_step_page(
     step: &'static guides::GuideStep,
     level_id: &str,
 ) -> impl IntoView {
-    let page_title = format!("{} | WE HODL BTC", step.title);
+    let page_title = format!("{} | We Hodl BTC", step.title);
     let level = guides::find_level(level_id);
     let level_name = level.map(|l| l.name).unwrap_or("Guide");
 

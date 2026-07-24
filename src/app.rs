@@ -70,16 +70,16 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
 
                 // description and keywords are set via leptos_meta in App() so pages can override
                 // Open Graph
-                <meta property="og:title" content="WE HODL BTC — Bitcoin Self-Custody & Blockchain Analytics"/>
+                <meta property="og:title" content="We Hodl BTC — Bitcoin Self-Custody & Blockchain Analytics"/>
                 <meta property="og:type" content="website"/>
                 <meta property="og:url" content="https://www.wehodlbtc.com/"/>
                 <meta property="og:image" content="https://www.wehodlbtc.com/img/metadata_unfurl_image.png"/>
                 <meta property="og:description" content="Free Bitcoin self-custody guides and The Bitcoin Observatory — live blockchain analytics with real-time network stats, fee charts, mining data, and BIP signaling tracker."/>
-                <meta property="og:site_name" content="WE HODL BTC"/>
+                <meta property="og:site_name" content="We Hodl BTC"/>
 
                 // Twitter
                 <meta name="twitter:card" content="summary_large_image"/>
-                <meta name="twitter:title" content="WE HODL BTC — Bitcoin Self-Custody & Blockchain Analytics"/>
+                <meta name="twitter:title" content="We Hodl BTC — Bitcoin Self-Custody & Blockchain Analytics"/>
                 <meta name="twitter:description" content="Free Bitcoin self-custody guides and The Bitcoin Observatory — live blockchain analytics with real-time network stats, fee charts, mining data, and BIP signaling tracker."/>
                 <meta name="twitter:url" content="https://www.wehodlbtc.com/"/>
                 <meta name="twitter:image" content="https://www.wehodlbtc.com/img/metadata_unfurl_image.png"/>
@@ -172,14 +172,14 @@ pub fn App() -> impl IntoView {
     provide_meta_context();
 
     view! {
-        <Title text="WE HODL BTC - Bitcoin Self-Custody Guides & Blockchain Analytics"/>
+        <Title text="We Hodl BTC - Bitcoin Self-Custody Guides & Blockchain Analytics"/>
         <Meta name="description" content="Free, opinionated Bitcoin self-custody guides and The Bitcoin Observatory — live blockchain analytics with real-time network stats, fee charts, mining data, and BIP signaling tracker."/>
         <Meta name="keywords" content="Bitcoin, self-custody, hardware wallet, Coldcard, Sparrow Wallet, multisig, Bitcoin security, blockchain analytics, Bitcoin charts, mining difficulty, SegWit, Taproot, BIP signaling, mempool, Bitcoin node"/>
 
         <Router>
-            <div class="flex flex-col justify-between h-screen">
+            <div class="flex flex-col min-h-screen">
                 <NavBar/>
-                <main>
+                <main class="flex-1">
                     <Routes fallback=|| view! {
                         <div class="flex flex-col items-center justify-center min-h-[60vh] px-6 opacity-0 animate-fadeinone">
                             <div class="text-[4rem] lg:text-[5rem] font-title text-white/10 font-bold mb-4">"404"</div>

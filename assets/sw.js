@@ -1,4 +1,4 @@
-// Service Worker for WE HODL BTC PWA
+// Service Worker for We Hodl BTC PWA
 // Strategy: cache static assets (app shell), network-first for API/pages
 
 // BUMP THIS on every deploy that ships client asset changes (JS/CSS/WASM). Changing

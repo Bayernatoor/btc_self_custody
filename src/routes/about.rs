@@ -5,19 +5,19 @@ use leptos_meta::*;
 #[component]
 pub fn AboutPage() -> impl IntoView {
     view! {
-        <Title text="About | WE HODL BTC"/>
-        <Meta name="description" content="WE HODL BTC is an open-source Bitcoin education project. Free self-custody guides, live blockchain analytics, and network monitoring powered by a full Bitcoin Core node."/>
+        <Title text="About | We Hodl BTC"/>
+        <Meta name="description" content="We Hodl BTC is an open-source Bitcoin education project. Free self-custody guides, live blockchain analytics, and network monitoring powered by a full Bitcoin Core node."/>
         <Link rel="canonical" href="https://www.wehodlbtc.com/about"/>
-        <div class="max-w-5xl mx-auto mt-10 mb-24 px-6 opacity-0 animate-fadeinone lg:max-w-6xl lg:px-8 md:my-20">
+        <div class="max-w-5xl mx-auto mt-14 mb-24 px-6 opacity-0 animate-fadeinone lg:max-w-6xl lg:px-8 md:my-24">
 
             // Header
             <header class="text-center mb-12">
                 <h1 class="text-3xl text-[#f7931a] font-semibold leading-tight font-title lg:text-4xl">
-                    "WE HODL BTC"
+                    "We Hodl BTC"
                 </h1>
                 <div class="w-16 h-0.5 bg-[#f7931a] mx-auto mt-3 mb-5"></div>
                 <p class="text-base text-white/80 max-w-2xl mx-auto leading-relaxed lg:text-lg">
-                    "WE HODL BTC helps you take true ownership of your bitcoin - whether it's your first 100 sats or your life savings. Self-sovereignty starts with self-custody."
+                    "We Hodl BTC helps you take true ownership of your bitcoin - whether it's your first 100 sats or your life savings. Self-sovereignty starts with self-custody."
                 </p>
             </header>
 

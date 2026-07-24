@@ -159,7 +159,7 @@ pub fn HallOfFamePage() -> impl IntoView {
     );
 
     view! {
-        <Title text="The Archives: Remarkable Blocks & Transactions | WE HODL BTC"/>
+        <Title text="The Archives: Remarkable Blocks & Transactions | We Hodl BTC"/>
         <Meta name="description" content="The Archives: a curated collection of Bitcoin's most remarkable blocks and transactions. Genesis block, Pizza Day, SegWit, Taproot, the 184 billion BTC bug, record-breaking blocks, and more."/>
         <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/archives"/>
 

@@ -5,7 +5,7 @@ use leptos_meta::*;
 #[component]
 pub fn BlogPage() -> impl IntoView {
     view! {
-        <Title text="Articles | WE HODL BTC"/>
+        <Title text="Articles | We Hodl BTC"/>
         <Meta name="description" content="Bitcoin articles covering self-custody, network analysis, security best practices, and blockchain data insights."/>
         <Link rel="canonical" href="https://www.wehodlbtc.com/blog"/>
 

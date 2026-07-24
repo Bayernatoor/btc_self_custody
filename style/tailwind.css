@@ -384,3 +384,322 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   flex: 1;
   height: auto !important;
 }
+
+/* ── Guides v2 · unified wizard (selector + guide share one shell) ────────── */
+/* Design tokens, tuned to sit on the live site background (#123c64). Most g2
+   surfaces are translucent (background-agnostic); these name the recurring
+   values so the selector and the guide stay in lockstep. */
+:root {
+  --g2-maxw: 880px;          /* one width for the whole flow, no click-through jump */
+  --g2-inner: 640px;         /* centered card lists / short content within the shell */
+  --g2-orange: #f7931a;
+  --g2-orange2: #ffb14d;
+  --g2-good: #42d69a;
+  --g2-warn: #ffce6b;
+  --g2-surface: linear-gradient(180deg, rgba(23, 61, 95, 0.55), rgba(18, 50, 79, 0.32));
+  --g2-hair: rgba(255, 255, 255, 0.09);
+  --g2-hair2: rgba(255, 255, 255, 0.16);
+  --g2-muted: rgba(255, 255, 255, 0.65);
+  --g2-muted2: rgba(255, 255, 255, 0.42);
+}
+
+/* The one container: selector, wallet picker, and guide all render inside it.
+   min-height keeps the site footer below the fold; the flex column lets the
+   guide's sticky nav sit at the bottom and the selector center its cards. */
+.g2-shell {
+  /* Content-height, TOP-aligned. Centered to --g2-maxw via side padding
+     (auto-margins don't center a flex item of the flex-col <main>). No
+     min-height/flex:1/vertical-centering: those floated content dead-center in a
+     huge blue void on tall monitors. The app shell's <main class="flex-1">
+     already anchors the footer at the viewport bottom. */
+  width: 100%;
+  /* Top padding matches the site pages (home/faq/about: mt-14 -> md:my-24) so
+     content sits at the same navbar-to-content gap everywhere. */
+  padding: 3.5rem max(1.25rem, calc((100% - var(--g2-maxw)) / 2)) 11rem;
+  opacity: 0;
+  animation: fadeinone 0.9s ease-in-out forwards;
+}
+@media (min-width: 768px) {
+  .g2-shell { padding-top: 6rem; }
+}
+
+/* Shared chrome: breadcrumb + slim progress, pinned at the top of the shell. */
+.g2-crumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; font-size: 0.72rem; letter-spacing: 0.03em; color: var(--g2-muted2); }
+.g2-crumbs a { color: var(--g2-muted2); text-decoration: none; transition: color 0.15s; }
+.g2-crumbs a:hover { color: var(--g2-muted); }
+.g2-crumb-cur { color: var(--g2-muted); }
+.g2-crumb-sep { opacity: 0.45; }
+
+/* Selector centers its (always short) card block in the space under the chrome,
+   preserving the vertically-centered feel while sharing the shell + chrome. */
+.g2-flow { padding: 0.5rem 0 1rem; }
+.g2-flow-inner { width: 100%; max-width: var(--g2-inner); margin: 0 auto; }
+
+/* Selector cards: gradient surface, orange left-edge reveal, lift on hover. */
+.g2-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+  padding: 1.35rem 1.5rem;
+  text-align: left;
+  background: linear-gradient(180deg, rgba(23, 61, 95, 0.55), rgba(18, 50, 79, 0.32));
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 14px;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.18s, box-shadow 0.18s;
+}
+.g2-card::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: #f7931a;
+  transform: scaleY(0);
+  transform-origin: top;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.g2-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
+}
+.g2-card:hover::after {
+  transform: scaleY(1);
+}
+.g2-card:active {
+  transform: translateY(0);
+}
+.g2-card-ic {
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: 0.7rem;
+  background: rgba(247, 147, 26, 0.12);
+  color: #f7931a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.18s;
+}
+.g2-card:hover .g2-card-ic {
+  background: rgba(247, 147, 26, 0.2);
+}
+.g2-card-arrow {
+  color: rgba(255, 255, 255, 0.3);
+  flex-shrink: 0;
+  transition: transform 0.18s, color 0.18s;
+}
+.g2-card:hover .g2-card-arrow {
+  transform: translateX(4px);
+  color: #f7931a;
+}
+
+/* Wallet-picker comparison cards: 2-up on desktop, stacked on mobile, equal height. */
+.g2-wcards { display: grid; grid-template-columns: 1fr; gap: 1rem; margin-top: 0.25rem; }
+@media (min-width: 640px) { .g2-wcards { grid-template-columns: 1fr 1fr; } }
+/* a single recommended wallet: one centered column, not stretched across the grid */
+.g2-wcards.g2-wcards-one { grid-template-columns: 1fr; max-width: 440px; margin-left: auto; margin-right: auto; }
+.g2-wcard {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  gap: 0.7rem;
+  padding: 1.3rem 1.4rem;
+  text-align: left;
+  background: var(--g2-surface);
+  border: 1px solid var(--g2-hair);
+  border-radius: 14px;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.18s, box-shadow 0.18s;
+}
+.g2-wcard::after {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--g2-orange);
+  transform: scaleY(0);
+  transform-origin: top;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.g2-wcard:hover { transform: translateY(-3px); border-color: var(--g2-hair2); box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28); }
+.g2-wcard:hover::after { transform: scaleY(1); }
+.g2-wcard:active { transform: translateY(0); }
+.g2-wcard-head { display: flex; align-items: center; gap: 0.7rem; }
+.g2-wcard-ic { width: 2.6rem; height: 2.6rem; border-radius: 0.7rem; background: rgba(255, 255, 255, 0.1); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.g2-wcard-name { font-size: 1.05rem; font-weight: 600; margin: 0; color: #fff; }
+.g2-wcard-why { font-size: 0.85rem; color: var(--g2-muted); margin: 0; line-height: 1.45; }
+.g2-wcard-traits { list-style: none; margin: 0.15rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.45rem; }
+.g2-wcard-traits li { display: flex; align-items: center; gap: 0.55rem; font-size: 0.82rem; color: rgba(255, 255, 255, 0.8); }
+.g2-wcard-ck { color: var(--g2-good); font-size: 0.78rem; flex: 0 0 auto; }
+.g2-wcard-go { margin-top: auto; padding-top: 0.7rem; color: var(--g2-orange); font-weight: 600; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 0.35rem; }
+/* stretch the Choose link over the whole card so it stays fully clickable */
+.g2-wcard-go::after { content: ""; position: absolute; inset: 0; z-index: 0; }
+/* inner chip links (e.g. BDK) sit above the stretch so they stay clickable */
+.g2-wcard-traits a { position: relative; z-index: 1; }
+.g2-wcard-arrow { transition: transform 0.18s; }
+.g2-wcard:hover .g2-wcard-arrow { transform: translateX(4px); }
+
+/* ── Guides v2 · StepperV2 wizard (renders inside .g2-shell) ────────── */
+.g2-wrap { position: relative; flex: 1; display: flex; flex-direction: column; }
+
+.g2-prog { height: 3px; border-radius: 3px; background: rgba(255,255,255,0.08); overflow: hidden; margin: 0.85rem 0 1.75rem; }
+.g2-prog-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--g2-orange), var(--g2-orange2)); transition: width 0.5s cubic-bezier(0.4,0.1,0.2,1); }
+
+.g2-stage { position: relative; }
+.g2-panel { display: none; }
+.g2-panel.g2-active { display: block; animation: g2rise 0.45s cubic-bezier(0.16,1,0.3,1) both; }
+@keyframes g2rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+
+.g2-eyebrow { font-family: var(--font-title); color: #f7931a; letter-spacing: 0.2em; text-transform: uppercase; font-size: 0.72rem; font-weight: 600; }
+.g2-step > .g2-eyebrow, .g2-intro > .g2-eyebrow { display: block; margin-bottom: 0.9rem; }
+.g2-h { font-family: var(--font-title); color: #fff; font-weight: 700; font-size: 2rem; line-height: 1.05; margin: 0.3em 0 0.35em; }
+.g2-h2 { font-family: var(--font-title); color: #fff; font-weight: 700; font-size: 1.7rem; line-height: 1.1; margin: 0 0 0.85em; }
+.g2-lede { color: rgba(255,255,255,0.72); max-width: 60ch; font-size: 1rem; line-height: 1.6; }
+.g2-center { margin-left: auto; margin-right: auto; text-align: center; }
+
+/* intro */
+.g2-intro { width: 100%; }
+.g2-chips { display: flex; flex-wrap: wrap; gap: 0.6rem; margin: 1rem 0 1.4rem; }
+.g2-chip { font-size: 0.78rem; color: rgba(255,255,255,0.72); background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.09); padding: 0.35rem 0.7rem; border-radius: 999px; }
+.g2-intro-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: start; }
+.g2-outcome, .g2-get { background: linear-gradient(180deg, rgba(18,50,79,0.55), rgba(18,50,79,0.25)); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 1.1rem 1.25rem; }
+.g2-outcome h4, .g2-get h4 { font-family: var(--font-title); letter-spacing: 0.03em; text-transform: uppercase; font-size: 0.8rem; color: #f7931a; margin: 0 0 0.7rem; }
+.g2-outcome ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
+.g2-outcome li { display: flex; gap: 0.6rem; align-items: flex-start; font-size: 0.9rem; color: rgba(255,255,255,0.72); }
+.g2-ck { color: #42d69a; flex: 0 0 auto; }
+.g2-intro-side { display: flex; flex-direction: column; gap: 1rem; }
+.g2-dls { display: flex; flex-direction: column; gap: 0.6rem; }
+/* Download = the primary action on the intro. Uses the shared primary treatment
+   (orange accent, not a solid fill) so it stays delicate and still outweighs the
+   secondary backup-sheet row below it. */
+.g2-dl { display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.75rem 1.1rem; background: rgba(247,147,26,0.1); border: 1px solid rgba(247,147,26,0.4); border-radius: 11px; transition: background 0.16s, border-color 0.16s, transform 0.16s; }
+.g2-dl:hover { background: rgba(247,147,26,0.2); border-color: rgba(247,147,26,0.6); transform: translateY(-1px); }
+.g2-dl-label { font-size: 0.9rem; font-weight: 600; color: #f7931a; }
+.g2-dl-ext { width: 0.95rem; height: 0.95rem; color: rgba(247,147,26,0.7); }
+
+/* backup sheet CTA — secondary/quiet, neutral (no orange) so it sits below the
+   Download button in the visual hierarchy. */
+.g2-sheet { display: flex; align-items: center; gap: 0.75rem; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.09); border-radius: 12px; padding: 0.7rem 0.9rem; color: rgba(255,255,255,0.8); transition: border-color 0.15s, background 0.15s; }
+.g2-sheet:hover { border-color: rgba(255,255,255,0.2); background: rgba(255,255,255,0.06); }
+.g2-sheet-ic { font-size: 1.05rem; flex: 0 0 auto; opacity: 0.65; }
+.g2-sheet-tx { flex: 1; display: flex; flex-direction: column; }
+.g2-sheet-tx b { font-family: var(--font-title); letter-spacing: 0.02em; font-size: 0.9rem; color: rgba(255,255,255,0.92); }
+.g2-sheet-tx small { color: rgba(255,255,255,0.55); font-size: 0.75rem; }
+.g2-sheet-go { color: rgba(255,255,255,0.5); font-weight: 500; font-size: 0.78rem; white-space: nowrap; }
+
+/* step: rail + two-pane */
+.g2-rail { display: flex; align-items: center; margin: 0.4rem 0 2rem; max-width: 520px; }
+.g2-node { width: 1.6rem; height: 1.6rem; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.68rem; font-weight: 600; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.16); color: rgba(255,255,255,0.4); padding: 0; appearance: none; cursor: pointer; transition: transform 0.15s; }
+.g2-node:hover { transform: scale(1.14); }
+.g2-node-done { background: rgba(66,214,154,0.16); border-color: rgba(66,214,154,0.5); color: #42d69a; }
+.g2-node-cur { background: #f7931a; border-color: #f7931a; color: #0a1f33; box-shadow: 0 0 0 5px rgba(247,147,26,0.16); }
+.g2-seg { flex: 1; height: 2px; background: rgba(255,255,255,0.08); margin: 0 2px; }
+.g2-seg-fill { background: linear-gradient(90deg, #42d69a, #f7931a); }
+.g2-pane { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 2.25rem; align-items: start; }
+.g2-pane.g2-solo { grid-template-columns: 1fr; }
+.g2-solo .g2-left { max-width: 620px; margin: 0 auto; }
+/* Desktop steps: stack actions above a full-width window so wide (landscape)
+   screenshots stay large instead of being crushed into the phone column. */
+.g2-pane.g2-stack { grid-template-columns: 1fr; gap: 1.7rem; }
+.g2-stack .g2-left { max-width: 780px; }
+.g2-stack .g2-right { width: 100%; }
+.g2-stack .g2-devicewrap { position: static; }
+.g2-stack .g2-window { max-width: 860px; }
+.g2-stack .g2-carousel { max-width: 860px; align-self: center; width: 100%; }
+.g2-caption { font-size: 0.8rem; color: rgba(255,255,255,0.5); text-align: center; margin: 0.15rem 0 0; }
+.g2-left, .g2-right { min-width: 0; }
+.g2-action-txt { min-width: 0; }
+.g2-goal { display: flex; gap: 0.6rem; background: rgba(247,147,26,0.08); border-left: 3px solid #f7931a; border-radius: 0 10px 10px 0; padding: 0.8rem 1rem; margin: 0 0 1.5rem; font-size: 0.94rem; line-height: 1.5; color: rgba(255,255,255,0.72); }
+.g2-goal b { color: #f7931a; font-family: var(--font-title); letter-spacing: 0.02em; }
+.g2-actions { counter-reset: g2s; list-style: none; padding: 0; margin: 0 0 1.5rem; display: flex; flex-direction: column; gap: 1.05rem; }
+.g2-actions li { counter-increment: g2s; display: flex; gap: 0.85rem; align-items: flex-start; font-size: 0.95rem; line-height: 1.6; color: rgba(255,255,255,0.72); }
+.g2-actions li::before { content: counter(g2s); font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.72rem; font-weight: 600; color: #f7931a; width: 1.5rem; height: 1.5rem; flex: 0 0 auto; border-radius: 0.45rem; background: rgba(247,147,26,0.12); display: grid; place-items: center; margin-top: 0.1rem; }
+.g2-b { color: #fff; font-weight: 600; }
+.g2-inline-link { color: #8cb4ff; border-bottom: 1px solid rgba(140,180,255,0.3); }
+.g2-inline-link:hover { color: #b8d4ff; }
+.g2-flag { display: flex; gap: 0.6rem; font-size: 0.82rem; line-height: 1.5; background: rgba(255,206,107,0.09); border: 1px solid rgba(255,206,107,0.28); color: #f0d9a8; border-radius: 10px; padding: 0.7rem 0.8rem; margin: 0 0 1rem; }
+.g2-flag-i { color: #ffce6b; flex: 0 0 auto; }
+.g2-why { border: 1px solid rgba(255,255,255,0.08); border-radius: 11px; padding: 0 0.9rem; margin: 0 0 1rem; background: rgba(255,255,255,0.02); }
+.g2-why summary { cursor: pointer; list-style: none; padding: 0.75rem 0; font-size: 0.82rem; color: rgba(255,255,255,0.72); display: flex; align-items: center; gap: 0.5rem; }
+.g2-why summary::-webkit-details-marker { display: none; }
+.g2-why summary::before { content: "?"; width: 1.1rem; height: 1.1rem; border-radius: 50%; background: #173d5f; color: #f7931a; display: grid; place-items: center; font-size: 0.7rem; font-weight: 700; flex: 0 0 auto; }
+.g2-why[open] summary { color: #fff; }
+.g2-why-body { padding: 0 0 0.8rem 1.6rem; font-size: 0.82rem; color: rgba(255,255,255,0.72); line-height: 1.6; }
+.g2-needs { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; font-size: 0.78rem; color: rgba(255,255,255,0.5); }
+.g2-needs-lab { font-family: var(--font-title); letter-spacing: 0.1em; text-transform: uppercase; font-size: 0.65rem; color: #f7931a; }
+.g2-pill { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.09); padding: 0.3rem 0.6rem; border-radius: 8px; color: rgba(255,255,255,0.72); font-size: 0.78rem; }
+
+/* device frame + pins */
+.g2-devicewrap { display: flex; flex-direction: column; align-items: center; gap: 0.7rem; position: sticky; top: 1.5rem; }
+.g2-phone { width: min(280px, 78vw); border-radius: 2.2rem; background: #05131f; border: 1px solid #24425f; box-shadow: 0 30px 70px rgba(0,0,0,0.45), inset 0 0 0 6px #0a1a29; padding: 0.6rem; }
+.g2-window { width: 100%; border-radius: 12px; overflow: hidden; border: 1px solid #2a4864; background: #0c1a27; box-shadow: 0 20px 50px rgba(0,0,0,0.4); }
+.g2-screen { position: relative; width: 100%; border-radius: 1.7rem; overflow: hidden; background: #0a141d; }
+.g2-window .g2-screen { border-radius: 0; }
+.g2-shot-btn { position: absolute; inset: 0; display: block; width: 100%; height: 100%; padding: 0; margin: 0; border: 0; background: transparent; appearance: none; cursor: zoom-in; }
+.g2-shot { display: block; width: 100%; height: 100%; object-fit: cover; object-position: top center; }
+
+/* carousel controls (shown when a step has >1 shot) */
+.g2-carousel { display: flex; align-items: center; justify-content: space-between; align-self: stretch; gap: 0.75rem; margin-top: 0.15rem; }
+.g2-caro-arrow { appearance: none; border: 1px solid var(--g2-hair2); background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.7); width: 1.7rem; height: 1.7rem; border-radius: 50%; display: grid; place-items: center; font-size: 1rem; line-height: 1; cursor: pointer; transition: border-color 0.15s, color 0.15s, background 0.15s; }
+.g2-caro-arrow:hover { border-color: rgba(255,255,255,0.4); color: #fff; background: rgba(255,255,255,0.09); }
+.g2-dots { display: flex; align-items: center; gap: 0.4rem; }
+.g2-dot { appearance: none; border: 0; padding: 0; width: 0.5rem; height: 0.5rem; border-radius: 50%; background: rgba(255,255,255,0.22); cursor: pointer; transition: background 0.15s, transform 0.15s; }
+.g2-dot:hover { background: rgba(255,255,255,0.45); transform: scale(1.15); }
+.g2-dot-on { background: #f7931a; }
+
+/* click-to-zoom modal */
+.g2-modal { position: fixed; inset: 0; z-index: 9990; display: flex; align-items: center; justify-content: center; padding: 4vh 4vw; background: rgba(3, 10, 20, 0.82); backdrop-filter: blur(6px); cursor: zoom-out; animation: fadeinone 0.18s ease-out; }
+.g2-modal-img { max-width: 100%; max-height: 92vh; object-fit: contain; border-radius: 14px; box-shadow: 0 24px 60px rgba(0,0,0,0.55); }
+.g2-pin { position: absolute; transform: translate(-50%, -50%); width: 1.4rem; height: 1.4rem; border-radius: 50%; background: #f7931a; color: #0a1f33; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.7rem; font-weight: 700; display: grid; place-items: center; box-shadow: 0 0 0 4px rgba(247,147,26,0.25), 0 2px 7px rgba(0,0,0,0.45); z-index: 2; }
+.g2-cap { font-size: 0.75rem; color: rgba(255,255,255,0.5); text-align: center; }
+.g2-legend { list-style: none; padding: 0; margin: 0.3rem 0 0; display: flex; flex-direction: column; gap: 0.5rem; max-width: 300px; }
+.g2-legend li { display: flex; gap: 0.6rem; font-size: 0.78rem; color: rgba(255,255,255,0.72); line-height: 1.45; }
+.g2-legend-n { width: 1.15rem; height: 1.15rem; flex: 0 0 auto; border-radius: 50%; background: #f7931a; color: #0a1f33; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.68rem; font-weight: 700; display: grid; place-items: center; }
+
+/* wizard nav: inline, right below the step content (a sticky/bottom-anchored bar
+   recreated the void whenever the footer produced any page scroll). */
+.g2-nav { margin-top: 2.25rem; border-top: 1px solid var(--g2-hair); }
+.g2-nav-inner { display: flex; align-items: center; gap: 1rem; padding: 1rem 0.25rem 0; }
+.g2-btn-ghost { display: inline-flex; align-items: center; gap: 0.5rem; color: rgba(255,255,255,0.65); background: transparent; border: 1px solid rgba(255,255,255,0.16); padding: 0.65rem 1.1rem; border-radius: 11px; font-size: 0.88rem; cursor: pointer; font-family: inherit; transition: all 0.16s; }
+.g2-btn-ghost:hover { color: #fff; border-color: rgba(255,255,255,0.4); }
+.g2-status { margin: 0 auto; font-size: 0.8rem; color: rgba(255,255,255,0.5); letter-spacing: 0.03em; }
+/* Primary CTA: orange as an accent (tint + hairline + orange label), matching the
+   selector's restraint. Delicate, not a heavy solid fill. Shared site-wide. */
+.g2-btn-primary { display: inline-flex; align-items: center; gap: 0.5rem; background: rgba(247,147,26,0.1); color: #f7931a; font-weight: 600; border: 1px solid rgba(247,147,26,0.4); padding: 0.7rem 1.4rem; border-radius: 11px; font-size: 0.9rem; cursor: pointer; font-family: inherit; transition: background 0.16s, border-color 0.16s, transform 0.16s; }
+.g2-btn-primary:hover { background: rgba(247,147,26,0.2); border-color: rgba(247,147,26,0.6); transform: translateY(-1px); }
+.g2-hidden { visibility: hidden; pointer-events: none; }
+
+/* completion */
+.g2-done { width: 100%; text-align: center; }
+.g2-seal { width: 4.6rem; height: 4.6rem; border-radius: 50%; margin: 0 auto 0.4rem; display: grid; place-items: center; background: rgba(66,214,154,0.14); border: 1px solid rgba(66,214,154,0.5); color: #42d69a; }
+.g2-seal svg { width: 2rem; height: 2rem; }
+.g2-done-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem; margin-top: 1.5rem; text-align: left; }
+.g2-next-tier { display: flex; flex-direction: column; gap: 0.2rem; background: linear-gradient(180deg, rgba(18,50,79,0.55), rgba(18,50,79,0.25)); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 1.1rem; transition: transform 0.18s, border-color 0.18s; }
+.g2-next-tier:hover { transform: translateY(-2px); border-color: rgba(255,255,255,0.18); }
+.g2-nt-k { font-family: var(--font-title); letter-spacing: 0.1em; text-transform: uppercase; font-size: 0.68rem; color: #f7931a; }
+.g2-nt-t { font-family: var(--font-title); font-size: 1.1rem; color: #fff; }
+.g2-nt-s { font-size: 0.8rem; color: rgba(255,255,255,0.72); }
+
+@media (max-width: 820px) {
+  .g2-pane { grid-template-columns: 1fr; gap: 1.4rem; }
+  .g2-intro-grid { grid-template-columns: 1fr; }
+  .g2-done-cards { grid-template-columns: 1fr; }
+  .g2-devicewrap { position: static; }
+  .g2-h { font-size: 1.7rem; }
+  .g2-h2 { font-size: 1.4rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .g2-panel.g2-active { animation: none; }
+  .g2-prog-fill { transition: none; }
+  .g2-shell { animation: none; opacity: 1; }
+}

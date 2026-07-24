@@ -129,7 +129,7 @@ pub fn SignalingPage() -> impl IntoView {
     });
 
     view! {
-        <Title text="BIP Signaling Tracker | WE HODL BTC"/>
+        <Title text="BIP Signaling Tracker | We Hodl BTC"/>
         <Meta name="description" content="Track Bitcoin Improvement Proposal signaling in real time. Monitor miner readiness for proposed protocol upgrades via version bit signaling and coinbase compliance across 2,016-block retarget periods."/>
         <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/signaling"/>
 
