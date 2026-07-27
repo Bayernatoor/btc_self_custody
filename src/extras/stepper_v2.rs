@@ -84,7 +84,22 @@ pub fn inline(s: &'static str) -> Vec<AnyView> {
         .into_iter()
         .map(|seg| match seg {
             Seg::Text(t) => view! { {t} }.into_any(),
-            Seg::Bold(t) => view! { <strong class="g2-b">{t}</strong> }.into_any(),
+            // A bold span can itself wrap a link, e.g. **[Coldcard](https://...)**,
+            // so re-parse its contents instead of printing them literally.
+            Seg::Bold(t) => {
+                let inner = parse_inline(&t)
+                    .into_iter()
+                    .map(|s| match s {
+                        Seg::Link(lt, lu) => view! {
+                            <a class="g2-inline-link" href=lu target="_blank" rel="noreferrer">{lt}</a>
+                        }
+                        .into_any(),
+                        Seg::Text(tt) => view! { {tt} }.into_any(),
+                        Seg::Bold(bt) => view! { {bt} }.into_any(),
+                    })
+                    .collect::<Vec<_>>();
+                view! { <strong class="g2-b">{inner}</strong> }.into_any()
+            }
             Seg::Link(t, u) => view! {
                 <a class="g2-inline-link" href=u target="_blank" rel="noreferrer">{t}</a>
             }
@@ -222,6 +237,9 @@ pub fn StepperV2(
     });
 
     // Navigate to a step by pushing a new query (Back/Forward then walk the guide).
+    // scroll: true jumps back to the top on each step change. The navbar is sticky
+    // (in-flow), so the top of the page shows the navbar + breadcrumb + progress,
+    // which is the intended landing spot when clicking Next/Back or a step circle.
     let go_to = {
         let navigate = navigate.clone();
         move |n: usize| {
@@ -229,7 +247,7 @@ pub fn StepperV2(
             let path = location.pathname.get_untracked();
             navigate(
                 &format!("{path}?step={n}"),
-                NavigateOptions { scroll: false, ..Default::default() },
+                NavigateOptions { scroll: true, ..Default::default() },
             );
         }
     };
@@ -465,6 +483,26 @@ mod tests {
                 Seg::Link("mempool".into(), "https://mempool.space".into()),
                 Seg::Text(" now".into()),
             ]
+        );
+    }
+
+    #[test]
+    fn bold_wrapped_link_keeps_its_markup_for_nested_parsing() {
+        // `inline()` re-parses a bold span's contents, so a link nested inside bold
+        // (**[text](url)**) renders as a real link instead of literal markdown.
+        let segs = parse_inline("Buy a **[Coldcard](https://store.coinkite.com)** today");
+        assert_eq!(
+            segs,
+            vec![
+                Seg::Text("Buy a ".into()),
+                Seg::Bold("[Coldcard](https://store.coinkite.com)".into()),
+                Seg::Text(" today".into()),
+            ]
+        );
+        // the nested pass is what turns that inner text into a Link
+        assert_eq!(
+            parse_inline("[Coldcard](https://store.coinkite.com)"),
+            vec![Seg::Link("Coldcard".into(), "https://store.coinkite.com".into())]
         );
     }
 

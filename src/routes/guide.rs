@@ -132,6 +132,32 @@ fn WalletCard(
     }
 }
 
+/// One part of a multi-part level (Intermediate: hardware wallet, then node).
+/// Same card language as WalletCard, minus the logo tile, since a part is a stage
+/// of the guide rather than a product.
+#[component]
+fn PartCard(
+    part: &'static guides_v2::LevelPart,
+    platform: String,
+    level: String,
+) -> impl IntoView {
+    let path = format!("/guides/{}/{}/{}", level, platform, part.id);
+    view! {
+        <div class="g2-wcard">
+            <div class="g2-wcard-head">
+                <h3 class="g2-wcard-name">{part.name}</h3>
+            </div>
+            <p class="g2-wcard-why">{part.tagline}</p>
+            <ul class="g2-wcard-traits">
+                {part.highlights.iter().map(|h| view! {
+                    <li><span class="g2-wcard-ck">"\u{2713}"</span><span>{inline(h)}</span></li>
+                }).collect::<Vec<_>>()}
+            </ul>
+            <a href=path class="g2-wcard-go">"Start "<span class="g2-wcard-arrow">"\u{2192}"</span></a>
+        </div>
+    }
+}
+
 #[component]
 fn ProductCard(product: &'static ProductLink) -> impl IntoView {
     view! {
@@ -239,9 +265,17 @@ fn render_level_page(
     );
     let canonical =
         format!("https://www.wehodlbtc.com/guides/{}/{}", level.id, platform);
-    // A wallet picker is a choose-one panel (like the selector), so it gets the
-    // slim progress bar; the intermediate/advanced level pages don't.
-    let has_picker = !wallets.is_empty();
+    // Levels are either a "pick a wallet" choice (Basic) or a "pick a part" choice
+    // (Intermediate: hardware wallet, then node). Both are choose-one panels like the
+    // selector, so both get the slim progress bar and the refined header.
+    let parts = guides_v2::parts_for_level(level.id);
+    let has_picker = !wallets.is_empty() || !parts.is_empty();
+    let parts_title = match parts.len() {
+        1 => "One Part",
+        2 => "Two Parts",
+        3 => "Three Parts",
+        _ => "The Parts",
+    };
     // The basic level's intro is mobile-framed ("mobile wallet", "carry cash");
     // the desktop path (Sparrow, single-sig + passphrase) needs its own framing.
     let picker_lede = if level.id == "basic" && is_desktop {
@@ -257,15 +291,6 @@ fn render_level_page(
         <Title text=page_title/>
         <Meta name="description" content=meta_desc/>
         <Link rel="canonical" href=canonical/>
-        {match guides_v2::find_level_guide_v2(level.id) {
-            // A level with a v2 guide (e.g. Intermediate) renders the wizard directly.
-            Some(guide) => view! {
-                <div class="g2-shell">
-                    <Breadcrumbs crumbs=crumbs.clone()/>
-                    <StepperV2 guide=guide downloads=Vec::new()/>
-                </div>
-            }.into_any(),
-            None => view! {
         <div class="g2-shell">
             <Breadcrumbs crumbs=crumbs/>
             {has_picker.then(|| view! {
@@ -326,6 +351,22 @@ fn render_level_page(
                             </div>
                         </div>
                     }.into_any()
+                } else if !parts.is_empty() {
+                    view! {
+                        <div class="animate-slideup" style="animation-delay: 200ms">
+                            <h2 class="font-title uppercase tracking-wider text-[0.8rem] text-[#f7931a] text-center mb-4">{parts_title}</h2>
+                            <div class="g2-wcards">
+                                {parts.iter().enumerate().map(|(i, p)| {
+                                    let delay = format!("animation-delay: {}ms", 250 + i * 80);
+                                    view! {
+                                        <div class="opacity-0 animate-slideup" style=delay>
+                                            <PartCard part=p platform=platform_owned.clone() level=level.id.to_string()/>
+                                        </div>
+                                    }
+                                }).collect::<Vec<_>>()}
+                            </div>
+                        </div>
+                    }.into_any()
                 } else if !level.steps.is_empty() {
                     render_step_navigation(level).into_any()
                 } else if let Some(faq_dir) = level.faq_dir {
@@ -342,8 +383,6 @@ fn render_level_page(
             </div>
             </div>
         </div>
-            }.into_any(),
-        }}
     }
 }
 
@@ -435,14 +474,58 @@ pub fn GuideWalletPage() -> impl IntoView {
             match (level_id.as_deref(), wallet_id.as_deref(), platform_id.as_deref()) {
                 (Some(lid), Some(wid), Some(pid)) => {
                     let level = guides::find_level(lid);
-                    match guides::find_wallet(wid) {
-                        Some(wallet) => render_wallet_page(wallet, pid, lid, level).into_any(),
-                        None => view! { <p class="text-white text-center p-8">"Wallet not found."</p> }.into_any(),
+                    // A multi-part level (Intermediate) uses this slot for its part id.
+                    match guides_v2::find_level_part(lid, wid) {
+                        Some(part) => render_part_page(part, pid, lid, level).into_any(),
+                        None => match guides::find_wallet(wid) {
+                            Some(wallet) => render_wallet_page(wallet, pid, lid, level).into_any(),
+                            None => view! { <p class="text-white text-center p-8">"Guide not found."</p> }.into_any(),
+                        },
                     }
                 }
                 _ => view! { <p class="text-white text-center p-8">"Invalid wallet URL."</p> }.into_any(),
             }
         }}
+    }
+}
+
+/// One part of a multi-part level, rendered as the same StepperV2 wizard a wallet
+/// guide gets. No downloads: the tools are bought or linked inline in the steps.
+fn render_part_page(
+    part: &'static guides_v2::LevelPart,
+    platform: &str,
+    level_id: &str,
+    level: Option<&'static GuideLevelDef>,
+) -> impl IntoView {
+    let page_title = format!("{} | We Hodl BTC", part.guide.intro.title);
+    let level_name = level.map(|l| l.name).unwrap_or("Guide");
+    let platform_display = guides::platform_display(platform);
+    let meta_desc = part.guide.intro.lede.to_string();
+    let canonical = format!(
+        "https://www.wehodlbtc.com/guides/{}/{}/{}",
+        level_id, platform, part.id
+    );
+
+    let crumbs = vec![
+        (level_name.to_string(), "/guides".to_string()),
+        (
+            platform_display.to_string(),
+            format!("/guides/{}/{}", level_id, platform),
+        ),
+        (
+            part.name.to_string(),
+            format!("/guides/{}/{}/{}", level_id, platform, part.id),
+        ),
+    ];
+
+    view! {
+        <Title text=page_title/>
+        <Meta name="description" content=meta_desc/>
+        <Link rel="canonical" href=canonical/>
+        <div class="g2-shell">
+            <Breadcrumbs crumbs=crumbs/>
+            <StepperV2 guide=part.guide downloads=Vec::new()/>
+        </div>
     }
 }
 

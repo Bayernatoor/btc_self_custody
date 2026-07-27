@@ -114,14 +114,73 @@ pub fn find_guide_v2(wallet_id: &str) -> Option<&'static GuideV2> {
     }
 }
 
-/// Look up a v2 guide attached to a whole LEVEL (not a wallet), e.g. Intermediate,
-/// which is one guide across its (single) platform. Some => the level page renders
-/// StepperV2 directly instead of a wallet picker / step nav.
-pub fn find_level_guide_v2(level_id: &str) -> Option<&'static GuideV2> {
+/// One part of a multi-part level. Levels that are not a "pick a wallet" choice
+/// (Intermediate, later Advanced) are split into parts so the level page can offer
+/// the same card picker the wallet levels get, instead of dropping the reader
+/// straight into a long wizard. Each part is its own StepperV2 guide, served at
+/// `/guides/<level>/<platform>/<part id>`.
+pub struct LevelPart {
+    pub id: &'static str,
+    pub name: &'static str,
+    pub tagline: &'static str,
+    /// Short "what you get" chips, same idea as WalletDef::highlights.
+    pub highlights: &'static [&'static str],
+    pub guide: &'static GuideV2,
+}
+
+pub static INTERMEDIATE_PARTS: &[LevelPart] = &[
+    LevelPart {
+        id: "hardware",
+        name: "Part 1: Hardware wallet",
+        tagline: "Generate your keys offline on a Coldcard, protect them with a passphrase, back them up in steel, and drive it all from Sparrow.",
+        highlights: &["Coldcard, fully air-gapped", "Passphrase protected", "Steel backup"],
+        guide: &INTERMEDIATE_HARDWARE_GUIDE,
+    },
+    LevelPart {
+        id: "node",
+        name: "Part 2: Your own node",
+        tagline: "Run Bitcoin yourself and point Sparrow at it, so no third party sees your addresses or tells you what is true.",
+        highlights: &["Validate every block", "Private by default", "Start9, MyNode or RaspiBlitz"],
+        guide: &INTERMEDIATE_NODE_GUIDE,
+    },
+];
+
+pub static ADVANCED_PARTS: &[LevelPart] = &[
+    LevelPart {
+        id: "multisig",
+        name: "Part 1: Build the multisig",
+        tagline: "Set up three Coldcards, combine them into a 2-of-3 with the air-gapped tool, and coordinate it from Sparrow.",
+        highlights: &["2-of-3, no single point of failure", "Fully air-gapped setup", "Output descriptor backed up"],
+        guide: &ADVANCED_MULTISIG_GUIDE,
+    },
+    LevelPart {
+        id: "spending",
+        name: "Part 2: Receive and spend",
+        tagline: "Take funds in, then walk a transaction out to two devices and back so the round trip is familiar before it matters.",
+        highlights: &["Receive to the quorum", "Sign a PSBT on two devices", "Broadcast from your own node"],
+        guide: &ADVANCED_SPENDING_GUIDE,
+    },
+    LevelPart {
+        id: "hardening",
+        name: "Part 3: Harden it further",
+        tagline: "Optional extras for specific threat models: decoy wallets, SeedXOR, and automated signing. Skip what does not fit.",
+        highlights: &["Duress and decoy wallets", "SeedXOR done properly", "Optional, adds complexity"],
+        guide: &ADVANCED_HARDENING_GUIDE,
+    },
+];
+
+/// Parts for a level, empty when the level is a wallet-picker level.
+pub fn parts_for_level(level_id: &str) -> &'static [LevelPart] {
     match level_id {
-        "intermediate" => Some(&INTERMEDIATE_GUIDE),
-        _ => None,
+        "intermediate" => INTERMEDIATE_PARTS,
+        "advanced" => ADVANCED_PARTS,
+        _ => &[],
     }
+}
+
+/// Look up one part of a level by its id (the last URL segment).
+pub fn find_level_part(level_id: &str, part_id: &str) -> Option<&'static LevelPart> {
+    parts_for_level(level_id).iter().find(|p| p.id == part_id)
 }
 
 /// Sentinel for a step with no screenshot: the renderer shows a single centered
@@ -708,7 +767,7 @@ pub static SPARROW_GUIDE: GuideV2 = GuideV2 {
             flag: None,
             why: Some((
                 "Why add a passphrase",
-                "The passphrase is a 13th secret that is not part of the 24 words. If someone finds your written words, they still cannot reach your bitcoin without the passphrase. Kept apart, neither piece is enough on its own.",
+                "The passphrase is an extra secret you add on top of your recovery words, not one of the words itself. If someone finds your written words, they still cannot reach your bitcoin without the passphrase. Kept apart, neither piece is enough on its own.",
             )),
             needs: &[],
             backup_cta: false,
@@ -720,7 +779,7 @@ pub static SPARROW_GUIDE: GuideV2 = GuideV2 {
                         alt: "Sparrow welcome and introduction screen",
                         caption: "Read the four intro screens, clicking Next",
                         img_w: 599,
-                        img_h: 588,
+                        img_h: 564,
                         pins: &[],
                     },
                     Shot {
@@ -728,7 +787,7 @@ pub static SPARROW_GUIDE: GuideV2 = GuideV2 {
                         alt: "Sparrow connection intro, Later or Offline Mode button",
                         caption: "On the last screen, click Later or Offline Mode",
                         img_w: 598,
-                        img_h: 579,
+                        img_h: 555,
                         pins: &[],
                     },
                     Shot {
@@ -783,7 +842,7 @@ pub static SPARROW_GUIDE: GuideV2 = GuideV2 {
                 "Click **Confirm Backup**, re-enter the words when asked, then click **Create Keystore**.",
                 "Click **Import Keystore**, then re-enter your passphrase to confirm.",
                 "**Note the master fingerprint** shown, then click **OK**.",
-                "Click **Apply** to save the wallet, then set a wallet password (this encrypts the file on your computer and is not your passphrase) or click **No Password**.",
+                "Click **Apply** to save the wallet, then set an **optional** wallet password (it encrypts the file on your computer and is not your passphrase), or click **No Password**.",
                 "Your wallet opens and starts loading its history.",
             ],
             flag: Some("Store the 24 words and the passphrase on paper, in two separate places. You need both to recover your bitcoin, and neither one alone is enough. Record the master fingerprint too, so you can confirm a correct recovery later."),
@@ -830,7 +889,7 @@ pub static SPARROW_GUIDE: GuideV2 = GuideV2 {
                         alt: "Sparrow, Apply to save the wallet",
                         caption: "Click Apply to save the wallet",
                         img_w: 1070,
-                        img_h: 812,
+                        img_h: 804,
                         pins: &[],
                     },
                     Shot {
@@ -838,7 +897,7 @@ pub static SPARROW_GUIDE: GuideV2 = GuideV2 {
                         alt: "Sparrow, set a wallet password or No Password",
                         caption: "Set a wallet password, or click No Password",
                         img_w: 1074,
-                        img_h: 813,
+                        img_h: 807,
                         pins: &[],
                     },
                     Shot {
@@ -846,7 +905,7 @@ pub static SPARROW_GUIDE: GuideV2 = GuideV2 {
                         alt: "Sparrow, the wallet open and loading its history",
                         caption: "Your wallet, loading its history",
                         img_w: 1072,
-                        img_h: 835,
+                        img_h: 807,
                         pins: &[],
                     },
                 ],
@@ -985,19 +1044,19 @@ pub static SPARROW_GUIDE: GuideV2 = GuideV2 {
                         pins: &[],
                     },
                     Shot {
-                        image: "/guide-images/sparrow/sparrow_wallet_recovery_dropdown.png",
-                        alt: "Sparrow, choose the number of words from the dropdown",
-                        caption: "Choose your word count",
-                        img_w: 1023,
-                        img_h: 766,
+                        image: "/guide-images/sparrow/sparrow-wallet-recovery-2.png",
+                        alt: "Sparrow, import wallet, set Mnemonic Words (BIP39) to Use 24 Words",
+                        caption: "For Mnemonic Words (BIP39), choose your word count (Use 24 Words)",
+                        img_w: 1070,
+                        img_h: 803,
                         pins: &[],
                     },
                     Shot {
-                        image: "/guide-images/sparrow/sparrow_wallet_recovery_seed.png",
+                        image: "/guide-images/sparrow/sparrow-wallet-recovery-3.png",
                         alt: "Sparrow, enter the words and passphrase, then discover wallet",
                         caption: "Enter your words and passphrase, then Discover Wallet",
-                        img_w: 1031,
-                        img_h: 775,
+                        img_w: 1071,
+                        img_h: 807,
                         pins: &[],
                     },
                     Shot {
@@ -1030,21 +1089,26 @@ pub static SPARROW_GUIDE: GuideV2 = GuideV2 {
 
 // =============================================================================
 // INTERMEDIATE (level guide) — Coldcard + Sparrow + your own node. Desktop path,
-// one guide for all OSes. Content condensed from the v1 hardware_wallet_setup and
-// node_setup markdown. Most steps have no screenshot (NO_DEVICE => single column);
-// buy/docs links live inline in the actions via the [text](url) parser.
+// one guide for all OSes. Content from the v1 hardware_wallet_setup and node_setup
+// markdown, reviewed 2026-07-24 to restore what the first condensation dropped
+// (encrypted microSD backups, the backup checklist, tamper-bag checks, the node
+// details and hardware advice). 11 steps: 1-9 Coldcard, 10 Sparrow, 11 node.
+// Most steps have no screenshot (NO_DEVICE => single column); the three that do use
+// Frame::Desktop => the stacked full-width layout. Buy/docs links live inline in the
+// actions via the [text](url) parser.
 // =============================================================================
 
-pub static INTERMEDIATE_GUIDE: GuideV2 = GuideV2 {
-    eyebrow: "Intermediate · Desktop",
+pub static INTERMEDIATE_HARDWARE_GUIDE: GuideV2 = GuideV2 {
+    eyebrow: "Intermediate · Hardware wallet",
     intro: Intro {
-        title: "Hardware wallet + your own node",
-        lede: "Real self-custody starts here. You will generate your keys on a dedicated hardware device (never a phone), connect it to Sparrow on your desktop, back them up in steel, and run your own Bitcoin node.",
-        chips: &["2 parts", "a few evenings", "for a serious stack"],
+        title: "Hardware wallet + Sparrow",
+        lede: "Real self-custody starts here. You will generate your keys on a dedicated hardware device (never a phone), protect them with a passphrase, back them up in steel, and connect it all to Sparrow on your desktop.",
+        chips: &["10 steps", "a few evenings", "part 1 of intermediate"],
         outcomes: &[
             "Keys generated on a Coldcard, fully offline",
+            "A passphrase-protected wallet only you can open",
             "A steel backup that survives fire and water",
-            "Your own node validating every block",
+            "Sparrow watching and spending, keys never online",
         ],
         backup_cta: true,
     },
@@ -1057,6 +1121,7 @@ pub static INTERMEDIATE_GUIDE: GuideV2 = GuideV2 {
                 "Buy a **[Coldcard MK4 bundle](https://store.coinkite.com/store/bundle-mk4-basic)** (about $220, it includes two microSD cards).",
                 "Add a **[Seedplate](https://store.coinkite.com/store/seedplate)** and a **[center punch](https://store.coinkite.com/store/drillpunch)** for a steel backup, plus a set of **casino dice** for your own entropy.",
                 "Get a way to power the Coldcard offline: **[Coldpower](https://store.coinkite.com/store/cldpwr)** or a plain USB wall charger.",
+                "If your computer has no microSD slot, add a **microSD to USB adapter**.",
             ],
             flag: Some("Never plug your Coldcard into a computer. Everything here is done offline (air-gapped)."),
             why: Some((
@@ -1067,14 +1132,34 @@ pub static INTERMEDIATE_GUIDE: GuideV2 = GuideV2 {
             backup_cta: false,
             device: NO_DEVICE,
         },
-        // 2 · Inspect & update
+        // 2 · Inspect and power on
         Step {
-            title: "Inspect and update the Coldcard",
-            goal: "Confirm the device is genuine and on the latest firmware.",
+            title: "Inspect and power on the Coldcard",
+            goal: "Confirm the device reached you untouched before you trust it with keys.",
             actions: &[
-                "Check the tamper-evident bag's serial number matches the one shown on the Coldcard when it powers on.",
-                "Download the latest firmware and **[verify it](https://coldcard.com/docs/upgrade/)** before use.",
-                "Copy the firmware to a microSD and install it via **Advanced -> Upgrade Firmware -> From MicroSD**.",
+                "Check the tamper-evident bag is sealed and undamaged. Keep it, it carries a unique serial number.",
+                "Inside you get the Coldcard, a serialized tear-off tab, and a wallet backup card. The number on the tab should match the bag.",
+                "Power the Coldcard from **Coldpower** or a USB wall charger, never from a computer.",
+                "When it boots, confirm the serial number on screen matches the bag, then press the **checkmark**.",
+            ],
+            flag: Some("Some battery packs cut power to low-draw devices. A USB wall charger or Coldpower is more reliable."),
+            why: Some((
+                "Why the tamper bag matters",
+                "A signing device is worth attacking before it ever reaches you. The sealed bag and matching serial numbers are your check that nobody opened or swapped the device in transit.",
+            )),
+            needs: &[],
+            backup_cta: false,
+            device: NO_DEVICE,
+        },
+        // 3 · Update the firmware
+        Step {
+            title: "Update the firmware",
+            goal: "Get the device onto the latest signed firmware before creating any keys.",
+            actions: &[
+                "Download the latest firmware from the **[Coldcard upgrade page](https://coldcard.com/docs/upgrade/)**.",
+                "**[Verify the download](https://coldcard.com/docs/upgrade/#dont-trust-verify-the-firmware)** before you use it.",
+                "Copy the firmware file onto a microSD card and insert it into the Coldcard.",
+                "Install it via **Advanced -> Upgrade Firmware -> From MicroSD**, then wait for the update to finish.",
             ],
             flag: None,
             why: None,
@@ -1082,14 +1167,15 @@ pub static INTERMEDIATE_GUIDE: GuideV2 = GuideV2 {
             backup_cta: false,
             device: NO_DEVICE,
         },
-        // 3 · Set a PIN
+        // 4 · Set a PIN
         Step {
             title: "Set a strong PIN",
             goal: "Lock the device with a PIN only you know.",
             actions: &[
-                "Choose **Choose PIN Code**, then set a prefix and a suffix (4 to 6 digits each).",
-                "Note the **two anti-phishing words** shown after the prefix; they prove the device has not been tampered with.",
-                "Write the prefix, suffix, and anti-phishing words on the included backup card.",
+                "Select **Choose PIN Code**, then enter a prefix of at least 4 digits and write it on the backup card.",
+                "Note the **two anti-phishing words** the Coldcard shows next. They appear every time you enter your prefix, and prove the device has not been tampered with or swapped.",
+                "Enter a suffix of 4 to 6 digits and write that down too.",
+                "Re-enter the prefix and suffix when asked, and check the anti-phishing words match what you wrote.",
             ],
             flag: Some("There is no way to recover this PIN. Keep it somewhere safe."),
             why: None,
@@ -1097,14 +1183,15 @@ pub static INTERMEDIATE_GUIDE: GuideV2 = GuideV2 {
             backup_cta: false,
             device: NO_DEVICE,
         },
-        // 4 · Create seed with dice
+        // 5 · Create seed with dice
         Step {
             title: "Create your seed with dice",
             goal: "Generate a 24-word key with your own added randomness.",
             actions: &[
                 "From the main menu choose **New Wallet**, then press **4** to add dice rolls.",
                 "Roll a real die at least **100 times**, entering each result. Do not fake it, this is your entropy.",
-                "Write down the **24 words** in order, then pass the Coldcard's confirmation quiz.",
+                "Write down the **24 words** in order on the backup card, then pass the Coldcard's confirmation quiz.",
+                "With the first microSD card inserted, save an **encrypted backup** of the wallet to it.",
             ],
             flag: None,
             why: Some((
@@ -1115,45 +1202,52 @@ pub static INTERMEDIATE_GUIDE: GuideV2 = GuideV2 {
             backup_cta: true,
             device: NO_DEVICE,
         },
-        // 5 · Verify by wipe & restore
+        // 6 · Verify by wipe & restore
         Step {
             title: "Verify by wipe and restore",
             goal: "Prove your written backup actually works, before funding it.",
             actions: &[
                 "Record the wallet's **fingerprint** from **Advanced -> View Identity**.",
-                "Wipe the seed: **Advanced -> Danger Zone -> Seed Functions -> Destroy Seed**.",
-                "Re-import your 24 words, then confirm the **fingerprint matches** the one you recorded.",
+                "Wipe the seed: **Advanced -> Danger Zone -> Seed Functions -> Destroy Seed**, then read and accept the warnings.",
+                "Re-enter your PIN, then go to **Import Existing -> 24 Words** and type your words back in. For the last word the Coldcard offers only the valid options; if yours is not listed, something earlier is wrong.",
+                "Go back to **Advanced -> View Identity** and confirm the **fingerprint matches** the one you recorded.",
             ],
             flag: Some("If the fingerprint does not match, your words are wrong. Fix them before putting any bitcoin on this wallet."),
-            why: None,
-            needs: &[],
-            backup_cta: false,
-            device: NO_DEVICE,
-        },
-        // 6 · Add a passphrase
-        Step {
-            title: "Add a passphrase",
-            goal: "Add a secret 25th word that creates a separate, stronger wallet.",
-            actions: &[
-                "Choose **Passphrase**, read the warnings, and enter a phrase of at least 12 characters.",
-                "Write it down and store it **apart from your seed words**, and record the new **fingerprint** it produces.",
-                "Save an encrypted backup of the passphrase to the second microSD card.",
-            ],
-            flag: Some("Your passphrase is as important as your seed words, and the Coldcard never stores it, you enter it every time."),
             why: Some((
-                "What a passphrase does",
-                "It is combined with your 24 words to derive an entirely separate wallet. Even someone who found your 24 words could not reach your bitcoin without it.",
+                "Why wipe a working device",
+                "An untested backup is not a backup. Destroying the seed and restoring it from your own handwriting is the only way to know those words really do bring the wallet back, and the fingerprint is what proves it.",
             )),
             needs: &[],
             backup_cta: false,
             device: NO_DEVICE,
         },
-        // 7 · Back up in steel
+        // 7 · Add a passphrase
+        Step {
+            title: "Add a passphrase",
+            goal: "Add an extra secret on top of your 24 words, which opens a separate and stronger wallet.",
+            actions: &[
+                "Select **Passphrase** from the main menu and read the warnings.",
+                "Enter a phrase of at least 12 characters, mixing letters, numbers and symbols (up to 100 characters).",
+                "Write it down and store it **apart from your seed words**.",
+                "Press **APPLY**, then record the new **fingerprint** it produces. This is how you confirm you entered the passphrase correctly.",
+                "With the second microSD card inserted, save an **encrypted backup of the passphrase** to it.",
+            ],
+            flag: Some("The Coldcard never stores your passphrase, you enter it every time you power on. It is as important as your 24 words, and the wallet backup you saved earlier does not contain it."),
+            why: Some((
+                "What a passphrase does",
+                "It is combined with your 24 words to derive an entirely separate wallet. People sometimes call it a 25th word, but that is misleading: it is not a word from the seed list, it is any phrase you choose. Your 24 words alone open one wallet, and those same words plus the passphrase open a different one. Someone who found your written words could not reach your bitcoin without it.",
+            )),
+            needs: &[],
+            backup_cta: false,
+            device: NO_DEVICE,
+        },
+        // 8 · Back up in steel
         Step {
             title: "Back up in steel",
             goal: "Make your seed survive fire, water, and time.",
             actions: &[
-                "On the Seedplate, punch the **first four letters** of each word, in order (column 1 is word 1).",
+                "Put the Seedplate on a solid surface. It is two-sided and holds 12 words per side.",
+                "Punch the **first four letters** of each word, in order (column 1 is word 1). Four letters is enough, wallet software completes the rest.",
                 "For example, for the word **certain** punch **C E R T** in column 1.",
                 "Double-check every word. Steel is permanent, you cannot undo a punch.",
             ],
@@ -1164,16 +1258,46 @@ pub static INTERMEDIATE_GUIDE: GuideV2 = GuideV2 {
             )),
             needs: &["Seedplate", "Center punch"],
             backup_cta: false,
+            device: Device {
+                frame: Frame::Desktop,
+                shots: &[Shot {
+                    image: "/img/seedplate.jpeg",
+                    alt: "A Coinkite Seedplate with the first four letters of each word punched in",
+                    caption: "A finished Seedplate, four letters punched per word",
+                    img_w: 2000,
+                    img_h: 1143,
+                    pins: &[],
+                }],
+            },
+        },
+        // 9 · Backup checklist
+        Step {
+            title: "Check your backups",
+            goal: "Confirm every piece is written down and stored before you put bitcoin on this wallet.",
+            actions: &[
+                "Your **24 words** are on the backup card and punched into steel.",
+                "An **encrypted wallet backup** is on one microSD card, and an **encrypted passphrase backup** on the other.",
+                "Your **passphrase** is written down and stored somewhere separate from the seed words.",
+                "Both **fingerprints** are recorded: the seed on its own, and the seed with the passphrase applied.",
+                "Your **PIN prefix, suffix and anti-phishing words** are on the backup card.",
+            ],
+            flag: Some("Never store your seed words together with your passphrase, and never put either online. No photos, no cloud, no password manager. This whole setup depends on staying offline."),
+            why: Some((
+                "How many copies should I keep?",
+                "More steel plates in more locations protect you against fire and flood, but every extra copy is one more thing someone could find. Two locations you control is a reasonable balance. You can keep the passphrase alongside the fingerprint, just never alongside the seed words.",
+            )),
+            needs: &[],
+            backup_cta: true,
             device: NO_DEVICE,
         },
-        // 8 · Connect to Sparrow (desktop screenshot)
+        // 10 · Connect to Sparrow (desktop screenshot)
         Step {
             title: "Connect to Sparrow",
             goal: "Watch and spend from your Coldcard on desktop, with the keys staying offline.",
             actions: &[
-                "Install **[Sparrow](https://sparrowwallet.com/download/)** on your computer (see the **[basic desktop guide](/guides/basic/desktop)** if you need it).",
-                "On the Coldcard, enter your passphrase, then export the wallet file to a microSD.",
-                "In Sparrow, import that file and follow **[Sparrow's Coldcard guide](https://sparrowwallet.com/docs/coldcard-wallet.html)**.",
+                "Install **[Sparrow](https://sparrowwallet.com/download/)** on your computer (see the **[basic desktop guide](/guides/basic/desktop)** if you need it). You do not need to create a wallet in it.",
+                "On the Coldcard, enter your passphrase, then export the wallet file to a microSD. If you only have two cards, use the passphrase card, since you have to enter the passphrase anyway.",
+                "In Sparrow, import that file and follow **[Sparrow's Coldcard guide](https://sparrowwallet.com/docs/coldcard-wallet.html)**, which also covers receiving and sending.",
             ],
             flag: Some("Always enter your passphrase on the Coldcard before exporting a wallet file or signing a transaction."),
             why: None,
@@ -1191,20 +1315,115 @@ pub static INTERMEDIATE_GUIDE: GuideV2 = GuideV2 {
                 }],
             },
         },
-        // 9 · Run your own node (choice, links out)
+    ],
+    completion: Completion {
+        title: "Your keys are on hardware",
+        lede: "Your keys were generated offline, protected by a passphrase, backed up in steel, and Sparrow can now watch and spend without them ever touching the internet. One part left.",
+        next_tier: Some(("Continue to part 2: run your own node", "/guides/intermediate/desktop/node")),
+        backup_cta: false,
+    },
+};
+
+// =============================================================================
+// INTERMEDIATE PART 2 — run your own node. Content from the v1 node_setup markdown
+// (node_faq1..5). Deliberately points at each project's own docs rather than
+// re-documenting three separate builds.
+// =============================================================================
+
+pub static INTERMEDIATE_NODE_GUIDE: GuideV2 = GuideV2 {
+    eyebrow: "Intermediate · Node",
+    intro: Intro {
+        title: "Run your own node",
+        lede: "Stop trusting someone else's server. You will pick a node implementation, get it synced, and point Sparrow at it, so every block and every balance is checked by a machine you control.",
+        chips: &["3 steps", "an evening, plus sync time", "part 2 of intermediate"],
+        outcomes: &[
+            "Your own full node validating every block",
+            "Sparrow asking your node, not a stranger's server",
+            "Better privacy, since nobody else sees your addresses",
+        ],
+        backup_cta: false,
+    },
+    steps: &[
+        // 1 · Choose an implementation
         Step {
-            title: "Run your own node",
-            goal: "Validate every block yourself, without trusting anyone else's server.",
+            title: "Choose your node",
+            goal: "Pick the implementation that matches how much tinkering you want to do.",
             actions: &[
-                "**Start9** is a full personal home server, GUI-first: **[buy one](https://store.start9.com)** or **[build it](https://docs.start9.com/)**.",
-                "**MyNode** is Bitcoin and Lightning, very beginner-friendly: **[buy one](https://www.mynodebtc.com/order_now)** or **[DIY](https://mynodebtc.github.io/)**.",
-                "**RaspiBlitz** is the classic DIY tinkerer's node: **[buy one](https://shop.fulmo.org/)** or **[follow the docs](https://docs.raspiblitz.org/docs/intro/)**.",
-                "Once it has synced, point Sparrow at your own node instead of a public server.",
+                "**Start9** is a full personal home server, GUI first and open source, with a marketplace of self-hosted apps. It is not bitcoin-only. **[Buy one](https://store.start9.com)**, **[build it](https://docs.start9.com/)**, or read the **[FAQ](https://start9.com/faq/)**.",
+                "**MyNode** is bitcoin and Lightning only, and the friendliest of the three. Prebuilt units include a year of premium support. **[Buy one](https://www.mynodebtc.com/order_now)**, **[DIY](https://mynodebtc.github.io/)**, or read the **[docs](https://mynodebtc.github.io/intro/introduction.html)**.",
+                "**RaspiBlitz** is the original DIY tinkerer's node, bitcoin and Lightning, with the advanced features behind SSH. **[Buy one](https://shop.fulmo.org/)** or **[follow the docs](https://docs.raspiblitz.org/docs/intro/)**.",
+                "Any of the three will do the job. If you are unsure, pick the one whose documentation reads best to you.",
             ],
             flag: None,
             why: Some((
                 "Why run a node?",
-                "Your node downloads and checks every block and transaction itself, so you rely on no third party for what is true on the network. It also improves your privacy, since Sparrow asks your node about your addresses instead of someone else's server.",
+                "Your node downloads and checks every block and transaction itself, so you rely on no third party for what is true on the network. It also improves your privacy: Sparrow asks your node about your addresses instead of handing them to someone else's server.",
+            )),
+            needs: &[],
+            backup_cta: false,
+            device: Device {
+                frame: Frame::Desktop,
+                shots: &[
+                    Shot {
+                        image: "/guide-images/start9/start9_home.png",
+                        alt: "The Start9 server dashboard",
+                        caption: "Start9: a full personal home server, GUI first",
+                        img_w: 3446,
+                        img_h: 1988,
+                        pins: &[],
+                    },
+                    Shot {
+                        image: "/guide-images/mynode/mynode_ui.png",
+                        alt: "The MyNode web interface",
+                        caption: "MyNode: bitcoin and Lightning, the friendliest of the three",
+                        img_w: 1688,
+                        img_h: 1494,
+                        pins: &[],
+                    },
+                    Shot {
+                        image: "/guide-images/raspiblitz/raspiblitz_graphics.jpg",
+                        alt: "A RaspiBlitz node with its display",
+                        caption: "RaspiBlitz: the original DIY tinkerer's node",
+                        img_w: 830,
+                        img_h: 357,
+                        pins: &[],
+                    },
+                ],
+            },
+        },
+        // 2 · Build or buy, then sync
+        Step {
+            title: "Set it up and let it sync",
+            goal: "Get the node running on your own network and fully caught up with the chain.",
+            actions: &[
+                "Buy the prebuilt unit or gather the parts, then follow that project's own setup guide start to finish.",
+                "Install the **Bitcoin Core** service, and its **Electrum server** (electrs) service, which is what Sparrow will talk to.",
+                "Let the initial sync finish. It downloads and verifies the entire chain, which takes anywhere from a few hours to a weekend.",
+                "Leave the node powered on and connected. It should be running whenever you want to use your wallet.",
+            ],
+            flag: None,
+            why: Some((
+                "A word on hardware",
+                "If you build your own, I recommend a used mini PC such as a Lenovo ThinkCentre or a Dell OptiPlex over a Raspberry Pi. For a little more money you get more memory, more storage and a faster processor, and the whole thing will feel less fragile. A Pi is still a fine way to start if you just want to get running cheaply.",
+            )),
+            needs: &[],
+            backup_cta: false,
+            device: NO_DEVICE,
+        },
+        // 3 · Point Sparrow at it
+        Step {
+            title: "Point Sparrow at your node",
+            goal: "Move Sparrow off the public server and onto your own.",
+            actions: &[
+                "Find your node's **Electrum server address** in its dashboard (your node's app will show the host and port).",
+                "In Sparrow open **File -> Preferences -> Server**, choose **Private Electrum**, and enter that address.",
+                "Click **Test Connection**. Once it succeeds, apply and reopen your wallet.",
+                "The status bar at the bottom of Sparrow should now show it is connected to your own server. See **[Sparrow's server docs](https://sparrowwallet.com/docs/connect-node.html)** if it will not connect.",
+            ],
+            flag: None,
+            why: Some((
+                "What changed",
+                "Before this, a public server knew every address in your wallet and could link them together. Now that query never leaves your home, and the balances Sparrow shows you were verified by your own copy of the chain.",
             )),
             needs: &[],
             backup_cta: false,
@@ -1216,5 +1435,520 @@ pub static INTERMEDIATE_GUIDE: GuideV2 = GuideV2 {
         lede: "Your keys live on dedicated hardware, backed up in steel, and your own node keeps the network honest for you. This is real self-custody.",
         next_tier: Some(("Level up to Advanced", "/guides/advanced/desktop")),
         backup_cta: false,
+    },
+};
+
+// =============================================================================
+// ADVANCED (level guide) — 2-of-3 multisig with three Coldcards, coordinated in
+// Sparrow. Content from the v1 advanced_desktop_setup markdown (advanced_faq1..5),
+// split into three parts: build it, use it, then optional hardening. Screenshots in
+// assets/guide-images/multisig/ and coldcard/ are landscape => Frame::Desktop.
+// FIRST PASS: menu paths come from the v1 markdown and need a walkthrough to verify.
+// =============================================================================
+
+pub static ADVANCED_MULTISIG_GUIDE: GuideV2 = GuideV2 {
+    eyebrow: "Advanced · Multisig",
+    intro: Intro {
+        title: "Build a 2-of-3 multisig",
+        lede: "No single device can lose or leak your bitcoin. You will set up three Coldcards, combine them into a 2-of-3 multisig with the air-gapped tool, and coordinate the whole thing from Sparrow. Two of the three keys sign any spend, so one lost or stolen device is survivable.",
+        chips: &["8 steps", "a weekend", "part 1 of advanced"],
+        outcomes: &[
+            "A 2-of-3 multisig with no single point of failure",
+            "Three signing devices you can store apart",
+            "Your wallet output descriptor backed up safely",
+        ],
+        backup_cta: true,
+    },
+    steps: &[
+        // 1 · Prerequisites
+        Step {
+            title: "Get up to speed",
+            goal: "Have the pieces from the earlier tiers in place before you start.",
+            actions: &[
+                "Install and verify **Sparrow** if you have not already (the **[basic desktop guide](/guides/basic/desktop)** covers it).",
+                "Set up your own node by following **[part 2 of the intermediate guide](/guides/intermediate/desktop/node)**.",
+                "Read through **[part 1 of the intermediate guide](/guides/intermediate/desktop/hardware)** again, because you are about to do that Coldcard setup three times.",
+                "If you can, use a **dedicated computer** whose only job is running bitcoin software.",
+            ],
+            flag: Some("Your own node is not strictly required, but without it a third party sees every address in your multisig. At this level that is worth avoiding."),
+            why: Some((
+                "Why a dedicated computer",
+                "Sparrow never holds your keys, so a compromised computer cannot sign for you. It can still lie to you about addresses and balances. A machine that does nothing else has far less surface to attack.",
+            )),
+            needs: &[],
+            backup_cta: false,
+            device: NO_DEVICE,
+        },
+        // 2 · Decide the quorum
+        Step {
+            title: "Decide your quorum",
+            goal: "Choose how many keys exist and how many are needed to spend.",
+            actions: &[
+                "Pick **N**, the number of signing devices, and **M**, how many must sign. This guide uses **2-of-3**.",
+                "Choose your hardware. I use the latest **Coldcard**, but you can mix vendors to remove single-vendor risk, as long as every device supports multisig. More options at **[The Bitcoin Hole](https://thebitcoinhole.com/hardware-wallets)**.",
+                "Count your cards: **two microSD cards per Coldcard** (one for the encrypted wallet backup, one for the passphrase), plus **one more** for the multisig setup itself.",
+                "Decide now where each device and each backup will live. Different rooms is a start, different buildings is better.",
+            ],
+            flag: None,
+            why: Some((
+                "What M-of-N really buys you",
+                "A 2-of-3 means any two keys can spend, and any one key can be lost or stolen without losing your bitcoin. That is the point: it removes the single point of failure a normal wallet has. It also adds complexity, so resist the urge to go bigger than you need.",
+            )),
+            needs: &[],
+            backup_cta: false,
+            device: NO_DEVICE,
+        },
+        // 3 · Plan the backups
+        Step {
+            title: "Plan your backups first",
+            goal: "Know exactly what you will write down and where it goes, before any keys exist.",
+            actions: &[
+                "For **each** device you will record: the **seed words**, the **passphrase**, and the **master fingerprint**. Seed words go on their own paper, apart from the passphrase.",
+                "On each Coldcard you will save an **encrypted seed backup** to one microSD and the **passphrase** to another. Use **[industrial grade cards](https://store.coinkite.com/store/microsd-cc)**.",
+                "Punch each device's seed into its own **steel plate**, and store the plates in different locations.",
+                "At the end, Sparrow gives you a **wallet output descriptor** as a PDF. You need it to rebuild the wallet, so keep it safe (it holds no private keys).",
+            ],
+            flag: Some("To recover a 2-of-3 you need two private keys AND the descriptor (the xpubs of all three). Losing every copy of the descriptor can strand your bitcoin even with the seeds in hand."),
+            why: Some((
+                "Do not invent your own scheme",
+                "Every homemade backup trick (splitting words in half, personal ciphers, clever hiding places) has killed someone's coins. Stick to the standard pieces: seed words, passphrase, fingerprint, descriptor. Threat-model your storage, not your format.",
+            )),
+            needs: &[],
+            backup_cta: true,
+            device: Device {
+                frame: Frame::Desktop,
+                shots: &[Shot {
+                    image: "/guide-images/multisig/wehodlbtc_xpub_backup.png",
+                    alt: "An exported multisig text backup listing each xpub and fingerprint",
+                    caption: "The exported xpubs and fingerprints, needed to rebuild the wallet",
+                    img_w: 1311,
+                    img_h: 221,
+                    pins: &[],
+                }],
+            },
+        },
+        // 4 · Set up each Coldcard
+        Step {
+            title: "Set up each Coldcard",
+            goal: "Create three independent single-sig wallets, one per device.",
+            actions: &[
+                "Run the full Coldcard setup from **[part 1 of the intermediate guide](/guides/intermediate/desktop/hardware)** on each device: inspect, update firmware, set a PIN, roll dice for the seed, verify by wipe and restore, add a passphrase.",
+                "Record each device's **seed words, passphrase and master fingerprint** as you go. Keep them clearly labelled per device.",
+                "Save each device's encrypted seed backup and passphrase to its own microSD cards.",
+            ],
+            flag: Some("The Coldcard does not remember your passphrase. Before you do anything multisig related, load it via Passphrase -> Restore Saved (or type it), and confirm the fingerprint matches that device."),
+            why: None,
+            needs: &["3 Coldcards", "Seedplates + punch"],
+            backup_cta: false,
+            device: NO_DEVICE,
+        },
+        // 5 · Export the xpubs
+        Step {
+            title: "Export each device's XPUB",
+            goal: "Collect one ccxp file per Coldcard onto a single microSD card.",
+            actions: &[
+                "Load the passphrase on the first Coldcard, then insert the empty microSD card reserved for the multisig setup.",
+                "Go to **Settings -> Multisig Wallets -> Export XPUB**. The device writes a **ccxp** file to the card.",
+                "Repeat on the next Coldcard, onto the **same** card. Order does not matter.",
+                "Stop after the second device: leave the third for the next step, which reads all the ccxp files at once.",
+            ],
+            flag: None,
+            why: Some((
+                "What is in a ccxp file",
+                "It holds the device's extended public key, its master fingerprint and the derivation path. That is everything needed to build the multisig and watch it, and nothing that can spend. Public data, but it does reveal your addresses, so do not publish it.",
+            )),
+            needs: &["A spare microSD card"],
+            backup_cta: false,
+            device: NO_DEVICE,
+        },
+        // 6 · Create the air-gapped multisig
+        Step {
+            title: "Create the air-gapped multisig",
+            goal: "Combine the three keys into one multisig wallet, entirely offline.",
+            actions: &[
+                "On the last Coldcard, load its passphrase and insert the microSD card holding the other ccxp files.",
+                "Go to **Settings -> Multisig Wallets -> Create Airgapped**, read the screen, and press **OK**.",
+                "Set **M**, the number of signers required, with the **7** and **9** keys. **N** is simply how many ccxp files it found, plus this device.",
+                "Press **OK**, check the wallet summary, and confirm. The device writes two files: a **Coldcard multisig config** for the other devices, and an **Electrum skeleton** for Sparrow.",
+            ],
+            flag: None,
+            why: None,
+            needs: &[],
+            backup_cta: false,
+            device: Device {
+                frame: Frame::Desktop,
+                shots: &[
+                    Shot {
+                        image: "/guide-images/coldcard/coldcard_air_gapped.png",
+                        alt: "The Coldcard air-gapped multisig creation screen",
+                        caption: "Create Airgapped reads the ccxp files from the card",
+                        img_w: 616,
+                        img_h: 346,
+                        pins: &[],
+                    },
+                    Shot {
+                        image: "/guide-images/coldcard/coldcard_m_of_n.png",
+                        alt: "The Coldcard screen for choosing the M of N threshold",
+                        caption: "Set M with the 7 and 9 keys",
+                        img_w: 361,
+                        img_h: 208,
+                        pins: &[],
+                    },
+                ],
+            },
+        },
+        // 7 · Import the config to the others
+        Step {
+            title: "Teach the other Coldcards about the wallet",
+            goal: "Give every device the multisig config so any of them can sign.",
+            actions: &[
+                "Eject the microSD card and insert it into one of the other Coldcards.",
+                "Load that device's **passphrase first**, then go to **Settings -> Multisig Wallets -> Import from file** and pick the config.",
+                "Repeat on the remaining device.",
+            ],
+            flag: Some("Import the config without loading the passphrase and the device builds the multisig from the wrong key, so it will not match. Load the passphrase every time, and check the fingerprint."),
+            why: None,
+            needs: &[],
+            backup_cta: false,
+            device: NO_DEVICE,
+        },
+        // 8 · Add it to Sparrow
+        Step {
+            title: "Add the wallet to Sparrow",
+            goal: "Get a watch-and-spend view of the multisig on your desktop.",
+            actions: &[
+                "In Sparrow choose **File -> New Wallet**, name it, and click **Create Wallet**.",
+                "Set **Policy Type** to **Multi Signature**, move the slider to your **M-of-N**, and leave **Script Type** on **Native SegWit (P2WSH)**.",
+                "Insert the microSD card with the ccxp files. For **Keystore 1**, click **Air-Gapped Hardware Wallet**, find **Coldcard Multisig**, and **Import File**. Label it so you know which physical device it is.",
+                "Repeat for each remaining keystore, then click **Apply**. You can set a Sparrow password to stop anyone at your computer from opening the wallet.",
+                "When prompted, **Save PDF** of the wallet output descriptor and store it somewhere safe. Then click **OK** to finish.",
+            ],
+            flag: None,
+            why: Some((
+                "Why Sparrow holds no keys",
+                "Sparrow only ever sees the extended public keys, so it can build transactions and show balances but never sign. Signing happens on the Coldcards, offline. That is what makes this an air-gapped setup.",
+            )),
+            needs: &["Sparrow (desktop)"],
+            backup_cta: false,
+            device: Device {
+                frame: Frame::Desktop,
+                shots: &[
+                    Shot {
+                        image: "/guide-images/multisig/sparrow_wallet_multisig_new_wallet.png",
+                        alt: "Sparrow, creating a new wallet for the multisig",
+                        caption: "File, New Wallet, then name it",
+                        img_w: 1028,
+                        img_h: 777,
+                        pins: &[],
+                    },
+                    Shot {
+                        image: "/guide-images/multisig/sparrow_new_wallet_multisig.png",
+                        alt: "Sparrow, policy type set to multi signature with an M of N slider",
+                        caption: "Policy Type Multi Signature, then your M-of-N",
+                        img_w: 1028,
+                        img_h: 769,
+                        pins: &[],
+                    },
+                    Shot {
+                        image: "/guide-images/multisig/sparrow_multisig_import.png",
+                        alt: "Sparrow, importing a Coldcard multisig ccxp file",
+                        caption: "Import each ccxp file as a keystore",
+                        img_w: 1030,
+                        img_h: 761,
+                        pins: &[],
+                    },
+                    Shot {
+                        image: "/guide-images/multisig/sparrow_multisig_keystore.png",
+                        alt: "Sparrow, one of three keystores populated",
+                        caption: "One keystore filled in, two to go",
+                        img_w: 1029,
+                        img_h: 764,
+                        pins: &[],
+                    },
+                    Shot {
+                        image: "/guide-images/multisig/sparrow_multisig_ready_to_import.png",
+                        alt: "Sparrow, all keystores imported and ready to apply",
+                        caption: "All keystores in, then Apply",
+                        img_w: 1032,
+                        img_h: 764,
+                        pins: &[],
+                    },
+                    Shot {
+                        image: "/guide-images/multisig/sparrow_multisig_backup.png",
+                        alt: "Sparrow, prompt to save the wallet output descriptor as a PDF",
+                        caption: "Save the output descriptor PDF and keep it safe",
+                        img_w: 1029,
+                        img_h: 767,
+                        pins: &[],
+                    },
+                ],
+            },
+        },
+    ],
+    completion: Completion {
+        title: "Your multisig is live",
+        lede: "Three keys exist, any two can spend, and no single device or location can lose your bitcoin. Next, learn to actually move funds through it.",
+        next_tier: Some(("Continue to part 2: receive and spend", "/guides/advanced/desktop/spending")),
+        backup_cta: true,
+    },
+};
+
+// =============================================================================
+// ADVANCED PART 2 — receiving and spending from the multisig (the PSBT round trip).
+// =============================================================================
+
+pub static ADVANCED_SPENDING_GUIDE: GuideV2 = GuideV2 {
+    eyebrow: "Advanced · Receive and spend",
+    intro: Intro {
+        title: "Receive and spend from a multisig",
+        lede: "Receiving is no harder than a normal wallet. Spending is, because a transaction has to travel to two devices and back on a microSD card. You will do that round trip once here so it is familiar before it matters.",
+        chips: &["5 steps", "about an hour", "part 2 of advanced"],
+        outcomes: &[
+            "Bitcoin received into the multisig",
+            "A PSBT signed by two separate devices",
+            "A spend broadcast from your own node",
+        ],
+        backup_cta: false,
+    },
+    steps: &[
+        // 1 · Receive
+        Step {
+            title: "Receive to your multisig",
+            goal: "Get an address and confirm the funds land.",
+            actions: &[
+                "Open the wallet in Sparrow and click **Receive**.",
+                "Add a **Label** so you remember where the funds came from, then **copy** the address.",
+                "Send a small test amount first. Nothing about a fresh multisig should be trusted with size until you have spent from it once.",
+                "The payment appears under **Transactions** once your node sees it. One confirmation means it is yours and protected by the quorum.",
+            ],
+            flag: None,
+            why: Some((
+                "How many confirmations?",
+                "One confirmation means it is in a block and protected by your multisig. For larger amounts wait for up to 6, which is the usual settled mark.",
+            )),
+            needs: &[],
+            backup_cta: false,
+            device: Device {
+                frame: Frame::Desktop,
+                shots: &[
+                    Shot {
+                        image: "/guide-images/multisig/receiving_to_multisig.png",
+                        alt: "Sparrow, a receive address for the multisig wallet",
+                        caption: "Label it, then copy the address",
+                        img_w: 1300,
+                        img_h: 916,
+                        pins: &[],
+                    },
+                    Shot {
+                        image: "/guide-images/multisig/transaction_received.png",
+                        alt: "Sparrow, the received transaction in the transactions tab",
+                        caption: "The payment lands under Transactions",
+                        img_w: 1380,
+                        img_h: 895,
+                        pins: &[],
+                    },
+                ],
+            },
+        },
+        // 2 · Build the transaction
+        Step {
+            title: "Create the transaction",
+            goal: "Build an unsigned transaction in Sparrow.",
+            actions: &[
+                "Click **Send**. Paste the destination into **Pay to** and add a **Label**.",
+                "Enter the **Amount**, then set your **fee rate**. If you are not in a rush, set it low.",
+                "Check the address once more, then click **Create Transaction**.",
+            ],
+            flag: Some("Sparrow cannot sign this. Nothing leaves your wallet until two devices approve it, so take your time here."),
+            why: None,
+            needs: &[],
+            backup_cta: false,
+            device: Device {
+                frame: Frame::Desktop,
+                shots: &[Shot {
+                    image: "/guide-images/multisig/sending_multisig_transaction.png",
+                    alt: "Sparrow, composing a spend from the multisig wallet",
+                    caption: "Address, label, amount, fee rate, then Create Transaction",
+                    img_w: 1378,
+                    img_h: 899,
+                    pins: &[],
+                }],
+            },
+        },
+        // 3 · Finalize to a PSBT
+        Step {
+            title: "Verify and save the PSBT",
+            goal: "Turn the transaction into a file your Coldcards can sign.",
+            actions: &[
+                "Review the inputs and outputs on the left, and confirm the destination address is right.",
+                "Click **Details** for the technical view. Under **Signatures** you should see your multisig wallet listed.",
+                "Click **Finalize Transaction for Signing**, then **Save Transaction** to write a **.psbt** file to a microSD card.",
+            ],
+            flag: None,
+            why: Some((
+                "What a PSBT is",
+                "A partially signed bitcoin transaction: the whole transaction plus however many signatures it has collected so far. It carries no secrets, which is why it can safely ride a microSD card between your computer and your offline devices.",
+            )),
+            needs: &["A microSD card"],
+            backup_cta: false,
+            device: Device {
+                frame: Frame::Desktop,
+                shots: &[
+                    Shot {
+                        image: "/guide-images/multisig/verify_the_transaction.png",
+                        alt: "Sparrow, verifying the transaction before signing",
+                        caption: "Check inputs, outputs and signatures, then finalize",
+                        img_w: 1381,
+                        img_h: 901,
+                        pins: &[],
+                    },
+                    Shot {
+                        image: "/guide-images/multisig/save_the_transaction.png",
+                        alt: "Sparrow, saving the transaction as a psbt file",
+                        caption: "Save Transaction writes the .psbt file",
+                        img_w: 1384,
+                        img_h: 890,
+                        pins: &[],
+                    },
+                ],
+            },
+        },
+        // 4 · Sign on M devices
+        Step {
+            title: "Sign with two devices",
+            goal: "Collect the signatures your quorum requires, offline.",
+            actions: &[
+                "Insert the microSD card into the first Coldcard and enter your PIN.",
+                "Load the **passphrase** (**Passphrase -> Restore Saved**, or type it), then confirm the **fingerprint** is the one you expect.",
+                "Choose **Ready to Sign** and pick the PSBT file. Verify the **amount**, **destination address** and **fee** on the device screen.",
+                "Press **OK** to sign. The device writes a new file ending in **-part.psbt**.",
+                "Repeat on the second device, and be sure to select the **-part.psbt** file, not the original.",
+            ],
+            flag: Some("Verify the address on the Coldcard screen, not just in Sparrow. Checking it on the offline device is the entire point of signing offline."),
+            why: None,
+            needs: &[],
+            backup_cta: false,
+            device: NO_DEVICE,
+        },
+        // 5 · Broadcast
+        Step {
+            title: "Broadcast the transaction",
+            goal: "Send the fully signed transaction to the network through your own node.",
+            actions: &[
+                "Put the microSD card back in your computer and click **Load Transaction** in Sparrow.",
+                "Select the fully signed file, likely ending in **-part-2.psbt**.",
+                "Both signatures appear and **Broadcast Transaction** becomes clickable. Click it.",
+                "Sparrow hands the transaction to your node, which relays it to the network.",
+            ],
+            flag: None,
+            why: None,
+            needs: &[],
+            backup_cta: false,
+            device: Device {
+                frame: Frame::Desktop,
+                shots: &[
+                    Shot {
+                        image: "/guide-images/multisig/signed_ready_to_broadcast.png",
+                        alt: "Sparrow, both signatures collected and ready to broadcast",
+                        caption: "Two signatures collected, ready to broadcast",
+                        img_w: 1032,
+                        img_h: 775,
+                        pins: &[],
+                    },
+                    Shot {
+                        image: "/guide-images/multisig/transaction_sent.png",
+                        alt: "Sparrow, the transaction broadcast to the network",
+                        caption: "Sent",
+                        img_w: 1034,
+                        img_h: 765,
+                        pins: &[],
+                    },
+                ],
+            },
+        },
+    ],
+    completion: Completion {
+        title: "You spent from a multisig",
+        lede: "You have moved bitcoin that required two independent devices to approve. That round trip is the skill worth having, so run it once more before you store anything serious here.",
+        next_tier: Some(("Optional: harden it further", "/guides/advanced/desktop/hardening")),
+        backup_cta: false,
+    },
+};
+
+// =============================================================================
+// ADVANCED PART 3 — optional hardening (duress wallets, SeedXOR, HSM). Reference
+// material from advanced_faq5, deliberately gated behind an "optional" framing
+// because every item here adds a way to lose funds.
+// =============================================================================
+
+pub static ADVANCED_HARDENING_GUIDE: GuideV2 = GuideV2 {
+    eyebrow: "Advanced · Hardening",
+    intro: Intro {
+        title: "Harden it further",
+        lede: "Optional extras for specific threat models. Every one of them adds complexity, and complexity is how people lose bitcoin. Read them, take what genuinely fits your situation, and skip the rest without guilt.",
+        chips: &["3 topics", "optional", "part 3 of advanced"],
+        outcomes: &[
+            "A decoy wallet for a coerced-access scenario",
+            "Seed backups split without weakening them",
+            "A sense of which extras are worth the risk",
+        ],
+        backup_cta: false,
+    },
+    steps: &[
+        // 1 · Duress / decoy
+        Step {
+            title: "Duress and decoy wallets",
+            goal: "Have something to hand over if you are ever forced to open a device.",
+            actions: &[
+                "**The passphrase trick:** your real wallet only exists once the passphrase is loaded. Send a small amount to the Coldcard's plain seed-words wallet (no passphrase) and it becomes a believable decoy.",
+                "**A duress PIN:** the Coldcard can hold a second PIN that opens a separate wallet. Fund it with an amount you are willing to lose. See **[the docs](https://coldcard.com/docs/settings/#duress-pin)**.",
+                "Whichever you use, keep a little real activity in the decoy. An empty wallet is not convincing.",
+            ],
+            flag: Some("A decoy only helps if you can stay calm and consistent under pressure. Practise opening it, and never hint that anything else exists."),
+            why: Some((
+                "Why this exists",
+                "Also called a $5 wrench attack. Once someone is physically threatening you, cryptography is irrelevant, so the goal shifts to having something plausible to give up. This is about physical safety more than key security.",
+            )),
+            needs: &[],
+            backup_cta: false,
+            device: NO_DEVICE,
+        },
+        // 2 · SeedXOR
+        Step {
+            title: "Split a seed with SeedXOR",
+            goal: "Store a seed in multiple pieces without making it easier to attack.",
+            actions: &[
+                "Never split a seed by simply cutting the word list in half. It leaks most of your key and makes brute force far easier. **[Here is why](https://www.youtube.com/watch?v=p5nSibpfHYE)**.",
+                "Use the Coldcard's **SeedXOR** instead: it splits a seed into parts where every part is a valid but useless seed on its own, and all parts are required to rebuild the real one.",
+                "Store each part in a different location, and record which wallet the set belongs to.",
+                "Read the **[SeedXOR documentation](https://seedxor.com/)** before you commit any funds to this.",
+            ],
+            flag: Some("Every extra part is another thing you can lose. If any single part goes missing, that seed is gone. Consider whether your multisig quorum already solves the problem you are reaching for here."),
+            why: None,
+            needs: &[],
+            backup_cta: false,
+            device: NO_DEVICE,
+        },
+        // 3 · HSM
+        Step {
+            title: "Signing without touching the device",
+            goal: "Know what exists, in case you need automated or remote signing.",
+            actions: &[
+                "The Coldcard's **HSM mode** and **CKBunker** let it sign according to preset rules without someone pressing buttons.",
+                "This suits treasuries and services, not personal savings. Read the **[official HSM docs](https://coldcard.com/docs/hsm/)** if it applies to you.",
+                "For a normal setup, skip this. Pressing OK yourself is a feature, not a chore.",
+            ],
+            flag: None,
+            why: None,
+            needs: &[],
+            backup_cta: false,
+            device: NO_DEVICE,
+        },
+    ],
+    completion: Completion {
+        title: "That is the whole path",
+        lede: "Keys on dedicated hardware, spread across a quorum, backed up in steel and verified by your own node. Keep it simple from here, test your recovery once a year, and enjoy actually owning your bitcoin.",
+        next_tier: None,
+        backup_cta: true,
     },
 };
