@@ -18,6 +18,11 @@ e2e/playwright-report/
 *.swp
 *.swo
 
+# Local agent config (Claude Code). Nothing here is tracked, and sandboxed runs
+# mount /dev/null over these paths, which shows up as untracked noise.
+.claude/
+.mcp.json
+
 # Environment
 .env
 .env.local
