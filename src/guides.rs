@@ -66,6 +66,10 @@ pub struct GuideLevelDef {
     pub products: &'static [ProductLink],
     /// For multi-step levels (intermediate), sub-steps
     pub steps: &'static [GuideStep],
+    /// Gated off the site: the routes render an under-construction notice instead
+    /// of the guide, and the level is not selectable in the picker. Set for the
+    /// Coldcard-based tiers after Coinkite's 2026-07-30 seed-generation advisory.
+    pub under_construction: bool,
 }
 
 /// A sub-step within a guide level (e.g., "Hardware Wallet Setup", "Node Setup")
@@ -256,6 +260,7 @@ pub static BASIC_LEVEL: GuideLevelDef = GuideLevelDef {
     faq_dir: None,
     products: &[],
     steps: &[],
+    under_construction: false,
 };
 
 pub static INTERMEDIATE_LEVEL: GuideLevelDef = GuideLevelDef {
@@ -352,6 +357,7 @@ pub static INTERMEDIATE_LEVEL: GuideLevelDef = GuideLevelDef {
             next_step_button_label: None,
         },
     ],
+    under_construction: true,
 };
 
 pub static ADVANCED_LEVEL: GuideLevelDef = GuideLevelDef {
@@ -367,6 +373,7 @@ pub static ADVANCED_LEVEL: GuideLevelDef = GuideLevelDef {
     faq_dir: Some("advanced_desktop_setup"),
     products: &[],
     steps: &[],
+    under_construction: true,
 };
 
 pub static ALL_LEVELS: &[&GuideLevelDef] =

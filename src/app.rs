@@ -33,6 +33,7 @@
 //! /hall-of-fame, /whale-watch.
 
 use crate::extras::footer::Footer;
+use crate::extras::advisory::AdvisoryBanner;
 use crate::extras::navbar::NavBar;
 use crate::routes::about::AboutPage;
 use crate::routes::blog::BlogPage;
@@ -178,6 +179,7 @@ pub fn App() -> impl IntoView {
 
         <Router>
             <div class="flex flex-col justify-between h-screen">
+                <AdvisoryBanner/>
                 <NavBar/>
                 <main>
                     <Routes fallback=|| view! {

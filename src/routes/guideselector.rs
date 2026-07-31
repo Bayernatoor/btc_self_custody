@@ -87,10 +87,14 @@ fn back_button_view(
 pub fn GuideLevelSelector() -> impl IntoView {
     use leptos_router::hooks::use_params_map;
     let params = use_params_map();
+    // A gated tier is never pre-selected; the reader lands on the level list, where
+    // it is shown as under construction.
     let initial_level = params
         .read()
         .get("level")
-        .and_then(|id| guides::find_level(&id).map(|l| l.id));
+        .and_then(|id| guides::find_level(&id))
+        .filter(|l| !l.under_construction)
+        .map(|l| l.id);
 
     let (selected_level, set_selected_level) = signal(initial_level);
     let (selected_platform, set_selected_platform) =
@@ -288,7 +292,24 @@ pub fn guide_selector_view(
                                         {guides::ALL_LEVELS.iter().enumerate().map(|(i, level)| {
                                             let level_id = level.id;
                                             let delay = format!("animation-delay: {}ms", i * 80);
-                                            view! {
+                                            if level.under_construction {
+                                                view! {
+                                                    <div
+                                                        class="opacity-0 animate-slideup flex items-center w-full px-5 py-4 lg:py-5 bg-white/[0.02] border border-white/[0.07] rounded-xl cursor-not-allowed"
+                                                        style=delay
+                                                        aria-disabled="true"
+                                                    >
+                                                        <div class="flex-1 text-left">
+                                                            <div class="text-base font-semibold text-white/35">{level.name}</div>
+                                                            <p class="text-sm text-white/30 mt-0.5">{level.subtitle}</p>
+                                                        </div>
+                                                        <span class="shrink-0 text-[0.65rem] font-title uppercase tracking-widest text-[#ffce6b] bg-[#ffce6b]/10 border border-[#ffce6b]/25 rounded-full px-2.5 py-1">
+                                                            "Under construction"
+                                                        </span>
+                                                    </div>
+                                                }.into_any()
+                                            } else {
+                                                view! {
                                                 <button
                                                     class="opacity-0 animate-slideup group flex items-center w-full px-5 py-4 lg:py-5 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 hover:border-white/25 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer"
                                                     style=delay
@@ -302,6 +323,7 @@ pub fn guide_selector_view(
                                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
                                                     </svg>
                                                 </button>
+                                                }.into_any()
                                             }
                                         }).collect::<Vec<_>>()}
                                     </div>
