@@ -15,7 +15,7 @@ use crate::extras::advisory::{BLOCK_REPORT_URL, COLDCARD_ADVISORY_URL, ROB_THREA
 
 /// Bump this whenever the page changes. Readers of a developing advisory need to
 /// know how fresh the guidance is.
-const LAST_UPDATED: &str = "3 August 2026";
+const LAST_UPDATED: &str = "4 August 2026";
 
 /// MARA's direct-to-miner submission service, opened to the public during this
 /// incident so anyone can bypass the public mempool without an account.
@@ -27,8 +27,8 @@ const FLAXMAN_GUIDE_URL: &str = "https://btcguide.github.io/";
 
 /// Bits of entropy per unit, so the table is computed rather than hardcoded.
 const CHARSETS: &[(&str, f64)] = &[
-    ("Random BIP39 seed words", 11.000),
-    ("Random words from a long list", 12.925),
+    ("Random BIP39 words (2,048 word list)", 11.000),
+    ("Random Diceware words (7,776 word list)", 12.925),
     ("Lowercase letters only", 4.700),
     ("Lowercase letters + digits", 5.170),
     ("Upper + lower + digits", 5.954),
@@ -36,6 +36,23 @@ const CHARSETS: &[(&str, f64)] = &[
 ];
 const LENGTHS: &[usize] = &[8, 12, 16, 20, 25, 30];
 const DICE_BITS: f64 = 2.585;
+
+/// Jump list, as (anchor id, short label). Must stay in sync with the `Section` ids
+/// below; a label here with no matching section is a dead link.
+const SECTIONS: &[(&str, &str)] = &[
+    ("position", "My position"),
+    ("urgency", "How fast to move"),
+    ("scams", "Scam warning"),
+    ("already-gone", "Check your balance"),
+    ("address-reuse", "Address reuse"),
+    ("passphrase", "Passphrase strength"),
+    ("dice", "Dice rolls"),
+    ("broadcast", "Avoid being front-run"),
+    ("move-now", "Where to move today"),
+    ("where-to-move", "Long term"),
+    ("my-guides", "My guides"),
+    ("sources", "Sources"),
+];
 
 fn bits_class(bits: f64) -> &'static str {
     if bits >= 128.0 {
@@ -135,9 +152,16 @@ pub fn ColdcardAdvisoryPage() -> impl IntoView {
                 <p class="text-base text-white/75 leading-relaxed">
                     "Your seed words are supposed to come from pure chance, so that nobody could ever
                      reproduce them. A software bug meant COLDCARDs were not doing that. From March 2021 onward
-                     they built seeds out of information about the device itself, such as its serial number and
-                     internal clock, which is predictable. That left a small enough pool of possible seeds that
-                     thieves can work through it and empty the wallets they find, which is happening now."
+                     the firmware quietly fell back to a general purpose random number generator instead of the
+                     dedicated hardware one, and that fallback seeds itself from the device's own state, things
+                     like a chip ID and an internal clock. Predictable inputs give predictable seeds."
+                </p>
+                <p class="text-base text-white/75 leading-relaxed mt-3">
+                    "At worst that narrows the range to about four billion possible seeds, and far fewer than
+                     that on the older models. Four billion sounds enormous, but a computer can work through the
+                     whole range. So thieves are not guessing at your wallet in particular. They are recreating
+                     every seed the flaw could produce, checking which ones hold coins, and emptying those. That
+                     is happening now."
                 </p>
             </header>
 
@@ -147,9 +171,41 @@ pub fn ColdcardAdvisoryPage() -> impl IntoView {
                     <span class="text-white font-semibold">"Not affected? "</span>
                     "If you have never generated a seed on a COLDCARD Mk2, Mk3, Mk4, Mk5 or Q, this does not
                      apply to you and you can stop reading. Seeds you generated somewhere else and merely
-                     imported into a COLDCARD are also fine. TAPSIGNER, OPENDIME and SATSCARD are unaffected."
+                     imported into a COLDCARD are also fine. As for TAPSIGNER, OPENDIME and SATSCARD, Coinkite
+                     says they are not affected because they run different codebases. Nothing has contradicted
+                     that so far, but it is the vendor's own assessment rather than an independent finding."
+                </p>
+                <p class="text-sm text-white/70 leading-relaxed mt-3 pt-3 border-t border-white/10">
+                    <span class="text-white font-semibold">"Already updated the firmware? "</span>
+                    "That protects seeds you generate from now on. It does nothing for a seed the old firmware
+                     already produced. If the seed you are using today came off an affected device, updating has
+                     not saved it and you still need to move."
                 </p>
             </div>
+
+            // ---------- jump list ----------
+            <nav aria-label="On this page" class="mb-10">
+                <div class="font-title text-xs uppercase tracking-widest text-[#f7931a] mb-3">
+                    "On this page"
+                </div>
+                // 12 entries divides evenly into 2, 3 and 4 columns, so every row is full at
+                // every breakpoint. Equal-width cells beat flex-wrap, which left a ragged 5/5/2.
+                <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                    {SECTIONS
+                        .iter()
+                        .map(|(id, label)| {
+                            view! {
+                                <a
+                                    href=format!("#{}", id)
+                                    class="flex items-center justify-center text-center px-3 py-2 rounded-lg text-xs text-white/65 bg-white/5 border border-white/10 hover:text-white hover:border-[#f7931a]/40 transition-colors"
+                                >
+                                    {*label}
+                                </a>
+                            }
+                        })
+                        .collect::<Vec<_>>()}
+                </div>
+            </nav>
 
             // ---------- my position ----------
             <Section id="position" title="My position">
@@ -220,7 +276,7 @@ pub fn ColdcardAdvisoryPage() -> impl IntoView {
                 </div>
             </Section>
 
-            // ---------- address reuse ----------
+            // ---------- scams ----------
             <Section id="scams" title="Nobody legitimate will ask for your seed">
                 <div class="bg-[#ffce6b]/[0.07] border border-[#ffce6b]/30 rounded-xl p-5">
                     <p class="text-sm text-white/80 leading-relaxed mb-3">
@@ -237,9 +293,9 @@ pub fn ColdcardAdvisoryPage() -> impl IntoView {
                 </div>
             </Section>
 
-            <Section id="already-gone" title="First, check the coins are still there">
+            <Section id="already-gone" title="Check the coins are still there">
                 <p class="text-sm text-white/75 leading-relaxed mb-3">
-                    "Before planning anything, confirm you still have a balance. Look up your address or your
+                    "Before you plan a migration, confirm you still have a balance. Look up your address or your
                      wallet on a block explorer, or open a watch-only copy of the wallet. Do not enter your seed
                      anywhere to do this, and use a public key or address only."
                 </p>
@@ -254,7 +310,7 @@ pub fn ColdcardAdvisoryPage() -> impl IntoView {
                 <div class="bg-[#ffce6b]/[0.07] border border-[#ffce6b]/30 rounded-xl p-5">
                     <p class="text-sm text-white/80 leading-relaxed">
                         "If you have received to the same address more than once, treat yourself as the most
-                         urgent case no matter which of the three above describes you. Address reuse hands an
+                         urgent case whichever of the three groups above describes you. Address reuse hands an
                          attacker a fixed target to watch and to test guessed keys against, and it removes the
                          small amount of cover that fresh addresses give you."
                     </p>
@@ -337,13 +393,16 @@ pub fn ColdcardAdvisoryPage() -> impl IntoView {
                     "A fair six-sided die contributes about 2.6 bits per roll, and dice entropy came from you
                      rather than from the device."
                 </p>
-                <div class="flex flex-wrap gap-2">
-                    {[30usize, 50, 75, 99, 100].iter().map(|n| {
+                // Four milestones so the grid fills evenly at 2 and 4 columns. 99 was dropped as
+                // redundant next to 100 (256 vs 258 bits) and the top figure now matches the
+                // "100 is a comfortable margin" line in the urgency cases.
+                <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {[30usize, 50, 75, 100].iter().map(|n| {
                         let bits = DICE_BITS * (*n as f64);
                         view! {
-                            <div class="bg-white/5 border border-white/10 rounded-lg px-3.5 py-2">
+                            <div class="flex items-center justify-between gap-2 bg-white/5 border border-white/10 rounded-lg px-3.5 py-2">
                                 <span class="text-white/80 text-sm">{format!("{} rolls", n)}</span>
-                                <span class=format!("text-sm ml-2 tabular-nums {}", bits_class(bits))>
+                                <span class=format!("text-sm tabular-nums {}", bits_class(bits))>
                                     {format!("{:.0} bits", bits)}
                                 </span>
                             </div>
