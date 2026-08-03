@@ -679,4 +679,18 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         highlight: false,
         source: Some(("Bitcoin Wiki: OP_CHECKSIG", "https://en.bitcoin.it/wiki/OP_CHECKSIG#Procedure_for_Hashtype_SIGHASH_SINGLE")),
     },
+    HallOfFameEntry {
+        slug: "coldcard-seed-entropy-flaw",
+        title: "COLDCARD RNG Failure",
+        description: "COLDCARD firmware generated wallet seeds from a predictable fallback rather than the hardware random number generator, deriving keys from readable device state instead of real randomness. Mk2 and Mk3 were hit worst, and every current model was affected too. Seeds made this way are not merely weak, they can be found by brute force. The flaw shipped in March 2021, went unnoticed for over four years, and was being actively exploited the day it became public.",
+        category: Attacks,
+        date: "2026-07-30",
+        block: None,
+        txid: None,
+        highlight: true,
+        source: Some((
+            "Block Engineering Report",
+            "https://engineering.block.xyz/blog/predictable-rng-fallback-and-32-bit-reseed-in-coldcard-firmware",
+        )),
+    },
 ];

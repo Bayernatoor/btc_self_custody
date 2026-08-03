@@ -70,7 +70,12 @@ pub fn NavBar() -> impl IntoView {
             // Mobile dropdown
             <div
                 node_ref=navbar_menu
-                class="lg:hidden fixed top-12 right-4 z-40 min-w-44 overflow-hidden"
+                // Anchored to the navbar (which is sticky, so it is the containing
+                // block) rather than the viewport. `fixed top-12` assumed the navbar
+                // sat at the very top of the page, so anything above it (the advisory
+                // banner) pushed the navbar down and left this menu floating over the
+                // banner instead of under the hamburger.
+                class="lg:hidden absolute top-full right-4 z-40 min-w-44 overflow-hidden"
                 class:hidden=move || !menu_open.get()
             >
                 <div

@@ -1,21 +1,41 @@
 //! Temporary site-wide security advisory banner.
 //!
-//! Added 2026-07-31, the day after Coinkite disclosed a seed-generation entropy
-//! flaw: the RNG hashed the device-generated seed together with every dice roll,
-//! leaving affected seeds with roughly 72 bits of entropy instead of 128.
+//! Added 2026-07-31 after the COLDCARD seed-generation failure.
 //!
-//! Affected: Coldcard Mk3 on any firmware from 4.0.1 (March 2021) onward, Mk4 and
-//! Mk5 before 5.6.0, and Q before 1.5.0Q. TAPSIGNER, OPENDIME and SATSCARD are not
-//! affected. Updating firmware does NOT repair a seed that was already generated.
+//! Root cause (per Block Engineering, who found it): a macro-check bug bound libngu
+//! to MicroPython's FALLBACK RNG rather than the hardware RNG, so seeds derived from
+//! observable device state (chip UID, SysTick, RTC). On current models the
+//! secure-element reseed contributes only 32 bits, into one state word.
+//!
+//! Severity: Block puts Mk2/Mk3 v4.0.0-v4.1.9 near 2^16 on a normal cold boot and
+//! bounds current Mk4/Q/Mk5 near 2^32, i.e. brute-forceable. Coinkite's own advisory
+//! quoted ~72 bits and offered dice rolls / a passphrase as mitigations; Block's
+//! analysis does not support that framing, so do NOT repeat it. Present since
+//! v4.0.0 (17 March 2021). Active exploitation confirmed on disclosure day.
+//! TAPSIGNER, OPENDIME and SATSCARD are not affected. Updating firmware does NOT
+//! repair a seed that was already generated.
 //!
 //! To retire this: delete this file, its `pub mod advisory;` line in extras/mod.rs,
 //! and the `<AdvisoryBanner/>` in app.rs.
 
 use leptos::prelude::*;
 
-/// Coinkite's advisory. Kept as a constant so the guides can link the same source.
+/// Coinkite's own advisory. Kept because the guides link it, but note it understates
+/// the severity and offers dice/passphrase mitigations that Block's analysis does not
+/// support. Prefer BLOCK_REPORT_URL when pointing readers at one source.
 pub const COLDCARD_ADVISORY_URL: &str =
     "https://blog.coinkite.com/coldcard-mk3-seed-generation-warning/";
+
+/// Block Engineering's technical report. They found the bug; this is the accurate
+/// account of the root cause and the real search-space numbers.
+pub const BLOCK_REPORT_URL: &str =
+    "https://engineering.block.xyz/blog/predictable-rng-fallback-and-32-bit-reseed-in-coldcard-firmware";
+
+/// Community emergency-migration walkthrough. Listed first in the banner because
+/// acting matters more than understanding for anyone holding an affected seed.
+/// Hosted on X, so it may be unreadable without an account.
+pub const MIGRATION_GUIDE_URL: &str =
+    "https://x.com/Rob1Ham/status/2083936334511538368";
 
 /// Full-width warning bar rendered above the navbar on every page.
 #[component]
@@ -44,14 +64,23 @@ pub fn AdvisoryBanner() -> impl IntoView {
                     <span class="font-semibold text-[#ffce6b]">
                         "Security advisory: Coldcard seed generation. "
                     </span>
-                    "A flaw in the way Coldcards generated seed words left them weaker than they should be. If your seed was created on a Mk3 running any firmware from 4.0.1 (March 2021) onward, treat this as urgent: your funds could be at risk. Mk4, Mk5 and Q owners on older firmware are also vulnerable. "
+                    "Since March 2021, Coldcards generated seed words from a predictable random number generator instead of the hardware one. Mk2 and Mk3 are worst hit, but Mk4, Q and Mk5 are affected too. Funds are being stolen right now. If you generated a seed on a Coldcard, treat it as compromised and migrate. "
                     <a
-                        href=COLDCARD_ADVISORY_URL
+                        href=MIGRATION_GUIDE_URL
                         target="_blank"
                         rel="noreferrer"
                         class="font-semibold text-[#ffce6b] underline underline-offset-2 whitespace-nowrap hover:text-white transition-colors"
                     >
-                        "Read Coinkite's advisory \u{2192}"
+                        "How to migrate now \u{2192}"
+                    </a>
+                    <span class="text-[#ffce6b]/40 px-1.5" aria-hidden="true">"|"</span>
+                    <a
+                        href=BLOCK_REPORT_URL
+                        target="_blank"
+                        rel="noreferrer"
+                        class="font-semibold text-[#ffce6b] underline underline-offset-2 whitespace-nowrap hover:text-white transition-colors"
+                    >
+                        "Technical report \u{2192}"
                     </a>
                 </p>
             </div>
