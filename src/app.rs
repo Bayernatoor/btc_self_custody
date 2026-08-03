@@ -176,7 +176,7 @@ pub fn App() -> impl IntoView {
     view! {
         <Title text="WE HODL BTC - Bitcoin Self-Custody Guides & Blockchain Analytics"/>
         <Meta name="description" content="Free, opinionated Bitcoin self-custody guides and The Bitcoin Observatory — live blockchain analytics with real-time network stats, fee charts, mining data, and BIP signaling tracker."/>
-        <Meta name="keywords" content="Bitcoin, self-custody, hardware wallet, Coldcard, Sparrow Wallet, multisig, Bitcoin security, blockchain analytics, Bitcoin charts, mining difficulty, SegWit, Taproot, BIP signaling, mempool, Bitcoin node"/>
+        <Meta name="keywords" content="Bitcoin, self-custody, hardware wallet, Sparrow Wallet, multisig, Bitcoin security, blockchain analytics, Bitcoin charts, mining difficulty, SegWit, Taproot, BIP signaling, mempool, Bitcoin node"/>
 
         <Router>
             <div class="flex flex-col justify-between h-screen">
