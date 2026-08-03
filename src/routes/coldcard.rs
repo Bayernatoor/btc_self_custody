@@ -28,7 +28,7 @@ const FLAXMAN_GUIDE_URL: &str = "https://btcguide.github.io/";
 /// Bits of entropy per unit, so the table is computed rather than hardcoded.
 const CHARSETS: &[(&str, f64)] = &[
     ("Random BIP39 words (2,048 word list)", 11.000),
-    ("Random Diceware words (7,776 word list)", 12.925),
+    ("Random words from a 7,776 word list", 12.925),
     ("Lowercase letters only", 4.700),
     ("Lowercase letters + digits", 5.170),
     ("Upper + lower + digits", 5.954),
