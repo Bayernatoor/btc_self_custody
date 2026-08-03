@@ -31,11 +31,11 @@ pub const COLDCARD_ADVISORY_URL: &str =
 pub const BLOCK_REPORT_URL: &str =
     "https://engineering.block.xyz/blog/predictable-rng-fallback-and-32-bit-reseed-in-coldcard-firmware";
 
-/// Community emergency-migration walkthrough. Listed first in the banner because
-/// acting matters more than understanding for anyone holding an affected seed.
-/// Hosted on X, so it may be unreadable without an account.
-pub const MIGRATION_GUIDE_URL: &str =
-    "https://x.com/Rob1Ham/status/2083936334511538368";
+/// Rob Hamilton's triage thread. Basis for the urgency levels on /coldcard-migration, and
+/// where we send readers for named product opinions. Hosted on X, so it may be
+/// unreadable without an account; that is why /coldcard-migration exists rather than linking
+/// this directly from the banner.
+pub const ROB_THREAD_URL: &str = "https://x.com/Rob1Ham/status/2083936334511538368";
 
 /// Full-width warning bar rendered above the navbar on every page.
 #[component]
@@ -66,12 +66,10 @@ pub fn AdvisoryBanner() -> impl IntoView {
                     </span>
                     "Since March 2021, Coldcards generated seed words from a predictable random number generator instead of the hardware one. Mk2 and Mk3 are worst hit, but Mk4, Q and Mk5 are affected too. Funds are being stolen right now. If you generated a seed on a Coldcard, treat it as compromised and migrate. "
                     <a
-                        href=MIGRATION_GUIDE_URL
-                        target="_blank"
-                        rel="noreferrer"
+                        href="/coldcard-migration"
                         class="font-semibold text-[#ffce6b] underline underline-offset-2 whitespace-nowrap hover:text-white transition-colors"
                     >
-                        "How to migrate now \u{2192}"
+                        "What to do \u{2192}"
                     </a>
                     <span class="text-[#ffce6b]/40 px-1.5" aria-hidden="true">"|"</span>
                     <a

@@ -114,7 +114,6 @@ fn WalletCard(
     level: String,
 ) -> impl IntoView {
     let path = format!("/guides/{}/{}/{}", level, platform, wallet.id);
-    let color = wallet.color;
     view! {
         <a href=path class="block">
             <button class="group flex items-center gap-4 w-full px-5 py-4 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 hover:border-white/25 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer">
@@ -122,7 +121,7 @@ fn WalletCard(
                     <img class="h-8 w-8 rounded-md" src=wallet.logo alt=wallet.logo_alt/>
                 </div>
                 <div class="flex-1 text-left">
-                    <h3 class="text-base lg:text-lg font-semibold" style=format!("color: {color}")>{wallet.name}</h3>
+                    <h3 class="text-base lg:text-lg font-semibold text-white">{wallet.name}</h3>
                     <p class="text-sm text-white/50 mt-0.5">{wallet.tagline}</p>
                 </div>
                 <svg class="w-5 h-5 text-white/30 group-hover:text-white/60 group-hover:translate-x-0.5 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">

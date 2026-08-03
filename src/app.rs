@@ -36,6 +36,7 @@ use crate::extras::footer::Footer;
 use crate::extras::advisory::AdvisoryBanner;
 use crate::extras::navbar::NavBar;
 use crate::routes::about::AboutPage;
+use crate::routes::coldcard::ColdcardAdvisoryPage;
 use crate::routes::blog::BlogPage;
 use crate::routes::faq::FaqPage;
 use crate::routes::guide::{GuideTwoSegment, GuideWalletPage};
@@ -241,6 +242,7 @@ pub fn App() -> impl IntoView {
                         <Route path=path!("/blog") view=BlogPage/>
                         <Route path=path!("/faq") view=FaqPage/>
                         <Route path=path!("/about") view=AboutPage/>
+                        <Route path=path!("/coldcard-migration") view=ColdcardAdvisoryPage/>
                     </Routes>
                 </main>
                 <Footer/>
