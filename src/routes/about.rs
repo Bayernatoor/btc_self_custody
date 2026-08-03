@@ -100,9 +100,9 @@ pub fn AboutPage() -> impl IntoView {
                             <span class="text-white/50 text-xs uppercase tracking-wide">"On-chain"</span>
                             <a
                                 class="block text-blue-400 hover:text-blue-300 transition-colors mt-0.5 text-[0.75rem] break-all"
-                                href="bitcoin:bc1pg3l4kqvurd3w350mgr4amcplj7ar70gqyck9hzfu75w5ylrvl3rst84h3d"
+                                href="bitcoin:bc1q567fhxutu76spq9gs53gxrgdyjcpw5s5evjn6z"
                             >
-                                "bc1pg3l4kqvurd3w350mgr4amcplj7ar70gqyck9hzfu75w5ylrvl3rst84h3d"
+                                "bc1q567fhxutu76spq9gs53gxrgdyjcpw5s5evjn6z"
                             </a>
                             <img
                                 class="h-auto w-28 mt-2 rounded"
