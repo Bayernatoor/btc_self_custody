@@ -101,17 +101,27 @@ pub fn HomePage() -> impl IntoView {
                 </a>
                 <a href="/guides" class="block opacity-0 animate-slideup" style="animation-delay: 200ms">
                     <div class="group bg-white/5 border border-white/10 rounded-xl p-5 hover:bg-white/10 hover:border-white/20 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 h-full">
-                        <div class="text-[#f7931a] text-xs font-semibold uppercase tracking-widest mb-2">"Intermediate"</div>
-                        <h3 class="text-base font-semibold text-white mb-1.5 group-hover:text-[#f4a949] transition-colors">"Hardware Wallet & Node"</h3>
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="text-[#f7931a] text-xs font-semibold uppercase tracking-widest">"Intermediate"</span>
+                            <span class="text-[0.6rem] font-title uppercase tracking-widest text-[#ffce6b] bg-[#ffce6b]/10 border border-[#ffce6b]/25 rounded-full px-2 py-0.5">
+                                "Offline"
+                            </span>
+                        </div>
+                        <h3 class="text-base font-semibold text-white mb-1.5">"Hardware Wallet & Node"</h3>
                         <p class="text-sm text-white/50 leading-relaxed">
-                            "Level up with a Coldcard hardware wallet and your own Bitcoin node. Standards-based security and real privacy."
+                            "Down while I rebuild it. It was built around one vendor, and that turned out to be a mistake."
                         </p>
                     </div>
                 </a>
                 <a href="/guides" class="block opacity-0 animate-slideup" style="animation-delay: 300ms">
                     <div class="group bg-white/5 border border-white/10 rounded-xl p-5 hover:bg-white/10 hover:border-white/20 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 h-full">
-                        <div class="text-[#f7931a] text-xs font-semibold uppercase tracking-widest mb-2">"Advanced"</div>
-                        <h3 class="text-base font-semibold text-white mb-1.5 group-hover:text-[#f4a949] transition-colors">"Multisig Setup"</h3>
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="text-[#f7931a] text-xs font-semibold uppercase tracking-widest">"Advanced"</span>
+                            <span class="text-[0.6rem] font-title uppercase tracking-widest text-[#ffce6b] bg-[#ffce6b]/10 border border-[#ffce6b]/25 rounded-full px-2 py-0.5">
+                                "Offline"
+                            </span>
+                        </div>
+                        <h3 class="text-base font-semibold text-white mb-1.5">"Multisig Setup"</h3>
                         <p class="text-sm text-white/50 leading-relaxed">
                             "2-of-3 multisig with multiple signing devices, steel seed backups, and geographic separation. Protect generational wealth."
                         </p>

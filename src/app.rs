@@ -33,8 +33,10 @@
 //! /hall-of-fame, /whale-watch.
 
 use crate::extras::footer::Footer;
+use crate::extras::advisory::AdvisoryBanner;
 use crate::extras::navbar::NavBar;
 use crate::routes::about::AboutPage;
+use crate::routes::coldcard::ColdcardAdvisoryPage;
 use crate::routes::blog::BlogPage;
 use crate::routes::faq::FaqPage;
 use crate::routes::guide::{GuideTwoSegment, GuideWalletPage};
@@ -174,10 +176,14 @@ pub fn App() -> impl IntoView {
     view! {
         <Title text="We Hodl BTC - Bitcoin Self-Custody Guides & Blockchain Analytics"/>
         <Meta name="description" content="Free, opinionated Bitcoin self-custody guides and The Bitcoin Observatory — live blockchain analytics with real-time network stats, fee charts, mining data, and BIP signaling tracker."/>
-        <Meta name="keywords" content="Bitcoin, self-custody, hardware wallet, Coldcard, Sparrow Wallet, multisig, Bitcoin security, blockchain analytics, Bitcoin charts, mining difficulty, SegWit, Taproot, BIP signaling, mempool, Bitcoin node"/>
+        <Meta name="keywords" content="Bitcoin, self-custody, hardware wallet, Sparrow Wallet, multisig, Bitcoin security, blockchain analytics, Bitcoin charts, mining difficulty, SegWit, Taproot, BIP signaling, mempool, Bitcoin node"/>
 
         <Router>
+            // min-h-screen (branch) over h-screen+justify-between (master): guide pages
+            // are long, and a fixed-height flex container squashes them. The advisory
+            // banner sits above the navbar so it is the first thing on every page.
             <div class="flex flex-col min-h-screen">
+                <AdvisoryBanner/>
                 <NavBar/>
                 <main class="flex-1">
                     <Routes fallback=|| view! {
@@ -239,6 +245,7 @@ pub fn App() -> impl IntoView {
                         <Route path=path!("/blog") view=BlogPage/>
                         <Route path=path!("/faq") view=FaqPage/>
                         <Route path=path!("/about") view=AboutPage/>
+                        <Route path=path!("/coldcard-migration") view=ColdcardAdvisoryPage/>
                     </Routes>
                 </main>
                 <Footer/>

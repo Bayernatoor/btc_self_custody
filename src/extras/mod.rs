@@ -1,4 +1,5 @@
 pub mod accordion_menu;
+pub mod advisory;
 pub mod footer;
 pub mod navbar;
 pub mod spinner;

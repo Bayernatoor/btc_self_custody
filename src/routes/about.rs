@@ -1,9 +1,25 @@
 use leptos::prelude::*;
 use leptos_meta::*;
 
+/// On-chain donation address. Clicking it copies rather than firing a `bitcoin:`
+/// URI, which on desktop just prompts to launch a wallet app.
+const DONATION_ADDRESS: &str = "bc1q567fhxutu76spq9gs53gxrgdyjcpw5s5evjn6z";
+
+/// BIP47 payment code behind the PayNym. Offered for copy alongside the friendly
+/// handle because the handle only resolves while paynym.rs is up, whereas this
+/// code works in any BIP47 wallet with no server involved.
+///
+/// Never rendered as text, only written to the clipboard, so it reads as dead code
+/// on the ssr target where the click handler is compiled out.
+#[allow(dead_code)]
+const PAYNYM_CODE: &str ="PM8TJVCNSQmaTZddhwNYhbdNXcxGqY8fPCC7Sab6SZDa9nar1z5JBaSMKtTLTeNHsjVyRocXgH35jCxs6roFMChDKTUTXatjud4XGvewzJcS1Gg5ogSS";
+
 /// Renders the About page of the application.
+#[allow(unused_variables)] // set_copied only used in the hydrate feature
 #[component]
 pub fn AboutPage() -> impl IntoView {
+    let (copied, set_copied) = signal(false);
+    let (code_copied, set_code_copied) = signal(false);
     view! {
         <Title text="About | We Hodl BTC"/>
         <Meta name="description" content="We Hodl BTC is an open-source Bitcoin education project. Free self-custody guides, live blockchain analytics, and network monitoring powered by a full Bitcoin Core node."/>
@@ -85,25 +101,70 @@ pub fn AboutPage() -> impl IntoView {
                                 "bayer@primal.net"
                             </a>
                         </div>
+                        // Reissued 2026-08-03 from Sparrow; the previous PayNym (+wildhaze2Ff)
+                        // was dropped because we could no longer identify the wallet holding
+                        // its payment code. Note the host: paynym.is now 308-redirects to
+                        // paynym.rs, so link the canonical domain directly.
                         <div>
-                            <span class="text-white/50 text-xs uppercase tracking-wide">"PayNym (BIP47)"</span>
+                            <span class="text-white/50 text-xs uppercase tracking-wide">
+                                "PayNym (BIP47) "
+                                <button
+                                    class="text-[#f7931a] normal-case tracking-normal hover:text-[#f4a949] transition-colors cursor-pointer"
+                                    title="Copy the BIP47 payment code"
+                                    on:click=move |_| {
+                                        #[cfg(feature = "hydrate")]
+                                        {
+                                            let _ = leptos::prelude::window()
+                                                .navigator()
+                                                .clipboard()
+                                                .write_text(PAYNYM_CODE);
+                                            set_code_copied.set(true);
+                                            leptos::prelude::set_timeout(
+                                                move || set_code_copied.set(false),
+                                                std::time::Duration::from_secs(2),
+                                            );
+                                        }
+                                    }
+                                >
+                                    {move || if code_copied.get() { "\u{2713} code copied" } else { "copy payment code" }}
+                                </button>
+                            </span>
                             <a
                                 class="block text-blue-400 hover:text-blue-300 transition-colors mt-0.5"
-                                href="https://paynym.is/+wildhaze2Ff"
+                                href="https://paynym.rs/+questionablebrother85"
                                 target="_blank"
                                 rel="noopener noreferrer"
                             >
-                                "+wildhaze2Ff"
+                                "+questionablebrother85"
                             </a>
                         </div>
                         <div>
-                            <span class="text-white/50 text-xs uppercase tracking-wide">"On-chain"</span>
-                            <a
-                                class="block text-blue-400 hover:text-blue-300 transition-colors mt-0.5 text-[0.75rem] break-all"
-                                href="bitcoin:bc1pg3l4kqvurd3w350mgr4amcplj7ar70gqyck9hzfu75w5ylrvl3rst84h3d"
+                            <span class="text-white/50 text-xs uppercase tracking-wide">
+                                "On-chain "
+                                <span class="text-[#f7931a] normal-case tracking-normal">
+                                    {move || if copied.get() { "\u{2713} copied" } else { "(click to copy)" }}
+                                </span>
+                            </span>
+                            <button
+                                class="block w-full text-left text-blue-400 hover:text-blue-300 transition-colors mt-0.5 text-[0.75rem] break-all cursor-pointer"
+                                title="Click to copy the address"
+                                on:click=move |_| {
+                                    #[cfg(feature = "hydrate")]
+                                    {
+                                        let _ = leptos::prelude::window()
+                                            .navigator()
+                                            .clipboard()
+                                            .write_text(DONATION_ADDRESS);
+                                        set_copied.set(true);
+                                        leptos::prelude::set_timeout(
+                                            move || set_copied.set(false),
+                                            std::time::Duration::from_secs(2),
+                                        );
+                                    }
+                                }
                             >
-                                "bc1pg3l4kqvurd3w350mgr4amcplj7ar70gqyck9hzfu75w5ylrvl3rst84h3d"
-                            </a>
+                                {DONATION_ADDRESS}
+                            </button>
                             <img
                                 class="h-auto w-28 mt-2 rounded"
                                 src="/img/bitcoin_donation_address_qr.png"

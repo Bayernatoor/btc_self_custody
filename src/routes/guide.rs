@@ -207,6 +207,9 @@ pub fn GuideTwoSegment() -> impl IntoView {
             match (level_id.as_deref(), segment.as_deref()) {
                 (Some(lid), Some(seg)) => {
                     match guides::find_level(lid) {
+                        Some(level) if level.under_construction => {
+                            render_under_construction(level).into_any()
+                        }
                         Some(level) => {
                             if seg == "desktop" {
                                 // /guides/basic/desktop → show OS picker
@@ -228,6 +231,51 @@ pub fn GuideTwoSegment() -> impl IntoView {
                 _ => view! { <p class="text-white text-center p-8">"Invalid guide URL."</p> }.into_any(),
             }
         }}
+    }
+}
+
+/// Shown in place of a guide whose tier has been pulled from the site. Used for the
+/// Coldcard-based tiers after Coinkite's 2026-07-30 seed-generation advisory: the
+/// routes stay live (old links and search results point at them) but serve this
+/// instead of advice that is no longer trusted.
+fn render_under_construction(level: &'static GuideLevelDef) -> impl IntoView {
+    let page_title = format!("{} | Under construction | We Hodl BTC", level.name);
+    view! {
+        <Title text=page_title/>
+        <Meta name="robots" content="noindex"/>
+        <div class="flex flex-col items-center justify-center min-h-[60vh] max-w-2xl mx-auto px-6 py-16 text-center opacity-0 animate-fadeinone">
+            <div class="w-14 h-14 rounded-2xl bg-[#ffce6b]/10 border border-[#ffce6b]/25 flex items-center justify-center mb-6">
+                <svg class="w-7 h-7 text-[#ffce6b]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                </svg>
+            </div>
+            <div class="font-title text-xs uppercase tracking-widest text-[#ffce6b] mb-2">"Under construction"</div>
+            <h1 class="text-2xl lg:text-3xl font-title text-white mb-4">
+                {level.name}" guide is offline"
+            </h1>
+            <p class="text-sm lg:text-[0.95rem] text-white/70 leading-relaxed mb-4">
+                "This guide was built around the Coldcard. After Coinkite disclosed a flaw in how their devices generated seed words, I have taken it down rather than leave up a recommendation I no longer stand behind."
+            </p>
+            <p class="text-sm lg:text-[0.95rem] text-white/70 leading-relaxed mb-8">
+                "It will return once I have reworked it around hardware I am confident in. If you already followed this guide, read the advisory and check where you stand."
+            </p>
+            <div class="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                <a
+                    href=crate::extras::advisory::COLDCARD_ADVISORY_URL
+                    target="_blank"
+                    rel="noreferrer"
+                    class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-[#ffce6b] bg-[#ffce6b]/10 border border-[#ffce6b]/40 hover:bg-[#ffce6b]/20 transition-all duration-200"
+                >
+                    "Read Coinkite's advisory \u{2192}"
+                </a>
+                <a
+                    href="/guides/basic"
+                    class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-[#f7931a] bg-[#f7931a]/10 border border-[#f7931a]/40 hover:bg-[#f7931a]/20 transition-all duration-200"
+                >
+                    "Go to the Basic guides \u{2192}"
+                </a>
+            </div>
+        </div>
     }
 }
 
@@ -502,6 +550,12 @@ pub fn GuideWalletPage() -> impl IntoView {
             match (level_id.as_deref(), wallet_id.as_deref(), platform_id.as_deref()) {
                 (Some(lid), Some(wid), Some(pid)) => {
                     let level = guides::find_level(lid);
+                    // Gate first: a gated level must not serve a part page either, and
+                    // Intermediate/Advanced are entirely parts. Checking after the part
+                    // lookup would leave the Coldcard guides reachable by direct URL.
+                    if let Some(l) = level.filter(|l| l.under_construction) {
+                        return render_under_construction(l).into_any();
+                    }
                     // A multi-part level (Intermediate) uses this slot for its part id.
                     match guides_v2::find_level_part(lid, wid) {
                         Some(part) => render_part_page(part, pid, lid, level).into_any(),
