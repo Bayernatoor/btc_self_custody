@@ -1,9 +1,9 @@
 //! Protocol Guide: educational page about Bitcoin data embedding protocols.
 //! Route: /observatory/learn/protocols
 
+use crate::extras::schema::{static_docs, StaticJsonLd};
 use leptos::prelude::*;
 use leptos_meta::*;
-use crate::extras::schema::{static_docs, StaticJsonLd};
 
 // ---------------------------------------------------------------------------
 // Protocol data

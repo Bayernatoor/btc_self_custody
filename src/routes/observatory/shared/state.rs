@@ -357,7 +357,7 @@ pub fn provide_observatory_state() -> ObservatoryState {
     });
     let data_loading = Signal::derive(move || {
         let want = (range.get(), custom_from.get(), custom_to.get());
-        last_resolved.get().map_or(true, |have| have != want)
+        last_resolved.get().is_none_or(|have| have != want)
     });
 
     // Fetch cumulative size offset (total bytes before visible window)

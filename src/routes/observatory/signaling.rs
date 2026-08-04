@@ -20,8 +20,8 @@ use leptos_meta::*;
 
 use super::components::*;
 use super::helpers::*;
-use crate::stats::server_fns::*;
 use crate::extras::schema::{static_docs, StaticJsonLd};
+use crate::stats::server_fns::*;
 
 /// Skeleton placeholder for the signaling page main content. Used both as the
 /// Suspense fallback on initial load and when the resource is refetching after

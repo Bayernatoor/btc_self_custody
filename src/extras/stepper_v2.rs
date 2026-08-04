@@ -139,7 +139,8 @@ fn DeviceFrame(device: &'static Device) -> impl IntoView {
     let (slide, set_slide) = signal(0usize);
     let (modal, set_modal) = signal(false);
     // current shot as a Copy signal so it can drive several reactive blocks
-    let cur = Signal::derive(move || shots[slide.get().min(n.saturating_sub(1))]);
+    let cur =
+        Signal::derive(move || shots[slide.get().min(n.saturating_sub(1))]);
 
     view! {
         <figure class="g2-devicewrap">
@@ -247,7 +248,10 @@ pub fn StepperV2(
             let path = location.pathname.get_untracked();
             navigate(
                 &format!("{path}?step={n}"),
-                NavigateOptions { scroll: true, ..Default::default() },
+                NavigateOptions {
+                    scroll: true,
+                    ..Default::default()
+                },
             );
         }
     };
@@ -462,7 +466,10 @@ mod tests {
 
     #[test]
     fn parses_plain_text() {
-        assert_eq!(parse_inline("hello world"), vec![Seg::Text("hello world".into())]);
+        assert_eq!(
+            parse_inline("hello world"),
+            vec![Seg::Text("hello world".into())]
+        );
     }
 
     #[test]
@@ -493,7 +500,9 @@ mod tests {
     fn bold_wrapped_link_keeps_its_markup_for_nested_parsing() {
         // `inline()` re-parses a bold span's contents, so a link nested inside bold
         // (**[text](url)**) renders as a real link instead of literal markdown.
-        let segs = parse_inline("Buy a **[Coldcard](https://store.coinkite.com)** today");
+        let segs = parse_inline(
+            "Buy a **[Coldcard](https://store.coinkite.com)** today",
+        );
         assert_eq!(
             segs,
             vec![
@@ -505,7 +514,10 @@ mod tests {
         // the nested pass is what turns that inner text into a Link
         assert_eq!(
             parse_inline("[Coldcard](https://store.coinkite.com)"),
-            vec![Seg::Link("Coldcard".into(), "https://store.coinkite.com".into())]
+            vec![Seg::Link(
+                "Coldcard".into(),
+                "https://store.coinkite.com".into()
+            )]
         );
     }
 

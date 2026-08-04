@@ -352,12 +352,8 @@ pub fn platform_display(platform: &str) -> &str {
     }
 }
 
-pub static ALL_WALLETS: &[&WalletDef] = &[
-    &SPARROW_WALLET,
-    &COVE_WALLET,
-    &BULL_WALLET,
-    &NUNCHUK_WALLET,
-];
+pub static ALL_WALLETS: &[&WalletDef] =
+    &[&SPARROW_WALLET, &COVE_WALLET, &BULL_WALLET, &NUNCHUK_WALLET];
 
 /// Look up a wallet definition by its short ID (e.g. "sparrow", "cove").
 pub fn find_wallet(id: &str) -> Option<&'static WalletDef> {
@@ -604,13 +600,16 @@ mod tests {
         let mut checked = 0;
         for raw in SITEMAP.split("<loc>").skip(1) {
             let url = raw.split("</loc>").next().unwrap_or_default().trim();
-            let Some(path) = url.strip_prefix(ORIGIN) else { continue };
+            let Some(path) = url.strip_prefix(ORIGIN) else {
+                continue;
+            };
             let parts: Vec<&str> = path.trim_matches('/').split('/').collect();
             if parts.first() != Some(&"guides") || parts.len() < 3 {
                 continue;
             }
             let (lid, platform) = (parts[1], parts[2]);
-            let level = find_level(lid).unwrap_or_else(|| panic!("{path}: unknown level '{lid}'"));
+            let level = find_level(lid)
+                .unwrap_or_else(|| panic!("{path}: unknown level '{lid}'"));
             assert!(
                 !level.under_construction,
                 "{path}: level '{lid}' is gated and must not be in the sitemap"
@@ -633,7 +632,8 @@ mod tests {
                     seen_wallets.push(wid);
                 }
                 None => assert!(
-                    !wallets.is_empty() || !crate::guides_v2::parts_for_level(lid).is_empty(),
+                    !wallets.is_empty()
+                        || !crate::guides_v2::parts_for_level(lid).is_empty(),
                     "{path}: renders an empty picker"
                 ),
             }

@@ -1,7 +1,7 @@
 use crate::extras::accordion_menu::AccordionMenu;
+use crate::extras::schema::{static_docs, StaticJsonLd};
 use leptos::prelude::*;
 use leptos_meta::*;
-use crate::extras::schema::{static_docs, StaticJsonLd};
 
 /// Renders the FAQ / Help Desk page.
 #[component]

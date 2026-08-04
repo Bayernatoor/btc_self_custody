@@ -1,6 +1,6 @@
+use crate::extras::schema::{static_docs, StaticJsonLd};
 use leptos::prelude::*;
 use leptos_meta::*;
-use crate::extras::schema::{static_docs, StaticJsonLd};
 
 /// Renders the home page of the application.
 #[component]

@@ -1,9 +1,9 @@
 //! Data Methodology: documents how embedded protocol data is detected, counted, and measured.
 //! Route: /observatory/learn/methodology
 
+use crate::extras::schema::{static_docs, StaticJsonLd};
 use leptos::prelude::*;
 use leptos_meta::*;
-use crate::extras::schema::{static_docs, StaticJsonLd};
 
 #[component]
 pub fn MethodologyPage() -> impl IntoView {

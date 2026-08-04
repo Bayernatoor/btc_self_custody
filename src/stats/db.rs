@@ -286,9 +286,7 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
             .prepare("SELECT op_return_text FROM mempool_txs LIMIT 0")
             .is_ok();
         if !has_op_return_text {
-            tracing::info!(
-                "Migrating: adding op_return_text to mempool_txs"
-            );
+            tracing::info!("Migrating: adding op_return_text to mempool_txs");
             conn.execute_batch(
                 "ALTER TABLE mempool_txs ADD COLUMN op_return_text TEXT;",
             )?;
@@ -600,8 +598,9 @@ pub fn find_missing_heights(
          SELECT n FROM r WHERE n NOT IN (SELECT height FROM blocks) \
          ORDER BY n LIMIT ?1",
     )?;
-    let rows = stmt
-        .query_map(params![limit], |row| row.get::<_, i64>(0).map(|n| n as u64))?;
+    let rows = stmt.query_map(params![limit], |row| {
+        row.get::<_, i64>(0).map(|n| n as u64)
+    })?;
     rows.collect()
 }
 
@@ -1084,13 +1083,17 @@ pub fn query_cumulative_size_before_ts(
     )
 }
 
+/// One year's aggregates for a calendar date, as returned by [`query_on_this_day`]:
+/// year, blocks, txs, fees, avg size, avg weight, inscriptions, runes, segwit txs,
+/// taproot outputs, total inputs, total outputs.
+pub type OnThisDayRow =
+    (u32, u64, u64, u64, f64, f64, u64, u64, u64, u64, u64, u64);
+
 /// "On This Day" — aggregate block data grouped by year for a given month+day.
 pub fn query_on_this_day(
     conn: &Connection,
     month_day: &str, // "04-01" format
-) -> rusqlite::Result<
-    Vec<(u32, u64, u64, u64, f64, f64, u64, u64, u64, u64, u64, u64)>,
-> {
+) -> rusqlite::Result<Vec<OnThisDayRow>> {
     let mut stmt = conn.prepare(
         "SELECT CAST(strftime('%Y', datetime(timestamp, 'unixepoch')) AS INTEGER) as year,
                 COUNT(*) as block_count,
@@ -3122,7 +3125,8 @@ mod tests {
             ("tx3".to_string(), 300u64, 350u32),
         ];
         let inserted =
-            insert_missing_mempool_txs(&conn, &entries, 1700009999, 5000).unwrap();
+            insert_missing_mempool_txs(&conn, &entries, 1700009999, 5000)
+                .unwrap();
         assert_eq!(inserted, 2); // only the two missing txs, tx1 skipped
 
         let unconfirmed = query_unconfirmed_txids(&conn, 100).unwrap();
@@ -3132,14 +3136,15 @@ mod tests {
 
         // Idempotent: a second pass with the same node set inserts nothing.
         let again =
-            insert_missing_mempool_txs(&conn, &entries, 1700009999, 5000).unwrap();
+            insert_missing_mempool_txs(&conn, &entries, 1700009999, 5000)
+                .unwrap();
         assert_eq!(again, 0);
 
         // Cap is respected: only max_insert new rows per call.
-        let big: Vec<(String, u64, u32)> = (0..10)
-            .map(|i| (format!("new{i}"), 10u64, 20u32))
-            .collect();
-        let capped = insert_missing_mempool_txs(&conn, &big, 1700009999, 4).unwrap();
+        let big: Vec<(String, u64, u32)> =
+            (0..10).map(|i| (format!("new{i}"), 10u64, 20u32)).collect();
+        let capped =
+            insert_missing_mempool_txs(&conn, &big, 1700009999, 4).unwrap();
         assert_eq!(capped, 4);
     }
 

@@ -99,8 +99,7 @@ pub struct StatsState {
     pub stats_summary_cache: Arc<Cache<(), super::types::StatsSummary>>,
     /// Daily aggregate cache, keyed by (from_ts, to_ts). 120s TTL.
     /// Invalidated on new block (today's bucket may shift).
-    pub daily_cache:
-        Arc<Cache<(u64, u64), Vec<super::types::DailyAggregate>>>,
+    pub daily_cache: Arc<Cache<(u64, u64), Vec<super::types::DailyAggregate>>>,
     /// Block height -> timestamp cache. Immutable data so no TTL or
     /// invalidation; entries are written once and live for the process.
     pub block_ts_cache: Arc<Cache<u64, u64>>,
@@ -124,8 +123,7 @@ pub struct StatsState {
     pub price_history_cache: Arc<Cache<(), Vec<PricePoint>>>,
     /// Range summary cache, keyed by (from_ts, to_ts). 60s TTL.
     /// Invalidated on new block.
-    pub range_summary_cache:
-        Arc<Cache<(u64, u64), super::types::RangeSummary>>,
+    pub range_summary_cache: Arc<Cache<(u64, u64), super::types::RangeSummary>>,
     /// Extremes cache, keyed by (from_ts, to_ts). 60s TTL.
     /// Invalidated on new block.
     pub extremes_cache: Arc<Cache<(u64, u64), super::types::ExtremesData>>,
@@ -214,7 +212,7 @@ const MAX_SSE_CONNECTIONS: usize = 256;
 /// this is effectively "how many bricks a fresh load shows". Set as a CEILING for
 /// full-mempool coverage even during congestion — the point of the mempool-as-
 /// timeline. It must sit ABOVE the client's LOD threshold (LOD_MIN_BLIPS=60k) so a
-/// >60k mempool actually loads in full and LOD (density columns) engages, instead
+/// mempool over 60k actually loads in full and LOD (density columns) engages, instead
 /// of being clipped to exactly 60k (which left LOD unreachable). This is a cap, not
 /// a fixed size: the payload scales with the ACTUAL mempool, so a normal 40-60k
 /// mempool is unaffected; only genuine congestion approaches the ceiling (~1.5-2MB
@@ -957,12 +955,10 @@ pub async fn get_heartbeat_sse(
         (Phase::History(history_data, notable_history), rx),
         |(phase, mut rx)| async move {
             match phase {
-                Phase::History(data, notables) => {
-                    Some((
-                        Ok(Event::default().event("history").data(data)),
-                        (Phase::NotableHistory(notables), rx),
-                    ))
-                }
+                Phase::History(data, notables) => Some((
+                    Ok(Event::default().event("history").data(data)),
+                    (Phase::NotableHistory(notables), rx),
+                )),
                 Phase::NotableHistory(notables) => {
                     let data = serde_json::to_string(&notables)
                         .unwrap_or_else(|_| "[]".to_string());

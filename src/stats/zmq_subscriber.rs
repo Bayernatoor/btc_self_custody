@@ -259,8 +259,7 @@ async fn subscribe_sequence(
     tracing::info!("ZMQ: subscribed to sequence (mempool removals)");
 
     let mut batch: Vec<String> = Vec::new();
-    let mut flush =
-        tokio::time::interval(Duration::from_millis(SEQ_FLUSH_MS));
+    let mut flush = tokio::time::interval(Duration::from_millis(SEQ_FLUSH_MS));
     let mut last_msg = std::time::Instant::now();
     let mut removed_total: u64 = 0;
     let mut msg_total: u64 = 0;
@@ -307,7 +306,7 @@ async fn subscribe_sequence(
                     // "receiving messages" line); sample later ones at debug.
                     if removed_total == 1 {
                         tracing::info!("ZMQ sequence: removals flowing");
-                    } else if removed_total % 500 == 0 {
+                    } else if removed_total.is_multiple_of(500) {
                         tracing::debug!("ZMQ sequence R #{removed_total}: {txid}");
                     }
                     batch.push(txid);
@@ -772,7 +771,13 @@ async fn subscribe_blocks(
         // block with authoritative data once the node answers; the frontend
         // replaces the estimated spike via its total_fees==0 dedup path.
         let estimated = size == 0 || weight == 0;
-        spawn_block_confirm(state, sender, block_hash, header.height, estimated);
+        spawn_block_confirm(
+            state,
+            sender,
+            block_hash,
+            header.height,
+            estimated,
+        );
     }
 }
 
@@ -1159,7 +1164,6 @@ fn read_varint(data: &[u8], cursor: &mut usize) -> Option<u64> {
         }
     }
 }
-
 
 /// Delete mempool_txs entries older than 7 days. Runs on startup and then daily.
 /// Keeps the table from growing unbounded since confirmed txs are never cleaned
@@ -1615,9 +1619,7 @@ mod tests {
     }
 
     /// Destructure the Tx variant for assertions (panics on other variants).
-    fn as_tx(
-        event: &HeartbeatEvent,
-    ) -> (u64, u32, f64, bool, bool, f64, u64) {
+    fn as_tx(event: &HeartbeatEvent) -> (u64, u32, f64, bool, bool, f64, u64) {
         match event {
             HeartbeatEvent::Tx {
                 fee,
@@ -1629,7 +1631,12 @@ mod tests {
                 timestamp,
                 ..
             } => (
-                *fee, *vsize, *fee_rate, *whale, *fee_outlier, *value_usd,
+                *fee,
+                *vsize,
+                *fee_rate,
+                *whale,
+                *fee_outlier,
+                *value_usd,
                 *timestamp,
             ),
             other => panic!("expected Tx, got {other:?}"),
@@ -1658,7 +1665,7 @@ mod tests {
     fn test_enrich_whale_sets_value_usd() {
         let mut p = parsed_fixture();
         p.value = 20_000_000_000; // 200 BTC
-        // 200 BTC * $50k = $10M >= $1M whale threshold
+                                  // 200 BTC * $50k = $10M >= $1M whale threshold
         let e = enrich_tx(&p, 1_000, 250, 50_000.0, 1_700_000_000);
         assert!(e.is_notable);
         assert_eq!(e.notable_type, Some("whale"));
@@ -1737,4 +1744,3 @@ mod tests {
         assert_eq!(seen.order.len(), 5);
     }
 }
-

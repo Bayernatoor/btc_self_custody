@@ -84,7 +84,8 @@ pub mod static_docs {
     /// `Organization` + `WebSite`. Site-level identity belongs on the root only.
     pub const SITE: &str = include_str!("../../assets/schema/site.json");
     /// `WebApplication` + the blockchain-statistics `Dataset`.
-    pub const OBSERVATORY: &str = include_str!("../../assets/schema/observatory.json");
+    pub const OBSERVATORY: &str =
+        include_str!("../../assets/schema/observatory.json");
     /// Embedded-data `Dataset`, on the chart page it measures.
     pub const DATASET_EMBEDDED: &str =
         include_str!("../../assets/schema/dataset-embedded.json");
@@ -285,7 +286,14 @@ mod tests {
             actions: vec!["Tap Next.".into()],
             image: Some("/guide-images/x.png".into()),
         }];
-        let out = how_to("G", "d", "https://e/x", Some(20), &["Phone".into()], &steps);
+        let out = how_to(
+            "G",
+            "d",
+            "https://e/x",
+            Some(20),
+            &["Phone".into()],
+            &steps,
+        );
         assert!(out.contains("\"@type\":\"HowTo\""));
         assert!(out.contains("\"totalTime\":\"PT20M\""));
         assert!(out.contains("HowToSupply"));
@@ -306,12 +314,18 @@ mod tests {
         for (name, doc) in static_docs::ALL {
             let v: Value = serde_json::from_str(doc)
                 .unwrap_or_else(|e| panic!("{name}: invalid JSON: {e}"));
-            assert_eq!(v["@context"], "https://schema.org", "{name}: missing @context");
+            assert_eq!(
+                v["@context"], "https://schema.org",
+                "{name}: missing @context"
+            );
             let has_type = v.get("@type").is_some()
                 || v["@graph"].as_array().is_some_and(|g| {
                     !g.is_empty() && g.iter().all(|n| n.get("@type").is_some())
                 });
-            assert!(has_type, "{name}: no @type on the node or its @graph members");
+            assert!(
+                has_type,
+                "{name}: no @type on the node or its @graph members"
+            );
         }
     }
 
@@ -327,10 +341,15 @@ mod tests {
             ("dataset-signaling", "/observatory/signaling"),
         ];
         for (name, path) in expected {
-            let doc = static_docs::ALL.iter().find(|(n, _)| *n == name).unwrap().1;
+            let doc =
+                static_docs::ALL.iter().find(|(n, _)| *n == name).unwrap().1;
             let v: Value = serde_json::from_str(doc).unwrap();
             let url = v["url"].as_str().unwrap_or_default();
-            assert_eq!(url, format!("{SITE}{path}"), "{name}: url does not match its page");
+            assert_eq!(
+                url,
+                format!("{SITE}{path}"),
+                "{name}: url does not match its page"
+            );
         }
     }
 
@@ -342,12 +361,13 @@ mod tests {
         for (name, doc) in static_docs::ALL {
             let v: Value = serde_json::from_str(doc).unwrap();
             let top: Vec<&str> = match v["@graph"].as_array() {
-                Some(g) => g.iter().filter_map(|n| n["@type"].as_str()).collect(),
+                Some(g) => {
+                    g.iter().filter_map(|n| n["@type"].as_str()).collect()
+                }
                 None => v["@type"].as_str().into_iter().collect(),
             };
-            let declares = top
-                .iter()
-                .any(|t| *t == "WebSite" || *t == "Organization");
+            let declares =
+                top.iter().any(|t| *t == "WebSite" || *t == "Organization");
             assert_eq!(
                 declares,
                 *name == "site",
