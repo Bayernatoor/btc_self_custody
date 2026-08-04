@@ -159,15 +159,15 @@ pub static COVE_WALLET: WalletDef = WalletDef {
     id: "cove",
     name: "Cove",
     tagline: "The simple Bitcoin-only wallet.",
-    description: "A clean, open-source, Bitcoin-only wallet built on BDK. Simple to start, and it grows with you into hardware-wallet signing.",
+    description: "A clean, open-source, Bitcoin-only wallet built on BDK. The simplest way to hold your own keys, with an optional end-to-end encrypted cloud backup as a safety net alongside your written words.",
     color: "#2f6df6",
     logo: "/logos/cove.png",
     logo_alt: "Cove logo",
     faq_dir: "cove",
     highlights: &[
-        "Simple yet powerful",
-        "Built using [BDK](https://bitcoindevkit.org)",
-        "Hardware wallet support",
+        "Bitcoin only, built on [BDK](https://bitcoindevkit.org)",
+        "Encrypted cloud backup",
+        "Decoy PIN and wipe protection",
     ],
     downloads: &[
         DownloadLink {
@@ -191,6 +191,108 @@ pub static COVE_WALLET: WalletDef = WalletDef {
         DownloadLink {
             label: "GitHub Releases",
             url: "https://github.com/bitcoinppl/cove/releases",
+            logo: "/logos/GitHub_Logo.png",
+            logo_alt: "GitHub",
+            color: "#24292f",
+            icon: r#"<path fill-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clip-rule="evenodd"/>"#,
+            platforms: &["android"],
+        },
+    ],
+};
+
+/// Bull Bitcoin wallet. Facts below are from the project's own README
+/// (github.com/SatoshiPortal/bullbitcoin-mobile): self-custodial Bitcoin + Liquid,
+/// optional integrated exchange. Its Lightning rail and cross-chain swaps ran on Boltz,
+/// which suspended service in August 2026, so both are out until Bull ships a
+/// replacement; on-chain and Liquid are unaffected. Card copy and BULL_GUIDE step 1
+/// reflect that and should be revisited when it is restored.
+/// Brand red sampled from their app icon.
+pub static BULL_WALLET: WalletDef = WalletDef {
+    id: "bull",
+    name: "Bull Bitcoin",
+    tagline: "The self-custodial wallet for spending.",
+    description: "Bitcoin and Liquid in one open-source app, built for everyday spending, with an optional integrated exchange if you want to buy or sell.",
+    color: "#C50000",
+    logo: "/logos/bull.png",
+    logo_alt: "Bull Bitcoin logo",
+    faq_dir: "bull",
+    highlights: &[
+        "Bitcoin and Liquid",
+        "Instant, low-fee spending",
+        "Optional buy and sell built in",
+    ],
+    downloads: &[
+        DownloadLink {
+            label: "Google Play",
+            url: "https://play.google.com/store/apps/details?id=com.bullbitcoin.mobile",
+            logo: "/logos/google_play.png",
+            logo_alt: "Google Play",
+            color: "#01875f",
+            icon: r#"<path d="M3.609 1.814L13.792 12 3.61 22.186a.996.996 0 01-.61-.92V2.734a1 1 0 01.609-.92zm10.89 10.893l2.302 2.302-10.937 6.333 8.635-8.635zm3.199-1.4l2.834 1.64a1 1 0 010 1.74l-2.834 1.64-2.532-2.534 2.532-2.486zM5.864 2.658L16.8 8.99l-2.302 2.302-8.635-8.635z"/>"#,
+            platforms: &["android"],
+        },
+        DownloadLink {
+            label: "App Store",
+            url: "https://apps.apple.com/us/app/bull-bitcoin/id6743380972",
+            logo: "/logos/download_on_app_store.png",
+            logo_alt: "App Store",
+            color: "#0071e3",
+            icon: r#"<path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>"#,
+            platforms: &["ios"],
+        },
+        DownloadLink {
+            label: "GitHub Releases",
+            url: "https://github.com/SatoshiPortal/bullbitcoin-mobile/releases",
+            logo: "/logos/GitHub_Logo.png",
+            logo_alt: "GitHub",
+            color: "#24292f",
+            icon: r#"<path fill-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clip-rule="evenodd"/>"#,
+            platforms: &["android"],
+        },
+    ],
+};
+
+/// Nunchuk. Facts verified against their repo (github.com/nunchuk-io/nunchuk-android):
+/// a natively written multisig wallet built on libnunchuk, GPLv3, with reproducible
+/// builds, collaborative wallets, and support for Coldcard, TapSigner, Trezor and
+/// Keystone. Brand yellow sampled from their app icon. This is the Basic-tier
+/// single-sig guide; multisig is where it goes at the Advanced tier.
+pub static NUNCHUK_WALLET: WalletDef = WalletDef {
+    id: "nunchuk",
+    name: "Nunchuk",
+    tagline: "The wallet you grow into.",
+    description: "Start with a straightforward single-key wallet, then keep the same app when you move up to a hardware signer or a full multisig. Open source, with reproducible builds.",
+    color: "#FFCB2E",
+    logo: "/logos/nunchuk.png",
+    logo_alt: "Nunchuk logo",
+    faq_dir: "nunchuk",
+    highlights: &[
+        "Single-sig now, multisig later",
+        "Mobile and desktop",
+        "Works with ten hardware wallets",
+    ],
+    downloads: &[
+        DownloadLink {
+            label: "Google Play",
+            url: "https://play.google.com/store/apps/details?id=io.nunchuk.android",
+            logo: "/logos/google_play.png",
+            logo_alt: "Google Play",
+            color: "#01875f",
+            icon: r#"<path d="M3.609 1.814L13.792 12 3.61 22.186a.996.996 0 01-.61-.92V2.734a1 1 0 01.609-.92zm10.89 10.893l2.302 2.302-10.937 6.333 8.635-8.635zm3.199-1.4l2.834 1.64a1 1 0 010 1.74l-2.834 1.64-2.532-2.534 2.532-2.486zM5.864 2.658L16.8 8.99l-2.302 2.302-8.635-8.635z"/>"#,
+            platforms: &["android"],
+        },
+        DownloadLink {
+            label: "App Store",
+            url: "https://apps.apple.com/us/app/nunchuk-bitcoin-wallet/id1563190073",
+            logo: "/logos/download_on_app_store.png",
+            logo_alt: "App Store",
+            color: "#0071e3",
+            icon: r#"<path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>"#,
+            platforms: &["ios"],
+        },
+        DownloadLink {
+            label: "GitHub Releases",
+            url: "https://github.com/nunchuk-io/nunchuk-android/releases",
             logo: "/logos/GitHub_Logo.png",
             logo_alt: "GitHub",
             color: "#24292f",
@@ -231,6 +333,26 @@ pub fn is_desktop_os(platform: &str) -> bool {
     platform.starts_with("desktop-")
 }
 
+/// True for the bare `desktop` umbrella as well as each specific desktop OS.
+///
+/// Distinct from [`is_desktop_os`], which is deliberately false for bare `desktop`
+/// so page titles read "Basic Desktop Self-Custody Guide" rather than
+/// "... Guide - Desktop". Use this one for desktop-vs-mobile framing decisions.
+pub fn is_desktop_context(platform: &str) -> bool {
+    platform == "desktop" || is_desktop_os(platform)
+}
+
+/// Whether a download's platform tag satisfies a requested platform.
+///
+/// `desktop` acts as an umbrella over `desktop-linux/-macos/-windows`. The guide
+/// selector treats it as an intermediate step before the OS choice, but
+/// `/guides/basic/desktop` is a real URL and is listed in the sitemap, so a
+/// `desktop-*` download has to match it or that page renders an empty picker.
+pub fn platform_matches(download_platform: &str, requested: &str) -> bool {
+    download_platform == requested
+        || (requested == "desktop" && download_platform.starts_with("desktop-"))
+}
+
 /// Get display name for any platform.
 pub fn platform_display(platform: &str) -> &str {
     match platform {
@@ -245,7 +367,7 @@ pub fn platform_display(platform: &str) -> &str {
 }
 
 pub static ALL_WALLETS: &[&WalletDef] =
-    &[&BLUE_WALLET, &SPARROW_WALLET, &COVE_WALLET];
+    &[&BLUE_WALLET, &SPARROW_WALLET, &COVE_WALLET, &BULL_WALLET, &NUNCHUK_WALLET];
 
 /// Look up a wallet definition by its short ID (e.g. "blue", "sparrow", "cove").
 pub fn find_wallet(id: &str) -> Option<&'static WalletDef> {
@@ -265,7 +387,12 @@ pub static BASIC_LEVEL: GuideLevelDef = GuideLevelDef {
     quote_author: "- Nick Szabo",
     intro: "This basic setup is meant to get you up to speed quickly. You'll pick one of the wallets below, create your private key and take possession of your bitcoin. I wouldn't recommend storing too much of your wealth in a mobile wallet. Think of it as a self-custodied spending wallet, similar to how you'd carry cash in a physical wallet.",
     platforms: &["android", "ios", "desktop"],
-    wallets: &["blue", "cove", "sparrow"],
+    // Mobile lineup: cove + bull (+ nunchuk when its guide lands). Blue is dropped
+    // from the picker but BLUE_WALLET / BLUE_GUIDE are kept in the code, so adding
+    // "blue" back to this list is the only step needed to restore it.
+    // Order drives the mobile picker: Cove (simplest), Nunchuk (grows with you), Bull
+    // (spending). Sparrow is desktop-only and filtered out on phones.
+    wallets: &["cove", "nunchuk", "bull", "sparrow"],
     faq_dir: None,
     products: &[],
     steps: &[],
@@ -401,7 +528,9 @@ pub fn wallets_for(
         .filter_map(|wid| find_wallet(wid))
         .filter(|w| {
             // Wallet is available on this platform if any of its downloads target it
-            w.downloads.iter().any(|d| d.platforms.contains(&platform))
+            w.downloads
+                .iter()
+                .any(|d| d.platforms.iter().any(|p| platform_matches(p, platform)))
         })
         .collect()
 }
@@ -414,6 +543,65 @@ pub fn downloads_for(
     wallet
         .downloads
         .iter()
-        .filter(|d| d.platforms.contains(&platform))
+        .filter(|d| d.platforms.iter().any(|p| platform_matches(p, platform)))
         .collect()
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every platform advertised by a level must actually yield content, otherwise
+    /// the route renders an empty picker. `/guides/basic/desktop` did exactly that:
+    /// Sparrow registers as desktop-linux/-macos/-windows and never matched the bare
+    /// `desktop` the level advertises and the sitemap lists.
+    #[test]
+    fn every_advertised_platform_resolves_to_content() {
+        for level in ALL_LEVELS {
+            for platform in level.platforms {
+                let wallets = wallets_for(level, platform);
+                let parts = crate::guides_v2::parts_for_level(level.id);
+                assert!(
+                    !wallets.is_empty() || !parts.is_empty(),
+                    "{}/{} renders an empty picker: no wallets and no parts",
+                    level.id,
+                    platform
+                );
+            }
+        }
+    }
+
+    /// A wallet shown in a picker must also offer at least one download there, or the
+    /// reader lands on a guide with no way to install the app.
+    #[test]
+    fn picked_wallets_always_have_a_download() {
+        for level in ALL_LEVELS {
+            for platform in level.platforms {
+                for w in wallets_for(level, platform) {
+                    assert!(
+                        !downloads_for(w, platform).is_empty(),
+                        "{} is offered on {}/{} but has no download for it",
+                        w.id,
+                        level.id,
+                        platform
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn desktop_is_an_umbrella_over_specific_oses() {
+        assert!(platform_matches("desktop-linux", "desktop"));
+        assert!(platform_matches("android", "android"));
+        // Not the other way round: a bare `desktop` download is not Linux-specific.
+        assert!(!platform_matches("desktop", "desktop-linux"));
+        assert!(!platform_matches("android", "ios"));
+        assert!(is_desktop_context("desktop"));
+        assert!(is_desktop_context("desktop-macos"));
+        assert!(!is_desktop_context("android"));
+        // Titles rely on this staying false for the umbrella.
+        assert!(!is_desktop_os("desktop"));
+    }
 }

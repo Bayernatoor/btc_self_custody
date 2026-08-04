@@ -425,8 +425,10 @@ fn step_panel(
                     <ol class="g2-actions">
                         {step.actions.iter().map(|a| view! { <li><span class="g2-action-txt">{inline(a)}</span></li> }).collect::<Vec<_>>()}
                     </ol>
+                    // Parsed like actions: flags sometimes need to cite a source, and a
+                    // raw **[text](url)** printed literally is worse than no link at all.
                     {step.flag.map(|f| view! {
-                        <div class="g2-flag"><span class="g2-flag-i">"⚠"</span><span>{f}</span></div>
+                        <div class="g2-flag"><span class="g2-flag-i">"⚠"</span><span>{inline(f)}</span></div>
                     })}
                     {step.backup_cta.then(|| view! { <BackupSheetCta/> })}
                     {step.why.map(|(summary, body)| view! {

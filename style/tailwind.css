@@ -504,6 +504,17 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 @media (min-width: 640px) { .g2-wcards { grid-template-columns: 1fr 1fr; } }
 /* a single recommended wallet: one centered column, not stretched across the grid */
 .g2-wcards.g2-wcards-one { grid-template-columns: 1fr; max-width: 440px; margin-left: auto; margin-right: auto; }
+/* three recommended wallets: one row of three, so none is orphaned on a second row.
+   Two-class selectors beat the plain .g2-wcards rules regardless of media order, so
+   this stays 1-up until there is room for a real 3-up. */
+.g2-wcards.g2-wcards-three { grid-template-columns: 1fr; }
+@media (min-width: 720px) {
+  .g2-wcards.g2-wcards-three { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.8rem; }
+  /* a touch tighter inside a narrower column */
+  .g2-wcards-three .g2-wcard { padding: 1.15rem 1.15rem; gap: 0.6rem; }
+  .g2-wcards-three .g2-wcard-name { font-size: 1rem; }
+  .g2-wcards-three .g2-wcard-head { gap: 0.55rem; }
+}
 .g2-wcard {
   display: flex;
   flex-direction: column;
@@ -682,7 +693,11 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 .g2-done { width: 100%; text-align: center; }
 .g2-seal { width: 4.6rem; height: 4.6rem; border-radius: 50%; margin: 0 auto 0.4rem; display: grid; place-items: center; background: rgba(66,214,154,0.14); border: 1px solid rgba(66,214,154,0.5); color: #42d69a; }
 .g2-seal svg { width: 2rem; height: 2rem; }
-.g2-done-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem; margin-top: 1.5rem; text-align: left; }
+/* The completion panel now carries only the next-tier card, so centre it rather
+   than stretching it across a two-column grid. Collapses to nothing on the final
+   tier, where there is no next step. */
+.g2-done-cards { display: grid; grid-template-columns: 1fr; gap: 0.9rem; margin-top: 1.5rem; text-align: left; max-width: 420px; margin-left: auto; margin-right: auto; }
+.g2-done-cards:empty { display: none; margin-top: 0; }
 .g2-next-tier { display: flex; flex-direction: column; gap: 0.2rem; background: linear-gradient(180deg, rgba(18,50,79,0.55), rgba(18,50,79,0.25)); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 1.1rem; transition: transform 0.18s, border-color 0.18s; }
 .g2-next-tier:hover { transform: translateY(-2px); border-color: rgba(255,255,255,0.18); }
 .g2-nt-k { font-family: var(--font-title); letter-spacing: 0.1em; text-transform: uppercase; font-size: 0.68rem; color: #f7931a; }

@@ -109,6 +109,8 @@ pub fn find_guide_v2(wallet_id: &str) -> Option<&'static GuideV2> {
     match wallet_id {
         "cove" => Some(&COVE_GUIDE),
         "blue" => Some(&BLUE_GUIDE),
+        "bull" => Some(&BULL_GUIDE),
+        "nunchuk" => Some(&NUNCHUK_GUIDE),
         "sparrow" => Some(&SPARROW_GUIDE),
         _ => None,
     }
@@ -184,7 +186,7 @@ pub fn find_level_part(level_id: &str, part_id: &str) -> Option<&'static LevelPa
 }
 
 /// Sentinel for a step with no screenshot: the renderer shows a single centered
-/// column (no device frame) when `image` is empty.
+/// column (no device frame) when `shots` is empty.
 const NO_DEVICE: Device = Device { frame: Frame::Desktop, shots: &[] };
 
 // =============================================================================
@@ -282,7 +284,7 @@ pub static COVE_GUIDE: GuideV2 = GuideV2 {
                 "Your recovery words are the wallet. Anything digital (a screenshot, a note, a cloud backup) can be reached by an attacker. A hand-written copy kept offline cannot.",
             )),
             needs: &[],
-            backup_cta: true,
+            backup_cta: false,
             device: Device {
                 frame: Frame::Phone,
                 shots: &[
@@ -530,7 +532,7 @@ pub static COVE_GUIDE: GuideV2 = GuideV2 {
         title: "You are self-custodied",
         lede: "Your bitcoin is in your hands now. Keep your recovery words safe, and when your stack grows, level up.",
         next_tier: Some(("Level up to Intermediate", "/guides/intermediate/desktop")),
-        backup_cta: true,
+        backup_cta: false,
     },
 };
 
@@ -708,7 +710,7 @@ pub static BLUE_GUIDE: GuideV2 = GuideV2 {
         title: "You are self-custodied",
         lede: "Your bitcoin is in your hands now. Keep your recovery words safe, and when your stack grows, level up.",
         next_tier: Some(("Level up to Intermediate", "/guides/intermediate/desktop")),
-        backup_cta: true,
+        backup_cta: false,
     },
 };
 
@@ -848,7 +850,7 @@ pub static SPARROW_GUIDE: GuideV2 = GuideV2 {
             flag: Some("Store the 24 words and the passphrase on paper, in two separate places. You need both to recover your bitcoin, and neither one alone is enough. Record the master fingerprint too, so you can confirm a correct recovery later."),
             why: None,
             needs: &[],
-            backup_cta: true,
+            backup_cta: false,
             device: Device {
                 frame: Frame::Desktop,
                 shots: &[
@@ -1083,7 +1085,7 @@ pub static SPARROW_GUIDE: GuideV2 = GuideV2 {
         title: "You are self-custodied on desktop",
         lede: "Your bitcoin sits behind your own keys and a passphrase now. Keep both backups safe and separate, and when your stack grows, step up to a hardware wallet.",
         next_tier: Some(("Level up to Intermediate", "/guides/intermediate/desktop")),
-        backup_cta: true,
+        backup_cta: false,
     },
 };
 
@@ -1689,7 +1691,7 @@ pub static ADVANCED_MULTISIG_GUIDE: GuideV2 = GuideV2 {
         title: "Your multisig is live",
         lede: "Three keys exist, any two can spend, and no single device or location can lose your bitcoin. Next, learn to actually move funds through it.",
         next_tier: Some(("Continue to part 2: receive and spend", "/guides/advanced/desktop/spending")),
-        backup_cta: true,
+        backup_cta: false,
     },
 };
 
@@ -1949,6 +1951,850 @@ pub static ADVANCED_HARDENING_GUIDE: GuideV2 = GuideV2 {
         title: "That is the whole path",
         lede: "Keys on dedicated hardware, spread across a quorum, backed up in steel and verified by your own node. Keep it simple from here, test your recovery once a year, and enjoy actually owning your bitcoin.",
         next_tier: None,
-        backup_cta: true,
+        backup_cta: false,
     },
 };
+
+// =============================================================================
+// BULL BITCOIN (Basic, mobile) — the spending wallet. Two wallets from one seed:
+// Secure Bitcoin (on-chain) and Instant payments (Liquid + Lightning). Facts about
+// the app's architecture come from the project README
+// (github.com/SatoshiPortal/bullbitcoin-mobile). Screenshots in
+// assets/guide-images/bull/ are 1080x2424 phone shots.
+// NOTE: the app blocks screenshots on the recovery-words and confirm-words screens,
+// so step 3 shows the dashboard warning before and after instead. The
+// choose-your-backup-method screen is still missing from the asset set.
+// =============================================================================
+
+const BULL_W: u32 = 1080;
+const BULL_H: u32 = 2424;
+
+pub static BULL_GUIDE: GuideV2 = GuideV2 {
+    eyebrow: "Basic · Bull Bitcoin",
+    intro: Intro {
+        title: "Set up Bull Bitcoin",
+        lede: "A self-custodial wallet built for spending. You get two wallets from one backup: an on-chain Bitcoin wallet for savings, and an instant wallet on Liquid for everyday payments. Lightning is temporarily out of service, explained on the first step. Everything this guide covers works normally. Create the wallet, write down your recovery words, and learn to receive and send.",
+        chips: &["6 steps", "about 20 min", "best for spending"],
+        outcomes: &[
+            "A self-custodied wallet, with the keys on your phone",
+            "One set of recovery words written down safely",
+            "The confidence to receive, spend and recover",
+        ],
+        backup_cta: true,
+    },
+    steps: &[
+        // 1 · Install and open
+        Step {
+            title: "Install and open Bull",
+            goal: "Get through the first-run screens with the settings you actually want.",
+            actions: &[
+                "Install Bull Bitcoin, open it, and tap **Next** on the welcome screen.",
+                "Set your **theme, language and default currency**. You can change all of these later.",
+                "Bull asks whether to send anonymised error logs. **Yes** or **No** both work; **No** is the more private choice.",
+                "The last screen lists features to explore later. Tap **Get started**.",
+            ],
+            // Boltz suspended its swap service in August 2026, which is what Bull's
+            // Lightning rail ran on. Stated up front rather than buried, because the
+            // Lightning tab is still visible in the app and in this guide's screenshots.
+            // Remove this once Bull ships a replacement; they say work has begun.
+            flag: Some("Lightning is temporarily unavailable in Bull. The swap provider it relied on suspended service, and Bull is working on a replacement. On-chain Bitcoin and Liquid both work normally, your funds are unaffected, and everything in this guide is on-chain. See **[Bull's announcement](https://www.bullbitcoin.com/blog/boltz-has-suspended-its-swap-services-your-funds-are-safe-here-is-what-it-means-for-bull-wallet-users)** for the detail."),
+            why: Some((
+                "What Bull actually is",
+                "A self-custodial wallet with an optional exchange bolted on. The keys are generated on your phone and never leave it, and you do not need a Bull Bitcoin account to use any wallet feature. The buy and sell buttons only matter if you choose to use them.",
+            )),
+            needs: &[],
+            backup_cta: false,
+            device: Device {
+                frame: Frame::Phone,
+                shots: &[
+                    Shot {
+                        image: "/guide-images/bull/bull-onboarding-01-welcome.png",
+                        alt: "Bull Bitcoin welcome screen, own your money",
+                        caption: "Bull, welcome",
+                        img_w: BULL_W,
+                        img_h: BULL_H,
+                        pins: &[Pin { n: 1, x: 9.0, y: 92.0, label: "Tap Next" }],
+                    },
+                    Shot {
+                        image: "/guide-images/bull/bull-onboarding-02-customize.png",
+                        alt: "Bull, customize theme, language and default currency",
+                        caption: "Bull, customise your experience",
+                        img_w: BULL_W,
+                        img_h: BULL_H,
+                        pins: &[Pin { n: 2, x: 9.0, y: 34.0, label: "Set theme, language and currency" }],
+                    },
+                    Shot {
+                        image: "/guide-images/bull/bull-onboarding-03-telemetry.png",
+                        alt: "Bull, asking to opt in to anonymised error reporting",
+                        caption: "Bull, error reporting is optional",
+                        img_w: BULL_W,
+                        img_h: BULL_H,
+                        pins: &[Pin { n: 3, x: 72.0, y: 92.0, label: "Choose Yes or No" }],
+                    },
+                    Shot {
+                        image: "/guide-images/bull/bull-onboarding-04-features.png",
+                        alt: "Bull, a list of features to try, with Get started",
+                        caption: "Bull, then Get started",
+                        img_w: BULL_W,
+                        img_h: BULL_H,
+                        pins: &[Pin { n: 4, x: 9.0, y: 92.0, label: "Tap Get started" }],
+                    },
+                ],
+            },
+        },
+        // 2 · Create the wallet
+        Step {
+            title: "Create your wallet",
+            goal: "Generate your keys on the phone, which creates both of Bull's wallets at once.",
+            actions: &[
+                "Tap **Create New Wallet**. Your keys are generated on the device.",
+                "**Advanced Options** is optional. It lets you route through **Tor** or point the app at your own **Electrum** and **Mempool** servers, and you can set all of it later in App Settings.",
+                "Bull opens on your dashboard with two wallets: **Secure Bitcoin** on the Bitcoin network, and **Instant payments** on Liquid.",
+            ],
+            flag: None,
+            why: Some((
+                "Why two wallets, and what Liquid is",
+                "Both wallets come from the same recovery words, so one backup covers both. Secure Bitcoin holds real on-chain bitcoin. Instant payments sits on Liquid, a sidechain that settles in seconds for a fraction of a cent, which is what makes small payments practical. Liquid is not the Bitcoin main chain though: it is run by a federation of functionaries, so you are trusting that group in a way you are not on-chain. Treat the instant wallet as pocket money and keep savings in Secure Bitcoin.",
+            )),
+            needs: &[],
+            backup_cta: false,
+            device: Device {
+                frame: Frame::Phone,
+                shots: &[
+                    Shot {
+                        image: "/guide-images/bull/bull-onboarding-05-create-or-recover.png",
+                        alt: "Bull, create new wallet or recover wallet",
+                        caption: "Bull, create a new wallet",
+                        img_w: BULL_W,
+                        img_h: BULL_H,
+                        pins: &[Pin { n: 1, x: 9.0, y: 78.0, label: "Tap Create New Wallet" }],
+                    },
+                    Shot {
+                        image: "/guide-images/bull/bull-onboarding-06-advanced-options.png",
+                        alt: "Bull, advanced options with Tor and custom servers",
+                        caption: "Bull, advanced options (optional)",
+                        img_w: BULL_W,
+                        img_h: BULL_H,
+                        pins: &[Pin { n: 2, x: 9.0, y: 22.0, label: "Optional: Tor and your own servers" }],
+                    },
+                    Shot {
+                        image: "/guide-images/bull/bull-backup-01-warning.png",
+                        alt: "Bull dashboard showing the Secure Bitcoin and Instant payments wallets",
+                        caption: "Two wallets, one seed",
+                        img_w: BULL_W,
+                        img_h: BULL_H,
+                        pins: &[Pin { n: 3, x: 4.0, y: 52.0, label: "Secure Bitcoin and Instant payments" }],
+                    },
+                ],
+            },
+        },
+        // 3 · Back up
+        Step {
+            title: "Write down your recovery words",
+            goal: "Save the words that are your only way back into this wallet.",
+            actions: &[
+                "On the dashboard, tap **Protect your bitcoin. Back up your wallet now.**",
+                "Choose the **physical backup** option, which shows you the words to write down. (The encrypted vault option stores an encrypted copy with a provider; this guide uses paper.)",
+                "Write the words down **in order** on [paper](/downloads/seed-backup-sheet.html), then confirm them when Bull asks.",
+                "Once confirmed, the warning disappears from your dashboard. That is how you know the backup is done.",
+            ],
+            flag: Some("Bull blocks screenshots on the recovery-words screens, which is a good thing: never photograph or type your words into anything. Paper only, stored somewhere only you can reach."),
+            why: Some((
+                "One backup, both wallets",
+                "The same words restore Secure Bitcoin and Instant payments, so there is only ever one set to protect. Bull keeps nagging you on the dashboard until you have proven the backup by typing the words back in, which is worth doing properly. If the app is ever wiped or broken by an update, those words are the whole recovery path.",
+            )),
+            needs: &[],
+            backup_cta: false,
+            device: Device {
+                frame: Frame::Phone,
+                shots: &[
+                    Shot {
+                        image: "/guide-images/bull/bull-backup-01-warning.png",
+                        alt: "Bull dashboard showing the back up your wallet warning",
+                        caption: "Tap the backup warning on the dashboard",
+                        img_w: BULL_W,
+                        img_h: BULL_H,
+                        pins: &[Pin { n: 1, x: 4.0, y: 38.0, label: "Tap the backup warning" }],
+                    },
+                    Shot {
+                        image: "/guide-images/bull/bull-backup-02-done.png",
+                        alt: "Bull dashboard with the backup warning gone",
+                        caption: "Warning gone once the backup is confirmed",
+                        img_w: BULL_W,
+                        img_h: BULL_H,
+                        pins: &[Pin { n: 4, x: 4.0, y: 30.0, label: "Warning gone, backup done" }],
+                    },
+                ],
+            },
+        },
+        // 4 · Receive
+        Step {
+            title: "Receive bitcoin",
+            goal: "Get an address and watch a payment arrive.",
+            actions: &[
+                "Tap **Receive**, then pick the network. Choose **Bitcoin** to follow this guide. The screen also offers **Liquid**, and a **Lightning** tab that is out of service for now.",
+                "Share the **QR code** or copy the address. You can add an optional amount and a private note.",
+                "Your balance updates when the payment arrives, and the wallet card shows it.",
+                "Tap the transaction to see it while it is **Pending**.",
+                "Once it is in a block, the status becomes **Confirmed** with a confirmation time.",
+            ],
+            flag: None,
+            why: Some((
+                "Which network should I receive on?",
+                "On-chain Bitcoin for anything you intend to keep, because it settles on the main chain. Liquid for small everyday amounts, because a small on-chain payment can cost more in fees than it is worth. Bull nudges you toward the sensible one based on the amount, and warns you when a payment is uneconomical. Lightning would normally be the other everyday option, and it is the rail currently out of service.",
+            )),
+            needs: &[],
+            backup_cta: false,
+            device: Device {
+                frame: Frame::Phone,
+                shots: &[
+                    Shot {
+                        image: "/guide-images/bull/bull-receive-01-address.png",
+                        alt: "Bull receive screen with Bitcoin, Lightning and Liquid tabs",
+                        caption: "Pick a network, then share the QR or address",
+                        img_w: BULL_W,
+                        img_h: BULL_H,
+                        pins: &[
+                            Pin { n: 1, x: 4.0, y: 16.0, label: "Choose Bitcoin" },
+                            Pin { n: 2, x: 4.0, y: 68.0, label: "Copy the address" },
+                        ],
+                    },
+                    Shot {
+                        image: "/guide-images/bull/bull-receive-02-dashboard-funded.png",
+                        alt: "Bull dashboard showing a received balance",
+                        caption: "The balance updates",
+                        img_w: BULL_W,
+                        img_h: BULL_H,
+                        pins: &[Pin { n: 3, x: 4.0, y: 56.0, label: "Your balance, now funded" }],
+                    },
+                    Shot {
+                        image: "/guide-images/bull/bull-receive-03-wallet-detail.png",
+                        alt: "Bull secure bitcoin wallet detail with manage coins and a pending transaction",
+                        caption: "Inside Secure Bitcoin: coin control and history",
+                        img_w: BULL_W,
+                        img_h: BULL_H,
+                        pins: &[],
+                    },
+                    Shot {
+                        image: "/guide-images/bull/bull-receive-04-pending-details.png",
+                        alt: "Bull transaction details showing a pending receive",
+                        caption: "Pending, waiting for a block",
+                        img_w: BULL_W,
+                        img_h: BULL_H,
+                        pins: &[Pin { n: 4, x: 4.0, y: 49.0, label: "Status: Pending" }],
+                    },
+                    Shot {
+                        image: "/guide-images/bull/bull-receive-05-confirmed-details.png",
+                        alt: "Bull transaction details showing a confirmed receive",
+                        caption: "Confirmed, with the time it landed",
+                        img_w: BULL_W,
+                        img_h: BULL_H,
+                        pins: &[Pin { n: 5, x: 4.0, y: 49.0, label: "Status: Confirmed" }],
+                    },
+                ],
+            },
+        },
+        // 5 · Send
+        Step {
+            title: "Send bitcoin",
+            goal: "Send a payment and choose what you pay in fees.",
+            actions: &[
+                "Tap **Send**, choose which wallet to spend from, and enter the **amount**. Add a note if you want to remember what it was for.",
+                "Tap **Continue**, then scan or paste the recipient's address.",
+                "Pick a **fee**: Fastest, Economic or Slow, or set your own. Bull shows the cost of each in sats and in your currency.",
+                "Check the address, amount and fee on the confirm screen, then tap **Confirm**.",
+                "Bull broadcasts it and shows **Successfully Sent**. The transaction sits as **Pending** until it is mined, and you can **Accelerate** it if you set the fee too low.",
+            ],
+            flag: Some("Always re-read the address before you confirm. Bitcoin transactions cannot be reversed."),
+            why: Some((
+                "Choosing a fee",
+                "Fees pay the miners who include your transaction in a block, and they rise and fall with demand. Slow is fine when nothing is waiting on it; Fastest is worth it when someone is standing in front of you. If you pick too low and get impatient, Accelerate re-sends it with a higher fee.",
+            )),
+            needs: &[],
+            backup_cta: false,
+            device: Device {
+                frame: Frame::Phone,
+                shots: &[
+                    Shot {
+                        image: "/guide-images/bull/bull-send-01-amount.png",
+                        alt: "Bull send screen with the amount and an optional note",
+                        caption: "Pick the wallet, amount and note",
+                        img_w: BULL_W,
+                        img_h: BULL_H,
+                        pins: &[Pin { n: 1, x: 4.0, y: 24.0, label: "Enter the amount" }],
+                    },
+                    Shot {
+                        image: "/guide-images/bull/bull-send-02-fee.png",
+                        alt: "Bull select network fee with fastest, economic, slow and custom",
+                        caption: "Choose your fee",
+                        img_w: BULL_W,
+                        img_h: BULL_H,
+                        pins: &[Pin { n: 3, x: 4.0, y: 16.0, label: "Pick a fee" }],
+                    },
+                    Shot {
+                        image: "/guide-images/bull/bull-send-03-confirm.png",
+                        alt: "Bull confirm send screen with address, amount and fees",
+                        caption: "Check everything, then Confirm",
+                        img_w: BULL_W,
+                        img_h: BULL_H,
+                        pins: &[Pin { n: 4, x: 4.0, y: 42.0, label: "Verify the address" }],
+                    },
+                    Shot {
+                        image: "/guide-images/bull/bull-send-04-sent.png",
+                        alt: "Bull successfully sent confirmation",
+                        caption: "Sent",
+                        img_w: BULL_W,
+                        img_h: BULL_H,
+                        pins: &[],
+                    },
+                    Shot {
+                        image: "/guide-images/bull/bull-send-05-pending-details.png",
+                        alt: "Bull transaction details for a pending send, with accelerate",
+                        caption: "Pending, with Accelerate if you need it",
+                        img_w: BULL_W,
+                        img_h: BULL_H,
+                        pins: &[Pin { n: 5, x: 4.0, y: 60.0, label: "Status: Pending" }],
+                    },
+                    Shot {
+                        image: "/guide-images/bull/bull-send-06-dashboard-empty.png",
+                        alt: "Bull dashboard after the send, balance back to zero",
+                        caption: "Back on the dashboard",
+                        img_w: BULL_W,
+                        img_h: BULL_H,
+                        pins: &[],
+                    },
+                ],
+            },
+        },
+        // 6 · Recover
+        Step {
+            title: "If you lose your phone",
+            goal: "Get both wallets back on a new device using your written words.",
+            actions: &[
+                "Install Bull on the new phone and tap **Recover Wallet** instead of creating one.",
+                "Enter your recovery words **in order**.",
+                "Both **Secure Bitcoin** and **Instant payments** come back, since they share the one seed. Give it a moment to sync.",
+                "You can also restore into any other **BIP39** wallet, meaning any wallet that recovers from recovery words, though only Bull will rebuild the Liquid side.",
+            ],
+            flag: Some("Treat the lost phone as compromised. After recovering, create a brand new wallet (a fresh set of keys with its own new recovery words) and move all funds to it. Anyone who ends up with the old phone or its written words could otherwise take your bitcoin."),
+            why: Some((
+                "Why this step matters more here",
+                "This is a hot wallet on a phone, and phones break, get stolen, and occasionally get bricked by a bad app update. That is survivable when the amounts are small and the words are on paper, and unrecoverable when they are not. Practise a recovery once with a trivial amount so you know it works before you rely on it.",
+            )),
+            needs: &[],
+            backup_cta: false,
+            device: Device {
+                frame: Frame::Phone,
+                shots: &[Shot {
+                    image: "/guide-images/bull/bull-onboarding-05-create-or-recover.png",
+                    alt: "Bull, recover wallet option on the first screen",
+                    caption: "Bull, recover an existing wallet",
+                    img_w: BULL_W,
+                    img_h: BULL_H,
+                    pins: &[Pin { n: 1, x: 9.0, y: 86.0, label: "Tap Recover Wallet" }],
+                }],
+            },
+        },
+    ],
+    completion: Completion {
+        title: "You are self-custodied",
+        lede: "Your keys are on your phone and your words are on paper. Keep the amounts here to what you would carry in a wallet, and when your stack grows, move the savings onto dedicated hardware.",
+        next_tier: Some(("Level up to Intermediate", "/guides/intermediate/desktop")),
+        backup_cta: false,
+    },
+};
+
+// =============================================================================
+// NUNCHUK (Basic, mobile) — the wallet you grow into. Deliberately kept to a
+// SINGLE-SIG hot wallet at this tier: Nunchuk's multisig and collaborative custody
+// belong to the Advanced tier, and this guide only points forward to them.
+// Facts verified against github.com/nunchuk-io/nunchuk-android.
+// PRIVACY NOTE: Nunchuk does NOT block screenshots on its seed-phrase screens, so
+// the three seed-bearing shots here are IRREVERSIBLY REDACTED (mosaiced) copies. Never
+// replace them with the raw captures.
+//
+// PIN CONVENTION for "tap Continue": place the pin at the LEFT END of the Continue
+// button, vertically centred on it, so it lands in the same spot on every screen.
+// Measured on these 1080x2424 shots: a full-width Continue is 996x126 at +42+2193
+// => x 6.0, y 93.1. The modal Continue is 764x126 at +158+1168 => x 17.0, y 50.8.
+// =============================================================================
+
+const NUN_W: u32 = 1080;
+const NUN_H: u32 = 2424;
+
+pub static NUNCHUK_GUIDE: GuideV2 = GuideV2 {
+    eyebrow: "Basic · Nunchuk",
+    intro: Intro {
+        title: "Set up Nunchuk",
+        lede: "Start with one key on your phone, in an app that can grow all the way to multisig later. You will create a single-signature hot wallet, write down your recovery words, and learn to receive and send, without changing apps when you level up.",
+        chips: &["6 steps", "about 20 min", "grows with you"],
+        outcomes: &[
+            "A single-sig wallet, with the key on your phone",
+            "Your 24 recovery words written down safely",
+            "A clear path to hardware signers and multisig",
+        ],
+        backup_cta: true,
+    },
+    steps: &[
+        // 1 · Install, skip the account
+        Step {
+            title: "Install and continue as guest",
+            goal: "Open Nunchuk without handing over an email address.",
+            actions: &[
+                "Install Nunchuk and open it. The first screen offers sign-in options.",
+                "Tap **Continue as guest**. You do not need an account for a self-custodial wallet.",
+                "Nunchuk's Home screen explains the two ways in: add a key first, or create a hot wallet straight away.",
+            ],
+            flag: None,
+            why: Some((
+                "Why skip the account",
+                "An account unlocks Nunchuk's paid, assisted services, and none of that is needed here. Continuing as a guest keeps your keys and your wallet entirely local, with no email tying your bitcoin to your identity. You can always sign in later if you decide you want those services.",
+            )),
+            needs: &[],
+            backup_cta: false,
+            device: Device {
+                frame: Frame::Phone,
+                shots: &[
+                    Shot {
+                        image: "/guide-images/nunchuk/nunchuk-01-signin.png",
+                        alt: "Nunchuk sign-in screen with a continue as guest option",
+                        caption: "Nunchuk, continue as guest",
+                        img_w: NUN_W,
+                        img_h: NUN_H,
+                        pins: &[Pin { n: 2, x: 4.0, y: 62.0, label: "Tap Continue as guest" }],
+                    },
+                    Shot {
+                        image: "/guide-images/nunchuk/nunchuk-02-home-welcome.png",
+                        alt: "Nunchuk home screen with add key, create hot wallet and recover options",
+                        caption: "Nunchuk, the Home screen",
+                        img_w: NUN_W,
+                        img_h: NUN_H,
+                        pins: &[Pin { n: 3, x: 4.0, y: 71.0, label: "Create hot wallet" }],
+                    },
+                ],
+            },
+        },
+        // 2 · Create the hot wallet
+        Step {
+            title: "Create a hot wallet",
+            goal: "Generate one key on the phone and get a single-sig wallet from it.",
+            actions: &[
+                "Tap **Create hot wallet**.",
+                "Read the **hot wallet** explainer. It says plainly that a hot wallet is connected to the internet, and that large amounts belong on cold storage or multisig. That is the honest framing, and it is why this tier is for spending money.",
+                "Tap **Continue**. Nunchuk creates **My hot wallet**, marked **Single-sig**.",
+            ],
+            flag: None,
+            why: Some((
+                "Why start single-sig here",
+                "One key is one thing to back up and one thing to understand. Nunchuk can do 2-of-3 multisig with hardware signers, but that is the Advanced tier and it deserves its own guide. Learn the single-key basics in this app first, then the upgrade path never involves changing wallets.",
+            )),
+            needs: &[],
+            backup_cta: false,
+            device: Device {
+                frame: Frame::Phone,
+                shots: &[
+                    Shot {
+                        image: "/guide-images/nunchuk/nunchuk-02-home-welcome.png",
+                        alt: "Nunchuk home screen with the create hot wallet option",
+                        caption: "Tap Create hot wallet",
+                        img_w: NUN_W,
+                        img_h: NUN_H,
+                        pins: &[Pin { n: 1, x: 4.0, y: 71.0, label: "Create hot wallet" }],
+                    },
+                    Shot {
+                        image: "/guide-images/nunchuk/nunchuk-03-hot-wallet-explainer.png",
+                        alt: "Nunchuk hot wallet explainer screen",
+                        caption: "Nunchuk is honest about what a hot wallet is",
+                        img_w: NUN_W,
+                        img_h: NUN_H,
+                        pins: &[Pin { n: 2, x: 4.0, y: 86.0, label: "Read it, then Continue" }],
+                    },
+                    Shot {
+                        image: "/guide-images/nunchuk/nunchuk-04-wallets-list.png",
+                        alt: "Nunchuk wallets list showing My hot wallet marked single-sig",
+                        caption: "My hot wallet, marked Single-sig",
+                        img_w: NUN_W,
+                        img_h: NUN_H,
+                        pins: &[Pin { n: 3, x: 4.0, y: 20.0, label: "Your new wallet" }],
+                    },
+                ],
+            },
+        },
+        // 3 · Back up
+        Step {
+            title: "Write down your recovery words",
+            goal: "Save the 24 words that are your only way back into this wallet.",
+            actions: &[
+                "Open the wallet. A banner reads **Please write down the seed phrase**. Tap **Do it now**.",
+                "Nunchuk warns that **this action cannot be repeated**. Have paper and a pen ready, then tap **Continue**.",
+                "Write all **24 words** down in order on [paper](/downloads/seed-backup-sheet.html). Check the spelling, then tap **Continue**.",
+                "Confirm the words Nunchuk asks for (it picks three at random), then tap **Continue**.",
+                "You land on your **Key Info** screen. Rename the key if you like, and note that **View seed phrase** lives here if you ever need it again. Tap the **back arrow** in the top left when you are done.",
+                "The warning banner disappears and the wallet header turns from amber to navy. That is how you know it is done.",
+            ],
+            flag: Some("Unlike some wallets, Nunchuk does not block screenshots on this screen, so it is entirely up to you: never photograph your words and never type them into anything. Paper only. The two screenshots here are deliberately blurred for exactly that reason."),
+            why: Some((
+                "One shot at this",
+                "Nunchuk shows the phrase once during setup and says so up front. You can still reach it later via Keys, then your key, then View seed phrase, but treat the first showing as the real one. Write it down properly rather than planning to come back.",
+            )),
+            needs: &[],
+            backup_cta: false,
+            device: Device {
+                frame: Frame::Phone,
+                shots: &[
+                    Shot {
+                        image: "/guide-images/nunchuk/nunchuk-05-backup-warning.png",
+                        alt: "Nunchuk wallet with a write down the seed phrase banner",
+                        caption: "Tap Do it now on the banner",
+                        img_w: NUN_W,
+                        img_h: NUN_H,
+                        pins: &[Pin { n: 1, x: 4.0, y: 13.0, label: "Tap Do it now" }],
+                    },
+                    Shot {
+                        image: "/guide-images/nunchuk/nunchuk-06-cannot-repeat-dialog.png",
+                        alt: "Nunchuk dialog warning that this action cannot be repeated",
+                        caption: "This action cannot be repeated",
+                        img_w: NUN_W,
+                        img_h: NUN_H,
+                        pins: &[Pin { n: 2, x: 17.0, y: 50.8, label: "Tap Continue" }],
+                    },
+                    Shot {
+                        image: "/guide-images/nunchuk/nunchuk-07-seed-phrase-redacted.png",
+                        alt: "Nunchuk seed phrase screen, words deliberately obscured",
+                        caption: "Your 24 words (hidden here on purpose)",
+                        img_w: NUN_W,
+                        img_h: NUN_H,
+                        pins: &[Pin { n: 3, x: 6.0, y: 93.1, label: "Write them all down, then Continue" }],
+                    },
+                    Shot {
+                        image: "/guide-images/nunchuk/nunchuk-08-confirm-seed-redacted.png",
+                        alt: "Nunchuk confirm seed phrase screen, candidate words obscured",
+                        caption: "Confirm the words it asks for",
+                        img_w: NUN_W,
+                        img_h: NUN_H,
+                        pins: &[Pin { n: 4, x: 6.0, y: 93.1, label: "Pick the right words, then Continue" }],
+                    },
+                    Shot {
+                        image: "/guide-images/nunchuk/nunchuk-09-key-info.png",
+                        alt: "Nunchuk key info screen after verifying the seed phrase",
+                        caption: "Name your key, then tap the back arrow",
+                        img_w: NUN_W,
+                        img_h: NUN_H,
+                        pins: &[Pin { n: 5, x: 13.0, y: 9.5, label: "Back arrow, top left" }],
+                    },
+                    Shot {
+                        image: "/guide-images/nunchuk/nunchuk-10-backup-done.png",
+                        alt: "Nunchuk wallet with the backup warning gone",
+                        caption: "Banner gone, header now navy",
+                        img_w: NUN_W,
+                        img_h: NUN_H,
+                        pins: &[],
+                    },
+                ],
+            },
+        },
+        // 4 · Receive
+        Step {
+            title: "Receive bitcoin",
+            goal: "Share an address and watch the payment arrive.",
+            actions: &[
+                "In the wallet, tap **Receive**. An empty wallet also shows its address straight away.",
+                "**Copy address** or **Share address** and give it to the sender.",
+                "The payment appears as **Pending confirmations** and your balance updates.",
+                "Tap it for the details, where **View on blockchain explorer** lets you check it yourself.",
+                "Once it is included in a block the badge becomes a **confirmation count**, climbing with every block that follows.",
+            ],
+            flag: None,
+            why: Some((
+                "When is it really yours?",
+                "Pending confirmations means the payment has been broadcast but is not in a block yet. One confirmation is enough for small amounts; for larger ones wait for up to 6. View on blockchain explorer lets you confirm all of it independently, rather than taking the app's word for it.",
+            )),
+            needs: &[],
+            backup_cta: false,
+            device: Device {
+                frame: Frame::Phone,
+                shots: &[
+                    Shot {
+                        image: "/guide-images/nunchuk/nunchuk-10-backup-done.png",
+                        alt: "Nunchuk wallet with a receive address and QR code on the empty wallet screen",
+                        caption: "Tap Receive, or use the address shown here",
+                        img_w: NUN_W,
+                        img_h: NUN_H,
+                        pins: &[
+                            Pin { n: 1, x: 45.0, y: 27.5, label: "Tap Receive" },
+                            Pin { n: 2, x: 4.0, y: 76.0, label: "Copy or share the address" },
+                        ],
+                    },
+                    Shot {
+                        image: "/guide-images/nunchuk/nunchuk-11-received.png",
+                        alt: "Nunchuk wallet showing a received pending payment",
+                        caption: "Received, pending confirmations",
+                        img_w: NUN_W,
+                        img_h: NUN_H,
+                        pins: &[Pin { n: 3, x: 68.0, y: 37.0, label: "Pending confirmations, balance updated" }],
+                    },
+                    Shot {
+                        image: "/guide-images/nunchuk/nunchuk-12-receive-details.png",
+                        alt: "Nunchuk transaction details for a received payment",
+                        caption: "Details, with a link to a block explorer",
+                        img_w: NUN_W,
+                        img_h: NUN_H,
+                        pins: &[Pin { n: 4, x: 42.0, y: 17.0, label: "Tap through for the details" }],
+                    },
+                    Shot {
+                        image: "/guide-images/nunchuk/nunchuk-19-wallet-funded.png",
+                        alt: "Nunchuk wallet showing confirmed receives with a confirmation count",
+                        caption: "Confirmed, with the count climbing",
+                        img_w: NUN_W,
+                        img_h: NUN_H,
+                        // confirmation pills are 260x48 at +778+870 and +778+1050
+                        pins: &[Pin { n: 5, x: 68.0, y: 36.9, label: "Confirmation count" }],
+                    },
+                ],
+            },
+        },
+        // 5 · Send
+        Step {
+            title: "Send bitcoin",
+            goal: "Send a payment out of the wallet.",
+            actions: &[
+                "Open your wallet and tap **Send**.",
+                "Enter the **amount**, or tap **Send all** to sweep the wallet (**Switch to USD** if you prefer fiat), then tap **Continue**.",
+                "Paste or scan the recipient's **address**. Nunchuk breaks it into blocks so you can check it a chunk at a time. Add a **note** if you want to remember what it was for.",
+                "Tap **Create transaction** to accept the suggested fee, or **Customize transaction** to control it yourself.",
+                "Customising lets you **subtract the fee from the amount**, choose which **coins** to spend, and tick **Manual fee rate** to set your own sat/vB against the current priority, standard and economical rates.",
+                "Check the address, fee and total on **Confirm transaction**, then tap **Confirm and create transaction**.",
+                "The transaction now exists but is **unsigned**, marked **Pending signatures**. Tap **Sign** next to your key.",
+                "It flips to **Ready to broadcast** with **enough signatures collected**. Tap **Broadcast transaction** to send it.",
+                "The send appears in your wallet as **Pending confirmations**, with your note beneath it.",
+            ],
+            flag: Some("Always re-read the recipient address before you confirm. Bitcoin transactions cannot be reversed."),
+            why: Some((
+                "Why sending takes two steps here",
+                "Most wallets send in one tap. Nunchuk splits it into create, then sign, because it is built for multisig: there a transaction is drafted first and then signed by several keys, often held by different people or on different devices. With a single key you simply do both yourself, so it is one extra tap. Nothing is wrong, and it is worth getting used to: this is the exact same flow you will use unchanged if you ever move up to a 2-of-3.",
+            )),
+            needs: &[],
+            backup_cta: false,
+            device: Device {
+                frame: Frame::Phone,
+                shots: &[
+                    Shot {
+                        image: "/guide-images/nunchuk/nunchuk-19-wallet-funded.png",
+                        alt: "Nunchuk funded wallet with the Send button",
+                        caption: "Tap Send",
+                        img_w: NUN_W,
+                        img_h: NUN_H,
+                        // Send/Receive/View coins are 126px circles at x 169/464/772, y 611.
+                        pins: &[Pin { n: 1, x: 17.5, y: 27.8, label: "Tap Send" }],
+                    },
+                    Shot {
+                        image: "/guide-images/nunchuk/nunchuk-20-send-amount.png",
+                        alt: "Nunchuk new transaction amount entry with send all",
+                        caption: "Enter the amount, then Continue",
+                        img_w: NUN_W,
+                        img_h: NUN_H,
+                        pins: &[Pin { n: 2, x: 6.0, y: 93.1, label: "Tap Continue" }],
+                    },
+                    Shot {
+                        image: "/guide-images/nunchuk/nunchuk-21-send-address.png",
+                        alt: "Nunchuk new transaction with the recipient address and a note",
+                        caption: "Address and note, then create or customise",
+                        img_w: NUN_W,
+                        img_h: NUN_H,
+                        // Create transaction 996x126 at +42+2025 => left end x 6.0, centre y 86.1
+                        pins: &[
+                            Pin { n: 3, x: 4.0, y: 17.0, label: "Paste or scan the address" },
+                            Pin { n: 4, x: 6.0, y: 86.1, label: "Create transaction" },
+                        ],
+                    },
+                    Shot {
+                        image: "/guide-images/nunchuk/nunchuk-22-customize-fee.png",
+                        alt: "Nunchuk customize transaction with fee settings and coin selection",
+                        caption: "Optional: fee settings and coin selection",
+                        img_w: NUN_W,
+                        img_h: NUN_H,
+                        pins: &[Pin { n: 5, x: 4.0, y: 36.0, label: "Fee and coin options" }],
+                    },
+                    Shot {
+                        image: "/guide-images/nunchuk/nunchuk-23-manual-fee-rate.png",
+                        alt: "Nunchuk manual fee rate in sats per vbyte with the current rates",
+                        caption: "Manual fee rate, with the current rates shown",
+                        img_w: NUN_W,
+                        img_h: NUN_H,
+                        pins: &[],
+                    },
+                    Shot {
+                        image: "/guide-images/nunchuk/nunchuk-24-confirm-transaction.png",
+                        alt: "Nunchuk confirm transaction screen with address, fee, total and input coins",
+                        caption: "Check it, then confirm and create",
+                        img_w: NUN_W,
+                        img_h: NUN_H,
+                        pins: &[Pin { n: 6, x: 6.0, y: 93.1, label: "Confirm and create transaction" }],
+                    },
+                    Shot {
+                        image: "/guide-images/nunchuk/nunchuk-25-pending-signatures.png",
+                        alt: "Nunchuk transaction pending signatures with a sign button beside the key",
+                        caption: "Created but unsigned: tap Sign",
+                        img_w: NUN_W,
+                        img_h: NUN_H,
+                        // Sign button 184x95 at +854+1100 => centre y 47.3, pin just left of it
+                        pins: &[Pin { n: 7, x: 74.0, y: 47.3, label: "Tap Sign" }],
+                    },
+                    Shot {
+                        image: "/guide-images/nunchuk/nunchuk-26-ready-to-broadcast.png",
+                        alt: "Nunchuk transaction signed and ready to broadcast",
+                        caption: "Signed, ready to broadcast",
+                        img_w: NUN_W,
+                        img_h: NUN_H,
+                        pins: &[Pin { n: 8, x: 6.0, y: 93.0, label: "Broadcast transaction" }],
+                    },
+                    Shot {
+                        image: "/guide-images/nunchuk/nunchuk-27-send-pending.png",
+                        alt: "Nunchuk wallet showing the send pending with a note",
+                        caption: "Sent, pending confirmations",
+                        img_w: NUN_W,
+                        img_h: NUN_H,
+                        // Send-to row's Pending pill is 353x48 at +685+870
+                        pins: &[Pin { n: 9, x: 60.0, y: 36.9, label: "Your send, pending" }],
+                    },
+                ],
+            },
+        },
+        // 6 · Recover / grow
+        Step {
+            title: "If you lose your phone",
+            goal: "Know how to restore this wallet onto a new device.",
+            actions: &[
+                "Install Nunchuk on the new phone and choose **Continue as guest**.",
+                "Tap **Recover existing wallet**, at the bottom of the wallet-type list.",
+                "Choose **Recover hot wallet**. The other entries are for hardware devices, group wallets and descriptors.",
+                "Type your **24 words separated by a space**, in order, all into the one box. Nunchuk suggests each word as you type, and **Continue** stays greyed out until the whole phrase is valid.",
+                "Your wallet comes back with its **full history**, confirmations and all. Your words are standard **BIP39**, so any wallet that restores from recovery words can recover this key too.",
+            ],
+            flag: Some("Treat the lost phone as compromised. After recovering, create a brand new wallet (a fresh set of keys with its own new recovery words) and move all funds to it. Anyone who ends up with the old phone or its written words could otherwise take your bitcoin."),
+            why: None,
+            needs: &[],
+            backup_cta: false,
+            device: Device {
+                frame: Frame::Phone,
+                shots: &[
+                    Shot {
+                        image: "/guide-images/nunchuk/nunchuk-02-home-welcome.png",
+                        alt: "Nunchuk home screen after choosing continue as guest",
+                        caption: "Continue as guest on the new phone",
+                        img_w: NUN_W,
+                        img_h: NUN_H,
+                        pins: &[Pin { n: 1, x: 4.0, y: 78.0, label: "Continue as guest" }],
+                    },
+                    Shot {
+                        image: "/guide-images/nunchuk/nunchuk-18-wallet-types.png",
+                        alt: "Nunchuk wallet type list with recover existing wallet at the bottom",
+                        caption: "Recover existing wallet, at the bottom",
+                        img_w: NUN_W,
+                        img_h: NUN_H,
+                        pins: &[Pin { n: 2, x: 4.0, y: 79.0, label: "Recover existing wallet" }],
+                    },
+                    Shot {
+                        image: "/guide-images/nunchuk/nunchuk-15-recover-methods.png",
+                        alt: "Nunchuk list of recovery methods including recover hot wallet",
+                        caption: "Choose Recover hot wallet",
+                        img_w: NUN_W,
+                        img_h: NUN_H,
+                        pins: &[Pin { n: 3, x: 4.0, y: 73.8, label: "Recover hot wallet" }],
+                    },
+                    Shot {
+                        image: "/guide-images/nunchuk/nunchuk-16-recover-enter-words.png",
+                        alt: "Nunchuk recover hot wallet screen for entering the seed phrase",
+                        caption: "All 24 words in one box, separated by spaces",
+                        img_w: NUN_W,
+                        img_h: NUN_H,
+                        pins: &[Pin { n: 4, x: 4.0, y: 21.0, label: "Type the words separated by spaces" }],
+                    },
+                    Shot {
+                        image: "/guide-images/nunchuk/nunchuk-17-recovered.png",
+                        alt: "Nunchuk wallet restored with its full transaction history and confirmations",
+                        caption: "Restored, history and confirmations intact",
+                        img_w: NUN_W,
+                        img_h: NUN_H,
+                        pins: &[Pin { n: 5, x: 38.0, y: 55.0, label: "History back, confirmations intact" }],
+                    },
+                ],
+            },
+        },
+    ],
+    completion: Completion {
+        title: "You are self-custodied",
+        lede: "One key, on your phone, with the words on paper. When you are ready for a hardware signer or a 2-of-3 multisig, you already have the app for it.",
+        next_tier: Some(("Level up to Intermediate", "/guides/intermediate/desktop")),
+        backup_cta: false,
+    },
+};
+
+#[cfg(test)]
+mod content_tests {
+    use super::*;
+
+    /// Every guide reachable from a wallet picker or a level part.
+    fn all_guides() -> Vec<(&'static str, &'static GuideV2)> {
+        let mut v: Vec<(&'static str, &'static GuideV2)> = ["cove", "blue", "bull", "nunchuk", "sparrow"]
+            .iter()
+            .filter_map(|id| find_guide_v2(id).map(|g| (*id, g)))
+            .collect();
+        for part in INTERMEDIATE_PARTS.iter().chain(ADVANCED_PARTS.iter()) {
+            v.push((part.id, part.guide));
+        }
+        v
+    }
+
+    fn has_markdown(s: &str) -> bool {
+        s.contains("**") || (s.contains("](") && s.contains('['))
+    }
+
+    /// `actions` and `flag` are rendered through `inline()`; nothing else is. Markdown
+    /// left in an unparsed field prints as literal `**[text](url)**` on the page, which
+    /// is exactly how Bull's Lightning notice first shipped.
+    #[test]
+    fn markdown_only_appears_in_inline_parsed_fields() {
+        for (id, g) in all_guides() {
+            assert!(!has_markdown(g.intro.lede), "{id}: intro.lede is not inline-parsed");
+            assert!(!has_markdown(g.completion.lede), "{id}: completion.lede is not inline-parsed");
+            for (i, s) in g.steps.iter().enumerate() {
+                assert!(!has_markdown(s.goal), "{id} step {i}: goal is not inline-parsed");
+                if let Some((summary, body)) = s.why {
+                    assert!(!has_markdown(summary), "{id} step {i}: why summary is not inline-parsed");
+                    assert!(!has_markdown(body), "{id} step {i}: why body is not inline-parsed");
+                }
+                for n in s.needs {
+                    assert!(!has_markdown(n), "{id} step {i}: needs pill is not inline-parsed");
+                }
+                for shot in s.device.shots {
+                    assert!(!has_markdown(shot.caption), "{id} step {i}: caption is not inline-parsed");
+                    assert!(!has_markdown(shot.alt), "{id} step {i}: alt text is not inline-parsed");
+                    for p in shot.pins {
+                        assert!(!has_markdown(p.label), "{id} step {i}: pin label is not inline-parsed");
+                    }
+                }
+            }
+        }
+    }
+
+    /// Pins reference the numbered actions beside them, so a pin number with no matching
+    /// action is a dangling reference the reader cannot resolve.
+    #[test]
+    fn pin_numbers_reference_a_real_action() {
+        for (id, g) in all_guides() {
+            for (i, s) in g.steps.iter().enumerate() {
+                let n_actions = s.actions.len();
+                for shot in s.device.shots {
+                    for p in shot.pins {
+                        assert!(
+                            (p.n as usize) <= n_actions && p.n >= 1,
+                            "{id} step {i}: pin {} but the step has {n_actions} actions",
+                            p.n
+                        );
+                    }
+                }
+            }
+        }
+    }
+}

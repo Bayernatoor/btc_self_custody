@@ -257,7 +257,8 @@ fn render_level_page(
         ),
     ];
 
-    let is_desktop = guides::is_desktop_os(platform);
+    // Umbrella-aware: /guides/basic/desktop needs the desktop framing too.
+    let is_desktop = guides::is_desktop_context(platform);
     let pd = platform_display.to_string();
     let meta_desc = format!(
         "Free {} Bitcoin self-custody guide for {}. Learn to secure your own bitcoin with step-by-step wallet setup instructions.",
@@ -285,7 +286,15 @@ fn render_level_page(
     };
     // Opinionated framing: these are curated recommendations, not a neutral list.
     let wallet_title = if wallets.len() == 1 { "Recommended Wallet" } else { "Recommended Wallets" };
-    let single_wallet = wallets.len() == 1;
+    // Only the Basic mobile trio (Cove, Nunchuk, Bull) has had its source read, so the
+    // note stays off the desktop picker rather than implying Sparrow got the same pass.
+    let show_source_note = level.id == "basic" && !is_desktop && wallets.len() == 3;
+    // One wallet centres in its own column; three sit side by side in one row.
+    let wcards_class = match wallets.len() {
+        1 => "g2-wcards g2-wcards-one",
+        3 => "g2-wcards g2-wcards-three",
+        _ => "g2-wcards",
+    };
 
     view! {
         <Title text=page_title/>
@@ -339,7 +348,7 @@ fn render_level_page(
                     view! {
                         <div class="animate-slideup" style="animation-delay: 200ms">
                             <h2 class="font-title uppercase tracking-wider text-[0.8rem] text-[#f7931a] text-center mb-4">{wallet_title}</h2>
-                            <div class=if single_wallet { "g2-wcards g2-wcards-one" } else { "g2-wcards" }>
+                            <div class=wcards_class>
                                 {wallets.iter().enumerate().map(|(i, w)| {
                                     let delay = format!("animation-delay: {}ms", 250 + i * 80);
                                     view! {
@@ -349,6 +358,25 @@ fn render_level_page(
                                     }
                                 }).collect::<Vec<_>>()}
                             </div>
+                            {show_source_note.then(|| view! {
+                                <div class="mt-6 bg-white/[0.04] border border-white/10 rounded-xl p-5">
+                                    <div class="font-title text-xs uppercase tracking-widest text-[#f7931a] mb-2">
+                                        "Why these three"
+                                    </div>
+                                    <p class="text-sm text-white/75 leading-relaxed">
+                                        "I do not recommend a wallet without reading it. The source code of all
+                                         three was reviewed with AI assistance, Opus 5 and Kimi K3, paying closest
+                                         attention to the parts that generate randomness, hold keys and build
+                                         transactions."
+                                    </p>
+                                    <p class="text-sm text-white/55 leading-relaxed mt-3">
+                                        "That is a code review, not a formal security audit, and it is not a
+                                         guarantee that nothing is wrong. All three are open source, so you are
+                                         free to read them yourself, and I would rather tell you what was done
+                                         than imply more than that."
+                                    </p>
+                                </div>
+                            })}
                         </div>
                     }.into_any()
                 } else if !parts.is_empty() {
