@@ -146,7 +146,7 @@ pub fn empty_blocks_by_pool_chart(blocks: &[EmptyBlock]) -> serde_json::Value {
 
     // Sort by count descending
     let mut sorted: Vec<(&str, u64)> = pool_counts.into_iter().collect();
-    sorted.sort_by(|a, b| b.1.cmp(&a.1));
+    sorted.sort_by_key(|&(_, count)| std::cmp::Reverse(count));
 
     let pools: Vec<&str> = sorted.iter().map(|(name, _)| *name).collect();
     let counts: Vec<u64> = sorted.iter().map(|(_, count)| *count).collect();

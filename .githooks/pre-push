@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# The same three commands .github/workflows/general.yml runs, in the same order.
+# Keep them identical: the point of this hook is that green here means green there.
+#
+# Pushing master also triggers deploy.yml, so this is the last gate before a release.
+#
+# Enable:  git config core.hooksPath .githooks
+# Bypass:  git push --no-verify
+set -euo pipefail
+
+# CI installs the current stable. A local toolchain that has fallen behind has fewer
+# clippy lints, so this hook can pass while CI fails. Printing the version makes that
+# visible; `rustup update stable` closes the gap.
+echo "pre-push: $(rustc --version)"
+
+fail() {
+    echo >&2
+    echo "pre-push: $1 failed. CI will fail too." >&2
+    echo "  bypass: git push --no-verify" >&2
+    exit 1
+}
+
+echo "pre-push: cargo fmt --check"
+cargo fmt --check || fail "formatting (run: cargo fmt)"
+
+echo "pre-push: cargo clippy --features ssr --all-targets -- -D warnings"
+cargo clippy --features ssr --all-targets -- -D warnings || fail "clippy"
+
+echo "pre-push: cargo test --features ssr"
+cargo test --features ssr || fail "tests"
+
+echo "pre-push: all checks passed"

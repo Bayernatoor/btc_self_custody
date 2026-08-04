@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Formatting only. Runs in about a second, so it is cheap enough for every commit.
+# Clippy and the test suite live in pre-push, where the wait is proportionate.
+#
+# Enable:  git config core.hooksPath .githooks
+# Bypass:  git commit --no-verify
+set -euo pipefail
+
+if ! cargo fmt --check >/dev/null 2>&1; then
+    echo "pre-commit: formatting check failed." >&2
+    echo >&2
+    cargo fmt --check 2>&1 | grep '^Diff in' | sed 's/^/  /' | sort -u >&2 || true
+    echo >&2
+    echo "  fix:    cargo fmt" >&2
+    echo "  bypass: git commit --no-verify" >&2
+    exit 1
+fi
