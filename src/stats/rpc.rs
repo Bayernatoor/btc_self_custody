@@ -385,7 +385,10 @@ impl BitcoinRpc {
     /// Returns `(method, stats)` tuples. Methods not listed aren't cached.
     pub fn cache_stats(&self) -> Vec<(String, SlotStats)> {
         let mut stats = vec![
-            ("getmempoolinfo".to_string(), self.mempool_info_cache.stats()),
+            (
+                "getmempoolinfo".to_string(),
+                self.mempool_info_cache.stats(),
+            ),
             (
                 "getblockchaininfo".to_string(),
                 self.blockchain_info_cache.stats(),
@@ -499,9 +502,9 @@ impl BitcoinRpc {
                 return Err(StatsError::Rpc(format!("RPC error: {error}")));
             }
         }
-        parsed
-            .result
-            .ok_or_else(|| StatsError::Rpc("RPC response missing result".to_string()))
+        parsed.result.ok_or_else(|| {
+            StatsError::Rpc("RPC response missing result".to_string())
+        })
     }
 
     /// Call `getblockchaininfo` - returns chain state, tip height, difficulty.
@@ -533,11 +536,11 @@ impl BitcoinRpc {
 
     /// Estimated network hash rate (hashes per second). Cached with a 60s TTL.
     /// Returns `(hashrate, is_stale)`.
-    pub async fn get_network_hashps(
-        &self,
-    ) -> Result<(f64, bool), StatsError> {
+    pub async fn get_network_hashps(&self) -> Result<(f64, bool), StatsError> {
         self.network_hashps_cache
-            .get_or_fetch(NETWORK_HASHPS_TTL, || self.get_network_hashps_fresh())
+            .get_or_fetch(NETWORK_HASHPS_TTL, || {
+                self.get_network_hashps_fresh()
+            })
             .await
     }
 
@@ -556,8 +559,10 @@ impl BitcoinRpc {
         target: u64,
     ) -> Result<(f64, bool), StatsError> {
         let slot = self.smart_fee_slot(target);
-        slot.get_or_fetch(SMART_FEE_TTL, || self.estimate_smart_fee_fresh(target))
-            .await
+        slot.get_or_fetch(SMART_FEE_TTL, || {
+            self.estimate_smart_fee_fresh(target)
+        })
+        .await
     }
 
     /// Force-refresh `estimatesmartfee`, bypassing the cache.

@@ -372,7 +372,8 @@ pub fn LiveCard(
     #[prop(optional, into)] tooltip: Option<&'static str>,
     /// Secondary value shown on a second dim line below the main value.
     /// Useful for pairing related metrics (e.g. vsize vs memory usage).
-    #[prop(optional, into)] sub_value: Option<Signal<String>>,
+    #[prop(optional, into)]
+    sub_value: Option<Signal<String>>,
 ) -> impl IntoView {
     let is_loading = Signal::derive(move || value.get() == "\u{2014}");
     view! {

@@ -169,7 +169,8 @@ pub fn classify_notable(
 
     let round_number = if price_usd > 0.0 {
         let matches_round = ROUND_NUMBER_AMOUNTS.iter().any(|&amt| {
-            parsed.max_output_value >= amt.saturating_sub(ROUND_NUMBER_TOLERANCE)
+            parsed.max_output_value
+                >= amt.saturating_sub(ROUND_NUMBER_TOLERANCE)
                 && parsed.max_output_value <= amt + ROUND_NUMBER_TOLERANCE
         });
         matches_round
@@ -222,8 +223,10 @@ pub fn extract_readable_text(payload: &[u8]) -> Option<String> {
     let slice = &payload[start..];
 
     // Require high printable ratio (>= 70%) to filter binary noise
-    let printable_count =
-        slice.iter().filter(|&&b| (0x20..=0x7e).contains(&b)).count();
+    let printable_count = slice
+        .iter()
+        .filter(|&&b| (0x20..=0x7e).contains(&b))
+        .count();
     if printable_count < 6 || printable_count * 100 < slice.len() * 70 {
         return None;
     }
@@ -900,7 +903,8 @@ mod tests {
     #[test]
     fn inscription_marker_detects_envelope() {
         let witness = [
-            0x00, 0x63, 0x03, 0x6f, 0x72, 0x64, // OP_FALSE OP_IF OP_PUSH3 "ord"
+            0x00, 0x63, 0x03, 0x6f, 0x72,
+            0x64, // OP_FALSE OP_IF OP_PUSH3 "ord"
             0xAA, 0xBB, 0xCC,
         ];
         assert!(has_inscription_marker(&witness));

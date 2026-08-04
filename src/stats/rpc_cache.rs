@@ -166,10 +166,8 @@ impl<T: Clone + Send + 'static> CachedSlot<T> {
                         notify: &self.notify,
                     };
                     let result = fetch().await;
-                    let mut state = self
-                        .inner
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner());
+                    let mut state =
+                        self.inner.lock().unwrap_or_else(|e| e.into_inner());
 
                     match result {
                         Ok(val) => {
@@ -184,10 +182,12 @@ impl<T: Clone + Send + 'static> CachedSlot<T> {
                             // hand it back with is_stale=true. The TTL is
                             // NOT extended — next caller will try upstream
                             // again, giving Core a chance to recover.
-                            let stale = state.last.as_ref().map(|(v, _)| v.clone());
+                            let stale =
+                                state.last.as_ref().map(|(v, _)| v.clone());
                             drop(state);
                             if let Some(v) = stale {
-                                self.stale_served.fetch_add(1, Ordering::Relaxed);
+                                self.stale_served
+                                    .fetch_add(1, Ordering::Relaxed);
                                 tracing::warn!(
                                     "RPC fetch failed, serving stale value: {e}"
                                 );
@@ -211,7 +211,8 @@ impl<T: Clone + Send + 'static> CachedSlot<T> {
 
     pub fn stats(&self) -> SlotStats {
         let state = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        let age_seconds = state.last.as_ref().map(|(_, t)| t.elapsed().as_secs());
+        let age_seconds =
+            state.last.as_ref().map(|(_, t)| t.elapsed().as_secs());
         SlotStats {
             hits: self.hits.load(Ordering::Relaxed),
             misses: self.misses.load(Ordering::Relaxed),

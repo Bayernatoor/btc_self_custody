@@ -35,7 +35,8 @@ pub const BLOCK_REPORT_URL: &str =
 /// where we send readers for named product opinions. Hosted on X, so it may be
 /// unreadable without an account; that is why /coldcard-migration exists rather than linking
 /// this directly from the banner.
-pub const ROB_THREAD_URL: &str = "https://x.com/Rob1Ham/status/2083936334511538368";
+pub const ROB_THREAD_URL: &str =
+    "https://x.com/Rob1Ham/status/2083936334511538368";
 
 /// Full-width warning bar rendered above the navbar on every page.
 #[component]

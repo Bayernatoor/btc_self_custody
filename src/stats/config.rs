@@ -55,8 +55,7 @@ impl StatsConfig {
 
         let zmq_tx_url = std::env::var("BITCOIN_STATS_ZMQ_TX").ok();
         let zmq_block_url = std::env::var("BITCOIN_STATS_ZMQ_BLOCK").ok();
-        let zmq_sequence_url =
-            std::env::var("BITCOIN_STATS_ZMQ_SEQUENCE").ok();
+        let zmq_sequence_url = std::env::var("BITCOIN_STATS_ZMQ_SEQUENCE").ok();
 
         Some(Self {
             rpc_url,

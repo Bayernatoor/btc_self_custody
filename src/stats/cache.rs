@@ -289,11 +289,7 @@ where
     }
 
     fn stats(&self) -> CacheStats {
-        let size = self
-            .inner
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .len();
+        let size = self.inner.lock().unwrap_or_else(|e| e.into_inner()).len();
         CacheStats {
             name: self.name,
             size,
@@ -331,9 +327,11 @@ impl CacheRegistry {
     /// `dyn CacheCell` is a fat pointer; `==` on the raw pointers
     /// would also compare vtables.
     pub fn register(&mut self, cache: Arc<dyn CacheCell>) {
-        if !self.all.iter().any(|c| {
-            std::ptr::addr_eq(Arc::as_ptr(c), Arc::as_ptr(&cache))
-        }) {
+        if !self
+            .all
+            .iter()
+            .any(|c| std::ptr::addr_eq(Arc::as_ptr(c), Arc::as_ptr(&cache)))
+        {
             self.all.push(cache);
         }
     }
@@ -396,7 +394,10 @@ mod tests {
         let v2 = fetch(&cache, 1, "b", &calls).await;
 
         assert_eq!(v1, "a");
-        assert_eq!(v2, "a", "second call returned cached, fetcher's value ignored");
+        assert_eq!(
+            v2, "a",
+            "second call returned cached, fetcher's value ignored"
+        );
         assert_eq!(calls.load(Ordering::SeqCst), 1);
     }
 
@@ -720,8 +721,7 @@ mod tests {
             Cache::new("b", Duration::from_secs(60))
                 .invalidated_by(CacheTag::OnNewBlock),
         );
-        let c: Arc<Cache<(), &'static str>> =
-            Arc::new(Cache::permanent("c"));
+        let c: Arc<Cache<(), &'static str>> = Arc::new(Cache::permanent("c"));
 
         let mut registry = CacheRegistry::new();
         // Mirror what the builder does: each cache registers once for
@@ -738,7 +738,11 @@ mod tests {
 
         let names: Vec<_> =
             registry.all_stats().into_iter().map(|s| s.name).collect();
-        assert_eq!(names.len(), 3, "no duplicates even though `a` has two tags");
+        assert_eq!(
+            names.len(),
+            3,
+            "no duplicates even though `a` has two tags"
+        );
         assert!(names.contains(&"a"));
         assert!(names.contains(&"b"));
         assert!(names.contains(&"c"));
@@ -751,10 +755,8 @@ mod tests {
     /// extend to every other cache automatically.
     #[tokio::test]
     async fn singleflight_dedups_concurrent_missers() {
-        let cache: Arc<Cache<u32, &'static str>> = Arc::new(Cache::new(
-            "sf",
-            Duration::from_secs(60),
-        ));
+        let cache: Arc<Cache<u32, &'static str>> =
+            Arc::new(Cache::new("sf", Duration::from_secs(60)));
         let calls = Arc::new(AtomicUsize::new(0));
 
         // Fire 50 concurrent get_or_compute calls for the SAME key. The
@@ -792,10 +794,8 @@ mod tests {
     /// after a failed fetch, the next caller's fetcher takes over.
     #[tokio::test]
     async fn singleflight_retries_after_fetcher_error() {
-        let cache: Arc<Cache<u32, &'static str>> = Arc::new(Cache::new(
-            "sf-err",
-            Duration::from_secs(60),
-        ));
+        let cache: Arc<Cache<u32, &'static str>> =
+            Arc::new(Cache::new("sf-err", Duration::from_secs(60)));
         let attempts = Arc::new(AtomicUsize::new(0));
 
         // First call: fetcher fails.
@@ -827,10 +827,8 @@ mod tests {
     /// Different keys never share a singleflight slot.
     #[tokio::test]
     async fn singleflight_does_not_collapse_distinct_keys() {
-        let cache: Arc<Cache<u32, &'static str>> = Arc::new(Cache::new(
-            "sf-keys",
-            Duration::from_secs(60),
-        ));
+        let cache: Arc<Cache<u32, &'static str>> =
+            Arc::new(Cache::new("sf-keys", Duration::from_secs(60)));
         let calls = Arc::new(AtomicUsize::new(0));
 
         let mut handles = Vec::with_capacity(10);

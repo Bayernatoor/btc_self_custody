@@ -459,8 +459,7 @@ pub fn HeartbeatPage() -> impl IntoView {
 
     // Reactive display values
     let block_height = Signal::derive(move || {
-        let live =
-            cached_live.get().map(|s| s.blockchain.blocks).unwrap_or(0);
+        let live = cached_live.get().map(|s| s.blockchain.blocks).unwrap_or(0);
         let height = live.max(sse_height.get());
         if height == 0 {
             "---".to_string()
@@ -470,11 +469,12 @@ pub fn HeartbeatPage() -> impl IntoView {
     });
 
     // LIVE indicator colour + label, derived from the SSE connection state.
-    let status_color = Signal::derive(move || match conn_state.get().as_str() {
-        "disconnected" => "#f44336", // red
-        "stale" => "#f7931a",        // amber
-        _ => "#00e676",              // green (live)
-    });
+    let status_color =
+        Signal::derive(move || match conn_state.get().as_str() {
+            "disconnected" => "#f44336", // red
+            "stale" => "#f7931a",        // amber
+            _ => "#00e676",              // green (live)
+        });
     let status_label = Signal::derive(move || {
         match conn_state.get().as_str() {
             "disconnected" => "RECONNECTING",
@@ -541,8 +541,8 @@ pub fn HeartbeatPage() -> impl IntoView {
 
     let time_since = Signal::derive(move || {
         let _ = tick.get(); // re-run every tick
-        // Use the timestamp from whichever source reports the newer block, so
-        // the "last block" timer follows the SSE/ZMQ stream during node hiccups.
+                            // Use the timestamp from whichever source reports the newer block, so
+                            // the "last block" timer follows the SSE/ZMQ stream during node hiccups.
         let live = cached_live.get();
         let live_h = live.as_ref().map(|s| s.blockchain.blocks).unwrap_or(0);
         let live_t = live.as_ref().map(|s| s.blockchain.time).unwrap_or(0);

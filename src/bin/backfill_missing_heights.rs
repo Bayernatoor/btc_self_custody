@@ -28,19 +28,17 @@ async fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "warn,backfill_missing_heights=info".into()),
+                .unwrap_or_else(|_| {
+                    "warn,backfill_missing_heights=info".into()
+                }),
         )
         .init();
 
     let config = StatsConfig::load()
         .expect("BITCOIN_STATS_RPC_URL must be set (see StatsConfig::load)");
-    let pool =
-        db::open_pool(&config.db_path, 4).expect("open SQLite pool");
-    let rpc = BitcoinRpc::new(
-        config.rpc_url,
-        config.rpc_user,
-        config.rpc_password,
-    );
+    let pool = db::open_pool(&config.db_path, 4).expect("open SQLite pool");
+    let rpc =
+        BitcoinRpc::new(config.rpc_url, config.rpc_user, config.rpc_password);
 
     let missing = find_missing_heights(&pool);
     if missing.is_empty() {
@@ -79,7 +77,10 @@ async fn main() {
         // Periodic progress (every 10, plus the last).
         let n = idx + 1;
         if n % 10 == 0 || n == total {
-            println!("  {}/{} done ({} filled, {} failed)", n, total, filled, failed);
+            println!(
+                "  {}/{} done ({} filled, {} failed)",
+                n, total, filled, failed
+            );
         }
     }
 

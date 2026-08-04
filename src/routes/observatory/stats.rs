@@ -495,17 +495,15 @@ pub fn StatsSummaryPage() -> impl IntoView {
     let avg_fees_per_block_btc = stat(|s| {
         if s.block_count > 0 {
             let sats = s.total_fees as f64 / s.block_count as f64;
-            format!(
-                "\u{20bf}{}",
-                format_number_f64(sats / 100_000_000.0, 4)
-            )
+            format!("\u{20bf}{}", format_number_f64(sats / 100_000_000.0, 4))
         } else {
             "\u{2014}".to_string()
         }
     });
     let avg_fees_per_block_sub = stat(|s| {
         if s.block_count > 0 {
-            let sats = (s.total_fees as f64 / s.block_count as f64).round() as u64;
+            let sats =
+                (s.total_fees as f64 / s.block_count as f64).round() as u64;
             format!("{} sats", format_number(sats))
         } else {
             String::new()
@@ -515,7 +513,10 @@ pub fn StatsSummaryPage() -> impl IntoView {
         if s.block_count > 0 {
             format!(
                 "\u{20bf}{}",
-                format_number_f64(s.median_fee_per_block as f64 / 100_000_000.0, 4)
+                format_number_f64(
+                    s.median_fee_per_block as f64 / 100_000_000.0,
+                    4
+                )
             )
         } else {
             "\u{2014}".to_string()

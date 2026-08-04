@@ -79,17 +79,16 @@ pub async fn init() -> Option<(
     // Every cache built through StatsStateBuilder is auto-registered
     // with the invalidation registry under each provided tag. Adding
     // a new cache is one line; the wiring cannot be forgotten.
-    use std::time::Duration;
     use super::cache::CacheTag;
     use super::types;
+    use std::time::Duration;
     let mut cb = super::api::StatsStateBuilder::new();
     let price_cache = cb.cache::<(), super::rpc::PriceInfo>(
         "price",
         Duration::from_secs(60),
         &[],
     );
-    let utxo_count =
-        cb.cache::<(), u64>("utxo_count", Duration::MAX, &[]);
+    let utxo_count = cb.cache::<(), u64>("utxo_count", Duration::MAX, &[]);
     let stats_summary_cache = cb.cache::<(), types::StatsSummary>(
         "stats_summary",
         Duration::from_secs(60),
@@ -102,8 +101,8 @@ pub async fn init() -> Option<(
     );
     let block_ts_cache =
         cb.cache::<u64, u64>("block_timestamps", Duration::MAX, &[]);
-    let signaling_blocks_cache = cb
-        .cache::<String, (Vec<types::SignalingBlock>, types::PeriodStats)>(
+    let signaling_blocks_cache =
+        cb.cache::<String, (Vec<types::SignalingBlock>, types::PeriodStats)>(
             "signaling_blocks",
             Duration::from_secs(60),
             &[],
@@ -225,9 +224,7 @@ pub fn spawn_background_tasks(
                 if let Ok(summary) =
                     db::query_range_summary(&conn, from_ts, to_ts)
                 {
-                    state
-                        .range_summary_cache
-                        .insert((from_ts, to_ts), summary);
+                    state.range_summary_cache.insert((from_ts, to_ts), summary);
                 }
                 tracing::info!("Cache pre-warm complete");
             }
@@ -290,8 +287,12 @@ pub fn spawn_background_tasks(
             };
             loop {
                 tokio::time::sleep(std::time::Duration::from_secs(15)).await;
-                ingest::poll_new_blocks(&state.rpc, &state.db, &state.heartbeat_tx)
-                    .await;
+                ingest::poll_new_blocks(
+                    &state.rpc,
+                    &state.db,
+                    &state.heartbeat_tx,
+                )
+                .await;
 
                 // Verify the last blocks against the canonical chain (detect reorgs).
                 // Depth must match super::rpc::REORG_DETECTION_DEPTH so the
@@ -351,8 +352,7 @@ pub fn spawn_background_tasks(
         tokio::spawn(async move {
             loop {
                 ingest::backfill_gaps(&state.rpc, &state.db).await;
-                tokio::time::sleep(std::time::Duration::from_secs(300))
-                    .await;
+                tokio::time::sleep(std::time::Duration::from_secs(300)).await;
             }
         });
     }

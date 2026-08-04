@@ -140,8 +140,9 @@ pub fn guide_selector_view(
         }
         v
     };
-    let prog =
-        move || (step.get() as f32 / (total_steps.get() + 1) as f32 * 100.0).round();
+    let prog = move || {
+        (step.get() as f32 / (total_steps.get() + 1) as f32 * 100.0).round()
+    };
 
     view! {
         <Title text="Choose Your Bitcoin Self-Custody Guide | We Hodl BTC"/>

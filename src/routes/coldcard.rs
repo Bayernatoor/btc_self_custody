@@ -11,7 +11,9 @@
 use leptos::prelude::*;
 use leptos_meta::*;
 
-use crate::extras::advisory::{BLOCK_REPORT_URL, COLDCARD_ADVISORY_URL, ROB_THREAD_URL};
+use crate::extras::advisory::{
+    BLOCK_REPORT_URL, COLDCARD_ADVISORY_URL, ROB_THREAD_URL,
+};
 use crate::extras::schema::{self, JsonLd};
 
 /// Bump this whenever the page changes. Readers of a developing advisory need to
@@ -87,7 +89,10 @@ const CASES_SOON: &[&str] = &[
 ];
 
 /// Numbered list of cases. `chip` carries that level's accent colours.
-fn case_list(items: &'static [&'static str], chip: &'static str) -> impl IntoView {
+fn case_list(
+    items: &'static [&'static str],
+    chip: &'static str,
+) -> impl IntoView {
     view! {
         <ol class="space-y-2.5">
             {items

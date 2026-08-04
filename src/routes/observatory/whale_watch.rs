@@ -562,11 +562,12 @@ fn LeaderRow(rank: usize, tx: NotableTxInfo) -> impl IntoView {
     let usd_str = fmt_usd_short(tx.value_usd);
     // For round_number, show the round output value (the part that triggered
     // the detection), not the total tx value which may include change.
-    let btc_str = if tx.notable_type == "round_number" && tx.max_output_value > 0 {
-        format!("{} out", fmt_btc(tx.max_output_value))
-    } else {
-        fmt_btc(tx.value)
-    };
+    let btc_str =
+        if tx.notable_type == "round_number" && tx.max_output_value > 0 {
+            format!("{} out", fmt_btc(tx.max_output_value))
+        } else {
+            fmt_btc(tx.value)
+        };
     let time_str = fmt_time_ago(tx.first_seen);
 
     view! {
@@ -598,11 +599,12 @@ fn TxRow(tx: NotableTxInfo) -> impl IntoView {
     let usd_str = fmt_usd_short(tx.value_usd);
     // For round_number, show the round output value (the part that triggered
     // the detection), not the total tx value which may include change.
-    let btc_str = if tx.notable_type == "round_number" && tx.max_output_value > 0 {
-        format!("{} out", fmt_btc(tx.max_output_value))
-    } else {
-        fmt_btc(tx.value)
-    };
+    let btc_str =
+        if tx.notable_type == "round_number" && tx.max_output_value > 0 {
+            format!("{} out", fmt_btc(tx.max_output_value))
+        } else {
+            fmt_btc(tx.value)
+        };
     let time_str = fmt_time_ago(tx.first_seen);
     let fee_str = if tx.vsize > 0 {
         format!("{:.1} sat/vB", tx.fee as f64 / tx.vsize as f64)

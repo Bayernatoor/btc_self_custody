@@ -55,9 +55,7 @@ async fn fetch_heights_with_retry(
     for attempt in 1..=FETCH_MAX_ATTEMPTS {
         let results: Vec<(u64, Result<Block, StatsError>)> =
             stream::iter(pending.iter().copied())
-                .map(|h| async move {
-                    (h, rpc.fetch_block_by_height(h).await)
-                })
+                .map(|h| async move { (h, rpc.fetch_block_by_height(h).await) })
                 .buffer_unordered(concurrency())
                 .collect()
                 .await;

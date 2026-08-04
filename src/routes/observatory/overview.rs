@@ -19,8 +19,8 @@ use leptos_meta::*;
 use super::components::*;
 use super::helpers::*;
 use super::shared::*;
-use crate::stats::server_fns::*;
 use crate::extras::schema::{static_docs, StaticJsonLd};
+use crate::stats::server_fns::*;
 
 /// Observatory dashboard page with live node stats, difficulty predictor, and halving countdown.
 #[component]
@@ -64,7 +64,9 @@ pub fn ObservatoryOverview() -> impl IntoView {
         live_field(|s| format!("{:.1} MB", s.mempool.bytes as f64 / 1e6))
     });
     let mempool_usage = Signal::derive(move || {
-        live_field(|s| format!("{:.0} MB in memory", s.mempool.usage as f64 / 1e6))
+        live_field(|s| {
+            format!("{:.0} MB in memory", s.mempool.usage as f64 / 1e6)
+        })
     });
     let price_usd = Signal::derive(move || {
         live_field(|s| {

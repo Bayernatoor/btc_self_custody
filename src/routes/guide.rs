@@ -7,8 +7,8 @@
 use leptos::prelude::*;
 use leptos_meta::*;
 
-use crate::extras::stepper::Stepper;
 use crate::extras::schema::{self, JsonLd};
+use crate::extras::stepper::Stepper;
 use crate::extras::stepper_v2::{inline, StepperV2};
 use crate::guides::{
     self, DownloadLink, GuideLevelDef, ProductLink, WalletDef,
@@ -550,7 +550,9 @@ fn render_step_navigation(level: &'static GuideLevelDef) -> impl IntoView {
 fn guide_how_to(guide: &'static guides_v2::GuideV2, canonical: &str) -> String {
     let minutes = guide.intro.chips.iter().find_map(|c| {
         let c = c.trim().strip_prefix("about ")?;
-        let n = c.strip_suffix(" min").or_else(|| c.strip_suffix(" minutes"))?;
+        let n = c
+            .strip_suffix(" min")
+            .or_else(|| c.strip_suffix(" minutes"))?;
         n.trim().parse::<u32>().ok()
     });
     let supplies: Vec<String> = guide
@@ -859,10 +861,11 @@ mod schema_tests {
     fn every_guide_emits_valid_how_to() {
         for wid in ["cove", "bull", "nunchuk", "sparrow"] {
             let g = guides_v2::find_guide_v2(wid).expect("guide exists");
-            let url = format!("https://www.wehodlbtc.com/guides/basic/android/{wid}");
+            let url =
+                format!("https://www.wehodlbtc.com/guides/basic/android/{wid}");
             let raw = guide_how_to(g, &url);
-            let v: serde_json::Value =
-                serde_json::from_str(&raw).unwrap_or_else(|e| panic!("{wid}: invalid JSON-LD: {e}"));
+            let v: serde_json::Value = serde_json::from_str(&raw)
+                .unwrap_or_else(|e| panic!("{wid}: invalid JSON-LD: {e}"));
             assert_eq!(v["@type"], "HowTo", "{wid}");
             assert_eq!(
                 v["step"].as_array().map(|a| a.len()),
@@ -870,8 +873,14 @@ mod schema_tests {
                 "{wid}: step count must match the guide"
             );
             // No markdown may leak into a snippet.
-            assert!(!raw.contains("**"), "{wid}: bold markup leaked into JSON-LD");
-            assert!(!raw.contains("]("), "{wid}: link markup leaked into JSON-LD");
+            assert!(
+                !raw.contains("**"),
+                "{wid}: bold markup leaked into JSON-LD"
+            );
+            assert!(
+                !raw.contains("]("),
+                "{wid}: link markup leaked into JSON-LD"
+            );
         }
     }
 

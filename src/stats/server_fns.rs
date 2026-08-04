@@ -474,8 +474,7 @@ pub async fn fetch_daily_aggregates(
                         avg_inscription_count: r.avg_inscription_count,
                         avg_inscription_bytes: r.avg_inscription_bytes,
                         avg_brc20_count: r.avg_brc20_count,
-                        avg_taproot_keypath_count: r
-                            .avg_taproot_keypath_count,
+                        avg_taproot_keypath_count: r.avg_taproot_keypath_count,
                         avg_taproot_scriptpath_count: r
                             .avg_taproot_scriptpath_count,
                         avg_fee_rate_p10: r.avg_fee_rate_p10,

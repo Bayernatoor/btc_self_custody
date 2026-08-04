@@ -72,28 +72,27 @@ impl TestApp {
             Duration::from_secs(60),
             &[],
         );
-        let utxo_count =
-            cb.cache::<(), u64>("utxo_count", Duration::MAX, &[]);
+        let utxo_count = cb.cache::<(), u64>("utxo_count", Duration::MAX, &[]);
         let stats_summary_cache = cb.cache::<(), types::StatsSummary>(
             "stats_summary",
             Duration::from_secs(60),
             &[CacheTag::OnNewBlock],
         );
-        let daily_cache = cb
-            .cache::<(u64, u64), Vec<types::DailyAggregate>>(
-                "daily_aggregates",
-                Duration::from_secs(120),
-                &[CacheTag::OnNewBlock],
-            );
-        let block_ts_cache = cb.cache::<u64, u64>(
-            "block_timestamps",
-            Duration::MAX,
+        let daily_cache = cb.cache::<(u64, u64), Vec<types::DailyAggregate>>(
+            "daily_aggregates",
+            Duration::from_secs(120),
+            &[CacheTag::OnNewBlock],
+        );
+        let block_ts_cache =
+            cb.cache::<u64, u64>("block_timestamps", Duration::MAX, &[]);
+        let signaling_blocks_cache = cb.cache::<String, (
+            Vec<types::SignalingBlock>,
+            types::PeriodStats,
+        )>(
+            "signaling_blocks",
+            Duration::from_secs(60),
             &[],
         );
-        let signaling_blocks_cache = cb.cache::<
-            String,
-            (Vec<types::SignalingBlock>, types::PeriodStats),
-        >("signaling_blocks", Duration::from_secs(60), &[]);
         let signaling_periods_cache = cb
             .cache::<String, Vec<super::db::SignalingPeriod>>(
                 "signaling_periods",
@@ -105,12 +104,11 @@ impl TestApp {
             Duration::from_secs(3600),
             &[],
         );
-        let range_summary_cache = cb
-            .cache::<(u64, u64), types::RangeSummary>(
-                "range_summary",
-                Duration::from_secs(60),
-                &[CacheTag::OnNewBlock],
-            );
+        let range_summary_cache = cb.cache::<(u64, u64), types::RangeSummary>(
+            "range_summary",
+            Duration::from_secs(60),
+            &[CacheTag::OnNewBlock],
+        );
         let extremes_cache = cb.cache::<(u64, u64), types::ExtremesData>(
             "extremes",
             Duration::from_secs(60),
@@ -343,10 +341,8 @@ async fn cache_stats_cold_start_reports_zero_counters() {
     let slots = body["slots"].as_array().expect("slots is array");
     // The three unconditional TTL slots are always present; estimatesmartfee
     // is lazily created per-target on first call, so it may not appear yet.
-    let methods: Vec<_> = slots
-        .iter()
-        .filter_map(|s| s["method"].as_str())
-        .collect();
+    let methods: Vec<_> =
+        slots.iter().filter_map(|s| s["method"].as_str()).collect();
     assert!(methods.contains(&"getmempoolinfo"));
     assert!(methods.contains(&"getblockchaininfo"));
     assert!(methods.contains(&"getnetworkhashps"));
@@ -359,10 +355,8 @@ async fn cache_stats_cold_start_reports_zero_counters() {
     }
 
     let blocks = body["blocks"].as_array().expect("blocks is array");
-    let block_methods: Vec<_> = blocks
-        .iter()
-        .filter_map(|s| s["method"].as_str())
-        .collect();
+    let block_methods: Vec<_> =
+        blocks.iter().filter_map(|s| s["method"].as_str()).collect();
     assert!(block_methods.contains(&"getblockhash"));
     assert!(block_methods.contains(&"getblock"));
     for slot in blocks {
@@ -485,10 +479,7 @@ async fn invalidate_on_new_block_clears_migrated_caches_via_registry() {
 
     // Seed block_ts_cache (no tags) so we can verify it survives.
     app.state.block_ts_cache.insert(800_000, 1_700_000_000);
-    assert_eq!(
-        app.state.block_ts_cache.get(&800_000),
-        Some(1_700_000_000)
-    );
+    assert_eq!(app.state.block_ts_cache.get(&800_000), Some(1_700_000_000));
 
     // Fire the same call the block poller makes. This is the entire
     // public surface for invalidation; the test does not import or

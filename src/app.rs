@@ -32,12 +32,12 @@
 //! search-engine-indexed URLs don't break: /stats, /on-this-day,
 //! /hall-of-fame, /whale-watch.
 
-use crate::extras::footer::Footer;
 use crate::extras::advisory::AdvisoryBanner;
+use crate::extras::footer::Footer;
 use crate::extras::navbar::NavBar;
 use crate::routes::about::AboutPage;
-use crate::routes::coldcard::ColdcardAdvisoryPage;
 use crate::routes::blog::BlogPage;
+use crate::routes::coldcard::ColdcardAdvisoryPage;
 use crate::routes::faq::FaqPage;
 use crate::routes::guide::{GuideTwoSegment, GuideWalletPage};
 use crate::routes::guideselector::{GuideLevelSelector, GuideSelector};
@@ -260,9 +260,7 @@ pub fn App() -> impl IntoView {
 fn redirect_permanent(target: &'static str) -> impl IntoView {
     #[cfg(feature = "ssr")]
     {
-        if let Some(response) =
-            use_context::<leptos_axum::ResponseOptions>()
-        {
+        if let Some(response) = use_context::<leptos_axum::ResponseOptions>() {
             response.set_status(axum::http::StatusCode::MOVED_PERMANENTLY);
             response.insert_header(
                 axum::http::header::LOCATION,
