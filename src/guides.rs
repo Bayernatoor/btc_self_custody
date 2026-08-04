@@ -93,51 +93,6 @@ pub struct GuideStep {
 // WALLET DEFINITIONS
 // =============================================================================
 
-pub static BLUE_WALLET: WalletDef = WalletDef {
-    id: "blue",
-    name: "Blue Wallet",
-    tagline: "Radically Simple, Extremely Powerful.",
-    description: "A freedom and self-sovereign tool, disguised as a cute little Blue app in your pocket.",
-    color: "#1a578f",
-    logo: "/logos/bluewallet_logo.webp",
-    logo_alt: "Blue Wallet logo",
-    faq_dir: "bluewallet",
-    highlights: &[
-        "On-chain and Lightning",
-        "Hardware wallet support",
-        "Battle-tested since 2018",
-    ],
-    downloads: &[
-        DownloadLink {
-            label: "Google Play",
-            url: "https://play.google.com/store/apps/details?id=io.bluewallet.bluewallet",
-            logo: "/logos/google_play.png",
-            logo_alt: "Google Play",
-            color: "#01875f",
-            icon: r#"<path d="M3.609 1.814L13.792 12 3.61 22.186a.996.996 0 01-.61-.92V2.734a1 1 0 01.609-.92zm10.89 10.893l2.302 2.302-10.937 6.333 8.635-8.635zm3.199-1.4l2.834 1.64a1 1 0 010 1.74l-2.834 1.64-2.532-2.534 2.532-2.486zM5.864 2.658L16.8 8.99l-2.302 2.302-8.635-8.635z"/>"#,
-            platforms: &["android"],
-        },
-        DownloadLink {
-            label: "GitHub Releases",
-            url: "https://github.com/BlueWallet/BlueWallet/releases",
-            logo: "/logos/GitHub_Logo.png",
-            logo_alt: "GitHub",
-            color: "#24292f",
-            icon: r#"<path fill-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clip-rule="evenodd"/>"#,
-            platforms: &["android"],
-        },
-        DownloadLink {
-            label: "App Store",
-            url: "https://apps.apple.com/app/bluewallet-bitcoin-wallet/id1376878040",
-            logo: "/logos/download_on_app_store.png",
-            logo_alt: "App Store",
-            color: "#0071e3",
-            icon: r#"<path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>"#,
-            platforms: &["ios"],
-        },
-    ],
-};
-
 pub static SPARROW_WALLET: WalletDef = WalletDef {
     id: "sparrow",
     name: "Sparrow Wallet",
@@ -162,14 +117,16 @@ pub static SPARROW_WALLET: WalletDef = WalletDef {
 pub static COVE_WALLET: WalletDef = WalletDef {
     id: "cove",
     name: "Cove",
-    tagline: "The simple Bitcoin-only wallet.",
+    // Cove's slot in the lineup is "start here", against Nunchuk's "grow into" and Bull's
+    // "spend". Traits shared by all three are stated above the cards, not on them.
+    tagline: "The wallet to start with.",
     description: "A clean, open-source, Bitcoin-only wallet built on BDK. The simplest way to hold your own keys, with an optional end-to-end encrypted cloud backup as a safety net alongside your written words.",
     color: "#2f6df6",
     logo: "/logos/cove.png",
     logo_alt: "Cove logo",
     faq_dir: "cove",
     highlights: &[
-        "Bitcoin only, built on [BDK](https://bitcoindevkit.org)",
+        "Simple yet powerful",
         "Encrypted cloud backup",
         "Decoy PIN and wipe protection",
     ],
@@ -214,7 +171,7 @@ pub static COVE_WALLET: WalletDef = WalletDef {
 pub static BULL_WALLET: WalletDef = WalletDef {
     id: "bull",
     name: "Bull Bitcoin",
-    tagline: "The self-custodial wallet for spending.",
+    tagline: "The wallet for spending.",
     description: "Bitcoin and Liquid in one open-source app, built for everyday spending, with an optional integrated exchange if you want to buy or sell.",
     color: "#C50000",
     logo: "/logos/bull.png",
@@ -346,12 +303,37 @@ pub fn is_desktop_context(platform: &str) -> bool {
     platform == "desktop" || is_desktop_os(platform)
 }
 
+/// Collapses the desktop OS variants onto the `desktop` umbrella for canonical URLs.
+///
+/// `desktop-linux`, `-macos` and `-windows` render the same guide with a different OS
+/// badge and download button, so self-canonicalising each one publishes three
+/// near-duplicate pages. The umbrella is the canonical form and the OS variants are
+/// conveniences that point at it.
+pub fn canonical_platform(platform: &str) -> &str {
+    if is_desktop_os(platform) {
+        "desktop"
+    } else {
+        platform
+    }
+}
+
+/// Whether a `/guides/<level>/...` path leads to a level that is currently gated.
+///
+/// Lets "level up" links stay in the guide data while the tier is offline: the
+/// renderer hides them instead of walking readers into an under-construction page,
+/// and they reappear on their own once the level is un-gated. Non-guide or
+/// unrecognised paths are treated as not gated.
+pub fn is_gated_path(href: &str) -> bool {
+    href.strip_prefix("/guides/")
+        .and_then(|rest| rest.split('/').next())
+        .and_then(find_level)
+        .is_some_and(|l| l.under_construction)
+}
+
 /// Whether a download's platform tag satisfies a requested platform.
 ///
-/// `desktop` acts as an umbrella over `desktop-linux/-macos/-windows`. The guide
-/// selector treats it as an intermediate step before the OS choice, but
-/// `/guides/basic/desktop` is a real URL and is listed in the sitemap, so a
-/// `desktop-*` download has to match it or that page renders an empty picker.
+/// `desktop` is an umbrella over `desktop-linux/-macos/-windows`. It is a real, sitemapped
+/// URL, so a `desktop-*` download has to satisfy it or that page renders an empty picker.
 pub fn platform_matches(download_platform: &str, requested: &str) -> bool {
     download_platform == requested
         || (requested == "desktop" && download_platform.starts_with("desktop-"))
@@ -370,10 +352,14 @@ pub fn platform_display(platform: &str) -> &str {
     }
 }
 
-pub static ALL_WALLETS: &[&WalletDef] =
-    &[&BLUE_WALLET, &SPARROW_WALLET, &COVE_WALLET, &BULL_WALLET, &NUNCHUK_WALLET];
+pub static ALL_WALLETS: &[&WalletDef] = &[
+    &SPARROW_WALLET,
+    &COVE_WALLET,
+    &BULL_WALLET,
+    &NUNCHUK_WALLET,
+];
 
-/// Look up a wallet definition by its short ID (e.g. "blue", "sparrow", "cove").
+/// Look up a wallet definition by its short ID (e.g. "sparrow", "cove").
 pub fn find_wallet(id: &str) -> Option<&'static WalletDef> {
     ALL_WALLETS.iter().find(|w| w.id == id).copied()
 }
@@ -391,9 +377,6 @@ pub static BASIC_LEVEL: GuideLevelDef = GuideLevelDef {
     quote_author: "- Nick Szabo",
     intro: "This basic setup is meant to get you up to speed quickly. You'll pick one of the wallets below, create your private key and take possession of your bitcoin. I wouldn't recommend storing too much of your wealth in a mobile wallet. Think of it as a self-custodied spending wallet, similar to how you'd carry cash in a physical wallet.",
     platforms: &["android", "ios", "desktop"],
-    // Mobile lineup: cove + bull (+ nunchuk when its guide lands). Blue is dropped
-    // from the picker but BLUE_WALLET / BLUE_GUIDE are kept in the code, so adding
-    // "blue" back to this list is the only step needed to restore it.
     // Order drives the mobile picker: Cove (simplest), Nunchuk (grows with you), Bull
     // (spending). Sparrow is desktop-only and filtered out on phones.
     wallets: &["cove", "nunchuk", "bull", "sparrow"],
@@ -535,9 +518,9 @@ pub fn wallets_for(
         .filter_map(|wid| find_wallet(wid))
         .filter(|w| {
             // Wallet is available on this platform if any of its downloads target it
-            w.downloads
-                .iter()
-                .any(|d| d.platforms.iter().any(|p| platform_matches(p, platform)))
+            w.downloads.iter().any(|d| {
+                d.platforms.iter().any(|p| platform_matches(p, platform))
+            })
         })
         .collect()
 }
@@ -553,7 +536,6 @@ pub fn downloads_for(
         .filter(|d| d.platforms.iter().any(|p| platform_matches(p, platform)))
         .collect()
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -610,5 +592,60 @@ mod tests {
         assert!(!is_desktop_context("android"));
         // Titles rely on this staying false for the umbrella.
         assert!(!is_desktop_os("desktop"));
+    }
+
+    /// Every guide URL handed to crawlers must resolve to real content, and a gated tier
+    /// must never be submitted for indexing.
+    #[test]
+    fn sitemap_guide_urls_all_resolve() {
+        const SITEMAP: &str = include_str!("../assets/sitemap.xml");
+        const ORIGIN: &str = "https://www.wehodlbtc.com";
+        let mut seen_wallets: Vec<&str> = Vec::new();
+        let mut checked = 0;
+        for raw in SITEMAP.split("<loc>").skip(1) {
+            let url = raw.split("</loc>").next().unwrap_or_default().trim();
+            let Some(path) = url.strip_prefix(ORIGIN) else { continue };
+            let parts: Vec<&str> = path.trim_matches('/').split('/').collect();
+            if parts.first() != Some(&"guides") || parts.len() < 3 {
+                continue;
+            }
+            let (lid, platform) = (parts[1], parts[2]);
+            let level = find_level(lid).unwrap_or_else(|| panic!("{path}: unknown level '{lid}'"));
+            assert!(
+                !level.under_construction,
+                "{path}: level '{lid}' is gated and must not be in the sitemap"
+            );
+            let wallets = wallets_for(level, platform);
+            match parts.get(3) {
+                Some(wid) => {
+                    assert!(
+                        wallets.iter().any(|w| w.id == *wid),
+                        "{path}: '{wid}' is not offered on platform '{platform}'"
+                    );
+                    assert!(
+                        !downloads_for(
+                            wallets.iter().find(|w| w.id == *wid).unwrap(),
+                            platform
+                        )
+                        .is_empty(),
+                        "{path}: no download for '{wid}' on '{platform}'"
+                    );
+                    seen_wallets.push(wid);
+                }
+                None => assert!(
+                    !wallets.is_empty() || !crate::guides_v2::parts_for_level(lid).is_empty(),
+                    "{path}: renders an empty picker"
+                ),
+            }
+            checked += 1;
+        }
+        assert!(checked > 0, "no guide URLs found in the sitemap at all");
+        // A live guide nobody can find is a guide that does not exist.
+        for wid in BASIC_LEVEL.wallets {
+            assert!(
+                seen_wallets.contains(wid),
+                "'{wid}' is offered in the Basic picker but has no sitemap entry"
+            );
+        }
     }
 }

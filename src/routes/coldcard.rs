@@ -12,10 +12,16 @@ use leptos::prelude::*;
 use leptos_meta::*;
 
 use crate::extras::advisory::{BLOCK_REPORT_URL, COLDCARD_ADVISORY_URL, ROB_THREAD_URL};
+use crate::extras::schema::{self, JsonLd};
 
 /// Bump this whenever the page changes. Readers of a developing advisory need to
 /// know how fresh the guidance is.
 const LAST_UPDATED: &str = "4 August 2026";
+
+/// Machine-readable twins of the date above, for the Article structured data. Keep
+/// `MODIFIED_ISO` in step with `LAST_UPDATED` or the schema contradicts the visible date.
+const PUBLISHED_ISO: &str = "2026-08-04";
+const MODIFIED_ISO: &str = "2026-08-04";
 
 /// MARA's direct-to-miner submission service, opened to the public during this
 /// incident so anyone can bypass the public mempool without an account.
@@ -137,6 +143,13 @@ pub fn ColdcardAdvisoryPage() -> impl IntoView {
             content="COLDCARD generated wallet seeds from a predictable random number generator from March 2021 onward. Work out how urgently you need to move your bitcoin, and what to move it to."
         />
         <Link rel="canonical" href="https://www.wehodlbtc.com/coldcard-migration"/>
+        <JsonLd data=schema::article(
+            "Your COLDCARD seed was not random",
+            "COLDCARD generated wallet seeds from a predictable random number generator from March 2021 onward. How urgently to move your bitcoin, and what to move it to.",
+            "https://www.wehodlbtc.com/coldcard-migration",
+            PUBLISHED_ISO,
+            MODIFIED_ISO,
+        )/>
 
         <div class="max-w-3xl mx-auto mt-10 mb-24 px-6 opacity-0 animate-fadeinone lg:px-8 md:mt-14">
 
@@ -188,8 +201,8 @@ pub fn ColdcardAdvisoryPage() -> impl IntoView {
                 <div class="font-title text-xs uppercase tracking-widest text-[#f7931a] mb-3">
                     "On this page"
                 </div>
-                // 12 entries divides evenly into 2, 3 and 4 columns, so every row is full at
-                // every breakpoint. Equal-width cells beat flex-wrap, which left a ragged 5/5/2.
+                // 12 entries divide evenly into 2, 3 and 4 columns, so no breakpoint leaves a
+                // stub row. Equal-width cells rather than flex-wrap, which wraps ragged.
                 <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
                     {SECTIONS
                         .iter()
@@ -393,9 +406,8 @@ pub fn ColdcardAdvisoryPage() -> impl IntoView {
                     "A fair six-sided die contributes about 2.6 bits per roll, and dice entropy came from you
                      rather than from the device."
                 </p>
-                // Four milestones so the grid fills evenly at 2 and 4 columns. 99 was dropped as
-                // redundant next to 100 (256 vs 258 bits) and the top figure now matches the
-                // "100 is a comfortable margin" line in the urgency cases.
+                // Four milestones so the grid fills evenly at 2 and 4 columns. The top figure
+                // matches the "100 is a comfortable margin" line in the urgency cases.
                 <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
                     {[30usize, 50, 75, 100].iter().map(|n| {
                         let bits = DICE_BITS * (*n as f64);
@@ -444,16 +456,42 @@ pub fn ColdcardAdvisoryPage() -> impl IntoView {
                      the coins off the compromised key first. Any of these will generate a fresh wallet in a few
                      minutes and none of them are affected by this flaw:"
                 </p>
+                // The mobile wallets link to the level page, not a wallet page: a wallet URL
+                // needs a platform segment, and guessing Android or iOS would show the wrong
+                // app store.
                 <ul class="text-sm text-white/80 leading-relaxed space-y-2 mb-5">
                     <li>
-                        <span class="text-white font-medium">"Sparrow"</span>
+                        <a
+                            class="text-white font-medium underline underline-offset-2 decoration-white/30 hover:decoration-[#f7931a] hover:text-[#f7931a] transition-colors"
+                            href="/guides/basic/desktop/sparrow"
+                        >
+                            "Sparrow"
+                        </a>
                         " on desktop, if you are comfortable on a computer."
                     </li>
                     <li>
-                        <span class="text-white font-medium">"Cove"</span>
+                        <a
+                            class="text-white font-medium underline underline-offset-2 decoration-white/30 hover:decoration-[#f7931a] hover:text-[#f7931a] transition-colors"
+                            href="/guides/basic"
+                        >
+                            "Cove"
+                        </a>
                         " or "
-                        <span class="text-white font-medium">"Nunchuk"</span>
-                        " on a phone, if you want this done in the next ten minutes."
+                        <a
+                            class="text-white font-medium underline underline-offset-2 decoration-white/30 hover:decoration-[#f7931a] hover:text-[#f7931a] transition-colors"
+                            href="/guides/basic"
+                        >
+                            "Nunchuk"
+                        </a>
+                        " or "
+                        <a
+                            class="text-white font-medium underline underline-offset-2 decoration-white/30 hover:decoration-[#f7931a] hover:text-[#f7931a] transition-colors"
+                            href="/guides/basic"
+                        >
+                            "Bull Bitcoin"
+                        </a>
+                        " on a phone, if you want this done in the next ten minutes. All three are walked
+                         through step by step once you pick your platform."
                     </li>
                 </ul>
                 <p class="text-sm text-white/75 leading-relaxed mb-4">

@@ -20,6 +20,7 @@ use super::components::*;
 use super::helpers::*;
 use super::shared::*;
 use crate::stats::server_fns::*;
+use crate::extras::schema::{static_docs, StaticJsonLd};
 
 /// Observatory dashboard page with live node stats, difficulty predictor, and halving countdown.
 #[component]
@@ -340,6 +341,7 @@ pub fn ObservatoryOverview() -> impl IntoView {
         <Title text="The Bitcoin Observatory: Live Network Readings | We Hodl BTC"/>
         <Meta name="description" content="Current readings from the Bitcoin network: real-time block height, difficulty, hashrate, mempool stats, price, supply, UTXO count, halving countdown, and difficulty adjustment predictions."/>
         <Link rel="canonical" href="https://www.wehodlbtc.com/observatory"/>
+        <StaticJsonLd doc=static_docs::OBSERVATORY/>
 
         // Live stats panel
         <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-6 lg:p-8 mb-8">

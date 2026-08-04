@@ -113,9 +113,6 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 // Fallback for browsers without WebAssembly (e.g. Vanadium)
                 <script defer src="/js/wasm-fallback.js"></script>
 
-                // Schema.org JSON-LD for search engines and LLMs
-                <script defer src="/js/jsonld.js"></script>
-
                 // Image lightbox for guide steps
                 <script defer src="/js/lightbox.js"></script>
 
@@ -179,9 +176,8 @@ pub fn App() -> impl IntoView {
         <Meta name="keywords" content="Bitcoin, self-custody, hardware wallet, Sparrow Wallet, multisig, Bitcoin security, blockchain analytics, Bitcoin charts, mining difficulty, SegWit, Taproot, BIP signaling, mempool, Bitcoin node"/>
 
         <Router>
-            // min-h-screen (branch) over h-screen+justify-between (master): guide pages
-            // are long, and a fixed-height flex container squashes them. The advisory
-            // banner sits above the navbar so it is the first thing on every page.
+            // min-h-screen, not a fixed height: guide pages are long and a fixed-height flex
+            // container squashes them. The banner sits above the navbar to lead every page.
             <div class="flex flex-col min-h-screen">
                 <AdvisoryBanner/>
                 <NavBar/>

@@ -1,0 +1,103 @@
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "WebApplication",
+   "name": "The Bitcoin Observatory",
+   "url": "https://www.wehodlbtc.com/observatory",
+   "applicationCategory": "FinanceApplication",
+   "operatingSystem": "Web",
+   "description": "Live Bitcoin blockchain analytics dashboard with 50+ charts covering real-time network stats, fee analysis, mining pool distribution, embedded data tracking (OP_RETURN, Ordinals, Runes), and BIP signaling. Data sourced directly from a full Bitcoin Core node.",
+   "featureList": [
+    "Live blockchain dashboard with block height, difficulty, hashrate, mempool, and price",
+    "Network charts: block size, weight utilization, transaction count, TPS, block intervals, chain size, block fullness distribution, block time distribution, rapid consecutive blocks, weekday activity",
+    "Adoption metrics: SegWit percentage, Taproot outputs, witness versions, address type evolution, P2PKH sunset tracker, adoption velocity for all types, cumulative adoption milestones",
+    "Transaction metrics: RBF adoption, UTXO flow, UTXO growth rate, transaction density, batching trends, transaction type evolution",
+    "Fee analysis: total fees, avg fee per tx, median fee rate, fee rate bands (p10-p90), subsidy vs fees, fee revenue share, BTC volume, value flow, fee pressure scatter, fee spike detector, halving era comparison, protocol fee breakdown",
+    "Mining analytics: difficulty history, difficulty ribbon (miner capitulation), mining pool dominance with OCEAN template miners, mining diversity index (HHI), empty blocks by pool",
+    "Embedded data: OP_RETURN protocols (Runes, Omni Layer, Counterparty), Ordinals inscriptions, BRC-20 tokens",
+    "BIP signaling tracker: BIP-110 version bit 4, BIP-54 coinbase locktime compliance per 2,016-block period",
+    "Block Heartbeat: real-time EKG visualization of mempool and block activity",
+    "Stats Overview: record-breaking blocks with 15 extreme categories",
+    "Hall of Fame: 57+ curated notable Bitcoin blocks and transactions",
+    "Chart overlays: halvings, BIP activations, Bitcoin Core releases, historical events, USD price",
+    "Time ranges from 1 day to full chain history with per-block and daily aggregation"
+   ],
+   "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+   },
+   "provider": {
+    "@type": "Organization",
+    "name": "We Hodl BTC",
+    "url": "https://www.wehodlbtc.com"
+   }
+  },
+  {
+   "@type": "Dataset",
+   "name": "Bitcoin Blockchain Statistics",
+   "description": "Real-time and historical Bitcoin blockchain data including block height, mining difficulty, network hashrate, mempool size, transaction counts, SegWit/Taproot adoption rates, fee levels, and supply metrics. Covers the full chain from genesis block (2009) to present. Updated every 60 seconds from a full Bitcoin Core node with txindex.",
+   "url": "https://www.wehodlbtc.com/observatory",
+   "license": "https://creativecommons.org/licenses/by/4.0/",
+   "creator": {
+    "@type": "Organization",
+    "name": "We Hodl BTC",
+    "url": "https://www.wehodlbtc.com"
+   },
+   "temporalCoverage": "2009/..",
+   "variableMeasured": [
+    {
+     "@type": "PropertyValue",
+     "name": "Block Height",
+     "description": "Current Bitcoin blockchain height"
+    },
+    {
+     "@type": "PropertyValue",
+     "name": "Mining Difficulty",
+     "description": "Mining difficulty in trillions (T), adjusted every 2,016 blocks"
+    },
+    {
+     "@type": "PropertyValue",
+     "name": "Network Hashrate",
+     "description": "Estimated network hash rate in EH/s"
+    },
+    {
+     "@type": "PropertyValue",
+     "name": "SegWit Adoption",
+     "description": "Percentage of transactions using Segregated Witness"
+    },
+    {
+     "@type": "PropertyValue",
+     "name": "Taproot Adoption",
+     "description": "Number of P2TR (Taproot) outputs created per block"
+    },
+    {
+     "@type": "PropertyValue",
+     "name": "Transaction Fees",
+     "description": "Total miner fee revenue per block in BTC and satoshis"
+    },
+    {
+     "@type": "PropertyValue",
+     "name": "Mempool Size",
+     "description": "Number of unconfirmed transactions and total size in bytes"
+    },
+    {
+     "@type": "PropertyValue",
+     "name": "Bitcoin Supply",
+     "description": "Total BTC issued and percentage of 21 million cap mined"
+    },
+    {
+     "@type": "PropertyValue",
+     "name": "Block Weight Utilization",
+     "description": "Percentage of the 4 MWU block weight limit used per block"
+    },
+    {
+     "@type": "PropertyValue",
+     "name": "RBF Adoption",
+     "description": "Percentage of transactions signaling Replace-By-Fee (BIP 125)"
+    }
+   ]
+  }
+ ]
+}

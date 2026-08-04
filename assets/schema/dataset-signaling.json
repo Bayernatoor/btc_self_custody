@@ -1,0 +1,11 @@
+{
+ "@context": "https://schema.org",
+ "@type": "Dataset",
+ "name": "Bitcoin BIP Signaling Data",
+ "description": "Per-block miner signaling data for active Bitcoin Improvement Proposals. Tracks BIP-110 (relaxed OP_RETURN data limits, version bit 4, 55% activation threshold) and BIP-54 (great consensus cleanup, coinbase locktime == height-1, 95% threshold) across 2,016-block retarget periods.",
+ "url": "https://www.wehodlbtc.com/observatory/signaling",
+ "creator": {
+  "@type": "Organization",
+  "name": "We Hodl BTC"
+ }
+}

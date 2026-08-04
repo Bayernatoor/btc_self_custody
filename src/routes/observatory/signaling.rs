@@ -21,6 +21,7 @@ use leptos_meta::*;
 use super::components::*;
 use super::helpers::*;
 use crate::stats::server_fns::*;
+use crate::extras::schema::{static_docs, StaticJsonLd};
 
 /// Skeleton placeholder for the signaling page main content. Used both as the
 /// Suspense fallback on initial load and when the resource is refetching after
@@ -132,6 +133,7 @@ pub fn SignalingPage() -> impl IntoView {
         <Title text="BIP Signaling Tracker | We Hodl BTC"/>
         <Meta name="description" content="Track Bitcoin Improvement Proposal signaling in real time. Monitor miner readiness for proposed protocol upgrades via version bit signaling and coinbase compliance across 2,016-block retarget periods."/>
         <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/signaling"/>
+        <StaticJsonLd doc=static_docs::DATASET_SIGNALING/>
 
         // Slim hero banner
         <div class="relative rounded-2xl overflow-hidden mb-6">

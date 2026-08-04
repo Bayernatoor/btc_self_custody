@@ -305,7 +305,9 @@ pub fn StepperV2(
                 <p class="g2-lede g2-center">{c.lede}</p>
                 <div class="g2-done-cards">
                     {c.backup_cta.then(|| view! { <BackupSheetCta/> })}
-                    {c.next_tier.map(|(label, href)| view! {
+                    // Hidden while the target tier is gated, so finishing a Basic guide
+                    // does not hand the reader a link to an under-construction page.
+                    {c.next_tier.filter(|(_, href)| !crate::guides::is_gated_path(href)).map(|(label, href)| view! {
                         <a class="g2-next-tier" href=href>
                             <span class="g2-nt-k">"Grow into it"</span>
                             <span class="g2-nt-t">{label}</span>
@@ -425,8 +427,7 @@ fn step_panel(
                     <ol class="g2-actions">
                         {step.actions.iter().map(|a| view! { <li><span class="g2-action-txt">{inline(a)}</span></li> }).collect::<Vec<_>>()}
                     </ol>
-                    // Parsed like actions: flags sometimes need to cite a source, and a
-                    // raw **[text](url)** printed literally is worse than no link at all.
+                    // Parsed like actions so a flag can cite a source.
                     {step.flag.map(|f| view! {
                         <div class="g2-flag"><span class="g2-flag-i">"⚠"</span><span>{inline(f)}</span></div>
                     })}

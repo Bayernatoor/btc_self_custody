@@ -3,6 +3,7 @@
 
 use leptos::prelude::*;
 use leptos_meta::*;
+use crate::extras::schema::{static_docs, StaticJsonLd};
 
 // ---------------------------------------------------------------------------
 // Protocol data
@@ -128,6 +129,7 @@ pub fn ProtocolGuidePage() -> impl IntoView {
         <Title text="Bitcoin Embedding Protocols: Runes, Ordinals, BRC-20, Stamps | We Hodl BTC"/>
         <Meta name="description" content="Technical guide to data embedding protocols on Bitcoin. Compare Omni Layer, Counterparty, Stamps, Ordinals inscriptions, BRC-20, and Runes with timelines, trade-offs, and pruning characteristics."/>
         <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/learn/protocols"/>
+        <StaticJsonLd doc=static_docs::ARTICLE_PROTOCOLS/>
 
         // Hero (matches other Observatory pages)
         <div class="relative rounded-2xl overflow-hidden mb-5">

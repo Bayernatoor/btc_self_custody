@@ -1,13 +1,15 @@
 use leptos::prelude::*;
 use leptos_meta::*;
+use crate::extras::schema::{static_docs, StaticJsonLd};
 
 /// Renders the home page of the application.
 #[component]
 pub fn HomePage() -> impl IntoView {
     view! {
         <Title text="We Hodl BTC - Bitcoin Self-Custody Guides & Live Blockchain Analytics"/>
-        <Meta name="description" content="Free Bitcoin self-custody guides for every level, from mobile wallets to multisig. Plus The Bitcoin Observatory: live blockchain analytics with 30+ charts powered by a full Bitcoin Core node."/>
+        <Meta name="description" content="Free Bitcoin self-custody guides for every level, from mobile wallets to multisig. Plus The Bitcoin Observatory: live blockchain analytics with 50+ charts powered by a full Bitcoin Core node."/>
         <Link rel="canonical" href="https://www.wehodlbtc.com/"/>
+        <StaticJsonLd doc=static_docs::SITE/>
 
         // Hero
         <section aria-label="Hero" class="grid gap-2 mx-auto justify-items-center max-w-5xl mt-14 px-6 opacity-0 animate-fadeinone md:grid-cols-1 lg:grid-cols-2 lg:max-w-6xl md:my-24 lg:pb-28 lg:px-8">
@@ -95,7 +97,7 @@ pub fn HomePage() -> impl IntoView {
                         <div class="text-[#f7931a] text-xs font-semibold uppercase tracking-widest mb-2">"Basic"</div>
                         <h3 class="text-base font-semibold text-white mb-1.5 group-hover:text-[#f4a949] transition-colors">"Mobile & Desktop Wallets"</h3>
                         <p class="text-sm text-white/50 leading-relaxed">
-                            "Get started with Blue Wallet, Green Wallet, or Sparrow. Generate your keys and take possession of your bitcoin in minutes."
+                            "Get started with Cove, Nunchuk or Bull Bitcoin on your phone, or Sparrow on a desktop. Generate your keys and take possession of your bitcoin in minutes."
                         </p>
                     </div>
                 </a>
@@ -148,9 +150,14 @@ pub fn HomePage() -> impl IntoView {
                         loading="lazy"
                     />
                     <div class="absolute inset-0 bg-gradient-to-t from-[#123c64] via-[#123c64]/50 to-transparent"></div>
-                    <div class="absolute inset-0 flex flex-col items-center justify-end pb-4 sm:pb-6">
+                    // items-center centres each child box but not the text inside it, so the
+                    // subtitle needs text-center. px-6 keeps both lines off the card edge.
+                    <div class="absolute inset-0 flex flex-col items-center justify-end px-6 pb-4 text-center sm:pb-6">
                         <h3 class="text-lg sm:text-xl lg:text-2xl font-title text-white mb-1 drop-shadow-lg group-hover:text-[#f4a949] transition-colors">"The Bitcoin Observatory"</h3>
-                        <p class="text-xs sm:text-sm text-white/50 drop-shadow">"50+ charts, live block data, protocol analytics, and BIP signaling"</p>
+                        // max-w-xs wraps to two lines on mobile; text-balance keeps them even.
+                        <p class="text-xs sm:text-sm text-white/50 drop-shadow max-w-xs text-balance sm:max-w-none">
+                            "50+ charts, live block data, protocol analytics, and BIP signaling"
+                        </p>
                     </div>
                 </div>
             </a>

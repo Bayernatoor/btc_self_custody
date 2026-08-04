@@ -3,6 +3,7 @@
 
 use leptos::prelude::*;
 use leptos_meta::*;
+use crate::extras::schema::{static_docs, StaticJsonLd};
 
 #[component]
 pub fn MethodologyPage() -> impl IntoView {
@@ -10,6 +11,7 @@ pub fn MethodologyPage() -> impl IntoView {
         <Title text="Data Methodology | We Hodl BTC"/>
         <Meta name="description" content="Complete data methodology for We Hodl BTC observatory: block metrics, fee calculations, address type classification, mining pool identification, embedded protocol detection, price data sourcing, and daily aggregation."/>
         <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/learn/methodology"/>
+        <StaticJsonLd doc=static_docs::ARTICLE_METHODOLOGY/>
 
         // Hero (matches other Observatory pages)
         <div class="relative rounded-2xl overflow-hidden mb-5">

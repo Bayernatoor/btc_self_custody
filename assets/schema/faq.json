@@ -1,0 +1,79 @@
+{
+ "@context": "https://schema.org",
+ "@type": "FAQPage",
+ "url": "https://www.wehodlbtc.com/faq",
+ "mainEntity": [
+  {
+   "@type": "Question",
+   "name": "What is Bitcoin?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "Bitcoin is money for the digital age - controlled by no one, accessible to everyone. It's a decentralized store of value and payment network secured by cryptography and proof-of-work mining."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "Why Bitcoin?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "Bitcoin is an exit from government-issued fiat currencies that undergo constant inflation. It is the best savings mechanism ever discovered, preserving wealth as everything priced in bitcoin trends towards zero."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "Why Bitcoin self-custody?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "Controlling a Bitcoin private key grants absolute control over the associated bitcoin. Self-custody restores independence and self-sovereignty, eliminating reliance on third parties like exchanges that can freeze, lose, or restrict access to your funds."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "What is a Bitcoin transaction?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "A Bitcoin transaction represents the transfer of value between participants on the Bitcoin network. It consists of one or more inputs (funds being spent) and one or more outputs (destinations receiving funds)."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "What is a Bitcoin mempool?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "A Bitcoin mempool (memory pool) is a temporary repository for unconfirmed transactions. Every node on the network maintains its own mempool, storing transactions until they are included in a mined block."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "How does Bitcoin mining work?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "Bitcoin mining uses specialized computers (ASICs) to solve proof-of-work puzzles approximately every 10 minutes. When a miner finds a valid solution, they add a new block to the blockchain and earn the block subsidy plus transaction fees."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "What are Bitcoin transaction fees?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "Transaction fees compensate miners for including transactions in blocks. Each block has limited space (~4 MB weight), creating a fee market. As demand increases, fees rise. Fees are measured in satoshis per virtual byte (sat/vB)."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "What are Bitcoin private and public keys?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "A private key is a secret value (often represented as 12 or 24 words) that grants control over bitcoin. A public key is derived from the private key and used to generate Bitcoin addresses for receiving funds. Never share your private key."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "What is a Bitcoin wallet?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "A Bitcoin wallet is software that stores your private keys and enables you to send and receive bitcoin. It does not store actual bitcoins - it stores the cryptographic keys that authorize transactions on the network."
+   }
+  }
+ ]
+}

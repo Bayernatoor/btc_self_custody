@@ -1,0 +1,26 @@
+{
+ "@context": "https://schema.org",
+ "@type": "Article",
+ "name": "Data Methodology",
+ "headline": "We Hodl BTC Data Methodology: How We Source, Compute, and Classify Bitcoin Metrics",
+ "description": "Complete documentation of the observatory's data methodology. Covers block metrics, fee calculations, address type classification, mining pool identification, embedded protocol detection, price data sourcing, daily aggregation, and known exclusions.",
+ "url": "https://www.wehodlbtc.com/observatory/learn/methodology",
+ "author": {
+  "@type": "Organization",
+  "name": "We Hodl BTC"
+ },
+ "about": [
+  {
+   "@type": "Thing",
+   "name": "Bitcoin Analytics"
+  },
+  {
+   "@type": "Thing",
+   "name": "Blockchain Data"
+  },
+  {
+   "@type": "Thing",
+   "name": "Data Methodology"
+  }
+ ]
+}

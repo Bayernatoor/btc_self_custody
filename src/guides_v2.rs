@@ -108,7 +108,6 @@ pub struct GuideV2 {
 pub fn find_guide_v2(wallet_id: &str) -> Option<&'static GuideV2> {
     match wallet_id {
         "cove" => Some(&COVE_GUIDE),
-        "blue" => Some(&BLUE_GUIDE),
         "bull" => Some(&BULL_GUIDE),
         "nunchuk" => Some(&NUNCHUK_GUIDE),
         "sparrow" => Some(&SPARROW_GUIDE),
@@ -196,7 +195,7 @@ const NO_DEVICE: Device = Device {
 };
 
 // =============================================================================
-// COVE (Basic) — content adapted from the BlueWallet guide, rendered for Cove.
+// COVE (Basic) — the simplest mobile path, and the first card in the picker.
 // Screenshots live in assets/guide-images/cove/ (served at /guide-images/cove/).
 // All Cove screenshots are 1080 x 2424.
 // =============================================================================
@@ -541,194 +540,6 @@ pub static COVE_GUIDE: GuideV2 = GuideV2 {
         backup_cta: false,
     },
 };
-
-// =============================================================================
-// BLUE WALLET (Basic) — content adapted from the v1 BlueWallet markdown guide.
-// Screenshots live in assets/guide-images/bluewallet/ (dims vary per image, set
-// inline so each device frame matches its screenshot's aspect, no cropping).
-// =============================================================================
-
-pub static BLUE_GUIDE: GuideV2 = GuideV2 {
-    eyebrow: "Basic · Blue Wallet",
-    intro: Intro {
-        title: "Set up Blue Wallet",
-        lede: "A radically simple, self-custodied wallet for your spending stack. You will create a wallet, write down your recovery words, and learn to receive and send bitcoin.",
-        chips: &["5 steps", "about 15 min", "best for small amounts"],
-        outcomes: &[
-            "Your own Bitcoin wallet, with the keys held by you",
-            "Your recovery words written down safely",
-            "The confidence to receive and send bitcoin",
-        ],
-        backup_cta: true,
-    },
-    steps: &[
-        // 1 · Create
-        Step {
-            title: "Create your wallet",
-            goal: "Make a new Blue Wallet with the keys generated on your phone.",
-            actions: &[
-                "Open Blue Wallet and tap **Add now**.",
-                "Give it a name, set **Type** to **Bitcoin**, then tap **Create**.",
-                "Blue Wallet then shows your **12 recovery words** to back up next.",
-            ],
-            flag: None,
-            why: Some((
-                "Hot wallet vs hardware wallet",
-                "A hot wallet keeps your keys on the phone, which is ideal for a small everyday spending stack. When you are ready to protect larger savings, the Intermediate guide moves your keys onto a dedicated hardware device.",
-            )),
-            needs: &[],
-            backup_cta: false,
-            device: Device {
-                frame: Frame::Phone,
-                shots: &[Shot {
-                    image: "/guide-images/bluewallet/bluewallet_wallet_creation.jpg",
-                    alt: "Blue Wallet, name the wallet and pick the Bitcoin type",
-                    caption: "Blue Wallet, create a wallet",
-                    img_w: 629,
-                    img_h: 1058,
-                    pins: &[
-                        Pin { n: 1, x: 50.0, y: 30.0, label: "Name your wallet" },
-                        Pin { n: 2, x: 50.0, y: 55.0, label: "Set Type to Bitcoin" },
-                        Pin { n: 3, x: 50.0, y: 85.0, label: "Tap Create" },
-                    ],
-                }],
-            },
-        },
-        // 2 · Back up recovery words
-        Step {
-            title: "Write down your recovery words",
-            goal: "Save your seed words, they are the only way to recover your bitcoin if you lose your phone.",
-            actions: &[
-                "Write all **12 words** down **in order** on paper, exactly as shown.",
-                "Double-check every word and its spelling against the screen.",
-                "Tap **Ok, I wrote it down**, and confirm **Yes, I have** when asked.",
-            ],
-            flag: Some("Never take a photo of these words or type them into any app. Anyone who reads them can take your bitcoin. Paper only."),
-            why: Some((
-                "Why write them on paper",
-                "Your recovery words are the wallet. Anything digital (a screenshot, a note, a cloud backup) can be reached by an attacker. A hand-written copy kept offline cannot.",
-            )),
-            needs: &[],
-            backup_cta: true,
-            device: Device {
-                frame: Frame::Phone,
-                shots: &[Shot {
-                    image: "/guide-images/bluewallet/bluewallet_backup_confirmation.png",
-                    alt: "Blue Wallet, confirm you have written down your recovery words",
-                    caption: "Blue Wallet, confirm your backup (words-display shot pending)",
-                    img_w: 628,
-                    img_h: 1235,
-                    pins: &[Pin { n: 1, x: 50.0, y: 62.0, label: "Confirm you wrote the words down" }],
-                }],
-            },
-        },
-        // 3 · Receive
-        Step {
-            title: "Receive bitcoin",
-            goal: "Get an address so someone can send bitcoin to your wallet.",
-            actions: &[
-                "Open your wallet and tap **Receive**.",
-                "Blue Wallet shows a **QR code** and an address starting with **bc1**.",
-                "Let the sender scan the QR, or tap the address to copy it, or tap **Share**.",
-            ],
-            flag: None,
-            why: Some((
-                "When is it really mine?",
-                "A payment must be included in a block (confirmed). It first shows as pending at 0 confirmations. One confirmation takes about 10 minutes on average, and six is the usual settled mark.",
-            )),
-            needs: &[],
-            backup_cta: false,
-            device: Device {
-                frame: Frame::Phone,
-                shots: &[Shot {
-                    image: "/guide-images/bluewallet/bluewallet_receive_address.png",
-                    alt: "Blue Wallet, receive address and QR code",
-                    caption: "Blue Wallet, receive screen",
-                    img_w: 607,
-                    img_h: 1230,
-                    pins: &[
-                        Pin { n: 1, x: 50.0, y: 40.0, label: "Your address as a QR code" },
-                        Pin { n: 2, x: 50.0, y: 64.0, label: "The bc1 address" },
-                        Pin { n: 3, x: 50.0, y: 90.0, label: "Share it" },
-                    ],
-                }],
-            },
-        },
-        // 4 · Send
-        Step {
-            title: "Send bitcoin",
-            goal: "Send bitcoin from your wallet to someone else's bitcoin address.",
-            actions: &[
-                "Open your wallet and tap **Send**.",
-                "Enter the **amount** and paste the recipient's **address**.",
-                "Set a **fee**, tap **Next**, review carefully, then tap **Send now**.",
-            ],
-            flag: Some("Always re-read the address before sending. Bitcoin transactions cannot be reversed."),
-            why: Some((
-                "A note on fees",
-                "Block space is limited, so fees rise with demand. Blue Wallet suggests a fee, but if you are in no rush you can set it lower to save sats.",
-            )),
-            needs: &[],
-            backup_cta: false,
-            device: Device {
-                frame: Frame::Phone,
-                shots: &[Shot {
-                    image: "/guide-images/bluewallet/bluewallet_sending_page.png",
-                    alt: "Blue Wallet, send compose screen",
-                    caption: "Blue Wallet, send screen",
-                    img_w: 632,
-                    img_h: 1245,
-                    pins: &[
-                        Pin { n: 1, x: 50.0, y: 30.0, label: "Enter the amount" },
-                        Pin { n: 2, x: 50.0, y: 46.0, label: "Paste the recipient address" },
-                        Pin { n: 3, x: 50.0, y: 80.0, label: "Set the fee, then Next" },
-                    ],
-                }],
-            },
-        },
-        // 5 · Recover
-        Step {
-            title: "If you lose your phone",
-            goal: "Know how to recover your bitcoin onto a new device using your written words.",
-            actions: &[
-                "Install Blue Wallet (or any **BIP39** wallet) on a new phone.",
-                "Tap **Add now**, then **Import wallet**.",
-                "Enter your **words in order**, separated by spaces, then tap **Import**.",
-            ],
-            flag: Some("Treat the lost phone as compromised. After recovering, create a brand new wallet (a fresh set of keys with its own new recovery words, not the same phrase again) and move all funds to it. Anyone who ends up with the old phone or its written words could otherwise take your bitcoin."),
-            why: None,
-            needs: &[],
-            backup_cta: false,
-            device: Device {
-                frame: Frame::Phone,
-                shots: &[Shot {
-                    image: "/guide-images/bluewallet/bluewallet_import_wallet.png",
-                    alt: "Blue Wallet, import an existing wallet",
-                    caption: "Blue Wallet, import / recover",
-                    img_w: 614,
-                    img_h: 1235,
-                    pins: &[Pin { n: 1, x: 50.0, y: 72.0, label: "Enter your words, then Import" }],
-                }],
-            },
-        },
-    ],
-    completion: Completion {
-        title: "You are self-custodied",
-        lede: "Your bitcoin is in your hands now. Keep your recovery words safe, and when your stack grows, level up.",
-        next_tier: Some(("Level up to Intermediate", "/guides/intermediate/desktop")),
-        backup_cta: false,
-    },
-};
-
-// =============================================================================
-// SPARROW (Basic, desktop) — single-sig + BIP39 passphrase, 24 words. Screenshots
-// in assets/guide-images/sparrow/ are landscape, so every step with shots uses
-// Frame::Desktop => the renderer STACKS the actions above a full-width window frame
-// (see .g2-stack) and shows a per-shot caption. The wallet-creation shots
-// (sparrow-onboarding-*.png) already have red arrows drawn on them pointing at the
-// control to click, so those shots use no pins. Step 1 (download/verify) has no shot.
-// =============================================================================
-
 pub static SPARROW_GUIDE: GuideV2 = GuideV2 {
     eyebrow: "Basic · Sparrow",
     intro: Intro {
@@ -1999,10 +1810,9 @@ pub static BULL_GUIDE: GuideV2 = GuideV2 {
                 "Bull asks whether to send anonymised error logs. **Yes** or **No** both work; **No** is the more private choice.",
                 "The last screen lists features to explore later. Tap **Get started**.",
             ],
-            // Boltz suspended its swap service in August 2026, which is what Bull's
-            // Lightning rail ran on. Stated up front rather than buried, bece the
-            // Lightning tab is still visible in the app and in this guide's screenshots.
-            // Remove this once Bull ships a replacement; they say work has begun.
+            // Bull's Lightning rail runs on Boltz, which suspended service in August 2026.
+            // Flagged here on step 1 because the Lightning tab is still visible in the app
+            // and in this guide's screenshots. Remove once Bull ships a replacement.
             flag: Some("Lightning is temporarily unavailable in Bull. The swap provider it relied on suspended service, and Bull is working on a replacement. On-chain Bitcoin and Liquid both work normally, your funds are unaffected, and everything in this guide is on-chain. See **[Bull's announcement](https://www.bullbitcoin.com/blog/boltz-has-suspended-its-swap-services-your-funds-are-safe-here-is-what-it-means-for-bull-wallet-users)** for details."),
             why: Some((
                 "What Bull actually is",
@@ -2770,7 +2580,7 @@ mod content_tests {
     /// Every guide reachable from a wallet picker or a level part.
     fn all_guides() -> Vec<(&'static str, &'static GuideV2)> {
         let mut v: Vec<(&'static str, &'static GuideV2)> =
-            ["cove", "blue", "bull", "nunchuk", "sparrow"]
+            ["cove", "bull", "nunchuk", "sparrow"]
                 .iter()
                 .filter_map(|id| find_guide_v2(id).map(|g| (*id, g)))
                 .collect();
@@ -2785,8 +2595,7 @@ mod content_tests {
     }
 
     /// `actions` and `flag` are rendered through `inline()`; nothing else is. Markdown
-    /// left in an unparsed field prints as literal `**[text](url)**` on the page, which
-    /// is exactly how Bull's Lightning notice first shipped.
+    /// left in any other field prints as literal `**[text](url)**` on the page.
     #[test]
     fn markdown_only_appears_in_inline_parsed_fields() {
         for (id, g) in all_guides() {
@@ -2872,8 +2681,8 @@ mod content_tests {
             }
             let mut texts: Vec<&str> =
                 vec![level.intro, level.title, level.subtitle];
-            // Wallet guides AND part guides: Intermediate and Advanced carry no wallets
-            // at all, so walking `level.wallets` alone silently scanned nothing for them.
+            // Part guides as well as wallet guides: Intermediate and Advanced carry no
+            // wallets, so `level.wallets` alone would scan nothing for them.
             let mut guides: Vec<&'static GuideV2> = level
                 .wallets
                 .iter()

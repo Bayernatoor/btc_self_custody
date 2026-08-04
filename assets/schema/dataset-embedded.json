@@ -1,0 +1,11 @@
+{
+ "@context": "https://schema.org",
+ "@type": "Dataset",
+ "name": "Bitcoin Embedded Data Analytics",
+ "description": "Tracking non-financial data embedded in Bitcoin transactions: OP_RETURN protocol usage (Runes, Omni Layer, Counterparty), Ordinals inscriptions, BRC-20 tokens, and Stamps. Includes per-block counts, byte volumes, block share percentages, and protocol dominance over time.",
+ "url": "https://www.wehodlbtc.com/observatory/charts/embedded",
+ "creator": {
+  "@type": "Organization",
+  "name": "We Hodl BTC"
+ }
+}

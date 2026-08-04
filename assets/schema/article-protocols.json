@@ -1,0 +1,38 @@
+{
+ "@context": "https://schema.org",
+ "@type": "Article",
+ "name": "Bitcoin Embedding Protocols: A Technical Guide",
+ "headline": "Bitcoin Embedding Protocols: Runes, Ordinals, BRC-20, Stamps, Omni, Counterparty",
+ "description": "Technical comparison of data embedding protocols on Bitcoin. Covers OP_RETURN-based protocols (Runes, Omni, Counterparty), witness-based protocols (Ordinals, BRC-20), and bare multisig encoding (Stamps). Includes chronological timeline, pruning characteristics, and trade-offs.",
+ "url": "https://www.wehodlbtc.com/observatory/learn/protocols",
+ "author": {
+  "@type": "Organization",
+  "name": "We Hodl BTC"
+ },
+ "about": [
+  {
+   "@type": "Thing",
+   "name": "Runes Protocol"
+  },
+  {
+   "@type": "Thing",
+   "name": "Ordinals Inscriptions"
+  },
+  {
+   "@type": "Thing",
+   "name": "BRC-20 Tokens"
+  },
+  {
+   "@type": "Thing",
+   "name": "Bitcoin Stamps"
+  },
+  {
+   "@type": "Thing",
+   "name": "Omni Layer"
+  },
+  {
+   "@type": "Thing",
+   "name": "Counterparty"
+  }
+ ]
+}

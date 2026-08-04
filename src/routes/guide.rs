@@ -8,6 +8,7 @@ use leptos::prelude::*;
 use leptos_meta::*;
 
 use crate::extras::stepper::Stepper;
+use crate::extras::schema::{self, JsonLd};
 use crate::extras::stepper_v2::{inline, StepperV2};
 use crate::guides::{
     self, DownloadLink, GuideLevelDef, ProductLink, WalletDef,
@@ -239,7 +240,8 @@ pub fn GuideTwoSegment() -> impl IntoView {
 /// routes stay live (old links and search results point at them) but serve this
 /// instead of advice that is no longer trusted.
 fn render_under_construction(level: &'static GuideLevelDef) -> impl IntoView {
-    let page_title = format!("{} | Under construction | We Hodl BTC", level.name);
+    let page_title =
+        format!("{} | Under construction | We Hodl BTC", level.name);
     view! {
         <Title text=page_title/>
         <Meta name="robots" content="noindex"/>
@@ -333,10 +335,15 @@ fn render_level_page(
         level.intro
     };
     // Opinionated framing: these are curated recommendations, not a neutral list.
-    let wallet_title = if wallets.len() == 1 { "Recommended Wallet" } else { "Recommended Wallets" };
+    let wallet_title = if wallets.len() == 1 {
+        "Recommended Wallet"
+    } else {
+        "Recommended Wallets"
+    };
     // Only the Basic mobile trio (Cove, Nunchuk, Bull) has had its source read, so the
     // note stays off the desktop picker rather than implying Sparrow got the same pass.
-    let show_source_note = level.id == "basic" && !is_desktop && wallets.len() == 3;
+    let show_source_note =
+        level.id == "basic" && !is_desktop && wallets.len() == 3;
     // One wallet centres in its own column; three sit side by side in one row.
     let wcards_class = match wallets.len() {
         1 => "g2-wcards g2-wcards-one",
@@ -412,16 +419,20 @@ fn render_level_page(
                                         "Why these three"
                                     </div>
                                     <p class="text-sm text-white/75 leading-relaxed">
-                                        "I do not recommend a wallet without reading it. The source code of all
-                                         three was reviewed with AI assistance, Opus 5 and Kimi K3, paying closest
-                                         attention to the parts that generate randomness, hold keys and build
-                                         transactions."
+                                        "All three are Bitcoin only and open source, and none of them hold your
+                                         keys. Those are the entry requirements rather than selling points, which
+                                         is why the cards above only tell you what sets each one apart."
+                                    </p>
+                                    <p class="text-sm text-white/75 leading-relaxed mt-3">
+                                        "I also do not recommend a wallet without reading it. The source code of
+                                         all three was reviewed with AI assistance, Opus 5 and Kimi K3, paying
+                                         closest attention to the parts that generate randomness, hold keys and
+                                         build transactions."
                                     </p>
                                     <p class="text-sm text-white/55 leading-relaxed mt-3">
                                         "That is a code review, not a formal security audit, and it is not a
                                          guarantee that nothing is wrong. All three are open source, so you are
-                                         free to read them yourself, and I would rather tell you what was done
-                                         than imply more than that."
+                                         free to read them yourself."
                                     </p>
                                 </div>
                             })}
@@ -531,6 +542,43 @@ fn render_step_navigation(level: &'static GuideLevelDef) -> impl IntoView {
     }
 }
 
+/// Build `HowTo` structured data from a v2 guide.
+///
+/// Kept next to the routes because it needs the canonical URL. Markdown is stripped
+/// so snippets read as prose, and `totalTime` is only claimed when a duration chip
+/// actually says so rather than being guessed.
+fn guide_how_to(guide: &'static guides_v2::GuideV2, canonical: &str) -> String {
+    let minutes = guide.intro.chips.iter().find_map(|c| {
+        let c = c.trim().strip_prefix("about ")?;
+        let n = c.strip_suffix(" min").or_else(|| c.strip_suffix(" minutes"))?;
+        n.trim().parse::<u32>().ok()
+    });
+    let supplies: Vec<String> = guide
+        .steps
+        .iter()
+        .flat_map(|s| s.needs.iter())
+        .map(|n| schema::strip_md(n))
+        .collect();
+    let steps: Vec<schema::SchemaStep> = guide
+        .steps
+        .iter()
+        .map(|s| schema::SchemaStep {
+            name: schema::strip_md(s.title),
+            goal: schema::strip_md(s.goal),
+            actions: s.actions.iter().map(|a| schema::strip_md(a)).collect(),
+            image: s.device.shots.first().map(|sh| sh.image.to_string()),
+        })
+        .collect();
+    schema::how_to(
+        &schema::strip_md(guide.intro.title),
+        &schema::strip_md(guide.intro.lede),
+        canonical,
+        minutes,
+        &supplies,
+        &steps,
+    )
+}
+
 // =============================================================================
 // Route: /guides/:level/:platform/:wallet - Wallet-specific guide stepper
 // =============================================================================
@@ -585,7 +633,9 @@ fn render_part_page(
     let meta_desc = part.guide.intro.lede.to_string();
     let canonical = format!(
         "https://www.wehodlbtc.com/guides/{}/{}/{}",
-        level_id, platform, part.id
+        level_id,
+        guides::canonical_platform(platform),
+        part.id
     );
 
     let crumbs = vec![
@@ -638,18 +688,26 @@ fn render_wallet_page(
         "Set up {} for Bitcoin self-custody. {}",
         wallet.name, wallet.tagline
     );
+    // Desktop OS variants canonicalise onto the `desktop` umbrella so the three
+    // near-identical Sparrow pages do not compete with each other.
     let canonical = format!(
         "https://www.wehodlbtc.com/guides/{}/{}/{}",
-        level_id, platform, wallet.id
+        level_id,
+        guides::canonical_platform(platform),
+        wallet.id
     );
 
     // v2 wallets render the refined wizard; everything else keeps the v1 layout.
     let guide_v2 = guides_v2::find_guide_v2(wallet.id);
+    let crumb_ld = schema::breadcrumbs(&crumbs);
+    let howto_ld = guide_v2.map(|g| guide_how_to(g, &canonical));
 
     view! {
         <Title text=page_title/>
         <Meta name="description" content=meta_desc/>
         <Link rel="canonical" href=canonical/>
+        <JsonLd data=crumb_ld/>
+        {howto_ld.map(|d| view! { <JsonLd data=d/> })}
         {match guide_v2 {
             Some(guide) => view! {
                 <div class="g2-shell">
@@ -788,5 +846,45 @@ fn render_step_page(
                 }
             })}
         </div>
+    }
+}
+
+#[cfg(test)]
+mod schema_tests {
+    use super::*;
+
+    /// Structured data that does not parse is worse than none: crawlers drop the
+    /// whole block. Validate every guide's HowTo, not just one sample.
+    #[test]
+    fn every_guide_emits_valid_how_to() {
+        for wid in ["cove", "bull", "nunchuk", "sparrow"] {
+            let g = guides_v2::find_guide_v2(wid).expect("guide exists");
+            let url = format!("https://www.wehodlbtc.com/guides/basic/android/{wid}");
+            let raw = guide_how_to(g, &url);
+            let v: serde_json::Value =
+                serde_json::from_str(&raw).unwrap_or_else(|e| panic!("{wid}: invalid JSON-LD: {e}"));
+            assert_eq!(v["@type"], "HowTo", "{wid}");
+            assert_eq!(
+                v["step"].as_array().map(|a| a.len()),
+                Some(g.steps.len()),
+                "{wid}: step count must match the guide"
+            );
+            // No markdown may leak into a snippet.
+            assert!(!raw.contains("**"), "{wid}: bold markup leaked into JSON-LD");
+            assert!(!raw.contains("]("), "{wid}: link markup leaked into JSON-LD");
+        }
+    }
+
+    /// `totalTime` is only legitimate when the guide actually states a duration.
+    #[test]
+    fn how_to_duration_comes_from_the_guide_not_a_guess() {
+        let g = guides_v2::find_guide_v2("bull").expect("bull");
+        let raw = guide_how_to(g, "https://e/x");
+        let stated = g.intro.chips.iter().any(|c| c.starts_with("about "));
+        assert_eq!(
+            raw.contains("totalTime"),
+            stated,
+            "totalTime present without a duration chip, or missing despite one"
+        );
     }
 }

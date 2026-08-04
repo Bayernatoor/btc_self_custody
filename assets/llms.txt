@@ -6,7 +6,7 @@
 
 We Hodl BTC is a Bitcoin education and analytics platform. It provides:
 - Step-by-step self-custody guides (beginner to advanced: mobile wallets, hardware wallets, multisig)
-- The Bitcoin Observatory: a live blockchain analytics dashboard with 30+ charts
+- The Bitcoin Observatory: a live blockchain analytics dashboard with 50+ charts
 
 ## The Bitcoin Observatory
 
@@ -54,13 +54,20 @@ Technical comparison of Bitcoin data embedding protocols: Omni Layer (2013), Cou
 ## Self-Custody Guides
 
 ### Basic Guide
-Set up a mobile or desktop Bitcoin wallet. Covers Blue Wallet, Green Wallet, and Sparrow Wallet with step-by-step instructions.
+Set up your first self-custody Bitcoin wallet, step by step, with screenshots of every
+screen. Three mobile options: Cove (the simplest place to start), Nunchuk (single-sig now,
+multisig later, on mobile and desktop), and Bull Bitcoin (built for spending, with an
+optional integrated exchange). One desktop option: Sparrow Wallet. All four are Bitcoin
+only, open source, and non-custodial. Each guide covers wallet creation, writing down the
+recovery words, receiving, sending with fee control, and recovering from the backup.
 
-### Intermediate Guide
-Set up a Coldcard hardware wallet connected to your own Bitcoin node (Start9, MyNode, or RaspiBlitz) for enhanced security and privacy.
-
-### Advanced Guide
-Create a 2-of-3 multisig wallet with multiple signing devices, steel seed backups, and geographic separation for maximum security.
+### Intermediate and Advanced Guides
+Temporarily offline. Both were built around the COLDCARD hardware wallet, and on 30 July
+2026 a firmware flaw was disclosed in which COLDCARD generated wallet seeds from a
+predictable random number generator rather than the hardware one, from March 2021 onward.
+The guides were withdrawn rather than left up as advice that is no longer sound, and will
+return rebuilt around hardware from multiple vendors. See
+https://www.wehodlbtc.com/coldcard-migration for what affected owners should do.
 
 ## Data Source
 All blockchain data is sourced directly from a full Bitcoin Core node with transaction index enabled (txindex=1). Data covers the full chain from the genesis block (January 3, 2009) to the present, updated every 60 seconds.
