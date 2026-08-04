@@ -652,7 +652,8 @@ fn TxRow(tx: NotableTxInfo) -> impl IntoView {
                 <span>{txid_short_mobile}</span>
             </div>
             {if !msg_text.is_empty() {
-                let quoted = format!("\"{}\"", &msg_text.chars().take(120).collect::<String>());
+                let quoted =
+                    format!("\"{}\"", msg_text.chars().take(120).collect::<String>());
                 view! {
                     <div class="mt-1 text-[10px] sm:text-[11px] text-white/40 italic truncate">{quoted}</div>
                 }.into_any()
