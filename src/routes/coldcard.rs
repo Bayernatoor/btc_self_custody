@@ -450,11 +450,9 @@ pub fn ColdcardAdvisoryPage() -> impl IntoView {
                         " on desktop, if you are comfortable on a computer."
                     </li>
                     <li>
-                        <span class="text-white font-medium">"Blue Wallet"</span>
-                        ", "
-                        <span class="text-white font-medium">"Blockstream Green"</span>
-                        " or "
                         <span class="text-white font-medium">"Cove"</span>
+                        " or "
+                        <span class="text-white font-medium">"Nunchuk"</span>
                         " on a phone, if you want this done in the next ten minutes."
                     </li>
                 </ul>
@@ -466,8 +464,8 @@ pub fn ColdcardAdvisoryPage() -> impl IntoView {
                     >
                         "Basic guides"
                     </a>
-                    " walk through Sparrow, Blue Wallet and Blockstream Green step by step, including writing the
-                     backup down properly. They are unaffected and still online."
+                    " walk through Cove, Nunchuk and Bull Bitcoin on a phone, and Sparrow on a desktop, step by
+                     step, including writing the backup down properly. They are unaffected and still online."
                 </p>
                 <div class="bg-white/5 border border-white/10 rounded-xl p-5 mb-4">
                     <div class="font-title text-xs uppercase tracking-widest text-[#f7931a] mb-2">

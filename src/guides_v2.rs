@@ -181,13 +181,19 @@ pub fn parts_for_level(level_id: &str) -> &'static [LevelPart] {
 }
 
 /// Look up one part of a level by its id (the last URL segment).
-pub fn find_level_part(level_id: &str, part_id: &str) -> Option<&'static LevelPart> {
+pub fn find_level_part(
+    level_id: &str,
+    part_id: &str,
+) -> Option<&'static LevelPart> {
     parts_for_level(level_id).iter().find(|p| p.id == part_id)
 }
 
 /// Sentinel for a step with no screenshot: the renderer shows a single centered
 /// column (no device frame) when `shots` is empty.
-const NO_DEVICE: Device = Device { frame: Frame::Desktop, shots: &[] };
+const NO_DEVICE: Device = Device {
+    frame: Frame::Desktop,
+    shots: &[],
+};
 
 // =============================================================================
 // COVE (Basic) — content adapted from the BlueWallet guide, rendered for Cove.
@@ -591,7 +597,7 @@ pub static BLUE_GUIDE: GuideV2 = GuideV2 {
         // 2 · Back up recovery words
         Step {
             title: "Write down your recovery words",
-            goal: "Save the words that are the only way to recover your bitcoin if you lose your phone.",
+            goal: "Save your seed words, they are the only way to recover your bitcoin if you lose your phone.",
             actions: &[
                 "Write all **12 words** down **in order** on paper, exactly as shown.",
                 "Double-check every word and its spelling against the screen.",
@@ -1994,10 +2000,10 @@ pub static BULL_GUIDE: GuideV2 = GuideV2 {
                 "The last screen lists features to explore later. Tap **Get started**.",
             ],
             // Boltz suspended its swap service in August 2026, which is what Bull's
-            // Lightning rail ran on. Stated up front rather than buried, because the
+            // Lightning rail ran on. Stated up front rather than buried, bece the
             // Lightning tab is still visible in the app and in this guide's screenshots.
             // Remove this once Bull ships a replacement; they say work has begun.
-            flag: Some("Lightning is temporarily unavailable in Bull. The swap provider it relied on suspended service, and Bull is working on a replacement. On-chain Bitcoin and Liquid both work normally, your funds are unaffected, and everything in this guide is on-chain. See **[Bull's announcement](https://www.bullbitcoin.com/blog/boltz-has-suspended-its-swap-services-your-funds-are-safe-here-is-what-it-means-for-bull-wallet-users)** for the detail."),
+            flag: Some("Lightning is temporarily unavailable in Bull. The swap provider it relied on suspended service, and Bull is working on a replacement. On-chain Bitcoin and Liquid both work normally, your funds are unaffected, and everything in this guide is on-chain. See **[Bull's announcement](https://www.bullbitcoin.com/blog/boltz-has-suspended-its-swap-services-your-funds-are-safe-here-is-what-it-means-for-bull-wallet-users)** for details."),
             why: Some((
                 "What Bull actually is",
                 "A self-custodial wallet with an optional exchange bolted on. The keys are generated on your phone and never leave it, and you do not need a Bull Bitcoin account to use any wallet feature. The buy and sell buttons only matter if you choose to use them.",
@@ -2050,11 +2056,12 @@ pub static BULL_GUIDE: GuideV2 = GuideV2 {
                 "Tap **Create New Wallet**. Your keys are generated on the device.",
                 "**Advanced Options** is optional. It lets you route through **Tor** or point the app at your own **Electrum** and **Mempool** servers, and you can set all of it later in App Settings.",
                 "Bull opens on your dashboard with two wallets: **Secure Bitcoin** on the Bitcoin network, and **Instant payments** on Liquid.",
+                "You'll notice the banner **Autoswap is active**, click on it for details. Left on, it sweeps the instant wallet back down to a target balance once it goes over a maximum, moving the surplus into Secure Bitcoin so spending money does not quietly pile up on Liquid. Default is on, feel free to toggle it off if you don't plan to use liquid.",
             ],
             flag: None,
             why: Some((
                 "Why two wallets, and what Liquid is",
-                "Both wallets come from the same recovery words, so one backup covers both. Secure Bitcoin holds real on-chain bitcoin. Instant payments sits on Liquid, a sidechain that settles in seconds for a fraction of a cent, which is what makes small payments practical. Liquid is not the Bitcoin main chain though: it is run by a federation of functionaries, so you are trusting that group in a way you are not on-chain. Treat the instant wallet as pocket money and keep savings in Secure Bitcoin.",
+                "Both wallets come from the same recovery words, so one backup covers both. Secure Bitcoin holds real on-chain bitcoin. Instant payments sits on Liquid, a sidechain that settles in seconds for a fraction of a cent, which is what makes small payments practical. Liquid is not the Bitcoin main chain though: it is run by a federation of functionaries, so you are trusting that group in a way you are not on-chain. Treat the instant wallet as pocket money and keep savings in Secure Bitcoin. Autoswap is Bull's way of enforcing exactly that split for you: set a target and a maximum, and anything above the maximum is swept into Secure Bitcoin, with a fee ceiling so it will not move funds on an expensive day. It is a swap under the hood, so it is one of the things that stopped working when Boltz suspended service, and you can turn it off outright.",
             )),
             needs: &[],
             backup_cta: false,
@@ -2085,13 +2092,21 @@ pub static BULL_GUIDE: GuideV2 = GuideV2 {
                         img_h: BULL_H,
                         pins: &[Pin { n: 3, x: 4.0, y: 52.0, label: "Secure Bitcoin and Instant payments" }],
                     },
+                    Shot {
+                        image: "/guide-images/bull/bull-autoswap-settings.png",
+                        alt: "Bull Auto Transfer Settings with target and maximum instant wallet balances, a maximum transfer fee and Secure Bitcoin as the recipient",
+                        caption: "Autoswap: sweep the surplus into Secure Bitcoin",
+                        img_w: BULL_W,
+                        img_h: BULL_H,
+                        pins: &[Pin { n: 4, x: 4.0, y: 35.0, label: "Target and maximum balances" }],
+                    },
                 ],
             },
         },
         // 3 · Back up
         Step {
             title: "Write down your recovery words",
-            goal: "Save the words that are your only way back into this wallet.",
+            goal: "Save your seed words, they are the only way to recover your wallet.",
             actions: &[
                 "On the dashboard, tap **Protect your bitcoin. Back up your wallet now.**",
                 "Choose the **physical backup** option, which shows you the words to write down. (The encrypted vault option stores an encrypted copy with a provider; this guide uses paper.)",
@@ -2141,7 +2156,7 @@ pub static BULL_GUIDE: GuideV2 = GuideV2 {
             flag: None,
             why: Some((
                 "Which network should I receive on?",
-                "On-chain Bitcoin for anything you intend to keep, because it settles on the main chain. Liquid for small everyday amounts, because a small on-chain payment can cost more in fees than it is worth. Bull nudges you toward the sensible one based on the amount, and warns you when a payment is uneconomical. Lightning would normally be the other everyday option, and it is the rail currently out of service.",
+                "On-chain Bitcoin for anything you intend to keep, because it settles on the main chain. Liquid for small everyday amounts, because a small on-chain payment can cost more in fees than it is worth. Bull nudges you toward the sensible one based on the amount, and warns you when a payment is uneconomical. Lightning would normally be the other everyday option, but it currently out of service. For now, stick with on-chain (Secure Bitcoin).",
             )),
             needs: &[],
             backup_cta: false,
@@ -2199,11 +2214,13 @@ pub static BULL_GUIDE: GuideV2 = GuideV2 {
             title: "Send bitcoin",
             goal: "Send a payment and choose what you pay in fees.",
             actions: &[
-                "Tap **Send**, choose which wallet to spend from, and enter the **amount**. Add a note if you want to remember what it was for.",
-                "Tap **Continue**, then scan or paste the recipient's address.",
-                "Pick a **fee**: Fastest, Economic or Slow, or set your own. Bull shows the cost of each in sats and in your currency.",
-                "Check the address, amount and fee on the confirm screen, then tap **Confirm**.",
-                "Bull broadcasts it and shows **Successfully Sent**. The transaction sits as **Pending** until it is mined, and you can **Accelerate** it if you set the fee too low.",
+                "Open your **Secure Bitcoin** wallet and tap **Send**. Scan the recipient's code with **Open the Camera**, or paste their address into **Recipient's address**, then tap **Continue**.",
+                "Enter the **amount**. Tap the arrow beside it to switch between sats and another currency, add a **note** to remember what the payment was for, or flip **MAX** to send the whole balance. Tap **Continue**.",
+                "The confirm screen lists the wallet it leaves **From**, the address it goes **To**, your note, the amount and the **network fee**. Confirm the address here.",
+                "To change what you pay, tap **Fee Priority**: **Fastest**, **Economic**, **Slow**, or a custom rate. Bull shows each one in sats per vByte, in sats, and in your currency.",
+                "Tap **Confirm**. Bull signs and broadcasts it, then shows **Successfully Sent**.",
+                "Tap **View Details** for the transaction ID and status. While it says **Pending** you can **Accelerate** it, which re-sends the same payment with a higher fee.",
+                "Back in the wallet the payment sits under **Pending** with your note, and the balance already accounts for it.",
             ],
             flag: Some("Always re-read the address before you confirm. Bitcoin transactions cannot be reversed."),
             why: Some((
@@ -2216,52 +2233,64 @@ pub static BULL_GUIDE: GuideV2 = GuideV2 {
                 frame: Frame::Phone,
                 shots: &[
                     Shot {
-                        image: "/guide-images/bull/bull-send-01-amount.png",
-                        alt: "Bull send screen with the amount and an optional note",
-                        caption: "Pick the wallet, amount and note",
+                        image: "/guide-images/bull/bull-send-01-recipient.png",
+                        alt: "Bull send screen offering a QR scan or a pasted recipient address",
+                        caption: "Scan the code, or paste the address",
                         img_w: BULL_W,
                         img_h: BULL_H,
-                        pins: &[Pin { n: 1, x: 4.0, y: 24.0, label: "Enter the amount" }],
+                        pins: &[Pin { n: 1, x: 4.0, y: 81.0, label: "Paste the address here" }],
                     },
                     Shot {
-                        image: "/guide-images/bull/bull-send-02-fee.png",
-                        alt: "Bull select network fee with fastest, economic, slow and custom",
-                        caption: "Choose your fee",
+                        image: "/guide-images/bull/bull-send-02-amount.png",
+                        alt: "Bull send screen with the amount, an optional note and a MAX toggle",
+                        caption: "Amount, note, and MAX for the lot",
                         img_w: BULL_W,
                         img_h: BULL_H,
-                        pins: &[Pin { n: 3, x: 4.0, y: 16.0, label: "Pick a fee" }],
+                        pins: &[Pin { n: 2, x: 4.0, y: 24.0, label: "Enter the amount" }],
                     },
                     Shot {
                         image: "/guide-images/bull/bull-send-03-confirm.png",
-                        alt: "Bull confirm send screen with address, amount and fees",
+                        alt: "Bull confirm send screen showing from, to, note, amount, network fee and fee priority",
                         caption: "Check everything, then Confirm",
                         img_w: BULL_W,
                         img_h: BULL_H,
-                        pins: &[Pin { n: 4, x: 4.0, y: 42.0, label: "Verify the address" }],
+                        pins: &[
+                            Pin { n: 3, x: 4.0, y: 42.0, label: "Read the address" },
+                            Pin { n: 4, x: 4.0, y: 62.0, label: "Tap to change the fee" },
+                            Pin { n: 5, x: 4.0, y: 78.0, label: "Confirm to broadcast" },
+                        ],
                     },
                     Shot {
-                        image: "/guide-images/bull/bull-send-04-sent.png",
-                        alt: "Bull successfully sent confirmation",
+                        image: "/guide-images/bull/bull-send-04-fee.png",
+                        alt: "Bull select network fee with fastest, economic, slow and a custom rate",
+                        caption: "Fastest, Economic, Slow, or your own rate",
+                        img_w: BULL_W,
+                        img_h: BULL_H,
+                        pins: &[Pin { n: 4, x: 4.0, y: 28.0, label: "Pick a fee" }],
+                    },
+                    Shot {
+                        image: "/guide-images/bull/bull-send-05-sent.png",
+                        alt: "Bull confirmation that the payment was successfully sent",
                         caption: "Sent",
                         img_w: BULL_W,
                         img_h: BULL_H,
                         pins: &[],
                     },
                     Shot {
-                        image: "/guide-images/bull/bull-send-05-pending-details.png",
-                        alt: "Bull transaction details for a pending send, with accelerate",
+                        image: "/guide-images/bull/bull-send-06-pending-details.png",
+                        alt: "Bull transaction details with the transaction ID, a pending status and Accelerate",
                         caption: "Pending, with Accelerate if you need it",
                         img_w: BULL_W,
                         img_h: BULL_H,
-                        pins: &[Pin { n: 5, x: 4.0, y: 60.0, label: "Status: Pending" }],
+                        pins: &[Pin { n: 6, x: 4.0, y: 72.0, label: "Status: Pending" }],
                     },
                     Shot {
-                        image: "/guide-images/bull/bull-send-06-dashboard-empty.png",
-                        alt: "Bull dashboard after the send, balance back to zero",
-                        caption: "Back on the dashboard",
+                        image: "/guide-images/bull/bull-send-07-wallet-pending.png",
+                        alt: "Bull Secure Bitcoin wallet with the pending send at the top and a reduced balance",
+                        caption: "Pending in your history, balance updated",
                         img_w: BULL_W,
                         img_h: BULL_H,
-                        pins: &[],
+                        pins: &[Pin { n: 7, x: 4.0, y: 48.0, label: "Your pending payment" }],
                     },
                 ],
             },
@@ -2531,7 +2560,10 @@ pub static NUNCHUK_GUIDE: GuideV2 = GuideV2 {
                         caption: "Received, pending confirmations",
                         img_w: NUN_W,
                         img_h: NUN_H,
-                        pins: &[Pin { n: 3, x: 68.0, y: 37.0, label: "Pending confirmations, balance updated" }],
+                        // x=45 sits in the empty gap between the truncated address (ends
+                        // ~25%) and the status badge (starts ~64%). Anything past ~60%
+                        // covers the badge text the pin is pointing at.
+                        pins: &[Pin { n: 3, x: 45.0, y: 37.0, label: "Pending confirmations, balance updated" }],
                     },
                     Shot {
                         image: "/guide-images/nunchuk/nunchuk-12-receive-details.png",
@@ -2548,7 +2580,8 @@ pub static NUNCHUK_GUIDE: GuideV2 = GuideV2 {
                         img_w: NUN_W,
                         img_h: NUN_H,
                         // confirmation pills are 260x48 at +778+870 and +778+1050
-                        pins: &[Pin { n: 5, x: 68.0, y: 36.9, label: "Confirmation count" }],
+                        // Matches pin 3's x: same screen layout, same carousel.
+                        pins: &[Pin { n: 5, x: 45.0, y: 36.9, label: "Confirmation count" }],
                     },
                 ],
             },
@@ -2736,10 +2769,11 @@ mod content_tests {
 
     /// Every guide reachable from a wallet picker or a level part.
     fn all_guides() -> Vec<(&'static str, &'static GuideV2)> {
-        let mut v: Vec<(&'static str, &'static GuideV2)> = ["cove", "blue", "bull", "nunchuk", "sparrow"]
-            .iter()
-            .filter_map(|id| find_guide_v2(id).map(|g| (*id, g)))
-            .collect();
+        let mut v: Vec<(&'static str, &'static GuideV2)> =
+            ["cove", "blue", "bull", "nunchuk", "sparrow"]
+                .iter()
+                .filter_map(|id| find_guide_v2(id).map(|g| (*id, g)))
+                .collect();
         for part in INTERMEDIATE_PARTS.iter().chain(ADVANCED_PARTS.iter()) {
             v.push((part.id, part.guide));
         }
@@ -2756,22 +2790,49 @@ mod content_tests {
     #[test]
     fn markdown_only_appears_in_inline_parsed_fields() {
         for (id, g) in all_guides() {
-            assert!(!has_markdown(g.intro.lede), "{id}: intro.lede is not inline-parsed");
-            assert!(!has_markdown(g.completion.lede), "{id}: completion.lede is not inline-parsed");
+            assert!(
+                !has_markdown(g.intro.lede),
+                "{id}: intro.lede is not inline-parsed"
+            );
+            assert!(
+                !has_markdown(g.completion.lede),
+                "{id}: completion.lede is not inline-parsed"
+            );
             for (i, s) in g.steps.iter().enumerate() {
-                assert!(!has_markdown(s.goal), "{id} step {i}: goal is not inline-parsed");
+                assert!(
+                    !has_markdown(s.goal),
+                    "{id} step {i}: goal is not inline-parsed"
+                );
                 if let Some((summary, body)) = s.why {
-                    assert!(!has_markdown(summary), "{id} step {i}: why summary is not inline-parsed");
-                    assert!(!has_markdown(body), "{id} step {i}: why body is not inline-parsed");
+                    assert!(
+                        !has_markdown(summary),
+                        "{id} step {i}: why summary is not inline-parsed"
+                    );
+                    assert!(
+                        !has_markdown(body),
+                        "{id} step {i}: why body is not inline-parsed"
+                    );
                 }
                 for n in s.needs {
-                    assert!(!has_markdown(n), "{id} step {i}: needs pill is not inline-parsed");
+                    assert!(
+                        !has_markdown(n),
+                        "{id} step {i}: needs pill is not inline-parsed"
+                    );
                 }
                 for shot in s.device.shots {
-                    assert!(!has_markdown(shot.caption), "{id} step {i}: caption is not inline-parsed");
-                    assert!(!has_markdown(shot.alt), "{id} step {i}: alt text is not inline-parsed");
+                    assert!(
+                        !has_markdown(shot.caption),
+                        "{id} step {i}: caption is not inline-parsed"
+                    );
+                    assert!(
+                        !has_markdown(shot.alt),
+                        "{id} step {i}: alt text is not inline-parsed"
+                    );
                     for p in shot.pins {
-                        assert!(!has_markdown(p.label), "{id} step {i}: pin label is not inline-parsed");
+                        assert!(
+                            !has_markdown(p.label),
+                            "{id} step {i}: pin label is not inline-parsed"
+                        );
                     }
                 }
             }
@@ -2793,6 +2854,76 @@ mod content_tests {
                             p.n
                         );
                     }
+                }
+            }
+        }
+    }
+
+    /// Nothing reachable without passing the under-construction gate may mention
+    /// COLDCARD. The Intermediate and Advanced guides are built around it and are
+    /// gated; if a level is ever un-gated, or a Coldcard reference creeps into a Basic
+    /// guide, this fails rather than quietly recommending a compromised device.
+    #[test]
+    fn ungated_guides_never_mention_coldcard() {
+        let banned = ["coldcard", "coinkite", "seedplate", "mk3", "mk4"];
+        for level in crate::guides::ALL_LEVELS {
+            if level.under_construction {
+                continue;
+            }
+            let mut texts: Vec<&str> =
+                vec![level.intro, level.title, level.subtitle];
+            // Wallet guides AND part guides: Intermediate and Advanced carry no wallets
+            // at all, so walking `level.wallets` alone silently scanned nothing for them.
+            let mut guides: Vec<&'static GuideV2> = level
+                .wallets
+                .iter()
+                .filter_map(|w| find_guide_v2(w))
+                .collect();
+            for part in parts_for_level(level.id) {
+                texts.push(part.name);
+                texts.push(part.tagline);
+                texts.extend(part.highlights.iter().copied());
+                guides.push(part.guide);
+            }
+            for g in guides {
+                {
+                    texts.push(g.intro.title);
+                    texts.push(g.intro.lede);
+                    texts.extend(g.intro.outcomes.iter().copied());
+                    texts.push(g.completion.title);
+                    texts.push(g.completion.lede);
+                    for s in g.steps {
+                        texts.push(s.title);
+                        texts.push(s.goal);
+                        texts.extend(s.actions.iter().copied());
+                        texts.extend(s.needs.iter().copied());
+                        if let Some(f) = s.flag {
+                            texts.push(f);
+                        }
+                        if let Some((a, b)) = s.why {
+                            texts.push(a);
+                            texts.push(b);
+                        }
+                        for shot in s.device.shots {
+                            texts.push(shot.alt);
+                            texts.push(shot.caption);
+                            for pin in shot.pins {
+                                texts.push(pin.label);
+                            }
+                        }
+                    }
+                }
+            }
+            for t in texts {
+                let lower = t.to_lowercase();
+                for b in banned {
+                    assert!(
+                        !lower.contains(b),
+                        "level '{}' is live and mentions '{}': {}",
+                        level.id,
+                        b,
+                        t
+                    );
                 }
             }
         }
