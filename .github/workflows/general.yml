@@ -10,17 +10,16 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
-# Every job uses stable, matching rust-toolchain.toml and deploy.yml. An explicit
-# nightly here overrides that pin via RUSTUP_TOOLCHAIN, and nightly rustfmt formats
-# differently from the stable one used locally, so `cargo fmt --check` disagrees
-# with a locally formatted tree.
+# No job names a toolchain. rustup resolves it from rust-toolchain.toml, which pins an
+# exact version and the rustfmt/clippy components, so CI and a developer machine run the
+# same compiler and the same lint set. Naming one here (even @stable) sets
+# RUSTUP_TOOLCHAIN and silently overrides that pin.
 jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Run tests
         run: cargo test --features ssr
@@ -30,9 +29,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
       - name: Enforce formatting
         run: cargo fmt --check
 
@@ -41,9 +37,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
       - uses: Swatinem/rust-cache@v2
       # --all-targets so test code is linted too. ssr is the default feature, but
       # naming it keeps the command honest about what is being checked.

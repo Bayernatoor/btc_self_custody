@@ -17,10 +17,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust stable + wasm target
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
+      # No toolchain action: rustup resolves the pinned version, components and the
+      # wasm32 target from rust-toolchain.toml, so the released binary is built with the
+      # same compiler CI tested against.
 
       - name: Rust build cache
         uses: Swatinem/rust-cache@v2
