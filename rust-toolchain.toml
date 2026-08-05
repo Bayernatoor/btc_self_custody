@@ -1,3 +1,16 @@
+# Single source of truth for the toolchain: local builds, CI and the release build all
+# resolve it from here, so they cannot drift apart. Nothing in .github/workflows names a
+# toolchain, deliberately, so this file is the only place to edit.
+#
+# Pinned to an exact version rather than "stable". With a channel pin, a machine that has
+# not run `rustup update` recently gets an older clippy than the CI runner's, so lints
+# exist in CI that cannot be reproduced locally and a branch passes every local check and
+# then fails CI.
+#
+# Bumping is deliberate: change the version, run `cargo fmt` and
+# `cargo clippy --features ssr --all-targets -- -D warnings`, fix what the newer lints
+# find, and commit that as its own change.
 [toolchain]
-channel = "stable"
+channel = "1.97.1"
+components = ["rustfmt", "clippy"]
 targets = ["wasm32-unknown-unknown"]
