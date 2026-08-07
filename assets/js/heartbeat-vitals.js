@@ -1,10 +1,11 @@
-// heartbeat-vitals.js — Vital signs, rhythm strip, search, effects, sound, capture
+// heartbeat-vitals.js — Vital signs, rhythm strip, search, effects, capture
+//
+// Block audio lives in heartbeat-audio.js, not here: it is cued from the SSE handler
+// so it also fires for a hidden tab, which this module's effects deliberately do not.
 import { getState, COLORS, POINT_WIDTH, HEAD_POSITION_FRAC, FLATLINE_PX_PER_SEC, RHYTHM_STRIP_BLOCKS, BG_COLOR, GRID_COLOR } from './heartbeat-state.js';
 import { generatePQRST, computeColor, hexToRgb, formatDuration } from './heartbeat-timeline.js';
 
 // ── Module-level audio state ─────────────────────────────
-var _audioCtx = null;
-var _soundEnabled = false;
 
 // ── Vital Signs Computation ──────────────────────────────
 
@@ -479,58 +480,6 @@ export function getOrganismStatus() {
         description: description,
         color: color
     });
-}
-
-// ── Sound (Web Audio heartbeat) ──────────────────────────
-
-export function heartbeatSoundToggle(enable) {
-    _soundEnabled = !!enable;
-    if (_soundEnabled && !_audioCtx) {
-        try {
-            _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        } catch(e) {
-            _soundEnabled = false;
-        }
-    }
-    return _soundEnabled;
-}
-
-export function heartbeatSoundIsEnabled() {
-    return _soundEnabled;
-}
-
-// Play lub-dub heartbeat sound
-export function heartbeatPlaySound() {
-    if (!_soundEnabled || !_audioCtx) return;
-    // Resume if suspended (autoplay policy)
-    if (_audioCtx.state === 'suspended') {
-        _audioCtx.resume();
-    }
-    var now = _audioCtx.currentTime;
-
-    // "Lub" - 80Hz sine, 60ms
-    var lub = _audioCtx.createOscillator();
-    var lubGain = _audioCtx.createGain();
-    lub.frequency.value = 80;
-    lub.type = 'sine';
-    lubGain.gain.setValueAtTime(0.3, now);
-    lubGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
-    lub.connect(lubGain);
-    lubGain.connect(_audioCtx.destination);
-    lub.start(now);
-    lub.stop(now + 0.07);
-
-    // "Dub" - 60Hz sine, 40ms, 120ms after lub
-    var dub = _audioCtx.createOscillator();
-    var dubGain = _audioCtx.createGain();
-    dub.frequency.value = 60;
-    dub.type = 'sine';
-    dubGain.gain.setValueAtTime(0.2, now + 0.12);
-    dubGain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
-    dub.connect(dubGain);
-    dubGain.connect(_audioCtx.destination);
-    dub.start(now + 0.12);
-    dub.stop(now + 0.17);
 }
 
 // ── Moment Capture ───────────────────────────────────────

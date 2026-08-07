@@ -1,6 +1,7 @@
 // heartbeat-sse.js — SSE connection, tx batching, and mempool fallback
 import { getState, FLATLINE_PX_PER_SEC, HEAD_POSITION_FRAC, POINT_WIDTH } from './heartbeat-state.js';
 import { feeRateColor, fmtBtc } from './heartbeat-timeline.js';
+import { playBlockCue } from './heartbeat-audio.js';
 
 // Run the SEQUENCED block reveal up to this entry zoom. It works across the whole
 // normal viewing range: the spike stays at the head, the unfurl zooms OUT to frame
@@ -378,7 +379,6 @@ export function processLiveBlock(block) {
 
     if (window.heartbeatFlash) window.heartbeatFlash();
     if (window.heartbeatPulse) window.heartbeatPulse();
-    if (window.heartbeatPlaySound) window.heartbeatPlaySound();
 
     // Update rhythm strip with the new block
     if (window.renderRhythmStrip && window.getHeartbeatRecentBlocks) {
@@ -626,6 +626,12 @@ export function connectOwnFeed() {
                 if (!block.height) return;
                 _hb._lastSseEventTs = Date.now() / 1000; // liveness
                 console.log('SSE block:', block.height, block.hash);
+
+                // Before the hidden-tab branch on purpose. A queued block is replayed
+                // minutes later, so cueing at replay time would announce a block that
+                // already happened; and a backgrounded tab is the main reason to want
+                // the sound. Web Audio is not throttled when hidden, unlike rAF.
+                playBlockCue();
 
                 // When tab is hidden, queue blocks for replay on return
                 // instead of processing live (which stacks them at same virtualX)

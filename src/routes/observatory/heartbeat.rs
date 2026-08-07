@@ -788,6 +788,22 @@ pub fn HeartbeatPage() -> impl IntoView {
 
                         <div class="w-px h-5 bg-white/10 mx-1"></div>
 
+                        // ── Block sound: a monitor beep when a block is mined ──
+                        // Ships in the off state; initSoundButton() repaints the icon
+                        // from localStorage on load. The click is also what unlocks the
+                        // AudioContext, which the autoplay policy requires.
+                        <button
+                            id="heartbeat-btn-sound"
+                            aria-label="Sound on a new block"
+                            aria-pressed="false"
+                            title="Block sound off"
+                            onclick="handleControlClick('sound')"
+                            class="group relative w-8 h-8 rounded-md bg-white/5 text-white/70 hover:bg-white/15 hover:text-white transition-all cursor-pointer flex items-center justify-center text-sm"
+                        >
+                            <span id="heartbeat-btn-sound-icon">"\u{1F507}"</span>
+                            <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded bg-[#0a1929] border border-white/10 text-[10px] text-white/80 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-10">"Sound on a new block"</span>
+                        </button>
+
                         // ── Help: reopen the intro hint ──
                         <button aria-label="How to read this" title="How to read this"
                             on:click=move |_| set_show_hint.set(true)

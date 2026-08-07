@@ -297,7 +297,7 @@ pub fn guide_selector_view(
                                                             <p class="text-sm text-white/30 mt-0.5">{level.subtitle}</p>
                                                         </div>
                                                         <span class="shrink-0 text-[0.65rem] font-title uppercase tracking-widest text-[#ffce6b] bg-[#ffce6b]/10 border border-[#ffce6b]/25 rounded-full px-2.5 py-1">
-                                                            "Under construction"
+                                                            "Under maintenance"
                                                         </span>
                                                     </div>
                                                 }.into_any()
