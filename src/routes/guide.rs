@@ -241,7 +241,7 @@ pub fn GuideTwoSegment() -> impl IntoView {
 /// instead of advice that is no longer trusted.
 fn render_under_construction(level: &'static GuideLevelDef) -> impl IntoView {
     let page_title =
-        format!("{} | Under construction | We Hodl BTC", level.name);
+        format!("{} | Under maintenance | We Hodl BTC", level.name);
     view! {
         <Title text=page_title/>
         <Meta name="robots" content="noindex"/>

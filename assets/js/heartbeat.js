@@ -4,16 +4,16 @@
 
 import { getState, setState, COLORS, BG_COLOR, FLATLINE_PX_PER_SEC, HEAD_POSITION_FRAC, RETARGET_PERIOD } from './heartbeat-state.js';
 import { drawGrid, createBlockSegment, createFlatlineSegment, computeColor, historyFlatlineWidth, feeRateColor } from './heartbeat-timeline.js';
-import { setupInputHandlers, handleControlClick } from './heartbeat-interaction.js';
+import { setupInputHandlers, handleControlClick, initSoundButton } from './heartbeat-interaction.js';
 import { stopMomentum } from './heartbeat-interaction.js';
 import { connectOwnFeed, placeHistoryTxs, fastForwardLiveFlatline } from './heartbeat-sse.js';
+import { playBlockCue, tuneSound, soundSettings } from './heartbeat-audio.js';
 import { drawFrame } from './heartbeat-render.js';
 import {
     getHeartbeatVitals, renderRhythmStrip, getHeartbeatRecentBlocks,
     heartbeatCenter, heartbeatSearchTx,
     heartbeatPulse, heartbeatFlash,
     getOrganismStatus,
-    heartbeatSoundToggle, heartbeatSoundIsEnabled, heartbeatPlaySound,
     heartbeatDownloadCapture
 } from './heartbeat-vitals.js';
 
@@ -132,6 +132,9 @@ window.initHeartbeat = function(canvasId) {
 
     // Setup input handlers
     setupInputHandlers(canvas);
+    // Paint the speaker icon from the stored preference: the markup ships in the off
+    // state, so a returning visitor with sound on would otherwise see the wrong icon.
+    initSoundButton();
 
     // Show fullscreen button only if the API is supported (not on iOS)
     var fsBtn = document.getElementById('heartbeat-fullscreen-btn');
@@ -694,6 +697,52 @@ window._hbToggleLod = function() {
 // Toggle the cinematic block reveal on/off. Off = the instant flow (spike appears,
 // harvest, mempool re-lays, no camera hijack; follow state respected). Persists to
 // localStorage. Call from the console: window._hbToggleReveal().
+// Fire the block cue by hand, for testing without waiting ~10 minutes for a block.
+// Enable the sound with the speaker button FIRST: a console call is not a user gesture,
+// so a context created here would start suspended and stay silent.
+//
+// To verify the hidden-tab path (the reason the cue is fired before the hidden branch in
+// heartbeat-sse.js), schedule it and switch away:
+//   setTimeout(window._hbPlayBlockCue, 5000)
+window._hbPlayBlockCue = function() {
+    playBlockCue();
+};
+
+// Tune the cue live, without a rebuild. Values are not persisted, so a reload restores
+// the module defaults. Example:
+//   window._hbSoundTune({ MASTER_GAIN: 0.8, SPIKE_PEAK_HZ: 1600 })
+//   window._hbPlayBlockCue()
+window._hbSoundTune = function(overrides) {
+    var r = tuneSound(overrides);
+    if (r.unknown.length) console.warn('[heartbeat] unknown sound params (typo?):', r.unknown);
+    console.log('[heartbeat] applied:', r.applied);
+    return r.applied;
+};
+
+// Print the current tuning. Also prints a paste-ready _hbSoundTune(...) of just what you
+// have changed, which is the thing to hand over when baking a session into the constants
+// at the top of heartbeat-audio.js.
+window._hbSoundValues = function() {
+    var s = soundSettings();
+    console.table(s.values);
+    var keys = Object.keys(s.changed);
+    if (keys.length === 0) {
+        console.log('[heartbeat] all values are at their defaults');
+    } else {
+        console.log('[heartbeat] changed from defaults:\n_hbSoundTune(' +
+            JSON.stringify(s.changed, null, 2) + ')');
+    }
+    return s.values;
+};
+
+// Block audio cue on/off, persisted in localStorage. Mirrors the speaker button in the
+// control bar. Call from the console: window._hbToggleSound().
+window._hbToggleSound = function() {
+    var on = handleControlClick('sound');
+    console.log('[heartbeat] block sound ' + (on ? 'ENABLED' : 'DISABLED'));
+    return on;
+};
+
 window._hbToggleReveal = function() {
     var s = getState();
     if (!s) return;
@@ -957,9 +1006,10 @@ function recoverTimeline(gapSecs) {
         console.log('[heartbeat] timeline resume: advanced virtualX by', Math.round(gapSecs), 's (',
             Math.round(gapSecs * FLATLINE_PX_PER_SEC), 'px)');
     }
-    // Re-arm the fade-in on a big resume (occlusion / sleep / long throttle) so the
-    // timeline eases back up instead of hard-cutting. Skip tiny tab-flicks.
-    if (gapSecs > 10) _hb._loadFadeStart = now;
+    // The load veil is NOT re-armed here. It exists to hide data streaming in on a
+    // cold start; on resume the bricks are already in state and keep their original
+    // timestamps, so there is nothing to hide and fading the whole timeline back up
+    // just looks like the page reloaded when you switch tabs.
 
     // Place buffered txs across the gap (the region between old bricks and
     // new virtualX). Timing is unreliable when hidden, but random spread
@@ -1106,7 +1156,4 @@ window.heartbeatSearchTx = function(txid) { return heartbeatSearchTx(txid); };
 window.heartbeatPulse = function() { heartbeatPulse(); };
 window.heartbeatFlash = function() { heartbeatFlash(); };
 window.getOrganismStatus = function() { return getOrganismStatus(); };
-window.heartbeatSoundToggle = function(enable) { return heartbeatSoundToggle(enable); };
-window.heartbeatSoundIsEnabled = function() { return heartbeatSoundIsEnabled(); };
-window.heartbeatPlaySound = function() { heartbeatPlaySound(); };
 window.heartbeatDownloadCapture = function(json) { heartbeatDownloadCapture(json); };

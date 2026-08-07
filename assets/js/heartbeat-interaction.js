@@ -1,6 +1,7 @@
 // heartbeat-interaction.js — User input handling, momentum scrolling, control buttons
 import { getState, HEAD_POSITION_FRAC, FLATLINE_PX_PER_SEC } from './heartbeat-state.js';
 import { canvasToVirtual, virtualToCanvas, blockAtVirtualX, flatlineAtVirtualX, blipAtCanvasXY, blipAtVirtualX } from './heartbeat-blips.js';
+import { isSoundEnabled, toggleSound } from './heartbeat-audio.js';
 
 // Clamp vertical pan (viewOffsetY shifts the baseline DOWN when positive). Two
 // regimes: when the tallest brick stack FITS above the baseline (low zoom, and
@@ -460,7 +461,30 @@ export function setupInputHandlers(canvas) {
     });
 }
 
+// Speaker icon reflects the current state. Called on toggle and once on load, since
+// the preference is restored from localStorage and the markup ships in the off state.
+function syncSoundButton(on) {
+    var icon = document.getElementById('heartbeat-btn-sound-icon');
+    if (icon) icon.textContent = on ? '\u{1F50A}' : '\u{1F507}';
+    var btn = document.getElementById('heartbeat-btn-sound');
+    if (btn) {
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        btn.title = on ? 'Block sound on' : 'Block sound off';
+    }
+}
+
+export function initSoundButton() {
+    syncSoundButton(isSoundEnabled());
+}
+
 export function handleControlClick(id) {
+    // Handled before the preamble below: the sound toggle changes no view state, so it
+    // must not cancel an in-progress reveal the way a zoom or pause press does.
+    if (id === 'sound') {
+        var on = toggleSound();
+        syncSoundButton(on);
+        return on; // window._hbToggleSound() reports this
+    }
     var _hb = getState();
     if (!_hb) return;
     // Any explicit control press ends an in-progress block reveal (finalizing the
