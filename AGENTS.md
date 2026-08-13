@@ -1,4 +1,4 @@
-# AGENTS.md — we_hodl_btc
+# AGENTS.md, we_hodl_btc
 
 Rust/Leptos site behind <https://www.wehodlbtc.com/>. Crate `we_hodl_btc` v0.5.0, edition 2021.
 
@@ -38,14 +38,79 @@ find, commit that alone.
 
 Two builds from one crate:
 
-- `ssr` (default) — server. Pulls in axum, tokio, rusqlite, r2d2, reqwest, zeromq, sha2,
+- `ssr` (default), server. Pulls in axum, tokio, rusqlite, r2d2, reqwest, zeromq, sha2,
   tower-http, tracing-subscriber, thiserror, futures.
-- `hydrate` — the WASM bundle. None of the above exist.
+- `hydrate`, the WASM bundle. None of the above exist.
 
 **Anything touching `stats::{db,rpc,config,ingest,zmq_subscriber}` is ssr-only.** Referencing it
 from code that also compiles to WASM breaks the hydrate build, and the error surfaces as a
 confusing wasm-bindgen or missing-symbol failure rather than a clear one. Check both builds
 before assuming a change is fine. `cargo clippy --features ssr` alone will not catch it.
+
+## Leptos, WASM and JS interop
+
+Each of these cost a real debugging session. They fail silently or with an error pointing
+somewhere else, which is why they are written down.
+
+**No inline content inside `<script>` tags in the `view!` macro.** Especially JSON or raw
+strings. It breaks hydration and the whole app goes non-interactive with no error. Use external
+`.js` files.
+
+**`class:` directives cannot take Tailwind classes containing `/` or `[]`.** So no
+`class:bg-white/10` or `class:bg-[#f7931a]`. Use a computed attribute instead:
+`class=move || format!(...)`.
+
+**`#![recursion_limit = "512"]` must be in both `lib.rs` and `main.rs`.** The bin crate compiles
+separately and does not inherit the lib's limit. Testing only the lib locally means this first
+appears in a CI or Docker build.
+
+**A `<Show>` that is not in the SSR HTML does not get event handlers attached** when inserted
+after hydration. The heartbeat hint overlay must start `signal(true)`; starting it `false` and
+toggling after init produced an undismissable overlay because the click handler never attached.
+
+**For JS touching Leptos-rendered `inner_html`, poll rather than observe.** `MutationObserver`
+does not reliably catch Leptos hydration timing; `setInterval` does. Applies to the lightbox and
+collapsible sections.
+
+**Compute in Rust, not JS.** JS is for rendering and animation only. `heartbeat.js` reported
+average block time as always 10 minutes because it re-derived a value Rust already had correct
+from `LiveStats`. Pass computed values into JS; do not recompute them there.
+
+**`node --check` proves nothing about a JS module.** It validates syntax, and an undefined
+reference is valid syntax. A broken heartbeat page shipped on 2026-08-07 because a scripted
+`replace()` matched nothing (its anchor comment had already been rewritten), leaving `PARAMS`
+referencing five constants that were never declared. `node --check` passed, `cargo check` passed,
+and the page died at module-eval time. ESM failure is fatal to the whole graph, so
+`heartbeat-audio.js` throwing meant `heartbeat.js` never defined its `window.*` functions and the
+page hung on "Mining blocks..." with an unrelated-looking error.
+
+After touching a module's top level, actually evaluate it:
+
+    # /tmp/claude/probe.mjs
+    globalThis.localStorage = { getItem: () => null, setItem: () => {} };
+    globalThis.window = {};
+    const m = await import(process.argv[2]);   # file:// URL
+
+Two habits that follow: assert on every scripted replacement so a stale anchor fails loudly, and
+prefer an editor-style edit over `sed`/`python` rewrites when the anchor may already have changed.
+
+## Content and data rules
+
+The site is meant to read as authoritative reference, not as a blog.
+
+**Verify every number.** Never take a block height, txid, fee, date or record from training data.
+Query the local database first (`SELECT height, size FROM blocks ORDER BY size DESC LIMIT 1`), or
+verify against multiple sources. A previous "largest block" claim was wrong: training data said
+774,628, the database says 836,964 at 3.99 MB. Inaccurate data destroys the site's credibility.
+If uncertain, flag it rather than guessing.
+
+**No opinions on `/observatory` pages** unless mathematically provable or undisputed. Not
+"Bitcoin's most significant upgrade since its creation" but "one of Bitcoin's largest protocol
+upgrades". Stick to verifiable facts: heights, dates, tx counts, BIP numbers.
+
+**Tone:** professional and objective but not boring. Hedged where hedging is honest (can,
+suggests, tends to, indicates). No absolutes unless factual, nothing exaggerated or superfluous.
+Match the existing copy rather than introducing a new voice.
 
 ## Layout
 
@@ -90,6 +155,9 @@ tens of GB.
 
 ## Conventions
 
+- **No infrastructure scripts in this repo.** iptables rules, cron jobs, systemd units, WireGuard
+  configs and node setup scripts belong on the server or in a separate infra repo. Reference
+  material for the Start9 and droplet setup goes in `docs/` as documentation, or stays local.
 - `master` is kept linear. Rebase feature branches; never merge master into one.
 - Never push without being asked. Stage work and hand over the commit command; GPG signing
   fails in sandboxed runs.
