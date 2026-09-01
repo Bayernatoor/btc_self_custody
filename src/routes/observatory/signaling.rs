@@ -1,15 +1,16 @@
 //! BIP signaling tracker: version bit signaling and coinbase compliance monitoring.
 //!
-//! Tracks two different types of BIP readiness across 2,016-block retarget periods:
-//!
-//! **BIP-110 (version bit signaling)**: miners signal support by setting bit 4 in
-//! the block header's nVersion field. Uses a 55% activation threshold (1,109 of
-//! 2,016 blocks). This is the standard BIP-9 style signaling mechanism.
+//! Tracks BIP readiness across 2,016-block retarget periods.
 //!
 //! **BIP-54 (coinbase compatibility checking)**: there is no formal signaling
 //! mechanism for BIP-54. This tracker checks compatibility by verifying that
 //! coinbase nLockTime equals height-1 and nSequence is not 0xFFFFFFFF (timelock
 //! not disabled). Uses a 95% threshold.
+//!
+//! BIP-54 is currently the only entry, but the selector and the
+//! `method` -> bit-number plumbing are kept: `fetch_signaling` takes a bit number
+//! and the server switches on `method`, so a version-bit BIP is added by giving it
+//! an `<option>`, a bit, a threshold, a description and a chart start height.
 //!
 //! The page shows: a status card with progress bars, per-pool signaling breakdown,
 //! a block grid where each cell is a block (green = signaled, red = not), and a
@@ -92,7 +93,7 @@ fn SignalingSkeleton() -> impl IntoView {
 /// aggregates, then renders status card, miner breakdown, block grid, and history chart.
 #[component]
 pub fn SignalingPage() -> impl IntoView {
-    let (bip_method, set_bip_method) = signal("bit".to_string());
+    let (bip_method, set_bip_method) = signal("locktime".to_string());
     let (period_offset, set_period_offset) = signal(0u64);
 
     let signaling_data = LocalResource::new(move || {
@@ -101,7 +102,9 @@ pub fn SignalingPage() -> impl IntoView {
         async move {
             let stats =
                 fetch_stats_summary().await.map_err(|e| e.to_string())?;
-            let bit = if method == "locktime" { 0 } else { 4 };
+            // BIP-54 has no version bit, so the server switches on `method` and
+            // ignores this. A version-bit BIP maps its method string to its bit here.
+            let bit = 0u32;
 
             let current_period = stats.max_height / 2016;
             let target_period = current_period.saturating_sub(offset);
@@ -172,7 +175,6 @@ pub fn SignalingPage() -> impl IntoView {
                         }
                     }
                 >
-                    <option value="bit">"BIP-110: OP_RETURN Limits (Bit 4)"</option>
                     <option value="locktime">"BIP-54: Consensus Cleanup (Locktime)"</option>
                 </select>
                 <svg class="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none w-3.5 h-3.5 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -243,7 +245,7 @@ pub fn SignalingPage() -> impl IntoView {
                                 return view! { <SignalingSkeleton/> }.into_any();
                             }
                             let is_locktime = data_method == "locktime";
-                            let threshold = if is_locktime { 95.0 } else { 55.0 };
+                            let threshold = 95.0;
                             let mined = period_stats.total_blocks;
                             let is_current = period_offset.get() == 0;
                             let remaining = if is_current { 2016u64.saturating_sub(mined) } else { 0 };
@@ -254,12 +256,10 @@ pub fn SignalingPage() -> impl IntoView {
                             let status_text = if activated { "Threshold reached" } else if is_current { "In progress" } else { "Did not activate" };
                             let status_color = if activated { "text-green-400" } else if pct >= threshold * 0.7 { "text-[#f7931a]" } else { "text-red-400/70" };
 
-                            // BIP description (compact)
-                            let bip_desc: (&str, &str, &str, &str) = if is_locktime {
-                                ("BIP-54: Consensus Cleanup", "Addresses four protocol vulnerabilities: timewarp attack, worst-case block validation time, 64-byte transaction exploits, and a theoretical edge case in BIP-34's duplicate coinbase txid prevention. There is no formal signaling mechanism for BIP-54. This tracker checks compatibility: coinbase nLockTime = height\u{2009}\u{2212}\u{2009}1 and nSequence != 0xFFFFFFFF (timelock not disabled).", "95%", "https://github.com/bitcoin/bips/blob/master/bip-0054.md")
-                            } else {
-                                ("BIP-110: OP_RETURN Limits", "Limits new outputs to 34 bytes (except OP_RETURN, which allows up to 83 bytes). Also caps data pushes and witness elements at 256 bytes, restricts spendable witness versions to v0 and v1 (Taproot), and temporarily limits certain Taproot features. Pre-existing UTXOs are exempt. Signals on bit 4 with a 55% threshold (1,109 of 2,016 blocks). Mandatory lock-in around August 2026, auto-expires ~1 year after activation.", "55%", "https://github.com/bitcoin/bips/blob/master/bip-0110.mediawiki")
-                            };
+                            // BIP description (compact). Becomes a branch on `data_method`
+                            // again once a second BIP is tracked.
+                            let bip_desc: (&str, &str, &str, &str) =
+                                ("BIP-54: Consensus Cleanup", "Addresses four protocol vulnerabilities: timewarp attack, worst-case block validation time, 64-byte transaction exploits, and a theoretical edge case in BIP-34's duplicate coinbase txid prevention. There is no formal signaling mechanism for BIP-54. This tracker checks compatibility: coinbase nLockTime = height\u{2009}\u{2212}\u{2009}1 and nSequence != 0xFFFFFFFF (timelock not disabled).", "95%", "https://github.com/bitcoin/bips/blob/master/bip-0054.md");
 
                             // Aggregate miner signaling data
                             let mut miner_map: std::collections::BTreeMap<String, (u64, u64)> = std::collections::BTreeMap::new();
@@ -304,7 +304,7 @@ pub fn SignalingPage() -> impl IntoView {
                                 }
                             }).collect::<Vec<_>>();
 
-                            let start_height = if is_locktime { 940_000u64 } else { 936_000 };
+                            let start_height = 940_000u64;
                             let filtered: Vec<_> = periods.iter()
                                 .filter(|p| p.end_height >= start_height)
                                 .cloned()
