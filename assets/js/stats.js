@@ -604,7 +604,6 @@
                 var feesBtc = b.total_fees != null ? satsToBtc(b.total_fees) : '\u2014';
                 var subsidyBtc = satsToBtc(subsidySats);
                 var rewardBtc = b.total_fees != null ? satsToBtc(subsidySats + b.total_fees) : '\u2014';
-                var bit4 = (b.version & (1 << 4)) !== 0;
                 var bip54 = b.coinbase_locktime === b.height - 1 && b.coinbase_sequence !== 4294967295;
                 var versionHex = '0x' + (b.version >>> 0).toString(16).padStart(8, '0');
                 var hashVal = b.hash || 'N/A';
@@ -677,7 +676,6 @@
 
                 var sigContent = document.createElement('div');
                 sigContent.style.cssText = 'display:none;overflow:hidden';
-                sigContent.appendChild(bdRow('BIP-110 (bit 4)', bit4 ? '\u2713 Signaled' : '\u2717 No'));
                 sigContent.appendChild(bdRow('BIP-54', bip54 ? '\u2713 Compliant' : '\u2717 No'));
                 sigContent.appendChild(bdCopyRow('Block Version', versionHex, versionHex));
                 body.appendChild(sigContent);

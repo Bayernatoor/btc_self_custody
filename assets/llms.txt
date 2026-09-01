@@ -29,7 +29,6 @@ OP_RETURN protocol tracking: Runes, Omni Layer, Counterparty, and other data car
 
 ### BIP Signaling Tracker
 Per-block miner signaling for active Bitcoin Improvement Proposals:
-- BIP-110: Relaxed OP_RETURN data limits (version bit 4, 55% activation threshold)
 - BIP-54: Great Consensus Cleanup (coinbase locktime == height-1, 95% threshold)
 Block grid visualization, historical period chart, progress tracking per 2,016-block retarget period.
 

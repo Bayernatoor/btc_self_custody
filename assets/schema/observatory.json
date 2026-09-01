@@ -16,7 +16,7 @@
     "Fee analysis: total fees, avg fee per tx, median fee rate, fee rate bands (p10-p90), subsidy vs fees, fee revenue share, BTC volume, value flow, fee pressure scatter, fee spike detector, halving era comparison, protocol fee breakdown",
     "Mining analytics: difficulty history, difficulty ribbon (miner capitulation), mining pool dominance with OCEAN template miners, mining diversity index (HHI), empty blocks by pool",
     "Embedded data: OP_RETURN protocols (Runes, Omni Layer, Counterparty), Ordinals inscriptions, BRC-20 tokens",
-    "BIP signaling tracker: BIP-110 version bit 4, BIP-54 coinbase locktime compliance per 2,016-block period",
+    "BIP signaling tracker: BIP-54 coinbase locktime compliance per 2,016-block period",
     "Block Heartbeat: real-time EKG visualization of mempool and block activity",
     "Stats Overview: record-breaking blocks with 15 extreme categories",
     "Hall of Fame: 57+ curated notable Bitcoin blocks and transactions",
