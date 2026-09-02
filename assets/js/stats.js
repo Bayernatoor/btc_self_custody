@@ -1,6 +1,19 @@
 // ECharts helpers for the stats page.
 // Called from WASM via wasm_bindgen extern functions.
 (function() {
+    // ECharts reports a missing point differently depending on series and axis
+    // type — null, undefined, or a non-finite number — and each of those
+    // stringifies straight into a tooltip as "null", "undefined" or "NaN".
+    // Charts emit gaps deliberately: moving-average and velocity warm-up
+    // windows, and blocks with nothing to measure (an empty block has no
+    // inputs to classify). A gap is a normal state to render, not an error,
+    // so every tooltip formatter routes missing values through these.
+    var NO_VALUE = '—';
+    function hasNoValue(v) {
+        return v === null || v === undefined ||
+            (typeof v === 'number' && !isFinite(v));
+    }
+
     window.scrollChartIntoView = function(elementId) {
         var el = document.getElementById(elementId);
         if (!el) return;
@@ -300,7 +313,9 @@
                         var p = params[i];
                         var raw = p.data && p.data._raw !== undefined ? p.data._raw : p.value;
                         var unit = p.data && p.data._unit ? ' ' + p.data._unit : '';
-                        var formatted = typeof raw === 'number' ? (raw < 1 && raw > 0 ? raw.toFixed(4) : raw.toLocaleString(undefined, {maximumFractionDigits: 2})) : raw;
+                        var missing = hasNoValue(raw);
+                        var formatted = missing ? NO_VALUE : (typeof raw === 'number' ? (raw < 1 && raw > 0 ? raw.toFixed(4) : raw.toLocaleString(undefined, {maximumFractionDigits: 2})) : raw);
+                        if (missing) unit = '';
                         lines += '<div style="display:flex;justify-content:space-between;gap:12px;line-height:1.6">';
                         lines += (p.marker || '') + '<span style="flex:1;color:rgba(255,255,255,0.7)">' + (p.seriesName || '') + '</span>';
                         lines += '<span style="font-weight:600;color:rgba(255,255,255,0.9)">' + formatted + unit + '</span>';
@@ -370,7 +385,9 @@
                         }
 
                         var formatted;
-                        if (typeof val !== 'number') {
+                        if (hasNoValue(val)) {
+                            formatted = NO_VALUE;
+                        } else if (typeof val !== 'number') {
                             formatted = val;
                         } else if (isPct) {
                             formatted = parseFloat(val.toPrecision(10)).toFixed(2) + '%';
@@ -399,15 +416,15 @@
                     var height = d.length >= 3 && typeof d[2] === 'number' ? 'Block #' + d[2].toLocaleString() : '';
                     if (noTime) {
                         // Non-time scatter: show x and y values directly
-                        var xVal = typeof d[0] === 'number' ? d[0].toFixed(1) : d[0];
-                        var yVal = typeof d[1] === 'number' ? d[1].toFixed(1) : d[1];
+                        var xVal = hasNoValue(d[0]) ? NO_VALUE : (typeof d[0] === 'number' ? d[0].toFixed(1) : d[0]);
+                        var yVal = hasNoValue(d[1]) ? NO_VALUE : (typeof d[1] === 'number' ? d[1].toFixed(1) : d[1]);
                         var lines = '';
                         if (height) lines += '<span style="color:#f7931a;font-size:11px">' + height + '</span><br>';
                         lines += (p.marker || '') + ' ' + xVal + '% / ' + yVal + ' sat/vB';
                         return lines;
                     }
                     var time = new Date(d[0]).toLocaleString();
-                    var val = typeof d[1] === 'number' ? d[1].toFixed(2) : d[1];
+                    var val = hasNoValue(d[1]) ? NO_VALUE : (typeof d[1] === 'number' ? d[1].toFixed(2) : d[1]);
                     var header = '<div style="color:rgba(255,255,255,0.5);font-size:12px;margin-bottom:4px">' + time;
                     if (height) header += '&nbsp;&nbsp;<span style="color:#f7931a;font-size:11px">' + height + '</span>';
                     header += '</div>';

@@ -311,7 +311,13 @@ input[type="date"] {
   -webkit-text-fill-color: rgba(255, 255, 255, 0.8);
 }
 input[type="date"]::-webkit-calendar-picker-indicator {
-  filter: invert(1) brightness(0.7);
+  /* brightness(0) then invert(1) forces pure white whatever colour the browser
+     draws the icon. A bare invert(1) fought the `color-scheme: dark` above:
+     in dark mode the browser already draws a light icon, so inverting it
+     produced the dark, low-contrast icon this rule exists to prevent.
+     Chromium and WebKit only — Firefox has no such pseudo-element and relies
+     on `color-scheme` alone, which already gives it a light icon. */
+  filter: brightness(0) invert(1);
   cursor: pointer;
 }
 

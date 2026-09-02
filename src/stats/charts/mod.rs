@@ -269,6 +269,35 @@ pub(crate) fn build_data_array_f64(
     buf
 }
 
+/// Build a JSON array of [timestamp_ms, value, height], writing `null` where
+/// there is nothing to measure.
+///
+/// A share-of-total chart has no meaningful value for a block with no
+/// population to divide: an empty block carries only the coinbase, so it has no
+/// inputs to classify. Writing `0` there is not a smaller value, it is a
+/// different claim — on a stacked percentage chart three zeros collapse the
+/// stack to the baseline and read as missing data. `null` leaves a gap, which
+/// is what actually happened.
+pub(crate) fn build_data_array_opt_f64(
+    blocks: &[BlockSummary],
+    value_fn: impl Fn(&BlockSummary) -> Option<f64>,
+) -> String {
+    let mut buf = String::with_capacity(blocks.len() * 30);
+    buf.push('[');
+    for (i, b) in blocks.iter().enumerate() {
+        if i > 0 {
+            buf.push(',');
+        }
+        let ts = ts_ms(b.timestamp);
+        let _ = match value_fn(b) {
+            Some(v) => write!(buf, "[{},{},{}]", ts, v, b.height),
+            None => write!(buf, "[{},null,{}]", ts, b.height),
+        };
+    }
+    buf.push(']');
+    buf
+}
+
 /// Build a JSON array of [timestamp_ms, value, height] for integer values.
 pub(crate) fn build_data_array_i64(
     blocks: &[BlockSummary],
@@ -1278,6 +1307,26 @@ mod tests {
         assert_eq!(legend["show"], false);
         // Should still have default textStyle from chart_defaults
         assert!(legend.get("textStyle").is_some());
+    }
+
+    #[test]
+    fn opt_data_array_writes_null_and_stays_valid_json() {
+        let blocks = vec![test_block(1, 1_000), test_block(2, 2_000)];
+        let raw = build_data_array_opt_f64(&blocks, |b| {
+            (b.height == 1).then_some(12.5)
+        });
+        assert!(raw.contains(",null,"), "expected a null value: {raw}");
+
+        // data_array_value swallows a parse error into an empty array, so a
+        // malformed gap would blank the whole chart silently instead of
+        // failing loudly. Parse it here so that cannot happen unnoticed.
+        let parsed = data_array_value(&raw);
+        let rows = parsed.as_array().expect("expected an array");
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0][1], json!(12.5));
+        assert!(rows[1][1].is_null());
+        // Height survives on the gap row, so click-to-detail still resolves.
+        assert_eq!(rows[1][2], json!(2));
     }
 
     // -----------------------------------------------------------------------

@@ -677,33 +677,28 @@ pub fn tx_type_evolution_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Tx Type Evolution");
     }
 
-    let legacy_str = build_data_array_f64(blocks, |b| {
+    // `null`, not `0`, when a block has no inputs to classify. An empty block
+    // carries only the coinbase, so there is no population to take a share of;
+    // three zeros would collapse this stacked percentage chart to the baseline
+    // and read as a data gap rather than as an empty block.
+    let legacy_str = build_data_array_opt_f64(blocks, |b| {
         let total = b.legacy_tx_count + b.segwit_tx_count + b.taproot_tx_count;
-        if total > 0 {
-            round(b.legacy_tx_count as f64 / total as f64 * 100.0, 2)
-        } else {
-            0.0
-        }
+        (total > 0)
+            .then(|| round(b.legacy_tx_count as f64 / total as f64 * 100.0, 2))
     });
     let legacy_data = data_array_value(&legacy_str);
 
-    let segwit_str = build_data_array_f64(blocks, |b| {
+    let segwit_str = build_data_array_opt_f64(blocks, |b| {
         let total = b.legacy_tx_count + b.segwit_tx_count + b.taproot_tx_count;
-        if total > 0 {
-            round(b.segwit_tx_count as f64 / total as f64 * 100.0, 2)
-        } else {
-            0.0
-        }
+        (total > 0)
+            .then(|| round(b.segwit_tx_count as f64 / total as f64 * 100.0, 2))
     });
     let segwit_data = data_array_value(&segwit_str);
 
-    let taproot_str = build_data_array_f64(blocks, |b| {
+    let taproot_str = build_data_array_opt_f64(blocks, |b| {
         let total = b.legacy_tx_count + b.segwit_tx_count + b.taproot_tx_count;
-        if total > 0 {
-            round(b.taproot_tx_count as f64 / total as f64 * 100.0, 2)
-        } else {
-            0.0
-        }
+        (total > 0)
+            .then(|| round(b.taproot_tx_count as f64 / total as f64 * 100.0, 2))
     });
     let taproot_data = data_array_value(&taproot_str);
 
