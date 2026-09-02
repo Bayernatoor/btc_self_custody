@@ -60,6 +60,24 @@ strings. It breaks hydration and the whole app goes non-interactive with no erro
 `class:bg-white/10` or `class:bg-[#f7931a]`. Use a computed attribute instead:
 `class=move || format!(...)`.
 
+**A `forwards`-filled opacity animation keeps its stacking context after it finishes, so a
+`fixed` overlay inside one cannot escape it.** `ObservatoryPage` wraps every observatory page in
+`<section class="... opacity-0 animate-fadeinone">`. That section goes on creating a stacking
+context long after the fade ends, which confines any `position: fixed` descendant to it, and the
+sticky navbar (`z-30`, root stacking context) then paints over the descendant no matter how high
+its z-index goes. The chart drawer sat at `z-index: 10003` and still lost. Probe, three cases side
+by side in one static HTML file rendered headless: a `fixed` child of a plain ancestor overlays the
+navbar, a child of the finished animation does not. Fix is `leptos::portal::Portal` to `<body>`
+(precedent: the `stepper_v2` lightbox). Note `Portal` takes children as `Fn`, so build any `Vec`
+inside the closure rather than capturing one, or you get `E0525 ... only implements FnOnce`.
+
+**Never offset a fixed overlay by a hardcoded navbar height.** `top-[48px]` on the chart drawer was
+already short of the ~53px navbar (~65px at `2xl`, from `py-4` plus `text-2xl`), and the advisory
+banner sits *above* the navbar, so it pushed the navbar down and buried the drawer's first ~120px.
+Anything anchored below the navbar has to be full-height-with-a-portal, or measured. The mobile
+menu in `navbar.rs` carries the same lesson: it uses `absolute top-full` against the sticky navbar
+rather than `fixed top-12`.
+
 **`#![recursion_limit = "512"]` must be in both `lib.rs` and `main.rs`.** The bin crate compiles
 separately and does not inherit the lib's limit. Testing only the lib locally means this first
 appears in a CI or Docker build.
