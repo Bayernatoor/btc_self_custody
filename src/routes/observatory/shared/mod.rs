@@ -17,6 +17,7 @@ pub use state::*;
 #[cfg(feature = "hydrate")]
 pub use url_sync::build_share_url;
 
+use leptos::portal::Portal;
 use leptos::prelude::*;
 use leptos_router::hooks::use_location;
 
@@ -447,38 +448,50 @@ pub fn ObservatoryNav() -> impl IntoView {
 #[component]
 pub fn BlockDetailModal() -> impl IntoView {
     view! {
-        <div id="block-detail-modal" class="hidden fixed inset-0 flex items-center justify-center p-4" style="z-index: 10001">
-            <div class="absolute inset-0 bg-black/60" onclick="closeBlockDetail()"></div>
-            <div class="relative bg-[#0e2a47] border border-white/15 rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] overflow-y-auto overflow-x-hidden">
-                <div class="flex items-center justify-between px-5 py-3 border-b border-white/10">
-                    <span id="block-detail-title" class="text-white font-medium">"Block"</span>
-                    <button
-                        class="text-white/40 hover:text-white text-lg cursor-pointer"
-                        onclick="closeBlockDetail()"
-                    >"\u{2715}"</button>
+        // Portaled to <body> for the same reason as the chart drawer: these are
+        // rendered inside ObservatoryPage's `opacity-0 animate-fadeinone`
+        // section, and a forwards-filled opacity animation keeps its stacking
+        // context alive after the fade ends, confining these to it. The sticky
+        // navbar (z-30, root context) then paints over a z-10001 modal. Centring
+        // hid it most of the time, but the backdrop never covered the navbar or
+        // the advisory banner, and on a short viewport the modal's top slid
+        // under the navbar. JS reaches these by `getElementById` at call time
+        // rather than caching a node, so moving them out of the page subtree is
+        // safe.
+        <Portal>
+            <div id="block-detail-modal" class="hidden fixed inset-0 flex items-center justify-center p-4" style="z-index: 10001">
+                <div class="absolute inset-0 bg-black/60" onclick="closeBlockDetail()"></div>
+                <div class="relative bg-[#0e2a47] border border-white/15 rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] overflow-y-auto overflow-x-hidden">
+                    <div class="flex items-center justify-between px-5 py-3 border-b border-white/10">
+                        <span id="block-detail-title" class="text-white font-medium">"Block"</span>
+                        <button
+                            class="text-white/40 hover:text-white text-lg cursor-pointer"
+                            onclick="closeBlockDetail()"
+                        >"\u{2715}"</button>
+                    </div>
+                    <div id="block-detail-body" class="px-5 py-4 text-sm text-white/80 space-y-1"
+                        style="--bd-label: rgba(255,255,255,0.5)"
+                    ></div>
                 </div>
-                <div id="block-detail-body" class="px-5 py-4 text-sm text-white/80 space-y-1"
-                    style="--bd-label: rgba(255,255,255,0.5)"
-                ></div>
             </div>
-        </div>
 
-        // Transaction detail modal
-        <div id="tx-detail-modal" class="hidden fixed inset-0 flex items-center justify-center p-4" style="z-index: 10001">
-            <div class="absolute inset-0 bg-black/60" onclick="closeTxDetail()"></div>
-            <div class="relative bg-[#0e2a47] border border-white/15 rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] overflow-y-auto overflow-x-hidden">
-                <div class="flex items-center justify-between px-5 py-3 border-b border-white/10">
-                    <span id="tx-detail-title" class="text-white font-medium">"Transaction"</span>
-                    <button
-                        class="text-white/40 hover:text-white text-lg cursor-pointer"
-                        onclick="closeTxDetail()"
-                    >"\u{2715}"</button>
+            // Transaction detail modal
+            <div id="tx-detail-modal" class="hidden fixed inset-0 flex items-center justify-center p-4" style="z-index: 10001">
+                <div class="absolute inset-0 bg-black/60" onclick="closeTxDetail()"></div>
+                <div class="relative bg-[#0e2a47] border border-white/15 rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] overflow-y-auto overflow-x-hidden">
+                    <div class="flex items-center justify-between px-5 py-3 border-b border-white/10">
+                        <span id="tx-detail-title" class="text-white font-medium">"Transaction"</span>
+                        <button
+                            class="text-white/40 hover:text-white text-lg cursor-pointer"
+                            onclick="closeTxDetail()"
+                        >"\u{2715}"</button>
+                    </div>
+                    <div id="tx-detail-body" class="px-5 py-4 text-sm text-white/80 space-y-1"
+                        style="--bd-label: rgba(255,255,255,0.5)"
+                    ></div>
                 </div>
-                <div id="tx-detail-body" class="px-5 py-4 text-sm text-white/80 space-y-1"
-                    style="--bd-label: rgba(255,255,255,0.5)"
-                ></div>
             </div>
-        </div>
+        </Portal>
     }
 }
 
