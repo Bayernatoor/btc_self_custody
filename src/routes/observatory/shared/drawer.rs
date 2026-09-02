@@ -2,7 +2,11 @@
 //!
 //! Collapsible sidebar listing all observatory charts organized by page and section.
 //! Clicking a chart name scrolls to it (same page) or navigates (cross-page).
+//!
+//! The overlay is portaled to `<body>` and spans the full viewport height. Both
+//! are load-bearing; see the comments on `ChartDrawer` for why.
 
+use leptos::portal::Portal;
 use leptos::prelude::*;
 use leptos_router::hooks::use_location;
 
@@ -356,8 +360,6 @@ pub fn ChartDrawer() -> impl IntoView {
     let (open, set_open) = signal(false);
     let location = use_location();
 
-    let pages = drawer_pages();
-
     view! {
         // Toggle tab fixed on the left edge
         // Section-nav drawer trigger. Deliberately quieter than the primary
@@ -376,102 +378,120 @@ pub fn ChartDrawer() -> impl IntoView {
             </svg>
         </button>
 
-        // Backdrop
-        <Show when=move || open.get()>
-            <div
-                style="z-index: 10002"
-                class="fixed inset-0 bg-black/50 transition-opacity"
-                on:click=move |_| set_open.set(false)
-            />
-        </Show>
-
-        // Drawer panel
-        <div
-            style=move || format!(
-                "z-index: 10003; transform: translateX({}); transition: transform 0.25s ease-in-out;",
-                if open.get() { "0" } else { "-100%" }
-            )
-            class="fixed top-[48px] left-0 bottom-0 w-72 bg-[#0d2137] border-r border-white/10 overflow-y-auto"
-        >
-            // Header
-            <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
-                <span class="text-sm font-semibold text-white/80">"Chart Index"</span>
-                <button
-                    class="text-white/30 hover:text-white/60 cursor-pointer"
+        // Portaled to <body> so the overlay escapes ObservatoryPage's stacking
+        // context. That section carries `opacity-0 animate-fadeinone`, and a
+        // forwards-filled opacity animation keeps creating a stacking context
+        // after it has finished, not just while it runs. That confined these
+        // children to the section, so the sticky navbar (z-30, root context)
+        // painted over the panel however high its z-index went. Verified by
+        // rendering the three cases side by side: a descendant of a plain
+        // ancestor overlays the navbar, a descendant of the finished animation
+        // does not.
+        <Portal>
+            // Backdrop
+            <Show when=move || open.get()>
+                <div
+                    style="z-index: 10002"
+                    class="fixed inset-0 bg-black/50 transition-opacity"
                     on:click=move |_| set_open.set(false)
-                >
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                    </svg>
-                </button>
-            </div>
+                />
+            </Show>
 
-            // Content
-            <nav class="p-3">
-                {pages.into_iter().map(|page| {
-                    let path_prefix = page.path_prefix;
-                    view! {
-                        <div class="mb-3">
-                            // Page heading
-                            <div class=move || {
-                                let current = location.pathname.get();
-                                if current.starts_with(path_prefix) {
-                                    "text-sm font-bold text-[#f7931a] uppercase tracking-wider px-2 py-1.5 border-b border-[#f7931a]/20 mb-1"
-                                } else {
-                                    "text-sm font-bold text-white/50 uppercase tracking-wider px-2 py-1.5 border-b border-white/5 mb-1"
-                                }
-                            }>
-                                {page.label}
-                            </div>
-                            // Sections
-                            {page.sections.into_iter().map(|section| {
-                                let has_label = !section.label.is_empty();
-                                view! {
-                                    <div class="ml-1">
-                                        {if has_label {
-                                            Some(view! {
-                                                <div class="text-[11px] text-white/45 font-semibold uppercase tracking-wider px-2 pt-2 pb-1">
-                                                    {section.label}
-                                                </div>
-                                            })
-                                        } else {
-                                            None
-                                        }}
-                                        <ul class="space-y-0">
-                                            {section.charts.into_iter().map(|chart| {
-                                                let card_id = chart.card_id;
-                                                view! {
-                                                    <li>
-                                                        <button
-                                                            class="w-full text-left text-[12px] text-white/60 hover:text-white hover:bg-white/5 rounded-md px-3 py-1 cursor-pointer transition-colors"
-                                                            on:click=move |_| {
-                                                                set_open.set(false);
-                                                                #[cfg(feature = "hydrate")]
-                                                                {
-                                                                    // All charts are in the DOM (flat layout), so direct
-                                                                    // scroll works for same-page. Cross-page: navigate via href.
-                                                                    if let Some(el) = leptos::prelude::document().get_element_by_id(card_id) {
-                                                                        el.scroll_into_view();
-                                                                    } else {
-                                                                        let url = format!("{}#{}", path_prefix, card_id);
-                                                                        let _ = leptos::prelude::window().location().set_href(&url);
+            // Drawer panel. Full height rather than offset to sit below the
+            // navbar: every hardcoded top goes stale as soon as anything above
+            // the navbar changes height. `top-[48px]` was already short of the
+            // ~53px navbar (~65px at 2xl) before the advisory banner pushed the
+            // navbar down and buried the panel's first ~120px.
+            <div
+                style=move || format!(
+                    "z-index: 10003; transform: translateX({}); transition: transform 0.25s ease-in-out;",
+                    if open.get() { "0" } else { "-100%" }
+                )
+                class="fixed inset-y-0 left-0 w-72 bg-[#0d2137] border-r border-white/10 overflow-y-auto"
+            >
+                // Header
+                <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
+                    <span class="text-sm font-semibold text-white/80">"Chart Index"</span>
+                    <button
+                        class="text-white/30 hover:text-white/60 cursor-pointer"
+                        on:click=move |_| set_open.set(false)
+                    >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+
+                // Content
+                <nav class="p-3">
+                    // Built here rather than hoisted above the view: `Portal`
+                    // takes its children as `Fn`, so the closure cannot move a
+                    // captured Vec out of its environment.
+                    {drawer_pages().into_iter().map(|page| {
+                        let path_prefix = page.path_prefix;
+                        view! {
+                            <div class="mb-3">
+                                // Page heading
+                                <div class=move || {
+                                    let current = location.pathname.get();
+                                    if current.starts_with(path_prefix) {
+                                        "text-sm font-bold text-[#f7931a] uppercase tracking-wider px-2 py-1.5 border-b border-[#f7931a]/20 mb-1"
+                                    } else {
+                                        "text-sm font-bold text-white/50 uppercase tracking-wider px-2 py-1.5 border-b border-white/5 mb-1"
+                                    }
+                                }>
+                                    {page.label}
+                                </div>
+                                // Sections
+                                {page.sections.into_iter().map(|section| {
+                                    let has_label = !section.label.is_empty();
+                                    view! {
+                                        <div class="ml-1">
+                                            {if has_label {
+                                                Some(view! {
+                                                    <div class="text-[11px] text-white/45 font-semibold uppercase tracking-wider px-2 pt-2 pb-1">
+                                                        {section.label}
+                                                    </div>
+                                                })
+                                            } else {
+                                                None
+                                            }}
+                                            <ul class="space-y-0">
+                                                {section.charts.into_iter().map(|chart| {
+                                                    let card_id = chart.card_id;
+                                                    view! {
+                                                        <li>
+                                                            <button
+                                                                class="w-full text-left text-[12px] text-white/60 hover:text-white hover:bg-white/5 rounded-md px-3 py-1 cursor-pointer transition-colors"
+                                                                on:click=move |_| {
+                                                                    set_open.set(false);
+                                                                    #[cfg(feature = "hydrate")]
+                                                                    {
+                                                                        // All charts are in the DOM (flat layout), so direct
+                                                                        // scroll works for same-page. Cross-page: navigate via href.
+                                                                        if let Some(el) = leptos::prelude::document().get_element_by_id(card_id) {
+                                                                            el.scroll_into_view();
+                                                                        } else {
+                                                                            let url = format!("{}#{}", path_prefix, card_id);
+                                                                            let _ = leptos::prelude::window().location().set_href(&url);
+                                                                        }
                                                                     }
                                                                 }
-                                                            }
-                                                        >
-                                                            {chart.label}
-                                                        </button>
-                                                    </li>
-                                                }
-                                            }).collect::<Vec<_>>()}
-                                        </ul>
-                                    </div>
-                                }
-                            }).collect::<Vec<_>>()}
-                        </div>
-                    }
-                }).collect::<Vec<_>>()}
-            </nav>
-        </div>
+                                                            >
+                                                                {chart.label}
+                                                            </button>
+                                                        </li>
+                                                    }
+                                                }).collect::<Vec<_>>()}
+                                            </ul>
+                                        </div>
+                                    }
+                                }).collect::<Vec<_>>()}
+                            </div>
+                        }
+                    }).collect::<Vec<_>>()}
+                </nav>
+            </div>
+        </Portal>
     }
 }
