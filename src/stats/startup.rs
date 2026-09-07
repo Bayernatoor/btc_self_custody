@@ -71,6 +71,16 @@ pub async fn init() -> Option<(
         if let Err(e) = db::rebuild_all_daily_blocks(&conn) {
             tracing::warn!("Failed to build daily_blocks: {e}");
         }
+        // Health probe. A non-zero result means the rollup has fallen behind
+        // and every range above 5,000 blocks is rendering incomplete data.
+        // Repair with `cargo run --bin rebuild_daily_blocks --features ssr`.
+        match db::daily_blocks_missing_days(&conn) {
+            Ok(0) => {}
+            Ok(n) => tracing::warn!(
+                "daily_blocks is missing {n} day(s) present in blocks; daily-mode charts are incomplete. Run the rebuild_daily_blocks bin to repair."
+            ),
+            Err(e) => tracing::warn!("daily_blocks probe failed: {e}"),
+        }
     }
 
     // Broadcast channel for heartbeat events (ZMQ → SSE). 4096 buffer handles bursts.
@@ -319,16 +329,11 @@ pub fn spawn_background_tasks(
                     // OnNewBlock at construction (see startup builder
                     // above); the registry fans this out.
                     state.invalidate(super::cache::CacheTag::OnNewBlock);
-                    // Update today's pre-computed daily aggregate
-                    if let Ok(conn) = state.db.get() {
-                        let today = db::timestamp_to_date(
-                            std::time::SystemTime::now()
-                                .duration_since(std::time::UNIX_EPOCH)
-                                .unwrap_or_default()
-                                .as_secs(),
-                        );
-                        let _ = db::refresh_daily_block(&conn, &today);
-                    }
+                    // The daily rollup is refreshed by `db::insert_blocks`,
+                    // keyed on each block's OWN timestamp. It used to be done
+                    // here against the system clock's "today", which silently
+                    // skipped the previous day whenever a block mined at 23:59
+                    // was ingested after midnight.
                 }
             }
         });

@@ -16,6 +16,7 @@ APP_DIR="/opt/wehodlbtc/app"
 STAGING_DIR="/opt/wehodlbtc/staging"
 BIN_PATH="${APP_DIR}/target/release/we_hodl_btc"
 SITE_PATH="${APP_DIR}/target/site"
+TOOLS_PATH="${APP_DIR}/tools"
 
 log() { echo "==> $*"; }
 die() { echo "!! $*" >&2; exit 1; }
@@ -39,6 +40,22 @@ log "Installing new artifacts"
 mv "${STAGING_DIR}/we_hodl_btc" "${BIN_PATH}"
 mv "${STAGING_DIR}/site" "${SITE_PATH}"
 chmod +x "${BIN_PATH}"
+
+# One-shot maintenance utilities (rebuild_daily_blocks, backfill_missing_heights).
+# Not part of the served release: no .prev copy and no rollback, because they
+# only read the DB and rewrite derived tables, so an older app with a newer tool
+# is harmless. Guarded on existence so this script still works against an
+# artifact built before CI started shipping them.
+if [ -d "${STAGING_DIR}/tools" ]; then
+    log "Installing maintenance utilities"
+    mkdir -p "${TOOLS_PATH}"
+    for tool in "${STAGING_DIR}"/tools/*; do
+        [ -f "$tool" ] || continue
+        install -m 755 "$tool" "${TOOLS_PATH}/$(basename "$tool")"
+    done
+    rm -rf "${STAGING_DIR}/tools"
+    ls -la "${TOOLS_PATH}"
+fi
 
 log "Restarting service"
 sudo systemctl restart wehodlbtc

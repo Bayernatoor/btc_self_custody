@@ -57,13 +57,27 @@ jobs:
       - name: Build release with cargo-leptos
         run: cargo leptos build --release
 
+      # cargo-leptos builds only `bin-target` (we_hodl_btc), so the one-shot
+      # maintenance utilities never reached the droplet and could only be run
+      # from a source tree that the deploy no longer guarantees is there.
+      # Incremental against the release build above, so this is cheap.
+      - name: Build maintenance utilities
+        run: |
+          cargo build --release --features ssr \
+            --bin backfill_missing_heights \
+            --bin rebuild_daily_blocks
+
       - name: Stage artifacts
         run: |
-          mkdir -p artifact
+          mkdir -p artifact/tools
           cp target/release/we_hodl_btc artifact/we_hodl_btc
           strip artifact/we_hodl_btc
           cp -r target/site artifact/site
-          ls -lah artifact
+          for tool in backfill_missing_heights rebuild_daily_blocks; do
+            cp "target/release/${tool}" "artifact/tools/${tool}"
+            strip "artifact/tools/${tool}"
+          done
+          ls -lah artifact artifact/tools
           du -sh artifact/site
 
       - name: Configure SSH

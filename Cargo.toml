@@ -26,6 +26,13 @@ path = "src/bin/backfill_missing_heights.rs"
 name = "backfill_missing_heights"
 required-features = ["ssr"]
 
+# Repairs the daily_blocks rollup. Same ssr-only constraint as above. Run as
+# `cargo run --bin rebuild_daily_blocks --features ssr`.
+[[bin]]
+path = "src/bin/rebuild_daily_blocks.rs"
+name = "rebuild_daily_blocks"
+required-features = ["ssr"]
+
 [dependencies]
 axum = { version = "0.8", optional = true }
 console_error_panic_hook = "0.1"
