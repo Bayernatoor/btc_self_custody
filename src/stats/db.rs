@@ -540,6 +540,14 @@ pub fn insert_blocks(
             ])?;
         }
     }
+    // Roll the affected days up inside the same transaction as the insert.
+    // This lives here rather than at the call sites because there are six
+    // writers (poller, initial ingest, gap fill, backward backfill, extras
+    // backfill, reorg replace) and the ones that forgot are exactly why the
+    // table drifted: a day is only ever correct if whoever wrote its blocks
+    // re-aggregated it. Same reasoning as the cache registry's "cannot ship
+    // without an invalidation contract".
+    refresh_daily_blocks_for_timestamps(&tx, blocks.iter().map(|b| b.time))?;
     tx.commit()?;
     Ok(())
 }
@@ -672,6 +680,10 @@ pub fn update_block_extras(
             ])?;
         }
     }
+    // The extras backfill is the single largest source of drift: it populates
+    // columns added by a later ALTER TABLE, and without this every day it
+    // touches keeps the DEFAULT 0 that the ALTER wrote into daily_blocks.
+    refresh_daily_blocks_for_timestamps(&tx, blocks.iter().map(|b| b.time))?;
     tx.commit()?;
     Ok(())
 }
@@ -1239,10 +1251,35 @@ pub struct DailyRow {
 
 /// Rebuild a single day's row in the daily_blocks table by re-aggregating
 /// from the raw blocks table. Called after new block ingestion.
-pub fn refresh_daily_block(
+/// Unix timestamp of the start of the UTC day containing `ts`.
+///
+/// UTC days align exactly to 86,400-second boundaries in Unix time, so this is
+/// integer arithmetic rather than calendar math. Used to turn a block's own
+/// timestamp into the identity of the `daily_blocks` row it belongs to.
+pub fn day_start(ts: u64) -> u64 {
+    ts - (ts % 86_400)
+}
+
+/// Re-aggregate the single UTC day containing `day_start_ts` from `blocks`.
+///
+/// Filters on a timestamp RANGE rather than `date(datetime(timestamp, ...)) = ?`.
+/// The expression form is not sargable: it forces a full scan of every block for
+/// each day refreshed (measured 502ms against 965k rows, versus 0.0ms for the
+/// range form using `idx_blocks_timestamp`, identical results). That cost was
+/// tolerable when only "today" was ever refreshed once per block, but this is now
+/// called for every day touched by ingestion and backfill, where thousands of
+/// full scans would be untenable.
+///
+/// `HAVING COUNT(*) > 0` keeps a day with no blocks from writing a row: the
+/// aggregate-without-GROUP-BY would otherwise yield a single row with a NULL day
+/// and a zero count, and `day` is the primary key.
+pub fn refresh_daily_day(
     conn: &Connection,
-    day: &str,
+    day_start_ts: u64,
 ) -> rusqlite::Result<()> {
+    let start = day_start(day_start_ts);
+    let end = start + 86_400;
+    let day = timestamp_to_date(start);
     conn.execute(
         "INSERT OR REPLACE INTO daily_blocks
             (day, block_count, avg_size, avg_weight, avg_tx_count, avg_difficulty,
@@ -1262,7 +1299,7 @@ pub fn refresh_daily_block(
              avg_inscription_envelope_bytes, total_inscription_fees, total_runes_fees,
              avg_legacy_tx_count, avg_segwit_tx_count, avg_taproot_tx_count,
              avg_fee_rate_p25, avg_fee_rate_p75)
-         SELECT date(datetime(timestamp, 'unixepoch')),
+         SELECT ?1,
                 COUNT(*), AVG(size), AVG(weight), AVG(tx_count), AVG(difficulty),
                 SUM(op_return_count), SUM(runes_count), SUM(omni_count),
                 SUM(counterparty_count), SUM(data_carrier_count),
@@ -1282,31 +1319,37 @@ pub fn refresh_daily_block(
                 AVG(legacy_tx_count), AVG(segwit_tx_count), AVG(taproot_tx_count),
                 AVG(fee_rate_p25), AVG(fee_rate_p75)
          FROM blocks
-         WHERE date(datetime(timestamp, 'unixepoch')) = ?1",
-        params![day],
+         WHERE timestamp >= ?2 AND timestamp < ?3
+         HAVING COUNT(*) > 0",
+        params![day, start, end],
     )?;
     Ok(())
 }
 
-/// Populate the entire daily_blocks table from scratch. Used on first run
-/// when the table is empty but blocks already exist.
-pub fn rebuild_all_daily_blocks(conn: &Connection) -> rusqlite::Result<u64> {
-    let count: u64 =
-        conn.query_row("SELECT COUNT(*) FROM daily_blocks", [], |r| r.get(0))?;
-    let block_count: u64 =
-        conn.query_row("SELECT COUNT(*) FROM blocks", [], |r| r.get(0))?;
-
-    // Only rebuild if blocks exist but daily_blocks is empty
-    if count > 0 || block_count == 0 {
-        return Ok(count);
+/// Re-aggregate every distinct UTC day covered by `timestamps`.
+///
+/// This is the function every writer to `blocks` must call. A block's day is
+/// derived from the block's OWN timestamp, never from the system clock: a block
+/// mined at 23:59 and ingested at 00:00 belongs to the day it was mined, and
+/// refreshing "today" instead left the previous day permanently short (50 such
+/// days in the local database before this shipped).
+///
+/// Returns the number of distinct days refreshed. Days are de-duplicated, so a
+/// 100-block batch spanning one day costs one refresh, not 100.
+pub fn refresh_daily_blocks_for_timestamps(
+    conn: &Connection,
+    timestamps: impl IntoIterator<Item = u64>,
+) -> rusqlite::Result<usize> {
+    let days: std::collections::BTreeSet<u64> =
+        timestamps.into_iter().map(day_start).collect();
+    for day in &days {
+        refresh_daily_day(conn, *day)?;
     }
+    Ok(days.len())
+}
 
-    tracing::info!(
-        "Building daily_blocks table from {} blocks...",
-        block_count
-    );
-    conn.execute_batch(
-        "INSERT OR REPLACE INTO daily_blocks
+/// Column list and aggregate shared by the full-table rebuild paths.
+const REBUILD_DAILY_SQL: &str = "INSERT OR REPLACE INTO daily_blocks
             (day, block_count, avg_size, avg_weight, avg_tx_count, avg_difficulty,
              total_op_return_count, total_runes_count, total_omni_count,
              total_counterparty_count, total_data_carrier_count,
@@ -1344,8 +1387,58 @@ pub fn rebuild_all_daily_blocks(conn: &Connection) -> rusqlite::Result<u64> {
                 AVG(legacy_tx_count), AVG(segwit_tx_count), AVG(taproot_tx_count),
                 AVG(fee_rate_p25), AVG(fee_rate_p75)
          FROM blocks
-         GROUP BY date(datetime(timestamp, 'unixepoch'))"
-    )?;
+         GROUP BY date(datetime(timestamp, 'unixepoch'))";
+
+/// Rebuild every `daily_blocks` row from `blocks`, unconditionally.
+///
+/// The maintenance counterpart to [`rebuild_all_daily_blocks`], which refuses to
+/// run once the table has any rows. That guard is right for startup and wrong for
+/// repair: columns added by a later `ALTER TABLE` keep their `DEFAULT 0` in every
+/// pre-existing daily row, because nothing re-aggregates a historical day after
+/// the extras backfill populates it in `blocks`. Run via
+/// `cargo run --bin rebuild_daily_blocks --features ssr`.
+///
+/// One grouped scan over `blocks` rather than a seek per day: cheaper than the
+/// equivalent loop once more than a handful of days need repair.
+pub fn rebuild_daily_blocks_force(conn: &Connection) -> rusqlite::Result<u64> {
+    conn.execute_batch(REBUILD_DAILY_SQL)?;
+    conn.query_row("SELECT COUNT(*) FROM daily_blocks", [], |r| r.get(0))
+}
+
+/// Count days present in `blocks` that have no `daily_blocks` row.
+///
+/// Cheap enough to run at startup as a health probe. A non-zero result means the
+/// rollup has fallen behind and daily-mode charts (every range above 5,000
+/// blocks) are rendering incomplete data.
+pub fn daily_blocks_missing_days(conn: &Connection) -> rusqlite::Result<u64> {
+    conn.query_row(
+        "SELECT COUNT(*) FROM (
+             SELECT DISTINCT date(datetime(timestamp, 'unixepoch')) AS d FROM blocks
+             EXCEPT SELECT day FROM daily_blocks
+         )",
+        [],
+        |r| r.get(0),
+    )
+}
+
+/// Populate the entire daily_blocks table from scratch. Used on first run
+/// when the table is empty but blocks already exist.
+pub fn rebuild_all_daily_blocks(conn: &Connection) -> rusqlite::Result<u64> {
+    let count: u64 =
+        conn.query_row("SELECT COUNT(*) FROM daily_blocks", [], |r| r.get(0))?;
+    let block_count: u64 =
+        conn.query_row("SELECT COUNT(*) FROM blocks", [], |r| r.get(0))?;
+
+    // Only rebuild if blocks exist but daily_blocks is empty
+    if count > 0 || block_count == 0 {
+        return Ok(count);
+    }
+
+    tracing::info!(
+        "Building daily_blocks table from {} blocks...",
+        block_count
+    );
+    conn.execute_batch(REBUILD_DAILY_SQL)?;
     let new_count: u64 =
         conn.query_row("SELECT COUNT(*) FROM daily_blocks", [], |r| r.get(0))?;
     tracing::info!("Built {} daily_blocks rows", new_count);
@@ -3220,6 +3313,154 @@ mod tests {
         assert_eq!(timestamp_to_date(1713571200), "2024-04-20"); // 4th halving
     }
 
+    // -----------------------------------------------------------------------
+    // daily_blocks rollup integrity
+    // -----------------------------------------------------------------------
+
+    fn daily_row(conn: &Connection, day: &str) -> Option<(u64, f64)> {
+        conn.query_row(
+            "SELECT block_count, avg_size FROM daily_blocks WHERE day = ?1",
+            rusqlite::params![day],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()
+        .unwrap()
+    }
+
+    #[test]
+    fn day_start_snaps_to_utc_midnight() {
+        // 2024-04-20 12:00:00 UTC -> 2024-04-20 00:00:00 UTC
+        assert_eq!(day_start(1713614400), 1713571200);
+        // Already midnight: unchanged (idempotent)
+        assert_eq!(day_start(1713571200), 1713571200);
+        // One second before midnight belongs to the previous day
+        assert_eq!(timestamp_to_date(day_start(1713571199)), "2024-04-19");
+    }
+
+    #[test]
+    fn refresh_daily_day_aggregates_only_that_day() {
+        let conn = setup_db();
+        // Two blocks on 2024-04-20, one on 2024-04-21.
+        insert_test_block(&conn, 1, 1713571200, 2_000_000, 100, 1000);
+        insert_test_block(&conn, 2, 1713600000, 4_000_000, 200, 2000);
+        insert_test_block(&conn, 3, 1713657600, 1_000_000, 50, 500);
+
+        refresh_daily_day(&conn, 1713571200).unwrap();
+
+        let (count, avg_size) = daily_row(&conn, "2024-04-20").unwrap();
+        assert_eq!(count, 2, "only the two blocks on 04-20");
+        // sizes are weight/4: 500,000 and 1,000,000 -> mean 750,000
+        assert_eq!(avg_size, 750_000.0);
+        assert!(
+            daily_row(&conn, "2024-04-21").is_none(),
+            "refreshing one day must not write another"
+        );
+    }
+
+    #[test]
+    fn refresh_daily_day_writes_no_row_for_an_empty_day() {
+        let conn = setup_db();
+        // No blocks at all. The aggregate-without-GROUP-BY would otherwise
+        // yield one row with a NULL day and a zero count, and `day` is the PK.
+        refresh_daily_day(&conn, 1713571200).unwrap();
+        let rows: u64 = conn
+            .query_row("SELECT COUNT(*) FROM daily_blocks", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(rows, 0);
+    }
+
+    /// The bug that produced 50 wrong `block_count` values in production: a
+    /// block mined at 23:59 and ingested after midnight was rolled into the
+    /// ingesting day rather than the day it was mined, leaving the previous
+    /// day permanently short. Keying on the block's own timestamp fixes it.
+    #[test]
+    fn insert_across_utc_midnight_rolls_up_both_days() {
+        let conn = setup_db();
+        let block = |height: u64, time: u64| Block {
+            height,
+            hash: format!("hash_{height}"),
+            time,
+            n_tx: 10,
+            size: 500_000,
+            weight: 2_000_000,
+            ..Default::default()
+        };
+
+        // 2024-04-20 23:59:00 and 2024-04-21 00:01:00, inserted together.
+        insert_blocks(&conn, &[block(1, 1713657540), block(2, 1713657660)])
+            .unwrap();
+
+        assert_eq!(
+            daily_row(&conn, "2024-04-20").map(|(c, _)| c),
+            Some(1),
+            "the 23:59 block belongs to the day it was mined"
+        );
+        assert_eq!(
+            daily_row(&conn, "2024-04-21").map(|(c, _)| c),
+            Some(1),
+            "the 00:01 block belongs to the following day"
+        );
+        assert_eq!(daily_blocks_missing_days(&conn).unwrap(), 0);
+    }
+
+    #[test]
+    fn batch_insert_refreshes_each_day_once() {
+        let conn = setup_db();
+        // 5 blocks spread over 2 days -> 2 distinct day refreshes, not 5.
+        let ts: Vec<u64> = vec![
+            1713571200, 1713600000, 1713620000, // 04-20
+            1713657600, 1713660000, // 04-21
+        ];
+        assert_eq!(
+            refresh_daily_blocks_for_timestamps(&conn, ts.clone()).unwrap(),
+            2
+        );
+    }
+
+    #[test]
+    fn force_rebuild_repairs_a_stale_row() {
+        let conn = setup_db();
+        insert_test_block(&conn, 1, 1713571200, 2_000_000, 100, 1000);
+        insert_test_block(&conn, 2, 1713600000, 4_000_000, 200, 2000);
+        refresh_daily_day(&conn, 1713571200).unwrap();
+
+        // Simulate the drift: a day row that predates a later ALTER TABLE and
+        // still carries the DEFAULT 0 the migration wrote.
+        conn.execute(
+            "UPDATE daily_blocks SET avg_size = 0, block_count = 0 WHERE day = '2024-04-20'",
+            [],
+        )
+        .unwrap();
+        assert_eq!(daily_row(&conn, "2024-04-20"), Some((0, 0.0)));
+
+        // The startup rebuild refuses to touch a non-empty table...
+        rebuild_all_daily_blocks(&conn).unwrap();
+        assert_eq!(
+            daily_row(&conn, "2024-04-20"),
+            Some((0, 0.0)),
+            "rebuild_all_daily_blocks must stay a first-run-only guard"
+        );
+
+        // ...the maintenance path repairs it.
+        rebuild_daily_blocks_force(&conn).unwrap();
+        assert_eq!(daily_row(&conn, "2024-04-20"), Some((2, 750_000.0)));
+    }
+
+    #[test]
+    fn missing_days_probe_counts_unrolled_days() {
+        let conn = setup_db();
+        insert_test_block(&conn, 1, 1713571200, 2_000_000, 100, 1000);
+        insert_test_block(&conn, 2, 1713657600, 2_000_000, 100, 1000);
+        // Nothing rolled up yet: both days are missing.
+        assert_eq!(daily_blocks_missing_days(&conn).unwrap(), 2);
+
+        refresh_daily_day(&conn, 1713571200).unwrap();
+        assert_eq!(daily_blocks_missing_days(&conn).unwrap(), 1);
+
+        refresh_daily_day(&conn, 1713657600).unwrap();
+        assert_eq!(daily_blocks_missing_days(&conn).unwrap(), 0);
+    }
+
     #[test]
     fn test_fullness_histogram() {
         let conn = setup_db();
@@ -3331,8 +3572,7 @@ mod tests {
 
         // Add another block on the same day
         insert_test_block(&conn, 2, 1700000600, 3_500_000, 200, 5000);
-        let day = timestamp_to_date(1700000000);
-        refresh_daily_block(&conn, &day).unwrap();
+        refresh_daily_day(&conn, 1700000000).unwrap();
 
         let rows =
             query_daily_aggregates_fast(&conn, 0, 9_999_999_999).unwrap();

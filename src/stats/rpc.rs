@@ -208,7 +208,11 @@ pub struct BlockTxids {
 
 /// Fully parsed block data from `getblock` verbosity=2.
 /// Contains all metrics computed in a single pass over the block's transactions.
-#[derive(Debug, Clone)]
+///
+/// `Default` exists so tests can build a block by naming only the fields under
+/// test; every field is a number or a String, so the derived zero value is
+/// meaningful rather than a placeholder for something unrepresentable.
+#[derive(Debug, Clone, Default)]
 pub struct Block {
     pub hash: String,
     pub height: u64,

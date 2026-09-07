@@ -253,6 +253,14 @@ pub async fn verify_recent_blocks(
             let _ =
                 db::insert_reorg(&conn, height, &stored_hash, &canonical_hash);
 
+            // Capture the stale block's day before deleting it. `insert_blocks`
+            // re-aggregates the day it writes, which covers the replacement, but
+            // only if the re-fetch below succeeds. If it fails we still removed a
+            // block, so the day's aggregate is left counting a block that is no
+            // longer there until something refreshes it.
+            let stale_day =
+                db::query_block_timestamp(&conn, height).ok().flatten();
+
             // Delete the stale block
             let _ = db::delete_block(&conn, height);
 
@@ -273,9 +281,22 @@ pub async fn verify_recent_blocks(
                         corrected += 1;
                     }
                 }
-                Err(e) => tracing::error!(
-                    "Failed to fetch canonical block at {height}: {e}"
-                ),
+                Err(e) => {
+                    tracing::error!(
+                        "Failed to fetch canonical block at {height}: {e}"
+                    );
+                    // Deleted but not replaced: re-aggregate the day so it stops
+                    // reporting the removed block.
+                    if let Some(ts) = stale_day {
+                        if let Err(e) =
+                            db::refresh_daily_blocks_for_timestamps(&conn, [ts])
+                        {
+                            tracing::warn!(
+                                "Failed to refresh daily rollup after reorg delete at {height}: {e}"
+                            );
+                        }
+                    }
+                }
             }
         }
     }
