@@ -3,8 +3,8 @@
 #
 # The production deploy pipeline now builds on GitHub Actions and rsyncs the
 # release binary + target/site/ into place (see .github/workflows/deploy.yml
-# and scripts/deploy-remote.sh). That path avoids running cargo on the 2GB
-# droplet and keeps target/ from growing unbounded on disk.
+# and scripts/deploy-remote.sh). That path avoids running cargo on the droplet
+# (2 vCPU / 4GB) and keeps target/ from growing unbounded on disk.
 #
 # Use this script only if the GitHub Actions pipeline is broken and you need
 # to recover prod by SSHing in directly:

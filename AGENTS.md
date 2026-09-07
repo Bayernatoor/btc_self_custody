@@ -171,6 +171,13 @@ bumps the service-worker cache version, then rsyncs the binary and `target/site`
 That constraint is remote-only; locally `target/` is disposable and worth cleaning, it reaches
 tens of GB.
 
+**The droplet is 2 vCPU / 4GB RAM / 80GB NVMe** (resized 2026-07-21 from 2GB/60GB, which swapped
+continuously). Treat 4GB as the memory budget rather than headroom: the SSE heartbeat history
+payload is tens of MB per build, and any RPC response parsed into a `serde_json::Value` instead
+of a typed struct spikes proportionally to the response (`rpc::call_typed` exists for exactly
+that reason). This lives here rather than only in `docs/ARCHITECTURE.md` because `docs/` is
+gitignored, so nothing in it reaches a fresh clone or another machine.
+
 ## Conventions
 
 - **No infrastructure scripts in this repo.** iptables rules, cron jobs, systemd units, WireGuard
