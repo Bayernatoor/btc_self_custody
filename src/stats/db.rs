@@ -422,7 +422,129 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
         )?;
     }
 
+    // Last, after every ALTER above. This reads and rewrites data rather than
+    // shaping the schema, and its rollup rebuild SELECTs the v10 and v11
+    // columns added just above, so running it earlier fails with "no such
+    // column" on any database that predates them and takes the whole app down
+    // at startup. Schema first, then data.
+    derive_missing_input_values(conn)?;
+
     Ok(())
+}
+
+/// Repair `total_input_value` for rows that never had it.
+///
+/// The column was read from `vin.prevout.value`, which Core only returns at
+/// `getblock` verbosity 3; ingestion calls verbosity 2, so the field silently
+/// never matched and the column was 0 for every block ever stored, while the
+/// Input vs Output Value chart plotted it as data.
+///
+/// Repaired from the accounting identity rather than from RPC: every satoshi
+/// entering the non-coinbase transactions either leaves as an output or is the
+/// fee, and both of those are already stored. That avoids a `BACKFILL_VERSION`
+/// bump, which would re-fetch 965k blocks to recompute something two existing
+/// columns already imply.
+///
+/// One caveat on precision: `total_fees` is the coinbase output minus the
+/// subsidy, i.e. the fees the miner *claimed*. A miner who under-claims leaves
+/// the difference unspendable, and for those blocks this understates the true
+/// input value by the unclaimed amount. Immaterial at chart resolution, but it
+/// is why this is an identity over claimed fees rather than over actual ones.
+///
+/// Repairs exactly the rows that need it, on every startup, rather than
+/// running once behind a whole-table guard.
+///
+/// The obvious guard is "skip if any row is already populated". It is cheap and
+/// it is not self-healing, which matters here: any row that arrives with a zero
+/// *after* the one-shot has run is never repaired, because the guard sees the
+/// column as populated and returns. That is reachable in production, because
+/// `deploy-remote.sh` rolls back to the previous binary when the health check
+/// fails, and the previous binary writes zeros again. It is also reachable
+/// locally just by running an older build against the same database: this was
+/// found that way, with 62 blocks between heights 966,089 and 966,165 sitting
+/// at zero while every other row was correct.
+///
+/// So the condition is the defect itself, which makes it idempotent by
+/// construction. The partial index keeps that affordable: matching rows are
+/// normally none, so the index is empty, costs nothing to maintain, and turns
+/// the check from a 1.6-second scan of the whole table into 3 milliseconds
+/// (measured on 966k rows). `INDEXED BY` is not decoration; without it the
+/// planner has no statistics for a partial index and picks an existing
+/// `tx_count` index instead, scanning the 876k rows with more than one
+/// transaction and taking the full 1.6 seconds.
+///
+/// Empty blocks are skipped: with no non-coinbase transactions their input
+/// value is genuinely 0. The `> 0` term means a row whose identity also yields
+/// zero is left alone rather than rewritten to the same value, so the returned
+/// count is exactly the number of rows actually changed.
+pub fn derive_missing_input_values(
+    conn: &Connection,
+) -> rusqlite::Result<usize> {
+    conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_blocks_input_value_missing
+             ON blocks(height)
+             WHERE tx_count > 1 AND total_input_value = 0;",
+    )?;
+
+    // Which days the repair will touch, read before the UPDATE removes the
+    // rows from the index. Needed to scope the rollup refresh below.
+    let affected_days: Vec<u64> = {
+        let mut stmt = conn.prepare(
+            "SELECT DISTINCT timestamp FROM blocks
+                 INDEXED BY idx_blocks_input_value_missing
+               WHERE tx_count > 1
+                 AND total_input_value = 0
+                 AND total_output_value + total_fees > 0",
+        )?;
+        let rows = stmt.query_map([], |r| r.get::<_, u64>(0))?;
+        rows.collect::<rusqlite::Result<_>>()?
+    };
+
+    let n = conn.execute(
+        "UPDATE blocks INDEXED BY idx_blocks_input_value_missing
+            SET total_input_value = total_output_value + total_fees
+          WHERE tx_count > 1
+            AND total_input_value = 0
+            AND total_output_value + total_fees > 0",
+        [],
+    )?;
+    if n == 0 {
+        return Ok(0);
+    }
+    tracing::info!("Derived total_input_value for {n} blocks");
+
+    // The rollup is refreshed by insert_blocks/update_block_extras, and this
+    // UPDATE goes round both of them, so daily_blocks would keep summing the
+    // old zeros. That matters: every range above MAX_PER_BLOCK_RANGE renders
+    // from the rollup, so the per-block charts would be repaired while 3M
+    // through ALL stayed wrong, with nothing in the code enforcing that the
+    // repair bin gets run afterwards. Refresh here so the migration is
+    // self-contained rather than half of an undocumented two-step.
+    //
+    // Scoped to the days that changed, because this now also runs for small
+    // incremental repairs. The one-shot backfill of the whole chain touches
+    // every day and is cheaper as a single bulk rebuild; a 62-block repair
+    // after a rollback touches one or two days and must not trigger a
+    // 6,400-day rebuild. BULK_REBUILD_DAYS is where the per-day path stops
+    // being the cheaper one.
+    const BULK_REBUILD_DAYS: usize = 500;
+    let unique_days = affected_days
+        .iter()
+        .map(|ts| day_start(*ts))
+        .collect::<std::collections::BTreeSet<_>>()
+        .len();
+    if unique_days >= BULK_REBUILD_DAYS {
+        let days = rebuild_daily_blocks_force(conn)?;
+        tracing::info!(
+            "Rebuilt all {days} daily_blocks rows so daily-mode ranges pick up the derived input value"
+        );
+    } else {
+        let days = refresh_daily_blocks_for_timestamps(conn, affected_days)?;
+        tracing::info!(
+            "Refreshed {days} daily_blocks row(s) so daily-mode ranges pick up the derived input value"
+        );
+    }
+    Ok(n)
 }
 
 pub fn open(path: &Path) -> rusqlite::Result<Connection> {
@@ -3662,6 +3784,189 @@ mod tests {
 
         refresh_daily_day(&conn, 1713657600).unwrap();
         assert_eq!(daily_blocks_missing_days(&conn).unwrap(), 0);
+    }
+
+    #[test]
+    fn input_value_is_derived_from_outputs_plus_fees() {
+        let conn = setup_db();
+        // Rows as they exist today: a real block with outputs and fees, and an
+        // empty (coinbase-only) block.
+        conn.execute(
+            "INSERT INTO blocks (height, hash, timestamp, tx_count, size, weight,
+             difficulty, total_output_value, total_fees, total_input_value)
+             VALUES (1,'h1',1700000000,10,0,0,1.0,500000000,1000000,0)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO blocks (height, hash, timestamp, tx_count, size, weight,
+             difficulty, total_output_value, total_fees, total_input_value)
+             VALUES (2,'h2',1700000600,1,0,0,1.0,0,0,0)",
+            [],
+        )
+        .unwrap();
+
+        assert_eq!(derive_missing_input_values(&conn).unwrap(), 1);
+
+        let get = |h: u64| -> u64 {
+            conn.query_row(
+                "SELECT total_input_value FROM blocks WHERE height = ?1",
+                rusqlite::params![h],
+                |r| r.get(0),
+            )
+            .unwrap()
+        };
+        assert_eq!(get(1), 501_000_000, "outputs 5 BTC + fees 0.01 BTC");
+        assert_eq!(get(2), 0, "an empty block really has no input value");
+
+        // Idempotent by construction: the WHERE clause is the defect itself,
+        // so a repaired row no longer matches and a restart cannot
+        // double-apply or overwrite real data.
+        assert_eq!(derive_missing_input_values(&conn).unwrap(), 0);
+        assert_eq!(get(1), 501_000_000);
+    }
+
+    /// The repair must fix a row that arrives zeroed *after* an earlier run,
+    /// not just do one pass over a wholly unpopulated column.
+    ///
+    /// Guarding on "some row is already populated" is cheaper and is not
+    /// self-healing, and the gap is reachable in production: deploy-remote.sh
+    /// rolls back to the previous binary on a failed health check, and that
+    /// binary writes zeros again. Found for real, as 62 blocks between heights
+    /// 966,089 and 966,165 left at zero by an older local build while every
+    /// other row was correct.
+    #[test]
+    fn input_value_repair_is_self_healing_after_a_later_zero() {
+        let conn = setup_db();
+        let insert = |h: u64, ts: u64, out: u64, fees: u64| {
+            conn.execute(
+                "INSERT INTO blocks (height, hash, timestamp, tx_count, size, weight,
+                 difficulty, total_output_value, total_fees, total_input_value)
+                 VALUES (?1, 'h' || ?1, ?2, 10, 0, 0, 1.0, ?3, ?4, 0)",
+                rusqlite::params![h, ts, out, fees],
+            )
+            .unwrap();
+        };
+
+        insert(1, 1_700_000_000, 500_000_000, 1_000_000);
+        assert_eq!(derive_missing_input_values(&conn).unwrap(), 1);
+
+        // An older binary then writes a zeroed row on a different day.
+        insert(2, 1_700_200_000, 700_000_000, 2_000_000);
+        assert_eq!(
+            derive_missing_input_values(&conn).unwrap(),
+            1,
+            "a zero arriving after the first run must still be repaired"
+        );
+
+        let got: u64 = conn
+            .query_row(
+                "SELECT total_input_value FROM blocks WHERE height = 2",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(got, 702_000_000);
+
+        // And its day's rollup reflects the repair, not the zero it replaced.
+        let rolled: u64 = conn
+            .query_row(
+                "SELECT total_input_value FROM daily_blocks
+                   WHERE day = date(datetime(1700200000, 'unixepoch'))",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(rolled, 702_000_000);
+    }
+
+    /// The migration writes `blocks` directly, going round the rollup hook in
+    /// insert_blocks, so without an explicit rebuild every range above
+    /// MAX_PER_BLOCK_RANGE would keep summing the old zeros: per-block charts
+    /// repaired, daily charts still wrong, and nothing in the code enforcing
+    /// that the repair bin runs afterwards.
+    #[test]
+    fn input_value_migration_also_refreshes_the_daily_rollup() {
+        let conn = setup_db();
+        conn.execute(
+            "INSERT INTO blocks (height, hash, timestamp, tx_count, size, weight,
+             difficulty, total_output_value, total_fees, total_input_value)
+             VALUES (1,'h1',1700000000,10,0,0,1.0,500000000,1000000,0)",
+            [],
+        )
+        .unwrap();
+        // Roll the day up first, so it holds the pre-migration zero.
+        refresh_daily_day(&conn, 1_700_000_000).unwrap();
+        let rolled = |c: &Connection| -> u64 {
+            c.query_row(
+                "SELECT total_input_value FROM daily_blocks WHERE day = '2023-11-14'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap()
+        };
+        assert_eq!(rolled(&conn), 0, "precondition: rollup holds the zero");
+
+        derive_missing_input_values(&conn).unwrap();
+
+        assert_eq!(
+            rolled(&conn),
+            501_000_000,
+            "the rollup must be rebuilt by the migration, not left for an ops step"
+        );
+    }
+
+    /// Opening a database that predates the v10/v11 columns must still work.
+    ///
+    /// `derive_missing_input_values` rewrites data and rebuilds the rollup, and
+    /// `REBUILD_DAILY_SQL` SELECTs `inscription_fees`, `fee_rate_p25`,
+    /// `legacy_tx_count` and five more columns that `init_schema` adds near its
+    /// end. Running the derivation before those ALTERs failed with "no such
+    /// column" and, because `open()` propagates it, stopped the app from
+    /// starting at all against an older database (a restored backup, another
+    /// machine, a dev box on older code). Every existing test used a
+    /// current-schema `setup_db()`, so none of them could see it.
+    #[test]
+    fn init_schema_succeeds_on_a_pre_v10_database() {
+        let conn = setup_db();
+        conn.execute(
+            "INSERT INTO blocks (height, hash, timestamp, tx_count, size, weight,
+             difficulty, total_output_value, total_fees, total_input_value)
+             VALUES (1,'h1',1700000000,10,0,0,1.0,500000000,1000000,0)",
+            [],
+        )
+        .unwrap();
+
+        // Wind the schema back to before the v10 and v11 block columns.
+        for col in [
+            "max_tx_fee",
+            "inscription_fees",
+            "runes_fees",
+            "legacy_tx_count",
+            "segwit_tx_count",
+            "taproot_tx_count",
+            "coinbase_text",
+            "fee_rate_p25",
+            "fee_rate_p75",
+            "inscription_envelope_bytes",
+        ] {
+            conn.execute_batch(&format!(
+                "ALTER TABLE blocks DROP COLUMN {col};"
+            ))
+            .unwrap_or_else(|e| panic!("dropping {col}: {e}"));
+        }
+
+        init_schema(&conn).expect("init_schema must migrate then derive");
+
+        // And the derivation still ran, rather than being skipped to dodge it.
+        let derived: u64 = conn
+            .query_row(
+                "SELECT total_input_value FROM blocks WHERE height = 1",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(derived, 501_000_000);
     }
 
     #[test]
