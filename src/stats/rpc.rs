@@ -761,7 +761,6 @@ impl BitcoinRpc {
         let mut taproot_keypath_count = 0u64;
         let mut taproot_scriptpath_count = 0u64;
         let mut total_output_value = 0u64;
-        let mut total_input_value = 0u64;
         let mut stamps_count = 0u64;
         let mut largest_tx_size = 0u64;
         let mut max_tx_fee = 0u64;
@@ -806,15 +805,6 @@ impl BitcoinRpc {
                 if let Some(vins) = tx["vin"].as_array() {
                     input_count += vins.len() as u64;
                     for vin in vins {
-                        // Sum input values from prevout
-                        if let Some(val) = vin
-                            .get("prevout")
-                            .and_then(|p| p.get("value"))
-                            .and_then(|v| v.as_f64())
-                        {
-                            total_input_value +=
-                                (val * 100_000_000.0).round() as u64;
-                        }
                         // Witness detection + byte counting + inscription detection
                         if let Some(wit) = vin["txinwitness"].as_array() {
                             has_witness = true;
@@ -1117,7 +1107,17 @@ impl BitcoinRpc {
             inscription_envelope_bytes,
             brc20_count,
             total_output_value,
-            total_input_value,
+            // Derived, not observed. This used to sum `vin.prevout.value`,
+            // but `getblock` is called at verbosity 2 and Core only returns
+            // prevout at verbosity 3, so the field silently never matched and
+            // the column was 0 for all 965,970 blocks while one chart plotted
+            // it as data. Verbosity 3 would fix the read at the cost of a much
+            // larger response on a 4GB box; the accounting identity gives the
+            // same number for free, and exactly: every satoshi entering the
+            // non-coinbase transactions either leaves as an output or is the
+            // fee. `total_output_value` skips the coinbase (txs.iter().skip(1))
+            // and `total_fees` is the block's fee total, so the two sides match.
+            total_input_value: total_output_value + total_fees,
             fee_rate_p10,
             fee_rate_p90,
             stamps_count,
