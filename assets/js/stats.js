@@ -508,14 +508,27 @@
                         }
                     }
                     if (!data) return;
-                    // Binary search for nearest timestamp
-                    var lo = 0, hi = data.length - 1, best = 0;
-                    while (lo <= hi) {
-                        var mid = (lo + hi) >> 1;
-                        if (data[mid][0] <= xVal) { best = mid; lo = mid + 1; }
-                        else { hi = mid - 1; }
+                    // Nearest point by absolute distance, scanned linearly.
+                    //
+                    // Not a binary search: that requires timestamps to increase
+                    // monotonically, and Bitcoin's do not. A block only has to
+                    // beat the median of the previous 11 and stay within two
+                    // hours of network time, so a later block can carry an
+                    // earlier timestamp. Measured on the local chain: 15,974
+                    // adjacent pairs run backwards, worst case 7,125 seconds,
+                    // and 1,424 of those are above height 800,000, so this is
+                    // ongoing rather than an early-chain artifact. A binary
+                    // search over that could settle on the wrong block and open
+                    // the wrong detail modal. Per-block series are capped at
+                    // MAX_PER_BLOCK_RANGE points, so a full scan per click is
+                    // a few thousand comparisons and imperceptible.
+                    var best = 0, bestDist = Infinity;
+                    for (var di = 0; di < data.length; di++) {
+                        var pt = data[di];
+                        if (!pt) continue;
+                        var dist = Math.abs(pt[0] - xVal);
+                        if (dist < bestDist) { bestDist = dist; best = di; }
                     }
-                    if (best < data.length - 1 && Math.abs(data[best+1][0] - xVal) < Math.abs(data[best][0] - xVal)) best++;
                     var height = data[best][2];
                     if (typeof height === 'number') window.showBlockDetail(height);
                 });
