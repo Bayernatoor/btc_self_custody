@@ -346,10 +346,29 @@ pub(crate) fn build_ma_array(
     buf
 }
 
-/// Convert a pre-built JSON array string into a serde_json::Value for embedding
-/// in chart option objects. Uses RawValue to avoid re-parsing.
+/// Convert a pre-built JSON array string into a `serde_json::Value` for
+/// embedding in chart option objects.
+///
+/// The fallback on malformed input is an empty array, which renders as a blank
+/// chart. That failure is otherwise completely silent: no console error, no
+/// server log, just a chart with no data and no explanation. Since these arrays
+/// are hand-written by `build_data_array_*` rather than serialised by serde, a
+/// formatting bug there is exactly the kind of thing this hides, so log before
+/// swallowing it.
 pub(crate) fn data_array_value(raw: &str) -> serde_json::Value {
-    serde_json::from_str(raw).unwrap_or(json!([]))
+    match serde_json::from_str(raw) {
+        Ok(value) => value,
+        Err(e) => {
+            // leptos::logging routes to console.error in the browser and to
+            // stderr under SSR, so this surfaces in both builds without
+            // pulling in web-sys or a cfg split.
+            leptos::logging::error!(
+                "chart data array failed to parse ({e}); chart will render empty. First 120 chars: {}",
+                raw.chars().take(120).collect::<String>()
+            );
+            json!([])
+        }
+    }
 }
 
 /// Round to N decimal places.

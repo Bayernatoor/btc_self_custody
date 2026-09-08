@@ -28,7 +28,13 @@ use leptos_router::hooks::use_location;
 /// Build a chart option as a derived Signal with parent-level caching.
 /// On first compute, stores the result in ObservatoryState::chart_cache.
 /// On subsequent evaluations (e.g. returning to a tab), returns the cached
-/// value instantly. Cache is cleared by an Effect when range or overlays change.
+/// value instantly.
+///
+/// Nothing clears this cache. It is not invalidated when the range or overlays
+/// change: both are part of the key, so a change simply misses. The only
+/// removal is the size trim below. An earlier version of this comment claimed
+/// an Effect cleared it on range change, which is the sort of claim that stops
+/// the next reader from noticing that the key was incomplete.
 #[macro_export]
 macro_rules! chart_memo {
     ($data:expr, $range:expr, $overlays:expr, |$blocks:ident| $per_block:expr, |$days:ident| $daily:expr) => {{
@@ -56,14 +62,29 @@ macro_rules! chart_memo {
             // MUST read data to track it as reactive dependency — otherwise
             // the derive won't re-run when new data arrives after range change.
             let data_opt = $data.get().and_then(|r| r.ok());
-            // Include data fingerprint in cache key so stale data never matches
+            // Data fingerprint, so a cached chart is never served for a
+            // different payload. Row count ALONE is not enough: two windows of
+            // the same range have the same length, so switching away from a
+            // range and back after the tip advanced hit a stale entry and
+            // re-served the older chart. Include the first and last identity
+            // (height per-block, date daily) so the window itself is keyed.
             let data_fp = data_opt
                 .as_ref()
                 .map(|d| match d {
-                    DashboardData::PerBlock(ref b) => b.len(),
-                    DashboardData::Daily(ref d) => d.len(),
+                    DashboardData::PerBlock(ref b) => format!(
+                        "b{}:{}:{}",
+                        b.len(),
+                        b.first().map(|x| x.height).unwrap_or(0),
+                        b.last().map(|x| x.height).unwrap_or(0),
+                    ),
+                    DashboardData::Daily(ref d) => format!(
+                        "d{}:{}:{}",
+                        d.len(),
+                        d.first().map(|x| x.date.as_str()).unwrap_or(""),
+                        d.last().map(|x| x.date.as_str()).unwrap_or(""),
+                    ),
                 })
-                .unwrap_or(0);
+                .unwrap_or_default();
 
             // Two-level cache: base chart (expensive) keyed without overlays,
             // final result (with overlays) keyed with full overlay flags.
