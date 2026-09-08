@@ -321,6 +321,25 @@ impl BitcoinRpc {
                 .connect_timeout(std::time::Duration::from_secs(10))
                 .pool_idle_timeout(std::time::Duration::from_secs(30))
                 .tcp_keepalive(std::time::Duration::from_secs(30))
+                // Bind the local socket to IPv4, which confines every
+                // connection to IPv4.
+                //
+                // hyper does not implement happy eyeballs: it tries resolved
+                // addresses in order and does not race or fall back, so a
+                // blackholed AAAA route stalls the whole request until the
+                // timeout. curl falls back and succeeds, which is what made
+                // this look like a server-side problem for four wrong
+                // hypotheses on 2026-09-08. Both external APIs are dual-stack
+                // and the Bitcoin node is reached over IPv4 on the LAN, so
+                // nothing here needs IPv6.
+                //
+                // The trigger on that box was ProtonVPN's IPv6 leak
+                // protection, but the point is not to depend on the host
+                // having a working IPv6 route for an outbound call that does
+                // not need one.
+                .local_address(std::net::IpAddr::V4(
+                    std::net::Ipv4Addr::UNSPECIFIED,
+                ))
                 .build()
                 .expect("Failed to build HTTP client"),
             url,
@@ -1370,11 +1389,46 @@ impl BitcoinRpc {
             )));
         }
 
-        let body: serde_json::Value = resp.json().await?;
+        // Read as text and parse explicitly, rather than `resp.json()`.
+        //
+        // A 200 from this endpoint does not guarantee JSON: it can carry a
+        // rate-limit notice, an interstitial page, or compressed bytes we did
+        // not ask for. `resp.json()` collapses every one of those into
+        // reqwest's "error decoding response body", which says nothing about
+        // what arrived, and the caller then logs a generic 500. Diagnosing the
+        // 2026-09-08 outage took several round trips for exactly that reason.
+        // Quoting a prefix of the body makes the next failure self-explaining.
+        let content_type = resp
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("(none)")
+            .to_string();
+        let encoding = resp
+            .headers()
+            .get(reqwest::header::CONTENT_ENCODING)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("identity")
+            .to_string();
+        let text = resp.text().await?;
+        let body: serde_json::Value =
+            serde_json::from_str(&text).map_err(|e| {
+                StatsError::Rpc(format!(
+                    "blockchain.info body is not JSON ({e}); \
+                     content-type={content_type} \
+                     content-encoding={encoding} len={} \
+                     first 200 chars: {:?}",
+                    text.len(),
+                    text.chars().take(200).collect::<String>()
+                ))
+            })?;
         let values = body["values"].as_array().ok_or_else(|| {
-            StatsError::Rpc(
-                "No values array in blockchain.info response".into(),
-            )
+            StatsError::Rpc(format!(
+                "blockchain.info JSON has no values array; top-level keys: {:?}",
+                body.as_object()
+                    .map(|o| o.keys().cloned().collect::<Vec<_>>())
+                    .unwrap_or_default()
+            ))
         })?;
 
         let result: Vec<(u64, f64)> = values
