@@ -30,31 +30,30 @@ pub fn MiningChartsPage() -> impl IntoView {
             let n = range_to_blocks(&r);
             let is_daily = uses_daily_aggregates(n);
 
-            if is_daily {
+            let from = stats.min_height.max(stats.max_height.saturating_sub(n));
+            // Both empty-block charts are groupings, so they are aggregated
+            // server-side regardless of mode. Only pool dominance differs
+            // between per-block and daily.
+            let empty_monthly =
+                fetch_empty_blocks_monthly(from, stats.max_height)
+                    .await
+                    .map_err(|e| e.to_string())?;
+            let empty_by_pool =
+                fetch_empty_blocks_by_pool(from, stats.max_height)
+                    .await
+                    .map_err(|e| e.to_string())?;
+
+            let miners = if is_daily {
                 let from_ts = stats.latest_timestamp.saturating_sub(n * 600);
-                let miners = fetch_miner_dominance_daily(
-                    from_ts,
-                    stats.latest_timestamp,
-                )
-                .await
-                .map_err(|e| e.to_string())?;
-                let from =
-                    stats.min_height.max(stats.max_height.saturating_sub(n));
-                let empty = fetch_empty_blocks(from, stats.max_height)
+                fetch_miner_dominance_daily(from_ts, stats.latest_timestamp)
                     .await
-                    .map_err(|e| e.to_string())?;
-                Ok::<_, String>((miners, empty))
+                    .map_err(|e| e.to_string())?
             } else {
-                let from =
-                    stats.min_height.max(stats.max_height.saturating_sub(n));
-                let miners = fetch_miner_dominance(from, stats.max_height)
+                fetch_miner_dominance(from, stats.max_height)
                     .await
-                    .map_err(|e| e.to_string())?;
-                let empty = fetch_empty_blocks(from, stats.max_height)
-                    .await
-                    .map_err(|e| e.to_string())?;
-                Ok((miners, empty))
-            }
+                    .map_err(|e| e.to_string())?
+            };
+            Ok::<_, String>((miners, empty_monthly, empty_by_pool))
         }
     });
 
@@ -88,7 +87,7 @@ pub fn MiningChartsPage() -> impl IntoView {
 
                 let miner_chart_option = Signal::derive(move || {
                     mining_data.get().and_then(|r| r.ok())
-                        .map(|(ref miners, _)| {
+                        .map(|(ref miners, _, _)| {
                             let value = crate::stats::charts::miner_dominance_chart(miners);
                             serde_json::to_string(&value).unwrap_or_default()
                         })
@@ -97,8 +96,8 @@ pub fn MiningChartsPage() -> impl IntoView {
                 let empty_blocks_option = Signal::derive(move || {
                     let flags = overlay_flags.get();
                     mining_data.get().and_then(|r| r.ok())
-                        .map(|(_, ref empty)| {
-                            let mut value = crate::stats::charts::empty_blocks_chart(empty);
+                        .map(|(_, ref monthly, _)| {
+                            let mut value = crate::stats::charts::empty_blocks_chart(monthly);
                             if value.is_null() { return String::new(); }
                             crate::stats::charts::apply_overlays(&mut value, &flags, true);
                             serde_json::to_string(&value).unwrap_or_default()
@@ -107,15 +106,15 @@ pub fn MiningChartsPage() -> impl IntoView {
                 });
                 let empty_by_pool_option = Signal::derive(move || {
                     mining_data.get().and_then(|r| r.ok())
-                        .map(|(_, ref empty)| {
-                            let value = crate::stats::charts::empty_blocks_by_pool_chart(empty);
+                        .map(|(_, _, ref by_pool)| {
+                            let value = crate::stats::charts::empty_blocks_by_pool_chart(by_pool);
                             serde_json::to_string(&value).unwrap_or_default()
                         })
                         .unwrap_or_default()
                 });
                 let diversity_option = Signal::derive(move || {
                     mining_data.get().and_then(|r| r.ok())
-                        .map(|(ref miners, _)| {
+                        .map(|(ref miners, _, _)| {
                             let value = crate::stats::charts::mining_diversity_chart(miners);
                             serde_json::to_string(&value).unwrap_or_default()
                         })

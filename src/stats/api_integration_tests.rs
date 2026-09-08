@@ -438,6 +438,27 @@ async fn signaling_periods_on_empty_db_returns_empty_shape() {
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
+async fn over_wide_range_is_a_client_error_not_a_server_fault() {
+    // A caller asking for too much has not broken the server. Returning 500
+    // misattributes it, logs at error! where it buries real faults, and tells
+    // the caller nothing about how to fix the request.
+    let app = TestApp::new();
+    let (status, body) = app.get("/op-returns?from=0&to=900000").await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "body: {body}");
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("too large"),
+        "the message must tell the caller what to change: {body}"
+    );
+
+    // A span inside the cap is served normally.
+    let (status, _) = app.get("/op-returns?from=0&to=100").await;
+    assert_eq!(status, StatusCode::OK);
+}
+
+#[tokio::test]
 async fn daily_aggregates_empty_range_is_ok() {
     let app = TestApp::new();
     let (status, body) = app.get("/aggregates/daily?from=0&to=1").await;

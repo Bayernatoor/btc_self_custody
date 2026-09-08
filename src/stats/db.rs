@@ -751,6 +751,63 @@ pub struct BlockRow {
     pub fee_rate_p75: f64,
 }
 
+impl From<DailyRow> for super::types::DailyAggregate {
+    fn from(r: DailyRow) -> Self {
+        Self {
+            date: r.date,
+            block_count: r.block_count,
+            avg_size: r.avg_size,
+            avg_weight: r.avg_weight,
+            avg_tx_count: r.avg_tx_count,
+            avg_difficulty: r.avg_difficulty,
+            total_op_return_count: r.total_op_return_count,
+            total_runes_count: r.total_runes_count,
+            total_omni_count: r.total_omni_count,
+            total_counterparty_count: r.total_counterparty_count,
+            total_data_carrier_count: r.total_data_carrier_count,
+            total_op_return_bytes: r.total_op_return_bytes,
+            total_runes_bytes: r.total_runes_bytes,
+            total_omni_bytes: r.total_omni_bytes,
+            total_counterparty_bytes: r.total_counterparty_bytes,
+            total_data_carrier_bytes: r.total_data_carrier_bytes,
+            total_fees: r.total_fees,
+            avg_segwit_spend_count: r.avg_segwit_spend_count,
+            avg_taproot_spend_count: r.avg_taproot_spend_count,
+            avg_p2pk_count: r.avg_p2pk_count,
+            avg_p2pkh_count: r.avg_p2pkh_count,
+            avg_p2sh_count: r.avg_p2sh_count,
+            avg_p2wpkh_count: r.avg_p2wpkh_count,
+            avg_p2wsh_count: r.avg_p2wsh_count,
+            avg_p2tr_count: r.avg_p2tr_count,
+            avg_multisig_count: r.avg_multisig_count,
+            avg_unknown_script_count: r.avg_unknown_script_count,
+            avg_input_count: r.avg_input_count,
+            avg_output_count: r.avg_output_count,
+            avg_rbf_count: r.avg_rbf_count,
+            avg_witness_bytes: r.avg_witness_bytes,
+            avg_inscription_count: r.avg_inscription_count,
+            avg_inscription_bytes: r.avg_inscription_bytes,
+            avg_brc20_count: r.avg_brc20_count,
+            avg_taproot_keypath_count: r.avg_taproot_keypath_count,
+            avg_taproot_scriptpath_count: r.avg_taproot_scriptpath_count,
+            avg_fee_rate_p10: r.avg_fee_rate_p10,
+            avg_fee_rate_p90: r.avg_fee_rate_p90,
+            avg_stamps_count: r.avg_stamps_count,
+            avg_median_fee_rate: r.avg_median_fee_rate,
+            total_output_value: r.total_output_value,
+            total_input_value: r.total_input_value,
+            avg_inscription_envelope_bytes: r.avg_inscription_envelope_bytes,
+            total_inscription_fees: r.total_inscription_fees,
+            total_runes_fees: r.total_runes_fees,
+            avg_legacy_tx_count: r.avg_legacy_tx_count,
+            avg_segwit_tx_count: r.avg_segwit_tx_count,
+            avg_taproot_tx_count: r.avg_taproot_tx_count,
+            avg_fee_rate_p25: r.avg_fee_rate_p25,
+            avg_fee_rate_p75: r.avg_fee_rate_p75,
+        }
+    }
+}
+
 impl From<BlockRow> for super::types::BlockSummary {
     fn from(r: BlockRow) -> Self {
         Self {
@@ -902,10 +959,17 @@ pub fn query_blocks(
 }
 
 /// Query blocks by timestamp range (for custom date ranges).
+/// Query blocks by timestamp range, bounded by `limit` rows.
+///
+/// The limit is not optional: this is reachable as a public POST endpoint and
+/// the range is entirely caller-controlled, so an unbounded form could be asked
+/// for all 965k rows across ~55 columns. Callers pass one more than they intend
+/// to accept, so a full result is distinguishable from a truncated one.
 pub fn query_blocks_by_ts(
     conn: &Connection,
     from_ts: u64,
     to_ts: u64,
+    limit: u64,
 ) -> rusqlite::Result<Vec<BlockRow>> {
     let mut stmt = conn.prepare(
         "SELECT height, hash, timestamp, tx_count, size, weight, difficulty,
@@ -925,9 +989,9 @@ pub fn query_blocks_by_ts(
                 max_tx_fee, inscription_fees, runes_fees,
                 legacy_tx_count, segwit_tx_count, taproot_tx_count,
                 coinbase_text, fee_rate_p25, fee_rate_p75
-         FROM blocks WHERE timestamp >= ?1 AND timestamp <= ?2 ORDER BY height ASC",
+         FROM blocks WHERE timestamp >= ?1 AND timestamp <= ?2 ORDER BY height ASC LIMIT ?3",
     )?;
-    let rows = stmt.query_map(params![from_ts, to_ts], |row| {
+    let rows = stmt.query_map(params![from_ts, to_ts, limit], |row| {
         Ok(BlockRow {
             height: row.get(0)?,
             hash: row.get(1)?,
@@ -1535,11 +1599,24 @@ pub fn query_daily_aggregates_fast(
         })
     })?;
 
-    let result: Vec<DailyRow> = rows.filter_map(|r| r.ok()).collect();
+    // Propagate row errors rather than dropping them. `filter_map(Result::ok)`
+    // turned a single decode failure into silently truncated chart data, and
+    // an all-rows failure into a full-table rescan via the fallback below.
+    let result: Vec<DailyRow> = rows.collect::<rusqlite::Result<_>>()?;
 
-    // Fallback to raw aggregation if pre-computed table has no data
+    // Fall back to raw aggregation only when the pre-computed table has never
+    // been built. Keying this on "no rows for the requested range" conflated
+    // that with a range that legitimately has no days (a future window, or one
+    // before genesis) and triggered a 965k-row GROUP BY on every such call.
     if result.is_empty() {
-        return query_daily_aggregates(conn, from_ts, to_ts);
+        let table_is_empty: bool = conn.query_row(
+            "SELECT NOT EXISTS(SELECT 1 FROM daily_blocks)",
+            [],
+            |r| r.get(0),
+        )?;
+        if table_is_empty {
+            return query_daily_aggregates(conn, from_ts, to_ts);
+        }
     }
 
     Ok(result)
@@ -1970,19 +2047,51 @@ pub fn query_miner_dominance_daily(
 }
 
 /// Empty blocks (tx_count == 1, coinbase only) for a height range
-pub fn query_empty_blocks(
+/// Empty blocks (coinbase-only) per calendar month, as (YYYY-MM, count).
+///
+/// Aggregated in SQL rather than by shipping rows. Both empty-block charts only
+/// ever group: one by month, one by pool. The previous per-row query returned
+/// 89,926 rows for the ALL range so the client could fold them into ~210 bars.
+/// Measured 0.58s for the full chain against a ~4MB payload and a client-side
+/// group-by.
+pub fn query_empty_blocks_monthly(
     conn: &Connection,
     from: u64,
     to: u64,
-) -> rusqlite::Result<Vec<(u64, u64, String)>> {
+) -> rusqlite::Result<Vec<(String, u64)>> {
     let mut stmt = conn.prepare(
-        "SELECT height, timestamp, miner FROM blocks
+        "SELECT strftime('%Y-%m', datetime(timestamp, 'unixepoch')) AS month,
+                COUNT(*)
+         FROM blocks
          WHERE height >= ?1 AND height <= ?2 AND tx_count <= 1
-         ORDER BY height ASC",
+         GROUP BY month
+         ORDER BY month ASC",
     )?;
-    let rows = stmt.query_map(params![from, to], |row| {
-        Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-    })?;
+    let rows = stmt
+        .query_map(params![from, to], |row| Ok((row.get(0)?, row.get(1)?)))?;
+    rows.collect()
+}
+
+/// Empty blocks per mining pool, as (pool, count), highest first.
+///
+/// Blank miner strings become "Unknown". Note that the early chain dominates
+/// this at wide ranges: 86,656 of 89,926 all-time empty blocks are unattributed,
+/// because pool identification depends on coinbase patterns that did not exist
+/// in 2009-2010.
+pub fn query_empty_blocks_by_pool(
+    conn: &Connection,
+    from: u64,
+    to: u64,
+) -> rusqlite::Result<Vec<(String, u64)>> {
+    let mut stmt = conn.prepare(
+        "SELECT COALESCE(NULLIF(miner, ''), 'Unknown') AS pool, COUNT(*) AS c
+         FROM blocks
+         WHERE height >= ?1 AND height <= ?2 AND tx_count <= 1
+         GROUP BY pool
+         ORDER BY c DESC, pool ASC",
+    )?;
+    let rows = stmt
+        .query_map(params![from, to], |row| Ok((row.get(0)?, row.get(1)?)))?;
     rows.collect()
 }
 
@@ -2257,6 +2366,35 @@ pub fn insert_missing_mempool_txs(
 /// (previously 7 days) just bloated the table to millions of rows. Capped per
 /// call to avoid a long write lock. Unconfirmed rows are handled separately by
 /// prune_departed_mempool_txs (the reconcile). Returns rows deleted.
+/// Delete `notable_txs` rows that were announced but never confirmed and are
+/// older than `first_seen_before`. Returns the number deleted.
+///
+/// `notable_txs` had no prune path at all (204,021 rows accumulated in five
+/// months locally, ~40k/month, unbounded). It is deliberately narrower than the
+/// mempool pruners: **confirmed rows are never deleted**, because they are the
+/// historical record the Lookout page is built on and their retention is a
+/// product decision, not a housekeeping one. What this removes is only the
+/// ghosts: transactions that entered the mempool, were flagged notable, and
+/// then vanished via RBF replacement or fee eviction without ever landing in a
+/// block. Those are not events that happened, and 72,436 of the local rows are
+/// in that state.
+pub fn prune_unconfirmed_notable_txs(
+    conn: &Connection,
+    first_seen_before: u64,
+    max_delete: usize,
+) -> rusqlite::Result<u64> {
+    let deleted = conn.execute(
+        "DELETE FROM notable_txs
+         WHERE txid IN (
+             SELECT txid FROM notable_txs
+             WHERE confirmed_height IS NULL AND first_seen < ?1
+             LIMIT ?2
+         )",
+        params![first_seen_before as i64, max_delete as i64],
+    )?;
+    Ok(deleted as u64)
+}
+
 pub fn prune_confirmed_mempool_txs(
     conn: &Connection,
     confirmed_before: u64,
@@ -3459,6 +3597,109 @@ mod tests {
 
         refresh_daily_day(&conn, 1713657600).unwrap();
         assert_eq!(daily_blocks_missing_days(&conn).unwrap(), 0);
+    }
+
+    #[test]
+    fn empty_block_aggregates_group_in_sql() {
+        let conn = setup_db();
+        // tx_count <= 1 is the empty-block definition.
+        let mk = |h: u64, ts: u64, txs: u64, miner: &str| {
+            conn.execute(
+                "INSERT INTO blocks (height, hash, timestamp, tx_count, size,
+                 weight, difficulty, miner) VALUES (?1,?2,?3,?4,0,0,1.0,?5)",
+                rusqlite::params![
+                    h as i64,
+                    format!("h{h}"),
+                    ts as i64,
+                    txs as i64,
+                    miner
+                ],
+            )
+            .unwrap();
+        };
+        // 2024-04: two empty (one unattributed), one non-empty.
+        mk(1, 1711929600, 1, "AntPool");
+        mk(2, 1711933200, 0, "");
+        mk(3, 1711936800, 2500, "AntPool");
+        // 2024-05: one empty.
+        mk(4, 1714608000, 1, "AntPool");
+
+        let monthly = query_empty_blocks_monthly(&conn, 0, 100).unwrap();
+        assert_eq!(
+            monthly,
+            vec![("2024-04".to_string(), 2), ("2024-05".to_string(), 1)],
+            "non-empty blocks must not be counted"
+        );
+
+        let by_pool = query_empty_blocks_by_pool(&conn, 0, 100).unwrap();
+        assert_eq!(
+            by_pool,
+            vec![("AntPool".to_string(), 2), ("Unknown".to_string(), 1)],
+            "blank miner becomes Unknown, ordered by count descending"
+        );
+    }
+
+    #[test]
+    fn blocks_by_ts_honours_its_row_limit() {
+        let conn = setup_db();
+        for h in 1..=10u64 {
+            insert_test_block(&conn, h, 1_700_000_000 + h * 600, 1000, 5, 10);
+        }
+        let capped = query_blocks_by_ts(&conn, 0, 9_999_999_999, 4).unwrap();
+        assert_eq!(capped.len(), 4, "must not return more than the limit");
+        let all = query_blocks_by_ts(&conn, 0, 9_999_999_999, 100).unwrap();
+        assert_eq!(all.len(), 10);
+    }
+
+    #[test]
+    fn daily_fallback_only_fires_when_the_table_was_never_built() {
+        let conn = setup_db();
+        insert_test_block(&conn, 1, 1_700_000_000, 2_000_000, 100, 1000);
+
+        // Table empty: fall back to the raw scan so a fresh DB still renders.
+        let built =
+            query_daily_aggregates_fast(&conn, 0, 9_999_999_999).unwrap();
+        assert_eq!(built.len(), 1, "empty table must fall back to raw scan");
+
+        // Populate it, then ask for a range with no days in it. Previously the
+        // empty result was read as "table not built" and triggered a full
+        // GROUP BY over every block.
+        refresh_daily_day(&conn, 1_700_000_000).unwrap();
+        let future =
+            query_daily_aggregates_fast(&conn, 4_000_000_000, 4_000_086_400)
+                .unwrap();
+        assert!(
+            future.is_empty(),
+            "a range with no days must return empty, not rescan the table"
+        );
+    }
+
+    #[test]
+    fn notable_prune_spares_confirmed_rows() {
+        let conn = setup_db();
+        let mk = |txid: &str, first_seen: u64, height: Option<u64>| {
+            conn.execute(
+                "INSERT INTO notable_txs (txid, notable_type, fee, vsize, value,
+                 first_seen, confirmed_height) VALUES (?1,'whale',1,1,1,?2,?3)",
+                rusqlite::params![txid, first_seen as i64, height.map(|h| h as i64)],
+            )
+            .unwrap();
+        };
+        mk("old_ghost", 1000, None);
+        mk("old_confirmed", 1000, Some(500));
+        mk("recent_ghost", 9000, None);
+
+        let deleted = prune_unconfirmed_notable_txs(&conn, 5000, 100).unwrap();
+        assert_eq!(deleted, 1, "only the old never-confirmed row");
+
+        let remaining: Vec<String> = {
+            let mut stmt = conn
+                .prepare("SELECT txid FROM notable_txs ORDER BY txid")
+                .unwrap();
+            let rows = stmt.query_map([], |r| r.get::<_, String>(0)).unwrap();
+            rows.map(|r| r.unwrap()).collect()
+        };
+        assert_eq!(remaining, vec!["old_confirmed", "recent_ghost"]);
     }
 
     #[test]

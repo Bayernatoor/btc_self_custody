@@ -137,8 +137,22 @@ pub async fn fetch_blocks_by_ts(
             .await
             .map_err(|e| internal_err("Stats unavailable", e))?;
     let conn = state.db.get().map_err(|e| internal_err("DB pool", e))?;
-    let rows = super::db::query_blocks_by_ts(&conn, from_ts, to_ts)
-        .map_err(|e| internal_err("DB query", e))?;
+    let rows = super::db::query_blocks_by_ts(
+        &conn,
+        from_ts,
+        to_ts,
+        MAX_PER_BLOCK_RANGE + 1,
+    )
+    .map_err(|e| internal_err("DB query", e))?;
+    // The client only takes this path for windows it estimated at
+    // MAX_PER_BLOCK_RANGE blocks or fewer, using span/600. That estimate
+    // under-counts whenever blocks came faster than 10 minutes, and nothing
+    // stops a direct call asking for the whole chain, so the cap is enforced
+    // here rather than trusted from the caller. Fetching one row beyond the
+    // cap distinguishes "exactly full" from "truncated".
+    if rows.len() as u64 > MAX_PER_BLOCK_RANGE {
+        return Err(ServerFnError::new("Block range too large"));
+    }
     Ok(rows.into_iter().map(BlockSummary::from).collect())
 }
 
@@ -383,39 +397,6 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
     })
 }
 
-#[server(prefix = "/api", endpoint = "stats_op_returns")]
-pub async fn fetch_op_returns(
-    from: u64,
-    to: u64,
-) -> Result<Vec<OpReturnBlock>, ServerFnError> {
-    let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
-        leptos_axum::extract()
-            .await
-            .map_err(|e| internal_err("Stats unavailable", e))?;
-    let conn = state.db.get().map_err(|e| internal_err("DB pool", e))?;
-    let rows = super::db::query_op_returns(&conn, from, to)
-        .map_err(|e| internal_err("DB query", e))?;
-    Ok(rows
-        .into_iter()
-        .map(|r| OpReturnBlock {
-            height: r.height,
-            timestamp: r.timestamp,
-            tx_count: r.tx_count,
-            size: r.size,
-            op_return_count: r.op_return_count,
-            op_return_bytes: r.op_return_bytes,
-            runes_count: r.runes_count,
-            runes_bytes: r.runes_bytes,
-            omni_count: r.omni_count,
-            omni_bytes: r.omni_bytes,
-            counterparty_count: r.counterparty_count,
-            counterparty_bytes: r.counterparty_bytes,
-            data_carrier_count: r.data_carrier_count,
-            data_carrier_bytes: r.data_carrier_bytes,
-        })
-        .collect())
-}
-
 #[server(prefix = "/api", endpoint = "stats_daily_aggregates")]
 pub async fn fetch_daily_aggregates(
     from_ts: u64,
@@ -440,62 +421,7 @@ pub async fn fetch_daily_aggregates(
                 super::db::query_daily_aggregates_fast(&conn, from_ts, to_ts)
                     .map_err(|e| internal_err("DB query", e))?;
             Ok::<_, ServerFnError>(
-                rows.into_iter()
-                    .map(|r| DailyAggregate {
-                        date: r.date,
-                        block_count: r.block_count,
-                        avg_size: r.avg_size,
-                        avg_weight: r.avg_weight,
-                        avg_tx_count: r.avg_tx_count,
-                        avg_difficulty: r.avg_difficulty,
-                        total_op_return_count: r.total_op_return_count,
-                        total_op_return_bytes: r.total_op_return_bytes,
-                        total_runes_count: r.total_runes_count,
-                        total_runes_bytes: r.total_runes_bytes,
-                        total_omni_count: r.total_omni_count,
-                        total_omni_bytes: r.total_omni_bytes,
-                        total_counterparty_count: r.total_counterparty_count,
-                        total_counterparty_bytes: r.total_counterparty_bytes,
-                        total_data_carrier_count: r.total_data_carrier_count,
-                        total_data_carrier_bytes: r.total_data_carrier_bytes,
-                        total_fees: r.total_fees,
-                        avg_segwit_spend_count: r.avg_segwit_spend_count,
-                        avg_taproot_spend_count: r.avg_taproot_spend_count,
-                        avg_p2pk_count: r.avg_p2pk_count,
-                        avg_p2pkh_count: r.avg_p2pkh_count,
-                        avg_p2sh_count: r.avg_p2sh_count,
-                        avg_p2wpkh_count: r.avg_p2wpkh_count,
-                        avg_p2wsh_count: r.avg_p2wsh_count,
-                        avg_p2tr_count: r.avg_p2tr_count,
-                        avg_multisig_count: r.avg_multisig_count,
-                        avg_unknown_script_count: r.avg_unknown_script_count,
-                        avg_input_count: r.avg_input_count,
-                        avg_output_count: r.avg_output_count,
-                        avg_rbf_count: r.avg_rbf_count,
-                        avg_witness_bytes: r.avg_witness_bytes,
-                        avg_inscription_count: r.avg_inscription_count,
-                        avg_inscription_bytes: r.avg_inscription_bytes,
-                        avg_brc20_count: r.avg_brc20_count,
-                        avg_taproot_keypath_count: r.avg_taproot_keypath_count,
-                        avg_taproot_scriptpath_count: r
-                            .avg_taproot_scriptpath_count,
-                        avg_fee_rate_p10: r.avg_fee_rate_p10,
-                        avg_fee_rate_p90: r.avg_fee_rate_p90,
-                        avg_stamps_count: r.avg_stamps_count,
-                        avg_median_fee_rate: r.avg_median_fee_rate,
-                        total_output_value: r.total_output_value,
-                        total_input_value: r.total_input_value,
-                        avg_inscription_envelope_bytes: r
-                            .avg_inscription_envelope_bytes,
-                        total_inscription_fees: r.total_inscription_fees,
-                        total_runes_fees: r.total_runes_fees,
-                        avg_legacy_tx_count: r.avg_legacy_tx_count,
-                        avg_segwit_tx_count: r.avg_segwit_tx_count,
-                        avg_taproot_tx_count: r.avg_taproot_tx_count,
-                        avg_fee_rate_p25: r.avg_fee_rate_p25,
-                        avg_fee_rate_p75: r.avg_fee_rate_p75,
-                    })
-                    .collect(),
+                rows.into_iter().map(DailyAggregate::from).collect(),
             )
         })
         .await
@@ -691,25 +617,51 @@ pub async fn fetch_miner_dominance_daily(
         .collect())
 }
 
-#[server(prefix = "/api", endpoint = "stats_empty_blocks")]
-pub async fn fetch_empty_blocks(
+/// Empty blocks per calendar month, aggregated in SQL.
+///
+/// Replaces a per-row query that returned every empty block in range: 89,926
+/// rows at ALL, which the client then folded into ~210 monthly bars. Both
+/// empty-block charts only ever group, so the rows were never needed.
+#[server(prefix = "/api", endpoint = "stats_empty_blocks_monthly")]
+pub async fn fetch_empty_blocks_monthly(
     from: u64,
     to: u64,
-) -> Result<Vec<EmptyBlock>, ServerFnError> {
+) -> Result<Vec<HistogramBucket>, ServerFnError> {
+    if from > to {
+        return Err(ServerFnError::new("Invalid block range"));
+    }
     let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
         leptos_axum::extract()
             .await
             .map_err(|e| internal_err("Stats unavailable", e))?;
     let conn = state.db.get().map_err(|e| internal_err("DB pool", e))?;
-    let rows = super::db::query_empty_blocks(&conn, from, to)
+    let rows = super::db::query_empty_blocks_monthly(&conn, from, to)
         .map_err(|e| internal_err("DB query", e))?;
     Ok(rows
         .into_iter()
-        .map(|(height, timestamp, miner)| EmptyBlock {
-            height,
-            timestamp,
-            miner,
-        })
+        .map(|(label, count)| HistogramBucket { label, count })
+        .collect())
+}
+
+/// Empty blocks per mining pool, aggregated in SQL, highest first.
+#[server(prefix = "/api", endpoint = "stats_empty_blocks_by_pool")]
+pub async fn fetch_empty_blocks_by_pool(
+    from: u64,
+    to: u64,
+) -> Result<Vec<HistogramBucket>, ServerFnError> {
+    if from > to {
+        return Err(ServerFnError::new("Invalid block range"));
+    }
+    let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
+        leptos_axum::extract()
+            .await
+            .map_err(|e| internal_err("Stats unavailable", e))?;
+    let conn = state.db.get().map_err(|e| internal_err("DB pool", e))?;
+    let rows = super::db::query_empty_blocks_by_pool(&conn, from, to)
+        .map_err(|e| internal_err("DB query", e))?;
+    Ok(rows
+        .into_iter()
+        .map(|(label, count)| HistogramBucket { label, count })
         .collect())
 }
 

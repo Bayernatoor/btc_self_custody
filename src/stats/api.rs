@@ -206,6 +206,10 @@ impl StatsStateBuilder {
 /// Maximum concurrent SSE connections before rejecting new ones.
 const MAX_SSE_CONNECTIONS: usize = 256;
 
+/// Largest height span `/op-returns` will serve. Matches its own default
+/// window, so it clamps only explicitly over-wide requests.
+const MAX_OP_RETURN_SPAN: u64 = 10_000;
+
 /// How many recent unconfirmed mempool txs to send as the heartbeat history
 /// (the initial brick fill on connect/refresh), newest-first from the last 2h.
 /// The client places all of them, bounded only by its per-column density cap, so
@@ -604,6 +608,13 @@ pub async fn get_op_returns(
         }
     };
 
+    // Caller-controlled range on a public endpoint: bound it. The default
+    // window is 10k blocks, so this only clamps explicit over-wide requests.
+    if to.saturating_sub(from) > MAX_OP_RETURN_SPAN {
+        return Err(StatsError::BadRequest(format!(
+            "Block range too large: max {MAX_OP_RETURN_SPAN} blocks"
+        )));
+    }
     let blocks = db::query_op_returns(&conn, from, to)?;
     Ok(Json(serde_json::json!({ "blocks": blocks })))
 }
@@ -612,17 +623,34 @@ pub async fn get_op_returns(
 pub async fn get_daily_aggregates(
     State(state): State<SharedStatsState>,
     Query(params): Query<TimestampQuery>,
-) -> Result<Json<serde_json::Value>, StatsError> {
-    let conn = state
-        .db
-        .get()
-        .map_err(|e| StatsError::Rpc(format!("DB pool: {e}")))?;
-
+) -> Result<CachedResponse, StatsError> {
     let from_ts = params.from.unwrap_or(0);
     let to_ts = params.to.unwrap_or(u64::MAX);
+    if from_ts > to_ts {
+        return Err(StatsError::BadRequest("Invalid timestamp range".into()));
+    }
 
-    let days = db::query_daily_aggregates(&conn, from_ts, to_ts)?;
-    Ok(Json(serde_json::json!({ "days": days })))
+    // Read the pre-computed rollup and share the 120s cache with the server-fn
+    // twin. This handler was left on `query_daily_aggregates`, the raw
+    // GROUP BY, when the other side was migrated: with `to` defaulting to
+    // u64::MAX it scanned all 965k rows on every uncached public request.
+    let days = state
+        .daily_cache
+        .clone()
+        .get_or_compute((from_ts, to_ts), || async move {
+            let conn = state
+                .db
+                .get()
+                .map_err(|e| StatsError::Rpc(format!("DB pool: {e}")))?;
+            let rows = db::query_daily_aggregates_fast(&conn, from_ts, to_ts)?;
+            Ok::<_, StatsError>(
+                rows.into_iter()
+                    .map(super::types::DailyAggregate::from)
+                    .collect(),
+            )
+        })
+        .await?;
+    Ok(cached_json(serde_json::json!({ "days": days }), 60))
 }
 
 /// GET /api/signaling - per-block signaling status (version bits or BIP-54 locktime).

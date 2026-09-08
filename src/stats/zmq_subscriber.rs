@@ -1188,6 +1188,27 @@ pub async fn prune_old_txs(state: &Arc<StatsState>) {
                 }
                 Err(e) => tracing::warn!("ZMQ: prune failed: {e}"),
             }
+            // Same 7-day horizon for notable txs that never confirmed. Only
+            // the never-confirmed ghosts: confirmed notables are the Lookout's
+            // historical record and are kept indefinitely. Capped per run so a
+            // large first-time backlog clears over successive days instead of
+            // holding one long write lock.
+            match db::prune_unconfirmed_notable_txs(
+                &conn,
+                seven_days_ago,
+                20_000,
+            ) {
+                Ok(count) => {
+                    if count > 0 {
+                        tracing::info!(
+                            "ZMQ: pruned {count} unconfirmed notable txs"
+                        );
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("ZMQ: notable prune failed: {e}")
+                }
+            }
         }
     })
     .await;
