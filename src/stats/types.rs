@@ -113,7 +113,13 @@ pub struct BlockSummary {
     pub fee_rate_p10: f64,
     /// 90th percentile fee rate in sat/vB.
     pub fee_rate_p90: f64,
-    /// Number of Stamps protocol outputs (bare multisig with fake pubkeys).
+    /// Intended as the count of Stamps protocol outputs (bare multisig with
+    /// fake pubkeys). ALWAYS 0: the detector tests whether a 33-byte key fails
+    /// to start with 0x02/0x03, but Stamps prefix their data keys with exactly
+    /// those bytes to look like valid pubkeys, so it can never fire. Measured
+    /// 2026-09: zero detections chain-wide against 2.78M bare multisig outputs.
+    /// Re-check with `SELECT SUM(stamps_count), SUM(multisig_count) FROM blocks`.
+    /// Do not build on this field until the detector is replaced.
     pub stamps_count: u64,
     /// Size of the largest transaction in bytes.
     pub largest_tx_size: u64,

@@ -22,13 +22,13 @@ pub fn EmbeddedChartsPage() -> impl IntoView {
 
     view! {
         <Title text="Bitcoin Embedded Data: OP_RETURN, Inscriptions & Runes | We Hodl BTC"/>
-        <Meta name="description" content="Track non-financial data embedded in Bitcoin blocks: OP_RETURN protocols (Runes, Omni, Counterparty), Ordinals inscriptions, BRC-20 tokens, and Stamps usage with counts, volumes, and block share over time."/>
+        <Meta name="description" content="Track non-financial data embedded in Bitcoin blocks: OP_RETURN protocols (Runes, Omni, Counterparty), Ordinals inscriptions and BRC-20 tokens, with counts, volumes and block share over time."/>
         <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/charts/embedded"/>
         <StaticJsonLd doc=static_docs::DATASET_EMBEDDED/>
         <ChartPageLayout
             title="Embedded Data"
             description="OP_RETURN protocols, Ordinals inscriptions, protocol fee analysis, and miner coinbase messages"
-            seo_text="Analyze non-financial data embedded in Bitcoin transactions. OP_RETURN protocols like Runes, Omni Layer, and Counterparty use dedicated outputs for on-chain data. Ordinals inscriptions and BRC-20 tokens store data in witness fields. Stamps use bare multisig encoding. Track each protocol's count, volume, block share, fee revenue, and encoding overhead. Miner coinbase messages reveal pool identity and signaling activity."
+            seo_text="Analyze non-financial data embedded in Bitcoin transactions. OP_RETURN protocols like Runes, Omni Layer, and Counterparty use dedicated outputs for on-chain data. Ordinals inscriptions and BRC-20 tokens store data in witness fields. Track each protocol's count, volume, block share, fee revenue, and encoding overhead. Miner coinbase messages reveal pool identity and signaling activity."
             header=move || view! {
                 <a href="/observatory/learn/protocols"
                     class="text-xs text-white/30 hover:text-[#f7931a] transition-colors flex items-center gap-1.5"
@@ -109,7 +109,7 @@ pub fn EmbeddedChartsPage() -> impl IntoView {
                             // ── Overview ─────────────────────────
                             <SectionHeading id="section-overview" title="Overview"/>
                             <ChartCard title="All Embedded Data — Block Share" description=chart_desc(range, "How much of each block is non-financial data (OP_RETURN outputs plus witness inscriptions)", "Daily average non-financial data share per block") chart_id="chart-all-embedded-share" option=all_embedded_share_option info="Combines OP_RETURN data (in outputs) and inscription data (in witness) as a percentage of total block size. These are disjoint categories that together represent all classified embedded data."/>
-                            <ChartCard title="All Embedded Data — Count" description=chart_desc(range, "Outputs per block by protocol: Runes, Omni, Counterparty, Ordinals, BRC-20, Stamps, and other data", "Daily average embedded outputs per block by protocol") chart_id="chart-unified-count" option=unified_count_option info="Stacked count of embedded data items by protocol. BRC-20 is a subset of Inscriptions (do not add them). Runes, Omni, and Counterparty are mutually exclusive subsets of OP_RETURN. See the Methodology page for the full taxonomy."/>
+                            <ChartCard title="All Embedded Data — Count" description=chart_desc(range, "Outputs per block by protocol: Runes, Omni, Counterparty, Ordinals, BRC-20, and other data", "Daily average embedded outputs per block by protocol") chart_id="chart-unified-count" option=unified_count_option info="Stacked count of embedded data items by protocol. BRC-20 is a subset of Inscriptions (do not add them). Runes, Omni, and Counterparty are mutually exclusive subsets of OP_RETURN. See the Methodology page for the full taxonomy."/>
                             <ChartCard title="All Embedded Data — Volume" description=chart_desc(range, "Bytes of data embedded per block by protocol", "Daily average bytes of data embedded per block by protocol") chart_id="chart-unified-volume" option=unified_volume_option/>
 
                             // ── Protocols ────────────────────────

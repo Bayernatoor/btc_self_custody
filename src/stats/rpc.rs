@@ -995,6 +995,16 @@ impl BitcoinRpc {
                                 {
                                     // Stamps multisig pattern: 1-of-N where N keys contain data.
                                     // The asm starts with "1 <key1> <key2> ... N OP_CHECKMULTISIG"
+                                    // KNOWN BROKEN: this never fires. Stamps prefix
+                                    // their data keys with 02/03 precisely to
+                                    // look like valid compressed pubkeys, so
+                                    // testing the prefix tests the wrong
+                                    // property; validity means the point is on
+                                    // the secp256k1 curve. Measured 2026-09:
+                                    // zero detections chain-wide against 2.78M
+                                    // bare multisig outputs. Kept rather than
+                                    // deleted so stamps_count keeps a defined
+                                    // meaning until a real decoder replaces it.
                                     // Check if any 33-byte "key" doesn't start with 02/03.
                                     if let Some(asm) =
                                         vout["scriptPubKey"]["asm"].as_str()

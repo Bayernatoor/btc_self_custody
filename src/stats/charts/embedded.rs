@@ -875,6 +875,11 @@ pub fn unified_embedded_volume_chart_daily(
 
 /// Stamps output count over time (per-block).
 /// Requires backfill v9 for historical data.
+/// UNREACHABLE while the Stamps detector is broken: `stamps_count` is 0 for
+/// every block, so this renders an empty chart. Wired to no page for that
+/// reason. Kept rather than deleted because it is waiting on data, not
+/// superseded: fixing the detector should not also mean rewriting its
+/// renderers. If the detector is abandoned, delete this and its daily twin.
 pub fn stamps_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Stamps");
