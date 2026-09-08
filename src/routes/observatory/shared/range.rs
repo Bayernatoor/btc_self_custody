@@ -5,6 +5,7 @@
 //! unified `ChartSettingsPanel`'s Range tab (see `shared/mod.rs`) as the
 //! floating-access equivalent.
 
+use crate::stats::types::uses_daily_aggregates;
 use leptos::prelude::*;
 
 use super::state::ObservatoryState;
@@ -29,7 +30,7 @@ pub fn RangeSelector() -> impl IntoView {
             "custom range"
         } else {
             let n = range_to_blocks(&r);
-            if n > 5_000 {
+            if uses_daily_aggregates(n) {
                 "daily averages"
             } else {
                 "per block"

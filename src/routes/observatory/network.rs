@@ -10,6 +10,7 @@ use super::components::*;
 use super::helpers::chart_desc;
 use super::shared::*;
 use crate::chart_memo;
+use crate::stats::types::uses_daily_aggregates;
 
 /// Network charts page — blocks, adoption, and transaction metrics in one scrollable list.
 #[component]
@@ -146,7 +147,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
         let r = range.get();
         async move {
             let n = crate::routes::observatory::helpers::range_to_blocks(&r);
-            if n <= 5_000 {
+            if !uses_daily_aggregates(n) {
                 return None;
             }
             let stats =
@@ -188,7 +189,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
         let r = range.get();
         async move {
             let n = crate::routes::observatory::helpers::range_to_blocks(&r);
-            if n <= 5_000 {
+            if !uses_daily_aggregates(n) {
                 return None;
             }
             let stats =
@@ -245,7 +246,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
         let r = range.get();
         async move {
             let n = crate::routes::observatory::helpers::range_to_blocks(&r);
-            if n <= 5_000 {
+            if !uses_daily_aggregates(n) {
                 return None;
             }
             let stats =
@@ -293,7 +294,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
         let r = range.get();
         async move {
             let n = crate::routes::observatory::helpers::range_to_blocks(&r);
-            if n <= 5_000 {
+            if !uses_daily_aggregates(n) {
                 return None;
             }
             let stats =

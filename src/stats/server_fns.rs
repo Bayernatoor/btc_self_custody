@@ -79,7 +79,7 @@ pub async fn fetch_stats_summary() -> Result<StatsSummary, ServerFnError> {
 pub async fn fetch_recent_blocks(
     count: u64,
 ) -> Result<Vec<BlockSummary>, ServerFnError> {
-    let count = count.min(4500); // matches fetch_blocks range guard
+    let count = count.min(MAX_PER_BLOCK_RANGE); // matches fetch_blocks range guard
     let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =
         leptos_axum::extract()
             .await
@@ -107,8 +107,10 @@ pub async fn fetch_blocks(
     if from > to {
         return Err(ServerFnError::new("Invalid block range"));
     }
-    // Limit range to prevent DoS via huge queries (4500 covers 1M range = ~4320 blocks)
-    if to - from > 4500 {
+    // Limit range to prevent DoS via huge queries. Must match the client's
+    // per-block mode switch exactly: anything the client will request in
+    // per-block mode has to be servable here. See MAX_PER_BLOCK_RANGE.
+    if block_range_too_large(from, to) {
         return Err(ServerFnError::new("Block range too large"));
     }
     let Extension(state): Extension<std::sync::Arc<super::api::StatsState>> =

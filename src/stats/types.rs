@@ -787,6 +787,37 @@ pub struct NotableStatsInfo {
 // Shared helpers
 // ---------------------------------------------------------------------------
 
+/// Largest block span served as per-block rows rather than daily aggregates.
+///
+/// This single constant couples two decisions that must agree exactly:
+///
+///  1. the client's mode switch, which requests per-block data when the range
+///     resolves to this many blocks or fewer, and
+///  2. the `fetch_blocks` server-side range guard, which rejects anything larger.
+///
+/// They were previously written independently as 5,000 and 4,500. Fixed presets
+/// never landed between the two, but YTD is computed as `days * 144`, so on days
+/// 32 to 34 of the year it resolved to 4,608, 4,752 and 4,896: inside the client
+/// gate, over the server cap. Every chart page hard-errored for three days each
+/// February with no fallback. Keep these as one value.
+pub const MAX_PER_BLOCK_RANGE: u64 = 5_000;
+
+/// Whether a range of `block_count` blocks renders from daily aggregates
+/// rather than per-block rows. The client's mode switch.
+pub fn uses_daily_aggregates(block_count: u64) -> bool {
+    block_count > MAX_PER_BLOCK_RANGE
+}
+
+/// Whether `fetch_blocks` must reject this height span as too large.
+/// The server's guard.
+///
+/// Paired with [`uses_daily_aggregates`] so the two sides of the mode switch
+/// cannot drift: any span the client requests in per-block mode must be one
+/// this accepts. Enforced by `per_block_ranges_are_always_servable`.
+pub fn block_range_too_large(from: u64, to: u64) -> bool {
+    to.saturating_sub(from) > MAX_PER_BLOCK_RANGE
+}
+
 const HALVING_INTERVAL: u64 = 210_000;
 const INITIAL_SUBSIDY: f64 = 50.0;
 

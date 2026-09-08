@@ -11,6 +11,7 @@ use super::helpers::*;
 use super::shared::*;
 use crate::chart_memo;
 use crate::stats::server_fns::*;
+use crate::stats::types::uses_daily_aggregates;
 
 /// Mining charts page — difficulty and pool distribution in one scrollable list.
 #[component]
@@ -27,7 +28,7 @@ pub fn MiningChartsPage() -> impl IntoView {
             let stats =
                 fetch_stats_summary().await.map_err(|e| e.to_string())?;
             let n = range_to_blocks(&r);
-            let is_daily = n > 5_000;
+            let is_daily = uses_daily_aggregates(n);
 
             if is_daily {
                 let from_ts = stats.latest_timestamp.saturating_sub(n * 600);

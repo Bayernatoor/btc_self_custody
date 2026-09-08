@@ -1,5 +1,6 @@
 //! Formatting and utility helpers for the stats page.
 
+use crate::stats::types::uses_daily_aggregates;
 use chrono::Datelike;
 use leptos::prelude::*;
 
@@ -11,7 +12,7 @@ pub fn chart_desc(
     daily: &'static str,
 ) -> Signal<String> {
     Signal::derive(move || {
-        if range_to_blocks(&range.get()) > 5_000 {
+        if uses_daily_aggregates(range_to_blocks(&range.get())) {
             daily.to_string()
         } else {
             per_block.to_string()
@@ -106,6 +107,7 @@ pub fn format_number_f64(n: f64, decimals: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::stats::types::MAX_PER_BLOCK_RANGE;
 
     #[test]
     fn format_number_zero() {
@@ -173,5 +175,64 @@ mod tests {
     #[test]
     fn range_to_blocks_unknown_defaults() {
         assert_eq!(range_to_blocks("invalid"), 12_960);
+    }
+
+    /// Any range the client resolves to per-block mode must be servable by
+    /// `fetch_blocks`, which rejects spans larger than `MAX_PER_BLOCK_RANGE`.
+    ///
+    /// This failed for three days every February: YTD is `days * 144`, so on
+    /// days 32 to 34 it produced 4,608 / 4,752 / 4,896 blocks, which passed the
+    /// client's `<= 5000` per-block gate but exceeded the server's independent
+    /// 4,500 cap. Every chart page hard-errored with "Block range too large".
+    #[test]
+    fn per_block_ranges_are_always_servable() {
+        // Mirrors create_dashboard_resource: per-block mode requests the
+        // window [tip - n, tip], so the span it asks for is exactly n.
+        let tip = 900_000u64;
+        let servable =
+            |n: u64| !crate::stats::types::block_range_too_large(tip - n, tip);
+
+        for preset in
+            ["1d", "1w", "1m", "3m", "6m", "1y", "2y", "5y", "10y", "all"]
+        {
+            let n = range_to_blocks(preset);
+            if !uses_daily_aggregates(n) {
+                assert!(
+                    servable(n),
+                    "preset {preset} takes per-block mode at {n} blocks, but \
+                     fetch_blocks would reject that span"
+                );
+            }
+        }
+
+        // YTD is the case that actually broke: `days * 144` swept through a
+        // window no fixed preset ever landed in. Exercise every day of a year.
+        for days in 1..=366u64 {
+            let n = days * 144;
+            if !uses_daily_aggregates(n) {
+                assert!(
+                    servable(n),
+                    "YTD on day {days} takes per-block mode at {n} blocks, but \
+                     fetch_blocks would reject that span"
+                );
+            }
+        }
+    }
+
+    /// The two predicates must partition every possible range with no gap: a
+    /// range is either daily or servable per-block, never neither.
+    #[test]
+    fn mode_switch_has_no_dead_zone() {
+        let tip = 900_000u64;
+        for n in 1..=MAX_PER_BLOCK_RANGE * 2 {
+            let daily = uses_daily_aggregates(n);
+            let servable =
+                !crate::stats::types::block_range_too_large(tip - n, tip);
+            assert!(
+                daily || servable,
+                "range of {n} blocks is neither served as daily aggregates nor \
+                 accepted by fetch_blocks: it would hard-error with no fallback"
+            );
+        }
     }
 }

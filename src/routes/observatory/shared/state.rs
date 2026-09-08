@@ -124,7 +124,7 @@ pub fn create_dashboard_resource(
                         .map(|t| t + 86_400) // include entire end day (midnight next day)
                         .unwrap_or(stats.latest_timestamp);
                     let approx_blocks = to_ts.saturating_sub(from_ts) / 600;
-                    if approx_blocks > 5_000 {
+                    if uses_daily_aggregates(approx_blocks) {
                         let days = fetch_daily_aggregates(from_ts, to_ts)
                             .await
                             .map_err(|e| e.to_string())?;
@@ -139,7 +139,7 @@ pub fn create_dashboard_resource(
             }
 
             let n = range_to_blocks(&r);
-            let is_daily = n > 5_000;
+            let is_daily = uses_daily_aggregates(n);
 
             if is_daily {
                 let from_ts = stats.latest_timestamp.saturating_sub(n * 600);
