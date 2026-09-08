@@ -648,11 +648,24 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
     HallOfFameEntry {
         slug: "first-op-return",
         title: "First Standardized OP_RETURN",
-        // DB: height 292534, 226 txs
-        description: "Block 292,534 contains early uses of the standardized OP_RETURN output after Bitcoin Core 0.9 made 40-byte data outputs relay-standard. This gave the ecosystem a \"blessed\" way to embed small amounts of data without polluting the UTXO set.",
+        // DB: height 291241, 578 txs, op_return_count 1, mined 2014-03-19 01:56 UTC.
+        // Was height 292534 dated 2014-03-29, which is wrong twice over: that
+        // block's timestamp is 2014-03-26, and it carries op_return_count 0, so
+        // the description named a block containing none of what it describes.
+        // Its same-day neighbours 292528/292551/292558 do have them, which is
+        // consistent with a height picked by hand. 291241 is the earliest block
+        // in the database with an OP_RETURN output dated on or after the 0.9.0
+        // release. Hedged to "one of the first" rather than "the first": it was
+        // mined 01:56 UTC on release day, so whether it precedes or follows the
+        // release announcement is not something this dataset can settle, and
+        // the site's own rule forbids absolutes that are not provable.
+        // OP_RETURN outputs also existed long before standardisation (earliest
+        // in the DB: 228,596 on 2013-03-29), a separate milestone that would
+        // deserve its own entry.
+        description: "Block 291,241 carries one of the first standardized OP_RETURN outputs, around the time Bitcoin Core 0.9 made 40-byte data outputs relay-standard. This gave the ecosystem a \"blessed\" way to embed small amounts of data without polluting the UTXO set.",
         category: Oddities,
-        date: "2014-03-29",
-        block: Some(292_534),
+        date: "2014-03-19",
+        block: Some(291_241),
         txid: None,
         highlight: false,
         source: None,
@@ -694,3 +707,119 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         )),
     },
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    /// Structural invariants for the curated entries.
+    ///
+    /// These are hand-written constants, and the one defect found in the
+    /// 2026-09-08 audit was invisible to the compiler: `first-op-return`
+    /// pointed at a block containing no OP_RETURN outputs and carried a date
+    /// three days off its block.
+    ///
+    /// `date` is the date of the **event**, not of the block, which is the
+    /// convention the data already followed and is documented on the field
+    /// itself in `types.rs`. So `overflow-fix-block` dating the incident to
+    /// 2010-08-15 while block 74,691 was mined just after UTC midnight on the
+    /// 16th is correct, not a discrepancy to reconcile.
+    ///
+    /// Block-height and date agreement cannot be asserted here, because it
+    /// needs the database and unit tests do not have one. Re-check it by hand
+    /// after editing an entry, printing each block's own date to compare
+    /// against the `date` field:
+    ///
+    ///     sqlite3 bitcoin_stats.db "SELECT height,
+    ///       date(timestamp,'unixepoch') FROM blocks WHERE height IN (...);"
+    ///
+    /// A one-day disagreement is expected, per the convention above. Anything
+    /// larger means the height is probably wrong. The query is written out
+    /// here rather than referenced because `notes/` is gitignored, so a
+    /// pointer into it is dead in a fresh clone.
+    #[test]
+    fn entries_are_structurally_sound() {
+        assert!(!HALL_OF_FAME.is_empty());
+
+        let mut slugs = HashSet::new();
+        for e in HALL_OF_FAME {
+            assert!(
+                slugs.insert(e.slug),
+                "duplicate slug {:?}: slugs are deep-link anchors and must be unique",
+                e.slug
+            );
+            assert!(
+                !e.slug.is_empty()
+                    && !e.title.is_empty()
+                    && !e.description.is_empty(),
+                "entry {:?} has an empty required field",
+                e.slug
+            );
+            assert!(
+                e.slug.chars().all(|c| c.is_ascii_lowercase()
+                    || c.is_ascii_digit()
+                    || c == '-'),
+                "slug {:?} is not URL-safe kebab-case",
+                e.slug
+            );
+
+            // Dates are rendered and sorted as strings, so the format is load-bearing.
+            let parsed = chrono::NaiveDate::parse_from_str(e.date, "%Y-%m-%d");
+            assert!(
+                parsed.is_ok(),
+                "entry {:?} has an unparseable date {:?}",
+                e.slug,
+                e.date
+            );
+            let date = parsed.unwrap();
+            assert!(
+                date >= chrono::NaiveDate::from_ymd_opt(2009, 1, 3).unwrap(),
+                "entry {:?} predates the genesis block",
+                e.slug
+            );
+
+            if let Some(txid) = e.txid {
+                assert_eq!(
+                    txid.len(),
+                    64,
+                    "entry {:?} txid is not 64 chars",
+                    e.slug
+                );
+                assert!(
+                    txid.chars()
+                        .all(|c| c.is_ascii_hexdigit()
+                            && !c.is_ascii_uppercase()),
+                    "entry {:?} txid is not lowercase hex",
+                    e.slug
+                );
+            }
+            if let Some((label, url)) = e.source {
+                assert!(
+                    !label.is_empty(),
+                    "entry {:?} has an empty source label",
+                    e.slug
+                );
+                assert!(
+                    url.starts_with("https://"),
+                    "entry {:?} source url is not https: {url}",
+                    e.slug
+                );
+            }
+        }
+    }
+
+    /// A height above the chain tip would render a dead block link.
+    #[test]
+    fn block_heights_are_plausible() {
+        for e in HALL_OF_FAME {
+            if let Some(h) = e.block {
+                assert!(
+                    h < 2_000_000,
+                    "entry {:?} block height {h} is beyond any plausible tip",
+                    e.slug
+                );
+            }
+        }
+    }
+}
