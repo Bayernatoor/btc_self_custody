@@ -2794,6 +2794,71 @@ pub struct NotableStats {
     pub top_txid: Option<String>,
 }
 
+/// Mirrors the existing `From<BlockRow> for BlockSummary`. Written as a `From`
+/// rather than field-by-field at the call site so adding a column to
+/// `NotableTx` fails to compile here instead of silently dropping the field
+/// from the API response.
+impl From<NotableTx> for super::types::NotableTxInfo {
+    fn from(r: NotableTx) -> Self {
+        Self {
+            txid: r.txid,
+            notable_type: r.notable_type,
+            fee: r.fee,
+            vsize: r.vsize,
+            value: r.value,
+            max_output_value: r.max_output_value,
+            value_usd: r.value_usd,
+            input_count: r.input_count,
+            output_count: r.output_count,
+            witness_bytes: r.witness_bytes,
+            op_return_text: r.op_return_text,
+            first_seen: r.first_seen,
+            confirmed_height: r.confirmed_height,
+            confirmed_at: r.confirmed_at,
+        }
+    }
+}
+
+/// Top notable txs by USD value first seen since `since`.
+///
+/// Lives here rather than inline in `server_fns.rs`, which had the only raw
+/// `conn.prepare` outside this module. A second home for SQL means a second
+/// place to look when a column changes.
+pub fn query_notable_top(
+    conn: &Connection,
+    since: u64,
+    limit: u64,
+) -> rusqlite::Result<Vec<NotableTx>> {
+    let mut stmt = conn.prepare(
+        "SELECT txid, notable_type, fee, vsize, value, max_output_value, value_usd,
+                input_count, output_count, witness_bytes, op_return_text,
+                first_seen, confirmed_height, confirmed_at
+         FROM notable_txs
+         WHERE first_seen >= ?1
+         ORDER BY value_usd DESC
+         LIMIT ?2",
+    )?;
+    let rows = stmt.query_map(params![since as i64, limit as i64], |row| {
+        Ok(NotableTx {
+            txid: row.get(0)?,
+            notable_type: row.get(1)?,
+            fee: row.get(2)?,
+            vsize: row.get(3)?,
+            value: row.get(4)?,
+            max_output_value: row.get(5)?,
+            value_usd: row.get(6)?,
+            input_count: row.get(7)?,
+            output_count: row.get(8)?,
+            witness_bytes: row.get(9)?,
+            op_return_text: row.get(10)?,
+            first_seen: row.get(11)?,
+            confirmed_height: row.get(12)?,
+            confirmed_at: row.get(13)?,
+        })
+    })?;
+    rows.collect()
+}
+
 /// Get aggregate stats for notable txs in a time window.
 pub fn query_notable_stats(
     conn: &Connection,
