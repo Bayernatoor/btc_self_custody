@@ -38,6 +38,31 @@ fn internal_err(context: &str, err: impl std::fmt::Display) -> ServerFnError {
     ServerFnError::new("Internal server error")
 }
 
+/// A client-side mistake, reported as such.
+///
+/// `ServerFnError::new` is what every validation path here used: probing the
+/// endpoints showed ten of them answering a reversed range or an out-of-range
+/// date with `500 ServerError|Invalid ...`. A caller asking for something
+/// impossible has not broken the server, and reporting it that way both
+/// misattributes the failure and buries genuine faults in the error log.
+///
+/// **This does not change the status code, and cannot.** `server_fn` 0.8.11
+/// hardcodes `INTERNAL_SERVER_ERROR` in `Res::error_response`
+/// (`src/response/http.rs`), so every `ServerFnError` is a 500 regardless of
+/// content. What this fixes is the half that is reachable: the log level drops
+/// from `error` to `warn` so client mistakes stop burying real faults, and the
+/// message is prefixed so the class is unmistakable to a caller and greppable
+/// in logs. Returning a true 4xx needs a custom error type implementing
+/// `FromServerFnError`, which is its own change.
+///
+/// The axum handlers are not affected by this limitation and do return real
+/// 4xx codes; see `StatsError::BadRequest` and `StatsError::NotFound`.
+#[cfg(feature = "ssr")]
+fn bad_request(message: &str) -> ServerFnError {
+    tracing::warn!("Rejected request: {message}");
+    ServerFnError::new(format!("Bad request: {message}"))
+}
+
 /// Pull the shared [`StatsState`](super::api::StatsState) out of the request's
 /// Axum extensions.
 ///
@@ -141,13 +166,15 @@ pub async fn fetch_blocks(
     to: u64,
 ) -> Result<Vec<BlockSummary>, ServerFnError> {
     if from > to {
-        return Err(ServerFnError::new("Invalid block range"));
+        return Err(bad_request("from must not exceed to"));
     }
     // Limit range to prevent DoS via huge queries. Must match the client's
     // per-block mode switch exactly: anything the client will request in
     // per-block mode has to be servable here. See MAX_PER_BLOCK_RANGE.
     if block_range_too_large(from, to) {
-        return Err(ServerFnError::new("Block range too large"));
+        return Err(bad_request(&format!(
+            "block range too large: max {MAX_PER_BLOCK_RANGE} blocks"
+        )));
     }
     let conn = conn().await?;
     let rows = super::db::query_blocks(&conn, from, to)
@@ -162,7 +189,7 @@ pub async fn fetch_blocks_by_ts(
     to_ts: u64,
 ) -> Result<Vec<BlockSummary>, ServerFnError> {
     if from_ts > to_ts {
-        return Err(ServerFnError::new("Invalid timestamp range"));
+        return Err(bad_request("from_ts must not exceed to_ts"));
     }
     let conn = conn().await?;
     let rows = super::db::query_blocks_by_ts(
@@ -179,7 +206,9 @@ pub async fn fetch_blocks_by_ts(
     // here rather than trusted from the caller. Fetching one row beyond the
     // cap distinguishes "exactly full" from "truncated".
     if rows.len() as u64 > MAX_PER_BLOCK_RANGE {
-        return Err(ServerFnError::new("Block range too large"));
+        return Err(bad_request(&format!(
+            "block range too large: max {MAX_PER_BLOCK_RANGE} blocks"
+        )));
     }
     Ok(rows.into_iter().map(BlockSummary::from).collect())
 }
@@ -416,7 +445,7 @@ pub async fn fetch_daily_aggregates(
     to_ts: u64,
 ) -> Result<Vec<DailyAggregate>, ServerFnError> {
     if from_ts > to_ts {
-        return Err(ServerFnError::new("Invalid timestamp range"));
+        return Err(bad_request("from_ts must not exceed to_ts"));
     }
 
     let state = state().await?;
@@ -444,6 +473,9 @@ pub async fn fetch_signaling(
     from: u64,
     to: u64,
 ) -> Result<(Vec<SignalingBlock>, PeriodStats), ServerFnError> {
+    if version_bit_out_of_range(bit) {
+        return Err(bad_request(&format!("bit must be 0..={MAX_VERSION_BIT}")));
+    }
     let state = state().await?;
 
     // Cache key includes method, bit, and range
@@ -526,6 +558,9 @@ pub async fn fetch_signaling_periods(
     bit: u32,
     method: String,
 ) -> Result<Vec<SignalingPeriod>, ServerFnError> {
+    if version_bit_out_of_range(bit) {
+        return Err(bad_request(&format!("bit must be 0..={MAX_VERSION_BIT}")));
+    }
     let state = state().await?;
 
     // Cache key: "bit:4" or "locktime"
@@ -624,7 +659,7 @@ pub async fn fetch_empty_blocks_monthly(
     to: u64,
 ) -> Result<Vec<HistogramBucket>, ServerFnError> {
     if from > to {
-        return Err(ServerFnError::new("Invalid block range"));
+        return Err(bad_request("from must not exceed to"));
     }
     let conn = conn().await?;
     let rows = super::db::query_empty_blocks_monthly(&conn, from, to)
@@ -642,7 +677,7 @@ pub async fn fetch_empty_blocks_by_pool(
     to: u64,
 ) -> Result<Vec<HistogramBucket>, ServerFnError> {
     if from > to {
-        return Err(ServerFnError::new("Invalid block range"));
+        return Err(bad_request("from must not exceed to"));
     }
     let conn = conn().await?;
     let rows = super::db::query_empty_blocks_by_pool(&conn, from, to)
@@ -777,7 +812,7 @@ pub async fn fetch_fullness_histogram(
     to_ts: u64,
 ) -> Result<Vec<HistogramBucket>, ServerFnError> {
     if from_ts > to_ts {
-        return Err(ServerFnError::new("Invalid timestamp range"));
+        return Err(bad_request("from_ts must not exceed to_ts"));
     }
     let conn = conn().await?;
     let buckets = super::db::query_fullness_histogram(&conn, from_ts, to_ts)
@@ -795,7 +830,7 @@ pub async fn fetch_block_time_histogram(
     to_ts: u64,
 ) -> Result<Vec<HistogramBucket>, ServerFnError> {
     if from_ts > to_ts {
-        return Err(ServerFnError::new("Invalid timestamp range"));
+        return Err(bad_request("from_ts must not exceed to_ts"));
     }
     let conn = conn().await?;
     let buckets = super::db::query_block_time_histogram(&conn, from_ts, to_ts)
@@ -906,7 +941,7 @@ pub async fn fetch_on_this_day(
     let conn = conn().await?;
 
     if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
-        return Err(ServerFnError::new("Invalid date"));
+        return Err(bad_request("month must be 1..=12 and day 1..=31"));
     }
     let month_day = format!("{:02}-{:02}", month, day);
     let rows = super::db::query_on_this_day(&conn, &month_day)
@@ -1096,7 +1131,7 @@ pub async fn fetch_range_summary(
     to_ts: u64,
 ) -> Result<RangeSummary, ServerFnError> {
     if from_ts > to_ts {
-        return Err(ServerFnError::new("Invalid timestamp range"));
+        return Err(bad_request("from_ts must not exceed to_ts"));
     }
 
     let state = state().await?;
@@ -1119,7 +1154,7 @@ pub async fn fetch_extremes(
     to_ts: u64,
 ) -> Result<ExtremesData, ServerFnError> {
     if from_ts > to_ts {
-        return Err(ServerFnError::new("Invalid timestamp range"));
+        return Err(bad_request("from_ts must not exceed to_ts"));
     }
 
     let state = state().await?;

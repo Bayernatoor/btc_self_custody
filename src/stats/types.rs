@@ -779,6 +779,25 @@ pub struct NotableStatsInfo {
 /// February with no fallback. Keep these as one value.
 pub const MAX_PER_BLOCK_RANGE: u64 = 5_000;
 
+/// Highest version bit BIP9 can signal on.
+///
+/// A block's `nVersion` is 32 bits, but the top three are the version-bits
+/// marker (`001`), so only 0 to 28 are available to signal with. Anything above
+/// is not a bit a block could ever set.
+pub const MAX_VERSION_BIT: u32 = 28;
+
+/// Whether `bit` is outside the range BIP9 can signal on.
+///
+/// Load-bearing rather than cosmetic: the signaling queries build their mask as
+/// `1i64 << bit`, and an unvalidated `bit` from the query string overflows that
+/// shift. In a debug build it panics and the connection dies with no response
+/// at all; in release the shift amount is masked to `bit % 64`, so `bit=99`
+/// silently answers as if it were bit 35. Found by probing
+/// `/api/stats/signaling?bit=99`, which returned nothing whatsoever.
+pub fn version_bit_out_of_range(bit: u32) -> bool {
+    bit > MAX_VERSION_BIT
+}
+
 /// Whether a range of `block_count` blocks renders from daily aggregates
 /// rather than per-block rows. The client's mode switch.
 pub fn uses_daily_aggregates(block_count: u64) -> bool {
@@ -823,6 +842,20 @@ pub fn calc_supply(height: u64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn version_bit_range_matches_bip9() {
+        // Only 0..=28 are signalable: the top three bits of nVersion are the
+        // version-bits marker.
+        assert!(!version_bit_out_of_range(0));
+        assert!(!version_bit_out_of_range(MAX_VERSION_BIT));
+        assert!(version_bit_out_of_range(MAX_VERSION_BIT + 1));
+        assert!(version_bit_out_of_range(99));
+        // 64 and above is where the underlying `1i64 << bit` would overflow,
+        // which is what took the connection down before this existed.
+        assert!(version_bit_out_of_range(64));
+        assert!(version_bit_out_of_range(u32::MAX));
+    }
 
     #[test]
     fn supply_genesis() {

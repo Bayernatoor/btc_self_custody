@@ -341,7 +341,9 @@ pub async fn get_block_detail(
             serde_json::to_value(b)
                 .map_err(|e| StatsError::Rpc(e.to_string()))?,
         )),
-        None => Ok(Json(serde_json::json!({ "error": "Block not found" }))),
+        // A 200 carrying {"error": ...} is worse than either a 200 or a 404:
+        // every caller has to inspect the body to learn it failed.
+        None => Err(StatsError::NotFound("Block not found".into())),
     }
 }
 
@@ -686,6 +688,13 @@ pub async fn get_signaling(
     State(state): State<SharedStatsState>,
     Query(params): Query<SignalingQuery>,
 ) -> Result<Json<serde_json::Value>, StatsError> {
+    let bit = params.bit.unwrap_or(0);
+    if super::types::version_bit_out_of_range(bit) {
+        return Err(StatsError::BadRequest(format!(
+            "bit must be 0..={}",
+            super::types::MAX_VERSION_BIT
+        )));
+    }
     let conn = state
         .db
         .get()
@@ -709,7 +718,7 @@ pub async fn get_signaling(
     let blocks = if use_locktime {
         db::query_signaling_locktime(&conn, from, to)?
     } else {
-        db::query_signaling_bit(&conn, params.bit.unwrap_or(0), from, to)?
+        db::query_signaling_bit(&conn, bit, from, to)?
     };
 
     // Period stats: retarget block (period_start) is the boundary between periods.
@@ -720,12 +729,7 @@ pub async fn get_signaling(
     let period_blocks = if use_locktime {
         db::query_signaling_locktime(&conn, period_start, period_end)?
     } else {
-        db::query_signaling_bit(
-            &conn,
-            params.bit.unwrap_or(0),
-            period_start,
-            period_end,
-        )?
+        db::query_signaling_bit(&conn, bit, period_start, period_end)?
     };
     let signaled_count =
         period_blocks.iter().filter(|b| b.signaled).count() as u64;
@@ -755,6 +759,15 @@ pub async fn get_signaling_periods(
     State(state): State<SharedStatsState>,
     Query(params): Query<SignalingPeriodsQuery>,
 ) -> Result<Json<serde_json::Value>, StatsError> {
+    // Validate before taking a pooled connection, as get_signaling does: a
+    // rejected request should not occupy one of the 16 slots to be told no.
+    let bit = params.bit.unwrap_or(0);
+    if super::types::version_bit_out_of_range(bit) {
+        return Err(StatsError::BadRequest(format!(
+            "bit must be 0..={}",
+            super::types::MAX_VERSION_BIT
+        )));
+    }
     let conn = state
         .db
         .get()
@@ -763,7 +776,7 @@ pub async fn get_signaling_periods(
     let periods = if use_locktime {
         db::query_signaling_periods_locktime(&conn)?
     } else {
-        db::query_signaling_periods_bit(&conn, params.bit.unwrap_or(0))?
+        db::query_signaling_periods_bit(&conn, bit)?
     };
     Ok(Json(serde_json::json!({
         "periods": periods

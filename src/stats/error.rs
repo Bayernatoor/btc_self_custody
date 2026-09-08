@@ -46,10 +46,20 @@ pub enum StatsError {
     /// and free of internal detail.
     #[error("{0}")]
     BadRequest(String),
+
+    /// The request was well-formed but the thing asked for does not exist.
+    /// Maps to 404 and echoes the message, same constraint as `BadRequest`.
+    #[error("{0}")]
+    NotFound(String),
 }
 
 impl IntoResponse for StatsError {
     fn into_response(self) -> Response {
+        if let Self::NotFound(message) = &self {
+            tracing::debug!("Not found: {message}");
+            let body = json!({ "error": message });
+            return (StatusCode::NOT_FOUND, body.to_string()).into_response();
+        }
         if let Self::BadRequest(message) = &self {
             // Caller's fault, so `warn` rather than `error`: these are
             // expected traffic and must not bury genuine faults in the log.

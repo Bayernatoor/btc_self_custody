@@ -318,13 +318,14 @@ async fn block_detail_returns_inserted_block() {
 }
 
 #[tokio::test]
-async fn block_detail_missing_height_returns_error_shape() {
+async fn block_detail_missing_height_returns_404() {
     let app = TestApp::new();
     let (status, body) = app.get("/blocks/999999").await;
-    // Current handler returns 200 with {"error": "Block not found"}.
-    // This test locks in that contract — if the response is changed to a
-    // proper 404, update the expectations here.
-    assert_eq!(status, StatusCode::OK);
+    // Was 200 carrying {"error": "Block not found"}, which is worse than
+    // either a 200 or a 404: every caller had to inspect the body to learn the
+    // request failed. The previous version of this test locked in that shape
+    // and invited exactly this change.
+    assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(body["error"], "Block not found");
 }
 
@@ -431,6 +432,42 @@ async fn signaling_periods_on_empty_db_returns_empty_shape() {
     // Exact shape varies by bit number; just lock that it returned valid
     // JSON and the handler didn't panic on an empty DB.
     assert!(body.is_object() || body.is_array());
+}
+
+/// An out-of-range version bit must be a 400, on both signaling endpoints.
+///
+/// This is the bug that made the whole probing exercise worth it.
+/// `/signaling?bit=99` returned no response at all: the mask is built as
+/// `1i64 << bit` from an unvalidated query parameter, and a shift past the word
+/// width panics in a debug build, killing the connection. A release build is
+/// arguably worse, masking the shift to `bit % 64` so `bit=99` answers as if it
+/// were bit 35 and looks like data. Nothing here asserted status codes, so the
+/// suite could not see either outcome.
+#[tokio::test]
+async fn out_of_range_version_bit_is_a_client_error() {
+    let app = TestApp::new();
+    for uri in [
+        "/signaling?bit=99&from=0&to=100",
+        "/signaling/periods?bit=99",
+        "/signaling?bit=29&from=0&to=100",
+        "/signaling/periods?bit=64",
+    ] {
+        let (status, _) = app.get(uri).await;
+        assert_eq!(
+            status,
+            StatusCode::BAD_REQUEST,
+            "{uri} should be rejected as a client error"
+        );
+    }
+}
+
+/// The highest signalable bit must still be accepted, so the guard rejects
+/// only what BIP9 cannot express rather than trimming the valid range.
+#[tokio::test]
+async fn highest_valid_version_bit_is_accepted() {
+    let app = TestApp::new();
+    let (status, _) = app.get("/signaling/periods?bit=28").await;
+    assert_eq!(status, StatusCode::OK);
 }
 
 // ---------------------------------------------------------------------------
