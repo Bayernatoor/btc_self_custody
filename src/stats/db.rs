@@ -1995,7 +1995,10 @@ pub fn query_signaling_bit(
     from: u64,
     to: u64,
 ) -> rusqlite::Result<Vec<SignalingBlock>> {
-    let mask = 1i64 << bit;
+    // `checked_shl` rather than `<<`: callers are validated at the API
+    // boundary, but a panic here takes the whole connection down, so this must
+    // not depend on that having happened. An out-of-range bit matches nothing.
+    let mask = 1i64.checked_shl(bit).unwrap_or(0);
     let mut stmt = conn.prepare(
         "SELECT height, timestamp, (version & ?1) != 0 as signaled, miner
          FROM blocks WHERE height >= ?2 AND height <= ?3
@@ -2050,7 +2053,7 @@ pub fn query_signaling_periods_bit(
     conn: &Connection,
     bit: u32,
 ) -> rusqlite::Result<Vec<SignalingPeriod>> {
-    let mask = 1i64 << bit;
+    let mask = 1i64.checked_shl(bit).unwrap_or(0);
     let mut stmt = conn.prepare(
         "SELECT height / 2016 as period,
                 MIN(height), MAX(height),
@@ -3967,6 +3970,34 @@ mod tests {
             )
             .unwrap();
         assert_eq!(derived, 501_000_000);
+    }
+
+    /// An out-of-range bit must not panic here. Callers are validated at the
+    /// API boundary, but a panic in a query takes the whole connection down
+    /// with no response at all, so this cannot depend on that.
+    #[test]
+    fn signaling_bit_beyond_the_word_does_not_panic() {
+        let conn = setup_db();
+        conn.execute(
+            "INSERT INTO blocks (height, hash, timestamp, tx_count, size, weight,
+             difficulty, version) VALUES (1,'h1',1700000000,1,0,0,1.0,536870914)",
+            [],
+        )
+        .unwrap();
+
+        // bit 1 is set in 0x20000002, so it signals.
+        let signaled = query_signaling_bit(&conn, 1, 0, 10).unwrap();
+        assert_eq!(signaled.len(), 1);
+        assert!(signaled[0].signaled);
+
+        // 99 would overflow `1i64 << bit`. Must return rows, none signaling.
+        let over = query_signaling_bit(&conn, 99, 0, 10).unwrap();
+        assert_eq!(over.len(), 1);
+        assert!(!over[0].signaled, "an impossible bit cannot be set");
+
+        // Same for the per-period query.
+        let periods = query_signaling_periods_bit(&conn, 99).unwrap();
+        assert!(periods.iter().all(|p| p.signaled_count == 0));
     }
 
     #[test]
