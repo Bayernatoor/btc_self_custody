@@ -111,7 +111,16 @@ pub(crate) fn chart_defaults() -> serde_json::Value {
         "toolbox": {
             "feature": {
                 "restore": { "title": "Reset zoom" },
-                "dataZoom": { "title": { "zoom": "Zoom", "back": "Undo zoom" } },
+                // yAxisIndex "none" restricts the box-select to time. Without
+                // it ECharts zooms BOTH axes, and stats.js arms this brush on
+                // every desktop chart so a plain drag triggers it. On a 100%
+                // stacked chart that silently clips the top bands out of the
+                // visible y range: dragging a box on Address Type Share made
+                // the P2TR band vanish while the tooltip still reported 20.73%,
+                // because the data was never affected, only the view. It also
+                // leaves the axis bounded by wherever the drag happened to end,
+                // which is why the y axis read 97.63 instead of 100.
+                "dataZoom": { "yAxisIndex": "none", "title": { "zoom": "Zoom", "back": "Undo zoom" } },
                 "saveAsImage": { "title": "Save image", "backgroundColor": "#0d2137" }
             },
             "iconStyle": { "borderColor": "#aaa" },
@@ -1498,6 +1507,28 @@ mod tests {
     // -----------------------------------------------------------------------
     // build_option merges correctly
     // -----------------------------------------------------------------------
+
+    /// The toolbox box-select must never zoom the value axis.
+    ///
+    /// stats.js arms this brush on every desktop chart, so a plain drag on the
+    /// plot area triggers it. With ECharts' default (both axes) that clips the
+    /// top of a 100% stacked chart out of view while the tooltip keeps
+    /// reporting the real values, which reads as missing data rather than as a
+    /// zoom. Every chart inherits this from chart_defaults, so assert it here.
+    #[test]
+    fn toolbox_zoom_is_restricted_to_the_time_axis() {
+        let opt = chart_defaults();
+        let zoom = opt
+            .get("toolbox")
+            .and_then(|t| t.get("feature"))
+            .and_then(|f| f.get("dataZoom"))
+            .expect("toolbox exposes a dataZoom feature");
+        assert_eq!(
+            zoom.get("yAxisIndex").and_then(|v| v.as_str()),
+            Some("none"),
+            "box-select would otherwise zoom the value axis and hide stacked bands"
+        );
+    }
 
     #[test]
     fn build_option_preserves_defaults() {
