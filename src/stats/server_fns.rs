@@ -806,6 +806,98 @@ pub async fn fetch_block_time_histogram(
         .collect())
 }
 
+/// Documented pre-exchange BTC/USD prices, oldest first, used only when the
+/// blockchain.info series has no point within two days of the target date.
+/// Keys are zero-padded `YYYY-MM` (or bare `YYYY`) so lexicographic order is
+/// chronological.
+#[cfg(feature = "ssr")]
+const EARLY_PRICES: &[(&str, f64)] = &[
+    ("2009", 0.0),      // no market price
+    ("2010-01", 0.0),   // no market
+    ("2010-03", 0.003), // early BitcoinMarket.com trades
+    ("2010-05", 0.004), // Pizza Day era (~$0.0041)
+    ("2010-07", 0.05),  // Mt. Gox opens
+    ("2010-08", 0.06),
+    ("2010-10", 0.10),
+    ("2010-11", 0.25), // brief spike
+    ("2010-12", 0.25),
+    ("2011-01", 0.30),
+    ("2011-02", 1.00), // BTC reaches $1
+];
+
+/// Most recent entry in [`EARLY_PRICES`] at or before `year`-`month`, or 0.0
+/// (rendered as "unavailable") for any month past the table's last entry.
+///
+/// The bound is the important part. This is a fallback for when the price
+/// series has no point near the target date, and the series covers 2010-07-19
+/// onward, so the table is the only source only for dates before that. But the
+/// fallback also fires for *every* date when the price fetch fails outright,
+/// and an unbounded carry-forward then reports the table's last entry, $1.00
+/// from February 2011, as the price of a 2026 date. That is worse than
+/// reporting nothing: the Almanac shows an em-dash and hides market cap for
+/// 0.0, so "unknown" is representable and honest, whereas "$1" reads as a real
+/// figure and is off by orders of magnitude.
+///
+/// So carry-forward is deliberately confined to the era the table documents.
+/// Filling months after it would mean publishing a guess, and 2011 alone moved
+/// far enough that the February figure does not describe the rest of it.
+#[cfg(feature = "ssr")]
+fn early_price_for(year: u32, month: u32) -> f64 {
+    let year_month = format!("{}-{:02}", year, month);
+    let Some((last_documented, _)) = EARLY_PRICES.last() else {
+        return 0.0;
+    };
+    if year_month.as_str() > *last_documented {
+        return 0.0;
+    }
+    EARLY_PRICES
+        .iter()
+        .rfind(|(prefix, _)| *prefix <= year_month.as_str())
+        .map(|(_, price)| *price)
+        .unwrap_or(0.0)
+}
+
+/// USD price for a date: the nearest series point within two days, else the
+/// documented early-price table.
+///
+/// **A zero from the series is treated as absent, and that distinction is the
+/// whole point.** The blockchain.info series carries entries with
+/// `price_usd: 0.0` for dates before a liquid market existed, so `Some(0.0)`
+/// means "the series covers this date and had nothing to report", not "the
+/// price was zero". Accepting it as a value short-circuits the early-price
+/// table for exactly the window that table exists to serve: Pizza Day
+/// rendered as unavailable while the table held $0.004 for 2010-05.
+///
+/// An earlier version of this claimed the series "has no data" before 2011.
+/// It has rows; their values are zero. Absent and zero are different, and
+/// conflating them is what broke the headline case of the fix that introduced
+/// the table lookup.
+#[cfg(feature = "ssr")]
+fn resolve_price_usd(
+    prices: &[PricePoint],
+    target_ms: u64,
+    year: u32,
+    month: u32,
+) -> f64 {
+    let two_days_ms = 2 * 86_400 * 1000;
+    let nearest = prices
+        .iter()
+        .filter(|p| {
+            p.timestamp_ms >= target_ms.saturating_sub(two_days_ms)
+                && p.timestamp_ms <= target_ms + two_days_ms
+        })
+        .min_by_key(|p| {
+            (p.timestamp_ms as i64 - target_ms as i64).unsigned_abs()
+        })
+        .map(|p| p.price_usd)
+        .filter(|p| *p > 0.0);
+
+    match nearest {
+        Some(p) => p,
+        None => early_price_for(year, month),
+    }
+}
+
 #[server(prefix = "/api", endpoint = "on_this_day")]
 pub async fn fetch_on_this_day(
     month: u32,
@@ -940,60 +1032,17 @@ pub async fn fetch_on_this_day(
                 first_block,
                 last_block,
             )| {
-                // Pre-exchange era prices (before blockchain.info data)
-                // These are well-documented historical prices for early Bitcoin
-                let early_prices: &[(&str, f64)] = &[
-                    ("2009", 0.0),      // No market price
-                    ("2010-01", 0.0),   // No market
-                    ("2010-03", 0.003), // Early BitcoinMarket.com trades
-                    ("2010-05", 0.004), // Pizza Day era (~$0.0041)
-                    ("2010-07", 0.05),  // Mt. Gox opens
-                    ("2010-08", 0.06),
-                    ("2010-10", 0.10),
-                    ("2010-11", 0.25), // Brief spike
-                    ("2010-12", 0.25),
-                    ("2011-01", 0.30),
-                    ("2011-02", 1.00), // BTC reaches $1
-                ];
-
-                // Find closest price: try blockchain.info first, fall back to early prices
+                // Closest price for this date. See `resolve_price_usd`.
                 let price_usd =
                     chrono::NaiveDate::from_ymd_opt(year as i32, month, day)
                         .and_then(|d| d.and_hms_opt(12, 0, 0))
                         .map(|dt| {
-                            let target_ms =
-                                dt.and_utc().timestamp() as u64 * 1000;
-                            let two_days_ms = 2 * 86_400 * 1000;
-                            // Try blockchain.info data first
-                            let api_price = prices
-                                .iter()
-                                .filter(|p| {
-                                    p.timestamp_ms
-                                        >= target_ms.saturating_sub(two_days_ms)
-                                        && p.timestamp_ms
-                                            <= target_ms + two_days_ms
-                                })
-                                .min_by_key(|p| {
-                                    (p.timestamp_ms as i64 - target_ms as i64)
-                                        .unsigned_abs()
-                                })
-                                .map(|p| p.price_usd);
-
-                            if let Some(p) = api_price {
-                                return p;
-                            }
-
-                            // Fall back to early price table
-                            let year_month = format!("{}-{:02}", year, month);
-                            let year_str = year.to_string();
-                            for (prefix, price) in early_prices.iter().rev() {
-                                if year_month.starts_with(prefix)
-                                    || year_str.starts_with(prefix)
-                                {
-                                    return *price;
-                                }
-                            }
-                            0.0
+                            resolve_price_usd(
+                                &prices,
+                                dt.and_utc().timestamp() as u64 * 1000,
+                                year,
+                                month,
+                            )
                         })
                         .unwrap_or(0.0);
 
@@ -1155,4 +1204,108 @@ pub async fn fetch_notable_top(
     let rows = super::db::query_notable_top(&conn, since, limit)
         .map_err(|e| internal_err("DB query", e))?;
     Ok(rows.into_iter().map(NotableTxInfo::from).collect())
+}
+
+#[cfg(all(test, feature = "ssr"))]
+mod tests {
+    use super::*;
+
+    /// The early-price table is a "last known price" lookup. It was written as
+    /// an exact prefix match, so any month not literally listed returned
+    /// $0.00 even with a known earlier price: 2010-02, 2010-04, 2010-06,
+    /// 2010-09 and every month of 2011 from March on. The 2010 gaps are the
+    /// damaging ones, since that window predates the blockchain.info series
+    /// and this table is the only source, so the Almanac showed $0.00 for
+    /// dates on either side of Pizza Day while showing $0.004 for Pizza Day.
+    #[test]
+    fn early_price_carries_forward_the_last_known_value() {
+        // Explicitly listed months are unchanged.
+        assert_eq!(early_price_for(2010, 3), 0.003);
+        assert_eq!(early_price_for(2010, 5), 0.004);
+        assert_eq!(early_price_for(2011, 2), 1.00);
+
+        // Gaps inside the table's era inherit the previous known price
+        // instead of zeroing. These are the damaging ones: the price series
+        // starts 2010-07-19, so for these months the table is the only source
+        // and the fallback always fires.
+        assert_eq!(early_price_for(2010, 4), 0.003, "April inherits March");
+        assert_eq!(early_price_for(2010, 6), 0.004, "June inherits May");
+        assert_eq!(early_price_for(2010, 9), 0.06, "September inherits August");
+
+        // Before any market existed, and before the table starts.
+        assert_eq!(early_price_for(2009, 6), 0.0);
+        assert_eq!(early_price_for(2008, 1), 0.0, "predates the table");
+
+        // Monotonic within the era: a later month can never report a lower
+        // price than an earlier one, which is what a carry-forward guarantees.
+        let mut prev = 0.0;
+        for (y, m) in [(2009, 1), (2010, 1), (2010, 6), (2010, 12), (2011, 2)] {
+            let p = early_price_for(y, m);
+            assert!(p >= prev, "{y}-{m:02} fell to {p} from {prev}");
+            prev = p;
+        }
+    }
+
+    /// A zero in the price series must not be read as a price.
+    ///
+    /// This is the bug that broke the headline case of the early-price fix:
+    /// the blockchain.info series carries rows with `price_usd: 0.0` for dates
+    /// before a liquid market, so the nearest-point lookup returned
+    /// `Some(0.0)` for 2010-05-22, short-circuited the early-price table, and
+    /// the Almanac rendered Pizza Day as unavailable while the table held
+    /// $0.004. Absent and zero are different things.
+    #[test]
+    fn a_zero_in_the_series_falls_back_to_the_early_table() {
+        // 2010-05-22 12:00 UTC, the target the Almanac asks for.
+        let pizza_day_ms = 1_274_529_600_000u64;
+
+        // The series covers the date but reports zero, as it really does.
+        let zeroed = vec![PricePoint {
+            timestamp_ms: pizza_day_ms,
+            price_usd: 0.0,
+        }];
+        assert_eq!(
+            resolve_price_usd(&zeroed, pizza_day_ms, 2010, 5),
+            0.004,
+            "a zero from the series must not beat the documented table"
+        );
+
+        // No coverage at all: same answer, via the same fallback.
+        assert_eq!(resolve_price_usd(&[], pizza_day_ms, 2010, 5), 0.004);
+
+        // A real price in range wins, which is the whole point of preferring
+        // the series for dates it actually covers.
+        let real = vec![PricePoint {
+            timestamp_ms: pizza_day_ms,
+            price_usd: 123.45,
+        }];
+        assert_eq!(resolve_price_usd(&real, pizza_day_ms, 2010, 5), 123.45);
+
+        // Outside the two-day window the series point is ignored.
+        let far = vec![PricePoint {
+            timestamp_ms: pizza_day_ms + 5 * 86_400 * 1000,
+            price_usd: 123.45,
+        }];
+        assert_eq!(resolve_price_usd(&far, pizza_day_ms, 2010, 5), 0.004);
+
+        // A zeroed series past the table's era still reports unknown, so the
+        // bound added earlier is not undone by this change.
+        assert_eq!(resolve_price_usd(&zeroed, pizza_day_ms, 2024, 4), 0.0);
+    }
+
+    /// Carry-forward must stop at the end of the table's era.
+    ///
+    /// The fallback fires for every date when the price fetch fails, not just
+    /// for pre-exchange ones, so an unbounded version reported February 2011's
+    /// $1.00 as the price of any modern date. 0.0 renders as an em-dash with
+    /// market cap hidden, so "unknown" is representable; "$1" is not merely
+    /// missing, it is wrong by orders of magnitude and looks deliberate.
+    #[test]
+    fn early_price_does_not_carry_past_the_documented_era() {
+        assert_eq!(early_price_for(2011, 2), 1.00, "last documented month");
+        assert_eq!(early_price_for(2011, 3), 0.0, "one month past the table");
+        assert_eq!(early_price_for(2013, 11), 0.0);
+        assert_eq!(early_price_for(2024, 4), 0.0, "halving day, not $1");
+        assert_eq!(early_price_for(2026, 9), 0.0, "today, not $1");
+    }
 }

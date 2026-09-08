@@ -80,7 +80,11 @@ fn YearCard(year: OnThisDayYear) -> impl IntoView {
         } else if mcap >= 1e6 {
             format!("${:.0}M mcap", mcap / 1e6)
         } else {
-            format!("${:.0} mcap", mcap)
+            // Sub-$1M market cap, which is 2010 only. This branch never
+            // rendered until the early-price lookup started returning a value
+            // for 2010, so it kept a bare unseparated number while every
+            // other branch had a unit suffix.
+            format!("${} mcap", format_number_f64(mcap, 0))
         }
     } else {
         String::new()
