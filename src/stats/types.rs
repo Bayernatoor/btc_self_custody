@@ -472,9 +472,21 @@ pub struct HallOfFameEntry {
     /// Longer description of the event.
     pub description: &'static str,
     pub category: HofCategory,
-    /// Date string for display (e.g. "2009-01-03").
+    /// UTC date of **the event**, `YYYY-MM-DD`, for display and sorting.
+    ///
+    /// The event, not the block. 22 of the 58 entries have no block at all
+    /// (exchange launches, price milestones, legal changes), so the event is
+    /// the only thing every entry shares and the block is supplementary
+    /// context. Where an entry has both, they can legitimately differ: the
+    /// value-overflow incident is dated 2010-08-15 while the block that
+    /// resolved it, 74,691, was mined just after UTC midnight on the 16th.
+    ///
+    /// So a one-day gap between `date` and the block's timestamp is expected
+    /// rather than a defect. A larger gap means the height is probably wrong,
+    /// which is how `first-op-return` was caught pointing three days and one
+    /// missing OP_RETURN away from what it described.
     pub date: &'static str,
-    /// Associated block height, if applicable.
+    /// Associated block height, if applicable. Supplementary: see `date`.
     pub block: Option<u64>,
     /// Associated transaction ID, if applicable.
     pub txid: Option<&'static str>,
