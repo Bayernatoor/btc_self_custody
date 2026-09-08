@@ -21,6 +21,40 @@ Before pushing, the same three things CI runs, in order:
 second), `pre-push` runs all three. Green locally then means green in CI. Bypass with
 `--no-verify` if you must.
 
+**Those three prove the code compiles and does what its tests assert. They prove nothing about
+what an endpoint returns.** Run the app and call it before pushing:
+
+    cargo leptos watch                  # one terminal
+    bash scripts/probe-endpoints.sh     # another; read-only, all 37 endpoints
+
+On 2026-09-08 that found five bugs the three gates had passed clean, across twelve reviewed
+branches and 268 tests:
+
+- `/api/stats/signaling?bit=99` returned **nothing at all**. `1i64 << bit` from an unvalidated
+  query parameter panics in a debug build and takes the connection with it; in release it masks
+  to `bit % 64` and answers as a different bit, which is worse.
+- Ten server functions answered a reversed range with `500`, at twelve call sites. A wrong status
+  is still a valid response, so no test noticed. Only half of this is fixable here: `server_fn`
+  0.8.11 hardcodes `INTERNAL_SERVER_ERROR` for every `ServerFnError`, so these still return 500.
+  They now log at `warn` instead of `error`, which was the part doing damage, since a caller's
+  bad range was burying real faults. A true 4xx needs a custom `FromServerFnError` type.
+- `/blocks/{height}` for a missing height returned `200` carrying `{"error": ...}`.
+- A box-drag on any chart zoomed the value axis as well as time, clipping the top bands off a
+  stacked chart while the tooltip kept reporting them. The code, the option and the data were all
+  correct; only the rendered view was wrong, so nothing static could have caught it.
+- Both external price fetches were failing on the dev box, silently degrading the price overlay,
+  Almanac prices and the Logbook's price columns to zero rather than surfacing an error. Cause was
+  IPv6: hyper has no happy-eyeballs fallback, so a blackholed AAAA route (ProtonVPN's leak
+  protection here) stalls a request that curl completes fine over IPv4. Observed on localhost and
+  never tested against prod, which does not run ProtonVPN, so production may be unaffected.
+
+Assert status codes in the integration tests when you add an endpoint, and keep the probe script
+current: a check that only ever runs by hand is one that stops running.
+
+The probe lives in `scripts/` rather than `notes/` on purpose. `notes/`, `tasks/` and `docs/` are
+all gitignored, so anything referenced from this file has to sit somewhere tracked or the
+instruction is dead on a fresh clone.
+
 `cargo run --bin backfill_missing_heights` is a one-shot maintenance utility and needs
 `--features ssr`.
 
