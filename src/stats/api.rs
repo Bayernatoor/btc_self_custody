@@ -502,14 +502,20 @@ pub async fn get_live(
     stale |= b_stale;
     let (mempool, m_stale) = mempool_res?;
     stale |= m_stale;
+    // A hard RPC failure means the value below is a zero placeholder, not a
+    // reading, so it must mark the response stale. Returning `false` here
+    // claimed the zeros were current, while the server-fn twin
+    // (`fetch_live_stats`) sets `stale = true` on the same path. The client
+    // renders a "data may be outdated" banner off this flag, so the two
+    // entry points disagreed about whether to warn the user.
     let (hashrate, h_stale) = hashrate_res.unwrap_or_else(|e| {
         tracing::warn!("Failed to fetch hashrate: {e}");
-        (0.0, false)
+        (0.0, true)
     });
     stale |= h_stale;
     let (next_block_fee, f_stale) = fee_res.unwrap_or_else(|e| {
         tracing::warn!("Failed to fetch fee estimate: {e}");
-        (0.0, false)
+        (0.0, true)
     });
     stale |= f_stale;
 

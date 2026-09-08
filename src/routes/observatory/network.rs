@@ -69,24 +69,6 @@ pub fn NetworkChartsPage() -> impl IntoView {
         |days| crate::stats::charts::tps_chart_daily(days)
     );
 
-    let chain_offset = LocalResource::new(move || {
-        let r = range.get();
-        async move {
-            let n = crate::routes::observatory::helpers::range_to_blocks(&r);
-            let stats =
-                crate::stats::server_fns::fetch_stats_summary().await.ok();
-            let from_height = stats
-                .map(|s| s.min_height.max(s.max_height.saturating_sub(n)))
-                .unwrap_or(0);
-            if from_height > 0 {
-                crate::stats::server_fns::fetch_cumulative_size(from_height)
-                    .await
-                    .unwrap_or(0)
-            } else {
-                0u64
-            }
-        }
-    });
     let chain_size_option = Signal::derive(move || {
         let _r = range.get();
         let flags = overlay_flags.get();
@@ -95,7 +77,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
             .get_untracked()
             .map(|s| s.network.chain_size_gb)
             .unwrap_or(0.0);
-        let offset = chain_offset.get().unwrap_or(0);
+        let offset = state.chain_size_offset.get().unwrap_or(0);
         dashboard_data
             .get()
             .and_then(|r| r.ok())

@@ -8,9 +8,6 @@ use wasm_bindgen::prelude::*;
 #[cfg(feature = "hydrate")]
 #[wasm_bindgen]
 extern "C" {
-    #[wasm_bindgen(js_name = setChartOption)]
-    fn set_chart_option(id: &str, option_json: &str);
-
     #[wasm_bindgen(js_name = setChartOptionLazy)]
     fn set_chart_option_lazy(id: &str, option_json: &str);
 }
@@ -24,10 +21,6 @@ extern "C" {
     #[wasm_bindgen(js_name = downloadChartCSV)]
     fn download_chart_csv(chart_id: &str, title: &str, range: &str);
 }
-
-#[cfg(not(feature = "hydrate"))]
-#[allow(dead_code)]
-fn set_chart_option(_id: &str, _json: &str) {}
 
 #[cfg(not(feature = "hydrate"))]
 fn set_chart_option_lazy(_id: &str, _json: &str) {}

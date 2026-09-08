@@ -75,7 +75,8 @@ pub(crate) const TAPROOT_COLOR: &str = "#f7931a";
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Base ECharts option with dark theme defaults (transparent bg, dark grid, toolbox, animation).
+/// Base ECharts option with dark theme defaults (transparent bg, dark grid,
+/// toolbox, progressive rendering, attribution watermark).
 pub(crate) fn chart_defaults() -> serde_json::Value {
     json!({
         "backgroundColor": "transparent",
@@ -93,8 +94,11 @@ pub(crate) fn chart_defaults() -> serde_json::Value {
             "right": 10, "top": 0,
             "itemSize": 14
         },
-        "animation": true,
-        "animationDuration": 300,
+        // No "animation" key: stats.js sets `opts.animation = false` on every
+        // render before handing the option to ECharts, so anything specified
+        // here was dead config that read as if charts animated. Transitions on
+        // a 30-chart page were the reason it was disabled; leaving the flag
+        // here only misleads.
         "progressive": 500,
         "progressiveThreshold": 3000,
         // Attribution watermark, Glassnode-style: centered behind the data
@@ -217,6 +221,9 @@ pub(crate) fn no_data_chart_with_hint(
 /// Compute a simple moving average with the given window size. Returns `None`
 /// for the first `window-1` elements where insufficient data exists.
 pub(crate) fn moving_average(data: &[f64], window: usize) -> Vec<Option<f64>> {
+    if window == 0 {
+        return vec![None; data.len()];
+    }
     let mut result = Vec::with_capacity(data.len());
     for i in 0..data.len() {
         if i < window.saturating_sub(1) {
@@ -417,6 +424,37 @@ pub(crate) fn format_num(n: u64) -> String {
         .map(|c| std::str::from_utf8(c).unwrap())
         .collect::<Vec<_>>()
         .join(",")
+}
+
+/// Halving dates as UTC calendar dates, newest first. Paired with
+/// [`halving_era_for_date`]; per-block code should use height instead.
+const HALVING_DATE_BOUNDARIES: &[&str] =
+    &["2024-04-20", "2020-05-11", "2016-07-09", "2012-11-28"];
+
+/// Halving era (0 = 50 BTC era) for a UTC date string, `YYYY-MM-DD`.
+///
+/// Daily aggregates carry no height, so era has to be derived from the date.
+/// That makes the halving day itself an approximation: a halving happens at a
+/// block, part-way through a day, so the halving date contains blocks from both
+/// eras and this attributes all of them to the new one. Four days in the chain's
+/// history are affected, one per halving, and only in daily mode. Per-block
+/// charts use [`block_subsidy`] and are exact.
+pub(crate) fn halving_era_for_date(date: &str) -> u32 {
+    // Boundaries the date has not yet reached. The list is newest-first, so
+    // subtracting these from the total leaves the number of halvings that had
+    // already happened, which is the era. Dates are `YYYY-MM-DD`, so a string
+    // compare is a chronological compare.
+    let not_yet_reached = HALVING_DATE_BOUNDARIES
+        .iter()
+        .filter(|boundary| date < **boundary)
+        .count();
+    (HALVING_DATE_BOUNDARIES.len() - not_yet_reached) as u32
+}
+
+/// Block subsidy in BTC for a UTC date string. See [`halving_era_for_date`]
+/// for the halving-day caveat.
+pub(crate) fn daily_subsidy_btc(date: &str) -> f64 {
+    50.0 / 2f64.powi(halving_era_for_date(date) as i32)
 }
 
 /// Block subsidy in satoshis for a given height.
@@ -1134,6 +1172,49 @@ mod tests {
         assert_eq!(result, vec![Some(10.0), Some(20.0), Some(30.0)]);
     }
 
+    /// A rolling-sum rewrite of `moving_average` was tried and rejected.
+    ///
+    /// This is O(n*w), and the common case is a 144-wide window over a 4,320
+    /// point series, so about 18.7M f64 additions across a 30-chart page. That
+    /// sounds worth fixing until measured: roughly 20ms total in WASM, under
+    /// 1ms per chart, against the 50-150ms per chart that ECharts setOption
+    /// already costs (see the render budget in stats.js).
+    ///
+    /// The rolling form subtracts the departing element instead of re-summing,
+    /// which drifts. Against a 500-point series it disagreed with this
+    /// implementation on 2 of ~350 values, each by exactly 0.001: the drift
+    /// landed on the rounding boundary and flipped the third decimal. So the
+    /// rewrite changed published chart values to save under a millisecond.
+    /// If it is ever revisited, keep this test and make it pass.
+    #[test]
+    fn ma_agrees_with_a_direct_window_sum() {
+        let data: Vec<f64> = (0..500)
+            .map(|i| ((i * 7919 % 613) as f64) / 3.0 + (i as f64) * 0.25)
+            .collect();
+        for window in [1usize, 2, 3, 7, 144, 200, 499, 500] {
+            let expected: Vec<Option<f64>> = (0..data.len())
+                .map(|i| {
+                    if i + 1 < window {
+                        None
+                    } else {
+                        let sum: f64 = data[i + 1 - window..=i].iter().sum();
+                        Some(((sum / window as f64) * 1000.0).round() / 1000.0)
+                    }
+                })
+                .collect();
+            assert_eq!(
+                moving_average(&data, window),
+                expected,
+                "window {window}"
+            );
+        }
+    }
+
+    #[test]
+    fn ma_window_zero_is_all_none() {
+        assert_eq!(moving_average(&[1.0, 2.0], 0), vec![None, None]);
+    }
+
     #[test]
     fn ma_rounds_to_3_decimals() {
         // 1/3 = 0.33333... should round to 0.333
@@ -1193,6 +1274,37 @@ mod tests {
     // -----------------------------------------------------------------------
     // show_ma
     // -----------------------------------------------------------------------
+
+    #[test]
+    fn halving_era_from_date_matches_height_eras() {
+        assert_eq!(halving_era_for_date("2009-01-03"), 0);
+        assert_eq!(halving_era_for_date("2012-11-27"), 0);
+        assert_eq!(halving_era_for_date("2012-11-28"), 1);
+        assert_eq!(halving_era_for_date("2016-07-09"), 2);
+        assert_eq!(halving_era_for_date("2020-05-11"), 3);
+        assert_eq!(halving_era_for_date("2024-04-20"), 4);
+        assert_eq!(halving_era_for_date("2026-09-08"), 4);
+    }
+
+    #[test]
+    fn daily_subsidy_agrees_with_block_subsidy_at_each_halving() {
+        // The date form and the height form must not drift apart.
+        let pairs = [
+            ("2009-01-03", 0u64),
+            ("2012-11-28", 210_000),
+            ("2016-07-09", 420_000),
+            ("2020-05-11", 630_000),
+            ("2024-04-20", 840_000),
+        ];
+        for (date, height) in pairs {
+            let from_date = daily_subsidy_btc(date);
+            let from_height = block_subsidy(height) as f64 / 100_000_000.0;
+            assert_eq!(
+                from_date, from_height,
+                "date {date} and height {height} disagree on subsidy"
+            );
+        }
+    }
 
     #[test]
     fn show_ma_threshold() {
@@ -1311,7 +1423,7 @@ mod tests {
         }));
         // Should have chart_defaults fields
         assert!(opt.get("toolbox").is_some());
-        assert!(opt.get("animation").is_some());
+        assert!(opt.get("progressive").is_some());
         // Should have our override
         assert_eq!(opt["xAxis"]["type"], "time");
     }

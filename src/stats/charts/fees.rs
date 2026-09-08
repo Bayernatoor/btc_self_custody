@@ -517,23 +517,8 @@ pub fn subsidy_vs_fees_chart_daily(
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
 
-    // Determine subsidy per day based on known halving dates
-    let subsidy_vals: Vec<f64> = days
-        .iter()
-        .map(|d| {
-            if d.date.as_str() >= "2024-04-20" {
-                3.125
-            } else if d.date.as_str() >= "2020-05-11" {
-                6.25
-            } else if d.date.as_str() >= "2016-07-09" {
-                12.5
-            } else if d.date.as_str() >= "2012-11-28" {
-                25.0
-            } else {
-                50.0
-            }
-        })
-        .collect();
+    let subsidy_vals: Vec<f64> =
+        days.iter().map(|d| daily_subsidy_btc(&d.date)).collect();
     let fee_vals: Vec<serde_json::Value> = days
         .iter()
         .map(|d| {
@@ -631,17 +616,7 @@ pub fn fee_revenue_share_chart_daily(
     let data: Vec<f64> = days
         .iter()
         .map(|d| {
-            let subsidy_per_block = if d.date.as_str() >= "2024-04-20" {
-                3.125
-            } else if d.date.as_str() >= "2020-05-11" {
-                6.25
-            } else if d.date.as_str() >= "2016-07-09" {
-                12.5
-            } else if d.date.as_str() >= "2012-11-28" {
-                25.0
-            } else {
-                50.0
-            };
+            let subsidy_per_block = daily_subsidy_btc(&d.date);
             let total_subsidy =
                 subsidy_per_block * d.block_count as f64 * 100_000_000.0;
             let fees = d.total_fees as f64;
@@ -1050,20 +1025,6 @@ pub fn halving_era_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
         return no_data_chart("Halving Era Comparison");
     }
 
-    fn date_to_era(date: &str) -> u64 {
-        if date >= "2024-04-20" {
-            4
-        } else if date >= "2020-05-11" {
-            3
-        } else if date >= "2016-07-09" {
-            2
-        } else if date >= "2012-11-28" {
-            1
-        } else {
-            0
-        }
-    }
-
     let subsidy_btc = [50.0, 25.0, 12.5, 6.25, 3.125];
     let mut era_data: std::collections::BTreeMap<
         u64,
@@ -1071,7 +1032,7 @@ pub fn halving_era_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     > = std::collections::BTreeMap::new();
 
     for d in days {
-        let era = date_to_era(&d.date);
+        let era = halving_era_for_date(&d.date) as u64;
         let entry = era_data.entry(era).or_insert((0.0, 0.0, 0.0, 0.0, 0));
         let bc = d.block_count as f64;
         entry.0 += d.avg_size / 1_000_000.0 * bc;
