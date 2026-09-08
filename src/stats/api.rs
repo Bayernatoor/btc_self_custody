@@ -184,7 +184,28 @@ impl StatsStateBuilder {
         K: Eq + std::hash::Hash + Clone + Send + Sync + 'static,
         V: Clone + Send + Sync + 'static,
     {
+        self.cache_with_capacity(name, ttl, tags, None)
+    }
+
+    /// As [`cache`](Self::cache), with an explicit entry cap. Needed for
+    /// caches whose working set is legitimately large (`block_timestamps`
+    /// holds one entry per height by design), since the default cap is sized
+    /// for the range-keyed caches it exists to bound.
+    pub fn cache_with_capacity<K, V>(
+        &mut self,
+        name: &'static str,
+        ttl: Duration,
+        tags: &[CacheTag],
+        capacity: Option<usize>,
+    ) -> Arc<Cache<K, V>>
+    where
+        K: Eq + std::hash::Hash + Clone + Send + Sync + 'static,
+        V: Clone + Send + Sync + 'static,
+    {
         let mut cache = Cache::new(name, ttl);
+        if let Some(capacity) = capacity {
+            cache = cache.with_capacity(capacity);
+        }
         for &tag in tags {
             cache = cache.invalidated_by(tag);
         }
