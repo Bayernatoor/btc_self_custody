@@ -45,7 +45,7 @@ pub fn MethodologyPage() -> impl IntoView {
                     </div>
                     <div class="ml-4 text-white/70 space-y-1">
                         <p>"Stamps " <span class="text-white/40">"(bare multisig outputs with fake pubkeys)"</span></p>
-                        <p class="ml-4 text-white/50">"count only, no byte tracking"</p>
+                        <p class="ml-4 text-white/50">"not currently detected, see Detection Rules"</p>
                     </div>
                 </div>
                 <p class="mt-3 text-white/60">"Inscriptions and OP_RETURN are guaranteed disjoint (different parts of the transaction). BRC-20 is always a subset of Inscriptions. Runes, Omni, Counterparty, and Other are mutually exclusive subsets of OP_RETURN."</p>
@@ -86,7 +86,7 @@ pub fn MethodologyPage() -> impl IntoView {
                 <MetricRow
                     name="Stamps"
                     unit="multisig outputs"
-                    desc="Bare multisig outputs containing at least one fake public key (33-byte key not starting with 0x02 or 0x03). Count only."
+                    desc="Not currently detected. The implemented rule looks for a 33-byte key not starting with 0x02 or 0x03, which no real Stamps output satisfies, so this metric reads zero for every block. Retained as a placeholder rather than removed so the field is not silently repurposed."
                 />
             </Section>
 
@@ -145,8 +145,8 @@ pub fn MethodologyPage() -> impl IntoView {
                 <DetectionRow
                     name="Stamps"
                     rule="Bare multisig output with at least one 33-byte key not starting with 0x02/0x03."
-                    confidence="Medium"
-                    note="Fake pubkey detection. May miss some encoding variants."
+                    confidence="None"
+                    note="This rule does not fire. Stamps encode data in keys that are prefixed 0x02/0x03 to look valid, so the test checks the wrong property: validity would require confirming the point is on the secp256k1 curve. Measured September 2026 over the full chain: zero detections against 2.78 million bare multisig outputs, 564,321 of them during the 2023 Stamps era. Sampling block 790,240 (950 such outputs) found every one to be 1-of-3 with all keys prefixed 0x02/0x03. Correct detection needs Counterparty ARC4 decoding, which is not implemented."
                 />
             </Section>
 
