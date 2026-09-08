@@ -82,6 +82,12 @@ pub struct ObservatoryState {
     pub set_chart_settings_tab: WriteSignal<ChartSettingsTab>,
     // chart JSON cache — persists across Outlet navigations
     pub chart_cache: ChartCache,
+    /// Total bytes of chain before the visible window, so the chain-size
+    /// chart and its overlay can show absolute rather than range-relative
+    /// values. Exposed here because the network page needs the same number:
+    /// it previously ran an identical LocalResource of its own, so every range
+    /// change fired two identical requests for it.
+    pub chain_size_offset: LocalResource<u64>,
     // true while the dashboard data resource hasn't yet resolved a value
     // for the *currently selected* range/custom-window.
     pub data_loading: Signal<bool>,
@@ -476,6 +482,7 @@ pub fn provide_observatory_state() -> ObservatoryState {
     let state = ObservatoryState {
         range,
         set_range,
+        chain_size_offset,
         overlay_flags,
         dashboard_data,
         cached_live,
