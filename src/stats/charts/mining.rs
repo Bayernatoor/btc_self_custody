@@ -83,28 +83,18 @@ pub fn miner_dominance_chart(miners: &[MinerShare]) -> serde_json::Value {
     })
 }
 
-/// Empty blocks scatter chart.
-pub fn empty_blocks_chart(blocks: &[EmptyBlock]) -> serde_json::Value {
-    if blocks.is_empty() {
+/// Empty blocks per month. Buckets are pre-aggregated in SQL
+/// (`query_empty_blocks_monthly`); this only shapes them for ECharts.
+pub fn empty_blocks_chart(buckets: &[HistogramBucket]) -> serde_json::Value {
+    if buckets.is_empty() {
         return no_data_chart_with_hint(
             "No empty blocks in this range",
             "Try a longer range (1Y or ALL) to find empty blocks",
         );
     }
 
-    // Group empty blocks by month for a bar chart
-    let mut monthly: std::collections::BTreeMap<String, u64> =
-        std::collections::BTreeMap::new();
-    for b in blocks {
-        // Convert timestamp to YYYY-MM
-        let dt = chrono::DateTime::from_timestamp(b.timestamp as i64, 0)
-            .unwrap_or_default();
-        let month = dt.format("%Y-%m").to_string();
-        *monthly.entry(month).or_default() += 1;
-    }
-
-    let months: Vec<String> = monthly.keys().cloned().collect();
-    let counts: Vec<u64> = monthly.values().copied().collect();
+    let months: Vec<String> = buckets.iter().map(|b| b.label.clone()).collect();
+    let counts: Vec<u64> = buckets.iter().map(|b| b.count).collect();
 
     build_option(json!({
         "xAxis": {
@@ -130,26 +120,19 @@ pub fn empty_blocks_chart(blocks: &[EmptyBlock]) -> serde_json::Value {
 
 /// Empty blocks grouped by mining pool. Shows which pools mine the most
 /// coinbase-only blocks as a horizontal bar chart.
-pub fn empty_blocks_by_pool_chart(blocks: &[EmptyBlock]) -> serde_json::Value {
-    if blocks.is_empty() {
+pub fn empty_blocks_by_pool_chart(
+    buckets: &[HistogramBucket],
+) -> serde_json::Value {
+    if buckets.is_empty() {
         return no_data_chart_with_hint(
             "No empty blocks in this range",
             "Try a longer range (1Y or ALL) to find empty blocks",
         );
     }
 
-    let mut pool_counts: std::collections::BTreeMap<&str, u64> =
-        std::collections::BTreeMap::new();
-    for b in blocks {
-        *pool_counts.entry(&b.miner).or_default() += 1;
-    }
-
-    // Sort by count descending
-    let mut sorted: Vec<(&str, u64)> = pool_counts.into_iter().collect();
-    sorted.sort_by_key(|&(_, count)| std::cmp::Reverse(count));
-
-    let pools: Vec<&str> = sorted.iter().map(|(name, _)| *name).collect();
-    let counts: Vec<u64> = sorted.iter().map(|(_, count)| *count).collect();
+    // Already ordered by count descending in SQL.
+    let pools: Vec<&str> = buckets.iter().map(|b| b.label.as_str()).collect();
+    let counts: Vec<u64> = buckets.iter().map(|b| b.count).collect();
 
     build_option(json!({
         "xAxis": {

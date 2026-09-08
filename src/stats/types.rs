@@ -184,31 +184,6 @@ pub struct BlockDetail {
     pub taproot_spend_count: u64,
 }
 
-/// Per-block OP_RETURN breakdown for the OP_RETURN analysis charts.
-/// Counts and byte sizes are split by protocol (Runes, Omni, Counterparty, generic).
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct OpReturnBlock {
-    pub height: u64,
-    /// Block timestamp in unix seconds.
-    pub timestamp: u64,
-    pub tx_count: u64,
-    /// Block size in bytes.
-    pub size: u64,
-    /// Total OP_RETURN outputs (all protocols combined, excludes SegWit commitments).
-    pub op_return_count: u64,
-    /// Total OP_RETURN data in bytes (all protocols combined).
-    pub op_return_bytes: u64,
-    pub runes_count: u64,
-    pub runes_bytes: u64,
-    pub omni_count: u64,
-    pub omni_bytes: u64,
-    pub counterparty_count: u64,
-    pub counterparty_bytes: u64,
-    /// Generic data carrier OP_RETURNs not matching any known protocol.
-    pub data_carrier_count: u64,
-    pub data_carrier_bytes: u64,
-}
-
 /// Daily aggregated metrics for long-range trend charts.
 ///
 /// Fields prefixed with `avg_` are per-block averages for that day (e.g. avg_size
@@ -713,16 +688,6 @@ pub struct MinerShare {
     pub count: u64,
     /// Percentage of total blocks in the range.
     pub percentage: f64,
-}
-
-/// An empty block (coinbase-only, no user transactions).
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct EmptyBlock {
-    pub height: u64,
-    /// Block timestamp in unix seconds.
-    pub timestamp: u64,
-    /// Mining pool that mined this empty block.
-    pub miner: String,
 }
 
 // ---------------------------------------------------------------------------
