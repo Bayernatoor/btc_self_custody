@@ -76,9 +76,15 @@ impl CacheStats {
     }
 }
 
+/// Default entry cap. Chosen to be far above the working set of any current
+/// cache (range-keyed ones see a handful of distinct windows per session) while
+/// still bounding a hostile caller who mints a new key per request.
+const DEFAULT_CAPACITY: usize = 512;
+
 /// Object-safe trait so the registry can hold heterogeneous `Cache<K, V>`
 /// instances behind `Arc<dyn CacheCell>`. Covers both invalidation
 /// (full-clear by tag) and observability (size + hit/miss counters).
+///
 /// Per-key invalidation is not on the trait because the registry path
 /// is always full-clear; callers who need targeted clears hold the
 /// concrete `Arc<Cache<K, V>>` and call `invalidate_key`.
@@ -101,13 +107,25 @@ pub trait CacheCell: Send + Sync {
 /// Eliminates thundering-herd to upstream services (mempool.space,
 /// SQLite long queries) when traffic spikes against a cold key.
 ///
-/// **Not bounded.** Entries accumulate without LRU eviction. Acceptable
-/// for the current call sites (single-key TTL caches, range-keyed
-/// caches that thrash naturally, and `block_ts_cache` whose worst case
-/// is ~24MB at full chain). Bounded LRU is the A.2 follow-up.
+/// **Bounded.** Entries are capped at `capacity` (default
+/// [`DEFAULT_CAPACITY`]) with oldest-first eviction, so a caller who mints a
+/// fresh key per request cannot grow the map without limit. `with_capacity`
+/// raises the cap for caches whose large working set is by design;
+/// `block_timestamps` is the only one, at one entry per height.
 pub struct Cache<K, V> {
     name: &'static str,
     inner: Mutex<HashMap<K, (V, Instant)>>,
+    /// Bumped by every `invalidate()`. A fetch that started before an
+    /// invalidation and finished after it must not install its now-stale
+    /// result, so `get_or_compute` snapshots this before calling the fetcher
+    /// and discards the write if it moved. Without this, a fetch straddling a
+    /// new block reinserted a pre-block value that then served for a full TTL,
+    /// which is exactly the staleness the tag registry exists to prevent.
+    generation: AtomicU64,
+    /// Maximum live entries. Caches keyed by a caller-supplied range
+    /// (`(from_ts, to_ts)`) have an unbounded key space on public endpoints, so
+    /// an unbounded map is a memory-growth surface rather than a cache.
+    capacity: usize,
     /// Per-key singleflight slots. A `OnceCell` initializes exactly
     /// once; concurrent callers all observe the same result. On
     /// initialization failure the cell stays empty and subsequent
@@ -137,10 +155,19 @@ where
             inflight: Mutex::new(HashMap::new()),
             ttl,
             tags: Vec::new(),
+            generation: AtomicU64::new(0),
+            capacity: DEFAULT_CAPACITY,
             hits: AtomicU64::new(0),
             misses: AtomicU64::new(0),
             refreshes: AtomicU64::new(0),
         }
+    }
+
+    /// Override the entry cap. Single-key caches (`Cache<(), V>`) never reach
+    /// it; range-keyed ones do.
+    pub fn with_capacity(mut self, capacity: usize) -> Self {
+        self.capacity = capacity.max(1);
+        self
     }
 
     /// Construct a cache that never expires by TTL. Still respects
@@ -212,12 +239,37 @@ where
                 .clone()
         };
 
+        // Snapshot the generation before fetching. If an invalidation lands
+        // while the fetcher runs, the value it returns describes pre-
+        // invalidation state and must not be installed.
+        let generation_at_start = self.generation.load(Ordering::Acquire);
+
         let result = slot
             .get_or_try_init(|| async {
                 let fresh = fetcher().await?;
-                let mut guard =
-                    self.inner.lock().unwrap_or_else(|e| e.into_inner());
-                guard.insert(key.clone(), (fresh.clone(), Instant::now()));
+                {
+                    // Take the lock *before* re-reading the generation, and
+                    // note that `invalidate()` bumps it under this same lock.
+                    // That makes check-and-insert atomic with respect to
+                    // invalidation. Checking outside the lock leaves the
+                    // original bug reachable through a narrower window: the
+                    // fetcher passes its check, `invalidate()` bumps and
+                    // clears, then the fetcher inserts a value the clear
+                    // should have removed, and it serves for a full TTL.
+                    let mut guard =
+                        self.inner.lock().unwrap_or_else(|e| e.into_inner());
+                    if self.generation.load(Ordering::Acquire)
+                        == generation_at_start
+                    {
+                        guard.insert(
+                            key.clone(),
+                            (fresh.clone(), Instant::now()),
+                        );
+                        Self::evict_if_over_capacity(&mut guard, self.capacity);
+                    }
+                }
+                // Either way the caller gets the value it waited for; only the
+                // decision to cache it is conditional.
                 Ok::<V, E>(fresh)
             })
             .await
@@ -268,7 +320,41 @@ where
     pub fn insert(&self, key: K, value: V) {
         let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         guard.insert(key, (value, Instant::now()));
+        Self::evict_if_over_capacity(&mut guard, self.capacity);
         self.refreshes.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Drop the oldest entries when the map exceeds `capacity`.
+    ///
+    /// Evicts down to a low-water mark (7/8 of capacity) rather than to
+    /// exactly `capacity`, so the scan amortizes over the next batch of
+    /// inserts. Trimming just the single excess entry would rescan the whole
+    /// map on *every* insert once full: at `block_timestamps`' 1.1M cap that
+    /// is a million key clones per block, under the lock, to drop one entry.
+    ///
+    /// Oldest-by-insertion rather than least-recently-used: entries already
+    /// carry the `Instant` they were stored at, and no read touches it, so
+    /// insertion order is the only ordering available without adding
+    /// bookkeeping to the read path. For TTL caches the two coincide closely
+    /// enough, since an old entry is also the one nearest expiry.
+    fn evict_if_over_capacity(
+        map: &mut HashMap<K, (V, Instant)>,
+        capacity: usize,
+    ) {
+        if map.len() <= capacity {
+            return;
+        }
+        // `max(1)` keeps a capacity-1 cache able to hold its one entry.
+        let target = capacity.saturating_sub(capacity / 8).max(1);
+        let excess = map.len() - target;
+        let mut ages: Vec<(K, Instant)> =
+            map.iter().map(|(k, (_, ts))| (k.clone(), *ts)).collect();
+        // Only the `excess` oldest need to be partitioned into place; the
+        // rest can stay unordered, so this is O(n) rather than O(n log n).
+        ages.select_nth_unstable_by_key(excess - 1, |(_, ts)| *ts);
+        for (key, _) in ages.into_iter().take(excess) {
+            map.remove(&key);
+        }
     }
 
     /// Clear the entry for `key` if present. No-op otherwise.
@@ -284,7 +370,13 @@ where
     V: Send + Sync + 'static,
 {
     fn invalidate(&self) {
+        // Bump and clear under one lock, the same lock `get_or_compute` holds
+        // across its generation check and its insert. An in-flight fetch then
+        // either observes the bump and declines to install, or completes its
+        // insert first and has it cleared here. Bumping outside the lock
+        // leaves a window where neither happens and a stale value survives.
         let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        self.generation.fetch_add(1, Ordering::AcqRel);
         guard.clear();
     }
 
@@ -408,7 +500,9 @@ mod tests {
         let calls = Arc::new(AtomicUsize::new(0));
 
         let _ = fetch(&cache, 1, "a", &calls).await;
-        tokio::time::sleep(Duration::from_millis(25)).await;
+        // 12x the TTL: these use real time, not tokio's paused clock, so a tight
+        // margin flakes when the suite runs in parallel under load.
+        tokio::time::sleep(Duration::from_millis(120)).await;
         let _ = fetch(&cache, 1, "b", &calls).await;
 
         assert_eq!(calls.load(Ordering::SeqCst), 2);
@@ -448,7 +542,7 @@ mod tests {
             Cache::new("test", Duration::from_millis(10));
         cache.insert(1, "a");
         assert_eq!(cache.get(&1), Some("a"));
-        tokio::time::sleep(Duration::from_millis(25)).await;
+        tokio::time::sleep(Duration::from_millis(120)).await;
         assert_eq!(cache.get(&1), None, "expired entry should not return");
     }
 
@@ -621,6 +715,152 @@ mod tests {
             2,
             "OnPriceRefresh cache should re-fetch after its tag fired"
         );
+    }
+
+    /// A fetch that straddles an invalidation must not install its result.
+    ///
+    /// This was the gap in the tag-registry guarantee: `invalidate()` cleared
+    /// the map, then the in-flight fetcher's `insert` put a pre-invalidation
+    /// value straight back, where it served for a full TTL. On a new block that
+    /// meant charts could show pre-block aggregates for up to 120 seconds
+    /// despite the OnNewBlock tag firing correctly.
+    #[tokio::test]
+    async fn in_flight_fetch_does_not_reinstate_a_stale_value() {
+        let cache: Arc<Cache<u32, &'static str>> = Arc::new(
+            Cache::new("race", Duration::from_secs(60))
+                .invalidated_by(CacheTag::OnNewBlock),
+        );
+        let (release_tx, release_rx) = tokio::sync::oneshot::channel::<()>();
+        let (started_tx, started_rx) = tokio::sync::oneshot::channel::<()>();
+
+        let fetching = {
+            let cache = cache.clone();
+            tokio::spawn(async move {
+                cache
+                    .get_or_compute(1u32, || async move {
+                        started_tx.send(()).unwrap();
+                        // Hold the fetch open until the test says otherwise.
+                        release_rx.await.unwrap();
+                        Ok::<_, Infallible>("pre_invalidation")
+                    })
+                    .await
+                    .unwrap()
+            })
+        };
+
+        // Wait until the fetcher is genuinely in flight, then invalidate.
+        started_rx.await.unwrap();
+        cache.invalidate();
+        release_tx.send(()).unwrap();
+
+        // The waiting caller still receives the value it asked for...
+        assert_eq!(fetching.await.unwrap(), "pre_invalidation");
+        // ...but it must not have been cached.
+        assert_eq!(
+            cache.get(&1),
+            None,
+            "a value fetched before an invalidation must not survive it"
+        );
+
+        // And the next caller re-fetches rather than seeing the stale entry.
+        let calls = Arc::new(AtomicUsize::new(0));
+        let fresh = fetch(&cache, 1, "post_invalidation", &calls).await;
+        assert_eq!(fresh, "post_invalidation");
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    /// An invalidation with no fetch in flight must still cache normally
+    /// afterwards: the generation guard should not wedge the cache shut.
+    #[tokio::test]
+    async fn generation_guard_does_not_block_later_writes() {
+        let cache: Cache<u32, &'static str> =
+            Cache::new("gen", Duration::from_secs(60));
+        let calls = Arc::new(AtomicUsize::new(0));
+
+        let _ = fetch(&cache, 1, "a", &calls).await;
+        cache.invalidate();
+        let _ = fetch(&cache, 1, "b", &calls).await; // re-fetches
+        let _ = fetch(&cache, 1, "c", &calls).await; // must hit cache
+
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            2,
+            "second post-invalidation read should be a hit, not a third fetch"
+        );
+    }
+
+    #[tokio::test]
+    async fn capacity_evicts_oldest_first() {
+        let cache: Cache<u32, u32> =
+            Cache::new("cap", Duration::from_secs(60)).with_capacity(3);
+        // Distinct timestamps so insertion order is unambiguous.
+        for k in 1..=3u32 {
+            cache.insert(k, k);
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        assert_eq!(cache.get(&1), Some(1));
+
+        cache.insert(4, 4);
+        assert_eq!(cache.stats().size, 3, "capacity must be respected");
+        assert_eq!(cache.get(&1), None, "oldest entry evicted");
+        assert_eq!(cache.get(&4), Some(4), "newest entry retained");
+    }
+
+    /// A range-keyed cache on a public endpoint can be handed a fresh key per
+    /// request. The map must stay bounded rather than growing per caller.
+    #[tokio::test]
+    async fn hostile_key_space_stays_bounded() {
+        let cache: Cache<(u64, u64), u64> =
+            Cache::new("range", Duration::from_secs(60)).with_capacity(64);
+        for i in 0..1_000u64 {
+            cache
+                .get_or_compute(
+                    (i, i + 1),
+                    || async move { Ok::<_, Infallible>(i) },
+                )
+                .await
+                .unwrap();
+        }
+        // The contract is the bound, not an exact count: eviction batches
+        // down to a low-water mark, so the live size oscillates in
+        // `low..=capacity` rather than pinning to the cap.
+        let size = cache.stats().size;
+        assert!(
+            size <= 64,
+            "1000 distinct keys must not exceed the cap, got {size}"
+        );
+        assert!(size >= 56, "eviction should not overshoot, got {size}");
+    }
+
+    /// Eviction trims a batch, not one entry per insert. Without this, a full
+    /// cache rescans its whole map on every single insert.
+    #[tokio::test]
+    async fn eviction_is_batched_not_one_at_a_time() {
+        let cache: Cache<u32, u32> =
+            Cache::new("batch", Duration::from_secs(60)).with_capacity(64);
+        for k in 0..64u32 {
+            cache.insert(k, k);
+        }
+        assert_eq!(cache.stats().size, 64, "at capacity, nothing evicted yet");
+
+        cache.insert(64, 64);
+        assert_eq!(
+            cache.stats().size,
+            56,
+            "one insert past capacity should trim to the 7/8 low-water mark"
+        );
+    }
+
+    /// A capacity-1 cache must still hold its single entry.
+    #[tokio::test]
+    async fn capacity_of_one_still_caches() {
+        let cache: Cache<u32, u32> =
+            Cache::new("one", Duration::from_secs(60)).with_capacity(1);
+        cache.insert(1, 1);
+        assert_eq!(cache.get(&1), Some(1));
+        cache.insert(2, 2);
+        assert_eq!(cache.stats().size, 1, "cap of 1 holds exactly one entry");
+        assert_eq!(cache.get(&2), Some(2), "newest entry retained");
     }
 
     #[tokio::test]

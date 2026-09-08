@@ -109,8 +109,16 @@ pub async fn init() -> Option<(
         Duration::from_secs(120),
         &[CacheTag::OnNewBlock],
     );
-    let block_ts_cache =
-        cb.cache::<u64, u64>("block_timestamps", Duration::MAX, &[]);
+    // One entry per height by design (immutable data, no TTL). Worst case at
+    // full chain is ~1M entries of two u64s, about 24MB, which the existing
+    // doc comment already accounts for. Explicitly capped so it cannot exceed
+    // that even if something starts probing arbitrary heights.
+    let block_ts_cache = cb.cache_with_capacity::<u64, u64>(
+        "block_timestamps",
+        Duration::MAX,
+        &[],
+        Some(1_100_000),
+    );
     let signaling_blocks_cache =
         cb.cache::<String, (Vec<types::SignalingBlock>, types::PeriodStats)>(
             "signaling_blocks",
