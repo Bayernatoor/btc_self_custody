@@ -207,10 +207,6 @@ fn drawer_pages() -> Vec<DrawerPage> {
                         card_id: "card-chart-btc-volume",
                     },
                     DrawerChart {
-                        label: "Input vs Output Value",
-                        card_id: "card-chart-value-flow",
-                    },
-                    DrawerChart {
                         label: "Halving Era Comparison",
                         card_id: "card-chart-halving-era",
                     },
@@ -493,5 +489,84 @@ pub fn ChartDrawer() -> impl IntoView {
                 </nav>
             </div>
         </Portal>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every drawer entry must point at a chart some page actually renders,
+    /// and every rendered chart must be reachable from the drawer.
+    ///
+    /// The drawer is a hand-maintained index parallel to the pages, so it
+    /// drifts silently in both directions: a removed chart leaves a nav item
+    /// that scrolls nowhere, and a new chart is unreachable from the menu.
+    /// Dropping the Input vs Output Value chart left exactly that dangling
+    /// entry and nothing failed. It was caught by eye, which is the part worth
+    /// fixing.
+    ///
+    /// Page sources are embedded with `include_str!` so this stays a hermetic
+    /// unit test rather than reading the filesystem at runtime. When the chart
+    /// registry lands (notes/single-chart-view-spec.md) the drawer should
+    /// derive from it and this whole class of drift disappears, at which point
+    /// this test can go.
+    #[test]
+    fn drawer_links_only_to_charts_that_exist() {
+        const PAGES: &[&str] = &[
+            include_str!("../network.rs"),
+            include_str!("../fees.rs"),
+            include_str!("../mining.rs"),
+            include_str!("../embedded.rs"),
+        ];
+
+        let rendered: Vec<String> = PAGES
+            .iter()
+            .flat_map(|src| {
+                src.split("chart_id=\"").skip(1).filter_map(|rest| {
+                    rest.split('"').next().map(str::to_string)
+                })
+            })
+            .collect();
+        assert!(
+            rendered.len() > 50,
+            "expected to parse chart ids out of the page sources, found {}",
+            rendered.len()
+        );
+
+        let mut dangling = Vec::new();
+        let mut linked = Vec::new();
+        for page in drawer_pages() {
+            for section in &page.sections {
+                for chart in &section.charts {
+                    // Drawer ids are the card wrapper: "card-" + chart_id.
+                    let id = chart
+                        .card_id
+                        .strip_prefix("card-")
+                        .unwrap_or(chart.card_id);
+                    linked.push(id.to_string());
+                    if !rendered.iter().any(|r| r == id) {
+                        dangling.push(format!(
+                            "{:?} -> {} (no page renders it)",
+                            chart.label, chart.card_id
+                        ));
+                    }
+                }
+            }
+        }
+        assert!(
+            dangling.is_empty(),
+            "drawer entries pointing at charts that do not exist:\n  {}",
+            dangling.join("\n  ")
+        );
+
+        let unreachable: Vec<&String> = rendered
+            .iter()
+            .filter(|r| !linked.iter().any(|l| l == *r))
+            .collect();
+        assert!(
+            unreachable.is_empty(),
+            "charts rendered but not linked from the drawer: {unreachable:?}"
+        );
     }
 }

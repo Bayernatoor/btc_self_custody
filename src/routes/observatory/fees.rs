@@ -95,14 +95,6 @@ pub fn FeeChartsPage() -> impl IntoView {
         |days| crate::stats::charts::btc_volume_chart_daily(days)
     );
 
-    let value_flow_option = chart_memo!(
-        dashboard_data,
-        range,
-        overlay_flags,
-        |blocks| crate::stats::charts::value_flow_chart(blocks),
-        |days| crate::stats::charts::value_flow_chart_daily(days)
-    );
-
     let fee_pressure_option = chart_memo!(
         dashboard_data,
         range,
@@ -212,13 +204,6 @@ pub fn FeeChartsPage() -> impl IntoView {
                                 chart_id="chart-btc-volume"
                                 option=btc_volume_option
                                 info="Total value of all non-coinbase outputs. This includes both the payment and the change output, so it overstates actual economic activity. Still useful for relative comparisons across time periods."
-                            />
-                            <ChartCard
-                                title="Input vs Output Value"
-                                description=chart_desc(range, "Total input value vs output value per block in BTC. The gap between the lines represents fees extracted by miners", "Daily total input and output value in BTC. The gap represents fees extracted by miners")
-                                chart_id="chart-value-flow"
-                                option=value_flow_option
-                                info="Inputs always exceed outputs because the difference is the fee. The visible gap between the two lines IS the total fee. When the gap widens, users are paying more in fees. The lines track closely because fees are typically a tiny fraction of transferred value."
                             />
                             <ChartCard
                                 title="Halving Era Comparison"
