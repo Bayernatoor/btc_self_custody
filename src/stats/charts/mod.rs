@@ -71,6 +71,31 @@ pub(crate) const SUBSIDY_COLOR: &str = "#9b59b6";
 pub(crate) const DISK_COLOR: &str = "#e74c3c"; // Red for disk size
 pub(crate) const TAPROOT_COLOR: &str = "#f7931a";
 
+/// Default right-hand grid margin, in pixels.
+///
+/// Sized so a centred final x-axis label cannot run off the canvas. Daily
+/// charts use a category axis whose labels centre on their tick, and the last
+/// tick sits at the grid's right edge, so a 10-character date needs about half
+/// its width in clearance. `containLabel` does not provide it: it reserves room
+/// for label extents on the axis it measures, not for horizontal overflow of
+/// the first and last x labels.
+///
+/// Measured by SSR-rendering against the ECharts the site loads (5.6.1) over 21
+/// combinations of width (700/1050/1400) and range (30 to 6400 days): at 20 the
+/// final label was clipped in one case, at 40 in none, and the label count
+/// barely moves (250 to 244 across all cases).
+///
+/// The `unwrap_or(GRID_RIGHT)` fallbacks below read this back out of the
+/// option tree, so they must not diverge from it.
+pub(crate) const GRID_RIGHT: u64 = 40;
+
+// A 10-character date at the 12px chart font is roughly 61px wide, so a label
+// centred on a tick at the grid's right edge overhangs by about 31px. Enforced
+// at compile time rather than in a test: both sides are constants, so a runtime
+// assertion is a tautology (clippy rejects it), while this fails the build if
+// the margin is ever tightened past the point where the final label fits.
+const _: () = assert!(GRID_RIGHT >= 31);
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -81,7 +106,7 @@ pub(crate) fn chart_defaults() -> serde_json::Value {
     json!({
         "backgroundColor": "transparent",
         "textStyle": { "color": "#aaa", "fontFamily": "Inter, system-ui, sans-serif" },
-        "grid": { "left": 55, "right": 20, "top": 50, "bottom": 65, "containLabel": true },
+        "grid": { "left": 55, "right": GRID_RIGHT, "top": 50, "bottom": 65, "containLabel": true },
         "legend": { "textStyle": { "color": "#ccc", "fontSize": 11 }, "top": 25, "left": "center", "type": "scroll" },
         "toolbox": {
             "feature": {
@@ -903,7 +928,10 @@ fn add_series_overlay(
     // Widen grid for the extra axis
     if let Some(grid) = obj.get_mut("grid") {
         if let Some(g) = grid.as_object_mut() {
-            let current = g.get("right").and_then(|v| v.as_u64()).unwrap_or(20);
+            let current = g
+                .get("right")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(GRID_RIGHT);
             g.insert(
                 "right".into(),
                 json!(current.max(70) + if axis_idx > 1 { 60 } else { 0 }),
@@ -1112,7 +1140,7 @@ pub fn apply_overlays(
             .get("grid")
             .and_then(|g| g.get("right"))
             .and_then(|v| v.as_u64())
-            .unwrap_or(20);
+            .unwrap_or(GRID_RIGHT);
         if let Some(grid) = obj.get_mut("grid") {
             if let Some(g) = grid.as_object_mut() {
                 g.insert("top".into(), json!(45));
@@ -1136,6 +1164,61 @@ pub fn apply_overlays(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // -----------------------------------------------------------------------
+    // x_axis_for
+    // -----------------------------------------------------------------------
+
+    /// The daily x-axis must not force which labels ECharts shows.
+    ///
+    /// The last label was clipped at the grid edge, and two rounds of trying
+    /// to fix it with label options made it worse, so this pins the approach
+    /// that works: leave label selection to ECharts and give the grid enough
+    /// right margin (see [`GRID_RIGHT`]) that a centred final label fits.
+    ///
+    /// Why not the label options, both measured over 21 width/range
+    /// combinations by SSR render:
+    ///
+    /// - `alignMaxLabel: "right"` alone right-aligns the last label so it
+    ///   cannot clip, but shifting its box toward its neighbour makes ECharts
+    ///   treat it as overlapping and **drop** it. The axis then ended earlier
+    ///   than before the fix.
+    /// - Adding `showMaxLabel: true` forces it back, but that switches off
+    ///   ECharts' overlap avoidance for that label, so it collides with its
+    ///   neighbour instead. Observed on a 1-year range as two dates printed
+    ///   on top of each other.
+    /// - `alignMinLabel: "left"` is the same trap at the other end: it
+    ///   dropped the FIRST label (2026-06-11 became 2026-06-21).
+    ///
+    /// Not forcing anything keeps ECharts' overlap avoidance intact, which
+    /// uses real font metrics rather than an estimate, so collisions are
+    /// impossible by construction. The margin then removes the only remaining
+    /// failure, the clip.
+    #[test]
+    fn daily_axis_leaves_label_selection_to_echarts() {
+        let daily =
+            x_axis_for(true, &["2026-09-07".into(), "2026-09-08".into()]);
+        for opt in ["showMaxLabel", "alignMaxLabel", "alignMinLabel"] {
+            assert!(
+                daily["axisLabel"][opt].is_null(),
+                "{opt} overrides ECharts' overlap avoidance; the clip is \
+                 solved with GRID_RIGHT instead"
+            );
+        }
+        assert_eq!(daily["axisLabel"]["color"], "#aaa");
+    }
+
+    /// `chart_defaults` must read the constant rather than repeat a literal,
+    /// or the `unwrap_or(GRID_RIGHT)` fallbacks stop matching the real margin.
+    /// The margin's minimum is enforced at compile time beside the constant.
+    #[test]
+    fn chart_defaults_uses_the_grid_right_constant() {
+        assert_eq!(
+            chart_defaults()["grid"]["right"],
+            GRID_RIGHT,
+            "chart_defaults must use the constant, not a literal"
+        );
+    }
 
     // -----------------------------------------------------------------------
     // moving_average
