@@ -477,22 +477,40 @@
             // the global cursor on restore.
             if (!el._clickRegistered) {
                 el._clickRegistered = true;
-                var downX, downY, downT;
-                el.addEventListener('mousedown', function(e) {
-                    downX = e.offsetX;
-                    downY = e.offsetY;
-                    downT = Date.now();
+
+                // Preferred path: let ECharts tell us which point was clicked.
+                //
+                // The fallback below reconstructs a data point from the cursor
+                // pixel, and that cannot agree with the tooltip on a dense
+                // scatter. The tooltip hit-tests in PIXEL space (block interval
+                // is `trigger: 'item'` with `symbolSize: 5`), so it reports
+                // whichever 5px symbol the cursor is inside. The fallback
+                // converts the pixel to a timestamp and takes the nearest point
+                // in VALUE space. Where several blocks share a few pixels the
+                // cursor can sit inside block N's symbol while the
+                // reconstructed timestamp is nearer block N+1, so the tooltip
+                // said 965358 and the modal opened 965359, varying with a
+                // pixel of mouse movement.
+                //
+                // Using the dataIndex ECharts hit-tested removes the
+                // disagreement by construction rather than by tightening a
+                // tolerance: it is the same point the tooltip just described.
+                // This fires only when a series item is actually hit, so
+                // clicks on empty grid still fall through.
+                el._chart.on('click', function(params) {
+                    var d = params && params.data;
+                    if (!Array.isArray(d) || typeof d[2] !== 'number') return;
+                    el._itemClickHeight = d[2];
                 });
-                el.addEventListener('mouseup', function(e) {
-                    if (downX === undefined) return;
-                    var dx = Math.abs(e.offsetX - downX);
-                    var dy = Math.abs(e.offsetY - downY);
-                    var dt = Date.now() - downT;
-                    downX = downY = downT = undefined;
-                    // Click threshold: 5px movement, 400ms duration. Anything
-                    // beyond that is a drag and belongs to the zoom brush.
-                    if (dx >= 5 || dy >= 5 || dt >= 400) return;
+
+                var resolveClick = function(e) {
                     if (!el._chart) return;
+                    var exact = el._itemClickHeight;
+                    el._itemClickHeight = undefined;
+                    if (typeof exact === 'number') {
+                        window.showBlockDetail(exact);
+                        return;
+                    }
                     var pointInPixel = [e.offsetX, e.offsetY];
                     if (!el._chart.containPixel('grid', pointInPixel)) return;
                     var xVal = el._chart.convertFromPixel({ seriesIndex: 0 }, pointInPixel)[0];
@@ -531,7 +549,33 @@
                     }
                     var height = data[best][2];
                     if (typeof height === 'number') window.showBlockDetail(height);
+                };
+
+                var downX, downY, downT;
+                el.addEventListener('mousedown', function(e) {
+                    downX = e.offsetX;
+                    downY = e.offsetY;
+                    downT = Date.now();
+                    el._itemClickHeight = undefined;
                 });
+                el.addEventListener('mouseup', function(e) {
+                    if (downX === undefined) return;
+                    var dx = Math.abs(e.offsetX - downX);
+                    var dy = Math.abs(e.offsetY - downY);
+                    var dt = Date.now() - downT;
+                    downX = downY = downT = undefined;
+                    // Click threshold: 5px movement, 400ms duration. Anything
+                    // beyond that is a drag and belongs to the zoom brush.
+                    if (dx >= 5 || dy >= 5 || dt >= 400) return;
+                    if (!el._chart) return;
+                    // Deferred by a tick so this does not depend on whether
+                    // zrender's synchronous click dispatch runs before this
+                    // listener. ECharts binds to the canvas and events bubble
+                    // up to the container, so it should, but a one-tick wait
+                    // makes the ordering irrelevant instead of assumed.
+                    setTimeout(function() { resolveClick(e); }, 0);
+                });
+
                 // Re-activate the zoom brush after Reset-zoom (restore) fires,
                 // which otherwise leaves the chart in a click-to-open-but-
                 // can't-zoom state until the user clicks the toolbox zoom icon.
