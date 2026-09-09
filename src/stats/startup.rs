@@ -36,6 +36,22 @@ use super::ingest;
 use super::rpc::BitcoinRpc;
 use super::zmq_subscriber;
 
+/// How long a fetched BTC/USD price stays usable.
+///
+/// Paired with [`PRICE_REFRESH_INTERVAL`], and the pairing is the point:
+/// `PRICE_REFRESH_INTERVAL` must be strictly less than this, or the cache is
+/// empty for the difference on every cycle. Named constants rather than two
+/// literals sixty lines apart, because that is how they drifted: a 90s refresh
+/// against a 60s TTL left a guaranteed 30s hole per cycle in which whale
+/// detection read no price and silently flagged nothing. Asserted in the tests
+/// below.
+const PRICE_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// How often the background task re-fetches the price. Must stay under
+/// [`PRICE_CACHE_TTL`]; the gap between them is the slack for a failed fetch.
+const PRICE_REFRESH_INTERVAL: std::time::Duration =
+    std::time::Duration::from_secs(45);
+
 /// Initialize the stats module. Returns `None` if `BITCOIN_STATS_RPC_URL` is not set
 /// (dormant mode). Otherwise returns
 /// (shared_state, router, zmq_tx_url, zmq_block_url, zmq_sequence_url).
@@ -93,11 +109,8 @@ pub async fn init() -> Option<(
     use super::types;
     use std::time::Duration;
     let mut cb = super::api::StatsStateBuilder::new();
-    let price_cache = cb.cache::<(), super::rpc::PriceInfo>(
-        "price",
-        Duration::from_secs(60),
-        &[],
-    );
+    let price_cache =
+        cb.cache::<(), super::rpc::PriceInfo>("price", PRICE_CACHE_TTL, &[]);
     let utxo_count = cb.cache::<(), u64>("utxo_count", Duration::MAX, &[]);
     let stats_summary_cache = cb.cache::<(), types::StatsSummary>(
         "stats_summary",
@@ -263,10 +276,23 @@ pub fn spawn_background_tasks(
         });
     }
 
-    // Background price refresh every 90 seconds.
-    // Critical for whale detection: ZMQ subscriber reads price_cache per tx,
-    // and if nobody loads the dashboard, the cache stays empty and no whales
-    // get flagged. This ensures the price is always fresh regardless of user activity.
+    // Background price refresh, deliberately faster than the price cache's TTL.
+    //
+    // Critical for whale detection: the ZMQ subscriber reads price_cache per
+    // tx, and if nobody loads the dashboard the cache stays empty and no
+    // whales get flagged. This keeps a price there regardless of user
+    // activity.
+    //
+    // The interval must stay BELOW `PRICE_CACHE_TTL`. It used to be 90s
+    // against a 60s TTL, so the entry was guaranteed expired for 30s of every
+    // 90s cycle. During those windows the ZMQ path read `None`, fell back to
+    // `unwrap_or(0.0)`, and computed `value_usd` as 0, so nothing could clear
+    // the $1M whale threshold and arrivals in that window were silently not
+    // flagged. Production bore this out: 114,557 misses against 681,164 hits
+    // on a cache with one key and a live refresher.
+    //
+    // Refreshing inside the TTL also leaves slack for a failed fetch: at 45s
+    // against 60s, one failure still leaves a valid entry.
     {
         let state = Arc::clone(&state);
         tokio::spawn(async move {
@@ -282,7 +308,7 @@ pub fn spawn_background_tasks(
                 Err(e) => tracing::warn!("Initial price fetch failed: {e}"),
             }
             loop {
-                tokio::time::sleep(std::time::Duration::from_secs(90)).await;
+                tokio::time::sleep(PRICE_REFRESH_INTERVAL).await;
                 match state.rpc.fetch_price().await {
                     Ok(price) => state.price_cache.insert((), price),
                     Err(e) => tracing::debug!("Price refresh failed: {e}"),
@@ -586,4 +612,36 @@ pub fn spawn_background_tasks(
     }
 
     tracing::info!("Connection pool: 16 connections (WAL mode enabled)");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The price refresher must run faster than the price cache expires.
+    ///
+    /// These two were literals sixty lines apart and drifted: a 90s refresh
+    /// against a 60s TTL meant the entry was expired for 30s of every 90s
+    /// cycle. The ZMQ whale path reads this cache with `get`, which respects
+    /// the TTL and does not repopulate, so in those windows it fell back to a
+    /// price of 0.0, `value_usd` computed to 0, nothing could clear the $1M
+    /// whale threshold, and arrivals were silently not flagged. Production
+    /// showed 114,557 misses against 681,164 hits on a single-key cache with a
+    /// live refresher, which is the signature.
+    #[test]
+    fn price_refresh_beats_the_price_ttl() {
+        assert!(
+            PRICE_REFRESH_INTERVAL < PRICE_CACHE_TTL,
+            "refresh every {:?} against a {:?} TTL leaves the cache empty for \
+             {:?} of every cycle, and whale detection reads 0 in that window",
+            PRICE_REFRESH_INTERVAL,
+            PRICE_CACHE_TTL,
+            PRICE_REFRESH_INTERVAL.saturating_sub(PRICE_CACHE_TTL),
+        );
+        // And with enough slack that one failed fetch does not open a hole.
+        assert!(
+            PRICE_REFRESH_INTERVAL * 2 > PRICE_CACHE_TTL,
+            "one missed refresh should still leave a valid entry"
+        );
+    }
 }
