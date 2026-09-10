@@ -155,7 +155,7 @@ fn YearCard(year: OnThisDayYear) -> impl IntoView {
                             {format!("\u{20bf}{:.4}", fees_btc)}
                         </p>
                     </div>
-                    <div data-tip="Daily average BTC/USD price (blockchain.info)" tabindex="0">
+                    <div data-tip="Daily average BTC/USD price" tabindex="0">
                         <p class="text-[10px] sm:text-[11px] text-white/50 uppercase tracking-wider">"Price"</p>
                         <p class="text-white font-mono text-xs sm:text-sm">{price_str}</p>
                         {(!mcap_str.is_empty()).then(|| view! {
