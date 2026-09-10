@@ -475,8 +475,20 @@ pub struct HallOfFameEntry {
     pub slug: &'static str,
     /// Short display title.
     pub title: &'static str,
-    /// Longer description of the event.
+    /// Longer description of the event, plain text, shown on the Archives card.
     pub description: &'static str,
+    /// One-line version for the Almanac's inline event row, where the full
+    /// description is too long for the layout.
+    ///
+    /// **May contain HTML**, because the Almanac renders it with `inner_html`.
+    /// Two entries rely on that to link the BIP they activated. That is safe
+    /// here and only here: these are `&'static str` compiled into the binary,
+    /// never user input, so there is nothing to escape. Do not widen this
+    /// field's source without revisiting that.
+    ///
+    /// `None` means the Almanac shows no event row for the date, which is the
+    /// pre-2026-09 behaviour for the entries that had no short copy.
+    pub short_context: Option<&'static str>,
     pub category: HofCategory,
     /// UTC date of **the event**, `YYYY-MM-DD`, for display and sorting.
     ///
