@@ -230,7 +230,7 @@ fn HofEntryCard(entry: &'static HallOfFameEntry) -> impl IntoView {
     let badge_style =
         format!("background: {}20; color: {cat_color}", cat_color);
 
-    // Format date nicely + build On This Day link
+    // Format date nicely + build the Almanac link
     let parsed_date =
         chrono::NaiveDate::parse_from_str(entry.date, "%Y-%m-%d").ok();
     let date_display = parsed_date
@@ -274,7 +274,7 @@ fn HofEntryCard(entry: &'static HallOfFameEntry) -> impl IntoView {
                         <a
                             href=href
                             class="text-[11px] text-white/40 hover:text-[#f7931a]/70 font-mono transition-colors"
-                            title="View this date on On This Day"
+                            title="View this date in the Almanac"
                         >{date_display.clone()}</a>
                     }.into_any(),
                     None => view! {
