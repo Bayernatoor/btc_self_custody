@@ -324,6 +324,17 @@ where
         self.refreshes.fetch_add(1, Ordering::Relaxed);
     }
 
+    /// Raw write with an explicit stored-at timestamp, so a test can place an
+    /// entry either side of its TTL deadline without sleeping. Real time is
+    /// the only clock here (`Instant`, not tokio's pausable one), so a test
+    /// that sleeps to force expiry also races the clock on the freshness
+    /// assertion it makes first.
+    #[cfg(test)]
+    fn insert_at(&self, key: K, value: V, stored: Instant) {
+        let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        guard.insert(key, (value, stored));
+    }
+
     /// Drop the oldest entries when the map exceeds `capacity`.
     ///
     /// Evicts down to a low-water mark (7/8 of capacity) rather than to
@@ -538,11 +549,13 @@ mod tests {
 
     #[tokio::test]
     async fn raw_get_respects_ttl() {
-        let cache: Cache<u32, &'static str> =
-            Cache::new("test", Duration::from_millis(10));
+        let ttl = Duration::from_secs(5);
+        let cache: Cache<u32, &'static str> = Cache::new("test", ttl);
+
         cache.insert(1, "a");
-        assert_eq!(cache.get(&1), Some("a"));
-        tokio::time::sleep(Duration::from_millis(120)).await;
+        assert_eq!(cache.get(&1), Some("a"), "fresh entry should return");
+
+        cache.insert_at(1, "a", Instant::now() - ttl * 2);
         assert_eq!(cache.get(&1), None, "expired entry should not return");
     }
 
