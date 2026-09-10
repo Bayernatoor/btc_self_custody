@@ -4,6 +4,7 @@
 //! node, ingests block data into SQLite, and serves analytics via API + server functions.
 
 pub mod charts;
+pub mod hall_of_fame_data;
 pub mod server_fns;
 pub mod types;
 

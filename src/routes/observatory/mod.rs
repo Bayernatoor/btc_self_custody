@@ -33,7 +33,6 @@ pub mod shared;
 mod embedded;
 mod fees;
 mod hall_of_fame;
-mod hall_of_fame_data;
 mod heartbeat;
 mod mining;
 mod network;

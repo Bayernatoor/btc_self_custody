@@ -1,6 +1,7 @@
 //! Bitcoin Hall of Fame: curated museum of remarkable blocks and transactions.
 //!
-//! A static collection of notable Bitcoin events defined in `hall_of_fame_data.rs`.
+//! A static collection of notable Bitcoin events defined in
+//! `stats::hall_of_fame_data`.
 //! Each entry has a date, title, description, category, optional block height,
 //! optional txid, and optional source link.
 //!
@@ -17,7 +18,7 @@ use leptos_meta::*;
 use leptos_router::hooks::use_query_map;
 
 use super::components::show_block_detail;
-use super::hall_of_fame_data::HALL_OF_FAME;
+use crate::stats::hall_of_fame_data::HALL_OF_FAME;
 use crate::stats::types::{HallOfFameEntry, HofCategory};
 
 // ---------------------------------------------------------------------------
