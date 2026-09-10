@@ -835,7 +835,7 @@ pub fn StatsSummaryPage() -> impl IntoView {
 
             <SectionHeader title="Price" subtitle="BTC/USD at the boundaries of the selected range"/>
             <StatCard label="Start Price" value=price_start
-                tooltip="BTC/USD price at the beginning of the selected range (daily granularity from blockchain.info)"/>
+                tooltip="BTC/USD price at the beginning of the selected range (daily granularity)"/>
             <StatCard label="End Price" value=price_end
                 tooltip="BTC/USD price at the end of the selected range"/>
             <StatCard label="Change" value=price_change
