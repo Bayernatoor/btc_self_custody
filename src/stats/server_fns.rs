@@ -996,11 +996,17 @@ pub async fn fetch_on_this_day(
                 // cards and no event row, and the three events both lists did
                 // hold carried different dates. An entry appears here only if
                 // it has `short_context`, because the full description does
-                // not fit this layout.
+                // not fit this layout, and only if `almanac` is set, which is
+                // how the three entries that would restate a same-day sibling
+                // stay on their Archives card without printing a second row
+                // about the same subject here.
                 for entry in super::hall_of_fame_data::HALL_OF_FAME {
                     let Some(context) = entry.short_context else {
                         continue;
                     };
+                    if !entry.almanac {
+                        continue;
+                    }
                     // date is "YYYY-MM-DD"; compare the tail to "MM-DD" and
                     // the head to the year being rendered.
                     let matches = entry.date.len() == 10

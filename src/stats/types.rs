@@ -481,18 +481,34 @@ pub struct HallOfFameEntry {
     /// description is too long for the layout.
     ///
     /// **May contain HTML**, because the Almanac renders it with `inner_html`.
-    /// Two entries rely on that to link the BIP they activated. That is safe
+    /// Nine entries rely on that to link the BIP they activated. That is safe
     /// here and only here: these are `&'static str` compiled into the binary,
     /// never user input, so there is nothing to escape. Do not widen this
     /// field's source without revisiting that.
     ///
-    /// `None` means the Almanac shows no event row for the date, which is the
-    /// pre-2026-09 behaviour for the entries that had no short copy.
+    /// `None` means the Almanac shows no event row for the date. Every entry
+    /// now has copy, and a guard test keeps it that way, so this stays an
+    /// `Option` only because the field is read before that is known.
     pub short_context: Option<&'static str>,
+    /// Whether this entry earns a row in the Almanac. The Archives shows all
+    /// 64 cards regardless.
+    ///
+    /// False for three entries whose row would restate a sibling on the same
+    /// calendar date rather than add to it: both genesis entries describe
+    /// block 0, and the inscription and Runes records each sit beside a
+    /// milestone that already covers the same event. The Almanac lists a day's
+    /// events in one column, so two rows on one subject read as a mistake
+    /// there while two cards in different categories do not.
+    ///
+    /// This is per-consumer curation of one shared list, not a second list.
+    /// The chart Events overlay will want the same treatment for the same
+    /// reason: 64 markers on one axis is unreadable, so something has to
+    /// choose, and it should choose from here.
+    pub almanac: bool,
     pub category: HofCategory,
     /// UTC date of **the event**, `YYYY-MM-DD`, for display and sorting.
     ///
-    /// The event, not the block. 22 of the 58 entries have no block at all
+    /// The event, not the block. 26 of the 64 entries have no block at all
     /// (exchange launches, price milestones, legal changes), so the event is
     /// the only thing every entry shares and the block is supplementary
     /// context. Where an entry has both, they can legitimately differ: the

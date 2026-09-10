@@ -24,6 +24,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "Genesis Block",
         description: "Block 0, the first Bitcoin block ever mined. The coinbase contains the famous headline: \"The Times 03/Jan/2009 Chancellor on brink of second bailout for banks.\" The 50 BTC reward is unspendable due to a quirk in the original code.",
         short_context: Some("Block 0 contains the famous headline: \"The Times 03/Jan/2009 Chancellor on brink of second bailout for banks\""),
+        almanac: true,
         category: Milestones,
         date: "2009-01-03",
         block: Some(0),
@@ -36,6 +37,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "First Bitcoin Transaction",
         description: "Satoshi Nakamoto sent 10 BTC to Hal Finney in block 170, the first person-to-person Bitcoin transaction. Finney reportedly ran Bitcoin on his laptop and was the first person other than Satoshi to mine blocks.",
         short_context: Some("Satoshi sent 10 BTC to Hal Finney in block 170. Finney reportedly ran Bitcoin on his laptop while fighting ALS"),
+        almanac: true,
         category: Milestones,
         date: "2009-01-12",
         block: Some(170),
@@ -48,6 +50,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "Bitcoin Pizza Day",
         description: "Laszlo Hanyecz paid 10,000 BTC for two Papa John's pizzas, the first known real-world Bitcoin purchase. Jeremy Sturdivant accepted the deal. Those coins would be worth billions today.",
         short_context: Some("Laszlo Hanyecz paid 10,000 BTC for two Papa John's pizzas, the first known real-world Bitcoin purchase"),
+        almanac: true,
         category: Milestones,
         date: "2010-05-22",
         block: Some(57043),
@@ -60,6 +63,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "Mt. Gox Exchange Opens",
         description: "Originally a Magic: The Gathering card trading site, Mt. Gox launched as a Bitcoin exchange. It would grow to handle 70% of all BTC trades before its catastrophic collapse in 2014.",
         short_context: Some("Originally a Magic: The Gathering card trading site. Would grow to handle 70% of all BTC trades before its collapse"),
+        almanac: true,
         category: Milestones,
         date: "2010-07-18",
         block: None,
@@ -72,6 +76,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "Satoshi's Last Public Post",
         description: "Satoshi's final message on BitcoinTalk discussed DoS attack prevention. After this post, Satoshi was never heard from publicly again. The last known login was December 13, 2010.",
         short_context: Some("Satoshi's final message on BitcoinTalk discussed DoS attack prevention. He was never heard from publicly again"),
+        almanac: true,
         category: Milestones,
         date: "2010-12-12",
         block: None,
@@ -84,6 +89,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "BTC Reaches $1",
         description: "Bitcoin achieved dollar parity for the first time, giving it a market cap of roughly $6 million. Just months earlier, 10,000 BTC bought two pizzas.",
         short_context: Some("Bitcoin achieved dollar parity, giving it a market cap of roughly $6 million"),
+        almanac: true,
         category: Milestones,
         date: "2011-02-09",
         block: None,
@@ -96,6 +102,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "First Halving",
         description: "Block reward dropped from 50 to 25 BTC. About 10.5 million BTC (50% of the total supply) had been mined in just under four years. Mined by Braiins (Slush Pool) with 457 transactions.",
         short_context: Some("Block reward dropped from 50 to 25 BTC. About 10.5 million BTC (50% of supply) had been mined in just 4 years"),
+        almanac: true,
         category: Milestones,
         date: "2012-11-28",
         block: Some(210_000),
@@ -108,6 +115,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "BTC Market Cap Reaches $1 Billion",
         description: "Bitcoin crossed the billion-dollar threshold at approximately $92 per coin with 10.9 million BTC in circulation.",
         short_context: Some("Bitcoin crossed the billion-dollar threshold at ~$92 per coin with 10.9 million BTC in circulation"),
+        almanac: true,
         category: Milestones,
         date: "2013-03-28",
         block: None,
@@ -120,6 +128,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "BTC Reaches $1,000",
         description: "Driven by Chinese exchange demand on platforms like BTC China, Bitcoin crossed $1,000 for the first time. That represents a 250,000x increase from Pizza Day's implied price.",
         short_context: Some("Driven by Chinese exchange demand, Bitcoin crossed $1,000 for the first time, a 250,000x increase from Pizza Day"),
+        almanac: true,
         category: Milestones,
         // Wikipedia (History of bitcoin) dates the $1,000 crossing to
         // 28 Nov 2013 at Mt. Gox, which traded at a premium and crossed
@@ -135,6 +144,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "Second Halving",
         description: "Block reward dropped from 25 to 12.5 BTC. Price was approximately $650 and would reach $20,000 within 18 months. Block contained 1,257 transactions.",
         short_context: Some("Block reward dropped from 25 to 12.5 BTC. Price was ~$650 and would reach $20K within 18 months"),
+        almanac: true,
         category: Milestones,
         date: "2016-07-09",
         block: Some(420_000),
@@ -147,6 +157,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "BTC Reaches $10,000",
         description: "Bitcoin breached five figures for the first time during the explosive 2017 bull run. It would double again to $20,000 in less than three weeks.",
         short_context: Some("Bitcoin breached five figures for the first time, then doubled again to $20,000 in under three weeks"),
+        almanac: true,
         category: Milestones,
         date: "2017-11-28",
         block: None,
@@ -159,6 +170,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "BTC Reaches $20,000",
         description: "The peak of the 2017 bull run. FOMO was so intense that Coinbase repeatedly crashed under traffic. A brutal 84% drawdown followed over the next year.",
         short_context: Some("The peak of the 2017 bull run. FOMO was so intense that Coinbase repeatedly crashed under traffic"),
+        almanac: true,
         category: Milestones,
         date: "2017-12-17",
         block: None,
@@ -171,6 +183,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "Third Halving",
         description: "Block reward dropped from 12.5 to 6.25 BTC. Price was approximately $8,600 and would reach $69,000 within 18 months. Mined by AntPool with 3,134 transactions.",
         short_context: Some("Block reward dropped from 12.5 to 6.25 BTC. Price was ~$8,600 and would reach $69K within 18 months"),
+        almanac: true,
         category: Milestones,
         date: "2020-05-11",
         block: Some(630_000),
@@ -183,6 +196,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "El Salvador Adopts BTC as Legal Tender",
         description: "The first country to make Bitcoin legal tender. President Bukele pushed the \"Bitcoin Law\" through congress with 62 out of 84 votes. It took effect on September 7, 2021.",
         short_context: Some("The first country to make Bitcoin legal tender. President Bukele pushed the \"Bitcoin Law\" through congress"),
+        almanac: true,
         category: Milestones,
         date: "2021-06-09",
         block: None,
@@ -195,6 +209,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "BTC ATH ~$69,000",
         description: "The peak of the 2021 cycle. Bitcoin's market cap briefly exceeded $1.2 trillion. The price would fall below $16,000 a year later during the FTX collapse.",
         short_context: Some("The peak of the 2021 cycle. Bitcoin's market cap briefly exceeded $1.2 trillion"),
+        almanac: true,
         category: Milestones,
         date: "2021-11-10",
         block: None,
@@ -207,6 +222,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "First Spot Bitcoin ETFs Approved",
         description: "The SEC approved 11 spot Bitcoin ETFs simultaneously after a decade of rejections. Over $4 billion in volume traded on day one, marking Bitcoin's arrival in traditional finance.",
         short_context: Some("The SEC approved 11 spot Bitcoin ETFs after a decade of rejections. Over $4B in volume traded on day one"),
+        almanac: true,
         category: Milestones,
         date: "2024-01-10",
         block: None,
@@ -219,6 +235,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "Fourth Halving + Runes Launch",
         description: "Block reward dropped from 6.25 to 3.125 BTC. The Runes fungible token protocol launched simultaneously, causing a massive fee spike: 37.6 BTC in fees for this single block. Mined by ViaBTC with 3,050 transactions.",
         short_context: Some("Block reward dropped from 6.25 to 3.125 BTC. The Runes protocol launched simultaneously, causing a fee spike as users minted tokens"),
+        almanac: true,
         category: Milestones,
         date: "2024-04-20",
         block: Some(840_000),
@@ -231,6 +248,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "BTC Breaks $100,000",
         description: "A psychological milestone 15 years in the making. From $0 to six figures, driven by institutional ETF inflows and growing mainstream adoption.",
         short_context: Some("A psychological milestone 15 years in the making. From $0 to six figures"),
+        almanac: true,
         category: Milestones,
         date: "2024-12-05",
         block: None,
@@ -248,6 +266,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         // DB: height 836964, size 3,993,936 bytes, 5 txs, miner F2Pool
         description: "At 3.99 MB, block 836,964 is the largest block ever mined on Bitcoin. It contained just 5 transactions, dominated by a single massive inscription that filled nearly the entire block. Mined by F2Pool.",
         short_context: Some("At 3.99 MB, the largest block ever mined. It held just 5 transactions, one inscription filling nearly all of it"),
+        almanac: true,
         category: Records,
         date: "2024-03-30",
         block: Some(836_964),
@@ -261,6 +280,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         // DB: height 409008, total_fees 29,153,275,103 sats, 1,962 txs, miner CKPool
         description: "Block 409,008 collected 291.5 BTC in fees, by far the highest ever. This was caused by a single transaction paying 29.1 billion sats (14.8 million sat/vB), almost certainly an accidental fat-finger fee. Mined by CKPool.",
         short_context: Some("Block 409,008 collected 291.5 BTC in fees, almost all of it from one transaction paying 14.8 million sat/vB by mistake"),
+        almanac: true,
         category: Records,
         date: "2016-04-26",
         block: Some(409_008),
@@ -274,6 +294,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         // DB: height 367853, tx_count 12239, size 999,956, miner Unknown
         description: "Block 367,853 packed 12,239 transactions into a pre-SegWit 1 MB block during the July-August 2015 stress test period. The transactions were mostly tiny spam outputs designed to flood the mempool.",
         short_context: Some("12,239 transactions squeezed into a pre-SegWit 1 MB block, most of them stress-test spam"),
+        almanac: true,
         category: Records,
         date: "2015-08-01",
         block: Some(367_853),
@@ -287,6 +308,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         // DB: height 839842, largest_tx_size 3,992,821, 3 txs, miner MARA
         description: "A single transaction in block 839,842 weighed 3.99 MB, nearly filling the entire block by itself. This was a large inscription transaction that pushed the limits of what a single Bitcoin transaction can contain. Mined by MARA.",
         short_context: Some("A single inscription transaction weighed 3.99 MB, filling almost the entire block by itself"),
+        almanac: true,
         category: Records,
         date: "2024-04-18",
         block: Some(839_842),
@@ -300,6 +322,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         // DB: height 367885, input_count 20,894, 273 txs, miner Unknown
         description: "A single transaction swept 20,000 anyone-can-spend dust outputs left behind by the July 2015 flood attack, sending them all into one OP_RETURN. Zero BTC moved, zero fee paid. 20,000 UTXO entries removed, zero created.",
         short_context: Some("One transaction swept 20,000 anyone-can-spend dust outputs into a single OP_RETURN. No BTC moved and no fee was paid"),
+        almanac: true,
         category: Records,
         date: "2015-08-01",
         block: Some(367_885),
@@ -313,6 +336,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         // DB: height 826052, output_count 26,906, 480 txs, miner Foundry USA
         description: "Block 826,052 created 26,906 new UTXOs from just 480 transactions. Likely a mass payout or airdrop operation. Mined by Foundry USA.",
         short_context: Some("Block 826,052 created 26,906 new UTXOs from just 480 transactions, likely a mass payout"),
+        almanac: true,
         category: Records,
         date: "2024-01-16",
         block: Some(826_052),
@@ -326,6 +350,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         // DB: height 806480, inscription_count 12,835, 766,244 bytes, miner AntPool
         description: "Block 806,480 contained 12,835 Ordinals inscriptions totaling 766 KB of embedded data during the September 2023 inscription craze. Mined by AntPool.",
         short_context: Some("12,835 Ordinals inscriptions in a single block, totalling 766 KB of embedded data"),
+        almanac: true,
         category: Records,
         date: "2023-09-06",
         block: Some(806_480),
@@ -339,6 +364,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         // DB: height 840655, taproot_spend_count 22,367, 186 txs, miner F2Pool
         description: "Block 840,655 had 22,367 Taproot (P2TR) spend inputs from just 186 transactions, with each transaction spending over 100 Taproot UTXOs on average. Mined by F2Pool four days after the fourth halving.",
         short_context: Some("22,367 Taproot inputs from only 186 transactions, averaging over 100 Taproot UTXOs spent per transaction"),
+        almanac: true,
         category: Records,
         date: "2024-04-24",
         block: Some(840_655),
@@ -352,6 +378,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         // DB: height 254642, total_fees 20,022,600,217 sats, 584 txs
         description: "Someone accidentally paid a 200 BTC fee in block 254,642, one of several infamous fat-finger incidents in Bitcoin's history. The lucky miner collected over $20,000 at the time (worth millions today).",
         short_context: Some("Someone accidentally paid a 200 BTC fee. Worth about $20,000 to the miner at the time, millions today"),
+        almanac: true,
         category: Records,
         date: "2013-08-28",
         block: Some(254_642),
@@ -370,6 +397,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         // The overflow tx was rolled back by reorg so its txid no longer exists on the canonical chain.
         description: "An integer overflow bug in block 74,638 created 184,467,440,737 BTC out of thin air, 8,784x the total supply. Satoshi published a fix (v0.3.10) within 5 hours. The good chain overtook the bad chain at block 74,691.",
         short_context: Some("An integer overflow created 184 billion BTC out of nothing, 8,784x the entire supply. Satoshi shipped a fix within five hours"),
+        almanac: true,
         category: Attacks,
         date: "2010-08-15",
         block: Some(74_638),
@@ -382,6 +410,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "Mt. Gox Hack",
         description: "A hacker compromised an auditor's account on Mt. Gox and dumped thousands of BTC, crashing the price from $17 to $0.01 on the exchange. About 25,000 BTC were stolen from 478 user accounts.",
         short_context: Some("A hacker compromised an auditor's account and dumped thousands of BTC, crashing the price from $17 to $0.01"),
+        almanac: true,
         category: Attacks,
         date: "2011-06-19",
         block: None,
@@ -394,6 +423,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "Mt. Gox Halts Withdrawals",
         description: "The exchange that once handled 70% of all Bitcoin trading suspended all withdrawals. Weeks later, it filed for bankruptcy, revealing 850,000 BTC (~$450M at the time) had been stolen over several years.",
         short_context: Some("The exchange suspended all withdrawals, later revealing 850,000 BTC (~$450M) had been stolen. It filed for bankruptcy weeks later"),
+        almanac: true,
         category: Attacks,
         date: "2014-02-07",
         block: None,
@@ -407,6 +437,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         // DB: block 364422 is from this period, 999,917 bytes
         description: "A sustained spam attack flooded the network with thousands of tiny transactions, pushing the mempool past 80,000 unconfirmed transactions and creating anyone-can-spend dust outputs that polluted the UTXO set for months.",
         short_context: Some("Spam pushed the mempool past 80,000 unconfirmed transactions and left dust that polluted the UTXO set for months"),
+        almanac: true,
         category: Attacks,
         date: "2015-07-08",
         block: Some(364_422),
@@ -419,6 +450,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "Black Thursday",
         description: "Bitcoin crashed 50% in a single day alongside global markets as COVID-19 panic hit. Liquidation cascades wiped $1 billion in leveraged positions. BTC briefly fell below $4,000.",
         short_context: Some("Bitcoin crashed 50% in hours alongside global markets as COVID panic hit. Liquidation cascades wiped $1B in leveraged positions"),
+        almanac: true,
         category: Milestones,
         date: "2020-03-12",
         block: None,
@@ -431,6 +463,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "China Mining Ban",
         description: "China's State Council ordered a crackdown on Bitcoin mining, triggering the largest hashrate migration in Bitcoin's history. Over 50% of global mining power relocated abroad within months.",
         short_context: Some("China ordered miners to shut down, triggering the largest hashrate migration in Bitcoin's history. Over 50% of mining moved abroad"),
+        almanac: true,
         category: Milestones,
         date: "2021-05-21",
         block: None,
@@ -443,6 +476,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "Tesla Buys $1.5B in BTC",
         description: "Tesla's SEC filing revealed a $1.5 billion Bitcoin purchase, making it one of the first major public companies to hold BTC on its balance sheet. The announcement sent Bitcoin above $44,000 for the first time.",
         short_context: Some("Tesla's SEC filing revealed a massive Bitcoin purchase, legitimizing BTC as a corporate treasury asset"),
+        almanac: true,
         category: Milestones,
         date: "2021-02-08",
         block: None,
@@ -455,6 +489,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "FTX Files for Bankruptcy",
         description: "Sam Bankman-Fried's exchange collapsed after revelations of massive fraud. Approximately $8 billion in customer funds were misused. BTC dropped to $16,000, marking the cycle bottom.",
         short_context: Some("Sam Bankman-Fried's exchange collapsed after revelations of massive fraud. ~$8B in customer funds were misused. BTC dropped to $16K"),
+        almanac: true,
         category: Attacks,
         date: "2022-11-11",
         block: None,
@@ -468,6 +503,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         // DB: block 806480 had 12,835 inscriptions
         description: "A massive inscription minting frenzy in September 2023 pushed block space demand to extremes. Block 806,480 alone contained 12,835 inscriptions. Fee rates spiked across the network.",
         short_context: Some("A minting frenzy pushed block space demand to extremes through September 2023, spiking fee rates across the network"),
+        almanac: false,
         category: Milestones,
         date: "2023-09-06",
         block: Some(806_480),
@@ -481,6 +517,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         // DB: block 840000, 37.6 BTC fees
         description: "The Runes protocol launched at block 840,000 (the halving block). 853 runes were etched in the first hour. Block fees hit 37.6 BTC, roughly 600x a typical block. The fee frenzy lasted several days.",
         short_context: Some("Block fees hit 37.6 BTC, roughly 600x a normal block, and the frenzy ran for several days"),
+        almanac: false,
         category: Milestones,
         date: "2024-04-20",
         block: Some(840_000),
@@ -497,7 +534,8 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "P2SH Activation (BIP-16)",
         // DB: height 173805, 106 txs
         description: "Pay-to-Script-Hash activated at block 173,805, enabling users to send to a hash of a script rather than the full script. This made multisig and complex spending conditions practical for everyday use.",
-        short_context: Some("Pay-to-Script-Hash activated at block 173,805, letting you send to the hash of a script and making multisig practical"),
+        short_context: Some("<a href='https://github.com/bitcoin/bips/blob/master/bip-0016.mediawiki' target='_blank' class='text-[#f7931a] hover:underline'>BIP-16</a> activated at block 173,805, letting you send to the hash of a script rather than the script itself. That made multisig practical"),
+        almanac: true,
         category: Protocol,
         date: "2012-04-01",
         block: Some(173_805),
@@ -510,7 +548,8 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "Strict DER Signature Activation (BIP-66)",
         // DB: height 363725, 1 tx (empty block), miner AntPool
         description: "BIP-66 enforced strict DER encoding for signatures at block 363,725, fixing a malleability vector. The activation caused a brief chain split when some miners hadn't upgraded.",
-        short_context: Some("BIP-66 enforced strict DER signature encoding at block 363,725, closing a malleability vector"),
+        short_context: Some("<a href='https://github.com/bitcoin/bips/blob/master/bip-0066.mediawiki' target='_blank' class='text-[#f7931a] hover:underline'>BIP-66</a> enforced strict DER signature encoding at block 363,725, closing a malleability vector"),
+        almanac: true,
         category: Protocol,
         date: "2015-07-04",
         block: Some(363_725),
@@ -523,7 +562,8 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "BIP-66 Chain Split",
         // DB: block 363731, 1883 txs
         description: "Shortly after BIP-66 activated, miners running old software produced invalid blocks, causing a brief chain split. Miners had signaled support without actually enforcing the new rules. This led directly to BIP-9 (Version Bits), which introduced named signaling bits and defined activation windows.",
-        short_context: Some("Miners signalled support for BIP-66 without enforcing it, produced invalid blocks and briefly split the chain. BIP-9 was the answer"),
+        short_context: Some("Miners signalled support for BIP-66 without enforcing it, produced invalid blocks and briefly split the chain. <a href='https://github.com/bitcoin/bips/blob/master/bip-0009.mediawiki' target='_blank' class='text-[#f7931a] hover:underline'>BIP-9</a> was the answer"),
+        almanac: true,
         category: Protocol,
         date: "2015-07-04",
         block: Some(363_731),
@@ -536,7 +576,8 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "CLTV Activation (BIP-65)",
         // DB: height 388381, 784 txs
         description: "CheckLockTimeVerify activated at block 388,381, enabling time-locked transactions at the script level. This was a key building block for payment channels and the Lightning Network.",
-        short_context: Some("CheckLockTimeVerify activated at block 388,381, adding script-level timelocks and a building block for Lightning"),
+        short_context: Some("<a href='https://github.com/bitcoin/bips/blob/master/bip-0065.mediawiki' target='_blank' class='text-[#f7931a] hover:underline'>BIP-65</a> activated CheckLockTimeVerify at block 388,381, adding script-level timelocks and a building block for Lightning"),
+        almanac: true,
         category: Protocol,
         date: "2015-12-14",
         block: Some(388_381),
@@ -549,7 +590,8 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "CSV Activation (BIP-68/112/113)",
         // DB: height 419328
         description: "CheckSequenceVerify and relative timelocks activated at block 419,328. Together with CLTV, these opcodes provided the scripting primitives needed for Lightning Network payment channels.",
-        short_context: Some("CheckSequenceVerify added relative timelocks at block 419,328, completing the script primitives Lightning needed"),
+        short_context: Some("<a href='https://github.com/bitcoin/bips/blob/master/bip-0112.mediawiki' target='_blank' class='text-[#f7931a] hover:underline'>BIP-112</a> added CheckSequenceVerify at block 419,328, and with it the relative timelocks that completed the script primitives Lightning needed"),
+        almanac: true,
         category: Protocol,
         date: "2016-07-04",
         block: Some(419_328),
@@ -562,6 +604,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "Bitcoin Cash Fork",
         description: "Block 478,558 was the last block shared by Bitcoin and Bitcoin Cash. BCH forked with 8 MB blocks while Bitcoin kept 1 MB + SegWit. The \"block size war\" that defined Bitcoin's governance ended here.",
         short_context: Some("A contentious hard fork created BCH with 8MB blocks. Bitcoin kept its 1MB+SegWit approach. The \"block size war\" ended"),
+        almanac: true,
         category: Protocol,
         date: "2017-08-01",
         block: Some(478_558),
@@ -573,7 +616,8 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         slug: "uasf-bip148",
         title: "UASF Movement (BIP-148)",
         description: "Users threatened to reject blocks that didn't signal for SegWit activation, pressuring miners to comply. The UASF movement demonstrated that economic nodes, not just miners, enforce consensus rules.",
-        short_context: Some("Users threatened to reject any block that did not signal for SegWit, showing that economic nodes enforce consensus, not just miners"),
+        short_context: Some("Under <a href='https://github.com/bitcoin/bips/blob/master/bip-0148.mediawiki' target='_blank' class='text-[#f7931a] hover:underline'>BIP-148</a>, users threatened to reject any block that did not signal for SegWit, showing that economic nodes enforce consensus, not just miners"),
+        almanac: true,
         category: Protocol,
         date: "2017-08-01",
         block: None,
@@ -587,6 +631,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         // DB: height 481824, 1,866 txs, total_fees 212,514,269 sats (~2.1 BTC)
         description: "Segregated Witness activated at block 481,824. SegWit fixed transaction malleability, increased effective block capacity, and enabled the Lightning Network. The activation block contained 6 SegWit transactions out of 1,866 total.",
         short_context: Some("<a href='https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki' target='_blank' class='text-[#f7931a] hover:underline'>BIP-141</a> activated at block 481,824. Segregated Witness fixed transaction malleability and enabled the Lightning Network"),
+        almanac: true,
         category: Protocol,
         date: "2017-08-24",
         block: Some(481_824),
@@ -599,6 +644,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "SegWit2x Cancelled",
         description: "The New York Agreement plan to double the block size to 2 MB was abandoned due to lack of consensus. No single group (miners, businesses, or developers) was able to force the protocol change through.",
         short_context: Some("The New York Agreement plan to double the block size was abandoned due to lack of consensus. A pivotal moment for Bitcoin's governance"),
+        almanac: true,
         category: Protocol,
         date: "2017-11-08",
         block: None,
@@ -612,6 +658,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         // DB: height 709632, 2,043 txs, miner F2Pool
         description: "Taproot activated at block 709,632, introducing Schnorr signatures, MAST, and new script capabilities. The activation block contained 14 Taproot spends out of 2,043 transactions. Mined by F2Pool.",
         short_context: Some("<a href='https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki' target='_blank' class='text-[#f7931a] hover:underline'>BIP-341</a> activated at block 709,632. The largest Bitcoin upgrade since SegWit, enabling more private and efficient smart contracts"),
+        almanac: true,
         category: Protocol,
         date: "2021-11-14",
         block: Some(709_632),
@@ -624,6 +671,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "First Taproot Key-Path Spend",
         description: "Three blocks after Taproot activated, BitGo executed the first P2TR key-path spend in block 709,635 with the message \"Thanks Satoshi!\" embedded via OP_RETURN. Multiple Bitcoin developers also made early Taproot transactions in the same block.",
         short_context: Some("Three blocks after activation, BitGo made the first key-path spend, with \"Thanks Satoshi!\" embedded in an OP_RETURN"),
+        almanac: true,
         category: Protocol,
         date: "2021-11-14",
         block: Some(709_635),
@@ -637,6 +685,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         // DB: height 767430, 2,332 txs
         description: "Casey Rodarmor inscribed a pixel art skull as inscription #0 in block 767,430, launching the Ordinals protocol. This enabled arbitrary data to be embedded directly in Bitcoin witness data. The block contained 1 inscription among 2,332 transactions.",
         short_context: Some("Casey Rodarmor inscribed a pixel-art skull as inscription #0, one of 2,332 transactions in the block"),
+        almanac: true,
         category: Protocol,
         date: "2022-12-14",
         block: Some(767_430),
@@ -649,6 +698,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "First BRC-20 Token Deployed",
         description: "The \"ordi\" token was deployed as the first BRC-20 token by @domodata at inscription #348,020. It had a supply of 21 million with 1,000 per mint. All tokens were minted within approximately 18 hours.",
         short_context: Some("The \"ordi\" token was deployed by @domodata with a supply of 21 million. All of it was minted within about 18 hours"),
+        almanac: true,
         category: Protocol,
         date: "2023-03-08",
         block: Some(779_832),
@@ -662,6 +712,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         // DB: block 840000, 3,050 txs, 37.6 BTC fees
         description: "The Runes fungible token protocol went live at block 840,000, the same block as the fourth halving. 853 runes were etched within the first hour, causing extreme fee competition.",
         short_context: Some("The Runes fungible token protocol went live in the halving block itself, with 853 runes etched in the first hour"),
+        almanac: true,
         category: Protocol,
         date: "2024-04-20",
         block: Some(840_000),
@@ -678,7 +729,8 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "Duplicate Transaction IDs (BIP-30)",
         // DB: blocks 91842 and 91880 confirmed
         description: "Blocks 91,842 and 91,880 contained coinbase transactions with identical TXIDs, possible because coinbase inputs are all zeros. The duplicates overwrote the earlier UTXOs, permanently destroying 100 BTC. This led to BIP-30 (forbidding duplicates) and BIP-34 (requiring block height in coinbase).",
-        short_context: Some("Two blocks carried coinbase transactions with identical TXIDs, and the duplicate overwrote the original, destroying 100 BTC"),
+        short_context: Some("Two blocks carried coinbase transactions with identical TXIDs, and the duplicate overwrote the original, destroying 100 BTC. <a href='https://github.com/bitcoin/bips/blob/master/bip-0030.mediawiki' target='_blank' class='text-[#f7931a] hover:underline'>BIP-30</a> forbade it"),
+        almanac: true,
         category: Oddities,
         date: "2010-11-14",
         block: Some(91_842),
@@ -691,6 +743,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "Genesis Block Coinbase is Unspendable",
         description: "The 50 BTC in the genesis block can never be spent. Whether this was an intentional design choice by Satoshi or a code quirk (the genesis block wasn't inserted into the UTXO database) remains debated to this day.",
         short_context: Some("The genesis block's 50 BTC can never be spent. Whether Satoshi intended that or it fell out of the code is still debated"),
+        almanac: false,
         category: Oddities,
         date: "2009-01-03",
         block: Some(0),
@@ -704,6 +757,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         // DB: height 74691, 2 txs
         description: "Block 74,691 is where the \"good\" chain (without the 184 billion BTC) overtook the \"bad\" chain. Miners running the patched v0.3.10 software reorganized the chain, erasing the overflow transaction within hours of its creation.",
         short_context: Some("Block 74,691 is where the patched chain overtook the bad one, erasing the 184 billion BTC within hours of its creation"),
+        almanac: true,
         category: Oddities,
         date: "2010-08-15",
         block: Some(74_691),
@@ -730,6 +784,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         // deserve its own entry.
         description: "Block 291,241 carries one of the first standardized OP_RETURN outputs, around the time Bitcoin Core 0.9 made 40-byte data outputs relay-standard. This gave the ecosystem a \"blessed\" way to embed small amounts of data without polluting the UTXO set.",
         short_context: Some("One of the first standardized OP_RETURN outputs, mined around the time Bitcoin Core 0.9 made 40-byte data outputs relay-standard"),
+        almanac: true,
         category: Oddities,
         date: "2014-03-19",
         block: Some(291_241),
@@ -742,6 +797,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "Anyone-Can-Spend Dust Storm",
         description: "During the July 2015 flood attack, thousands of transactions created outputs with empty scriptPubKeys and zero value. These anyone-can-spend outputs were worthless but polluted the UTXO set, forcing every full node to track them until they were cleaned up weeks later.",
         short_context: Some("The flood attack left thousands of zero-value outputs with empty scripts, worthless but tracked by every full node for weeks"),
+        almanac: true,
         category: Oddities,
         date: "2015-07-15",
         block: None,
@@ -754,6 +810,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "SIGHASH_SINGLE Bug",
         description: "When SIGHASH_SINGLE is used and the input index exceeds the number of outputs, Bitcoin's original code returns hash value 1 instead of failing. Any signature valid for hash(1) can spend the input. This created real anyone-can-spend outputs in the wild. Fixed for SegWit inputs but unfixable for legacy.",
         short_context: Some("A quirk in the original code makes SIGHASH_SINGLE return a hash of 1 rather than failing, leaving inputs that anyone can spend"),
+        almanac: true,
         category: Oddities,
         date: "2012-07-01",
         block: None,
@@ -766,6 +823,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "COLDCARD RNG Failure",
         description: "COLDCARD firmware generated wallet seeds from a predictable fallback rather than the hardware random number generator, deriving keys from readable device state instead of real randomness. Mk2 and Mk3 were hit worst, and every current model was affected too. Seeds made this way are not merely weak, they can be found by brute force. The flaw shipped in March 2021, went unnoticed for over four years, and was being actively exploited the day it became public.",
         short_context: Some("COLDCARD firmware derived seeds from readable device state instead of its hardware RNG. It shipped in 2021 and went unnoticed for four years"),
+        almanac: true,
         category: Attacks,
         date: "2026-07-30",
         block: None,
@@ -782,6 +840,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "El Salvador Bitcoin Law Takes Effect",
         description: "The Bitcoin Law passed on 9 June 2021 came into force, making Bitcoin legal tender alongside the US dollar. The government launched the Chivo wallet with a $30 sign-up incentive.",
         short_context: Some("Bitcoin became legal tender alongside the US dollar. The government launched the Chivo wallet"),
+        almanac: true,
         category: Milestones,
         // Distinct from el-salvador-legal-tender, which is the law passing.
         // Passage and commencement are three months apart; both are events.
@@ -796,6 +855,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "Ordinals Protocol Launch",
         description: "Casey Rodarmor released Ordinal Theory and the ord client, giving witness-data inscriptions a numbering scheme and a wallet.",
         short_context: Some("Casey Rodarmor launched Ordinal Theory, enabling NFT-like inscriptions in Bitcoin witness data"),
+        almanac: true,
         category: Milestones,
         // first-ordinals (2022-12-14) is the first inscription, five weeks
         // earlier. The protocol's release and its first use are separate.
@@ -810,6 +870,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "BTC Reaches $73,000",
         description: "A new all-time high driven by spot ETF inflows in the months after approval.",
         short_context: Some("A new all-time high driven by ETF inflows. Bitcoin surpassed silver's market cap"),
+        almanac: true,
         category: Milestones,
         date: "2024-03-14",
         block: None,
@@ -822,6 +883,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         title: "BTC ATH ~$126,000",
         description: "The current all-time high. Bitcoin's market capitalisation passed $2.5 trillion.",
         short_context: Some("The current all-time high. Bitcoin's market cap surpassed $2.5 trillion"),
+        almanac: true,
         category: Milestones,
         date: "2025-10-06",
         block: None,
@@ -840,6 +902,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         // the week from 2021-06-21 produced 659 blocks against 1,008 expected.
         description: "Difficulty fell 27.94% at block 689,472, the largest downward adjustment in Bitcoin's history. Hashrate left the network faster than difficulty could respond after China's mining crackdown, and blocks slowed to roughly 15 minutes apart before the retarget corrected it.",
         short_context: Some("Difficulty fell 27.94% at block 689,472, the largest downward adjustment in Bitcoin's history"),
+        almanac: true,
         category: Oddities,
         date: "2021-07-03",
         block: Some(689_472),
@@ -857,6 +920,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         // blocks since the window opened have set bit 4.
         description: "BIP-110 proposed capping transaction outputs at 34 bytes through a modified BIP9 soft fork on version bit 4. It had no failure state, only mandatory signalling: from block 961,632 every block had to set bit 4 or enforcing nodes would reject it. AntPool mined 961,632 without the bit, mainnet accepted it, and the enforcing nodes forked onto a minority chain that inherited mainnet's difficulty at a fraction of its hashrate. Support had peaked at 2.53%, supplied almost entirely by OCEAN templates.",
         short_context: Some("Mandatory bit-4 signalling opened at block 961,632. AntPool mined it without the bit and enforcing nodes forked onto a minority chain"),
+        almanac: true,
         category: Attacks,
         date: "2026-08-08",
         block: Some(961_632),
@@ -995,6 +1059,30 @@ mod tests {
             "these entries lack short_context, so their Archives date link \
              lands on an Almanac day with no event row: {missing:?}"
         );
+    }
+
+    /// `almanac: false` is only safe while a sibling on the same date still
+    /// renders. It exists to stop two rows describing one subject, not to
+    /// hide a date. If an entry's date were ever changed so a suppressed
+    /// entry stood alone on its day, that day would show year cards and no
+    /// event row, which is the exact defect this list was reconciled to
+    /// remove, so it fails here instead.
+    #[test]
+    fn almanac_suppression_never_blanks_a_date() {
+        for e in HALL_OF_FAME.iter().filter(|e| !e.almanac) {
+            let has_sibling = HALL_OF_FAME.iter().any(|o| {
+                o.slug != e.slug
+                    && o.date == e.date
+                    && o.almanac
+                    && o.short_context.is_some()
+            });
+            assert!(
+                has_sibling,
+                "{:?} is hidden from the Almanac but is the only entry on \
+                 {}, so that date would render no event row",
+                e.slug, e.date
+            );
+        }
     }
 
     /// `short_context` is rendered with `inner_html`, so a stray unescaped
