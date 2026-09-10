@@ -1,8 +1,17 @@
+//! Curated Archives entries ("Hall of Fame"), verified against the live
+//! database and cross-referenced historical sources.
+//!
+//! Lives in `stats` beside `HallOfFameEntry` in `types.rs`, not under
+//! `routes`, because two layers read it: the Archives page renders the cards
+//! and the Almanac's `fetch_on_this_day` derives its event rows from the same
+//! entries. Keeping it under `routes` would have meant the data subsystem
+//! depending on the presentation layer to answer a data question.
+//!
 //! Curated Hall of Fame entries, verified against the live database and
 //! cross-referenced historical sources. Every block height and stat has been
 //! confirmed via direct DB query or authoritative documentation.
 
-use crate::stats::types::{HallOfFameEntry, HofCategory};
+use super::types::{HallOfFameEntry, HofCategory};
 
 use HofCategory::*;
 
@@ -952,6 +961,62 @@ mod tests {
                 assert!(
                     url.starts_with("https://"),
                     "entry {:?} source url is not https: {url}",
+                    e.slug
+                );
+            }
+        }
+    }
+
+    /// Every Archives date must resolve to something the Almanac can render,
+    /// and the shortfall must stay visible.
+    ///
+    /// The Archives and the Almanac used to keep separate lists of the same
+    /// history, 58 entries against 31, and nothing tied them together. Half
+    /// the Archives entries had no Almanac counterpart, so their date link
+    /// landed on a page with year cards and no event row, and the three events
+    /// both lists did hold carried different dates. The Almanac now derives
+    /// its rows from this list, so the only way to drift is an entry with no
+    /// `short_context`, which renders no row.
+    ///
+    /// That is a content gap rather than a bug, so this asserts a ceiling
+    /// rather than zero: the count may fall as copy is written, and the
+    /// assertion fails if it rises, which would mean a new entry was added
+    /// without the one-line copy the Almanac needs.
+    #[test]
+    fn entries_without_short_context_are_a_known_shrinking_set() {
+        let missing: Vec<&str> = HALL_OF_FAME
+            .iter()
+            .filter(|e| e.short_context.is_none())
+            .map(|e| e.slug)
+            .collect();
+
+        // 31 of 64 as of 2026-09-10. Lower this as copy is written; if it
+        // rises, a new entry needs a short_context before it ships.
+        assert!(
+            missing.len() <= 31,
+            "{} entries lack short_context, was 31. New entries need a \
+             one-line context for the Almanac. Missing: {missing:?}",
+            missing.len()
+        );
+    }
+
+    /// `short_context` is rendered with `inner_html`, so a stray unescaped
+    /// angle bracket becomes broken markup rather than visible text. Only
+    /// deliberate anchor tags are expected.
+    #[test]
+    fn short_context_html_is_limited_to_links() {
+        for e in HALL_OF_FAME {
+            let Some(c) = e.short_context else { continue };
+            let tags: Vec<&str> = c
+                .split('<')
+                .skip(1)
+                .map(|t| t.split('>').next().unwrap_or(""))
+                .collect();
+            for t in tags {
+                assert!(
+                    t.starts_with("a ") || t == "/a",
+                    "entry {:?} short_context contains <{t}>, only <a> is \
+                     expected here",
                     e.slug
                 );
             }
