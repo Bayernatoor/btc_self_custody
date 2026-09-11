@@ -65,7 +65,14 @@ pub fn AdvisoryBanner() -> impl IntoView {
                     <span class="font-semibold text-[#ffce6b]">
                         "Security advisory: Coldcard seed generation. "
                     </span>
-                    "Since March 2021, Coldcards generated seed words from a predictable random number generator instead of the hardware one. Mk2 and Mk3 are worst hit, but Mk4, Q and Mk5 are affected too. Funds are being stolen right now. If you generated a seed on a Coldcard, treat it as compromised and migrate. "
+                    // Cut to one line on 2026-09-11, six weeks after the
+                    // disclosure. The detail moved to /coldcard-migration
+                    // rather than being deleted: a banner that stays paragraph-
+                    // length past the acute phase gets scrolled past, and it
+                    // costs every page above the fold. What survives is the
+                    // instruction, since that is the part a reader has to act
+                    // on; the model list and the mechanism are one click away.
+                    "If you generated a seed on a Coldcard, treat it as compromised and migrate. "
                     <a
                         href="/coldcard-migration"
                         class="font-semibold text-[#ffce6b] underline underline-offset-2 whitespace-nowrap hover:text-white transition-colors"
