@@ -62,7 +62,11 @@ fn canvas_id(slug: &str) -> String {
 
 fn fmt_num(v: f64) -> String {
     let abs = v.abs();
-    if abs >= 1_000_000.0 {
+    if abs >= 1e12 {
+        format!("{:.1}T", v / 1e12)
+    } else if abs >= 1e9 {
+        format!("{:.1}G", v / 1e9)
+    } else if abs >= 1_000_000.0 {
         format!("{:.2}M", v / 1_000_000.0)
     } else if abs >= 10_000.0 {
         format!("{:.1}k", v / 1_000.0)
@@ -70,8 +74,12 @@ fn fmt_num(v: f64) -> String {
         format!("{v:.0}")
     } else if abs >= 1.0 {
         format!("{v:.2}")
-    } else if abs > 0.0 {
+    } else if abs >= 0.001 {
         format!("{v:.4}")
+    } else if abs > 0.0 {
+        // Genesis difficulty is 1 against a present-day 1.6e14, so the low
+        // over ALL is real but tiny. "0.0000" claimed it was zero.
+        format!("{v:.2e}")
     } else {
         "0".to_string()
     }
@@ -83,6 +91,10 @@ fn fmt_ms(ms: Option<f64>) -> Option<String> {
     chrono::DateTime::from_timestamp_millis(ms as i64)
         .map(|dt| dt.format("%Y-%m-%d").to_string())
 }
+
+/// Beyond this ratio between the first and last value, a percentage change
+/// stops informing: the number is dominated by how small the baseline was.
+const PCT_MEANINGFUL_RATIO: f64 = 10_000.0;
 
 /// When a peak or low happened, however the chart encodes it. Per-block charts
 /// carry a millisecond timestamp on the point; daily charts emit bare numbers
@@ -545,7 +557,7 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                     <KeyFacts kpis=kpis unit=meta.unit/>
                 </RailSection>
 
-                <RailSection title="Annotations">
+                <RailSection title="Overlays">
                     <OverlayToggles/>
                 </RailSection>
 
@@ -765,7 +777,15 @@ fn KeyFacts(kpis: Signal<Kpis>, unit: registry::Unit) -> impl IntoView {
         {move || match kpis.get() {
             Kpis::Series { average, peak, low, first, last, observations, axis_labels } => {
                 let change = last - first;
-                let pct = if first != 0.0 { change / first.abs() * 100.0 } else { 0.0 };
+                // A relative change is only meaningful against a baseline of
+                // comparable size. Difficulty over ALL starts at 1 and ends at
+                // 1.6e14, which the old guard let through as
+                // "+12745078971584212.0%" because it only skipped an exact
+                // zero. Past four orders of magnitude the percentage says
+                // nothing the absolute change does not say better.
+                let pct = (first != 0.0
+                    && (last / first).abs() < PCT_MEANINGFUL_RATIO)
+                    .then(|| change / first.abs() * 100.0);
                 view! {
                     <div class="space-y-2">
                         <Fact label="average" value=fmt_num(average) note=(unit != registry::Unit::Count).then(|| unit.label().to_string())/>
@@ -774,7 +794,7 @@ fn KeyFacts(kpis: Signal<Kpis>, unit: registry::Unit) -> impl IntoView {
                         <Fact
                             label="change"
                             value=format!("{}{}", if change >= 0.0 { "+" } else { "" }, fmt_num(change))
-                            note=(first != 0.0).then(|| format!("{pct:+.1}%"))
+                            note=pct.map(|p| format!("{p:+.1}%"))
                         />
                         <Fact label="observations" value=observations.to_string() note=None/>
                     </div>
@@ -829,20 +849,50 @@ fn Fact(
     }
 }
 
-/// The overlays already exist and are effectively hidden behind a floating
+/// The overlays already exist and were effectively hidden behind a floating
 /// panel. The rail is the fix asked for: they are simply always on screen.
+///
+/// Split into two groups because they are two different things wearing one
+/// name. Event markers are vertical lines drawn against the chart's own axis.
+/// Comparison series are extra data with their own scale, so they claim the
+/// right axis, and that axis has exactly one occupant: picking one greys the
+/// other, which is the same constraint the compare feature will contend with.
 #[component]
 fn OverlayToggles() -> impl IntoView {
     let s = expect_context::<ObservatoryState>();
+    let price_holds_axis = Signal::derive(move || s.overlay_price.get());
+    let size_holds_axis = Signal::derive(move || s.overlay_chain_size.get());
+    let never = Signal::derive(|| false);
     view! {
+        <p class="text-[0.6rem] uppercase tracking-widest text-white/30 mb-1.5">
+            "Event markers"
+        </p>
         <div class="space-y-1.5">
-            <Toggle label="Halvings" get=s.overlay_halvings set=s.set_overlay_halvings/>
-            <Toggle label="BIP activations" get=s.overlay_bips set=s.set_overlay_bips/>
-            <Toggle label="Core releases" get=s.overlay_core set=s.set_overlay_core/>
-            <Toggle label="Events" get=s.overlay_events set=s.set_overlay_events/>
-            <Toggle label="Price (right axis)" get=s.overlay_price set=s.set_overlay_price/>
-            <Toggle label="Chain size (right axis)" get=s.overlay_chain_size set=s.set_overlay_chain_size/>
+            <Toggle label="Halvings" get=s.overlay_halvings set=s.set_overlay_halvings disabled=never/>
+            <Toggle label="BIP activations" get=s.overlay_bips set=s.set_overlay_bips disabled=never/>
+            <Toggle label="Core releases" get=s.overlay_core set=s.set_overlay_core disabled=never/>
+            <Toggle label="Events" get=s.overlay_events set=s.set_overlay_events disabled=never/>
         </div>
+        <p class="text-[0.6rem] uppercase tracking-widest text-white/30 mt-3 mb-1.5">
+            "Comparison series"
+        </p>
+        <div class="space-y-1.5">
+            <Toggle
+                label="Price (USD)"
+                get=s.overlay_price
+                set=s.set_overlay_price
+                disabled=size_holds_axis
+            />
+            <Toggle
+                label="Chain size"
+                get=s.overlay_chain_size
+                set=s.set_overlay_chain_size
+                disabled=price_holds_axis
+            />
+        </div>
+        <p class="text-[0.6rem] text-white/25 mt-1.5">
+            "one at a time: they share the right axis"
+        </p>
     }
 }
 
@@ -851,9 +901,19 @@ fn Toggle(
     label: &'static str,
     get: ReadSignal<bool>,
     set: WriteSignal<bool>,
+    /// Greyed and inert when the other occupant already holds the right axis.
+    /// Showing why beats silently dropping one of two selected series.
+    disabled: Signal<bool>,
 ) -> impl IntoView {
     view! {
-        <label class="flex items-center gap-2 cursor-pointer group">
+        <label
+            class=move || if disabled.get() {
+                "flex items-center gap-2 opacity-40 cursor-not-allowed"
+            } else {
+                "flex items-center gap-2 cursor-pointer group"
+            }
+            title=move || if disabled.get() { "The right axis is taken by the other series" } else { "" }
+        >
             <span
                 class=move || if get.get() {
                     "w-3.5 h-3.5 rounded border border-[#f7931a] bg-[#f7931a]/30 shrink-0"
@@ -865,7 +925,11 @@ fn Toggle(
                 type="checkbox"
                 class="sr-only"
                 prop:checked=move || get.get()
-                on:change=move |_| set.update(|v| *v = !*v)
+                on:change=move |_| {
+                    if !disabled.get() {
+                        set.update(|v| *v = !*v);
+                    }
+                }
             />
             <span class="text-sm text-white/60 group-hover:text-white/80 transition-colors">{label}</span>
         </label>

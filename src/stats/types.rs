@@ -196,7 +196,9 @@ pub struct BlockDetail {
 /// is the mean block size across all blocks mined that day). Fields prefixed with
 /// `total_` are day-wide sums. This distinction matters because ~144 blocks are
 /// mined per day, so totals scale with block count while averages do not.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+/// `Default` is derived so a test can name the two or three fields it cares
+/// about out of 28 rather than spelling out a whole row.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct DailyAggregate {
     /// Date string in YYYY-MM-DD format (UTC).
     pub date: String,

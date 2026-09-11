@@ -201,7 +201,13 @@ pub(crate) fn x_axis_for(
         json!({
             "type": "category",
             "data": categories,
-            "axisLabel": { "color": "#aaa" },
+            "axisLabel": {
+                "color": "#aaa",
+                // Thin the labels out rather than letting them collide, which
+                // is what produced the odd 9-month gaps between ticks on ALL.
+                "hideOverlap": true,
+                "formatter": date_label_sentinel(categories),
+            },
             "axisLine": { "lineStyle": { "color": "#555" } }
         })
     } else {
@@ -212,6 +218,42 @@ pub(crate) fn x_axis_for(
         })
     }
 }
+
+/// Which date format the category axis should render, as a sentinel for
+/// `stats.js` to swap for a real formatter.
+///
+/// The axis `data` stays as `YYYY-MM-DD` and is never rewritten: the key
+/// figures read it back to date the peak and low, and the CSV export takes
+/// its first column from it. Only the *label* changes.
+///
+/// Format chosen from the span rather than from the range name, because the
+/// builder is handed a slice and not a range, and because a custom window can
+/// be any length. Sixteen years of history as `2009-10-05` at nine-month
+/// intervals is unreadable; `Jul '09` is not.
+fn date_label_sentinel(categories: &[String]) -> &'static str {
+    let span_days = match (categories.first(), categories.last()) {
+        (Some(a), Some(b)) => days_between(a, b).unwrap_or(0),
+        _ => 0,
+    };
+    // Two years is where day-level labels stop being legible: beyond it there
+    // are too many to thin down to something evenly spaced.
+    if span_days > 730 {
+        DATE_LABEL_MONTH_YEAR
+    } else {
+        DATE_LABEL_DAY_MONTH
+    }
+}
+
+fn days_between(from: &str, to: &str) -> Option<i64> {
+    let a = chrono::NaiveDate::parse_from_str(from, "%Y-%m-%d").ok()?;
+    let b = chrono::NaiveDate::parse_from_str(to, "%Y-%m-%d").ok()?;
+    Some((b - a).num_days())
+}
+
+/// `2009-07-15` renders as `Jul '09`. Must match `stats.js`.
+pub(crate) const DATE_LABEL_MONTH_YEAR: &str = "__date_month_year__";
+/// `2026-06-13` renders as `13 Jun`. Must match `stats.js`.
+pub(crate) const DATE_LABEL_DAY_MONTH: &str = "__date_day_month__";
 
 /// Y-axis config with name label, dashed grid lines, and dark theme styling.
 pub(crate) fn y_axis(name: &str) -> serde_json::Value {
@@ -281,6 +323,7 @@ fn set_axis_scale(
         // Hand the linear axis back exactly as the builder configured it.
         o.remove("min");
         o.remove("max");
+        o.remove("splitNumber");
         return;
     }
 
@@ -312,6 +355,11 @@ fn set_axis_scale(
         // significant figures keeps the fit tight and the label legible.
         o.insert("min".to_string(), json!(round_sig(lo, 3, RoundDir::Down)));
         o.insert("max".to_string(), json!(round_sig(hi, 3, RoundDir::Up)));
+        // ECharts is sparing with ticks on a log axis whose bounds are not
+        // decade-aligned, and ours never are since they fit the data: over
+        // ALL, difficulty got three gridlines across fourteen decades. This
+        // is a hint rather than a guarantee, which is all ECharts offers.
+        o.insert("splitNumber".to_string(), json!(LOG_AXIS_SPLITS));
     }
 }
 
@@ -424,6 +472,10 @@ fn round_sig(v: f64, digits: i32, dir: RoundDir) -> f64 {
     snapped / scale
 }
 
+/// Tick hint for a logarithmic axis. Eight reads as a readable ladder across
+/// the fourteen decades difficulty covers without crowding a narrow range.
+const LOG_AXIS_SPLITS: u32 = 8;
+
 /// Breathing room above and below the plotted range on a log axis, as a
 /// fraction. Multiplicative rather than absolute, since that is scale
 /// invariant and a log axis is all ratios.
@@ -528,6 +580,37 @@ fn log_scale_is_meaningful(option: &serde_json::Value) -> bool {
     // a bounded percentage axis.
     true
 }
+
+/// A value axis whose labels are abbreviated with SI suffixes by the client.
+///
+/// For quantities that span many orders of magnitude and have no natural
+/// scaled unit. Difficulty is the case that forced it: it runs from 1 at
+/// genesis to 1.6e14 today, so no fixed divisor works. Dividing by 1e12 and
+/// calling the axis "T" put every historical value below 1, where ECharts
+/// falls back to full decimal notation and the floor label rendered as
+/// "0.0000000001".
+///
+/// Block size in MB, chain size in GB and inscription payloads in KB do not
+/// need this: each spans three or four decades and stays above ~0.001, so a
+/// fixed unit reads naturally.
+///
+/// The formatter is a sentinel string rather than a function because this
+/// option is serialised from Rust, where a JS function cannot be expressed.
+/// `stats.js` swaps it for a real one; see `SI_AXIS_SENTINEL` there.
+pub(crate) fn y_axis_si(name: &str) -> serde_json::Value {
+    let mut axis = y_axis(name);
+    if let Some(o) = axis.as_object_mut() {
+        o.insert(
+            "axisLabel".to_string(),
+            json!({ "color": "#aaa", "formatter": SI_AXIS_SENTINEL }),
+        );
+    }
+    axis
+}
+
+/// Marks an axis whose labels `stats.js` should abbreviate. Must match the
+/// constant of the same name there.
+pub(crate) const SI_AXIS_SENTINEL: &str = "__si_suffix__";
 
 /// Fallback chart option when no data is available for the current range.
 pub(crate) fn no_data_chart(title: &str) -> serde_json::Value {
@@ -1621,6 +1704,83 @@ mod tests {
         }
     }
 
+    /// Sixteen years of history labelled `2009-10-05` at nine-month intervals
+    /// is unreadable. The format follows the span, not the range name, since
+    /// the builder is handed a slice and a custom window can be any length.
+    #[test]
+    fn date_labels_follow_the_span() {
+        let all: Vec<String> =
+            ["2009-01-03".into(), "2026-09-11".into()].into();
+        assert_eq!(date_label_sentinel(&all), DATE_LABEL_MONTH_YEAR);
+
+        let quarter: Vec<String> =
+            ["2026-06-13".into(), "2026-09-11".into()].into();
+        assert_eq!(date_label_sentinel(&quarter), DATE_LABEL_DAY_MONTH);
+
+        // Two years exactly stays day-level; past it, months.
+        let two_years: Vec<String> =
+            ["2024-09-11".into(), "2026-09-10".into()].into();
+        assert_eq!(date_label_sentinel(&two_years), DATE_LABEL_DAY_MONTH);
+        let over: Vec<String> =
+            ["2024-09-11".into(), "2026-10-11".into()].into();
+        assert_eq!(date_label_sentinel(&over), DATE_LABEL_MONTH_YEAR);
+
+        // Empty or unparseable must not panic, and falls back to day level.
+        assert_eq!(date_label_sentinel(&[]), DATE_LABEL_DAY_MONTH);
+        let junk: Vec<String> = ["nope".into(), "also nope".into()].into();
+        assert_eq!(date_label_sentinel(&junk), DATE_LABEL_DAY_MONTH);
+    }
+
+    /// The axis `data` must stay as ISO dates whatever the label format: the
+    /// key figures read it back to date the peak and low, and the CSV export
+    /// takes its first column from it.
+    #[test]
+    fn date_axis_keeps_iso_values_and_only_shortens_labels() {
+        let cats: Vec<String> =
+            ["2009-01-03".into(), "2026-09-11".into()].into();
+        let axis = x_axis_for(true, &cats);
+        assert_eq!(axis["data"][0], "2009-01-03");
+        assert_eq!(axis["data"][1], "2026-09-11");
+        assert_eq!(axis["axisLabel"]["formatter"], DATE_LABEL_MONTH_YEAR);
+        assert_eq!(axis["axisLabel"]["hideOverlap"], json!(true));
+    }
+
+    /// Difficulty has no natural scaled unit: 1 at genesis against 1.6e14
+    /// today. Dividing by 1e12 and calling the axis "T" put every historical
+    /// value below 1, where the floor label rendered as "0.0000000001".
+    #[test]
+    fn difficulty_uses_raw_values_with_an_si_axis() {
+        let opt = difficulty_chart_daily(&[
+            daily_with_difficulty("2009-01-03", 1.0),
+            daily_with_difficulty("2026-09-11", 1.6e14),
+        ]);
+        // Raw, not pre-divided: 1e12 would put genesis at 1e-12.
+        let data = &opt["series"][0]["data"];
+        assert_eq!(data[0].as_f64().unwrap(), 1.0);
+        assert_eq!(data[1].as_f64().unwrap(), 1.6e14);
+        // And the axis asks the client to abbreviate.
+        assert_eq!(opt["yAxis"]["axisLabel"]["formatter"], SI_AXIS_SENTINEL);
+        assert_eq!(opt["yAxis"]["name"], "Difficulty");
+    }
+
+    /// A log axis that fits its data never lands on decade boundaries, and
+    /// ECharts is sparing with ticks there: difficulty over ALL got three
+    /// gridlines across fourteen decades.
+    #[test]
+    fn log_axis_asks_for_more_ticks_and_gives_them_back() {
+        let mut v = json!({
+            "yAxis": {"type": "value"},
+            "series": [{"name": "d", "data": [[1, 1.0], [2, 1.6e14]]}]
+        });
+        apply_log_scale(&mut v, true);
+        assert_eq!(v["yAxis"]["splitNumber"], json!(LOG_AXIS_SPLITS));
+        apply_log_scale(&mut v, false);
+        assert!(
+            v["yAxis"].get("splitNumber").is_none(),
+            "the hint must not persist onto the linear axis"
+        );
+    }
+
     /// A narrow range must still get a log axis, fitted to its own data.
     /// Glassnode offers log from 7d to ALL and so should this; an earlier
     /// version refused under two decades, which was really covering for
@@ -1894,6 +2054,17 @@ mod tests {
         apply_log_scale(&mut v, true);
         assert_eq!(v["yAxis"][0]["type"], "log");
         assert_eq!(v["yAxis"][1]["type"], "value");
+    }
+
+    fn daily_with_difficulty(
+        date: &str,
+        d: f64,
+    ) -> crate::stats::types::DailyAggregate {
+        crate::stats::types::DailyAggregate {
+            date: date.to_string(),
+            avg_difficulty: d,
+            ..Default::default()
+        }
     }
 
     fn v_type(v: &serde_json::Value) -> &str {

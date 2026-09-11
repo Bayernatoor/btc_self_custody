@@ -275,12 +275,12 @@ pub fn difficulty_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Difficulty");
     }
 
-    let raw_str = build_data_array_f64(blocks, |b| b.difficulty / 1e12);
+    let raw_str = build_data_array_f64(blocks, |b| b.difficulty);
     let raw = data_array_value(&raw_str);
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
-        "yAxis": y_axis("T"),
+        "yAxis": y_axis_si("Difficulty"),
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
         "series": [
@@ -301,11 +301,11 @@ pub fn difficulty_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     }
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let vals: Vec<f64> = days.iter().map(|d| d.avg_difficulty / 1e12).collect();
+    let vals: Vec<f64> = days.iter().map(|d| d.avg_difficulty).collect();
 
     build_option(json!({
         "xAxis": x_axis_for(true, &cats),
-        "yAxis": y_axis("T"),
+        "yAxis": y_axis_si("Difficulty"),
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
         "series": [
@@ -1168,8 +1168,7 @@ pub fn difficulty_ribbon_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         "rgba(10,60,170,0.7)", // darkest blue
     ];
 
-    let diff_vals: Vec<f64> =
-        blocks.iter().map(|b| b.difficulty / 1e12).collect();
+    let diff_vals: Vec<f64> = blocks.iter().map(|b| b.difficulty).collect();
 
     let mut series = Vec::with_capacity(windows.len());
     for (i, &w) in windows.iter().enumerate() {
@@ -1188,7 +1187,7 @@ pub fn difficulty_ribbon_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
-        "yAxis": y_axis("Difficulty (T)"),
+        "yAxis": y_axis_si("Difficulty"),
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
         "legend": { "show": true },
@@ -1216,8 +1215,7 @@ pub fn difficulty_ribbon_chart_daily(
     ];
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let diff_vals: Vec<f64> =
-        days.iter().map(|d| d.avg_difficulty / 1e12).collect();
+    let diff_vals: Vec<f64> = days.iter().map(|d| d.avg_difficulty).collect();
 
     let mut series = Vec::with_capacity(windows.len());
     for (i, &w) in windows.iter().enumerate() {
@@ -1241,7 +1239,7 @@ pub fn difficulty_ribbon_chart_daily(
 
     build_option(json!({
         "xAxis": x_axis_for(true, &cats),
-        "yAxis": y_axis("Difficulty (T)"),
+        "yAxis": y_axis_si("Difficulty"),
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
         "legend": { "show": true },

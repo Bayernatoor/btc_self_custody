@@ -105,6 +105,106 @@
     };
 
     // Apply mobile-specific option tweaks (called on init and resize)
+    // Must match SI_AXIS_SENTINEL in src/stats/charts/mod.rs. The chart option
+    // is serialised from Rust, where a JS function cannot be expressed, so an
+    // axis that wants abbreviated labels marks itself with this string and we
+    // swap in the real formatter here.
+    var SI_AXIS_SENTINEL = '__si_suffix__';
+
+    // 1 -> "1", 1500 -> "1.5K", 1.6e14 -> "160T".
+    //
+    // Exists for quantities with no natural scaled unit that span many orders
+    // of magnitude. Difficulty runs from 1 at genesis to 1.6e14 today, so no
+    // fixed divisor works: dividing by 1e12 put every historical value below
+    // 1, where the axis rendered its floor as "0.0000000001".
+    //
+    // Deliberately short of "P" and beyond: difficulty reaches the low
+    // hundreds of T, and a suffix a reader has to look up is worse than an
+    // exponent. Anything larger falls back to exponential notation.
+    function siSuffix(v) {
+        if (v === 0) return '0';
+        if (!isFinite(v)) return String(v);
+        var neg = v < 0;
+        var n = Math.abs(v);
+        var units = [
+            { at: 1e12, s: 'T' },
+            { at: 1e9,  s: 'G' },
+            { at: 1e6,  s: 'M' },
+            { at: 1e3,  s: 'K' }
+        ];
+        var out;
+        if (n >= 1e15) {
+            out = n.toExponential(1);
+        } else {
+            var u = null;
+            for (var i = 0; i < units.length; i++) {
+                if (n >= units[i].at) { u = units[i]; break; }
+            }
+            if (u) {
+                // Up to one decimal, but no trailing ".0": 160T not 160.0T.
+                var scaled = n / u.at;
+                out = (scaled < 10 ? Number(scaled.toFixed(1))
+                                   : Math.round(scaled)) + u.s;
+            } else if (n >= 1) {
+                out = String(Number(n.toPrecision(3)));
+            } else {
+                // Below 1 a log axis can still place ticks; keep them short
+                // rather than printing ten leading zeros.
+                out = n >= 0.001 ? String(Number(n.toPrecision(2)))
+                                 : n.toExponential(0);
+            }
+        }
+        return neg ? '-' + out : out;
+    }
+
+    // Must match the constants in src/stats/charts/mod.rs.
+    var DATE_MONTH_YEAR = '__date_month_year__';
+    var DATE_DAY_MONTH = '__date_day_month__';
+    var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun',
+                  'Jul','Aug','Sep','Oct','Nov','Dec'];
+
+    // The category axis carries 'YYYY-MM-DD' and keeps it: the key figures
+    // read it back to date the peak and low, and the CSV export takes its
+    // first column from it. Only the label is shortened, and Rust picks which
+    // shortening from the span it can see.
+    //
+    // Parsed by hand rather than with `new Date(s)`, which would apply the
+    // viewer's timezone and can shift a date by a day either way.
+    function shortDate(value, style) {
+        var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value));
+        if (!m) return value;
+        var year = m[1], mon = MONTHS[parseInt(m[2], 10) - 1], day = m[3];
+        if (!mon) return value;
+        if (style === DATE_MONTH_YEAR) {
+            return mon + " '" + year.slice(2);
+        }
+        return String(parseInt(day, 10)) + ' ' + mon;
+    }
+
+    // Replace the sentinel on every axis that asked for it. Runs on each
+    // setOption, since the option is rebuilt whenever the range, the overlays
+    // or the scale change.
+    function applySiAxisFormatters(opts) {
+        ['yAxis', 'xAxis'].forEach(function(key) {
+            var axes = opts[key];
+            if (!axes) return;
+            if (!Array.isArray(axes)) axes = [axes];
+            axes.forEach(function(axis) {
+                if (!axis || !axis.axisLabel) return;
+                var f = axis.axisLabel.formatter;
+                if (f === SI_AXIS_SENTINEL) {
+                    axis.axisLabel.formatter = function(v) {
+                        return siSuffix(v);
+                    };
+                } else if (f === DATE_MONTH_YEAR || f === DATE_DAY_MONTH) {
+                    axis.axisLabel.formatter = function(v) {
+                        return shortDate(v, f);
+                    };
+                }
+            });
+        });
+    }
+
     function applyMobileAdjustments(opts) {
         if (window.innerWidth >= 640) return;
         // Hide toolbox — not usable on touch screens
@@ -451,6 +551,7 @@
                 var watermarkPx = Math.max(20, Math.min(56, Math.floor(chartW * 0.08)));
                 opts.graphic[0].style.font = 'bold ' + watermarkPx + 'px Inter, system-ui, sans-serif';
             }
+            applySiAxisFormatters(opts);
             applyMobileAdjustments(opts);
             // The single-chart view puts a labelled PNG button in its header,
             // so the toolbox's save icon would be a second control doing the
