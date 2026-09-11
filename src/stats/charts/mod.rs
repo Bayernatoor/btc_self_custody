@@ -239,6 +239,24 @@ pub fn apply_log_scale(option: &mut serde_json::Value, on: bool) {
     if on && !log_scale_is_meaningful(option) {
         return;
     }
+    // Read before the axis is borrowed mutably: both come from the series
+    // alongside it.
+    let extent = positive_extent(option);
+    let dropped = if on { non_positive_count(option) } else { 0 };
+    set_axis_scale(option, on, extent);
+    // Reconciled unconditionally, and after the axis, so switching back to
+    // linear clears a notice the log view left behind. Doing it inside the
+    // axis block meant the `!on` path returned before reaching it, and the
+    // warning stayed on a linear chart.
+    set_log_notice(option, dropped);
+}
+
+/// Set the left value axis type, and its bounds when logarithmic.
+fn set_axis_scale(
+    option: &mut serde_json::Value,
+    on: bool,
+    extent: Option<(f64, f64)>,
+) {
     let Some(axis) = option.get_mut("yAxis") else {
         return;
     };
@@ -258,6 +276,187 @@ pub fn apply_log_scale(option: &mut serde_json::Value, on: bool) {
         "type".to_string(),
         serde_json::Value::String(if on { "log" } else { "value" }.to_string()),
     );
+
+    if !on {
+        // Hand the linear axis back exactly as the builder configured it.
+        o.remove("min");
+        o.remove("max");
+        return;
+    }
+
+    // Bounds come from the data, not from decade boundaries.
+    //
+    // Left to itself ECharts picks decades from its split count, which on
+    // difficulty over ALL put the top tick eight decades above the real
+    // maximum. Rounding out to the enclosing decades fixes that case and
+    // ruins narrow ones: over 1Y difficulty spans 140 T to 160 T, which
+    // rounds to a 100-to-1000 axis with every point pinned to the floor.
+    //
+    // The data extent with a small multiplicative pad is right at both ends
+    // of that scale, because on a log axis a ratio is the same shape wherever
+    // it sits. A narrow range then looks close to linear, which is the honest
+    // rendering of narrow data rather than a defect.
+    if let Some((lo, hi)) = extent {
+        // Degenerate case: one distinct value, where any ratio-based pad
+        // collapses. Give it a decade either side so the line has somewhere
+        // to sit instead of an axis of zero height.
+        let (lo, hi) = if hi / lo < 1.000_001 {
+            (lo / 10.0, hi * 10.0)
+        } else {
+            (lo * (1.0 - LOG_AXIS_PAD), hi * (1.0 + LOG_AXIS_PAD))
+        };
+        // Rounded, because ECharts prints an explicit min and max verbatim as
+        // axis labels. The raw padded values are floats off the data, so the
+        // axis read "159.09249284" and "122.4342086864" while the linear
+        // version of the same chart showed 0, 30, 60, 90, 120, 150. Three
+        // significant figures keeps the fit tight and the label legible.
+        o.insert("min".to_string(), json!(round_sig(lo, 3, RoundDir::Down)));
+        o.insert("max".to_string(), json!(round_sig(hi, 3, RoundDir::Up)));
+    }
+}
+
+/// How many left-axis points a log scale cannot plot.
+fn non_positive_count(option: &serde_json::Value) -> usize {
+    let Some(series) = option.get("series").and_then(|s| s.as_array()) else {
+        return 0;
+    };
+    series
+        .iter()
+        .filter(|s| {
+            s.get("yAxisIndex").and_then(|i| i.as_u64()).unwrap_or(0) == 0
+        })
+        .flat_map(|s| {
+            s.get("data")
+                .and_then(|d| d.as_array())
+                .map(|a| a.as_slice())
+                .unwrap_or_default()
+        })
+        .filter(|v| {
+            let y = match v {
+                serde_json::Value::Number(n) => n.as_f64(),
+                serde_json::Value::Array(a) => {
+                    a.get(1).and_then(|y| y.as_f64())
+                }
+                _ => None,
+            };
+            matches!(y, Some(y) if y <= 0.0)
+        })
+        .count()
+}
+
+/// Say so, in the chart, when a log axis cannot plot every point.
+///
+/// Written into the option rather than returned to the caller so it reaches
+/// every view for free: the multi-chart cards, the single-chart page and the
+/// PNG export all render the same option and none of them need to know this
+/// rule exists. The alternative, returning a status for each view to render,
+/// would have to be plumbed through `chart_memo!` and then remembered at
+/// every call site.
+///
+/// Zero and negative are legitimate values here (fees on an empty block, net
+/// UTXO growth), so this is a normal state to be in, not an error.
+fn set_log_notice(option: &mut serde_json::Value, dropped: usize) {
+    let Some(graphic) = option.get_mut("graphic") else {
+        return;
+    };
+    let Some(items) = graphic.as_array_mut() else {
+        return;
+    };
+    // Idempotent: re-applying must not stack notices, since the option is
+    // rebuilt and re-decorated on every range and overlay change.
+    items.retain(|g| {
+        g.get("id").and_then(|i| i.as_str()) != Some(LOG_NOTICE_ID)
+    });
+    if dropped == 0 {
+        return;
+    }
+    let text = if dropped == 1 {
+        "1 point is zero or negative and cannot be shown on a log axis"
+            .to_string()
+    } else {
+        format!(
+            "{dropped} points are zero or negative and cannot be shown on a log axis"
+        )
+    };
+    items.push(json!({
+        "id": LOG_NOTICE_ID,
+        "type": "text",
+        "left": "center",
+        "top": 4,
+        "silent": true,
+        "z": 10,
+        "style": {
+            "text": text,
+            "fill": "#f0d9a8",
+            "font": "11px Inter, system-ui, sans-serif",
+            "textAlign": "center"
+        }
+    }));
+}
+
+/// Marks the notice so it can be removed rather than duplicated on re-apply.
+const LOG_NOTICE_ID: &str = "log-scale-notice";
+
+/// Which way `round_sig` breaks, so a bound never crops the data it is meant
+/// to contain: the lower bound rounds down, the upper rounds up.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RoundDir {
+    Down,
+    Up,
+}
+
+/// Round to `digits` significant figures, away from the data.
+///
+/// Significant figures rather than decimal places because a log axis spans
+/// orders of magnitude: the same chart can need 0.221 at one end and 159 at
+/// the other, and a fixed number of decimals is wrong at one of them.
+fn round_sig(v: f64, digits: i32, dir: RoundDir) -> f64 {
+    if v == 0.0 || !v.is_finite() {
+        return v;
+    }
+    let mag = v.abs().log10().floor();
+    let scale = 10f64.powi(digits - 1 - mag as i32);
+    let scaled = v * scale;
+    let snapped = match dir {
+        RoundDir::Down => scaled.floor(),
+        RoundDir::Up => scaled.ceil(),
+    };
+    snapped / scale
+}
+
+/// Breathing room above and below the plotted range on a log axis, as a
+/// fraction. Multiplicative rather than absolute, since that is scale
+/// invariant and a log axis is all ratios.
+const LOG_AXIS_PAD: f64 = 0.02;
+
+/// Smallest and largest strictly positive value plotted on the left axis,
+/// which is what a log axis can actually show.
+fn positive_extent(option: &serde_json::Value) -> Option<(f64, f64)> {
+    let series = option.get("series")?.as_array()?;
+    let mut lo = f64::INFINITY;
+    let mut hi = f64::NEG_INFINITY;
+    for s in series {
+        if s.get("yAxisIndex").and_then(|i| i.as_u64()).unwrap_or(0) != 0 {
+            continue;
+        }
+        let Some(data) = s.get("data").and_then(|d| d.as_array()) else {
+            continue;
+        };
+        for v in data {
+            let y = match v {
+                serde_json::Value::Number(n) => n.as_f64(),
+                serde_json::Value::Array(a) => {
+                    a.get(1).and_then(|y| y.as_f64())
+                }
+                _ => None,
+            };
+            if let Some(y) = y.filter(|y| *y > 0.0) {
+                lo = lo.min(y);
+                hi = hi.max(y);
+            }
+        }
+    }
+    (lo.is_finite() && hi.is_finite()).then_some((lo, hi))
 }
 
 /// Whether a log axis would say something true about this chart.
@@ -293,9 +492,12 @@ fn log_scale_is_meaningful(option: &serde_json::Value) -> bool {
     if percent_axis {
         return false;
     }
-    // Only the left-axis series matter; an overlay on the right keeps its own
-    // linear scale either way.
-    series
+    // Non-positive points are deliberately NOT a refusal. ECharts cannot plot
+    // zero or negative on a log axis, but the honest response is to switch
+    // and say so rather than to ignore the request: `note_dropped_points`
+    // below writes a notice into the option. Glassnode does the same, and a
+    // control that silently does nothing is worse than one that explains.
+    let _unused_positivity_check = series
         .iter()
         .filter(|s| {
             s.get("yAxisIndex").and_then(|i| i.as_u64()).unwrap_or(0) == 0
@@ -314,7 +516,17 @@ fn log_scale_is_meaningful(option: &serde_json::Value) -> bool {
                 .map(|y| y > 0.0)
                 .unwrap_or(true),
             _ => true,
-        })
+        });
+    // Deliberately no minimum span either. A narrow range renders almost
+    // identically to linear, which is the correct outcome rather than a
+    // reason to refuse: the reader asked for a log axis and gets one, at 7d
+    // as at ALL. An earlier version refused under two decades, which only
+    // papered over decade-rounded bounds that were themselves the bug.
+    //
+    // So the only hard refusals left are the two where a log axis would be
+    // actively misleading rather than merely uninformative: stacked bands and
+    // a bounded percentage axis.
+    true
 }
 
 /// Fallback chart option when no data is available for the current range.
@@ -540,7 +752,67 @@ pub(crate) fn build_option(extra: serde_json::Value) -> serde_json::Value {
             base_obj.insert(k, v);
         }
     }
+    fit_value_axis(&mut base);
     base
+}
+
+/// Let the left value axis fit its data instead of always reaching zero.
+///
+/// ECharts defaults a value axis to `scale: false`, which forces zero into
+/// range. For a quantity that never goes near zero that throws the detail
+/// away: difficulty over three months sat between 120 T and 142 T on a
+/// 0-to-150 axis, so every adjustment in the quarter read as a flat line.
+/// Fitting the axis is what makes the same chart legible, and it is why the
+/// log view appeared to be such an improvement: log was quietly doing the
+/// fitting the linear axis should have been doing all along.
+///
+/// Three kinds of chart still need zero, and the reason differs each time:
+///
+/// - **Bars.** Bar length encodes magnitude, so a cut axis misstates ratios.
+///   This is the one where fitting would actually mislead rather than just
+///   look different.
+/// - **Stacked.** The stack is a sum measured from zero.
+/// - **Percentages.** 0 to 100 is the frame that gives the number meaning.
+///
+/// Decided from the assembled option rather than from per-chart metadata, the
+/// same way the log refusals are, so a new chart gets the right axis without
+/// declaring anything.
+fn fit_value_axis(option: &mut serde_json::Value) {
+    let series = option
+        .get("series")
+        .and_then(|s| s.as_array())
+        .map(|a| a.as_slice())
+        .unwrap_or_default();
+    if series.is_empty() {
+        return;
+    }
+    let has_bars = series.iter().any(|s| {
+        s.get("type").and_then(|t| t.as_str()) == Some("bar")
+            || s.get("stack").is_some()
+    });
+    if has_bars {
+        return;
+    }
+    let Some(axis) = option.get_mut("yAxis") else {
+        return;
+    };
+    let first = match axis {
+        serde_json::Value::Array(a) => a.first_mut(),
+        other => Some(other),
+    };
+    let Some(serde_json::Value::Object(o)) = first else {
+        return;
+    };
+    if o.get("type").and_then(|t| t.as_str()) != Some("value") {
+        return;
+    }
+    // A percentage axis declares its own frame; leave it alone.
+    if o.get("max").and_then(|m| m.as_f64()) == Some(100.0)
+        || o.get("min").is_some()
+    {
+        return;
+    }
+    o.insert("scale".to_string(), serde_json::Value::Bool(true));
 }
 
 pub(crate) fn format_num(n: u64) -> String {
@@ -1288,13 +1560,222 @@ mod tests {
                 {"type": "value", "name": "Count"},
                 {"type": "value", "name": "Price"}
             ],
-            "series": [{"name": "Count", "data": [[1, 5.0]]}]
+            "series": [{"name": "Count", "data": [[1, 1.0], [2, 1000.0]]}]
         });
         apply_log_scale(&mut v, true);
         assert_eq!(v["yAxis"][0]["type"], "log");
         assert_eq!(v["yAxis"][1]["type"], "value", "overlay axis untouched");
         apply_log_scale(&mut v, false);
         assert_eq!(v["yAxis"][0]["type"], "value");
+    }
+
+    /// ECharts prints an explicit min and max verbatim, so unrounded padded
+    /// bounds became axis labels like "122.4342086864" beside clean decade
+    /// ticks. Both ends must read as numbers a person would write.
+    #[test]
+    fn log_axis_bounds_are_rounded_not_raw_floats() {
+        let mut v = json!({
+            "yAxis": {"type": "value"},
+            "series": [{"name": "difficulty", "data": [
+                [1, 122.4342086864], [2, 141.7344641525]
+            ]}]
+        });
+        apply_log_scale(&mut v, true);
+        let lo = v["yAxis"]["min"].as_f64().unwrap();
+        let hi = v["yAxis"]["max"].as_f64().unwrap();
+        assert_eq!(lo, 119.0, "min should read as a round number");
+        assert_eq!(hi, 145.0, "max should read as a round number");
+        // And still contain the data after rounding.
+        assert!(lo < 122.4342086864 && hi > 141.7344641525);
+    }
+
+    /// Rounding must work at both ends of a wide axis, where one bound needs
+    /// three decimal places and the other needs none.
+    #[test]
+    fn log_axis_bounds_round_across_orders_of_magnitude() {
+        let mut v = json!({
+            "yAxis": {"type": "value"},
+            "series": [{"name": "difficulty", "data": [
+                [1, 0.2213162147], [2, 159.09249284]
+            ]}]
+        });
+        apply_log_scale(&mut v, true);
+        let lo = v["yAxis"]["min"].as_f64().unwrap();
+        let hi = v["yAxis"]["max"].as_f64().unwrap();
+        assert_eq!(lo, 0.216);
+        assert_eq!(hi, 163.0);
+        assert!(lo < 0.2213162147 && hi > 159.09249284);
+    }
+
+    /// Rounding away from the data, never into it: a bound that crops a point
+    /// would hide data to tidy a label.
+    #[test]
+    fn rounding_never_crops_the_data() {
+        for (lo_raw, hi_raw) in
+            [(1.0001, 9.9999), (0.00123, 0.00987), (7.77, 7_777_777.0)]
+        {
+            let lo = round_sig(lo_raw, 3, RoundDir::Down);
+            let hi = round_sig(hi_raw, 3, RoundDir::Up);
+            assert!(lo <= lo_raw, "{lo} must not exceed {lo_raw}");
+            assert!(hi >= hi_raw, "{hi} must not fall short of {hi_raw}");
+        }
+    }
+
+    /// A narrow range must still get a log axis, fitted to its own data.
+    /// Glassnode offers log from 7d to ALL and so should this; an earlier
+    /// version refused under two decades, which was really covering for
+    /// decade-rounded bounds.
+    #[test]
+    fn log_scale_fits_a_narrow_range_instead_of_refusing_it() {
+        let mut v = json!({
+            "yAxis": {"type": "value"},
+            "series": [{"name": "difficulty", "data": [
+                [1, 140.0], [2, 152.0], [3, 160.0]
+            ]}]
+        });
+        apply_log_scale(&mut v, true);
+        assert_eq!(v["yAxis"]["type"], "log");
+        // Fitted to 140..160 with a little padding, nowhere near the
+        // enclosing 100..1000 decades that pinned the series to the floor.
+        let lo = v["yAxis"]["min"].as_f64().unwrap();
+        let hi = v["yAxis"]["max"].as_f64().unwrap();
+        assert!(lo > 135.0 && lo < 140.0, "min was {lo}");
+        assert!(hi > 160.0 && hi < 165.0, "max was {hi}");
+    }
+
+    /// One distinct value has no ratio to pad, so it gets a decade either
+    /// side rather than an axis of zero height.
+    #[test]
+    fn log_scale_handles_a_single_distinct_value() {
+        let mut v = json!({
+            "yAxis": {"type": "value"},
+            "series": [{"name": "flat", "data": [[1, 50.0], [2, 50.0]]}]
+        });
+        apply_log_scale(&mut v, true);
+        assert_eq!(v["yAxis"]["min"], json!(5.0));
+        assert_eq!(v["yAxis"]["max"], json!(500.0));
+    }
+
+    /// ECharts picks log decades from its split count, not from the data, so
+    /// difficulty's top tick landed eight decades above its real maximum and
+    /// pushed the whole series into a third of the plot.
+    /// Wide data must fill the plot rather than sitting under eight decades
+    /// of empty space, which is what ECharts' own split choice produced.
+    #[test]
+    fn log_scale_fits_a_range_spanning_many_decades() {
+        let mut v = json!({
+            "yAxis": {"type": "value"},
+            "series": [{"name": "difficulty", "data": [
+                [1, 1.5e-12], [2, 1.4e2]
+            ]}]
+        });
+        apply_log_scale(&mut v, true);
+        let lo = v["yAxis"]["min"].as_f64().unwrap();
+        let hi = v["yAxis"]["max"].as_f64().unwrap();
+        assert!(lo < 1.5e-12 && lo > 1.4e-12, "min was {lo}");
+        assert!(hi > 1.4e2 && hi < 1.5e2, "max was {hi}");
+
+        // Back to linear must drop the bounds, or they crop the linear view.
+        apply_log_scale(&mut v, false);
+        assert_eq!(v["yAxis"]["type"], "value");
+        assert!(v["yAxis"].get("min").is_none());
+        assert!(v["yAxis"].get("max").is_none());
+    }
+
+    /// The overlay's own series must not widen the metric's axis.
+    #[test]
+    fn log_bounds_ignore_the_right_axis_series() {
+        let mut v = json!({
+            "yAxis": [{"type": "value"}, {"type": "value"}],
+            "series": [
+                {"name": "count", "data": [[1, 0.5], [2, 80.0]]},
+                {"name": "price", "yAxisIndex": 1, "data": [[1, 90000.0]]}
+            ]
+        });
+        apply_log_scale(&mut v, true);
+        // Padded data extent, 80 * 1.02, and crucially not widened by the
+        // 90000 sitting on the right axis.
+        let hi = v["yAxis"][0]["max"].as_f64().unwrap();
+        assert!(hi > 80.0 && hi < 85.0, "max was {hi}");
+    }
+
+    /// A line of a quantity far from zero must fit its data, or the detail is
+    /// thrown away: difficulty over 3M sat between 120 T and 142 T on a
+    /// 0-to-150 axis and read as a flat line.
+    #[test]
+    fn value_axis_fits_a_line_chart() {
+        let opt = build_option(json!({
+            "yAxis": y_axis("T"),
+            "series": [{"name": "Difficulty", "type": "line", "data": [
+                [1, 122.0], [2, 142.0]
+            ]}]
+        }));
+        assert_eq!(opt["yAxis"]["scale"], json!(true));
+    }
+
+    /// Bar length encodes magnitude, so a cut axis misstates ratios. This is
+    /// the exclusion where fitting would mislead rather than merely differ.
+    #[test]
+    fn value_axis_stays_zero_based_for_bars() {
+        let opt = build_option(json!({
+            "yAxis": y_axis("Count"),
+            "series": [{"name": "c", "type": "bar", "data": [[1, 5.0]]}]
+        }));
+        assert!(opt["yAxis"].get("scale").is_none());
+    }
+
+    /// The stack is a sum measured from zero, so it keeps zero even though
+    /// its series are lines.
+    #[test]
+    fn value_axis_stays_zero_based_for_stacks() {
+        let opt = build_option(json!({
+            "yAxis": y_axis("Outputs"),
+            "series": [
+                {"name": "a", "type": "line", "stack": "t", "data": [[1, 1.0]]},
+                {"name": "b", "type": "line", "stack": "t", "data": [[1, 2.0]]}
+            ]
+        }));
+        assert!(opt["yAxis"].get("scale").is_none());
+    }
+
+    /// 0 to 100 is the frame that gives a percentage meaning.
+    #[test]
+    fn value_axis_stays_zero_based_for_percentages() {
+        let mut axis = y_axis("%");
+        axis["max"] = json!(100.0);
+        let opt = build_option(json!({
+            "yAxis": axis,
+            "series": [{"name": "share", "type": "line", "data": [[1, 40.0]]}]
+        }));
+        assert!(opt["yAxis"].get("scale").is_none());
+    }
+
+    /// A builder that set its own bounds meant them; fitting would override
+    /// a deliberate frame.
+    #[test]
+    fn value_axis_respects_bounds_the_builder_already_set() {
+        let mut axis = y_axis("min");
+        axis["min"] = json!(0.0);
+        let opt = build_option(json!({
+            "yAxis": axis,
+            "series": [{"name": "interval", "type": "line", "data": [[1, 9.0]]}]
+        }));
+        assert!(opt["yAxis"].get("scale").is_none());
+    }
+
+    /// Fitting must not touch the overlay's axis, and a no-data chart with no
+    /// series must not gain one.
+    #[test]
+    fn value_axis_fitting_leaves_other_axes_and_empty_charts_alone() {
+        let opt = build_option(json!({
+            "yAxis": [y_axis("Count"), y_axis("Price")],
+            "series": [{"name": "c", "type": "line", "data": [[1, 5.0]]}]
+        }));
+        assert_eq!(opt["yAxis"][0]["scale"], json!(true));
+        assert!(opt["yAxis"][1].get("scale").is_none());
+
+        let empty = build_option(json!({"yAxis": y_axis("Count")}));
+        assert!(empty["yAxis"].get("scale").is_none());
     }
 
     /// A stacked chart's bands are read as a sum, so a log axis makes their
@@ -1324,32 +1805,68 @@ mod tests {
         assert_eq!(v["yAxis"]["type"], "value");
     }
 
-    /// The one that would silently lie: ECharts drops non-positive points on a
-    /// log axis rather than erroring, so a zero would vanish from the plot
-    /// without saying so. Empty blocks and net UTXO growth both hit this.
+    /// Zero and negative points do not refuse a log axis, they annotate it.
+    /// ECharts cannot plot them, so the chart says which and how many rather
+    /// than the toggle appearing to do nothing. Fees on an empty block are
+    /// zero and net UTXO growth goes negative, so this is a normal state.
     #[test]
-    fn log_scale_refuses_a_series_touching_zero_or_below() {
-        let mut zero = json!({
+    fn log_scale_switches_and_reports_points_it_cannot_plot() {
+        let mut v = json!({
+            "graphic": [{"type": "text", "style": {"text": "wehodlbtc"}}],
             "yAxis": {"type": "value"},
-            "series": [{"name": "fees", "data": [[1, 3.0], [2, 0.0]]}]
+            "series": [{"name": "fees", "data": [
+                [1, 3.0], [2, 0.0], [3, -1.0], [4, 900.0]
+            ]}]
         });
-        apply_log_scale(&mut zero, true);
-        assert_eq!(v_type(&zero), "value", "a zero point must refuse log");
+        apply_log_scale(&mut v, true);
+        assert_eq!(v["yAxis"]["type"], "log", "must still switch");
 
-        let mut neg = json!({
-            "yAxis": {"type": "value"},
-            "series": [{"name": "net", "data": [[1, 5.0], [2, -2.0]]}]
-        });
-        apply_log_scale(&mut neg, true);
-        assert_eq!(v_type(&neg), "value", "a negative point must refuse log");
+        let note = v["graphic"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|g| g["id"] == "log-scale-notice")
+            .expect("expected a notice");
+        let text = note["style"]["text"].as_str().unwrap();
+        assert!(text.starts_with("2 points"), "got {text:?}");
 
-        // Bare numbers, which is how the daily builders emit their series.
-        let mut bare = json!({
+        // Bounds come from the positive points alone.
+        let lo = v["yAxis"]["min"].as_f64().unwrap();
+        assert!(lo > 2.9 && lo < 3.0, "min was {lo}");
+
+        // Re-applying must not stack notices, since the option is rebuilt and
+        // re-decorated on every range and overlay change.
+        apply_log_scale(&mut v, true);
+        assert_eq!(
+            v["graphic"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|g| g["id"] == "log-scale-notice")
+                .count(),
+            1
+        );
+
+        // And going back to linear clears it.
+        apply_log_scale(&mut v, false);
+        assert!(!v["graphic"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|g| g["id"] == "log-scale-notice"));
+    }
+
+    /// The singular wording, since "1 points" reads as a bug.
+    #[test]
+    fn log_notice_is_singular_for_one_point() {
+        let mut v = json!({
+            "graphic": [],
             "yAxis": {"type": "value"},
-            "series": [{"name": "count", "data": [4.0, 0.0, 9.0]}]
+            "series": [{"name": "x", "data": [[1, 5.0], [2, 0.0], [3, 500.0]]}]
         });
-        apply_log_scale(&mut bare, true);
-        assert_eq!(v_type(&bare), "value");
+        apply_log_scale(&mut v, true);
+        let text = v["graphic"][0]["style"]["text"].as_str().unwrap();
+        assert!(text.starts_with("1 point is"), "got {text:?}");
     }
 
     /// A strictly positive series is the case log exists for.
@@ -1370,7 +1887,7 @@ mod tests {
         let mut v = json!({
             "yAxis": [{"type": "value"}, {"type": "value"}],
             "series": [
-                {"name": "count", "data": [[1, 5.0]]},
+                {"name": "count", "data": [[1, 1.0], [2, 500.0]]},
                 {"name": "price", "yAxisIndex": 1, "data": [[1, 0.0]]}
             ]
         });
@@ -1405,7 +1922,7 @@ mod tests {
     fn log_scale_handles_a_bare_axis_object() {
         let mut v = json!({
             "yAxis": {"type": "value"},
-            "series": [{"name": "x", "data": [[1, 2.0]]}]
+            "series": [{"name": "x", "data": [[1, 2.0], [2, 2000.0]]}]
         });
         apply_log_scale(&mut v, true);
         assert_eq!(v["yAxis"]["type"], "log");
@@ -1417,7 +1934,7 @@ mod tests {
     fn log_scale_leaves_category_and_missing_axes_alone() {
         let mut cat = json!({
             "yAxis": {"type": "category", "data": ["a"]},
-            "series": [{"name": "x", "data": [[1, 2.0]]}]
+            "series": [{"name": "x", "data": [[1, 2.0], [2, 2000.0]]}]
         });
         apply_log_scale(&mut cat, true);
         assert_eq!(cat["yAxis"]["type"], "category");

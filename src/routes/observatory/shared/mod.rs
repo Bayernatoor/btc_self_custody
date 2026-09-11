@@ -333,7 +333,7 @@ fn ScaleToggle() -> impl IntoView {
                 } else {
                     "px-2.5 py-1 text-xs rounded-lg text-white/40 hover:text-white/70 hover:bg-white/5 transition-all cursor-pointer"
                 }
-                title="Logarithmic value axis. Ignored on percentage and stacked charts, and where a series touches zero"
+                title="Logarithmic value axis, at any range. Zero and negative points cannot be plotted on it; the chart says how many were left out"
                 on:click=move |_| set_on.set(true)
             >
                 "Log"
@@ -368,7 +368,7 @@ fn OverlaysTabContent() -> impl IntoView {
                     </span>
                 </label>
                 <p class="text-[0.7rem] text-white/30 mt-1 ml-6">
-                    "Ignored on percentage and stacked charts, and where a series touches zero"
+                    "Applies at any range. Ignored on percentage and stacked charts, where a second scale cannot be read against the bands"
                 </p>
             </div>
             <label class="flex items-center gap-2 cursor-pointer group">

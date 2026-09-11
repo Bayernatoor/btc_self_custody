@@ -438,7 +438,7 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                                     } else {
                                         "px-2 py-1 text-xs rounded-md bg-white/5 text-white/50 hover:text-white/80 cursor-pointer"
                                     }
-                                    title="Logarithmic value axis. Useful where the metric spans orders of magnitude; zero and negative points cannot be plotted on it"
+                                    title="Logarithmic value axis, at any range. Zero and negative points cannot be plotted on it; the chart says how many were left out"
                                     on:click=move |_| set_log_scale.set(true)
                                 >
                                     "Log"
