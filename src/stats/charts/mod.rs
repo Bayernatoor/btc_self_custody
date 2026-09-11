@@ -29,8 +29,10 @@ pub mod adoption;
 pub mod embedded;
 pub mod fees;
 pub mod gauges;
+pub mod kpi;
 pub mod mining;
 pub mod network;
+pub mod registry;
 pub mod signaling;
 pub mod tx_metrics;
 
@@ -221,6 +223,38 @@ pub(crate) fn y_axis(name: &str) -> serde_json::Value {
         "axisLine": { "lineStyle": { "color": "#555" } },
         "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.20)", "type": "dashed" } }
     })
+}
+
+/// Switch the left value axis to a logarithmic scale.
+///
+/// Only the first y axis: the second belongs to the price or chain-size
+/// overlay, and rescaling someone else's axis underneath them is how the
+/// clipping bug in `fix/chart-zoom-axis` happened. A category axis is left
+/// alone, since there is nothing to rescale.
+///
+/// ECharts drops non-positive points on a log axis instead of erroring, so
+/// callers must only offer this where the series is positive; see
+/// `registry::ChartMeta::supports_log`.
+pub fn apply_log_scale(option: &mut serde_json::Value, on: bool) {
+    let Some(axis) = option.get_mut("yAxis") else {
+        return;
+    };
+    // `yAxis` is an object on single-axis charts and an array once an overlay
+    // has added the right-hand one.
+    let first = match axis {
+        serde_json::Value::Array(a) => a.first_mut(),
+        other => Some(other),
+    };
+    let Some(serde_json::Value::Object(o)) = first else {
+        return;
+    };
+    if o.get("type").and_then(|t| t.as_str()) == Some("category") {
+        return;
+    }
+    o.insert(
+        "type".to_string(),
+        serde_json::Value::String(if on { "log" } else { "value" }.to_string()),
+    );
 }
 
 /// Fallback chart option when no data is available for the current range.
@@ -1172,6 +1206,43 @@ pub fn apply_overlays(
 
 #[cfg(test)]
 mod tests {
+
+    /// The right axis belongs to the price or chain-size overlay. Rescaling it
+    /// under them is the shape of the clipping bug fixed in
+    /// `fix/chart-zoom-axis`.
+    #[test]
+    fn log_scale_only_touches_the_left_axis() {
+        let mut v = json!({"yAxis": [
+            {"type": "value", "name": "Count"},
+            {"type": "value", "name": "Price"}
+        ]});
+        apply_log_scale(&mut v, true);
+        assert_eq!(v["yAxis"][0]["type"], "log");
+        assert_eq!(v["yAxis"][1]["type"], "value", "overlay axis untouched");
+        apply_log_scale(&mut v, false);
+        assert_eq!(v["yAxis"][0]["type"], "value");
+    }
+
+    /// Single-axis charts carry `yAxis` as an object, not an array.
+    #[test]
+    fn log_scale_handles_a_bare_axis_object() {
+        let mut v = json!({"yAxis": {"type": "value"}});
+        apply_log_scale(&mut v, true);
+        assert_eq!(v["yAxis"]["type"], "log");
+    }
+
+    /// A category axis has no scale to change, and a chart with no yAxis at
+    /// all (a donut) must not panic.
+    #[test]
+    fn log_scale_leaves_category_and_missing_axes_alone() {
+        let mut cat = json!({"yAxis": {"type": "category", "data": ["a"]}});
+        apply_log_scale(&mut cat, true);
+        assert_eq!(cat["yAxis"]["type"], "category");
+
+        let mut none = json!({"series": []});
+        apply_log_scale(&mut none, true);
+        assert!(none.get("yAxis").is_none());
+    }
     use super::*;
 
     // -----------------------------------------------------------------------
