@@ -177,6 +177,12 @@ pub fn ChartCard(
     let share_id = chart_id.clone();
     let download_id = chart_id.clone();
     let download_title = title.clone();
+    // The single-chart route's slug is the card's `chart_id` minus the prefix,
+    // which is also how the registry keys it.
+    let page_slug = chart_id
+        .strip_prefix("chart-")
+        .unwrap_or(chart_id.as_str())
+        .to_string();
     let (copied, set_copied) = signal(false);
     let state = expect_context::<super::shared::ObservatoryState>();
     let loading = state.data_loading;
@@ -276,6 +282,28 @@ pub fn ChartCard(
                             }.into_any()
                         }}
                     </button>
+                    // Link to the chart's own page, when it has one. Guarded on
+                    // the registry rather than assuming, so a card whose chart
+                    // is unregistered shows no link instead of a dead one. A
+                    // test asserts every card is registered, so in practice
+                    // this is always Some; the guard is what keeps it true if
+                    // that ever stops holding.
+                    {crate::stats::charts::registry::find(
+                        page_slug.as_str(),
+                    )
+                    .map(|_| {
+                        view! {
+                            <a
+                                href=format!("/observatory/chart/{page_slug}")
+                                class="text-white/50 hover:text-[#f7931a] transition-colors cursor-pointer p-1.5 rounded-lg hover:bg-white/5 inline-flex"
+                                title="Open this chart's own page, with downloads and key figures"
+                            >
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/>
+                                </svg>
+                            </a>
+                        }
+                    })}
                     <button
                         class="text-white/50 hover:text-[#f7931a] transition-colors cursor-pointer p-1.5 rounded-lg hover:bg-white/5"
                         title="Expand"
