@@ -39,6 +39,7 @@ mod network;
 mod on_this_day;
 mod overview;
 mod signaling;
+mod single_chart;
 mod stats;
 mod whale_watch;
 
@@ -51,6 +52,7 @@ pub use network::NetworkChartsPage;
 pub use on_this_day::OnThisDayPage;
 pub use overview::ObservatoryOverview;
 pub use signaling::SignalingPage;
+pub use single_chart::SingleChartPage;
 pub use stats::StatsSummaryPage;
 pub use whale_watch::WhaleWatchPage;
 
@@ -73,10 +75,23 @@ pub fn ObservatoryPage() -> impl IntoView {
     let location = leptos_router::hooks::use_location();
     let on_dashboard =
         Signal::derive(move || location.pathname.get() == "/observatory");
+    // The single-chart view is meant to be dominated by the chart, so it drops
+    // the section nav and takes the full width. The nav is still one click
+    // away: the breadcrumb goes back to the chart's page, and the chart
+    // drawer on the left edge reaches all 61 charts directly.
+    let solo_chart = Signal::derive(move || {
+        location.pathname.get().starts_with("/observatory/chart/")
+    });
 
     view! {
         // Title and meta description are set per sub-page for SEO
-        <section class="max-w-[1750px] mx-auto px-3 sm:px-4 lg:px-8 pt-6 sm:pt-10 pb-28 opacity-0 animate-fadeinone">
+        <section
+            class=move || if solo_chart.get() {
+                "max-w-none mx-auto px-2 sm:px-3 lg:px-5 pt-3 sm:pt-4 pb-12 opacity-0 animate-fadeinone"
+            } else {
+                "max-w-[1750px] mx-auto px-3 sm:px-4 lg:px-8 pt-6 sm:pt-10 pb-28 opacity-0 animate-fadeinone"
+            }
+        >
             // Hero branding — only on dashboard
             <Show when=move || on_dashboard.get()>
                 <div class="relative rounded-2xl overflow-hidden mb-6 sm:mb-8">
@@ -94,7 +109,9 @@ pub fn ObservatoryPage() -> impl IntoView {
                     </div>
                 </div>
             </Show>
-            <ObservatoryNav/>
+            <Show when=move || !solo_chart.get()>
+                <ObservatoryNav/>
+            </Show>
             <components::NodeStatusBanner/>
             <ChartSettingsPanel/>
             <leptos_router::components::Outlet/>

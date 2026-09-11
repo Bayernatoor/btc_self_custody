@@ -452,6 +452,15 @@
                 opts.graphic[0].style.font = 'bold ' + watermarkPx + 'px Inter, system-ui, sans-serif';
             }
             applyMobileAdjustments(opts);
+            // The single-chart view puts a labelled PNG button in its header,
+            // so the toolbox's save icon would be a second control doing the
+            // same thing a few pixels away. The zoom and restore tools stay:
+            // the box-select brush is activated by default below and is the
+            // main way to zoom.
+            if (elementId.indexOf('single-chart-') === 0 &&
+                opts.toolbox && opts.toolbox.feature) {
+                delete opts.toolbox.feature.saveAsImage;
+            }
             el._chart.setOption(opts, { notMerge: true, lazyUpdate: true });
             // Activate the toolbox dataZoom brush by default on desktop so a
             // drag on the chart area immediately box-selects a zoom range —
@@ -977,6 +986,82 @@
         setTimeout(_tryHashScroll, 800);
     }
     // CSV export: extract data from an ECharts instance and trigger download.
+    // PNG export for the single-chart view. The ECharts toolbox is hidden
+    // below 640px by applyMobileAdjustments, so on a phone this is the only
+    // image export that exists.
+    window.downloadChartPNG = function(chartId, title) {
+        var el = document.getElementById(chartId);
+        if (!el || !el._chart) return;
+        var url = el._chart.getDataURL({
+            type: 'png',
+            pixelRatio: 2,
+            backgroundColor: '#0d2137'
+        });
+        var name = (title || 'chart').replace(/[^a-z0-9]+/gi, '-')
+            .replace(/^-|-$/g, '').toLowerCase();
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = name + '.png';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    };
+
+    // JSON export, for anyone who would otherwise parse our CSV. Same series
+    // selection as the CSV path: overlay series sit on yAxisIndex >= 1 and are
+    // excluded, so a download matches the metric the page is about rather than
+    // whatever was toggled on beside it.
+    window.downloadChartJSON = function(chartId, title, range) {
+        var el = document.getElementById(chartId);
+        if (!el || !el._chart) return;
+        var option = el._chart.getOption();
+        if (!option || !option.series) return;
+
+        var series = option.series.filter(function(s) {
+            return !s.yAxisIndex || s.yAxisIndex === 0;
+        });
+        if (series.length === 0) return;
+
+        var isCategory = option.xAxis && option.xAxis[0] &&
+            option.xAxis[0].type === 'category';
+        var labels = (isCategory && option.xAxis[0].data) || [];
+
+        var payload = {
+            metric: title,
+            range: range,
+            source: 'wehodlbtc.com',
+            exported_at: new Date().toISOString(),
+            series: series.map(function(s) {
+                return {
+                    name: s.name || 'series',
+                    points: (s.data || []).map(function(d, i) {
+                        // Per-block series carry [ts, value, height]; daily
+                        // series carry bare numbers with dates on the axis.
+                        if (Array.isArray(d)) {
+                            var p = { x: d[0], value: d[1] };
+                            if (d.length > 2) p.height = d[2];
+                            return p;
+                        }
+                        return { x: labels[i] !== undefined ? labels[i] : i, value: d };
+                    })
+                };
+            })
+        };
+
+        var name = (title || 'chart').replace(/[^a-z0-9]+/gi, '-')
+            .replace(/^-|-$/g, '').toLowerCase();
+        var blob = new Blob([JSON.stringify(payload, null, 2)],
+            { type: 'application/json' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = name + '.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
+
     window.downloadChartCSV = function(chartId, title, range) {
         var el = document.getElementById(chartId);
         if (!el || !el._chart) return;
