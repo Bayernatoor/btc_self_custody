@@ -73,6 +73,8 @@ pub struct ObservatoryState {
     pub set_overlay_chain_size: WriteSignal<bool>,
     pub overlay_events: ReadSignal<bool>,
     pub set_overlay_events: WriteSignal<bool>,
+    pub overlay_log_scale: ReadSignal<bool>,
+    pub set_overlay_log_scale: WriteSignal<bool>,
     pub price_loading: Signal<bool>,
     // Unified chart-settings panel (one floating button, tabs for Overlays + Range).
     // Replaces the earlier split between OverlayPanel and FloatingRangePicker.
@@ -453,6 +455,12 @@ pub fn provide_observatory_state() -> ObservatoryState {
         Signal::derive(move || cached.get())
     };
 
+    // Not an annotation like the others, but it belongs to the same bundle:
+    // it is applied after the base chart is built and so shares the cache
+    // generation. Naming it `overlay_*` keeps it with the flags it travels
+    // with rather than implying it draws something.
+    let (overlay_log_scale, set_overlay_log_scale) = signal(false);
+
     let overlay_flags = Signal::derive(move || {
         let price_data = if overlay_price.get() {
             cached_price_history.get()
@@ -473,6 +481,7 @@ pub fn provide_observatory_state() -> ObservatoryState {
             events: overlay_events.get(),
             price_data,
             chain_size_data,
+            log_scale: overlay_log_scale.get(),
         }
     });
 
@@ -498,6 +507,8 @@ pub fn provide_observatory_state() -> ObservatoryState {
         set_overlay_chain_size,
         overlay_events,
         set_overlay_events,
+        overlay_log_scale,
+        set_overlay_log_scale,
         price_loading,
         chart_settings_open,
         set_chart_settings_open,

@@ -236,6 +236,9 @@ pub(crate) fn y_axis(name: &str) -> serde_json::Value {
 /// callers must only offer this where the series is positive; see
 /// `registry::ChartMeta::supports_log`.
 pub fn apply_log_scale(option: &mut serde_json::Value, on: bool) {
+    if on && !log_scale_is_meaningful(option) {
+        return;
+    }
     let Some(axis) = option.get_mut("yAxis") else {
         return;
     };
@@ -255,6 +258,63 @@ pub fn apply_log_scale(option: &mut serde_json::Value, on: bool) {
         "type".to_string(),
         serde_json::Value::String(if on { "log" } else { "value" }.to_string()),
     );
+}
+
+/// Whether a log axis would say something true about this chart.
+///
+/// Decided from the built option rather than from chart metadata, so one
+/// global toggle can be applied to every chart without each of the 53
+/// `chart_memo!` call sites having to declare its shape. Three refusals:
+///
+/// - **Stacked series.** The bands are read as a sum, and a log axis makes the
+///   stack's heights mean nothing.
+/// - **A percentage axis**, bounded to 100. Already a bounded scale; a log
+///   version only compresses the top.
+/// - **Any non-positive plotted value.** This is the one that silently lies:
+///   ECharts drops zero and negative points on a log axis rather than
+///   erroring, so a chart with a single zero would quietly lose it. Several
+///   here legitimately hit zero (empty blocks, fees on an empty block) and
+///   `utxo-growth` is net, so it goes negative.
+fn log_scale_is_meaningful(option: &serde_json::Value) -> bool {
+    let Some(series) = option.get("series").and_then(|s| s.as_array()) else {
+        return false;
+    };
+    if series.iter().any(|s| s.get("stack").is_some()) {
+        return false;
+    }
+    let bounded_to_100 = |a: &serde_json::Value| {
+        a.get("max").and_then(|m| m.as_f64()) == Some(100.0)
+    };
+    let percent_axis = match option.get("yAxis") {
+        Some(serde_json::Value::Array(a)) => a.iter().any(bounded_to_100),
+        Some(other) => bounded_to_100(other),
+        None => false,
+    };
+    if percent_axis {
+        return false;
+    }
+    // Only the left-axis series matter; an overlay on the right keeps its own
+    // linear scale either way.
+    series
+        .iter()
+        .filter(|s| {
+            s.get("yAxisIndex").and_then(|i| i.as_u64()).unwrap_or(0) == 0
+        })
+        .flat_map(|s| {
+            s.get("data")
+                .and_then(|d| d.as_array())
+                .map(|a| a.as_slice())
+                .unwrap_or_default()
+        })
+        .all(|v| match v {
+            serde_json::Value::Number(n) => n.as_f64().unwrap_or(0.0) > 0.0,
+            serde_json::Value::Array(a) => a
+                .get(1)
+                .and_then(|y| y.as_f64())
+                .map(|y| y > 0.0)
+                .unwrap_or(true),
+            _ => true,
+        })
 }
 
 /// Fallback chart option when no data is available for the current range.
@@ -673,19 +733,28 @@ pub struct OverlayFlags {
     pub price_data: Vec<(u64, f64)>,
     /// Chain size overlay data (timestamp_ms, cumulative_gb). Empty vec = disabled.
     pub chain_size_data: Vec<(u64, f64)>,
+    /// Render the left value axis logarithmically.
+    ///
+    /// Lives here rather than per chart because it is a view option applied
+    /// after the base chart is built, exactly like the annotations, so it
+    /// belongs to the same cache generation. `apply_log_scale` refuses it
+    /// where it would mislead, which is what lets one global switch cover
+    /// charts of every shape.
+    pub log_scale: bool,
 }
 
 impl OverlayFlags {
     /// Compact string key for cache differentiation.
     pub fn cache_key(&self) -> String {
         format!(
-            "h{}b{}c{}e{}p{}s{}",
+            "h{}b{}c{}e{}p{}s{}l{}",
             self.halvings as u8,
             self.bip_activations as u8,
             self.core_releases as u8,
             self.events as u8,
             self.price_data.len(),
             self.chain_size_data.len(),
+            self.log_scale as u8,
         )
     }
 }
@@ -1212,10 +1281,15 @@ mod tests {
     /// `fix/chart-zoom-axis`.
     #[test]
     fn log_scale_only_touches_the_left_axis() {
-        let mut v = json!({"yAxis": [
-            {"type": "value", "name": "Count"},
-            {"type": "value", "name": "Price"}
-        ]});
+        // A positive series, so the meaningfulness guard is satisfied and
+        // this test is about the axis mechanics alone.
+        let mut v = json!({
+            "yAxis": [
+                {"type": "value", "name": "Count"},
+                {"type": "value", "name": "Price"}
+            ],
+            "series": [{"name": "Count", "data": [[1, 5.0]]}]
+        });
         apply_log_scale(&mut v, true);
         assert_eq!(v["yAxis"][0]["type"], "log");
         assert_eq!(v["yAxis"][1]["type"], "value", "overlay axis untouched");
@@ -1223,10 +1297,116 @@ mod tests {
         assert_eq!(v["yAxis"][0]["type"], "value");
     }
 
+    /// A stacked chart's bands are read as a sum, so a log axis makes their
+    /// heights mean nothing.
+    #[test]
+    fn log_scale_refuses_stacked_charts() {
+        let mut v = json!({
+            "yAxis": {"type": "value"},
+            "series": [
+                {"name": "a", "stack": "t", "data": [[1, 5.0]]},
+                {"name": "b", "stack": "t", "data": [[1, 5.0]]}
+            ]
+        });
+        apply_log_scale(&mut v, true);
+        assert_eq!(v["yAxis"]["type"], "value", "stacked must stay linear");
+    }
+
+    /// A 0-to-100 axis is already bounded; a log version only compresses the
+    /// top of it.
+    #[test]
+    fn log_scale_refuses_a_percentage_axis() {
+        let mut v = json!({
+            "yAxis": {"type": "value", "max": 100.0},
+            "series": [{"name": "share", "data": [[1, 40.0]]}]
+        });
+        apply_log_scale(&mut v, true);
+        assert_eq!(v["yAxis"]["type"], "value");
+    }
+
+    /// The one that would silently lie: ECharts drops non-positive points on a
+    /// log axis rather than erroring, so a zero would vanish from the plot
+    /// without saying so. Empty blocks and net UTXO growth both hit this.
+    #[test]
+    fn log_scale_refuses_a_series_touching_zero_or_below() {
+        let mut zero = json!({
+            "yAxis": {"type": "value"},
+            "series": [{"name": "fees", "data": [[1, 3.0], [2, 0.0]]}]
+        });
+        apply_log_scale(&mut zero, true);
+        assert_eq!(v_type(&zero), "value", "a zero point must refuse log");
+
+        let mut neg = json!({
+            "yAxis": {"type": "value"},
+            "series": [{"name": "net", "data": [[1, 5.0], [2, -2.0]]}]
+        });
+        apply_log_scale(&mut neg, true);
+        assert_eq!(v_type(&neg), "value", "a negative point must refuse log");
+
+        // Bare numbers, which is how the daily builders emit their series.
+        let mut bare = json!({
+            "yAxis": {"type": "value"},
+            "series": [{"name": "count", "data": [4.0, 0.0, 9.0]}]
+        });
+        apply_log_scale(&mut bare, true);
+        assert_eq!(v_type(&bare), "value");
+    }
+
+    /// A strictly positive series is the case log exists for.
+    #[test]
+    fn log_scale_accepts_a_strictly_positive_series() {
+        let mut v = json!({
+            "yAxis": {"type": "value"},
+            "series": [{"name": "difficulty", "data": [[1, 1.0], [2, 1e12]]}]
+        });
+        apply_log_scale(&mut v, true);
+        assert_eq!(v_type(&v), "log");
+    }
+
+    /// An overlay on the right axis keeps its own linear scale, so a zero in
+    /// the price series must not veto log on the metric the page is about.
+    #[test]
+    fn log_scale_ignores_non_positive_points_on_the_overlay_axis() {
+        let mut v = json!({
+            "yAxis": [{"type": "value"}, {"type": "value"}],
+            "series": [
+                {"name": "count", "data": [[1, 5.0]]},
+                {"name": "price", "yAxisIndex": 1, "data": [[1, 0.0]]}
+            ]
+        });
+        apply_log_scale(&mut v, true);
+        assert_eq!(v["yAxis"][0]["type"], "log");
+        assert_eq!(v["yAxis"][1]["type"], "value");
+    }
+
+    fn v_type(v: &serde_json::Value) -> &str {
+        v["yAxis"]["type"].as_str().unwrap_or("")
+    }
+
+    /// The cache key must move with the flag. If it does not, toggling the
+    /// axis serves the previous render, which is the stale-chart defect
+    /// fix/chart-correctness fixed.
+    #[test]
+    fn log_scale_changes_the_overlay_cache_key() {
+        let linear = OverlayFlags::default();
+        let logged = OverlayFlags {
+            log_scale: true,
+            ..Default::default()
+        };
+        assert_ne!(
+            linear.cache_key(),
+            logged.cache_key(),
+            "a chart cached linear would be served for a log request"
+        );
+    }
+
     /// Single-axis charts carry `yAxis` as an object, not an array.
     #[test]
     fn log_scale_handles_a_bare_axis_object() {
-        let mut v = json!({"yAxis": {"type": "value"}});
+        let mut v = json!({
+            "yAxis": {"type": "value"},
+            "series": [{"name": "x", "data": [[1, 2.0]]}]
+        });
         apply_log_scale(&mut v, true);
         assert_eq!(v["yAxis"]["type"], "log");
     }
@@ -1235,7 +1415,10 @@ mod tests {
     /// all (a donut) must not panic.
     #[test]
     fn log_scale_leaves_category_and_missing_axes_alone() {
-        let mut cat = json!({"yAxis": {"type": "category", "data": ["a"]}});
+        let mut cat = json!({
+            "yAxis": {"type": "category", "data": ["a"]},
+            "series": [{"name": "x", "data": [[1, 2.0]]}]
+        });
         apply_log_scale(&mut cat, true);
         assert_eq!(cat["yAxis"]["type"], "category");
 

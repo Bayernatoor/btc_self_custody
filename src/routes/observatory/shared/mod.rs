@@ -147,6 +147,13 @@ macro_rules! chart_memo {
             // Apply overlays on top of base chart
             let result = if let Ok(mut value) = serde_json::from_str::<serde_json::Value>(&base) {
                 $crate::stats::charts::apply_overlays(&mut value, &flags, is_daily);
+                // After the overlays, so it only ever rescales the left axis
+                // the metric owns and not the right one price or chain size
+                // just added. Refused per chart inside apply_log_scale, by
+                // inspecting the built option, which is what lets one global
+                // switch cover charts of every shape without each of these
+                // call sites declaring anything.
+                $crate::stats::charts::apply_log_scale(&mut value, flags.log_scale);
                 serde_json::to_string(&value).unwrap_or_default()
             } else {
                 base
@@ -296,6 +303,45 @@ fn ChartSettingsTabButton(
     }
 }
 
+/// Linear/log switch for the chart pages, sitting next to the range.
+///
+/// The same flag is also in the settings panel with the annotations, since
+/// that is where it belongs conceptually, but a control nobody finds is a
+/// control nobody uses: the overlays spent months effectively hidden behind
+/// that panel. Both drive one signal, so they cannot disagree.
+#[component]
+fn ScaleToggle() -> impl IntoView {
+    let state = expect_context::<ObservatoryState>();
+    let on = state.overlay_log_scale;
+    let set_on = state.set_overlay_log_scale;
+    view! {
+        <div class="flex gap-1 bg-[#0a1a2e] rounded-xl p-1.5 border border-white/5">
+            <button
+                class=move || if on.get() {
+                    "px-2.5 py-1 text-xs rounded-lg text-white/40 hover:text-white/70 hover:bg-white/5 transition-all cursor-pointer"
+                } else {
+                    "px-2.5 py-1 text-xs rounded-lg bg-[#f7931a] text-[#1a1a2e] font-semibold cursor-pointer"
+                }
+                title="Linear value axis"
+                on:click=move |_| set_on.set(false)
+            >
+                "Linear"
+            </button>
+            <button
+                class=move || if on.get() {
+                    "px-2.5 py-1 text-xs rounded-lg bg-[#f7931a] text-[#1a1a2e] font-semibold cursor-pointer"
+                } else {
+                    "px-2.5 py-1 text-xs rounded-lg text-white/40 hover:text-white/70 hover:bg-white/5 transition-all cursor-pointer"
+                }
+                title="Logarithmic value axis. Ignored on percentage and stacked charts, and where a series touches zero"
+                on:click=move |_| set_on.set(true)
+            >
+                "Log"
+            </button>
+        </div>
+    }
+}
+
 #[component]
 fn OverlaysTabContent() -> impl IntoView {
     let state = expect_context::<ObservatoryState>();
@@ -305,6 +351,26 @@ fn OverlaysTabContent() -> impl IntoView {
             <OverlayCheckbox label="BIP Activations" color="#4ecdc4" icon="\u{2026}" checked=state.overlay_bips on_toggle=state.set_overlay_bips/>
             <OverlayCheckbox label="Core Releases" color="#a855f7" icon="\u{2026}" checked=state.overlay_core on_toggle=state.set_overlay_core/>
             <OverlayCheckbox label="Events" color="#ef4444" icon="\u{2605}" checked=state.overlay_events on_toggle=state.set_overlay_events/>
+            // Not an annotation, so it sits below a divider rather than in the
+            // list with them. Charts where a log axis would mislead ignore it
+            // rather than refusing loudly, since one switch covers all 61 and
+            // most of them have nothing to say about it.
+            <div class="border-t border-white/10 pt-2.5 mt-1">
+                <label class="flex items-center gap-2 cursor-pointer group">
+                    <input
+                        type="checkbox"
+                        class="accent-[#f7931a] w-4 h-4 cursor-pointer"
+                        prop:checked=move || state.overlay_log_scale.get()
+                        on:change=move |_| state.set_overlay_log_scale.update(|v| *v = !*v)
+                    />
+                    <span class="text-[0.9rem] text-white/60 group-hover:text-white/80 transition-colors">
+                        "Logarithmic axis"
+                    </span>
+                </label>
+                <p class="text-[0.7rem] text-white/30 mt-1 ml-6">
+                    "Ignored on percentage and stacked charts, and where a series touches zero"
+                </p>
+            </div>
             <label class="flex items-center gap-2 cursor-pointer group">
                 <input
                     type="checkbox"
@@ -584,7 +650,8 @@ pub fn ChartPageLayout(
                     "Methodology"
                 </a>
             </div>
-            <div class="sm:ml-auto">
+            <div class="sm:ml-auto flex items-center gap-3">
+                <ScaleToggle/>
                 <RangeSelector/>
             </div>
         </div>
