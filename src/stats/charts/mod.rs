@@ -127,8 +127,12 @@ pub(crate) fn chart_defaults() -> serde_json::Value {
                 // because the data was never affected, only the view. It also
                 // leaves the axis bounded by wherever the drag happened to end,
                 // which is why the y axis read 97.63 instead of 100.
-                "dataZoom": { "yAxisIndex": "none", "title": { "zoom": "Zoom", "back": "Undo zoom" } },
-                "saveAsImage": { "title": "Save image", "backgroundColor": "#0d2137" }
+                "dataZoom": { "yAxisIndex": "none", "title": { "zoom": "Zoom", "back": "Undo zoom" } }
+                // No `saveAsImage`. Every view now has a labelled PNG button
+                // in its header, and the toolbox icon sat a centimetre from
+                // the header's CSV arrow: two similar glyphs, two formats,
+                // neither saying which. The toolbox keeps only what acts on
+                // the chart itself, which is zoom, undo and reset.
             },
             "iconStyle": { "borderColor": "#aaa" },
             "emphasis": { "iconStyle": { "borderColor": "#f7931a" } },
@@ -179,7 +183,10 @@ pub(crate) fn chart_defaults() -> serde_json::Value {
 pub(crate) fn data_zoom() -> serde_json::Value {
     json!([
         {
-            "type": "slider", "start": 0, "end": 100, "height": 20, "bottom": 8,
+            // 32px, up from 20. The slider is both a control and a preview
+            // of the whole series, and at 20px the preview was a smudge and
+            // the grab target was thinner than a scrollbar.
+            "type": "slider", "start": 0, "end": 100, "height": 32, "bottom": 8,
             "borderColor": "#333", "fillerColor": "rgba(247,147,26,0.15)",
             "handleStyle": { "color": "#f7931a" }, "textStyle": { "color": "#aaa", "fontSize": 10 }
         }
@@ -1869,7 +1876,13 @@ fn push_right_axis(
             "formatter": SI_AXIS_SENTINEL
         },
         "axisLine": { "lineStyle": { "color": color } },
-        "splitLine": { "show": false }
+        "splitLine": { "show": false },
+        // The axis name sits above the axis, which is exactly where the
+        // toolbox icons are. Default `nameGap` is 15, which put "USD" level
+        // with the restore icon and on top of it once the toolbox moved left
+        // to make room. 6 drops the name to just above the first tick, below
+        // the icon row.
+        "nameGap": 6
     }));
     obj.insert("yAxis".into(), json!(y_axes));
 
@@ -2070,7 +2083,9 @@ pub fn apply_overlays(
         }
         if let Some(toolbox) = obj.get_mut("toolbox") {
             if let Some(t) = toolbox.as_object_mut() {
-                t.insert("right".into(), json!(grid_right + 25));
+                // Clear of the axis name as well as the axis. +25 left the
+                // two touching.
+                t.insert("right".into(), json!(grid_right + 45));
             }
         }
         if let Some(legend) = obj.get_mut("legend") {
@@ -3899,15 +3914,24 @@ mod tests {
         assert!(val > 13.0 && val < 14.0, "Expected ~13.79%, got {}", val);
     }
 
+    /// This test asserted `outputs - inputs = 1000` and passed for as long as
+    /// the chart was wrong, because both it and the builder used the formula
+    /// rather than the definition. `test_block` gives 100 OP_RETURN outputs,
+    /// so the honest answer is 900: those hundred can never be spent and
+    /// never enter the set.
+    ///
+    /// Worth keeping the note. A test written from the implementation cannot
+    /// catch the implementation being wrong, and this one made a 2.6x error
+    /// look verified for as long as it existed.
     #[test]
-    fn utxo_growth_computes_net_change() {
+    fn utxo_growth_excludes_outputs_that_can_never_be_spent() {
         let blocks = vec![test_block(100, 1700000000)];
         let chart = tx_metrics::utxo_growth_chart(&blocks);
         let series = chart.get("series").unwrap().as_array().unwrap();
         let data = series[0].get("data").unwrap().as_array().unwrap();
-        // output_count(5000) - input_count(4000) = 1000
+        // outputs(5000) - op_return(100) - inputs(4000)
         let val = data[0].as_array().unwrap()[1].as_i64().unwrap();
-        assert_eq!(val, 1000);
+        assert_eq!(val, 900);
     }
 
     #[test]

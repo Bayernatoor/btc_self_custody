@@ -20,6 +20,9 @@ extern "C" {
 
     #[wasm_bindgen(js_name = downloadChartCSV)]
     fn download_chart_csv(chart_id: &str, title: &str, range: &str);
+
+    #[wasm_bindgen(js_name = downloadChartPNG)]
+    fn download_chart_png(chart_id: &str, title: &str);
 }
 
 #[cfg(not(feature = "hydrate"))]
@@ -30,6 +33,9 @@ pub fn show_block_detail(_height: u64) {}
 
 #[cfg(not(feature = "hydrate"))]
 fn download_chart_csv(_id: &str, _title: &str, _range: &str) {}
+
+#[cfg(not(feature = "hydrate"))]
+fn download_chart_png(_id: &str, _title: &str) {}
 
 // ---------------------------------------------------------------------------
 // Chart component
@@ -167,14 +173,8 @@ pub fn ChartCard(
     /// Show a "Coming Soon" overlay over the chart area
     #[prop(optional)]
     coming_soon: bool,
-    /// Info tooltip text explaining how to read this chart
-    #[prop(optional, into)]
-    info: Option<&'static str>,
 ) -> impl IntoView {
-    let (expanded, set_expanded) = signal(false);
     let (info_open, set_info_open) = signal(false);
-    let anchor = chart_id.clone();
-    let share_id = chart_id.clone();
     let download_id = chart_id.clone();
     let download_title = title.clone();
     // The single-chart route's slug is the card's `chart_id` minus the prefix,
@@ -183,6 +183,16 @@ pub fn ChartCard(
         .strip_prefix("chart-")
         .unwrap_or(chart_id.as_str())
         .to_string();
+    // Long-form copy comes from the registry, keyed by the same slug the
+    // card's page link uses, so a card and its page cannot describe the same
+    // chart differently.
+    let about = crate::stats::charts::registry::find(page_slug.as_str())
+        .and_then(|m| m.about);
+    let about_slug = page_slug.clone();
+    let png_id = chart_id.clone();
+    let png_title = title.clone();
+    let expand_slug = page_slug.clone();
+    let share_slug = page_slug.clone();
     let (copied, set_copied) = signal(false);
     let state = expect_context::<super::shared::ObservatoryState>();
     let loading = state.data_loading;
@@ -192,29 +202,22 @@ pub fn ChartCard(
         <div id=format!("card-{}", chart_id) class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6">
             <div class="flex items-start justify-between mb-4">
                 <div>
-                    <h3
-                        class="text-base text-white font-semibold cursor-pointer hover:text-[#f7931a] transition-colors"
-                        title="Click to copy link"
-                        on:click={
-                            let id = anchor.clone();
-                            move |_| {
-                                #[cfg(feature = "hydrate")]
-                                {
-                                    let url = super::shared::build_share_url(&id);
-                                    let _ = leptos::prelude::window().navigator().clipboard().write_text(&url);
-                                    set_copied.set(true);
-                                    leptos::prelude::set_timeout(move || set_copied.set(false), std::time::Duration::from_secs(2));
-                                }
-                            }
-                        }
-                    >
-                        {title.clone()}
-                        " "
-                        <span class="text-white/20 text-xs font-normal">{move || if copied.get() { "\u{2713} copied" } else { "#" }}</span>
+                    // A link to the chart's own page, not click-to-copy. The
+                    // copy-link button sits a few pixels to the right and does
+                    // that already, so the title was spending the most obvious
+                    // click target on the less useful of the two actions.
+                    <h3 class="text-base text-white font-semibold">
+                        <a
+                            href=format!("/observatory/chart/{page_slug}")
+                            class="hover:text-[#f7931a] transition-colors"
+                            title="Open this chart's own page"
+                        >
+                            {title.clone()}
+                        </a>
                     </h3>
                     <div class="flex items-center gap-1.5 mt-0.5">
                         <p class="text-sm text-white/50">{move || description.get()}</p>
-                        {info.map(|_| view! {
+                        {about.map(|_| view! {
                             <button
                                 class="text-white/30 hover:text-[#f7931a] transition-colors cursor-pointer shrink-0"
                                 title="How to read this chart"
@@ -227,10 +230,28 @@ pub fn ChartCard(
                             </button>
                         })}
                     </div>
-                    {info.map(|text| view! {
+                    // The same words the chart's own page shows under "About
+                    // this metric", read from the registry rather than passed
+                    // in. They used to be a separate hand-written prop on the
+                    // page, which meant the two views explained the same chart
+                    // in two voices, and 36 charts had one while 13 had the
+                    // other.
+                    {about.map(|copy| view! {
                         <Show when=move || info_open.get()>
-                            <div class="mt-2 p-3 bg-white/[0.03] border border-white/5 rounded-lg text-sm text-white/60 leading-relaxed">
-                                {text}
+                            <div class="mt-2 p-3 bg-white/[0.03] border border-white/5 rounded-lg text-sm text-white/60 leading-relaxed space-y-2 max-w-3xl">
+                                {copy.definition.map(|d| view! { <p>{d}</p> })}
+                                <p>
+                                    <span class="text-white/40">"How it is measured. "</span>
+                                    {copy.technical}
+                                </p>
+                                <p class="text-xs text-white/30">
+                                    <a
+                                        href=format!("/observatory/chart/{about_slug}")
+                                        class="hover:text-[#f7931a] transition-colors"
+                                    >
+                                        "Full page, key figures and downloads"
+                                    </a>
+                                </p>
                             </div>
                         </Show>
                     })}
@@ -254,13 +275,31 @@ pub fn ChartCard(
                     </button>
                     <button
                         class="text-white/50 hover:text-[#f7931a] transition-colors cursor-pointer p-1.5 rounded-lg hover:bg-white/5"
-                        title="Copy link to chart"
+                        title="Download PNG"
                         on:click={
-                            let _id = share_id.clone();
+                            let id = png_id.clone();
+                            let t = png_title.clone();
+                            move |_| download_chart_png(&id, &t)
+                        }
+                    >
+                        // A picture frame, not a second download arrow. The
+                        // toolbox's save icon used to sit a centimetre away
+                        // from the header's CSV arrow, two similar glyphs for
+                        // two different formats.
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M18 9.75h.008v.008H18V9.75zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3h16.5A1.5 1.5 0 0 1 21.75 4.5v15a1.5 1.5 0 0 1-1.5 1.5H3.75a1.5 1.5 0 0 1-1.5-1.5v-15A1.5 1.5 0 0 1 3.75 3z"/>
+                        </svg>
+                    </button>
+                    <button
+                        class="text-white/50 hover:text-[#f7931a] transition-colors cursor-pointer p-1.5 rounded-lg hover:bg-white/5"
+                        title="Copy a link to this chart"
+                        on:click={
+                            let _slug = share_slug.clone();
                             move |_| {
                                 #[cfg(feature = "hydrate")]
                                 {
-                                    let url = super::shared::build_share_url(&_id);
+                                    let url = super::shared::build_chart_page_url(&_slug);
                                     let _ = leptos::prelude::window().navigator().clipboard().write_text(&url);
                                     set_copied.set(true);
                                     leptos::prelude::set_timeout(move || set_copied.set(false), std::time::Duration::from_secs(2));
@@ -282,37 +321,25 @@ pub fn ChartCard(
                             }.into_any()
                         }}
                     </button>
-                    // Link to the chart's own page, when it has one. Guarded on
-                    // the registry rather than assuming, so a card whose chart
-                    // is unregistered shows no link instead of a dead one. A
-                    // test asserts every card is registered, so in practice
-                    // this is always Some; the guard is what keeps it true if
-                    // that ever stops holding.
-                    {crate::stats::charts::registry::find(
-                        page_slug.as_str(),
-                    )
-                    .map(|_| {
-                        view! {
-                            <a
-                                href=format!("/observatory/chart/{page_slug}")
-                                class="text-white/50 hover:text-[#f7931a] transition-colors cursor-pointer p-1.5 rounded-lg hover:bg-white/5 inline-flex"
-                                title="Open this chart's own page, with downloads and key figures"
-                            >
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/>
-                                </svg>
-                            </a>
-                        }
-                    })}
-                    <button
-                        class="text-white/50 hover:text-[#f7931a] transition-colors cursor-pointer p-1.5 rounded-lg hover:bg-white/5"
-                        title="Expand"
-                        on:click=move |_| set_expanded.set(true)
+                    // Expanding navigates to the chart's page rather than
+                    // opening a modal over the one you are on. The page is a
+                    // better version of what the modal was for: it is bigger,
+                    // it carries the key figures and the exports, and it has
+                    // a URL.
+                    //
+                    // Same tab as the title, and the duplicate external-link
+                    // icon beside it is gone: an icon in the control row and
+                    // a linked title are two affordances for one action, not
+                    // three.
+                    <a
+                        href=format!("/observatory/chart/{expand_slug}")
+                        class="text-white/50 hover:text-[#f7931a] transition-colors cursor-pointer p-1.5 rounded-lg hover:bg-white/5 inline-flex"
+                        title="Open full size, with key figures and downloads"
                     >
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15"/>
                         </svg>
-                    </button>
+                    </a>
                 </div>
             </div>
             <div class="h-[350px] lg:h-[600px] relative">
@@ -341,44 +368,6 @@ pub fn ChartCard(
             </div>
         </div>
 
-        // Fullscreen overlay when expanded
-        <Show when=move || expanded.get()>
-            // Close on Escape key
-            {
-                use leptos::ev::keydown;
-                let handle = leptos::prelude::window_event_listener(keydown, move |ev| {
-                    if ev.key() == "Escape" {
-                        set_expanded.set(false);
-                    }
-                });
-                leptos::prelude::on_cleanup(move || handle.remove());
-            }
-            <div
-                class="fixed inset-0 flex flex-col pt-14 pb-4 px-2 sm:px-4 lg:pt-16 lg:pb-6 lg:px-8 overflow-hidden"
-                style="z-index: 9999; background: #0a1929; max-width: 100vw;"
-            >
-                // Header with close button
-                <div class="flex items-center justify-between mb-2 sm:mb-3 shrink-0">
-                    <div class="min-w-0 mr-2">
-                        <h3 class="text-sm sm:text-base text-white font-semibold truncate">{title.clone()}</h3>
-                        <p class="text-xs sm:text-sm text-white/50 mt-0.5 truncate">{move || description.get()}</p>
-                    </div>
-                    <button
-                        class="text-white/60 hover:text-white transition-colors cursor-pointer p-2.5 rounded-xl hover:bg-white/10 border border-white/10 hover:border-white/20"
-                        title="Close (Esc)"
-                        on:click=move |_| set_expanded.set(false)
-                    >
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
-                        </svg>
-                    </button>
-                </div>
-                // Chart fills remaining space
-                <div class="flex-1 min-h-0 bg-[#0a1a2e] border border-white/10 rounded-xl p-2">
-                    <Chart id=format!("{}-fullscreen", chart_id) option=option class="w-full h-full".to_string()/>
-                </div>
-            </div>
-        </Show>
     }
 }
 

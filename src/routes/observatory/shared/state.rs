@@ -594,6 +594,25 @@ pub fn provide_observatory_state() -> ObservatoryState {
                 return;
             }
             let pathname = location.pathname.get();
+            // Only write to the entry that is actually on screen.
+            //
+            // This writes with `replaceState`, which edits whichever history
+            // entry is current. The effect also re-runs when the router's
+            // pathname changes, so during a navigation it can fire while the
+            // browser still has the previous entry current, stamping the new
+            // page's query string onto the old page's history entry. Going
+            // back then lands on a URL that never existed.
+            //
+            // Comparing the router's view of the path against the browser's
+            // is what tells the two apart: equal means the navigation has
+            // settled and this entry is ours to edit.
+            let live = leptos::prelude::window()
+                .location()
+                .pathname()
+                .unwrap_or_default();
+            if live != pathname {
+                return;
+            }
             let search = leptos::prelude::window()
                 .location()
                 .search()

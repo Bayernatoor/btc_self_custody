@@ -313,7 +313,9 @@
         if (opts.dataZoom && Array.isArray(opts.dataZoom)) {
             opts.dataZoom.forEach(function(dz) {
                 if (dz.type === 'slider') {
-                    dz.height = 15;
+                    // Shorter than desktop but still a finger-width grab
+                    // target; 15 was thinner than a scrollbar.
+                    dz.height = 22;
                     dz.bottom = 5;
                 }
             });
@@ -564,16 +566,6 @@
                     return header + (p.marker || '') + ' ' + val;
                 };
             }
-            // Dark background for PNG downloads only (chart renders transparent).
-            // Derive a per-chart filename from the element id so saved images
-            // are named "wehodlbtc_<chart>.jpg" instead of the ECharts default
-            // "echarts.jpg" — both improves clarity for the user and acts as
-            // a distribution hook when images are shared.
-            if (opts.toolbox && opts.toolbox.feature && opts.toolbox.feature.saveAsImage) {
-                opts.toolbox.feature.saveAsImage.connectedBackgroundColor = '#0d2137';
-                var slug = elementId.replace(/^chart[-_]/, '').replace(/[-\s]+/g, '_');
-                opts.toolbox.feature.saveAsImage.name = 'wehodlbtc_' + slug;
-            }
             // Scale watermark font to chart width so it fits on mobile without
             // overflowing. ECharts graphic elements don't auto-scale, so we
             // compute a size here (8% of chart width, clamped to [20, 56] px).
@@ -586,15 +578,6 @@
             }
             applyAxisSentinels(opts);
             applyMobileAdjustments(opts);
-            // The single-chart view puts a labelled PNG button in its header,
-            // so the toolbox's save icon would be a second control doing the
-            // same thing a few pixels away. The zoom and restore tools stay:
-            // the box-select brush is activated by default below and is the
-            // main way to zoom.
-            if (elementId.indexOf('single-chart-') === 0 &&
-                opts.toolbox && opts.toolbox.feature) {
-                delete opts.toolbox.feature.saveAsImage;
-            }
             el._chart.setOption(opts, { notMerge: true, lazyUpdate: true });
             // Activate the toolbox dataZoom brush by default on desktop so a
             // drag on the chart area immediately box-selects a zoom range —
@@ -1131,11 +1114,16 @@
             pixelRatio: 2,
             backgroundColor: '#0d2137'
         });
+        // Prefixed, because a saved chart travels: it gets pasted into a
+        // thread with no link back, and the filename is the only thing on it
+        // that says where it came from. The toolbox's save tool did this and
+        // this replaced it, so dropping the prefix would have been a quiet
+        // regression rather than a change anyone decided on.
         var name = (title || 'chart').replace(/[^a-z0-9]+/gi, '-')
             .replace(/^-|-$/g, '').toLowerCase();
         var a = document.createElement('a');
         a.href = url;
-        a.download = name + '.png';
+        a.download = 'wehodlbtc_' + name + '.png';
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);

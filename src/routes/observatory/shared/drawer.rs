@@ -22,6 +22,38 @@ struct DrawerSection {
     charts: Vec<DrawerChart>,
 }
 
+/// How many charts the index lists, for the header.
+///
+/// Counted from the drawer's own entries rather than from the registry, so
+/// the number describes what is actually on screen. A test holds the two
+/// lists together, so they agree; if they ever stop, this should say what the
+/// reader can see.
+fn chart_count() -> usize {
+    drawer_pages()
+        .iter()
+        .flat_map(|p| p.sections.iter())
+        .map(|s| s.charts.len())
+        .sum()
+}
+
+/// The chart's registry slug, from the card element id the drawer stores.
+///
+/// Drawer entries hold `card-chart-<slug>`, the id of the card wrapper on a
+/// multi-chart page. The single-chart route keys off the bare slug, and the
+/// test below checks the same mapping, so the derivation lives here rather
+/// than being written out at each use.
+///
+/// Ungated so the tests can reach it: the only non-test caller is inside the
+/// hydrate-only click handler, which does not exist in the `ssr` build where
+/// tests run.
+#[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
+fn slug_of(card_id: &str) -> &str {
+    card_id
+        .strip_prefix("card-chart-")
+        .or_else(|| card_id.strip_prefix("chart-"))
+        .unwrap_or(card_id)
+}
+
 /// A top-level page grouping in the drawer.
 struct DrawerPage {
     label: &'static str,
@@ -241,6 +273,14 @@ fn drawer_pages() -> Vec<DrawerPage> {
                             card_id: "card-chart-difficulty",
                         },
                         DrawerChart {
+                            label: "Hash Rate",
+                            card_id: "card-chart-hash-rate",
+                        },
+                        DrawerChart {
+                            label: "Difficulty Adjustment",
+                            card_id: "card-chart-diff-adjustment",
+                        },
+                        DrawerChart {
                             label: "Difficulty Ribbon",
                             card_id: "card-chart-diff-ribbon",
                         },
@@ -365,13 +405,30 @@ pub fn ChartDrawer() -> impl IntoView {
         // clearly clickable without competing with the solid-fill FAB.
         <button
             style="z-index: 10001"
-            class="fixed left-0 top-1/3 bg-[#0d2137] border sm:border-[3px] border-l-0 sm:border-l-0 border-[#f7931a]/60 rounded-r-xl px-2 sm:px-2.5 py-2.5 sm:py-6 cursor-pointer hover:bg-[#143050] hover:border-[#f7931a] hover:scale-105 transition-all group shadow-lg shadow-black/30"
+            // Narrow and tall rather than square. A wide tab reads as a
+            // button that happens to be at the edge and takes width from the
+            // chart; a thin one that runs a fifth of the viewport reads as a
+            // handle, which is what it is, and is a bigger target for being
+            // noticed at all despite covering less area.
+            // Border weight and colours match the settings button on the
+            // opposite edge, so the two floating affordances read as a pair
+            // rather than as one control and one decoration.
+            class="fixed left-0 top-1/3 -translate-y-1/4 h-[20vh] min-h-[7rem] w-7 sm:w-8 flex flex-col items-center justify-center gap-2 bg-[#0d2137] border-[3px] border-l-0 border-[#f7931a]/70 hover:border-[#ffa534] rounded-r-lg cursor-pointer hover:bg-[#143050] hover:w-8 sm:hover:w-9 transition-all group shadow-lg shadow-black/30"
             on:click=move |_| set_open.set(true)
             title="Chart index"
         >
-            <svg class="w-5 h-5 sm:w-6 sm:h-6 text-[#f7931a]/80 group-hover:text-[#f7931a] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-4 h-4 text-[#f7931a]/80 group-hover:text-[#ffa534] transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 6h16M4 12h16M4 18h16"/>
             </svg>
+            // Vertical, because a handle this narrow has room for the word
+            // only if it runs with the tab rather than across it. Says what
+            // opens, which an icon alone never did.
+            <span
+                class="text-[10px] font-bold tracking-[0.18em] uppercase text-[#f7931a]/80 group-hover:text-[#ffa534] transition-colors whitespace-nowrap"
+                style="writing-mode: vertical-rl"
+            >
+                "Charts"
+            </span>
         </button>
 
         // Portaled to <body> so the overlay escapes ObservatoryPage's stacking
@@ -403,19 +460,29 @@ pub fn ChartDrawer() -> impl IntoView {
                     "z-index: 10003; transform: translateX({}); transition: transform 0.25s ease-in-out;",
                     if open.get() { "0" } else { "-100%" }
                 )
-                class="fixed inset-y-0 left-0 w-72 bg-[#0d2137] border-r border-white/10 overflow-y-auto"
+                class="fixed inset-y-0 left-0 w-80 sm:w-[22rem] bg-[#0d2137] border-r border-white/10 overflow-y-auto shadow-2xl shadow-black/50"
             >
-                // Header
-                <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
-                    <span class="text-sm font-semibold text-white/80">"Chart Index"</span>
-                    <button
-                        class="text-white/30 hover:text-white/60 cursor-pointer"
-                        on:click=move |_| set_open.set(false)
-                    >
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                        </svg>
-                    </button>
+                // Header. Says what the list is for, not just what it is
+                // called: "Chart Index" alone left a reader to work out
+                // whether this was navigation or settings.
+                <div class="px-4 py-3.5 border-b border-white/10 sticky top-0 bg-[#0d2137] z-10">
+                    <div class="flex items-start justify-between gap-3">
+                        <div>
+                            <h2 class="text-base font-semibold text-white">"All charts"</h2>
+                            <p class="text-[0.7rem] text-white/40 mt-0.5">
+                                {format!("{} metrics from my own node", chart_count())}
+                            </p>
+                        </div>
+                        <button
+                            class="text-white/30 hover:text-white/70 cursor-pointer p-1 -mr-1 -mt-0.5 rounded-md hover:bg-white/5 transition-colors"
+                            aria-label="Close the chart index"
+                            on:click=move |_| set_open.set(false)
+                        >
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
 
                 // Content
@@ -437,6 +504,9 @@ pub fn ChartDrawer() -> impl IntoView {
                                     }
                                 }>
                                     {page.label}
+                                    <span class="ml-1.5 font-normal normal-case tracking-normal text-white/25">
+                                        {page.sections.iter().map(|s| s.charts.len()).sum::<usize>()}
+                                    </span>
                                 </div>
                                 // Sections
                                 {page.sections.into_iter().map(|section| {
@@ -445,7 +515,7 @@ pub fn ChartDrawer() -> impl IntoView {
                                         <div class="ml-1">
                                             {if has_label {
                                                 Some(view! {
-                                                    <div class="text-[11px] text-white/45 font-semibold uppercase tracking-wider px-2 pt-2 pb-1">
+                                                    <div class="text-[11px] text-white/50 font-semibold uppercase tracking-wider px-2 pt-3 pb-1">
                                                         {section.label}
                                                     </div>
                                                 })
@@ -458,19 +528,37 @@ pub fn ChartDrawer() -> impl IntoView {
                                                     view! {
                                                         <li>
                                                             <button
-                                                                class="w-full text-left text-[12px] text-white/60 hover:text-white hover:bg-white/5 rounded-md px-3 py-1 cursor-pointer transition-colors"
+                                                                // 13px and py-1.5, up from 12px and py-1. Sixty-one
+                                                                // entries at the old size read as a wall of grey
+                                                                // rather than a list of things to pick.
+                                                                class="w-full text-left text-[13px] text-white/65 hover:text-white hover:bg-white/[0.07] rounded-md px-3 py-1.5 cursor-pointer transition-colors"
                                                                 on:click=move |_| {
                                                                     set_open.set(false);
                                                                     #[cfg(feature = "hydrate")]
                                                                     {
-                                                                        // All charts are in the DOM (flat layout), so direct
-                                                                        // scroll works for same-page. Cross-page: navigate via href.
-                                                                        if let Some(el) = leptos::prelude::document().get_element_by_id(card_id) {
+                                                                        // Reading a chart on its own page and picking
+                                                                        // another from the index means you want that
+                                                                        // chart's page, not the grid it came from.
+                                                                        // Sending you back to the multi-chart view was
+                                                                        // a demotion disguised as navigation.
+                                                                        let on_single = leptos::prelude::window()
+                                                                            .location()
+                                                                            .pathname()
+                                                                            .unwrap_or_default()
+                                                                            .starts_with("/observatory/chart/");
+                                                                        let url = if on_single {
+                                                                            format!("/observatory/chart/{}", slug_of(card_id))
+                                                                        } else if let Some(el) =
+                                                                            leptos::prelude::document().get_element_by_id(card_id)
+                                                                        {
+                                                                            // Same page, flat layout: every card is in
+                                                                            // the DOM, so scroll rather than reload.
                                                                             el.scroll_into_view();
+                                                                            return;
                                                                         } else {
-                                                                            let url = format!("{}#{}", path_prefix, card_id);
-                                                                            let _ = leptos::prelude::window().location().set_href(&url);
-                                                                        }
+                                                                            format!("{}#{}", path_prefix, card_id)
+                                                                        };
+                                                                        let _ = leptos::prelude::window().location().set_href(&url);
                                                                     }
                                                                 }
                                                             >
@@ -568,5 +656,52 @@ mod tests {
             unreachable.is_empty(),
             "charts rendered but not linked from the drawer: {unreachable:?}"
         );
+    }
+}
+
+#[cfg(test)]
+mod registry_link_tests {
+    use super::*;
+
+    /// From a single-chart page the drawer navigates to another chart's own
+    /// page, so every entry has to name a chart the registry knows. An entry
+    /// that does not is a 404 reachable from the index of all charts.
+    ///
+    /// This is the third hand-maintained list of the same charts (pages,
+    /// drawer, registry), and the direction that matters most now that the
+    /// drawer produces URLs rather than scroll targets.
+    #[test]
+    fn every_drawer_entry_resolves_to_a_chart_page() {
+        let mut missing = Vec::new();
+        let mut count = 0;
+        for page in drawer_pages() {
+            for section in &page.sections {
+                for chart in &section.charts {
+                    count += 1;
+                    let slug = slug_of(chart.card_id);
+                    if crate::stats::charts::registry::find(slug).is_none() {
+                        missing.push((chart.label, chart.card_id, slug));
+                    }
+                }
+            }
+        }
+        assert!(
+            count > 50,
+            "parsed only {count} drawer entries; the drawer, not the \
+             registry, is probably what changed"
+        );
+        assert!(
+            missing.is_empty(),
+            "drawer entries with no chart page, which now 404 from the \
+             chart index: {missing:?}"
+        );
+    }
+
+    /// The mapping the link depends on, pinned in both shapes the ids take.
+    #[test]
+    fn a_card_id_reduces_to_its_slug() {
+        assert_eq!(slug_of("card-chart-difficulty"), "difficulty");
+        assert_eq!(slug_of("chart-difficulty"), "difficulty");
+        assert_eq!(slug_of("difficulty"), "difficulty");
     }
 }

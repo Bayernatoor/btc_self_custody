@@ -798,10 +798,16 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                 {match meta.about {
                     Some(copy) => view! {
                         <div class="max-w-3xl space-y-3">
-                            <p class="text-sm text-white/70 leading-relaxed">
-                                <span class="text-white/50">"Definition. "</span>
-                                {copy.definition}
-                            </p>
+                            // Not every chart has the definition half yet, so
+                            // the subtitle above carries the short answer and
+                            // this shows what exists rather than an empty
+                            // heading.
+                            {copy.definition.map(|d| view! {
+                                <p class="text-sm text-white/70 leading-relaxed">
+                                    <span class="text-white/50">"Definition. "</span>
+                                    {d}
+                                </p>
+                            })}
                             <p class="text-sm text-white/70 leading-relaxed">
                                 <span class="text-white/50">"How it is measured. "</span>
                                 {copy.technical}
@@ -1418,9 +1424,20 @@ fn OverlayToggles(
                     // words for the same thing.
                     {move || if daily.get() { c.desc_daily } else { c.desc_per_block }}
                     ". "
+                    // Clears the comparison on the way out. You are asking
+                    // to look at the chart you were comparing against, and it
+                    // cannot be compared with itself, so carrying the slug
+                    // across is carrying a value that is invalid on arrival.
+                    //
+                    // Clearing it here rather than letting the reconciling
+                    // effect do it after the fact matters, because the URL
+                    // writer runs on every state change and would otherwise
+                    // stamp `?compare=<this chart>` onto the new page before
+                    // the effect cleared it again.
                     <a
                         href=format!("/observatory/chart/{}", c.slug)
                         class="text-white/60 hover:text-[#f7931a] underline decoration-white/20 underline-offset-2 transition-colors"
+                        on:click=move |_| set_compare.set(String::new())
                     >
                         "Open its chart"
                     </a>

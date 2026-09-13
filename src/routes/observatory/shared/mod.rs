@@ -15,7 +15,7 @@ pub use drawer::*;
 pub use range::*;
 pub use state::*;
 #[cfg(feature = "hydrate")]
-pub use url_sync::build_share_url;
+pub use url_sync::{build_chart_page_url, build_share_url};
 
 use leptos::portal::Portal;
 use leptos::prelude::*;
@@ -244,9 +244,13 @@ pub fn ChartSettingsPanel() -> impl IntoView {
                     // Header: tabs + close
                     <div class="flex items-center justify-between border-b border-white/5 px-4 pt-3 pb-0">
                         <div class="flex gap-4">
+                            // "Axes", not "Range". The tab holds how the data
+                            // is sliced and how it is drawn, which are both
+                            // axis decisions, and the scale switches were
+                            // sitting under Overlays where they drew nothing.
                             <ChartSettingsTabButton
                                 tab=ChartSettingsTab::Range
-                                label="Range"
+                                label="Axes"
                             />
                             <ChartSettingsTabButton
                                 tab=ChartSettingsTab::Overlays
@@ -271,10 +275,60 @@ pub fn ChartSettingsPanel() -> impl IntoView {
                             }.into_any(),
                             ChartSettingsTab::Range => view! {
                                 <RangeSelector/>
+                                <ScaleSettings/>
                             }.into_any(),
                         }}
                     </div>
                 </div>
+            </Show>
+        </div>
+    }
+}
+
+/// Both value-axis scales, in the tab that owns how the chart is drawn.
+///
+/// Lived in the Overlays tab, which was wrong twice over: a scale is not
+/// something drawn on top of the chart, and a reader looking for it had no
+/// reason to open a tab named after annotations. The second switch appears
+/// only once something owns the right axis, since there is otherwise nothing
+/// for it to move.
+#[component]
+fn ScaleSettings() -> impl IntoView {
+    let state = expect_context::<ObservatoryState>();
+    view! {
+        <div class="border-t border-white/10 pt-3 mt-3">
+            <p class="text-[0.6rem] uppercase tracking-widest text-white/30 mb-2">
+                "Scale"
+            </p>
+            <label class="flex items-center gap-2 cursor-pointer group">
+                <input
+                    type="checkbox"
+                    class="accent-[#f7931a] w-4 h-4 cursor-pointer"
+                    prop:checked=move || state.overlay_log_scale.get()
+                    on:change=move |_| state.set_overlay_log_scale.update(|v| *v = !*v)
+                />
+                <span class="text-[0.9rem] text-white/60 group-hover:text-white/80 transition-colors">
+                    "Logarithmic axis"
+                </span>
+            </label>
+            <p class="text-[0.7rem] text-white/30 mt-1 ml-6">
+                "Applies at any range. Ignored on percentage and stacked charts, where a second scale cannot be read against the bands"
+            </p>
+            <Show when=move || state.overlay_flags.get().has_right_axis()>
+                <label class="flex items-center gap-2 cursor-pointer group mt-2.5">
+                    <input
+                        type="checkbox"
+                        class="accent-[#e6c84e] w-4 h-4 cursor-pointer"
+                        prop:checked=move || state.overlay_right_log_scale.get()
+                        on:change=move |_| state.set_overlay_right_log_scale.update(|v| *v = !*v)
+                    />
+                    <span class="text-[0.9rem] text-white/60 group-hover:text-white/80 transition-colors">
+                        "Logarithmic overlay axis"
+                    </span>
+                </label>
+                <p class="text-[0.7rem] text-white/30 mt-1 ml-6">
+                    "Scales the right-hand axis on its own, so price can be read across six orders of magnitude without moving the metric beside it"
+                </p>
             </Show>
         </div>
     }
@@ -351,47 +405,6 @@ fn OverlaysTabContent() -> impl IntoView {
             <OverlayCheckbox label="BIP Activations" color="#4ecdc4" icon="\u{2026}" checked=state.overlay_bips on_toggle=state.set_overlay_bips/>
             <OverlayCheckbox label="Core Releases" color="#a855f7" icon="\u{2026}" checked=state.overlay_core on_toggle=state.set_overlay_core/>
             <OverlayCheckbox label="Events" color="#ef4444" icon="\u{2605}" checked=state.overlay_events on_toggle=state.set_overlay_events/>
-            // Not an annotation, so it sits below a divider rather than in the
-            // list with them. Charts where a log axis would mislead ignore it
-            // rather than refusing loudly, since one switch covers all 61 and
-            // most of them have nothing to say about it.
-            <div class="border-t border-white/10 pt-2.5 mt-1">
-                <label class="flex items-center gap-2 cursor-pointer group">
-                    <input
-                        type="checkbox"
-                        class="accent-[#f7931a] w-4 h-4 cursor-pointer"
-                        prop:checked=move || state.overlay_log_scale.get()
-                        on:change=move |_| state.set_overlay_log_scale.update(|v| *v = !*v)
-                    />
-                    <span class="text-[0.9rem] text-white/60 group-hover:text-white/80 transition-colors">
-                        "Logarithmic axis"
-                    </span>
-                </label>
-                <p class="text-[0.7rem] text-white/30 mt-1 ml-6">
-                    "Applies at any range. Ignored on percentage and stacked charts, where a second scale cannot be read against the bands"
-                </p>
-                // Separate switch, and only once there is a right axis to
-                // move. Price crosses six orders of magnitude, so it needs a
-                // log axis to be readable at all; tying that to the metric's
-                // own scale would mean rescaling the thing the chart is about
-                // in order to read the line laid over it.
-                <Show when=move || state.overlay_flags.get().has_right_axis()>
-                    <label class="flex items-center gap-2 cursor-pointer group mt-2.5">
-                        <input
-                            type="checkbox"
-                            class="accent-[#e6c84e] w-4 h-4 cursor-pointer"
-                            prop:checked=move || state.overlay_right_log_scale.get()
-                            on:change=move |_| state.set_overlay_right_log_scale.update(|v| *v = !*v)
-                        />
-                        <span class="text-[0.9rem] text-white/60 group-hover:text-white/80 transition-colors">
-                            "Logarithmic overlay axis"
-                        </span>
-                    </label>
-                    <p class="text-[0.7rem] text-white/30 mt-1 ml-6">
-                        "Scales the right-hand axis on its own, so price can be read across six orders of magnitude without moving the metric beside it"
-                    </p>
-                </Show>
-            </div>
             <label class="flex items-center gap-2 cursor-pointer group">
                 <input
                     type="checkbox"

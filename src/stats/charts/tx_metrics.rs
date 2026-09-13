@@ -513,20 +513,39 @@ pub fn utxo_flow_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
 
 /// Net UTXO set change per block (outputs minus inputs).
 /// Positive = UTXO set growing, negative = consolidation.
+/// Net change in the spendable output set for one block.
+///
+/// `output_count - input_count` looks like the answer and is not, by a factor
+/// of 2.6 across the chain: summed over every block it gives 424,938,729
+/// against a node's own 165 million.
+///
+/// **OP_RETURN outputs are created and never enter the set.** They are
+/// provably unspendable, so no input will ever consume one, and counting them
+/// as growth inflates the series permanently. They are 262,908,750 of the
+/// 3,918,115,271 outputs ever created, 6.7% lifetime and far higher lately.
+///
+/// **The coinbase transaction is not in these counts at all.** A block with
+/// only a coinbase records `input_count = 0` and `output_count = 0`, which is
+/// how the ingest is built. So there is no coinbase input to correct for, and
+/// the coinbase's own outputs, which do enter the set, are missing. That
+/// leaves this roughly 3 per block short, the residual between the corrected
+/// figure and the node's. Fixing it means storing a coinbase output count and
+/// backfilling 966,871 blocks; the `technical` copy says so rather than
+/// implying the number is exact.
+fn net_utxo_change(b: &BlockSummary) -> i64 {
+    b.output_count as i64 - b.op_return_count as i64 - b.input_count as i64
+}
+
 pub fn utxo_growth_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("UTXO Growth Rate");
     }
 
-    let data_str = build_data_array_i64(blocks, |b| {
-        b.output_count as i64 - b.input_count as i64
-    });
+    let data_str = build_data_array_i64(blocks, net_utxo_change);
     let data = data_array_value(&data_str);
 
-    let raw: Vec<f64> = blocks
-        .iter()
-        .map(|b| b.output_count as f64 - b.input_count as f64)
-        .collect();
+    let raw: Vec<f64> =
+        blocks.iter().map(|b| net_utxo_change(b) as f64).collect();
     let ma = moving_average(&raw, 144);
     let ma_str = build_ma_array(blocks, &ma);
     let ma_data = data_array_value(&ma_str);
@@ -563,8 +582,9 @@ pub fn utxo_growth_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     let data: Vec<f64> = days
         .iter()
         .map(|d| {
-            let net =
-                (d.avg_output_count - d.avg_input_count) * d.block_count as f64;
+            let net = (d.avg_output_count - d.avg_input_count)
+                * d.block_count as f64
+                - d.total_op_return_count as f64;
             round(net, 0)
         })
         .collect();
@@ -729,4 +749,54 @@ pub fn tx_type_evolution_chart(blocks: &[BlockSummary]) -> serde_json::Value {
             }
         ]
     }))
+}
+
+#[cfg(test)]
+mod utxo_tests {
+    use super::*;
+
+    fn block(outputs: u64, inputs: u64, op_returns: u64) -> BlockSummary {
+        BlockSummary {
+            output_count: outputs,
+            input_count: inputs,
+            op_return_count: op_returns,
+            ..Default::default()
+        }
+    }
+
+    /// The defect: unspendable outputs counted as growth. Summed over the
+    /// chain this made the series 2.6 times too large, which a reader caught
+    /// by adding up the CSV and comparing it against their own node.
+    #[test]
+    fn unspendable_outputs_are_not_growth() {
+        // Ten outputs, four of them OP_RETURN, three inputs spent.
+        // Six enter the set, three leave: net three.
+        assert_eq!(net_utxo_change(&block(10, 3, 4)), 3);
+        // The old formula would have said seven.
+        assert_ne!(net_utxo_change(&block(10, 3, 4)), 7);
+    }
+
+    /// Consolidation is the case the chart exists to show, and it has to stay
+    /// negative: a log axis refuses these points and says how many it left
+    /// out, which only works if they are still here.
+    #[test]
+    fn consolidation_still_reads_negative() {
+        assert_eq!(net_utxo_change(&block(2, 50, 0)), -48);
+        assert_eq!(net_utxo_change(&block(2, 50, 1)), -49);
+    }
+
+    /// A block carrying nothing but a coinbase records zeroes, because the
+    /// ingest excludes the coinbase transaction. No inputs to correct for,
+    /// and nothing to add.
+    #[test]
+    fn an_empty_block_moves_the_set_by_nothing() {
+        assert_eq!(net_utxo_change(&block(0, 0, 0)), 0);
+    }
+
+    /// A block that is all OP_RETURN adds nothing spendable, whatever the
+    /// output count says.
+    #[test]
+    fn a_block_of_only_op_returns_adds_nothing() {
+        assert_eq!(net_utxo_change(&block(5, 0, 5)), 0);
+    }
 }

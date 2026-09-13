@@ -155,6 +155,26 @@ pub fn build_share_url(chart_id: &str) -> String {
     format!("{origin}{pathname}{search}#{chart_id}")
 }
 
+/// A shareable link to one chart's own page, carrying the current view.
+///
+/// The card's copy button used to produce `{grid page}#{card id}`, which
+/// drops the recipient into a wall of thirty charts and scrolls. Every chart
+/// now has a page of its own that takes the same query state, so that is the
+/// better thing to hand someone: it opens on the chart, at the range and
+/// scale the sender was looking at, with its own title and description.
+///
+/// The search string is carried verbatim rather than rebuilt. It is whatever
+/// `sync_url_to_state` last wrote, so the link cannot disagree with the
+/// address bar it was copied from, and a parameter only the grid understands
+/// is simply ignored by the page.
+#[cfg(feature = "hydrate")]
+pub fn build_chart_page_url(slug: &str) -> String {
+    let window = leptos::prelude::window();
+    let origin = window.location().origin().unwrap_or_default();
+    let search = window.location().search().unwrap_or_default();
+    format!("{origin}/observatory/chart/{slug}{search}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

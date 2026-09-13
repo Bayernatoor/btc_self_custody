@@ -169,14 +169,12 @@ pub fn FeeChartsPage() -> impl IntoView {
                                 description=chart_desc(range, "Median fee rate across all transactions in each block", "Median fee rate (per-block ranges only for daily)")
                                 chart_id="chart-median-rate"
                                 option=median_rate_option
-                                info="The median is more representative than the average because it ignores outliers like fat-finger fees. A rising median means the typical user is paying more. The 144-block moving average (~1 day) smooths out block-to-block variance."
                             />
                             <ChartCard
                                 title="Fee Rate Bands"
                                 description="Fee rate percentiles from p10 to p90 showing the full spread of fee rates per block. Click legend items to toggle bands"
                                 chart_id="chart-fee-heatmap"
                                 option=fee_heatmap_option
-                                info="Five stacked bands showing fee rate percentiles. p10 (blue) is what the cheapest 10% of transactions paid. Median (orange) is the middle. p90 (red) is what urgent transactions paid. A wide spread means high fee variance. Click legend items to isolate specific bands."
                             />
                             <ChartCard
                                 title="Avg Fee per Transaction"
@@ -189,42 +187,36 @@ pub fn FeeChartsPage() -> impl IntoView {
                                 description=chart_desc(range, "Block reward breakdown per block. The subsidy halves every 4 years while fees must eventually replace it", "Daily average block reward breakdown. The subsidy halves every 4 years while fees must eventually replace it")
                                 chart_id="chart-subsidy-fees"
                                 option=subsidy_fees_option
-                                info="The block subsidy (new BTC created) halves every 210,000 blocks (~4 years). After the 2024 halving, the subsidy is 3.125 BTC per block. As the subsidy decreases over time, fees become a larger share of miner revenue."
                             />
                             <ChartCard
                                 title="Fee Revenue Share"
                                 description=chart_desc(range, "Percentage of total block reward that comes from fees rather than subsidy", "Daily average fee revenue as a percentage of total block reward")
                                 chart_id="chart-fee-revenue-share"
                                 option=fee_revenue_share_option
-                                info="Shows fees as a percentage of total miner revenue (subsidy + fees). As the subsidy halves, this ratio increases. Typically 1-5% during normal periods, but has spiked to 10-40% during high-demand events."
                             />
                             <ChartCard
                                 title="BTC Transferred Volume"
                                 description=chart_desc(range, "Total non-coinbase output value per block in BTC", "Daily total non-coinbase output value in BTC")
                                 chart_id="chart-btc-volume"
                                 option=btc_volume_option
-                                info="Total value of all non-coinbase outputs. This includes both the payment and the change output, so it overstates actual economic activity. Still useful for relative comparisons across time periods."
                             />
                             <ChartCard
                                 title="Halving Era Comparison"
                                 description="Side-by-side comparison of average block metrics across Bitcoin's halving eras. Shows how the network evolves between halvings"
                                 chart_id="chart-halving-era"
                                 option=halving_era_option
-                                info="Each bar group represents one halving era (the period between two halvings). Metrics are normalized to percentages of the highest era so different scales are comparable. For example, if Era 4 has the highest average fee, it shows as 100% and other eras show relative to that. Click legend items to focus on specific metrics. Hover bars for actual values."
                             />
                             <ChartCard
                                 title="Fee Pressure vs Block Space"
                                 description="Scatter plot showing the relationship between block fullness and fee rates. Clusters in the top-right indicate high-demand periods"
                                 chart_id="chart-fee-pressure"
                                 option=fee_pressure_option
-                                info="Each dot is one block. X-axis shows how full the block is (weight utilization %), Y-axis shows the median fee rate. When blocks are nearly full AND fees are high (top-right cluster), the network is under pressure. Dots in the bottom-right mean full blocks with low fees (normal operation). Top-left means high fees despite empty blocks (unusual)."
                             />
                             <ChartCard
                                 title="Fee Spike Detector"
                                 description="Highlights blocks where the median fee rate exceeded 5x the trailing 144-block average. Red dots mark fee spike events"
                                 chart_id="chart-fee-spikes"
                                 option=fee_spike_option
-                                info="The white line shows the 144-block trailing average fee rate (roughly one day). Red dots appear when a block's median fee rate exceeds 5x that average, indicating sudden demand surges. Requires at least 300 blocks (1W+ range) for meaningful detection."
                             />
                             <ChartCard
                                 title="Max Transaction Fee"

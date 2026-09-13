@@ -84,6 +84,14 @@ pub fn MiningChartsPage() -> impl IntoView {
                     |blocks| crate::stats::charts::difficulty_ribbon_chart(blocks),
                     |days| crate::stats::charts::difficulty_ribbon_chart_daily(days)
                 );
+                let hash_rate_option = chart_memo!(dashboard_data, range, overlay_flags,
+                    |blocks| crate::stats::charts::hash_rate_chart(blocks),
+                    |days| crate::stats::charts::hash_rate_chart_daily(days)
+                );
+                let diff_adjustment_option = chart_memo!(dashboard_data, range, overlay_flags,
+                    |blocks| crate::stats::charts::difficulty_adjustment_chart(blocks),
+                    |days| crate::stats::charts::difficulty_adjustment_chart_daily(days)
+                );
 
                 let miner_chart_option = Signal::derive(move || {
                     mining_data.get().and_then(|r| r.ok())
@@ -125,12 +133,14 @@ pub fn MiningChartsPage() -> impl IntoView {
                     <div class="space-y-10">
                         <SectionHeading id="section-difficulty" title="Difficulty"/>
                         <ChartCard title="Difficulty" description=chart_desc(range, "Mining difficulty per block, adjusts every 2,016 blocks (~2 weeks)", "Daily mining difficulty, adjusts every 2,016 blocks (~2 weeks)") chart_id="chart-difficulty" option=diff_option/>
-                        <ChartCard title="Difficulty Ribbon" description=chart_desc(range, "Multiple moving averages of mining difficulty. When short MAs cross below long MAs, it may indicate miner capitulation", "Daily difficulty ribbon showing 7 moving averages from 7-day to 128-day") chart_id="chart-diff-ribbon" option=diff_ribbon_option info="Seven moving averages of difficulty (7, 14, 25, 40, 60, 90, 128 days) form a ribbon. When the ribbon is wide, difficulty is rising steadily. When it compresses or inverts (short MAs drop below long MAs), difficulty is declining, which can indicate less efficient miners are going offline. Historically, ribbon inversions have coincided with periods of reduced mining activity."/>
+                        <ChartCard title="Hash Rate" description=chart_desc(range, "Estimated hashes per second the network is computing, derived from difficulty", "Estimated daily hash rate, derived from difficulty") chart_id="chart-hash-rate" option=hash_rate_option/>
+                        <ChartCard title="Difficulty Adjustment" description=chart_desc(range, "How much difficulty moved at each retarget, every 2,016 blocks", "How much difficulty moved at each retarget, every 2,016 blocks") chart_id="chart-diff-adjustment" option=diff_adjustment_option/>
+                        <ChartCard title="Difficulty Ribbon" description=chart_desc(range, "Multiple moving averages of mining difficulty. When short MAs cross below long MAs, it may indicate miner capitulation", "Daily difficulty ribbon showing 7 moving averages from 7-day to 128-day") chart_id="chart-diff-ribbon" option=diff_ribbon_option/>
 
                         <SectionHeading id="section-pools" title="Mining Pools"/>
-                        <ChartCard title="Mining Pool Share" description="Which mining pools are finding the most blocks. More distributed is healthier for the network" chart_id="chart-miner-dominance" option=miner_chart_option info="Pools are identified by matching known signatures in the coinbase transaction's scriptSig text. OCEAN template miners are identified individually. Hover slices for block counts and percentages."/>
-                        <ChartCard title="Mining Diversity Index" description="Herfindahl-Hirschman Index (HHI) measuring mining concentration. Below 1000 is competitive, above 1800 is concentrated" chart_id="chart-diversity" option=diversity_option info="The HHI is calculated by squaring each pool's market share percentage and summing the results. A monopoly scores 10,000, perfectly distributed mining scores near 0. Below 1,000 (green): competitive market. 1,000-1,800 (yellow): moderate concentration. Above 1,800 (red): high concentration, meaning a small number of pools control most of the hashrate. Unknown miners are excluded from the calculation."/>
-                        <ChartCard title="Empty Blocks" description="Blocks with no user transactions, usually mined before the pool has received the previous block's transactions" chart_id="chart-empty-blocks" option=empty_blocks_option info="A block with only a coinbase transaction (no user transactions). This happens when a miner finds a block before propagating the previous block's transactions. Common in early Bitcoin, rare today. Modern pools typically include transactions within seconds of receiving a new block."/>
+                        <ChartCard title="Mining Pool Share" description="Which mining pools are finding the most blocks. More distributed is healthier for the network" chart_id="chart-miner-dominance" option=miner_chart_option/>
+                        <ChartCard title="Mining Diversity Index" description="Herfindahl-Hirschman Index (HHI) measuring mining concentration. Below 1000 is competitive, above 1800 is concentrated" chart_id="chart-diversity" option=diversity_option/>
+                        <ChartCard title="Empty Blocks" description="Blocks with no user transactions, usually mined before the pool has received the previous block's transactions" chart_id="chart-empty-blocks" option=empty_blocks_option/>
                         <ChartCard title="Empty Blocks by Pool" description="Which mining pools produce the most coinbase-only blocks" chart_id="chart-empty-by-pool" option=empty_by_pool_option/>
                     </div>
                 }
