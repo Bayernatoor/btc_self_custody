@@ -181,10 +181,18 @@
         return String(parseInt(day, 10)) + ' ' + mon;
     }
 
+    // Must match the constants in src/stats/charts/mod.rs.
+    var CALENDAR_TICK_SENTINEL = '__calendar_ticks__';
+    var CALENDAR_TICK_DATA_KEY = '__calendarTicks';
+
     // Replace the sentinel on every axis that asked for it. Runs on each
     // setOption, since the option is rebuilt whenever the range, the overlays
     // or the scale change.
-    function applySiAxisFormatters(opts) {
+    //
+    // Idempotent: a second pass over the same object sees functions rather
+    // than sentinel strings and leaves them alone, which matters because the
+    // resize path re-decorates an option it has already decorated.
+    function applyAxisSentinels(opts) {
         ['yAxis', 'xAxis'].forEach(function(key) {
             var axes = opts[key];
             if (!axes) return;
@@ -201,8 +209,33 @@
                         return shortDate(v, f);
                     };
                 }
+                applyCalendarTicks(axis.axisLabel);
             });
         });
+    }
+
+    // Turn the index list Rust computed into the predicate ECharts wants.
+    //
+    // `axisLabel.interval` only accepts a function for per-index control, and
+    // a function cannot be serialised from Rust, so the indices ride across
+    // as data and become a closure here. See `calendar_tick_indices` for why
+    // index arithmetic cannot be left to pick calendar labels.
+    function applyCalendarTicks(label) {
+        if (label.interval !== CALENDAR_TICK_SENTINEL) return;
+        var idx = label[CALENDAR_TICK_DATA_KEY];
+        delete label[CALENDAR_TICK_DATA_KEY];
+        if (!Array.isArray(idx) || !idx.length) {
+            // Nothing to install. Hand the axis back to ECharts rather than
+            // leaving the sentinel in place, where it would be read as a
+            // string and label nothing at all.
+            label.interval = 'auto';
+            return;
+        }
+        var keep = Object.create(null);
+        for (var i = 0; i < idx.length; i++) keep[idx[i]] = true;
+        label.interval = function(index) {
+            return keep[index] === true;
+        };
     }
 
     function applyMobileAdjustments(opts) {
@@ -551,7 +584,7 @@
                 var watermarkPx = Math.max(20, Math.min(56, Math.floor(chartW * 0.08)));
                 opts.graphic[0].style.font = 'bold ' + watermarkPx + 'px Inter, system-ui, sans-serif';
             }
-            applySiAxisFormatters(opts);
+            applyAxisSentinels(opts);
             applyMobileAdjustments(opts);
             // The single-chart view puts a labelled PNG button in its header,
             // so the toolbox's save icon would be a second control doing the

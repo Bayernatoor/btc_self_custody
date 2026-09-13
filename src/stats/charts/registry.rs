@@ -104,7 +104,11 @@ impl Unit {
             Self::TxPerSec => "tx/s",
             Self::Minutes => "minutes",
             Self::Seconds => "seconds",
-            Self::Difficulty => "difficulty (T)",
+            // No unit multiplier: the difficulty charts plot the raw protocol
+            // value and abbreviate it on the axis, because dividing by 1e12
+            // put every value before 2013 below 1 where the labels degenerate
+            // into leading zeros.
+            Self::Difficulty => "difficulty",
             Self::Ratio => "ratio",
             Self::Mixed => "mixed",
         }
@@ -186,6 +190,26 @@ pub enum Source {
     Mining(MiningChart),
 }
 
+/// Long-form copy for a chart, in the two parts a reader asks for in order.
+///
+/// Two fields rather than one paragraph with a marker in it, because the
+/// split is the point: someone new needs `definition` and nothing else,
+/// while someone checking our numbers needs `technical` and already knows the
+/// definition. Rendering them as one block would make the first group read
+/// past the implementation detail and the second group hunt for it.
+///
+/// `technical` is where this site earns the word "observatory": it says what
+/// the figure is computed from and, where it matters, what it leaves out. A
+/// caveat stated here is worth more than a more impressive-looking number.
+#[derive(Clone, Copy)]
+pub struct About {
+    /// What the metric is, for a reader who has not met it. No jargon that
+    /// is not defined in the same sentence.
+    pub definition: &'static str,
+    /// How this site computes it, and what that excludes.
+    pub technical: &'static str,
+}
+
 /// One chart, as the single-chart view needs to know it.
 #[derive(Clone, Copy)]
 pub struct ChartMeta {
@@ -206,7 +230,7 @@ pub struct ChartMeta {
     pub source: Source,
     /// Long-form copy for the flagship charts. `None` renders the short
     /// description alone rather than an empty section.
-    pub about: Option<&'static str>,
+    pub about: Option<About>,
 }
 
 impl ChartMeta {
@@ -252,6 +276,31 @@ impl ChartMeta {
             }
         )
     }
+
+    /// Whether this chart can take part in a comparison, on either side.
+    ///
+    /// Three conditions, and each rules out a different failure:
+    ///
+    /// - **Built from the dashboard rows.** Those are already loaded for the
+    ///   selected range, so a comparison costs no extra request and the two
+    ///   series are guaranteed to cover the same span. The mining charts and
+    ///   the two distributions each need their own fetch over their own
+    ///   window, which would mean overlaying two series that quietly do not
+    ///   describe the same period.
+    /// - **A shape that accepts a second series.** Stacked percentage bands
+    ///   already fill 0 to 100, and a donut or histogram has no shared x
+    ///   domain to lay anything along.
+    /// - **Not already using both axes.** `Unit::Mixed` charts have spent the
+    ///   right axis on themselves.
+    ///
+    /// Derived rather than stored for the same reason `supports_log` is: a
+    /// newly registered chart gets the right answer from what it already
+    /// declares.
+    pub fn can_compare(&self) -> bool {
+        matches!(self.source, Source::Dashboard { .. })
+            && self.shape.accepts_second_series()
+            && !self.unit.occupies_both_axes()
+    }
 }
 
 /// Every chart with a single-chart view, sorted by category then slug.
@@ -280,7 +329,12 @@ pub const CHARTS: &[ChartMeta] = &[
         shape: Shape::Line,
         source: Source::Dashboard {
             per_block: super::coinbase_message_length_chart,
-            daily: Daily::Fn(super::coinbase_message_length_chart_daily),
+            // Daily aggregates carry no coinbase text, so the daily builder
+            // could only ever return an empty chart. Declaring it as a
+            // builder made `has_daily` answer true, which offered this as a
+            // comparison over long ranges where it draws nothing and
+            // suppressed the "this chart needs a shorter range" notice.
+            daily: Daily::Unavailable,
         },
         about: None,
     },
@@ -338,7 +392,10 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::inscription_chart,
             daily: Daily::Fn(super::inscription_chart_daily),
         },
-        about: None,
+        about: Some(About {
+            definition: "Inscriptions attach data such as an image or text to an individual satoshi, using the Ordinals convention introduced in 2023. The data rides in the witness part of a Taproot transaction, the cheapest room in a block. Whether this is a good use of the chain is disputed; that it happens, and at what scale, is not.",
+            technical: "Counted by matching the inscription envelope pattern in Taproot witness data. This is a convention, not a consensus rule: nothing in the protocol knows what an inscription is, so a different encoding would not appear here. Inscriptions compete for the same block space as ordinary payments, which is visible in the fee charts over the same periods.",
+        }),
     },
     ChartMeta {
         slug: "op-block-share",
@@ -529,9 +586,12 @@ pub const CHARTS: &[ChartMeta] = &[
         desc_daily: "Average daily transaction fees earned by miners per block",
         category: Category::Fees,
         unit: Unit::Btc,
-        shape: Shape::StackedAbsolute,
+        shape: Shape::Line,
         source: Source::Fees,
-        about: None,
+        about: Some(About {
+            definition: "What everyone paid, in total, to get into a given block. Each transaction pays a fee to be included, and the miner keeps every fee in the block they find. It is one half of what a miner earns; the other is the subsidy, which halves every four years and eventually reaches zero.",
+            technical: "A transaction does not state its fee anywhere, so this is computed as inputs minus outputs. Denominated in BTC rather than the dollars they were worth at the time, which is what makes it comparable across the chain's history.",
+        }),
     },
     ChartMeta {
         slug: "halving-era",
@@ -573,7 +633,10 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::median_fee_rate_chart,
             daily: Daily::Fn(super::median_fee_rate_chart_daily),
         },
-        about: None,
+        about: Some(About {
+            definition: "How much a transaction paid per unit of size to get into a block, taking the middle transaction rather than the average. Fees are charged by the room a transaction takes, not the value it moves, so sending a large amount can cost less than sending a small one.",
+            technical: "Fee divided by virtual size for every transaction in the block, then the middle value. Virtual size is weight divided by four, the unit the fee market actually prices in. The median rather than the mean, because one very large fee drags an average somewhere no real transaction sat. The coinbase transaction is excluded, since it pays no fee.",
+        }),
     },
     ChartMeta {
         slug: "protocol-fees",
@@ -629,7 +692,10 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::difficulty_chart,
             daily: Daily::Fn(super::difficulty_chart_daily),
         },
-        about: None,
+        about: Some(About {
+            definition: "Difficulty is how hard it currently is to mine a block. Every miner is racing to find a number that makes the block's hash fall below a target, and difficulty is that target expressed as a multiple of the easiest one the protocol allows. Nobody sets it: it moves automatically with how much mining power is on the network.",
+            technical: "Read from the header of every block in the range, so it is the protocol's own value and not a derived one. It changes once every 2,016 blocks, roughly every two weeks, which is why the line steps rather than curves. Multiply by 2^32 for the expected number of hashes per block, the figure hash-rate estimates are built on.",
+        }),
     },
     ChartMeta {
         slug: "diversity",
@@ -673,7 +739,10 @@ pub const CHARTS: &[ChartMeta] = &[
         unit: Unit::Percent,
         shape: Shape::Donut,
         source: Source::Mining(MiningChart::Dominance),
-        about: None,
+        about: Some(About {
+            definition: "Which mining pools are finding blocks, and in what proportion. Miners join a pool to get a steady payout instead of a rare large one, and the pool chooses which transactions its members' blocks include. Concentration is worth watching because it shows how much of block production a few operators direct.",
+            technical: "Attributed from the coinbase transaction, where pools identify themselves by convention rather than by requirement. A pool that stops tagging its blocks, or tags them differently, moves between these categories without anything changing on the network. Unattributed blocks are counted as unknown rather than shared out among the named pools.",
+        }),
     },
     ChartMeta {
         slug: "address-types",
@@ -740,7 +809,10 @@ pub const CHARTS: &[ChartMeta] = &[
         unit: Unit::Gigabytes,
         shape: Shape::Line,
         source: Source::ChainSize,
-        about: None,
+        about: Some(About {
+            definition: "The total size of the block chain on disk. Every full node stores all of it, back to 2009, and that is what lets a node check the rules for itself instead of trusting anyone. The number matters because it sets the floor on what running one costs.",
+            technical: "Blocks summed across the range and anchored to the size my node reports on disk now, so the present-day figure is measured rather than estimated. Block data only: it excludes the chainstate and index databases a node also keeps, so a full data directory is larger. A pruned node stores a fraction of this and still verifies everything.",
+        }),
     },
     ChartMeta {
         slug: "cumulative-adoption",
@@ -779,7 +851,10 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::block_interval_chart,
             daily: Daily::Fn(super::block_interval_chart_daily),
         },
-        about: None,
+        about: Some(About {
+            definition: "The time between one block and the next. Bitcoin targets ten minutes on average and holds that average by adjusting difficulty, but any single gap is close to random: a two-minute gap and a fifty-minute gap are both ordinary.",
+            technical: "The difference between consecutive block header timestamps. Miners set those timestamps and the protocol only loosely constrains them, so a handful of intervals in the chain's history are negative or implausibly long. They are plotted as found, because a cleaned series would be my data rather than the chain's.",
+        }),
     },
     ChartMeta {
         slug: "largest-tx",
@@ -791,7 +866,10 @@ pub const CHARTS: &[ChartMeta] = &[
         shape: Shape::Line,
         source: Source::Dashboard {
             per_block: super::largest_tx_chart,
-            daily: Daily::Fn(super::largest_tx_chart_daily),
+            // Daily aggregates carry no per-transaction sizes, so the daily
+            // builder could only ever return an empty chart. See
+            // `coinbase-msg-length` for what declaring one costs.
+            daily: Daily::Unavailable,
         },
         about: None,
     },
@@ -863,7 +941,10 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::segwit_adoption_chart,
             daily: Daily::Fn(super::segwit_adoption_chart_daily),
         },
-        about: None,
+        about: Some(About {
+            definition: "The share of transactions using Segregated Witness. SegWit, activated in 2017, moves signatures into a part of the block that counts less toward the size limit, which makes those transactions cheaper to send. Adoption took years rather than months.",
+            technical: "A transaction counts as SegWit when at least one of its inputs carries witness data, which is what determines the fee saving. How many outputs are SegWit is a different question, answered by the address-type charts, and it moved on a different schedule.",
+        }),
     },
     ChartMeta {
         slug: "size",
@@ -877,7 +958,10 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::block_size_chart,
             daily: Daily::Fn(super::block_size_chart_daily),
         },
-        about: None,
+        about: Some(About {
+            definition: "How much data each block carries. Block space is limited and shared, so this is the clearest view of how full the chain is running. A larger block is not better or worse; it means more, or larger, transactions were included.",
+            technical: "The serialised size of the block as my node stores it, witness data included. Consensus limits weight rather than bytes, to 4 million weight units, and witness bytes count a quarter as much toward that. This is why blocks pass the old one-megabyte figure. Weight utilisation has its own chart.",
+        }),
     },
     ChartMeta {
         slug: "taproot",
@@ -891,7 +975,10 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::taproot_chart,
             daily: Daily::Fn(super::taproot_chart_daily),
         },
-        about: None,
+        about: Some(About {
+            definition: "How many new Taproot outputs are being created. Taproot, activated in 2021, is the most recent change to how Bitcoin outputs can be locked. It makes a complex spending condition, such as a multi-signature wallet, look the same on chain as an ordinary payment, which helps both privacy and fees.",
+            technical: "Counts outputs with a pay-to-taproot script created in each block. Created, not spent: an output can sit unspent for years, so this leads the share of transactions that actually use Taproot. Inscriptions are stored in Taproot witness data, which is why this and the inscription charts move together from 2023.",
+        }),
     },
     ChartMeta {
         slug: "taproot-spend-types",
@@ -930,7 +1017,10 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::tps_chart,
             daily: Daily::Fn(super::tps_chart_daily),
         },
-        about: None,
+        about: Some(About {
+            definition: "How many transactions per second the chain is settling. It is a small number next to a card network, and deliberately so: every full node verifies every transaction, and that is what the limit buys.",
+            technical: "Transactions in the block divided by the seconds since the previous one, so a short interval reads high and a long one reads low even at a steady rate. Base-chain settlement only. Nothing carried over Lightning or netted inside an exchange appears here, which makes this a floor on activity rather than a measure of it.",
+        }),
     },
     ChartMeta {
         slug: "tx-density",
@@ -972,7 +1062,10 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::tx_count_chart,
             daily: Daily::Fn(super::tx_count_chart_daily),
         },
-        about: None,
+        about: Some(About {
+            definition: "How many transactions each block contains. It moves with two things at once: how much people are transacting, and how much room each transaction takes. A block of many small payments and a block of a few large ones can carry the same data and count very differently.",
+            technical: "Counted from the block as my node stores it, including the coinbase transaction that pays the miner. That adds exactly one to every block, which matters when comparing against sources that leave it out. A transaction counts in the block that confirmed it, so this says nothing about how long it waited in the mempool.",
+        }),
     },
     ChartMeta {
         slug: "utxo-flow",
@@ -1000,7 +1093,10 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::utxo_growth_chart,
             daily: Daily::Fn(super::utxo_growth_chart_daily),
         },
-        about: None,
+        about: Some(About {
+            definition: "Whether the set of spendable coins is growing or shrinking. Every transaction consumes existing outputs and creates new ones, and the running total of unspent ones is the UTXO set. Positive means more were created than consumed; negative means wallets are consolidating many small coins into fewer large ones.",
+            technical: "Outputs created minus inputs consumed, per block. Net rather than cumulative, which is why it goes negative and why a log axis cannot plot every point; the chart says how many it left out. The UTXO set matters because nodes hold it in memory to validate, so it is a running cost to the whole network.",
+        }),
     },
     ChartMeta {
         slug: "weekday",
@@ -1124,6 +1220,96 @@ pub fn related(meta: &ChartMeta, max: usize) -> Vec<&'static ChartMeta> {
     out
 }
 
+/// Charts that can be laid over `meta`, grouped by category for the picker.
+///
+/// Ordered so the useful answers are near the top: the same category first,
+/// since a fee metric next to another fee metric is the comparison someone
+/// actually came for, then everything else. Within a group, registry order,
+/// which is alphabetical by slug.
+///
+/// `daily_only` drops charts with no daily aggregate when the selected range
+/// is long enough to use them. Offering one there would build an empty series
+/// and the comparison would silently not appear.
+/// Whether `candidate` may be laid over `primary` at this resolution.
+///
+/// **The one rule.** Everything that decides a comparison is valid goes here
+/// and nowhere else: the picker filters on it, the page resolves the selected
+/// slug through it, and the effect that clears a stale selection asks it. Three
+/// consumers, one answer, so they cannot drift into disagreeing about what is
+/// offerable versus what is renderable.
+///
+/// That split mattered. This used to be spread between `comparable_with` and
+/// the picker's own gating, which meant "you cannot select an invalid
+/// comparison" was enforced by the select not rendering. Safe only while the
+/// selection died with the page; the moment it became shared state and
+/// survived navigation, a comparison could arrive on a chart that never
+/// offered it.
+///
+/// Editorial, not structural. This answers "should we offer this", which
+/// includes taste: a histogram could technically hold a second line and it
+/// would mean nothing. What a chart can *structurally* hold without lying is
+/// answered by `charts::apply_comparison`, from the built option, and that is
+/// the check no caller can skip.
+pub fn is_valid_comparison(
+    primary: &ChartMeta,
+    candidate: &ChartMeta,
+    daily: bool,
+) -> bool {
+    primary.can_compare()
+        && candidate.can_compare()
+        // A chart laid over itself draws two identical lines on two axes,
+        // which reads as a rendering fault rather than a comparison.
+        && candidate.slug != primary.slug
+        // Seven charts have no daily builder, so over a long range they would
+        // add an axis and no line.
+        && (!daily || candidate.has_daily())
+}
+
+/// Resolve a slug from the URL or the picker into a comparison, or `None`.
+///
+/// The single entry point for turning stored state into something to render.
+/// An unknown slug, a chart that cannot take part, this chart itself, and a
+/// chart with nothing to draw at this range all answer `None`, so a caller
+/// that forgets one of those cases cannot exist.
+pub fn comparison_for(
+    primary: &ChartMeta,
+    slug: &str,
+    daily: bool,
+) -> Option<&'static ChartMeta> {
+    find(slug).filter(|c| is_valid_comparison(primary, c, daily))
+}
+
+/// Charts that can be laid over `meta`, grouped by category for the picker.
+///
+/// Ordered so the useful answers are near the top: the same category first,
+/// since a fee metric next to another fee metric is the comparison someone
+/// actually came for, then everything else. Within a group, registry order,
+/// which is alphabetical by slug.
+pub fn comparable_with(
+    meta: &ChartMeta,
+    daily: bool,
+) -> Vec<(Category, Vec<&'static ChartMeta>)> {
+    let mut groups: Vec<(Category, Vec<&'static ChartMeta>)> = Vec::new();
+    // `meta`'s own category first, then the others in the order they appear.
+    let mut order: Vec<Category> = vec![meta.category];
+    for c in CHARTS.iter() {
+        if !order.contains(&c.category) {
+            order.push(c.category);
+        }
+    }
+    for cat in order {
+        let members: Vec<&'static ChartMeta> = CHARTS
+            .iter()
+            .filter(|c| c.category == cat)
+            .filter(|c| is_valid_comparison(meta, c, daily))
+            .collect();
+        if !members.is_empty() {
+            groups.push((cat, members));
+        }
+    }
+    groups
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1161,6 +1347,267 @@ mod tests {
             }
         }
         out
+    }
+
+    /// The long copy is the site's answer to "why should I believe this
+    /// number", so the half that answers it cannot be missing, and neither
+    /// half may quietly become a restatement of the one-liner already on the
+    /// page above it.
+    #[test]
+    fn the_long_copy_says_something_the_short_copy_does_not() {
+        let written: Vec<&ChartMeta> =
+            CHARTS.iter().filter(|c| c.about.is_some()).collect();
+        assert!(
+            written.len() >= 12,
+            "only {} charts have long copy; the flagship set was supposed to \
+             be at least a dozen",
+            written.len()
+        );
+        for c in written {
+            let about = c.about.unwrap();
+            for (part, text) in [
+                ("definition", about.definition),
+                ("technical", about.technical),
+            ] {
+                assert!(
+                    text.len() > 160,
+                    "{}'s {part} is too short to be more than a restated \
+                     one-liner",
+                    c.slug
+                );
+                assert!(
+                    text.trim().ends_with('.'),
+                    "{}'s {part} does not end in a sentence",
+                    c.slug
+                );
+                assert_ne!(
+                    text, c.desc_per_block,
+                    "{}'s {part} just repeats the card description",
+                    c.slug
+                );
+                // The site's copy rule, enforced where the copy lives.
+                assert!(
+                    !text.contains('\u{2014}') && !text.contains('\u{2013}'),
+                    "{}'s {part} contains a dash character",
+                    c.slug
+                );
+            }
+        }
+    }
+
+    /// Copy on the page describes the metric, never this codebase's history
+    /// with it. "Plotted raw and abbreviated on the axis: an earlier version
+    /// divided by a trillion" shipped in the difficulty copy and reads as a
+    /// code comment that escaped, because that is what it was.
+    ///
+    /// The style to match is the opening of any `definition`: present tense,
+    /// direct, about the thing itself.
+    #[test]
+    fn long_copy_describes_the_metric_and_not_its_edit_history() {
+        const NARRATES_HISTORY: &[&str] = &[
+            "earlier version",
+            "used to",
+            "previously",
+            "an older",
+            "we changed",
+            "no longer",
+            "before this",
+            "originally",
+        ];
+        for c in CHARTS.iter().filter(|c| c.about.is_some()) {
+            let about = c.about.unwrap();
+            for text in [about.definition, about.technical] {
+                let lower = text.to_lowercase();
+                for phrase in NARRATES_HISTORY {
+                    assert!(
+                        !lower.contains(phrase),
+                        "{}'s copy narrates history ({phrase:?}): {text}",
+                        c.slug
+                    );
+                }
+            }
+        }
+    }
+
+    /// Every About block is followed by "Measured from my own Bitcoin node",
+    /// so copy that says the same thing a sentence earlier is a reader being
+    /// told twice in one card.
+    ///
+    /// Not a ban on mentioning the node. "as my node stores it" distinguishes
+    /// the serialised block from other definitions of its size, and chain size
+    /// is explicitly anchored to what the node reports on disk. Both earn it.
+    /// Bare attribution does not.
+    #[test]
+    fn long_copy_does_not_repeat_the_footer_attribution() {
+        const REDUNDANT: &[&str] =
+            &["from my own node", "from my own Bitcoin node"];
+        for c in CHARTS.iter().filter(|c| c.about.is_some()) {
+            let about = c.about.unwrap();
+            for text in [about.definition, about.technical] {
+                for phrase in REDUNDANT {
+                    assert!(
+                        !text.contains(phrase),
+                        "{} repeats the footer attribution ({phrase:?})",
+                        c.slug
+                    );
+                }
+            }
+        }
+    }
+
+    /// Comparison candidates are built from the dashboard rows already loaded
+    /// for the range. A chart with any other source needs its own fetch over
+    /// its own window, so overlaying it would put two series that describe
+    /// different periods on one plot.
+    #[test]
+    fn only_dashboard_charts_can_be_compared() {
+        for c in CHARTS {
+            let dashboard = matches!(c.source, Source::Dashboard { .. });
+            if !dashboard {
+                assert!(
+                    !c.can_compare(),
+                    "{} is not built from the dashboard rows but offers \
+                     comparison",
+                    c.slug
+                );
+            }
+        }
+        // And the shape and unit refusals actually bite, rather than the rule
+        // collapsing to "every dashboard chart".
+        let refused: Vec<&str> = CHARTS
+            .iter()
+            .filter(|c| {
+                matches!(c.source, Source::Dashboard { .. }) && !c.can_compare()
+            })
+            .map(|c| c.slug)
+            .collect();
+        assert!(
+            !refused.is_empty(),
+            "no dashboard chart is refused, so the shape and unit checks are \
+             doing nothing"
+        );
+        for slug in &refused {
+            let c = find(slug).unwrap();
+            assert!(
+                !c.shape.accepts_second_series() || c.unit.occupies_both_axes(),
+                "{slug} is refused for no stated reason"
+            );
+        }
+    }
+
+    /// The picker and the resolver have to agree, or a comparison the picker
+    /// offered would be refused on selection, or worse, one it never offered
+    /// would render because it arrived from a URL.
+    ///
+    /// This is the invariant that used to be held up by the select not
+    /// rendering. Now both sides ask `is_valid_comparison`, and this asserts
+    /// they still do.
+    #[test]
+    fn the_picker_and_the_resolver_agree_on_every_pair() {
+        for daily in [false, true] {
+            for primary in CHARTS.iter() {
+                let offered: std::collections::HashSet<&str> =
+                    comparable_with(primary, daily)
+                        .into_iter()
+                        .flat_map(|(_, m)| m)
+                        .map(|c| c.slug)
+                        .collect();
+                for candidate in CHARTS.iter() {
+                    let resolves =
+                        comparison_for(primary, candidate.slug, daily)
+                            .is_some();
+                    assert_eq!(
+                        offered.contains(candidate.slug),
+                        resolves,
+                        "{} over {}: offered={} resolves={} (daily={daily})",
+                        candidate.slug,
+                        primary.slug,
+                        offered.contains(candidate.slug),
+                        resolves
+                    );
+                }
+            }
+        }
+    }
+
+    /// The four ways a stored slug goes stale. Each one arrives by navigating
+    /// or by pasting a link, and each has to answer `None` rather than render.
+    #[test]
+    fn a_stale_comparison_slug_resolves_to_nothing() {
+        let primary = CHARTS
+            .iter()
+            .find(|c| c.can_compare())
+            .expect("a comparable chart");
+
+        // Never existed, or was renamed out of the registry.
+        assert!(comparison_for(primary, "no-such-chart", false).is_none());
+        assert!(comparison_for(primary, "", false).is_none());
+
+        // Itself, which is what navigating to the chart you were comparing
+        // with produces.
+        assert!(comparison_for(primary, primary.slug, false).is_none());
+
+        // A chart that cannot take part at all.
+        let excluded = CHARTS
+            .iter()
+            .find(|c| !c.can_compare())
+            .expect("an excluded chart");
+        assert!(comparison_for(primary, excluded.slug, false).is_none());
+
+        // Valid over a short range, nothing to draw over a long one.
+        let no_daily = CHARTS
+            .iter()
+            .find(|c| {
+                c.can_compare() && !c.has_daily() && c.slug != primary.slug
+            })
+            .expect("a comparable chart with no daily builder");
+        assert!(comparison_for(primary, no_daily.slug, false).is_some());
+        assert!(comparison_for(primary, no_daily.slug, true).is_none());
+    }
+
+    /// Landing on a chart that cannot take a comparison must drop one that
+    /// arrived with it, rather than carrying it in from the previous chart.
+    #[test]
+    fn a_primary_that_cannot_compare_resolves_nothing() {
+        let excluded = CHARTS
+            .iter()
+            .find(|c| !c.can_compare())
+            .expect("an excluded chart");
+        for candidate in CHARTS.iter() {
+            assert!(
+                comparison_for(excluded, candidate.slug, false).is_none(),
+                "{} resolved over a chart that cannot compare",
+                candidate.slug
+            );
+        }
+        assert!(comparable_with(excluded, false).is_empty());
+    }
+
+    /// Ordering and uniqueness, which the picker owns and the resolver has
+    /// no opinion about.
+    ///
+    /// Everything else the picker must not offer is covered by
+    /// `the_picker_and_the_resolver_agree_on_every_pair`, which asserts the
+    /// two answer identically for all 61 by 61 pairs at both resolutions.
+    #[test]
+    fn the_picker_leads_with_the_readers_own_category() {
+        let meta = CHARTS
+            .iter()
+            .find(|c| c.can_compare())
+            .expect("at least one comparable chart");
+        for daily in [false, true] {
+            let groups = comparable_with(meta, daily);
+            assert!(!groups.is_empty(), "nothing offered at daily={daily}");
+            // A fee metric beside another fee metric is the comparison the
+            // reader came for, so it should not be below three other groups.
+            assert_eq!(groups[0].0, meta.category);
+            let mut seen = std::collections::HashSet::new();
+            for (_, members) in &groups {
+                for c in members {
+                    assert!(seen.insert(c.slug), "{} offered twice", c.slug);
+                }
+            }
+        }
     }
 
     #[test]

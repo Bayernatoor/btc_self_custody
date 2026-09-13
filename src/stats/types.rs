@@ -23,7 +23,11 @@ pub struct StatsSummary {
 
 /// Per-block summary row returned by range queries. Contains all metrics
 /// extracted during ingestion for chart rendering and table display.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+/// `Default` for the same reason `DailyAggregate` has it: the chart
+/// conformance tests build every registered chart from synthetic rows, and
+/// naming 35 fields at each of them would make the test unreadable enough
+/// that nobody would extend it.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct BlockSummary {
     /// Block height (0 = genesis).
     pub height: u64,

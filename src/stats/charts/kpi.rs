@@ -152,14 +152,32 @@ pub fn compute(option_json: &str, shape: Shape) -> Kpis {
     let Some(series) = opt.get("series").and_then(|s| s.as_array()) else {
         return Kpis::Unavailable;
     };
+    // Only what the metric itself plots. A price overlay, a chain-size
+    // overlay and a comparison series all sit on the right axis, and all
+    // three are something laid beside the metric rather than part of it.
+    //
+    // This is what `bands` got wrong: it summed every series, so switching on
+    // the price overlay added the dollar price to "latest total" on a stacked
+    // chart and counted it as an extra band. Wrong before compare existed and
+    // wrong more often afterwards, since a stacked absolute chart accepts a
+    // comparison. Filtering here rather than in each branch, because the rule
+    // is the same for all three and a fourth right-axis occupant would
+    // otherwise have to remember it.
+    let series: Vec<serde_json::Value> = series
+        .iter()
+        .filter(|s| {
+            s.get("yAxisIndex").and_then(|i| i.as_u64()).unwrap_or(0) == 0
+        })
+        .cloned()
+        .collect();
     if series.is_empty() {
         return Kpis::Unavailable;
     }
 
     match shape {
-        Shape::Donut | Shape::Histogram => categorical(&opt, series),
-        Shape::StackedAbsolute | Shape::StackedPercent => bands(series),
-        _ => single_series(&opt, series),
+        Shape::Donut | Shape::Histogram => categorical(&opt, &series),
+        Shape::StackedAbsolute | Shape::StackedPercent => bands(&series),
+        _ => single_series(&opt, &series),
     }
 }
 
@@ -469,5 +487,83 @@ mod tests {
             }
             other => panic!("expected Series, got {other:?}"),
         }
+    }
+
+    /// A price overlay, a chain-size overlay and a comparison series all live
+    /// on the right axis and are not part of the metric. Counting one as a
+    /// band made "latest total" the sum of fees in BTC and a dollar price.
+    #[test]
+    fn right_axis_series_are_not_counted_as_bands() {
+        let stacked = |extra: &str| {
+            format!(
+                r#"{{"series": [
+                    {{"name": "Subsidy", "stack": "t", "yAxisIndex": 0,
+                      "data": [10.0, 12.0]}},
+                    {{"name": "Fees", "stack": "t", "yAxisIndex": 0,
+                      "data": [1.0, 2.0]}}
+                    {extra}
+                ]}}"#
+            )
+        };
+        let alone = compute(&stacked(""), Shape::StackedAbsolute);
+        let with_price = compute(
+            &stacked(
+                r#", {"name": "Price (USD)", "yAxisIndex": 1,
+                      "data": [90000.0, 95000.0]}"#,
+            ),
+            Shape::StackedAbsolute,
+        );
+        match (alone, with_price) {
+            (
+                Kpis::Bands {
+                    total_latest: a,
+                    band_count: ab,
+                    ..
+                },
+                Kpis::Bands {
+                    total_latest: b,
+                    band_count: bb,
+                    ..
+                },
+            ) => {
+                assert_eq!(a, 14.0, "12 BTC subsidy plus 2 BTC fees");
+                assert_eq!(
+                    b, a,
+                    "the overlay changed the total the metric reports"
+                );
+                assert_eq!(ab, 2);
+                assert_eq!(bb, 2, "the overlay was counted as a third band");
+            }
+            other => panic!("expected Bands, got {other:?}"),
+        }
+    }
+
+    /// And the single-series path must keep reading the metric, not the line
+    /// laid over it, whatever order the series end up in.
+    #[test]
+    fn right_axis_series_are_not_mistaken_for_the_metric() {
+        let json = r#"{"series": [
+            {"name": "Difficulty", "yAxisIndex": 0,
+             "data": [[1, 100.0], [2, 200.0]]},
+            {"name": "Price (USD)", "yAxisIndex": 1,
+             "data": [[1, 90000.0], [2, 95000.0]]}
+        ]}"#;
+        match compute(json, Shape::Line) {
+            Kpis::Series { peak, .. } => {
+                assert_eq!(peak.y, 200.0, "read the overlay instead");
+            }
+            other => panic!("expected Series, got {other:?}"),
+        }
+    }
+
+    /// A chart whose only series is on the right axis has no metric to
+    /// describe, and a number invented from the overlay would be a claim
+    /// about data the chart is not about.
+    #[test]
+    fn a_chart_with_nothing_on_the_left_axis_reports_nothing() {
+        let json = r#"{"series": [
+            {"name": "Price (USD)", "yAxisIndex": 1, "data": [[1, 9.0]]}
+        ]}"#;
+        assert!(matches!(compute(json, Shape::Line), Kpis::Unavailable));
     }
 }

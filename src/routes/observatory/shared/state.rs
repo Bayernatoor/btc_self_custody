@@ -75,6 +75,18 @@ pub struct ObservatoryState {
     pub set_overlay_events: WriteSignal<bool>,
     pub overlay_log_scale: ReadSignal<bool>,
     pub set_overlay_log_scale: WriteSignal<bool>,
+    pub overlay_right_log_scale: ReadSignal<bool>,
+    pub set_overlay_right_log_scale: WriteSignal<bool>,
+    /// The chart laid over the current one, by slug, or empty for none.
+    ///
+    /// Shared rather than page-local so it survives a refresh and can be
+    /// shared in a link. That means it also survives navigation to another
+    /// chart, where it may name that chart or one that cannot be compared
+    /// with it, so **nothing may render this without resolving it through
+    /// `registry::comparison_for` first**. It is a stored intent, not a
+    /// guarantee.
+    pub compare: ReadSignal<String>,
+    pub set_compare: WriteSignal<String>,
     pub price_loading: Signal<bool>,
     // Unified chart-settings panel (one floating button, tabs for Overlays + Range).
     // Replaces the earlier split between OverlayPanel and FloatingRangePicker.
@@ -185,6 +197,27 @@ pub fn provide_observatory_state() -> ObservatoryState {
         .get("overlays")
         .filter(|s| !s.is_empty())
         .map(|s| s.split(',').map(|s| s.to_string()).collect())
+        .unwrap_or_default();
+
+    // A permalink carries the view, not just the data: which range, which
+    // annotations, which scale on each axis and what is laid over the chart.
+    // Anything omitted here silently resets on refresh, which is how the
+    // scale toggles behaved before and read as the control not working.
+    let initial_scale_log = query
+        .read_untracked()
+        .get("scale")
+        .is_some_and(|v| v == "log");
+    let initial_right_scale_log = query
+        .read_untracked()
+        .get("overlay_scale")
+        .is_some_and(|v| v == "log");
+    // Stored unvalidated on purpose. Validity depends on which chart is being
+    // viewed, which this function does not know, so the page resolves it
+    // through `registry::comparison_for` on every render instead.
+    let initial_compare = query
+        .read_untracked()
+        .get("compare")
+        .filter(|s| !s.is_empty())
         .unwrap_or_default();
 
     let initial_custom_from =
@@ -459,7 +492,14 @@ pub fn provide_observatory_state() -> ObservatoryState {
     // it is applied after the base chart is built and so shares the cache
     // generation. Naming it `overlay_*` keeps it with the flags it travels
     // with rather than implying it draws something.
-    let (overlay_log_scale, set_overlay_log_scale) = signal(false);
+    let (overlay_log_scale, set_overlay_log_scale) = signal(initial_scale_log);
+    // The right axis, which only exists while price or chain size is on. Kept
+    // separate from `overlay_log_scale` so a reader can put price on a log
+    // axis, where six decades are readable, without moving the metric they
+    // came to look at onto a scale they did not ask for.
+    let (overlay_right_log_scale, set_overlay_right_log_scale) =
+        signal(initial_right_scale_log);
+    let (compare, set_compare) = signal(initial_compare);
 
     let overlay_flags = Signal::derive(move || {
         let price_data = if overlay_price.get() {
@@ -482,6 +522,7 @@ pub fn provide_observatory_state() -> ObservatoryState {
             price_data,
             chain_size_data,
             log_scale: overlay_log_scale.get(),
+            right_log_scale: overlay_right_log_scale.get(),
         }
     });
 
@@ -509,6 +550,10 @@ pub fn provide_observatory_state() -> ObservatoryState {
         set_overlay_events,
         overlay_log_scale,
         set_overlay_log_scale,
+        overlay_right_log_scale,
+        set_overlay_right_log_scale,
+        compare,
+        set_compare,
         price_loading,
         chart_settings_open,
         set_chart_settings_open,
@@ -539,6 +584,11 @@ pub fn provide_observatory_state() -> ObservatoryState {
                 ("chain_size", overlay_chain_size.get()),
                 ("events", overlay_events.get()),
             ];
+            let scales = super::url_sync::Scales {
+                left_log: overlay_log_scale.get(),
+                right_log: overlay_right_log_scale.get(),
+            };
+            let cmp = compare.get();
             if first {
                 first = false;
                 return;
@@ -557,6 +607,8 @@ pub fn provide_observatory_state() -> ObservatoryState {
                 current_section.as_deref(),
                 cf.as_deref(),
                 ct.as_deref(),
+                scales,
+                &cmp,
             );
         });
     }

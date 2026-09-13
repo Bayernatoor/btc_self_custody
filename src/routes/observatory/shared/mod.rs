@@ -147,13 +147,13 @@ macro_rules! chart_memo {
             // Apply overlays on top of base chart
             let result = if let Ok(mut value) = serde_json::from_str::<serde_json::Value>(&base) {
                 $crate::stats::charts::apply_overlays(&mut value, &flags, is_daily);
-                // After the overlays, so it only ever rescales the left axis
-                // the metric owns and not the right one price or chain size
-                // just added. Refused per chart inside apply_log_scale, by
-                // inspecting the built option, which is what lets one global
-                // switch cover charts of every shape without each of these
+                // After the overlays, because the right axis this rescales
+                // does not exist until price or chain size has added it, and
+                // because both scales are refused or allowed per chart by
+                // inspecting the built option. That is what lets two global
+                // switches cover charts of every shape without any of these
                 // call sites declaring anything.
-                $crate::stats::charts::apply_log_scale(&mut value, flags.log_scale);
+                $crate::stats::charts::apply_scales(&mut value, &flags);
                 serde_json::to_string(&value).unwrap_or_default()
             } else {
                 base
@@ -370,6 +370,27 @@ fn OverlaysTabContent() -> impl IntoView {
                 <p class="text-[0.7rem] text-white/30 mt-1 ml-6">
                     "Applies at any range. Ignored on percentage and stacked charts, where a second scale cannot be read against the bands"
                 </p>
+                // Separate switch, and only once there is a right axis to
+                // move. Price crosses six orders of magnitude, so it needs a
+                // log axis to be readable at all; tying that to the metric's
+                // own scale would mean rescaling the thing the chart is about
+                // in order to read the line laid over it.
+                <Show when=move || state.overlay_flags.get().has_right_axis()>
+                    <label class="flex items-center gap-2 cursor-pointer group mt-2.5">
+                        <input
+                            type="checkbox"
+                            class="accent-[#e6c84e] w-4 h-4 cursor-pointer"
+                            prop:checked=move || state.overlay_right_log_scale.get()
+                            on:change=move |_| state.set_overlay_right_log_scale.update(|v| *v = !*v)
+                        />
+                        <span class="text-[0.9rem] text-white/60 group-hover:text-white/80 transition-colors">
+                            "Logarithmic overlay axis"
+                        </span>
+                    </label>
+                    <p class="text-[0.7rem] text-white/30 mt-1 ml-6">
+                        "Scales the right-hand axis on its own, so price can be read across six orders of magnitude without moving the metric beside it"
+                    </p>
+                </Show>
             </div>
             <label class="flex items-center gap-2 cursor-pointer group">
                 <input

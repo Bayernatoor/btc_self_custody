@@ -21,6 +21,7 @@ use crate::stats::charts::kpi::{self, Kpis};
 use crate::stats::charts::registry::{
     self, ChartMeta, Daily, MiningChart, Source,
 };
+use crate::stats::charts::OverlayFlags;
 use crate::stats::server_fns::{
     fetch_empty_blocks_by_pool, fetch_empty_blocks_monthly,
     fetch_fullness_histogram, fetch_miner_dominance,
@@ -96,6 +97,32 @@ fn fmt_ms(ms: Option<f64>) -> Option<String> {
 /// stops informing: the number is dominated by how small the baseline was.
 const PCT_MEANINGFUL_RATIO: f64 = 10_000.0;
 
+/// Build a chart from the dashboard rows already loaded for this range.
+///
+/// Only answers for `Source::Dashboard`, which is what `can_compare` restricts
+/// comparison candidates to. The chain-size, fee and distribution charts each
+/// need something beyond the rows (a disk figure, a unit, a separate fetch),
+/// so they take part in a comparison as the primary chart but never as the
+/// overlaid one.
+fn build_from_dashboard(
+    data: &DashboardData,
+    m: &ChartMeta,
+) -> Option<serde_json::Value> {
+    match (data, m.source) {
+        (DashboardData::PerBlock(b), Source::Dashboard { per_block, .. }) => {
+            Some(per_block(b))
+        }
+        (
+            DashboardData::Daily(d),
+            Source::Dashboard {
+                daily: Daily::Fn(f),
+                ..
+            },
+        ) => Some(f(d)),
+        _ => None,
+    }
+}
+
 /// When a peak or low happened, however the chart encodes it. Per-block charts
 /// carry a millisecond timestamp on the point; daily charts emit bare numbers
 /// and keep their dates on the category axis, so those are matched by position.
@@ -170,9 +197,75 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
     // from `lg` up, since below that the rail is stacked underneath and costs
     // the chart no width at all.
     let (rail_open, set_rail_open) = signal(true);
-    // Off by default: a log axis is the right view for a few charts and a
-    // misleading one for a reader who did not ask for it.
-    let (log_scale, set_log_scale) = signal(false);
+    // Both scales and the comparison live in the shared state, so a refresh
+    // or a pasted link restores the view rather than resetting it to linear
+    // with nothing laid over it. The single-chart page used to keep its own
+    // metric-scale signal, which meant two toggles for one idea and neither
+    // of them in the URL.
+    let log_scale = state.overlay_log_scale;
+    let set_log_scale = state.set_overlay_log_scale;
+    let right_log_scale = state.overlay_right_log_scale;
+    let set_right_log_scale = state.set_overlay_right_log_scale;
+    let compare = state.compare;
+    let set_compare = state.set_compare;
+    // The stored slug is an intent, not a guarantee: it survives navigation
+    // to another chart, and it can name this chart, a chart that cannot be
+    // compared with this one, or one with nothing to draw at this range.
+    // Resolving it here, on every render, through the registry's single
+    // validator is what makes all of those a no-op instead of a broken chart.
+    let compare_meta = Signal::derive(move || {
+        // Price and chain size are applied first and take the right axis, so
+        // a comparison cannot be drawn beside them. `apply_comparison`
+        // already refuses on that ground, structurally; answering None here
+        // as well is what keeps the picker, its description and the URL from
+        // advertising a comparison the chart is not drawing. A link asking
+        // for both used to do exactly that.
+        //
+        // Overlay wins rather than comparison, matching the precedence
+        // already in force between price and chain size, which is the order
+        // `apply_overlays` applies them in.
+        // The toggles, not the fetched data. `OverlayFlags::has_right_axis`
+        // reads the price and chain-size series, which arrive asynchronously,
+        // so during SSR and the first client render they are empty and this
+        // would resolve a comparison that is about to be displaced the moment
+        // the fetch lands. The toggle is true immediately and is what the
+        // reader actually asked for.
+        if state.overlay_price.get() || state.overlay_chain_size.get() {
+            return None;
+        }
+        registry::comparison_for(
+            meta,
+            &compare.get(),
+            uses_daily_aggregates(range_to_blocks(&range.get())),
+        )
+    });
+    // One occupant at a time, the constraint the price and chain-size
+    // toggles already enforce between themselves. A comparison joins that
+    // group rather than claiming a third axis, because three value axes on
+    // one plot is a chart nobody can read.
+    let compare_holds_axis =
+        Signal::derive(move || compare_meta.get().is_some());
+    // Reconcile the stored slug with what can actually be drawn here.
+    //
+    // Rendering is already safe without this: `compare_meta` resolves to None
+    // and nothing is laid over the chart. What this fixes is the picker still
+    // showing a name, and the URL still carrying a slug, for a comparison
+    // that is not on screen. Both of those read as the feature being broken
+    // rather than as this chart not supporting that pairing.
+    //
+    // Every stale case at once, because they all arrive the same way, by
+    // navigating or by pasting a link: the chart was renamed out of the
+    // registry, it is this chart, it cannot be compared with this one, or it
+    // has no daily builder and the range just grew past the threshold.
+    Effect::new(move |_| {
+        let slug = compare.get();
+        if !slug.is_empty() && compare_meta.get().is_none() {
+            set_compare.set(String::new());
+        }
+    });
+    let has_right_axis = Signal::derive(move || {
+        overlay_flags.get().has_right_axis() || compare_holds_axis.get()
+    });
 
     let needs_mining = matches!(meta.source, Source::Mining(_));
     let needs_buckets =
@@ -243,15 +336,44 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
         let sats = fee_sats.get();
         let logv = log_scale.get() && meta.supports_log();
 
-        let finish = |mut v: serde_json::Value, is_daily: bool| -> String {
+        let cmp = compare_meta.get();
+
+        // `cmp_option` is threaded in rather than read from a signal here so
+        // the mining branch, which has no dashboard rows to build a second
+        // series from, can pass None without the comparison code caring.
+        let decorate = |mut v: serde_json::Value,
+                        is_daily: bool,
+                        cmp_option: Option<serde_json::Value>|
+         -> String {
             if v.is_null() {
                 return String::new();
             }
             crate::stats::charts::apply_overlays(&mut v, &flags, is_daily);
-            // After the overlays, so it only ever touches the left axis the
-            // metric owns rather than the right one price or chain size added.
+            // After the overlays, because `apply_overlays` sets grid.right to
+            // a fixed width for its mark-line labels, and adding an axis has
+            // to be the last thing that widens the plot or the axis ends up
+            // drawn over them.
+            if let (Some(other), Some(c)) = (cmp_option, cmp) {
+                crate::stats::charts::apply_comparison(
+                    &mut v,
+                    &other,
+                    c.title,
+                    c.unit.label(),
+                );
+            }
+            // After both, so it only ever touches the left axis the metric
+            // owns rather than the right one an overlay or a comparison added.
             crate::stats::charts::apply_log_scale(&mut v, logv);
+            // The metric's scale is this page's own signal; the right axis
+            // belongs to whatever is occupying it, which is shared state.
+            crate::stats::charts::apply_right_log_scale(
+                &mut v,
+                flags.right_log_scale,
+            );
             serde_json::to_string(&v).unwrap_or_default()
+        };
+        let finish = |v: serde_json::Value, is_daily: bool| -> String {
+            decorate(v, is_daily, None)
         };
 
         match meta.source {
@@ -286,6 +408,15 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
             _ => {
                 let Some(Ok(data)) = dashboard_data.get() else {
                     return String::new();
+                };
+                // Built from the same rows over the same range as the primary
+                // chart, which is the whole reason `can_compare` is restricted
+                // to dashboard-sourced charts: no second request, and the two
+                // series cannot end up describing different periods.
+                let cmp_option =
+                    cmp.and_then(|c| build_from_dashboard(&data, c));
+                let finish = |v: serde_json::Value, is_daily: bool| -> String {
+                    decorate(v, is_daily, cmp_option.clone())
                 };
                 let disk_gb = state
                     .cached_live
@@ -382,7 +513,7 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
     let cid = canvas_id(meta.slug);
     let title_tag = format!("{} | Bitcoin Chart | We Hodl BTC", meta.title);
     let desc_tag = format!(
-        "{} for the Bitcoin network, measured in {}, from our own node. \
+        "{} for the Bitcoin network, measured in {}, from my own node. \
          Downloadable as CSV.",
         meta.title,
         meta.unit.label()
@@ -415,6 +546,10 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                 // width and wrapped it to one word per line on a phone.
                 <div class="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between lg:gap-3 mb-3 lg:mb-4">
                     <div class="min-w-0">
+                        // No info icon here: the one-liner is directly beneath it
+                        // and the long-form About is below the chart, so a
+                        // third copy of the same sentence in a bubble would
+                        // teach a reader that the icons are noise.
                         <h1 class="text-lg sm:text-xl text-white font-semibold">{meta.title}</h1>
                         // The same one-liner the card shows, switching with
                         // the range the way chart_desc does on the pages, so
@@ -430,33 +565,38 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                     // Range sits in the chart header rather than the rail:
                     // it is one row of buttons and it was costing the chart
                     // 20rem of width to hold it in a column.
-                    <div class="flex items-start gap-2 shrink-0">
+                    <div class="flex items-start gap-3 shrink-0">
                         {meta.supports_log().then(|| view! {
-                            <div class="flex items-center gap-1 mt-0.5">
-                                <button
-                                    class=move || if log_scale.get() {
-                                        "px-2 py-1 text-xs rounded-md bg-white/5 text-white/50 hover:text-white/80 cursor-pointer"
-                                    } else {
-                                        "px-2 py-1 text-xs rounded-md bg-[#f7931a] text-[#1a1a2e] font-semibold cursor-pointer"
-                                    }
-                                    title="Linear value axis"
-                                    on:click=move |_| set_log_scale.set(false)
-                                >
-                                    "Linear"
-                                </button>
-                                <button
-                                    class=move || if log_scale.get() {
-                                        "px-2 py-1 text-xs rounded-md bg-[#f7931a] text-[#1a1a2e] font-semibold cursor-pointer"
-                                    } else {
-                                        "px-2 py-1 text-xs rounded-md bg-white/5 text-white/50 hover:text-white/80 cursor-pointer"
-                                    }
-                                    title="Logarithmic value axis, at any range. Zero and negative points cannot be plotted on it; the chart says how many were left out"
-                                    on:click=move |_| set_log_scale.set(true)
-                                >
-                                    "Log"
-                                </button>
-                            </div>
+                            <ScaleSwitch
+                                on=log_scale
+                                set_on=set_log_scale
+                                // Unlabelled while it is the only switch on
+                                // the page, since there is nothing to tell it
+                                // apart from.
+                                axis_label=Signal::derive(move || if has_right_axis.get() {
+                                    meta.unit.label().to_string()
+                                } else {
+                                    String::new()
+                                })
+                                title_log="Logarithmic value axis, at any range. Zero and negative points cannot be plotted on it; the chart says how many were left out"
+                            />
                         })}
+                        // Only while an overlay owns the right axis, because
+                        // there is otherwise no second scale to switch. The
+                        // label names the axis, since two identical
+                        // Linear/Log pairs side by side would not say which
+                        // one moves what.
+                        <Show when=move || has_right_axis.get()>
+                            <ScaleSwitch
+                                on=right_log_scale
+                                set_on=set_right_log_scale
+                                axis_label=Signal::derive(move || right_axis_label(&overlay_flags.get(), compare_meta.get()))
+                                title_log="Logarithmic axis for the overlay. Price crosses six orders of magnitude, which a linear axis flattens into a line along the bottom until 2017"
+                                // The switch beside it already explains the
+                                // difference, and it is the same difference.
+                                explain=false
+                            />
+                        </Show>
                         <RailRange/>
                         <button
                             class="hidden lg:inline-flex items-center text-white/40 hover:text-[#f7931a] transition-colors cursor-pointer p-1 rounded-md hover:bg-white/5 mt-0.5"
@@ -547,7 +687,10 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
             } else {
                 "space-y-4 lg:hidden"
             }>
-                <RailSection title="Key facts">
+                <RailSection
+                    title="Key facts"
+                    explain="Calculated from the points currently plotted, so they follow the range you pick. Zooming with the slider changes only what you see, not these."
+                >
                     // "Over selected range", not "visible": these follow the
                     // range slice, not the zoom slider, which changes only the
                     // view. Making them follow zoom needs a datazoom handler.
@@ -557,19 +700,37 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                     <KeyFacts kpis=kpis unit=meta.unit/>
                 </RailSection>
 
-                <RailSection title="Overlays">
-                    <OverlayToggles/>
+                <RailSection
+                    title="Overlays"
+                    explain="Extra context drawn on top of the chart. Event markers are vertical lines at dated moments; a comparison series is a second set of numbers on its own axis at the right."
+                >
+                    <OverlayToggles
+                        meta=meta
+                        compare=compare
+                        set_compare=set_compare
+                        compare_meta=compare_meta
+                        compare_holds_axis=compare_holds_axis
+                        daily=Signal::derive(move || uses_daily_aggregates(range_to_blocks(&range.get())))
+                    />
                 </RailSection>
 
                 {
                     let rel = registry::related(meta, 4);
                     (!rel.is_empty()).then(|| view! {
-                        <RailSection title="Related">
-                            <div class="space-y-1.5">
+                        <RailSection
+                            title="Related"
+                            explain="Charts measuring the same thing or covering the same part of the network, for reading this one in context."
+                        >
+                            // Chips below `lg`, where four full-width links
+                            // are four rows of mostly empty line and each is
+                            // a small tap target in a tall list. Back to a
+                            // stacked list in the 15rem rail, where a title
+                            // rarely fits on one chip.
+                            <div class="flex flex-wrap gap-1.5 lg:block lg:space-y-1.5">
                                 {rel.into_iter().map(|r| view! {
                                     <a
                                         href=format!("/observatory/chart/{}", r.slug)
-                                        class="block text-sm text-white/70 hover:text-[#f7931a] transition-colors"
+                                        class="inline-block px-2.5 py-1.5 rounded-lg bg-white/5 text-sm text-white/70 hover:text-[#f7931a] hover:bg-white/10 transition-colors lg:block lg:px-0 lg:py-0 lg:bg-transparent lg:hover:bg-transparent"
                                     >
                                         {r.title}
                                     </a>
@@ -624,17 +785,34 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                 </div>
             </div>
 
-            // `about` is None for every chart today, so this renders the short
-            // description rather than an empty heading. Definition then
-            // Technical is the structure the copy will follow: what the metric
-            // is, then how it is computed.
+            // Definition then Technical, and both headed, because they answer
+            // two different questions: what is this, and can I trust the
+            // number. A reader wants one or the other, rarely both, so
+            // running them together would make each group read past the one
+            // they did not come for. Charts without the long copy fall back
+            // to the one-liner rather than an empty heading.
             <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-4 lg:p-5">
                 <h2 class="text-[0.7rem] uppercase tracking-widest text-white/55 mb-3">
                     "About this metric"
                 </h2>
                 {match meta.about {
                     Some(copy) => view! {
-                        <p class="text-sm text-white/70 leading-relaxed max-w-3xl">{copy}</p>
+                        <div class="max-w-3xl space-y-3">
+                            <p class="text-sm text-white/70 leading-relaxed">
+                                <span class="text-white/50">"Definition. "</span>
+                                {copy.definition}
+                            </p>
+                            <p class="text-sm text-white/70 leading-relaxed">
+                                <span class="text-white/50">"How it is measured. "</span>
+                                {copy.technical}
+                            </p>
+                        </div>
+                        <p class="text-xs text-white/35 mt-3">
+                            "Measured from my own Bitcoin node. "
+                            <a href="/observatory/learn/methodology" class="hover:text-[#f7931a] transition-colors">
+                                "Methodology"
+                            </a>
+                        </p>
                     }.into_any(),
                     None => view! {
                         <p class="text-sm text-white/70 leading-relaxed max-w-3xl">
@@ -643,7 +821,7 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                             "."
                         </p>
                         <p class="text-xs text-white/35 mt-2">
-                            "Measured from our own Bitcoin node. "
+                            "Measured from my own Bitcoin node. "
                             <a href="/observatory/learn/methodology" class="hover:text-[#f7931a] transition-colors">
                                 "Methodology"
                             </a>
@@ -655,6 +833,111 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
         // Without this the view is a dead end: four related charts and the
         // browser back button. The drawer indexes all 61.
         <super::shared::ChartDrawer/>
+    }
+}
+
+/// A Linear/Log pair for one value axis.
+///
+/// Extracted because the page can show two of them, and two copies of the
+/// markup would be two places for the active-state styling to drift apart.
+/// The label is what distinguishes them, so it is a signal: it appears only
+/// once there is a second switch to be confused with.
+#[component]
+fn ScaleSwitch(
+    on: ReadSignal<bool>,
+    set_on: WriteSignal<bool>,
+    axis_label: Signal<String>,
+    title_log: &'static str,
+    /// Whether this switch carries the linear-versus-log explanation.
+    ///
+    /// The page can show two of these, and they are the same control applied
+    /// to different axes, so the explanation is the same for both. Printing
+    /// it twice, a few centimetres apart, teaches a reader that the icons
+    /// repeat themselves.
+    #[prop(default = true)]
+    explain: bool,
+) -> impl IntoView {
+    let cls = move |active: bool| segmented_button(active);
+    view! {
+        <div class="flex items-center gap-1.5 mt-0.5">
+            {explain.then(|| view! {
+                <InfoTip text="A linear axis spaces values evenly, so 0 to 100 takes the same height as 100 to 200. A logarithmic axis spaces them by ratio, so each step up is a multiplication. Log is the readable choice for anything that grows by multiplying, such as price or difficulty, where a linear axis flattens the early years into a line along the bottom."/>
+            })}
+            <Show when=move || !axis_label.get().is_empty()>
+                <span class="text-[11px] text-white/35 whitespace-nowrap">
+                    {move || axis_label.get()}
+                </span>
+            </Show>
+            <div class=SEGMENTED_GROUP>
+                <button
+                    class=move || cls(!on.get())
+                    title="Linear value axis"
+                    on:click=move |_| set_on.set(false)
+                >
+                    "Linear"
+                </button>
+                <button
+                    class=move || cls(on.get())
+                    title=title_log
+                    on:click=move |_| set_on.set(true)
+                >
+                    "Log"
+                </button>
+            </div>
+        </div>
+    }
+}
+
+/// The tray a related set of buttons sits in, so two sets side by side read as
+/// two controls rather than one long strip.
+///
+/// The chart header carries the axis scale and the range next to each other,
+/// twelve small buttons in a row, and with only a gap between them "Log" and
+/// "1D" looked like neighbours in the same group. The tray is what says where
+/// one control ends.
+const SEGMENTED_GROUP: &str =
+    "flex flex-wrap items-center gap-0.5 p-0.5 rounded-lg \
+     bg-black/25 border border-white/10";
+
+/// One button inside a [`SEGMENTED_GROUP`].
+///
+/// Inactive buttons have no background of their own: the tray is the ground
+/// they sit on, and giving them one as well produced the blocky strip this
+/// replaced.
+fn segmented_button(active: bool) -> &'static str {
+    if active {
+        "px-2 py-1 text-xs rounded-md bg-[#f7931a] text-[#1a1a2e] font-semibold cursor-pointer"
+    } else {
+        "px-2 py-1 text-xs rounded-md text-white/50 hover:text-white/85 hover:bg-white/10 transition-colors cursor-pointer"
+    }
+}
+
+/// What the right axis is currently showing, for the scale switch beside it.
+///
+/// The label is the entire reason two Linear/Log pairs side by side are
+/// readable, so any case that falls through to the generic word defeats the
+/// control. A comparison is checked first because it is the occupant most
+/// likely to sit next to a metric switch showing a similar-looking unit, and
+/// because this function originally could not see one at all: it read only
+/// `OverlayFlags`, which a comparison does not travel in.
+///
+/// Both overlays can be on at once, in which case they get an axis each and
+/// only the first is switchable. "overlay" is honest there, since naming one
+/// of two would be wrong half the time.
+fn right_axis_label(
+    flags: &OverlayFlags,
+    compare: Option<&'static ChartMeta>,
+) -> String {
+    if let Some(c) = compare {
+        return c.unit.label().to_string();
+    }
+    match (
+        !flags.price_data.is_empty(),
+        !flags.chain_size_data.is_empty(),
+    ) {
+        (true, false) => "price".to_string(),
+        (false, true) => "chain size".to_string(),
+        _ => "overlay".to_string(),
     }
 }
 
@@ -691,7 +974,14 @@ fn RailRange() -> impl IntoView {
     };
 
     view! {
-        <div class="flex flex-wrap justify-start lg:justify-end gap-1">
+        // One column, so the mode line sits under the presets rather than
+        // beside them. Both used to be emitted as bare siblings, which made
+        // them two items of the header's own flex row: the mode line then
+        // competed with the presets for width, and giving it `w-full` to get
+        // the info icon inline claimed the entire row and wrapped "Custom"
+        // onto a line of its own.
+        <div class="flex flex-col items-start lg:items-end min-w-0">
+        <div class=format!("{SEGMENTED_GROUP} justify-start lg:justify-end")>
             {PRESETS.iter().map(|r| {
                 let val = r.to_string();
                 let label = r.to_uppercase();
@@ -701,11 +991,7 @@ fn RailRange() -> impl IntoView {
                 };
                 view! {
                     <button
-                        class=move || if is_on() {
-                            "px-2 py-1 text-xs rounded-md bg-[#f7931a] text-[#1a1a2e] font-semibold cursor-pointer"
-                        } else {
-                            "px-2 py-1 text-xs rounded-md bg-white/5 text-white/50 hover:text-white/80 hover:bg-white/10 transition-colors cursor-pointer"
-                        }
+                        class=move || segmented_button(is_on())
                         on:click={
                             let val = val.clone();
                             move |_| {
@@ -719,12 +1005,12 @@ fn RailRange() -> impl IntoView {
                     </button>
                 }
             }).collect_view()}
+            // In the same tray as the presets, with a rule in front of it:
+            // it is a range like the others, but it opens a panel rather than
+            // selecting one.
+            <span class="w-px self-stretch bg-white/10 mx-0.5"></span>
             <button
-                class=move || if range.get() == "custom" {
-                    "px-2 py-1 text-xs rounded-md bg-[#f7931a] text-[#1a1a2e] font-semibold cursor-pointer"
-                } else {
-                    "px-2 py-1 text-xs rounded-md bg-white/5 text-white/50 hover:text-white/80 hover:bg-white/10 transition-colors cursor-pointer"
-                }
+                class=move || segmented_button(range.get() == "custom")
                 // The date picker itself lives in the chart settings panel.
                 // Opening it there beats a second copy in a 20rem rail, which
                 // is what overflowed when the shared selector was used here.
@@ -737,7 +1023,11 @@ fn RailRange() -> impl IntoView {
                 "Custom"
             </button>
         </div>
-        <p class="text-[0.7rem] text-white/45 mt-1.5 lg:text-right">{mode}</p>
+        <p class="text-[0.7rem] text-white/45 mt-1.5 inline-flex items-center gap-1">
+            <span class="whitespace-nowrap">{mode}</span>
+            <InfoTip text="Short ranges plot one point per block, about one every ten minutes. Longer ranges plot one point per day, averaged from every block in that day, so brief spikes are smoothed away."/>
+        </p>
+        </div>
     }
 }
 
@@ -762,12 +1052,111 @@ fn ExportButton(
 }
 
 #[component]
-fn RailSection(title: &'static str, children: Children) -> impl IntoView {
+fn RailSection(
+    title: &'static str,
+    /// What this section is for, in a sentence. Empty means no icon.
+    #[prop(default = "")]
+    explain: &'static str,
+    children: Children,
+) -> impl IntoView {
+    // A native `<details>`, open by default, rather than a signal and a
+    // click handler. On a phone the rail stacks under the chart, so three
+    // always-open cards mean a long scroll past things the reader may not
+    // want; being able to collapse them is the fix. Open by default keeps the
+    // desktop rail exactly as it was, and native `<details>` brings its own
+    // keyboard handling and renders identically under SSR, where a signal
+    // seeded from a media query would not.
     view! {
-        <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-4">
-            <h2 class="text-[0.7rem] uppercase tracking-widest text-white/55 mb-3">{title}</h2>
-            {children()}
-        </div>
+        <details open class="group/sec bg-[#0d2137] border border-white/10 rounded-2xl p-4">
+            // `list-none` kills the marker in Firefox and Chrome;
+            // `::-webkit-details-marker` is still needed for Safari, which
+            // would otherwise draw a triangle beside our own chevron.
+            <summary class="text-[0.7rem] uppercase tracking-widest text-white/55 flex items-center gap-1 cursor-pointer list-none [&::-webkit-details-marker]:hidden lg:cursor-default">
+                {title}
+                {(!explain.is_empty()).then(|| view! { <InfoTip text=explain/> })}
+                // The chevron is the only affordance saying this collapses,
+                // so it is hidden where collapsing is pointless.
+                <svg
+                    class="w-3.5 h-3.5 ml-auto text-white/35 transition-transform group-open/sec:rotate-180 lg:hidden"
+                    fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"
+                >
+                    <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"/>
+                </svg>
+            </summary>
+            <div class="mt-3">{children()}</div>
+        </details>
+    }
+}
+
+/// An "i" that explains a term on hover, on keyboard focus and on tap.
+///
+/// The site's purpose is teaching, so a reader who does not know what
+/// "observations" or "BIP activations" means has to be able to find out
+/// without leaving the chart. That rules out the native `title` attribute,
+/// which never appears on a touch screen and waits a second on a desktop.
+///
+/// No JavaScript: a `<button>` inside a `group` shows the bubble on
+/// `group-hover`, on `group-focus-within` and on `group-active`. Three
+/// triggers rather than two because Safari does not reliably move focus to a
+/// button on click, which would leave a touch user with no way to open this
+/// at all; `:active` at least shows it while the finger is down.
+/// `type="button"` matters, since several of these sit inside a `<label>`.
+#[component]
+fn InfoTip(text: &'static str) -> impl IntoView {
+    view! {
+        <span class="relative inline-flex group/tip align-middle shrink-0">
+            <button
+                type="button"
+                class="w-3.5 h-3.5 rounded-full border border-white/25 text-white/45 hover:text-[#f7931a] hover:border-[#f7931a]/60 focus:text-[#f7931a] focus:border-[#f7931a]/60 focus:outline-none text-[0.6rem] leading-none flex items-center justify-center cursor-help transition-colors normal-case"
+                aria-label=format!("What this means: {text}")
+            >
+                "i"
+            </button>
+            // Opens **downward**. An upward bubble reads better next to a
+            // control at the bottom of a card, and it is wrong everywhere it
+            // matters: the scale switch and the range mode sit in the chart
+            // header near the top of the page, where opening upward put the
+            // text behind the navbar and the advisory banner and then off the
+            // top of the window entirely, which cannot be scrolled to.
+            // Downward overflow is always reachable, because the document
+            // continues below.
+            //
+            // Right-anchored from `lg` up, where these sit near the right
+            // edge of a 15rem rail, and left-anchored below it, where the
+            // rail is full width and the icons follow labels near the left.
+            // The max-width is the backstop for both.
+            //
+            // `z-40` clears the chart canvas and the rail cards. It stays
+            // under the navbar's `z-30` stacking context rather than fighting
+            // it, which is safe now that nothing opens upward into it.
+            <span class="pointer-events-none absolute top-full left-0 lg:left-auto lg:right-0 mt-1.5 w-56 max-w-[calc(100vw-3rem)] z-40 opacity-0 invisible group-hover/tip:opacity-100 group-hover/tip:visible group-focus-within/tip:opacity-100 group-focus-within/tip:visible group-active/tip:opacity-100 group-active/tip:visible transition-opacity duration-150 bg-[#06131f] border border-white/15 rounded-lg px-2.5 py-2 text-[0.7rem] leading-relaxed text-white/75 font-normal tracking-normal normal-case whitespace-normal text-left shadow-lg shadow-black/50">
+                {text}
+            </span>
+        </span>
+    }
+}
+
+/// What each key figure means, in a sentence a reader new to this can use.
+///
+/// Here rather than beside the calculation in `kpi.rs` because these explain
+/// the rendered label, and the label is chosen here: `kpi.rs` returns
+/// `observations` for four different shapes of chart and this file decides
+/// what to call it in each. Keeping the words with the label they explain is
+/// what stops the two drifting.
+fn fact_hint(label: &str) -> &'static str {
+    match label {
+        "average" => "The mean of every plotted point over the selected range. Not a running average: change the range and this changes with it.",
+        "peak" => "The highest single value in the range, and when it happened.",
+        "low" => "The lowest single value in the range, and when it happened.",
+        "change" => "Last value minus first value over the range. The percentage is shown only when the starting value is large enough for it to mean something.",
+        "observations" => "How many data points are plotted. One per block on short ranges, one per day once the range is long enough to use daily aggregates.",
+        "latest total" => "The sum of every band at the most recent point in the range.",
+        "largest band" => "The band holding the biggest share at the most recent point.",
+        "bands" => "How many stacked categories the chart is divided into.",
+        "largest" => "The category with the biggest share over the whole range.",
+        "its value" => "The value behind that share, in the chart's own unit.",
+        "entries" => "How many categories the chart counts.",
+        _ => "",
     }
 }
 
@@ -787,7 +1176,11 @@ fn KeyFacts(kpis: Signal<Kpis>, unit: registry::Unit) -> impl IntoView {
                     && (last / first).abs() < PCT_MEANINGFUL_RATIO)
                     .then(|| change / first.abs() * 100.0);
                 view! {
-                    <div class="space-y-2">
+                    // Two columns of tiles below `lg`, where the rail is
+                    // stacked under the chart at full width and a column of
+                    // label-value rows leaves most of the line empty. Back to
+                    // rows in the 15rem rail, where two columns would not fit.
+                    <div class="grid grid-cols-2 gap-x-4 gap-y-2 lg:grid-cols-1 lg:gap-0 lg:space-y-2">
                         <Fact label="average" value=fmt_num(average) note=(unit != registry::Unit::Count).then(|| unit.label().to_string())/>
                         <Fact label="peak" value=fmt_num(peak.y) note=point_label(&peak, &axis_labels)/>
                         <Fact label="low" value=fmt_num(low.y) note=point_label(&low, &axis_labels)/>
@@ -802,7 +1195,11 @@ fn KeyFacts(kpis: Signal<Kpis>, unit: registry::Unit) -> impl IntoView {
             }
             Kpis::Bands { total_latest, dominant, dominant_share_pct, band_count, observations } => {
                 view! {
-                    <div class="space-y-2">
+                    // Two columns of tiles below `lg`, where the rail is
+                    // stacked under the chart at full width and a column of
+                    // label-value rows leaves most of the line empty. Back to
+                    // rows in the 15rem rail, where two columns would not fit.
+                    <div class="grid grid-cols-2 gap-x-4 gap-y-2 lg:grid-cols-1 lg:gap-0 lg:space-y-2">
                         <Fact label="latest total" value=fmt_num(total_latest) note=None/>
                         <Fact label="largest band" value=dominant note=Some(format!("{dominant_share_pct:.1}% of total"))/>
                         <Fact label="bands" value=band_count.to_string() note=None/>
@@ -812,7 +1209,11 @@ fn KeyFacts(kpis: Signal<Kpis>, unit: registry::Unit) -> impl IntoView {
             }
             Kpis::Categorical { top_name, top_value, top_share_pct, entries } => {
                 view! {
-                    <div class="space-y-2">
+                    // Two columns of tiles below `lg`, where the rail is
+                    // stacked under the chart at full width and a column of
+                    // label-value rows leaves most of the line empty. Back to
+                    // rows in the 15rem rail, where two columns would not fit.
+                    <div class="grid grid-cols-2 gap-x-4 gap-y-2 lg:grid-cols-1 lg:gap-0 lg:space-y-2">
                         <Fact label="largest" value=top_name note=Some(format!("{top_share_pct:.1}% of total"))/>
                         <Fact label="its value" value=fmt_num(top_value) note=None/>
                         <Fact label="entries" value=entries.to_string() note=None/>
@@ -836,9 +1237,13 @@ fn Fact(
     /// has an explicit answer for whether there is a note.
     note: Option<String>,
 ) -> impl IntoView {
+    let hint = fact_hint(label);
     view! {
         <div class="flex items-baseline justify-between gap-3">
-            <span class="text-xs text-white/55 shrink-0">{label}</span>
+            <span class="text-xs text-white/55 shrink-0 inline-flex items-center gap-1">
+                {label}
+                {(!hint.is_empty()).then(|| view! { <InfoTip text=hint/> })}
+            </span>
             <span class="text-right min-w-0">
                 <span class="text-sm text-white font-mono">{value}</span>
                 {note.map(|n| view! {
@@ -858,20 +1263,62 @@ fn Fact(
 /// right axis, and that axis has exactly one occupant: picking one greys the
 /// other, which is the same constraint the compare feature will contend with.
 #[component]
-fn OverlayToggles() -> impl IntoView {
+fn OverlayToggles(
+    meta: &'static ChartMeta,
+    compare: ReadSignal<String>,
+    set_compare: WriteSignal<String>,
+    /// The comparison actually being drawn, resolved by the page.
+    ///
+    /// Passed in rather than resolved again here. A second reading drifted
+    /// from the first the moment axis contention entered the rules, and the
+    /// result was a picker describing a comparison that was not on screen.
+    compare_meta: Signal<Option<&'static ChartMeta>>,
+    compare_holds_axis: Signal<bool>,
+    /// Whether the selected range is long enough to use daily aggregates, so
+    /// the picker can drop charts that have no daily variant instead of
+    /// offering one that would draw nothing.
+    daily: Signal<bool>,
+) -> impl IntoView {
     let s = expect_context::<ObservatoryState>();
-    let price_holds_axis = Signal::derive(move || s.overlay_price.get());
-    let size_holds_axis = Signal::derive(move || s.overlay_chain_size.get());
+    let price_holds_axis = Signal::derive(move || {
+        s.overlay_price.get() || compare_holds_axis.get()
+    });
+    let size_holds_axis = Signal::derive(move || {
+        s.overlay_chain_size.get() || compare_holds_axis.get()
+    });
+    // The picker is inert while price or chain size holds the axis, the same
+    // way each of those is inert while the other does.
+    let overlay_holds_axis = Signal::derive(move || {
+        s.overlay_price.get() || s.overlay_chain_size.get()
+    });
+    let groups =
+        Signal::derive(move || registry::comparable_with(meta, daily.get()));
     let never = Signal::derive(|| false);
     view! {
         <p class="text-[0.6rem] uppercase tracking-widest text-white/30 mb-1.5">
             "Event markers"
         </p>
         <div class="space-y-1.5">
-            <Toggle label="Halvings" get=s.overlay_halvings set=s.set_overlay_halvings disabled=never/>
-            <Toggle label="BIP activations" get=s.overlay_bips set=s.set_overlay_bips disabled=never/>
-            <Toggle label="Core releases" get=s.overlay_core set=s.set_overlay_core disabled=never/>
-            <Toggle label="Events" get=s.overlay_events set=s.set_overlay_events disabled=never/>
+            <Toggle
+                label="Halvings"
+                get=s.overlay_halvings set=s.set_overlay_halvings disabled=never
+                hint="Roughly every four years, the reward paid to miners for each block is cut in half. Four have happened so far, and they are the clearest scheduled events in Bitcoin's history."
+            />
+            <Toggle
+                label="BIP activations"
+                get=s.overlay_bips set=s.set_overlay_bips disabled=never
+                hint="A BIP is a Bitcoin Improvement Proposal: a design document for a change to the protocol. These lines mark the dates that proposals such as SegWit and Taproot became active on the network."
+            />
+            <Toggle
+                label="Core releases"
+                get=s.overlay_core set=s.set_overlay_core disabled=never
+                hint="Releases of Bitcoin Core, the software most nodes run. A release does not change consensus rules by itself, but it often changes what transactions a node will relay, which can show up in these charts."
+            />
+            <Toggle
+                label="Events"
+                get=s.overlay_events set=s.set_overlay_events disabled=never
+                hint="Dated moments outside the protocol that moved the numbers: exchange failures, country-level bans, the first Ordinals inscriptions."
+            />
         </div>
         <p class="text-[0.6rem] uppercase tracking-widest text-white/30 mt-3 mb-1.5">
             "Comparison series"
@@ -882,17 +1329,109 @@ fn OverlayToggles() -> impl IntoView {
                 get=s.overlay_price
                 set=s.set_overlay_price
                 disabled=size_holds_axis
+                hint="The daily BTC price in US dollars, drawn on its own axis on the right. Price crosses six orders of magnitude, so it usually wants the logarithmic setting beside it."
             />
             <Toggle
                 label="Chain size"
                 get=s.overlay_chain_size
                 set=s.set_overlay_chain_size
                 disabled=price_holds_axis
+                hint="The total size of the block chain on disk, growing as blocks are added. A full node has to store all of it."
             />
         </div>
-        <p class="text-[0.6rem] text-white/25 mt-1.5">
-            "one at a time: they share the right axis"
-        </p>
+        // A select rather than a list of toggles: 50-odd candidates will not
+        // fit in a 15rem rail, and the native control brings its own keyboard
+        // handling, type-ahead and mobile picker for nothing.
+        <Show when=move || !groups.get().is_empty()>
+            <p class="text-[0.6rem] uppercase tracking-widest text-white/30 mt-3 mb-1.5">
+                "Compare with"
+            </p>
+            <select
+                // `color-scheme: dark` is what actually fixes the popup. The
+                // list of options is drawn by the browser, not by our CSS, so
+                // it ignored the dark theme and rendered white; the options
+                // then inherited the select's own white text and the whole
+                // list was invisible. The explicit colours below are the
+                // belt to that brace, since a few platforms honour one and
+                // not the other.
+                class=move || if overlay_holds_axis.get() {
+                    "w-full text-xs bg-white/5 border border-white/10 rounded-md px-2 py-1.5 text-white/30 cursor-not-allowed [color-scheme:dark]"
+                } else {
+                    "w-full text-xs bg-white/5 border border-white/10 rounded-md px-2 py-1.5 text-white/70 hover:border-white/25 cursor-pointer [color-scheme:dark]"
+                }
+                prop:disabled=move || overlay_holds_axis.get()
+                prop:value=move || compare.get()
+                title=move || if overlay_holds_axis.get() {
+                    "The right axis is taken by a comparison series"
+                } else {
+                    "Lay a second chart over this one, on its own axis"
+                }
+                on:change=move |ev| set_compare.set(event_target_value(&ev))
+            >
+                // `selected` as well as `prop:value`, because the prop is
+                // only applied once WASM has hydrated. Without it a link
+                // carrying a comparison paints a chart with two series beside
+                // a picker reading "None" until hydration catches up.
+                <option
+                    class="bg-[#0d2137] text-white"
+                    value=""
+                    selected=move || compare.get().is_empty()
+                >"None"</option>
+                <For
+                    each=move || groups.get()
+                    key=|(cat, members)| (cat.label(), members.len())
+                    let:group
+                >
+                    <optgroup class="bg-[#0d2137] text-white/50" label=group.0.label()>
+                        {group.1.iter().map(|c| {
+                            // Copied out of the borrow: these are `&'static`
+                            // already, and the `selected` closure outlives
+                            // the iteration that produced them.
+                            let (slug, title) = (c.slug, c.title);
+                            view! {
+                                <option
+                                    class="bg-[#0d2137] text-white"
+                                    value=slug
+                                    selected=move || compare.get() == slug
+                                >{title}</option>
+                            }
+                        }).collect_view()}
+                    </optgroup>
+                </For>
+            </select>
+        </Show>
+        // The line under the picker was already spent on a constraint note,
+        // so saying what the chosen chart measures costs no space and no new
+        // control. It is also the moment the reader most needs it: the legend
+        // gives them a name and nothing else, and "UTXO Flow" means nothing
+        // until something says what it counts.
+        //
+        // The constraint note takes the line back when nothing is picked,
+        // since that is when it applies.
+        {move || match compare_meta.get() {
+            Some(c) => view! {
+                <p class="text-[0.65rem] text-white/45 mt-1.5 leading-relaxed">
+                    <span class="inline-block w-2 h-2 rounded-full bg-[#60a5fa] mr-1 align-middle"></span>
+                    // The same one-liner that chart's own page shows, and it
+                    // switches with the range the way that page's does, so a
+                    // reader who follows the link is not met with different
+                    // words for the same thing.
+                    {move || if daily.get() { c.desc_daily } else { c.desc_per_block }}
+                    ". "
+                    <a
+                        href=format!("/observatory/chart/{}", c.slug)
+                        class="text-white/60 hover:text-[#f7931a] underline decoration-white/20 underline-offset-2 transition-colors"
+                    >
+                        "Open its chart"
+                    </a>
+                </p>
+            }.into_any(),
+            None => view! {
+                <p class="text-[0.6rem] text-white/25 mt-1.5">
+                    "one at a time: they share the right axis"
+                </p>
+            }.into_any(),
+        }}
     }
 }
 
@@ -904,13 +1443,18 @@ fn Toggle(
     /// Greyed and inert when the other occupant already holds the right axis.
     /// Showing why beats silently dropping one of two selected series.
     disabled: Signal<bool>,
+    /// What this overlay marks, for a reader who has not met the term. Half
+    /// of these are Bitcoin vocabulary that the chart otherwise assumes.
+    #[prop(default = "")]
+    hint: &'static str,
 ) -> impl IntoView {
     view! {
+        <div class="flex items-center gap-1">
         <label
             class=move || if disabled.get() {
-                "flex items-center gap-2 opacity-40 cursor-not-allowed"
+                "flex items-center gap-2 opacity-40 cursor-not-allowed min-w-0"
             } else {
-                "flex items-center gap-2 cursor-pointer group"
+                "flex items-center gap-2 cursor-pointer group min-w-0"
             }
             title=move || if disabled.get() { "The right axis is taken by the other series" } else { "" }
         >
@@ -931,7 +1475,141 @@ fn Toggle(
                     }
                 }
             />
-            <span class="text-sm text-white/60 group-hover:text-white/80 transition-colors">{label}</span>
+            <span class="text-sm text-white/60 group-hover:text-white/80 transition-colors truncate">{label}</span>
         </label>
+        // Outside the label, or clicking the icon would toggle the overlay.
+        {(!hint.is_empty()).then(|| view! { <InfoTip text=hint/> })}
+        </div>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// This file, read back, so the guards below check what is actually
+    /// rendered rather than a second list that can drift from it. Same
+    /// technique the registry uses against the four page sources.
+    const SELF: &str = include_str!("single_chart.rs");
+
+    /// Every attribute value in the file, which for these guards means every
+    /// piece of user-facing copy: tooltips, titles and labels.
+    fn quoted_strings() -> Vec<String> {
+        let mut out = Vec::new();
+        let mut rest = SELF;
+        while let Some(i) = rest.find('"') {
+            rest = &rest[i + 1..];
+            match rest.find('"') {
+                Some(j) => {
+                    out.push(rest[..j].to_string());
+                    rest = &rest[j + 1..];
+                }
+                None => break,
+            }
+        }
+        out
+    }
+
+    /// The site's copy rule, enforced where copy is actually written rather
+    /// than left to review. An emdash reaching a tooltip is the same defect as
+    /// one reaching a chart title, which shipped once already.
+    #[test]
+    fn no_user_facing_copy_contains_an_emdash() {
+        for s in quoted_strings() {
+            assert!(
+                !s.contains('\u{2014}') && !s.contains('\u{2013}'),
+                "dash character in copy: {s}"
+            );
+        }
+    }
+
+    /// A key figure with no explanation is the case this feature exists to
+    /// prevent: the reader sees "observations" and has nowhere to go. Adding
+    /// a `Fact` without a hint has to fail rather than ship silently.
+    #[test]
+    fn every_key_figure_explains_itself() {
+        let labels: Vec<&str> = SELF
+            .split("<Fact")
+            .skip(1)
+            .filter_map(|chunk| {
+                chunk.split("label=\"").nth(1)?.split('"').next()
+            })
+            .collect();
+        assert!(
+            labels.len() >= 10,
+            "failed to parse Fact labels out of this file, found {}. The \
+             parser, not the copy, is probably what broke.",
+            labels.len()
+        );
+        for label in &labels {
+            assert!(
+                !fact_hint(label).is_empty(),
+                "the key figure \"{label}\" has no explanation in fact_hint"
+            );
+        }
+    }
+
+    /// And the reverse, so a renamed label leaves a dead arm behind rather
+    /// than an unexplained figure that looks explained in the source.
+    #[test]
+    fn no_key_figure_explanation_is_orphaned() {
+        for label in [
+            "average",
+            "peak",
+            "low",
+            "change",
+            "observations",
+            "latest total",
+            "largest band",
+            "bands",
+            "largest",
+            "its value",
+            "entries",
+        ] {
+            assert!(!fact_hint(label).is_empty(), "{label} lost its hint");
+            assert!(
+                SELF.contains(&format!("label=\"{label}\"")),
+                "fact_hint explains \"{label}\", which nothing renders"
+            );
+        }
+        assert_eq!(fact_hint("not a real label"), "");
+    }
+
+    /// Two Linear/Log pairs side by side are only readable because each is
+    /// labelled, so a case that falls through to the generic word defeats the
+    /// control. The comparison case is the one that did: the function read
+    /// only OverlayFlags, which a comparison does not travel in.
+    #[test]
+    fn the_right_axis_switch_names_whatever_is_on_that_axis() {
+        use crate::stats::charts::registry;
+        let price = OverlayFlags {
+            price_data: vec![(1, 1.0)],
+            ..Default::default()
+        };
+        let size = OverlayFlags {
+            chain_size_data: vec![(1, 1.0)],
+            ..Default::default()
+        };
+        assert_eq!(right_axis_label(&price, None), "price");
+        assert_eq!(right_axis_label(&size, None), "chain size");
+
+        // A comparison names its unit, and takes precedence: it is the
+        // occupant, and the flags it is contending with are switched off.
+        let compared = registry::CHARTS
+            .iter()
+            .find(|c| c.can_compare())
+            .expect("a comparable chart");
+        let label = right_axis_label(&OverlayFlags::default(), Some(compared));
+        assert_eq!(label, compared.unit.label());
+        assert_ne!(label, "overlay", "fell through to the generic word");
+
+        // Both overlays at once get an axis each and only the first is
+        // switchable, so naming one of two would be wrong half the time.
+        let both = OverlayFlags {
+            price_data: vec![(1, 1.0)],
+            chain_size_data: vec![(1, 1.0)],
+            ..Default::default()
+        };
+        assert_eq!(right_axis_label(&both, None), "overlay");
     }
 }

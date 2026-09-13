@@ -26,6 +26,11 @@ use serde_json::json;
 use crate::stats::types::*;
 
 pub mod adoption;
+/// Builds every registered chart and checks it behaves the way the registry
+/// says it does. Test-only: `shape` and `unit` are declarations, and nearly
+/// every rule is derived from them.
+#[cfg(test)]
+mod conformance;
 pub mod embedded;
 pub mod fees;
 pub mod gauges;
@@ -198,26 +203,160 @@ pub(crate) fn x_axis_for(
     categories: &[String],
 ) -> serde_json::Value {
     if is_daily {
+        let mut label = json!({
+            "color": "#aaa",
+            // Thin the labels out rather than letting them collide, which
+            // is what produced the odd 9-month gaps between ticks on ALL.
+            "hideOverlap": true,
+            "formatter": date_label_sentinel(categories),
+        });
+        if let Some(ticks) = calendar_tick_indices(categories) {
+            let o = label
+                .as_object_mut()
+                .expect("built as an object one line above");
+            o.insert("interval".into(), json!(CALENDAR_TICK_SENTINEL));
+            o.insert(CALENDAR_TICK_DATA_KEY.into(), json!(ticks));
+        }
         json!({
             "type": "category",
             "data": categories,
-            "axisLabel": {
-                "color": "#aaa",
-                // Thin the labels out rather than letting them collide, which
-                // is what produced the odd 9-month gaps between ticks on ALL.
-                "hideOverlap": true,
-                "formatter": date_label_sentinel(categories),
-            },
+            "axisLabel": label,
             "axisLine": { "lineStyle": { "color": "#555" } }
         })
     } else {
         json!({
             "type": "time",
-            "axisLabel": { "color": "#aaa", "hideOverlap": true },
+            "axisLabel": {
+                "color": "#aaa",
+                "hideOverlap": true,
+                // Per level, because a time axis picks its own tick
+                // granularity from the span and then formats every level with
+                // the same string unless told otherwise. The default prints a
+                // bare day number at day level, which reads as a count rather
+                // than a date, and a bare hour at hour level. Naming both
+                // means a 1D window reads as clock time and a 1W window as
+                // dates without the axis having to know which range is in
+                // effect.
+                "formatter": {
+                    "year": "{yyyy}",
+                    "month": "{MMM} '{yy}",
+                    "day": "{d} {MMM}",
+                    "hour": "{HH}:{mm}",
+                    "minute": "{HH}:{mm}",
+                    "second": "{HH}:{mm}:{ss}",
+                    "millisecond": "{HH}:{mm}:{ss}",
+                    "none": "{d} {MMM} {HH}:{mm}"
+                }
+            },
             "axisLine": { "lineStyle": { "color": "#555" } }
         })
     }
 }
+
+/// Which category indices sit on a calendar boundary worth labelling, or
+/// `None` to leave ECharts' own index-based thinning in place.
+///
+/// `hideOverlap` thins labels by *index*, and the categories are days. An
+/// even index step across 6,456 daily categories does not land on even
+/// calendar months, so the months walk forward: `Jan '10, Aug '10, Feb '11,
+/// Aug '11, Mar '12`. Worse, the step comes from the available width, so
+/// enabling an overlay, collapsing the rail or resizing the window moved the
+/// labels. They were never calendar-aligned; one step size happened to look
+/// like it was.
+///
+/// So hand ECharts a candidate set that is calendar-aligned by construction.
+/// `hideOverlap` stays on and still drops what will not fit, but every
+/// candidate is the first plotted day of a month on a fixed stride, so
+/// whatever subset survives still reads as clean boundaries, and zooming in
+/// reveals more of them rather than shifting the ones already there.
+///
+/// Returns indices rather than installing a predicate because
+/// `axisLabel.interval` only takes one as a JS function, which cannot be
+/// serialised from here. Same sentinel handshake as the SI and date
+/// formatters: Rust decides, `stats.js` installs.
+fn calendar_tick_indices(categories: &[String]) -> Option<Vec<usize>> {
+    let span = days_between(categories.first()?, categories.last()?)?;
+    // Under this the labels are days, where nobody reads the axis as calendar
+    // boundaries and the drift is invisible. Same threshold that switches the
+    // label format, so the two decisions cannot disagree.
+    if span <= DATE_LABEL_MONTH_YEAR_DAYS {
+        return None;
+    }
+    let months = (span as f64 / 30.44).round() as i64;
+    let step = CALENDAR_TICK_STEPS
+        .iter()
+        .copied()
+        .find(|&s| months / s as i64 <= CALENDAR_TICK_TARGET)
+        .unwrap_or_else(|| {
+            *CALENDAR_TICK_STEPS
+                .last()
+                .expect("CALENDAR_TICK_STEPS is never empty")
+        });
+
+    let mut out = Vec::new();
+    let mut prev: Option<(u32, u32)> = None;
+    for (idx, c) in categories.iter().enumerate() {
+        let Some(ym) = year_month(c) else { continue };
+        // First plotted day of its month, so a gap in the data moves the
+        // label to the next day that exists instead of losing it.
+        let starts_a_month = prev != Some(ym);
+        prev = Some(ym);
+        if starts_a_month && is_tick_month(ym.0, ym.1, step) {
+            out.push(idx);
+        }
+    }
+    // One label is worse than none: it reads as the axis having failed.
+    (out.len() >= 2).then_some(out)
+}
+
+/// Whether a calendar month falls on the labelling stride.
+///
+/// Anchored to January, and for multi-year strides to years divisible by the
+/// stride, rather than to wherever the data happens to begin. That way the
+/// same chart viewed over two different ranges labels the same months, and a
+/// range whose first day is mid-month does not shift every label after it.
+fn is_tick_month(year: u32, month: u32, step_months: u32) -> bool {
+    if step_months >= 12 {
+        return month == 1 && year.is_multiple_of(step_months / 12);
+    }
+    (month - 1).is_multiple_of(step_months)
+}
+
+/// Year and month from a `YYYY-MM-DD` category label.
+///
+/// Parsed directly rather than through `chrono`, because the day is not
+/// needed and a category that is not a date at all (the weekday and
+/// fee-bucket axes use words) must fall through rather than be rejected as an
+/// error.
+fn year_month(date: &str) -> Option<(u32, u32)> {
+    let month: u32 = date.get(5..7)?.parse().ok()?;
+    if !(1..=12).contains(&month) || date.as_bytes().get(4) != Some(&b'-') {
+        return None;
+    }
+    Some((date.get(0..4)?.parse().ok()?, month))
+}
+
+/// Roughly how many candidate labels to emit across the span.
+///
+/// Deliberately more than fit. `hideOverlap` thins them to the width
+/// available, so this only has to be dense enough that a zoomed-in window
+/// still has labels in it, and sparse enough that the thinning is not doing
+/// all the work.
+const CALENDAR_TICK_TARGET: i64 = 30;
+
+/// Strides in months, coarsest last. Each is a boundary a reader recognises,
+/// which is why the ladder skips 4, 5 and 8: nobody reads "every five months"
+/// as a calendar step.
+const CALENDAR_TICK_STEPS: &[u32] = &[1, 2, 3, 6, 12, 24, 60];
+
+/// Marks a category axis whose label interval `stats.js` should install from
+/// [`CALENDAR_TICK_DATA_KEY`]. Must match the constant of the same name there.
+pub(crate) const CALENDAR_TICK_SENTINEL: &str = "__calendar_ticks__";
+
+/// Where the indices ride until `stats.js` turns them into a predicate and
+/// deletes the key. Not an ECharts option; the double underscore marks it as
+/// ours to anyone reading a serialised option.
+pub(crate) const CALENDAR_TICK_DATA_KEY: &str = "__calendarTicks";
 
 /// Which date format the category axis should render, as a sentinel for
 /// `stats.js` to swap for a real formatter.
@@ -235,14 +374,21 @@ fn date_label_sentinel(categories: &[String]) -> &'static str {
         (Some(a), Some(b)) => days_between(a, b).unwrap_or(0),
         _ => 0,
     };
-    // Two years is where day-level labels stop being legible: beyond it there
-    // are too many to thin down to something evenly spaced.
-    if span_days > 730 {
+    if span_days > DATE_LABEL_MONTH_YEAR_DAYS {
         DATE_LABEL_MONTH_YEAR
     } else {
         DATE_LABEL_DAY_MONTH
     }
 }
+
+/// Span above which the category axis labels months rather than days.
+///
+/// Two years is where day-level labels stop being legible: beyond it there
+/// are too many to thin down to something evenly spaced. Shared with
+/// [`calendar_tick_indices`], which only aligns ticks to the calendar once
+/// the labels name months, so the two cannot disagree about which regime the
+/// axis is in.
+const DATE_LABEL_MONTH_YEAR_DAYS: i64 = 730;
 
 fn days_between(from: &str, to: &str) -> Option<i64> {
     let a = chrono::NaiveDate::parse_from_str(from, "%Y-%m-%d").ok()?;
@@ -283,9 +429,9 @@ pub fn apply_log_scale(option: &mut serde_json::Value, on: bool) {
     }
     // Read before the axis is borrowed mutably: both come from the series
     // alongside it.
-    let extent = positive_extent(option);
-    let dropped = if on { non_positive_count(option) } else { 0 };
-    set_axis_scale(option, on, extent);
+    let extent = positive_extent(option, 0);
+    let dropped = if on { non_positive_count(option, 0) } else { 0 };
+    set_axis_scale(option, 0, on, extent);
     // Reconciled unconditionally, and after the axis, so switching back to
     // linear clears a notice the log view left behind. Doing it inside the
     // axis block meant the `!on` path returned before reaching it, and the
@@ -293,9 +439,100 @@ pub fn apply_log_scale(option: &mut serde_json::Value, on: bool) {
     set_log_notice(option, dropped);
 }
 
-/// Set the left value axis type, and its bounds when logarithmic.
+/// Switch the right value axis, the one an overlay owns, to a logarithmic
+/// scale independently of the metric's own axis.
+///
+/// Separate from [`apply_log_scale`] because the two axes carry unrelated
+/// quantities and a reader wants them scaled independently: price over ALL is
+/// unreadable on a linear axis whatever the metric beside it is doing, and
+/// forcing both to log to get that is how the metric ends up on a scale
+/// nobody asked for. Glassnode calls the combination "Mixed"; here it is just
+/// two switches, which says which axis each one moves.
+///
+/// No shape refusals, unlike the left axis: the right axis holds one line,
+/// never a stack or a percentage band. A chart with no right axis is a no-op,
+/// which is what makes this safe to call unconditionally after the overlays.
+///
+/// It **does** need the dropped-point notice, and that is worth spelling out
+/// because this function shipped without one. The reasoning was that price
+/// and chain size are the only two series that ever claim this axis and both
+/// are strictly positive. True when written, and `apply_comparison` broke it
+/// three hours later: any comparable chart can now claim the right axis,
+/// including `utxo-growth`, whose own copy says it goes negative. The notice
+/// is written by [`apply_scales`], which is the only place that knows what
+/// both axes dropped.
+///
+/// The lesson is about the comment rather than the code. An invariant
+/// justified by naming today's callers is a note that expires silently.
+pub fn apply_right_log_scale(option: &mut serde_json::Value, on: bool) {
+    if !has_right_value_axis(option) {
+        return;
+    }
+    let extent = positive_extent(option, RIGHT_AXIS_IDX);
+    set_axis_scale(option, RIGHT_AXIS_IDX, on, extent);
+}
+
+/// Apply both axis scales in the order they depend on, and reconcile the one
+/// notice that covers them both.
+///
+/// The single entry point the chart views call, so neither has to remember
+/// that the right axis only exists after the overlays have run, that the left
+/// one refuses on some shapes, or that a log axis cannot plot zero.
+///
+/// One notice rather than one per axis: it is a `graphic` element pinned to
+/// the top of the plot, so two would overlap. The count is the total across
+/// both, which is what a reader needs to know, and the wording does not name
+/// an axis for that reason.
+pub fn apply_scales(option: &mut serde_json::Value, flags: &OverlayFlags) {
+    apply_log_scale(option, flags.log_scale);
+    apply_right_log_scale(option, flags.right_log_scale);
+    // After both, and unconditionally, so turning either one off clears a
+    // notice the other did not put there. `apply_log_scale` has already
+    // written the left-axis count; this replaces it with the combined one,
+    // which is why `set_log_notice` removes before it adds.
+    let dropped = if flags.log_scale {
+        non_positive_count(option, 0)
+    } else {
+        0
+    } + if flags.right_log_scale && has_right_value_axis(option) {
+        non_positive_count(option, RIGHT_AXIS_IDX)
+    } else {
+        0
+    };
+    set_log_notice(option, dropped);
+}
+
+/// The axis index an overlay's own series is plotted against.
+///
+/// `add_series_overlay` pushes the overlay axis onto the end of `yAxis`, so
+/// with one overlay it is index 1. With two (price and chain size) the second
+/// lands at index 2 and keeps its own linear scale; treating only index 1 as
+/// the overlay axis is a deliberate simplification, since the pair is rare
+/// and a third scale switch would cost more in UI than it buys.
+const RIGHT_AXIS_IDX: u64 = 1;
+
+/// Whether an overlay has added a right-hand value axis to rescale.
+///
+/// Both scale types count. Asking only for `value` meant that once the axis
+/// had been switched to `log` this refused to recognise it, so the switch
+/// back to linear did nothing and the axis was stuck. A category axis is the
+/// real exclusion: there is no scale there to change.
+fn has_right_value_axis(option: &serde_json::Value) -> bool {
+    matches!(
+        option
+            .get("yAxis")
+            .and_then(|a| a.as_array())
+            .and_then(|a| a.get(RIGHT_AXIS_IDX as usize))
+            .and_then(|a| a.get("type"))
+            .and_then(|t| t.as_str()),
+        Some("value" | "log")
+    )
+}
+
+/// Set a value axis's type, and its bounds when logarithmic.
 fn set_axis_scale(
     option: &mut serde_json::Value,
+    axis_idx: u64,
     on: bool,
     extent: Option<(f64, f64)>,
 ) {
@@ -304,11 +541,12 @@ fn set_axis_scale(
     };
     // `yAxis` is an object on single-axis charts and an array once an overlay
     // has added the right-hand one.
-    let first = match axis {
-        serde_json::Value::Array(a) => a.first_mut(),
-        other => Some(other),
+    let target = match axis {
+        serde_json::Value::Array(a) => a.get_mut(axis_idx as usize),
+        other if axis_idx == 0 => Some(other),
+        _ => None,
     };
-    let Some(serde_json::Value::Object(o)) = first else {
+    let Some(serde_json::Value::Object(o)) = target else {
         return;
     };
     if o.get("type").and_then(|t| t.as_str()) == Some("category") {
@@ -324,6 +562,8 @@ fn set_axis_scale(
         o.remove("min");
         o.remove("max");
         o.remove("splitNumber");
+        o.remove("minorTick");
+        o.remove("minorSplitLine");
         return;
     }
 
@@ -360,19 +600,46 @@ fn set_axis_scale(
         // ALL, difficulty got three gridlines across fourteen decades. This
         // is a hint rather than a guarantee, which is all ECharts offers.
         o.insert("splitNumber".to_string(), json!(LOG_AXIS_SPLITS));
+        // Minor ticks are the only way to give a log axis structure between
+        // its labels, because ECharts labels a log axis at powers of the base
+        // and nowhere else. `splitNumber` above is a hint it can only honour
+        // by choosing how many decades to step; inside a decade it has no
+        // tick to offer.
+        //
+        // That falls apart on a span under one decade, which is common for a
+        // comparison series: UTXO flow over 10Y runs 1.9K to 11K, so the only
+        // power of ten inside the range is 10K and the axis draws three
+        // labels, two of them the bounds. Minor split lines put a rule at 2,
+        // 3, 4 and so on within each decade, so the reader can place a value
+        // even where there is no label to read.
+        o.insert("minorTick".to_string(), json!({ "show": true }));
+        o.insert(
+            "minorSplitLine".to_string(),
+            json!({
+                "show": true,
+                "lineStyle": {
+                    "color": "rgba(255,255,255,0.06)",
+                    "type": "dotted"
+                }
+            }),
+        );
     }
 }
 
-/// How many left-axis points a log scale cannot plot.
-fn non_positive_count(option: &serde_json::Value) -> usize {
+/// Which y axis a series is plotted against. Absent means the first one,
+/// which is what ECharts assumes and what every single-axis builder relies on.
+fn series_axis(s: &serde_json::Value) -> u64 {
+    s.get("yAxisIndex").and_then(|i| i.as_u64()).unwrap_or(0)
+}
+
+/// How many of an axis's points a log scale cannot plot.
+fn non_positive_count(option: &serde_json::Value, axis_idx: u64) -> usize {
     let Some(series) = option.get("series").and_then(|s| s.as_array()) else {
         return 0;
     };
     series
         .iter()
-        .filter(|s| {
-            s.get("yAxisIndex").and_then(|i| i.as_u64()).unwrap_or(0) == 0
-        })
+        .filter(|s| series_axis(s) == axis_idx)
         .flat_map(|s| {
             s.get("data")
                 .and_then(|d| d.as_array())
@@ -483,12 +750,15 @@ const LOG_AXIS_PAD: f64 = 0.02;
 
 /// Smallest and largest strictly positive value plotted on the left axis,
 /// which is what a log axis can actually show.
-fn positive_extent(option: &serde_json::Value) -> Option<(f64, f64)> {
+fn positive_extent(
+    option: &serde_json::Value,
+    axis_idx: u64,
+) -> Option<(f64, f64)> {
     let series = option.get("series")?.as_array()?;
     let mut lo = f64::INFINITY;
     let mut hi = f64::NEG_INFINITY;
     for s in series {
-        if s.get("yAxisIndex").and_then(|i| i.as_u64()).unwrap_or(0) != 0 {
+        if series_axis(s) != axis_idx {
             continue;
         }
         let Some(data) = s.get("data").and_then(|d| d.as_array()) else {
@@ -546,29 +816,10 @@ fn log_scale_is_meaningful(option: &serde_json::Value) -> bool {
     }
     // Non-positive points are deliberately NOT a refusal. ECharts cannot plot
     // zero or negative on a log axis, but the honest response is to switch
-    // and say so rather than to ignore the request: `note_dropped_points`
-    // below writes a notice into the option. Glassnode does the same, and a
-    // control that silently does nothing is worse than one that explains.
-    let _unused_positivity_check = series
-        .iter()
-        .filter(|s| {
-            s.get("yAxisIndex").and_then(|i| i.as_u64()).unwrap_or(0) == 0
-        })
-        .flat_map(|s| {
-            s.get("data")
-                .and_then(|d| d.as_array())
-                .map(|a| a.as_slice())
-                .unwrap_or_default()
-        })
-        .all(|v| match v {
-            serde_json::Value::Number(n) => n.as_f64().unwrap_or(0.0) > 0.0,
-            serde_json::Value::Array(a) => a
-                .get(1)
-                .and_then(|y| y.as_f64())
-                .map(|y| y > 0.0)
-                .unwrap_or(true),
-            _ => true,
-        });
+    // and say so rather than to ignore the request: `set_log_notice` writes a
+    // notice into the option. Glassnode does the same, and a control that
+    // silently does nothing is worse than one that explains.
+    //
     // Deliberately no minimum span either. A narrow range renders almost
     // identically to linear, which is the correct outcome rather than a
     // reason to refuse: the reader asked for a log axis and gets one, at 7d
@@ -1096,13 +1347,37 @@ pub struct OverlayFlags {
     /// where it would mislead, which is what lets one global switch cover
     /// charts of every shape.
     pub log_scale: bool,
+    /// Render the right value axis, the one the price or chain-size overlay
+    /// owns, logarithmically.
+    ///
+    /// Independent of `log_scale` because the two axes carry unrelated
+    /// quantities. Price over ALL needs a log axis to be readable at all,
+    /// and tying that to the metric's own scale would mean accepting a scale
+    /// change on the thing the chart is actually about in order to read the
+    /// overlay beside it.
+    pub right_log_scale: bool,
 }
 
 impl OverlayFlags {
+    /// Whether an overlay will add a right-hand value axis, and so whether
+    /// `right_log_scale` has anything to act on.
+    ///
+    /// Answered from the flags rather than from a built option because the UI
+    /// has to decide whether to show the second scale switch before any chart
+    /// has been built.
+    pub fn has_right_axis(&self) -> bool {
+        !self.price_data.is_empty() || !self.chain_size_data.is_empty()
+    }
+
     /// Compact string key for cache differentiation.
+    ///
+    /// Every field that changes the rendered option has to appear here.
+    /// Omitting one serves the previous render on toggle, which is the defect
+    /// `fix/chart-correctness` fixed and the reason both scale flags are
+    /// keyed even though they are applied long after the base chart is built.
     pub fn cache_key(&self) -> String {
         format!(
-            "h{}b{}c{}e{}p{}s{}l{}",
+            "h{}b{}c{}e{}p{}s{}l{}r{}",
             self.halvings as u8,
             self.bip_activations as u8,
             self.core_releases as u8,
@@ -1110,6 +1385,7 @@ impl OverlayFlags {
             self.price_data.len(),
             self.chain_size_data.len(),
             self.log_scale as u8,
+            self.right_log_scale as u8,
         )
     }
 }
@@ -1361,25 +1637,7 @@ fn add_series_overlay(
         return;
     }
 
-    // Convert yAxis to array and add secondary axis
-    let y_axis = obj.remove("yAxis");
-    let mut y_axes = match y_axis {
-        Some(serde_json::Value::Array(arr)) => arr,
-        Some(v) => vec![v],
-        None => vec![json!({ "type": "value" })],
-    };
-    let axis_idx = y_axes.len();
-    y_axes.push(json!({
-        "type": "value",
-        "name": unit,
-        "nameTextStyle": { "color": color },
-        "position": "right",
-        "offset": if y_axes.len() > 1 { 60 } else { 0 },
-        "axisLabel": { "color": color, "fontSize": 10 },
-        "axisLine": { "lineStyle": { "color": color } },
-        "splitLine": { "show": false }
-    }));
-    obj.insert("yAxis".into(), json!(y_axes));
+    let axis_idx = push_right_axis(obj, unit, color);
 
     // Ensure existing series have explicit yAxisIndex
     if let Some(series) = obj.get_mut("series") {
@@ -1389,20 +1647,6 @@ fn add_series_overlay(
                     s_obj.entry("yAxisIndex").or_insert(json!(0));
                 }
             }
-        }
-    }
-
-    // Widen grid for the extra axis
-    if let Some(grid) = obj.get_mut("grid") {
-        if let Some(g) = grid.as_object_mut() {
-            let current = g
-                .get("right")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(GRID_RIGHT);
-            g.insert(
-                "right".into(),
-                json!(current.max(70) + if axis_idx > 1 { 60 } else { 0 }),
-            );
         }
     }
 
@@ -1431,6 +1675,217 @@ fn add_series_overlay(
             l.insert("show".into(), json!(true));
         }
     }
+}
+
+/// Lay a second chart's series over this one on the right axis.
+///
+/// The comparison chart is built from the same rows over the same range by
+/// the same family of builders, so the two series already share an x domain
+/// and need no interpolation, unlike the price and chain-size overlays whose
+/// data arrives from elsewhere on its own dates. That is also why this
+/// refuses rather than resamples when the shapes do not line up: a mismatch
+/// means an assumption broke, and silently drawing a misaligned series is the
+/// worst available outcome on a chart whose whole claim is that the numbers
+/// are checkable.
+///
+/// Takes the other chart's **first** series only. Anything with more is
+/// already excluded by `Shape::accepts_second_series`, so reaching a
+/// multi-series chart here is a registry error rather than a case to handle.
+///
+/// Returns whether it applied, so the caller can say "not available over this
+/// range" instead of showing a picker that quietly does nothing.
+pub fn apply_comparison(
+    option: &mut serde_json::Value,
+    other: &serde_json::Value,
+    label: &str,
+    axis_name: &str,
+) -> bool {
+    if !accepts_comparison_series(option) {
+        return false;
+    }
+    let Some(data) = other
+        .get("series")
+        .and_then(|s| s.as_array())
+        .and_then(|a| a.first())
+        .and_then(|s| s.get("data"))
+        .and_then(|d| d.as_array())
+        .filter(|d| !d.is_empty())
+    else {
+        return false;
+    };
+    let Some(obj) = option.as_object_mut() else {
+        return false;
+    };
+    let Some(own) = obj
+        .get("series")
+        .and_then(|s| s.as_array())
+        .and_then(|a| a.first())
+        .and_then(|s| s.get("data"))
+        .and_then(|d| d.as_array())
+    else {
+        return false;
+    };
+    // A daily chart plots bare numbers positioned by the category axis, so an
+    // unequal count silently shifts the whole comparison sideways. A per-block
+    // chart carries its own timestamps and is self-aligning, so a different
+    // count there is fine and expected.
+    let positional = own.first().is_some_and(|v| !v.is_array());
+    if positional && own.len() != data.len() {
+        return false;
+    }
+    let data = data.clone();
+
+    let axis_idx = push_right_axis(obj, axis_name, COMPARISON_COLOR);
+    let Some(serde_json::Value::Array(mut arr)) = obj.remove("series") else {
+        return false;
+    };
+    // The metric's own series stay on the left axis. ECharts defaults an
+    // absent `yAxisIndex` to 0, but only while there is one axis.
+    for s in arr.iter_mut() {
+        if let Some(o) = s.as_object_mut() {
+            o.entry("yAxisIndex").or_insert(json!(0));
+        }
+    }
+    arr.push(json!({
+        "name": label,
+        "type": "line",
+        "yAxisIndex": axis_idx,
+        "data": data,
+        "connectNulls": true,
+        "lineStyle": {
+            "color": COMPARISON_COLOR, "width": 1.5, "opacity": 0.85
+        },
+        "itemStyle": { "color": COMPARISON_COLOR },
+        "symbol": "none",
+        "smooth": true,
+        "z": 1
+    }));
+    obj.insert("series".into(), json!(arr));
+    // Two unlabelled lines is a puzzle rather than a comparison.
+    if let Some(l) = obj.get_mut("legend").and_then(|l| l.as_object_mut()) {
+        l.insert("show".into(), json!(true));
+    }
+    true
+}
+
+/// Whether this option can hold a second series on a right axis without lying.
+///
+/// Structural, and decided from the built option rather than from chart
+/// metadata, for the same reason `log_scale_is_meaningful` and
+/// `fit_value_axis` are: it then covers every call site, including ones that
+/// do not exist yet, and a new chart gets the right answer without declaring
+/// anything.
+///
+/// This is deliberately a second line of defence behind
+/// `registry::is_valid_comparison`. That one is editorial and gates what the
+/// picker offers; this one gates what can actually be drawn. Keeping them
+/// separate is what stops "the select never renders on such a chart" from
+/// being the thing holding the invariant up, which is how a comparison
+/// reached a donut the moment the selection outlived the page.
+///
+/// Four refusals:
+///
+/// - **A pie series.** There are no cartesian axes to hang anything from, so
+///   this pushed a value axis onto a donut and drew a line across it.
+/// - **Two value axes already.** `Unit::Mixed` charts spend the right axis on
+///   themselves, and an overlay that has already claimed it leaves nothing
+///   free. A third axis on one plot is unreadable, so this is also what makes
+///   the price/chain-size/comparison exclusion structural rather than a rule
+///   the UI remembers to grey out.
+/// - **Stacked percentage bands.** They fill 0 to 100 and are read against
+///   each other; a second scale cannot be read against them at all.
+/// - **No series.** Nothing to compare against.
+fn accepts_comparison_series(option: &serde_json::Value) -> bool {
+    let Some(series) = option.get("series").and_then(|s| s.as_array()) else {
+        return false;
+    };
+    if series.is_empty() {
+        return false;
+    }
+    if series
+        .iter()
+        .any(|s| s.get("type").and_then(|t| t.as_str()) == Some("pie"))
+    {
+        return false;
+    }
+    if option
+        .get("yAxis")
+        .and_then(|a| a.as_array())
+        .is_some_and(|a| a.len() > 1)
+    {
+        return false;
+    }
+    let bounded_to_100 = |a: &serde_json::Value| {
+        a.get("max").and_then(|m| m.as_f64()) == Some(100.0)
+    };
+    let percent_axis = match option.get("yAxis") {
+        Some(serde_json::Value::Array(a)) => a.iter().any(bounded_to_100),
+        Some(other) => bounded_to_100(other),
+        None => false,
+    };
+    !(percent_axis && series.iter().any(|s| s.get("stack").is_some()))
+}
+
+/// Blue, because the two existing right-axis occupants are gold (price) and
+/// green (chain size) and only one of the three is ever on at once.
+const COMPARISON_COLOR: &str = "#60a5fa";
+
+/// Append a right-hand value axis and return its index.
+///
+/// Shared with the price and chain-size overlays so all three occupants of
+/// the right axis get the same fitting, the same abbreviated labels and the
+/// same grid widening. Before this was factored out, the overlay axis had
+/// picked up `scale` and the SI formatter and a second implementation would
+/// have started without them.
+fn push_right_axis(
+    obj: &mut serde_json::Map<String, serde_json::Value>,
+    name: &str,
+    color: &str,
+) -> usize {
+    let mut y_axes = match obj.remove("yAxis") {
+        Some(serde_json::Value::Array(arr)) => arr,
+        Some(v) => vec![v],
+        None => vec![json!({ "type": "value" })],
+    };
+    let axis_idx = y_axes.len();
+    y_axes.push(json!({
+        "type": "value",
+        "name": name,
+        "nameTextStyle": { "color": color },
+        "position": "right",
+        "offset": if axis_idx > 1 { 60 } else { 0 },
+        // Fit the series to its own data for the same reason the metric axis
+        // does: ECharts reaches for zero by default, and price from $0.05 to
+        // $120,000 on a zero-based axis is a flat line along the bottom until
+        // 2017. A series on the right axis is there to be compared against,
+        // so it has to be legible on its own terms.
+        "scale": true,
+        "axisLabel": {
+            "color": color,
+            "fontSize": 10,
+            // Price crosses six decades and chain size three, the same
+            // problem the metric axis has. Without this a log price axis
+            // labels its floor "0.05000000000000001".
+            "formatter": SI_AXIS_SENTINEL
+        },
+        "axisLine": { "lineStyle": { "color": color } },
+        "splitLine": { "show": false }
+    }));
+    obj.insert("yAxis".into(), json!(y_axes));
+
+    // Room for the axis and its labels, kept at the widest any occupant needs
+    // so toggling between them does not resize the plot.
+    if let Some(g) = obj.get_mut("grid").and_then(|g| g.as_object_mut()) {
+        let current = g
+            .get("right")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(GRID_RIGHT);
+        g.insert(
+            "right".into(),
+            json!(current.max(70) + if axis_idx > 1 { 60 } else { 0 }),
+        );
+    }
+    axis_idx
 }
 
 /// Merge overlay markLines and series into an already-parsed chart option Value.
@@ -1630,6 +2085,823 @@ pub fn apply_overlays(
 
 #[cfg(test)]
 mod tests {
+
+    /// Daily categories from `start` for `days`, the shape every daily
+    /// builder hands to `x_axis_for`.
+    fn daily_categories(start: &str, days: i64) -> Vec<String> {
+        let from = chrono::NaiveDate::parse_from_str(start, "%Y-%m-%d")
+            .expect("test date");
+        (0..days)
+            .map(|d| {
+                (from + chrono::Duration::days(d))
+                    .format("%Y-%m-%d")
+                    .to_string()
+            })
+            .collect()
+    }
+
+    /// The reported bug: months walked forward (`Jan '10, Aug '10, Feb '11`)
+    /// because labels were thinned by index across daily categories. Every
+    /// candidate must now be the first plotted day of a month, so no subset
+    /// ECharts keeps can land mid-month.
+    #[test]
+    fn calendar_ticks_only_ever_start_a_month() {
+        let cats = daily_categories("2009-01-03", 6456);
+        let ticks =
+            calendar_tick_indices(&cats).expect("16 years is above the floor");
+        assert!(ticks.len() >= 2);
+        for &i in &ticks {
+            let (year, month) = year_month(&cats[i]).expect("a date");
+            // First plotted day of its month: either index 0, or the previous
+            // category belongs to a different month.
+            let starts_month =
+                i == 0 || year_month(&cats[i - 1]) != Some((year, month));
+            assert!(
+                starts_month,
+                "tick {i} at {} is not the first day of its month",
+                cats[i]
+            );
+        }
+    }
+
+    /// A missing day must move a label to the next day that exists rather
+    /// than dropping the month. Real daily data has gaps.
+    #[test]
+    fn calendar_ticks_survive_a_missing_first_of_the_month() {
+        let mut cats = daily_categories("2015-01-01", 2200);
+        let dropped = cats
+            .iter()
+            .position(|c| c == "2017-01-01")
+            .expect("in range");
+        cats.remove(dropped);
+        let ticks = calendar_tick_indices(&cats).unwrap();
+        let labelled: Vec<&str> =
+            ticks.iter().map(|&i| cats[i].as_str()).collect();
+        assert!(
+            labelled.contains(&"2017-01-02"),
+            "January 2017 lost its label to a one-day gap: {labelled:?}"
+        );
+    }
+
+    /// Below two years the labels are days, where nobody reads the axis as
+    /// calendar boundaries. Aligning there would thin a 3M chart to three
+    /// labels for no gain, so the span floor has to hold.
+    #[test]
+    fn calendar_ticks_are_declined_on_short_and_non_date_axes() {
+        assert!(calendar_tick_indices(&daily_categories("2025-01-01", 90))
+            .is_none());
+        assert!(calendar_tick_indices(&daily_categories("2024-01-01", 730))
+            .is_none());
+        assert!(calendar_tick_indices(&[]).is_none());
+        // The weekday and fee-bucket axes are words, not dates.
+        let words: Vec<String> = ["Mon", "Tue", "Wed"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert!(calendar_tick_indices(&words).is_none());
+    }
+
+    /// The stride has to stay dense enough that a zoomed-in window still has
+    /// labels, and sparse enough that `hideOverlap` is not doing all the
+    /// thinning. Both ends of that are what make the alignment visible.
+    #[test]
+    fn calendar_tick_density_stays_in_a_usable_band() {
+        for (start, days) in [
+            ("2009-01-03", 6456),
+            ("2020-01-01", 2192),
+            ("2023-01-01", 900),
+        ] {
+            let cats = daily_categories(start, days);
+            let n = calendar_tick_indices(&cats)
+                .unwrap_or_else(|| panic!("{days} days should align"))
+                .len();
+            assert!(
+                (6..=CALENDAR_TICK_TARGET as usize + 2).contains(&n),
+                "{days} days produced {n} candidate labels"
+            );
+        }
+    }
+
+    /// The sentinel is only useful paired with the indices, and `stats.js`
+    /// reads both off `axisLabel`. A rename on either side has to fail here
+    /// rather than silently label nothing.
+    #[test]
+    fn the_category_axis_carries_both_halves_of_the_handshake() {
+        let cats = daily_categories("2009-01-03", 6456);
+        let axis = x_axis_for(true, &cats);
+        let label = &axis["axisLabel"];
+        assert_eq!(label["interval"], CALENDAR_TICK_SENTINEL);
+        assert!(
+            label[CALENDAR_TICK_DATA_KEY]
+                .as_array()
+                .is_some_and(|a| a.len() >= 2),
+            "sentinel present with no indices to install"
+        );
+        // And a short range leaves ECharts' own thinning alone.
+        let short = x_axis_for(true, &daily_categories("2025-01-01", 90));
+        assert!(short["axisLabel"].get("interval").is_none());
+        assert!(short["axisLabel"].get(CALENDAR_TICK_DATA_KEY).is_none());
+    }
+
+    /// A time axis formats every tick level with one string unless told
+    /// otherwise, which printed a bare day number where a date belonged and
+    /// no clock time at all on a 1D range.
+    #[test]
+    fn the_time_axis_names_a_format_for_every_level() {
+        let axis = x_axis_for(false, &[]);
+        let fmt = &axis["axisLabel"]["formatter"];
+        for level in
+            ["year", "month", "day", "hour", "minute", "second", "none"]
+        {
+            assert!(
+                fmt[level].as_str().is_some_and(|s| !s.is_empty()),
+                "time axis has no format for {level}"
+            );
+        }
+        assert_eq!(fmt["hour"], "{HH}:{mm}", "1D has to read as clock time");
+    }
+
+    /// The whole decoration pipeline over a real builder, in the order the
+    /// page applies it.
+    ///
+    /// Every other test here builds an option by hand with exactly the series
+    /// it wants to check. That is why both defects on this branch survived to
+    /// the end: each function was right and the composition was not. This
+    /// starts from a real chart and asserts what a reader would see.
+    fn pipeline(
+        flags: &OverlayFlags,
+        compare_with: Option<&serde_json::Value>,
+    ) -> serde_json::Value {
+        let days: Vec<_> = daily_categories("2012-01-01", 3000)
+            .iter()
+            .enumerate()
+            .map(|(i, d)| daily_with_difficulty(d, 1.0 + i as f64 * 1e9))
+            .collect();
+        let mut v = super::network::difficulty_chart_daily(&days);
+        apply_overlays(&mut v, flags, true);
+        if let Some(other) = compare_with {
+            apply_comparison(&mut v, other, "Transaction Count", "count");
+        }
+        apply_scales(&mut v, flags);
+        v
+    }
+
+    /// Mark lines, a price overlay and both scales at once. The combination a
+    /// reader reaches by turning on everything in the rail.
+    #[test]
+    fn the_full_pipeline_leaves_each_axis_where_it_was_asked_to_be() {
+        let cats = daily_categories("2012-01-01", 3000);
+        let price: Vec<(u64, f64)> = cats
+            .iter()
+            .enumerate()
+            .map(|(i, d)| {
+                let ms = chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d")
+                    .unwrap()
+                    .and_hms_opt(0, 0, 0)
+                    .unwrap()
+                    .and_utc()
+                    .timestamp_millis() as u64;
+                (ms, 5.0 + i as f64 * 40.0)
+            })
+            .collect();
+        let flags = OverlayFlags {
+            halvings: true,
+            price_data: price,
+            log_scale: true,
+            right_log_scale: true,
+            ..Default::default()
+        };
+        let v = pipeline(&flags, None);
+
+        assert_eq!(v["yAxis"][0]["type"], "log", "metric axis");
+        assert_eq!(v["yAxis"][1]["type"], "log", "overlay axis");
+        // Independently: the reader can have one without the other.
+        let mixed = pipeline(
+            &OverlayFlags {
+                log_scale: false,
+                ..flags.clone()
+            },
+            None,
+        );
+        assert_eq!(mixed["yAxis"][0]["type"], "value");
+        assert_eq!(mixed["yAxis"][1]["type"], "log");
+
+        // The calendar ticks survive everything downstream of them.
+        let label = &v["xAxis"]["axisLabel"];
+        assert_eq!(label["interval"], CALENDAR_TICK_SENTINEL);
+        assert!(label[CALENDAR_TICK_DATA_KEY].as_array().unwrap().len() >= 2);
+
+        // And the mark lines did not take the axis's room back.
+        assert!(v["grid"]["right"].as_u64().unwrap() >= 70);
+    }
+
+    /// The two defects this branch shipped with, asserted at the level they
+    /// actually appeared: what the rail prints beside the chart.
+    #[test]
+    fn key_figures_describe_the_metric_and_not_what_is_laid_over_it() {
+        let cats = daily_categories("2012-01-01", 3000);
+        let other: Vec<_> = cats
+            .iter()
+            .enumerate()
+            // Deliberately far larger than difficulty here, so counting it
+            // would be unmissable in the peak.
+            .map(|(i, d)| daily_with_difficulty(d, 1e30 + i as f64))
+            .collect();
+        let compare = super::network::difficulty_chart_daily(&other);
+
+        let plain = pipeline(&OverlayFlags::default(), None);
+        let with_compare = pipeline(&OverlayFlags::default(), Some(&compare));
+
+        // The comparison is drawn...
+        assert_eq!(
+            with_compare["series"].as_array().unwrap().len(),
+            plain["series"].as_array().unwrap().len() + 1
+        );
+        assert!(has_right_value_axis(&with_compare));
+
+        // ...and the key figures do not see it.
+        let kpis = |v: &serde_json::Value| {
+            crate::stats::charts::kpi::compute(
+                &serde_json::to_string(v).unwrap(),
+                crate::stats::charts::registry::Shape::Line,
+            )
+        };
+        let before = kpis(&plain);
+        // Asserting equality alone would pass if both sides were
+        // `Unavailable`, which is exactly what a bad axis filter would
+        // produce. Pin the real figures first.
+        match &before {
+            crate::stats::charts::kpi::Kpis::Series {
+                peak,
+                observations,
+                ..
+            } => {
+                assert_eq!(*observations, 3000);
+                assert!(peak.y > 1e12, "read the metric, not a placeholder");
+            }
+            other => panic!("the metric alone should report: {other:?}"),
+        }
+        assert_eq!(
+            before,
+            kpis(&with_compare),
+            "the comparison series changed the metric's own key figures"
+        );
+    }
+
+    /// The defect a review caught: `apply_right_log_scale` shipped with no
+    /// dropped-point notice, justified by a comment naming price and chain
+    /// size as the only occupants of that axis. `apply_comparison` then let
+    /// any comparable chart claim it, including `utxo-growth`, which is net
+    /// and goes negative. Switching the overlay axis to log dropped those
+    /// points with nothing on screen saying so.
+    #[test]
+    fn a_negative_comparison_on_a_log_overlay_axis_says_so() {
+        let mut v = daily_chart(&[1.0, 2.0, 3.0]);
+        // `graphic` is where the notice lands; real builders always have one.
+        v["graphic"] = json!([]);
+        let negative = daily_chart(&[5.0, -1.0, 0.0]);
+        assert!(apply_comparison(&mut v, &negative, "UTXO Growth", "count"));
+
+        let flags = OverlayFlags {
+            right_log_scale: true,
+            ..Default::default()
+        };
+        apply_scales(&mut v, &flags);
+        let notice = v["graphic"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|g| g["id"] == LOG_NOTICE_ID)
+            .expect("two non-positive points went unmentioned");
+        let text = notice["style"]["text"].as_str().unwrap();
+        assert!(text.starts_with('2'), "wrong count: {text}");
+
+        // And it clears when the axis goes back to linear.
+        apply_scales(&mut v, &OverlayFlags::default());
+        assert!(!v["graphic"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|g| g["id"] == LOG_NOTICE_ID));
+    }
+
+    /// One notice, not one per axis: it is pinned to the top of the plot, so
+    /// two would sit on top of each other. The count has to be the total.
+    #[test]
+    fn both_axes_dropping_points_produce_one_combined_notice() {
+        let mut v = daily_chart(&[1.0, 0.0, 3.0]);
+        v["graphic"] = json!([]);
+        let negative = daily_chart(&[5.0, -1.0, 0.0]);
+        assert!(apply_comparison(&mut v, &negative, "UTXO Growth", "count"));
+        apply_scales(
+            &mut v,
+            &OverlayFlags {
+                log_scale: true,
+                right_log_scale: true,
+                ..Default::default()
+            },
+        );
+        let notices: Vec<&serde_json::Value> = v["graphic"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|g| g["id"] == LOG_NOTICE_ID)
+            .collect();
+        assert_eq!(notices.len(), 1, "one notice, whatever dropped");
+        let text = notices[0]["style"]["text"].as_str().unwrap();
+        assert!(
+            text.starts_with('3'),
+            "one zero on the left plus two on the right: {text}"
+        );
+
+        // And each axis counts only its own. A positive metric beside a
+        // negative comparison must not claim points it plots perfectly well
+        // were dropped.
+        let mut left_only = daily_chart(&[1.0, 2.0, 3.0]);
+        left_only["graphic"] = json!([]);
+        assert!(apply_comparison(
+            &mut left_only,
+            &daily_chart(&[5.0, -1.0, -2.0]),
+            "UTXO Growth",
+            "count"
+        ));
+        apply_scales(
+            &mut left_only,
+            &OverlayFlags {
+                log_scale: true,
+                ..Default::default()
+            },
+        );
+        assert!(
+            !left_only["graphic"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|g| g["id"] == LOG_NOTICE_ID),
+            "the metric plots every point; nothing was dropped"
+        );
+    }
+
+    /// A log axis labels only at powers of ten, so a span under one decade
+    /// gets three labels, two of which are its own bounds. Minor split lines
+    /// are what make it readable between them, and they have to come off
+    /// again with everything else when the axis goes back to linear.
+    #[test]
+    fn a_log_axis_carries_minor_gridlines_and_gives_them_back() {
+        // The real case: UTXO flow beside difficulty, 1.9K to 11K.
+        let mut v = daily_chart(&[1_900.0, 5_000.0, 11_000.0]);
+        apply_log_scale(&mut v, true);
+        assert_eq!(v["yAxis"]["type"], "log");
+        assert_eq!(v["yAxis"]["minorTick"]["show"], true);
+        assert_eq!(v["yAxis"]["minorSplitLine"]["show"], true);
+
+        apply_log_scale(&mut v, false);
+        assert!(v["yAxis"].get("minorTick").is_none());
+        assert!(v["yAxis"].get("minorSplitLine").is_none());
+        assert!(v["yAxis"].get("splitNumber").is_none());
+    }
+
+    /// A pie has no cartesian axes, so this pushed a value axis onto a donut
+    /// and drew a line across it.
+    ///
+    /// **Matching lengths, deliberately.** The first probe of this used
+    /// mismatched lengths and reported "refused", which was the length guard
+    /// firing, not a real refusal. Reading that as safety is how this would
+    /// have shipped, so the test pins the case that actually applied.
+    #[test]
+    fn a_comparison_is_refused_on_a_donut() {
+        let mut donut = json!({
+            "series": [{
+                "name": "Pools", "type": "pie",
+                "data": [{"name": "Foundry", "value": 30.0},
+                         {"name": "AntPool", "value": 20.0}]
+            }]
+        });
+        let before = donut.clone();
+        assert!(!apply_comparison(
+            &mut donut,
+            &daily_chart(&[1.0, 2.0]),
+            "Other",
+            "count"
+        ));
+        assert_eq!(donut, before, "a refused comparison must change nothing");
+    }
+
+    /// A chart already using both axes has nothing free, and a third value
+    /// axis on one plot cannot be read. This is also what makes the
+    /// price/chain-size/comparison exclusion structural: with an overlay
+    /// already on, there is no room, whatever the UI did or did not grey out.
+    #[test]
+    fn a_comparison_is_refused_when_both_axes_are_taken() {
+        // A Unit::Mixed chart, which arrives with two axes of its own.
+        let mut mixed = json!({
+            "yAxis": [{"type": "value"}, {"type": "value"}],
+            "series": [
+                {"name": "Count", "yAxisIndex": 0, "data": [1.0, 2.0, 3.0]},
+                {"name": "BTC", "yAxisIndex": 1, "data": [4.0, 5.0, 6.0]}
+            ]
+        });
+        let before = mixed.clone();
+        assert!(!apply_comparison(
+            &mut mixed,
+            &daily_chart(&[1.0, 2.0, 3.0]),
+            "Other",
+            "count"
+        ));
+        assert_eq!(mixed, before);
+
+        // And the same refusal once an overlay has claimed the right axis,
+        // reached through the real path rather than a hand-built option.
+        let mut v = per_block_chart(&[
+            (1_231_006_505_000, 1.0),
+            (1_600_000_000_000, 2.0),
+        ]);
+        apply_overlays(
+            &mut v,
+            &OverlayFlags {
+                price_data: vec![
+                    (1_231_006_505_000, 0.05),
+                    (1_600_000_000_000, 120_000.0),
+                ],
+                ..Default::default()
+            },
+            false,
+        );
+        assert!(!apply_comparison(
+            &mut v,
+            &per_block_chart(&[(1_231_006_505_000, 9.0)]),
+            "Other",
+            "count"
+        ));
+        assert_eq!(
+            v["yAxis"].as_array().unwrap().len(),
+            2,
+            "a third axis was created"
+        );
+    }
+
+    /// Stacked percentage bands fill 0 to 100 and are read against each
+    /// other, so a second scale cannot be read against them at all. The same
+    /// refusal the log axis makes, for the same reason.
+    #[test]
+    fn a_comparison_is_refused_on_stacked_percentage_bands() {
+        let mut pct = json!({
+            "yAxis": {"type": "value", "max": 100.0},
+            "series": [
+                {"name": "P2PKH", "stack": "t", "data": [60.0, 55.0, 50.0]},
+                {"name": "P2WPKH", "stack": "t", "data": [40.0, 45.0, 50.0]}
+            ]
+        });
+        let before = pct.clone();
+        assert!(!apply_comparison(
+            &mut pct,
+            &daily_chart(&[1.0, 2.0, 3.0]),
+            "Other",
+            "count"
+        ));
+        assert_eq!(pct, before);
+    }
+
+    /// A permalink can ask for a comparison and the price overlay at once,
+    /// and only one of them can have the right axis. The overlay wins, which
+    /// is the precedence `apply_overlays` already sets between price and
+    /// chain size, and the comparison has to be refused rather than half
+    /// applied.
+    #[test]
+    fn an_overlay_and_a_comparison_cannot_both_hold_the_right_axis() {
+        let mut v = per_block_chart(&[
+            (1_231_006_505_000, 1.0),
+            (1_600_000_000_000, 2.0),
+        ]);
+        apply_overlays(
+            &mut v,
+            &OverlayFlags {
+                price_data: vec![
+                    (1_231_006_505_000, 0.05),
+                    (1_600_000_000_000, 120_000.0),
+                ],
+                ..Default::default()
+            },
+            false,
+        );
+        let after_overlay = v.clone();
+        assert!(!apply_comparison(
+            &mut v,
+            &per_block_chart(&[(1_231_006_505_000, 9.0)]),
+            "Other",
+            "count"
+        ));
+        assert_eq!(v, after_overlay, "a refused comparison changed the chart");
+        assert_eq!(
+            v["yAxis"].as_array().unwrap().len(),
+            2,
+            "exactly one right axis, held by the overlay"
+        );
+        assert_eq!(v["yAxis"][1]["name"], "USD");
+    }
+
+    /// A daily chart: bare numbers positioned by the category axis.
+    fn daily_chart(vals: &[f64]) -> serde_json::Value {
+        json!({
+            "grid": {"right": 20},
+            "legend": {"show": false},
+            "xAxis": {"type": "category", "data": ["a", "b", "c"]},
+            "yAxis": {"type": "value", "name": "Count"},
+            "series": [{"name": "Count", "type": "line", "data": vals}]
+        })
+    }
+
+    /// A per-block chart: `[timestamp, value]` pairs that carry their own x.
+    fn per_block_chart(pts: &[(u64, f64)]) -> serde_json::Value {
+        let data: Vec<_> = pts.iter().map(|&(t, v)| json!([t, v])).collect();
+        json!({
+            "grid": {"right": 20},
+            "legend": {"show": false},
+            "xAxis": {"type": "time"},
+            "yAxis": {"type": "value", "name": "Count"},
+            "series": [{"name": "Count", "type": "line", "data": data}]
+        })
+    }
+
+    /// The comparison lands on its own axis with the metric left where it was.
+    #[test]
+    fn a_comparison_takes_the_right_axis_and_leaves_the_metric_alone() {
+        let mut v = daily_chart(&[1.0, 2.0, 3.0]);
+        let other = daily_chart(&[100.0, 200.0, 300.0]);
+        assert!(apply_comparison(&mut v, &other, "Fee rate", "sat/vB"));
+
+        let axes = v["yAxis"].as_array().expect("two axes now");
+        assert_eq!(axes.len(), 2);
+        assert_eq!(axes[0]["name"], "Count", "the metric's axis is unchanged");
+        assert_eq!(axes[1]["name"], "sat/vB");
+        assert_eq!(axes[1]["position"], "right");
+
+        let series = v["series"].as_array().unwrap();
+        assert_eq!(series.len(), 2);
+        assert_eq!(series[0]["yAxisIndex"], 0, "metric pinned to the left");
+        assert_eq!(series[1]["yAxisIndex"], 1);
+        assert_eq!(series[1]["name"], "Fee rate");
+        assert_eq!(series[1]["data"], json!([100.0, 200.0, 300.0]));
+        // Two unlabelled lines is a puzzle, not a comparison.
+        assert_eq!(v["legend"]["show"], true);
+        // And the plot has to make room, or the axis is drawn over the data.
+        assert!(v["grid"]["right"].as_u64().unwrap() >= 70);
+    }
+
+    /// A daily chart positions bare numbers by index, so an unequal count
+    /// shifts the entire comparison sideways with nothing on screen saying
+    /// so. Refusing is the only safe answer on a site whose claim is that the
+    /// numbers are checkable.
+    #[test]
+    fn a_daily_comparison_refuses_a_length_mismatch() {
+        let mut v = daily_chart(&[1.0, 2.0, 3.0]);
+        let short = daily_chart(&[100.0, 200.0]);
+        let before = v.clone();
+        assert!(!apply_comparison(&mut v, &short, "Other", "count"));
+        assert_eq!(v, before, "a refused comparison must change nothing");
+    }
+
+    /// Per-block points carry their own timestamps, so they self-align and a
+    /// different count is normal rather than a mismatch.
+    #[test]
+    fn a_per_block_comparison_does_not_need_matching_lengths() {
+        let mut v = per_block_chart(&[(1, 1.0), (2, 2.0), (3, 3.0)]);
+        let other = per_block_chart(&[(1, 9.0), (3, 7.0)]);
+        assert!(apply_comparison(&mut v, &other, "Other", "count"));
+        assert_eq!(v["series"].as_array().unwrap().len(), 2);
+    }
+
+    /// A chart with no rows for this range would otherwise add an axis and an
+    /// empty line, which reads as "the comparison is flat at zero".
+    #[test]
+    fn a_comparison_with_no_data_is_refused() {
+        let mut v = daily_chart(&[1.0, 2.0, 3.0]);
+        let before = v.clone();
+        assert!(!apply_comparison(
+            &mut v,
+            &daily_chart(&[]),
+            "Other",
+            "count"
+        ));
+        assert!(!apply_comparison(
+            &mut v,
+            &json!({"series": []}),
+            "Other",
+            "count"
+        ));
+        assert!(!apply_comparison(&mut v, &json!({}), "Other", "count"));
+        assert_eq!(v, before);
+    }
+
+    /// The comparison is the right axis while it is on, so the second scale
+    /// switch has to move it. Without this the switch would look broken on
+    /// exactly the charts where a log overlay matters most.
+    #[test]
+    fn the_scale_switch_reaches_a_comparison_axis() {
+        let mut v = daily_chart(&[1.0, 2.0, 3.0]);
+        let other = daily_chart(&[1.0, 1000.0, 1_000_000.0]);
+        assert!(apply_comparison(&mut v, &other, "Other", "count"));
+        assert!(has_right_value_axis(&v));
+        apply_right_log_scale(&mut v, true);
+        assert_eq!(v["yAxis"][1]["type"], "log");
+        assert_eq!(v["yAxis"][0]["type"], "value");
+    }
+
+    /// Mark lines set `grid.right` to a fixed width for their labels. An axis
+    /// added before them would be overdrawn, so the ordering in `decorate` is
+    /// load-bearing and this is the assertion that holds it.
+    #[test]
+    fn a_comparison_survives_mark_lines_widening_the_grid() {
+        let mut v = per_block_chart(&[
+            (1_231_006_505_000, 1.0),
+            (1_600_000_000_000, 2.0),
+        ]);
+        apply_overlays(
+            &mut v,
+            &OverlayFlags {
+                halvings: true,
+                ..Default::default()
+            },
+            false,
+        );
+        let after_overlays = v["grid"]["right"].as_u64().unwrap();
+        let other = per_block_chart(&[
+            (1_231_006_505_000, 9.0),
+            (1_600_000_000_000, 8.0),
+        ]);
+        assert!(apply_comparison(&mut v, &other, "Other", "count"));
+        assert!(
+            v["grid"]["right"].as_u64().unwrap() >= after_overlays.max(70),
+            "the comparison axis did not claim its own width"
+        );
+    }
+
+    /// An option with one axis, and the same option after an overlay has
+    /// added the right-hand one.
+    fn with_overlay_axis() -> serde_json::Value {
+        json!({
+            "yAxis": [
+                {"type": "value", "name": "Count", "scale": true},
+                {"type": "value", "name": "USD", "scale": true}
+            ],
+            "series": [
+                {"name": "Count", "yAxisIndex": 0, "data": [[1, 5.0], [2, 9.0]]},
+                {"name": "Price (USD)", "yAxisIndex": 1,
+                 "data": [[1, 0.05], [2, 120000.0]]}
+            ]
+        })
+    }
+
+    /// The point of the second switch: price goes logarithmic while the
+    /// metric stays where the reader left it.
+    #[test]
+    fn the_overlay_axis_scales_independently_of_the_metric() {
+        let mut v = with_overlay_axis();
+        apply_right_log_scale(&mut v, true);
+        assert_eq!(v["yAxis"][1]["type"], "log");
+        assert_eq!(
+            v["yAxis"][0]["type"], "value",
+            "the metric's own axis must not follow the overlay"
+        );
+        // And the bounds fit the price data rather than reaching for zero,
+        // which a log axis cannot represent anyway.
+        let lo = v["yAxis"][1]["min"].as_f64().expect("a fitted floor");
+        assert!(lo > 0.0 && lo <= 0.05, "floor {lo} does not contain $0.05");
+    }
+
+    /// Switching back has to hand the axis over exactly as the overlay built
+    /// it. The left-axis version of this bug left a log chart's bounds on a
+    /// linear axis.
+    #[test]
+    fn turning_the_overlay_axis_back_to_linear_clears_its_bounds() {
+        let mut v = with_overlay_axis();
+        apply_right_log_scale(&mut v, true);
+        apply_right_log_scale(&mut v, false);
+        assert_eq!(v["yAxis"][1]["type"], "value");
+        assert!(v["yAxis"][1].get("min").is_none(), "stale log floor");
+        assert!(v["yAxis"][1].get("max").is_none(), "stale log ceiling");
+        assert!(v["yAxis"][1].get("splitNumber").is_none());
+        assert_eq!(
+            v["yAxis"][1]["scale"], true,
+            "the overlay still has to fit its own data when linear"
+        );
+    }
+
+    /// Called unconditionally after the overlays, so with no overlay on there
+    /// is no right axis and nothing may change.
+    #[test]
+    fn the_overlay_scale_is_a_no_op_without_an_overlay() {
+        let mut v = json!({
+            "yAxis": {"type": "value", "name": "Count"},
+            "series": [{"name": "Count", "data": [[1, 5.0], [2, 9.0]]}]
+        });
+        let before = v.clone();
+        apply_right_log_scale(&mut v, true);
+        assert_eq!(v, before);
+        // Nor may it invent an axis on a chart whose y axis is categorical.
+        let mut cat = json!({
+            "yAxis": [{"type": "category", "data": ["Mon"]}],
+            "series": [{"data": [1.0]}]
+        });
+        let cat_before = cat.clone();
+        apply_right_log_scale(&mut cat, true);
+        assert_eq!(cat, cat_before);
+    }
+
+    /// Both scales are applied after the base chart is cached, so a flag that
+    /// is not in the key serves the previous render. That is the defect
+    /// `fix/chart-correctness` fixed, and it has to stay fixed for each new
+    /// flag.
+    #[test]
+    fn every_scale_flag_reaches_the_cache_key() {
+        let base = OverlayFlags::default();
+        let left = OverlayFlags {
+            log_scale: true,
+            ..Default::default()
+        };
+        let right = OverlayFlags {
+            right_log_scale: true,
+            ..Default::default()
+        };
+        let both = OverlayFlags {
+            log_scale: true,
+            right_log_scale: true,
+            ..Default::default()
+        };
+        let keys = [
+            base.cache_key(),
+            left.cache_key(),
+            right.cache_key(),
+            both.cache_key(),
+        ];
+        for (i, a) in keys.iter().enumerate() {
+            for b in keys.iter().skip(i + 1) {
+                assert_ne!(a, b, "two scale states share a cache key");
+            }
+        }
+    }
+
+    /// The UI shows the second switch from the flags alone, before any chart
+    /// exists, so that answer has to agree with what the overlays actually
+    /// build.
+    #[test]
+    fn has_right_axis_agrees_with_the_built_option() {
+        for flags in [
+            OverlayFlags {
+                price_data: vec![(1_231_006_505_000, 0.05)],
+                ..Default::default()
+            },
+            OverlayFlags {
+                chain_size_data: vec![(1_231_006_505_000, 0.1)],
+                ..Default::default()
+            },
+            OverlayFlags {
+                halvings: true,
+                ..Default::default()
+            },
+            OverlayFlags::default(),
+        ] {
+            let mut v = json!({
+                "xAxis": {"type": "time"},
+                "grid": {"right": 20},
+                "yAxis": {"type": "value"},
+                "series": [{"name": "Count", "data": [
+                    [1_231_006_505_000u64, 1.0], [1_231_100_000_000u64, 2.0]
+                ]}]
+            });
+            apply_overlays(&mut v, &flags, false);
+            assert_eq!(
+                has_right_value_axis(&v),
+                flags.has_right_axis(),
+                "flags and built option disagree for {}",
+                flags.cache_key()
+            );
+        }
+    }
+
+    /// The right axis crosses six decades, so it needs the same abbreviation
+    /// the metric axis got. Without it a log price floor labels itself
+    /// "0.05000000000000001".
+    #[test]
+    fn the_overlay_axis_abbreviates_its_labels() {
+        let mut v = json!({
+            "xAxis": {"type": "time"},
+            "grid": {"right": 20},
+            "yAxis": {"type": "value"},
+            "series": [{"name": "Count", "data": [
+                [1_231_006_505_000u64, 1.0], [1_600_000_000_000u64, 2.0]
+            ]}]
+        });
+        let flags = OverlayFlags {
+            price_data: vec![
+                (1_231_006_505_000, 0.05),
+                (1_600_000_000_000, 120_000.0),
+            ],
+            ..Default::default()
+        };
+        apply_overlays(&mut v, &flags, false);
+        assert_eq!(v["yAxis"][1]["axisLabel"]["formatter"], SI_AXIS_SENTINEL);
+    }
 
     /// The right axis belongs to the price or chain-size overlay. Rescaling it
     /// under them is the shape of the clipping bug fixed in
@@ -2069,6 +3341,40 @@ mod tests {
 
     fn v_type(v: &serde_json::Value) -> &str {
         v["yAxis"]["type"].as_str().unwrap_or("")
+    }
+
+    /// The unit tests above exercise `x_axis_for` directly, which proves the
+    /// helper and nothing about whether a chart reaches it. This goes through
+    /// a real builder, so a daily chart that hand-rolls its category axis
+    /// instead of calling the helper fails here.
+    #[test]
+    fn a_real_daily_chart_gets_calendar_aligned_ticks() {
+        let days: Vec<_> = daily_categories("2009-01-03", 6456)
+            .iter()
+            .enumerate()
+            // Rising, positive and never flat, so nothing else refuses.
+            .map(|(i, d)| daily_with_difficulty(d, 1.0 + i as f64 * 1e9))
+            .collect();
+        let opt = super::network::difficulty_chart_daily(&days);
+        let label = &opt["xAxis"]["axisLabel"];
+        assert_eq!(
+            label["interval"], CALENDAR_TICK_SENTINEL,
+            "the difficulty chart does not route through x_axis_for"
+        );
+        let ticks = label[CALENDAR_TICK_DATA_KEY]
+            .as_array()
+            .expect("indices alongside the sentinel");
+        let cats = opt["xAxis"]["data"].as_array().expect("categories");
+        // Every label the axis will draw names a January, because sixteen
+        // years lands on the twelve-month stride.
+        for t in ticks {
+            let date = cats[t.as_u64().unwrap() as usize].as_str().unwrap();
+            assert!(
+                date.starts_with(&format!("{}-01", &date[..4])),
+                "tick on {date} is not a January"
+            );
+        }
+        assert!(ticks.len() >= 6, "too few labels to read the axis by");
     }
 
     /// The cache key must move with the flag. If it does not, toggling the

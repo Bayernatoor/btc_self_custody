@@ -9,6 +9,7 @@ needs that those do not: commands, the traps, and where to look.
 ## Commands
 
     cargo leptos watch                  # dev server on 127.0.0.1:8000, live reload on 3002
+    ./target/debug/we_hodl_btc          # the built binary, which listens on 3000, not 8000
     cargo leptos build --release         # production build
 
 Before pushing, the same three things CI runs, in order:
@@ -128,6 +129,22 @@ collapsible sections.
 average block time as always 10 minutes because it re-derived a value Rust already had correct
 from `LiveStats`. Pass computed values into JS; do not recompute them there.
 
+**`prop:value` on a `<select>` does not survive SSR.** It is applied after hydration, so a page
+rendered with a selection paints the control empty until WASM loads. Pair it with `selected` on
+the options, which is an attribute and does render.
+
+**A native `<select>` popup ignores your CSS.** The browser draws the option list, so a dark
+`<select>` opened to a white list with white text, invisible. `[color-scheme:dark]` on the select
+is what actually fixes it; explicit `bg-`/`text-` on each `<option>` and `<optgroup>` is the
+fallback for platforms that honour one and not the other.
+
+**Anything absolutely positioned inside arbitrary copy has to reset what it inherits.** A tooltip
+placed next to a label picked up `white-space: nowrap` from an ancestor and ignored its own
+width, running off the screen. Reset `whitespace`, `text-transform`, `font-weight`, `letter-spacing`
+and text alignment on a floating element, not just its colours. Related: open such a thing
+**downward**. Upward overflow at the top of the page goes behind the navbar and then off the
+document, where it cannot be scrolled to; downward overflow is always reachable.
+
 **`node --check` proves nothing about a JS module.** It validates syntax, and an undefined
 reference is valid syntax. A broken heartbeat page shipped on 2026-08-07 because a scripted
 `replace()` matched nothing (its anchor comment had already been rewritten), leaving `PARAMS`
@@ -145,6 +162,26 @@ After touching a module's top level, actually evaluate it:
 
 Two habits that follow: assert on every scripted replacement so a stale anchor fails loudly, and
 prefer an editor-style edit over `sed`/`python` rewrites when the anchor may already have changed.
+
+## ECharts
+
+Three things about the library that are not bugs in our code and cost a session each to work out.
+
+**A log axis labels only at powers of the base.** `splitNumber` is a hint it can only honour by
+choosing how many decades to step, so a range spanning under one decade gets two or three labels
+and there is no way to add more: ECharts 5 has no explicit tick list for a value or log axis. What
+it does place is **minor ticks**, at 2, 3, 4 and so on within each decade, so `minorTick` plus
+`minorSplitLine` is the whole of what can be done. Sub-decade spans turn up routinely on the
+right-hand axis, where the series is whatever the reader chose to compare against.
+
+**A JS function cannot be serialised from Rust, so use a sentinel.** Rust writes a marker string
+where the function belongs, and `stats.js` swaps in the real one. Used for SI axis labels, date
+formats and the calendar-tick `axisLabel.interval` predicate. Any new one needs its constant
+declared on both sides and a test asserting the option carries both halves.
+
+**A time axis takes a per-level format object**, keyed `year`/`month`/`day`/`hour`/..., which is
+plain JSON and needs no sentinel. Without it every tick level is formatted by one string, so a
+one-day range shows no clock time and a one-week range shows bare day numbers.
 
 ## Content and data rules
 
