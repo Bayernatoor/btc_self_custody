@@ -144,7 +144,11 @@ fn synthetic_days(n: usize) -> Vec<DailyAggregate> {
                 avg_size: 900_000.0 + f * 40.0,
                 avg_weight: 3_600_000.0 + f * 160.0,
                 avg_tx_count: 2_000.0 + f,
-                avg_difficulty: 1.0e12 + f * 1.0e10,
+                // Stepped every 14 days, not rising daily. Difficulty
+                // retargets every 2,016 blocks and holds flat between, and a
+                // chart that reads retargets off the daily series finds none
+                // in a value that changes every single day.
+                avg_difficulty: 1.0e12 + (i / 14) as f64 * 1.4e11,
                 total_op_return_count: 4_000 + u * 3,
                 total_op_return_bytes: 300_000 + u * 90,
                 total_runes_count: 500 + u,

@@ -19,9 +19,9 @@ pub fn signaling_chart(blocks: &[SignalingBlock]) -> serde_json::Value {
         "xAxis": x_axis_for(false, &[]),
         "yAxis": {
             "type": "value", "name": "Signaled",
-            "nameTextStyle": { "color": "#aaa" },
+            "nameTextStyle": { "color": "#d4d4d4" },
             "axisLabel": {
-                "color": "#aaa",
+                "color": "#d4d4d4",
                 "formatter": "{value}"
             },
             "min": 0, "max": 1, "interval": 1,
@@ -71,14 +71,14 @@ pub fn signaling_periods_chart(
     build_option(json!({
         "xAxis": {
             "type": "category", "data": cats,
-            "axisLabel": { "color": "#aaa", "rotate": 45, "fontSize": 10 },
-            "axisLine": { "lineStyle": { "color": "#555" } }
+            "axisLabel": { "color": "#d4d4d4", "rotate": 45, "fontSize": 10 },
+            "axisLine": { "lineStyle": { "color": "#7a7a7a" } }
         },
         "yAxis": {
             "type": "value", "name": "%", "max": 100,
-            "nameTextStyle": { "color": "#aaa" },
-            "axisLabel": { "color": "#aaa" },
-            "axisLine": { "lineStyle": { "color": "#555" } },
+            "nameTextStyle": { "color": "#d4d4d4" },
+            "axisLabel": { "color": "#d4d4d4" },
+            "axisLine": { "lineStyle": { "color": "#7a7a7a" } },
             "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.20)", "type": "dashed" } }
         },
         "grid": { "left": 45, "right": 20, "top": 35, "bottom": 80 },

@@ -193,9 +193,9 @@ pub fn runes_pct_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
         "yAxis": { "type": "value", "name": "%", "max": 100,
-            "nameTextStyle": { "color": "#aaa" },
-            "axisLabel": { "color": "#aaa" },
-            "axisLine": { "lineStyle": { "color": "#555" } },
+            "nameTextStyle": { "color": "#d4d4d4" },
+            "axisLabel": { "color": "#d4d4d4" },
+            "axisLine": { "lineStyle": { "color": "#7a7a7a" } },
             "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.20)", "type": "dashed" } }
         },
         "dataZoom": data_zoom(),
@@ -243,9 +243,9 @@ pub fn runes_pct_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     build_option(json!({
         "xAxis": x_axis_for(true, &dates),
         "yAxis": { "type": "value", "name": "%", "max": 100,
-            "nameTextStyle": { "color": "#aaa" },
-            "axisLabel": { "color": "#aaa" },
-            "axisLine": { "lineStyle": { "color": "#555" } },
+            "nameTextStyle": { "color": "#d4d4d4" },
+            "axisLabel": { "color": "#d4d4d4" },
+            "axisLine": { "lineStyle": { "color": "#7a7a7a" } },
             "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.20)", "type": "dashed" } }
         },
         "dataZoom": data_zoom(),

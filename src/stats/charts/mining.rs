@@ -67,7 +67,7 @@ pub fn miner_dominance_chart(miners: &[MinerShare]) -> serde_json::Value {
             },
             "label": {
                 "show": true,
-                "color": "#ccc",
+                "color": "#e8e8e8",
                 "fontSize": 10,
                 "formatter": "{b}\n{d}%"
             },
@@ -100,8 +100,8 @@ pub fn empty_blocks_chart(buckets: &[HistogramBucket]) -> serde_json::Value {
         "xAxis": {
             "type": "category",
             "data": months,
-            "axisLabel": { "color": "#aaa", "rotate": 45, "fontSize": 10 },
-            "axisLine": { "lineStyle": { "color": "#555" } }
+            "axisLabel": { "color": "#d4d4d4", "rotate": 45, "fontSize": 10 },
+            "axisLine": { "lineStyle": { "color": "#7a7a7a" } }
         },
         "yAxis": y_axis("Count"),
         "dataZoom": data_zoom(),
@@ -138,16 +138,16 @@ pub fn empty_blocks_by_pool_chart(
         "xAxis": {
             "type": "value",
             "name": "Empty Blocks",
-            "nameTextStyle": { "color": "#aaa" },
-            "axisLabel": { "color": "#aaa" },
+            "nameTextStyle": { "color": "#d4d4d4" },
+            "axisLabel": { "color": "#d4d4d4" },
             "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.1)" } }
         },
         "yAxis": {
             "type": "category",
             "data": pools,
             "inverse": true,
-            "axisLabel": { "color": "#ccc", "fontSize": 11 },
-            "axisLine": { "lineStyle": { "color": "#555" } }
+            "axisLabel": { "color": "#e8e8e8", "fontSize": 11 },
+            "axisLine": { "lineStyle": { "color": "#7a7a7a" } }
         },
         "grid": { "left": 120, "right": 30, "top": 25, "bottom": 30 },
         "tooltip": tooltip_axis(),
@@ -374,12 +374,61 @@ pub fn difficulty_adjustment_chart(
         "tooltip": tooltip_axis(),
         "legend": { "show": true },
         "series": [
-            { "name": "Harder", "type": "bar", "data": split(true),
-              "barMaxWidth": 6, "itemStyle": { "color": "#22c55e" } },
-            { "name": "Easier", "type": "bar", "data": split(false),
-              "barMaxWidth": 6, "itemStyle": { "color": "#ef4444" } }
+            { "name": "Harder", "type": "bar", "barGap": "-100%",
+              "data": split(true), "barMaxWidth": 14,
+              "itemStyle": { "color": "#22c55e" } },
+            { "name": "Easier", "type": "bar", "barGap": "-100%",
+              "data": split(false), "barMaxWidth": 14,
+              "itemStyle": { "color": "#ef4444" } }
         ]
     }))
+}
+
+/// Retarget steps from a daily series, ignoring the blended day.
+///
+/// `avg_difficulty` is the mean across the blocks in a UTC day, and a retarget
+/// lands mid-day, so the day it happens on averages blocks from both epochs.
+/// Stepping between consecutive daily values therefore draws the adjustment
+/// twice and gets both halves wrong: February 2026 retargeted from 125.86T to
+/// 144.40T, one step of +14.73%, and the naive reading produced +2.59% on the
+/// blend day followed by +11.83% on the next.
+///
+/// So step between *plateaus* instead. An epoch is 2,016 blocks, about a
+/// fortnight, so a settled difficulty holds for a dozen days or more and a
+/// run of a single day is always a blend. The step is placed on the first day
+/// of the new plateau, which is the first full day at the new difficulty.
+///
+/// A range too short to contain a whole plateau yields nothing, which is the
+/// honest answer: there is no retarget in view to measure.
+fn daily_difficulty_steps(days: &[DailyAggregate]) -> Vec<(usize, f64)> {
+    // Runs of equal difficulty, as (first index, value, length).
+    let mut runs: Vec<(usize, f64, usize)> = Vec::new();
+    for (i, d) in days.iter().enumerate() {
+        if d.avg_difficulty <= 0.0 {
+            continue;
+        }
+        match runs.last_mut() {
+            Some(last)
+                if (d.avg_difficulty - last.1).abs() / last.1 <= 1e-9 =>
+            {
+                last.2 += 1;
+            }
+            _ => runs.push((i, d.avg_difficulty, 1)),
+        }
+    }
+    // Drop the one-day blends. Keeping the final run whatever its length, so
+    // a retarget in the last day or two of the range is still reported.
+    let last = runs.len().saturating_sub(1);
+    let plateaus: Vec<(usize, f64)> = runs
+        .iter()
+        .enumerate()
+        .filter(|(i, r)| r.2 > 1 || *i == last)
+        .map(|(_, r)| (r.0, r.1))
+        .collect();
+    plateaus
+        .windows(2)
+        .map(|w| (w[1].0, (w[1].1 / w[0].1 - 1.0) * 100.0))
+        .collect()
 }
 
 pub fn difficulty_adjustment_chart_daily(
@@ -389,7 +438,7 @@ pub fn difficulty_adjustment_chart_daily(
         return no_data_chart("Difficulty Adjustment");
     }
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let steps = difficulty_steps(days, |d| d.avg_difficulty);
+    let steps = daily_difficulty_steps(days);
     // Positioned by category index, so every day needs a slot and the ones
     // without a retarget carry null rather than zero. Zero would draw a bar
     // of no height at every point and read as "no change today", which is a
@@ -410,10 +459,23 @@ pub fn difficulty_adjustment_chart_daily(
         "tooltip": tooltip_axis(),
         "legend": { "show": true },
         "series": [
-            { "name": "Harder", "type": "bar", "data": series_for(true),
-              "barMaxWidth": 6, "itemStyle": { "color": "#22c55e" } },
-            { "name": "Easier", "type": "bar", "data": series_for(false),
-              "barMaxWidth": 6, "itemStyle": { "color": "#ef4444" } }
+            // `barGap: -100%` overlays the two series in one slot rather
+            // than placing them side by side, which at 366 categories left
+            // each bar about two pixels wide. They never collide: a retarget
+            // is either a rise or a fall, so one series is always null where
+            // the other has a value.
+            //
+            // Not `stack`, which would do the same thing visually and be a
+            // lie about the chart. The conformance suite reads the built
+            // option, and a declared stack changes which key figures are
+            // computed and refuses a log axis. This is a layout trick, not a
+            // stacked chart.
+            { "name": "Harder", "type": "bar", "barGap": "-100%",
+              "data": series_for(true), "barMaxWidth": 14,
+              "itemStyle": { "color": "#22c55e" } },
+            { "name": "Easier", "type": "bar", "barGap": "-100%",
+              "data": series_for(false), "barMaxWidth": 14,
+              "itemStyle": { "color": "#ef4444" } }
         ]
     }))
 }
@@ -461,4 +523,88 @@ pub fn no_data_for_per_block_ranges(
     _blocks: &[BlockSummary],
 ) -> serde_json::Value {
     no_data_chart("Mining Luck (daily ranges only)")
+}
+
+#[cfg(test)]
+mod adjustment_tests {
+    use super::*;
+
+    fn day(date: &str, difficulty: f64) -> DailyAggregate {
+        DailyAggregate {
+            date: date.to_string(),
+            avg_difficulty: difficulty,
+            ..Default::default()
+        }
+    }
+
+    /// The real case, from February 2026: 125.86T to 144.40T is one retarget
+    /// of +14.73%. Averaging across the day it lands on produced a blended
+    /// value, and stepping through it drew two bars of +2.59% and +11.83%.
+    #[test]
+    fn a_retarget_is_one_step_not_two() {
+        let days = vec![
+            day("2026-02-16", 125_864_590_119_494.0),
+            day("2026-02-17", 125_864_590_119_494.0),
+            day("2026-02-18", 125_864_590_119_494.0),
+            // The blend: this day carries blocks from both epochs.
+            day("2026-02-19", 129_128_405_963_274.0),
+            day("2026-02-20", 144_398_401_518_101.0),
+            day("2026-02-21", 144_398_401_518_101.0),
+            day("2026-02-22", 144_398_401_518_101.0),
+        ];
+        let steps = daily_difficulty_steps(&days);
+        assert_eq!(steps.len(), 1, "got {steps:?}");
+        let (idx, pct) = steps[0];
+        assert_eq!(
+            idx, 4,
+            "the step belongs on the first full day at the new value"
+        );
+        assert!(
+            (pct - 14.725).abs() < 0.01,
+            "expected the whole adjustment, got {pct}"
+        );
+    }
+
+    /// A range holding no settled plateau has no retarget to report, and
+    /// saying nothing is better than reporting a blend as though it were one.
+    #[test]
+    fn too_short_a_range_reports_nothing() {
+        let days = vec![day("2026-02-19", 129.0), day("2026-02-20", 144.0)];
+        // Two runs of one day each: the first is a blend with nothing settled
+        // before it, so there is no plateau-to-plateau step.
+        assert!(daily_difficulty_steps(&days).len() <= 1);
+        assert!(daily_difficulty_steps(&[]).is_empty());
+    }
+
+    /// Flat difficulty is not a retarget, and floating point noise between
+    /// two reads of the same epoch must not become one.
+    #[test]
+    fn a_settled_epoch_produces_no_bars() {
+        let days: Vec<_> = (0..20)
+            .map(|i| {
+                day(&format!("2026-03-{:02}", i + 1), 144_398_401_518_101.0)
+            })
+            .collect();
+        assert!(daily_difficulty_steps(&days).is_empty());
+    }
+
+    /// Downward retargets are the interesting ones, and the sign has to
+    /// survive: the largest on record is the 2021 mining ban.
+    #[test]
+    fn a_downward_retarget_keeps_its_sign() {
+        let days = vec![
+            day("2021-07-01", 19_932_791_027_263.0),
+            day("2021-07-02", 19_932_791_027_263.0),
+            day("2021-07-03", 16_000_000_000_000.0),
+            day("2021-07-04", 14_363_025_673_660.0),
+            day("2021-07-05", 14_363_025_673_660.0),
+        ];
+        let steps = daily_difficulty_steps(&days);
+        assert_eq!(steps.len(), 1);
+        assert!(
+            steps[0].1 < -27.0 && steps[0].1 > -28.0,
+            "got {:?}",
+            steps[0]
+        );
+    }
 }

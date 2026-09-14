@@ -112,9 +112,9 @@ const _: () = assert!(GRID_RIGHT >= 31);
 pub(crate) fn chart_defaults() -> serde_json::Value {
     json!({
         "backgroundColor": "transparent",
-        "textStyle": { "color": "#aaa", "fontFamily": "Inter, system-ui, sans-serif" },
+        "textStyle": { "color": "#d4d4d4", "fontFamily": "Inter, system-ui, sans-serif" },
         "grid": { "left": 55, "right": GRID_RIGHT, "top": 50, "bottom": 65, "containLabel": true },
-        "legend": { "textStyle": { "color": "#ccc", "fontSize": 11 }, "top": 25, "left": "center", "type": "scroll" },
+        "legend": { "textStyle": { "color": "#e8e8e8", "fontSize": 11 }, "top": 25, "left": "center", "type": "scroll" },
         "toolbox": {
             "feature": {
                 "restore": { "title": "Reset zoom" },
@@ -134,7 +134,7 @@ pub(crate) fn chart_defaults() -> serde_json::Value {
                 // neither saying which. The toolbox keeps only what acts on
                 // the chart itself, which is zoom, undo and reset.
             },
-            "iconStyle": { "borderColor": "#aaa" },
+            "iconStyle": { "borderColor": "#c8c8c8" },
             "emphasis": { "iconStyle": { "borderColor": "#f7931a" } },
             "right": 10, "top": 0,
             "itemSize": 14
@@ -188,7 +188,7 @@ pub(crate) fn data_zoom() -> serde_json::Value {
             // the grab target was thinner than a scrollbar.
             "type": "slider", "start": 0, "end": 100, "height": 32, "bottom": 8,
             "borderColor": "#333", "fillerColor": "rgba(247,147,26,0.15)",
-            "handleStyle": { "color": "#f7931a" }, "textStyle": { "color": "#aaa", "fontSize": 10 }
+            "handleStyle": { "color": "#f7931a" }, "textStyle": { "color": "#d4d4d4", "fontSize": 10 }
         }
     ])
 }
@@ -211,7 +211,7 @@ pub(crate) fn x_axis_for(
 ) -> serde_json::Value {
     if is_daily {
         let mut label = json!({
-            "color": "#aaa",
+            "color": "#d4d4d4",
             // Thin the labels out rather than letting them collide, which
             // is what produced the odd 9-month gaps between ticks on ALL.
             "hideOverlap": true,
@@ -228,13 +228,13 @@ pub(crate) fn x_axis_for(
             "type": "category",
             "data": categories,
             "axisLabel": label,
-            "axisLine": { "lineStyle": { "color": "#555" } }
+            "axisLine": { "lineStyle": { "color": "#7a7a7a" } }
         })
     } else {
         json!({
             "type": "time",
             "axisLabel": {
-                "color": "#aaa",
+                "color": "#d4d4d4",
                 "hideOverlap": true,
                 // Per level, because a time axis picks its own tick
                 // granularity from the span and then formats every level with
@@ -255,7 +255,7 @@ pub(crate) fn x_axis_for(
                     "none": "{d} {MMM} {HH}:{mm}"
                 }
             },
-            "axisLine": { "lineStyle": { "color": "#555" } }
+            "axisLine": { "lineStyle": { "color": "#7a7a7a" } }
         })
     }
 }
@@ -413,10 +413,10 @@ pub(crate) fn y_axis(name: &str) -> serde_json::Value {
     json!({
         "type": "value",
         "name": name,
-        "nameTextStyle": { "color": "#aaa" },
-        "axisLabel": { "color": "#aaa" },
-        "axisLine": { "lineStyle": { "color": "#555" } },
-        "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.20)", "type": "dashed" } }
+        "nameTextStyle": { "color": "#d4d4d4" },
+        "axisLabel": { "color": "#d4d4d4" },
+        "axisLine": { "lineStyle": { "color": "#7a7a7a" } },
+        "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.28)", "type": "dashed" } }
     })
 }
 
@@ -860,7 +860,7 @@ pub(crate) fn y_axis_si(name: &str) -> serde_json::Value {
     if let Some(o) = axis.as_object_mut() {
         o.insert(
             "axisLabel".to_string(),
-            json!({ "color": "#aaa", "formatter": SI_AXIS_SENTINEL }),
+            json!({ "color": "#d4d4d4", "formatter": SI_AXIS_SENTINEL }),
         );
     }
     axis
@@ -3477,7 +3477,7 @@ mod tests {
                  solved with GRID_RIGHT instead"
             );
         }
-        assert_eq!(daily["axisLabel"]["color"], "#aaa");
+        assert_eq!(daily["axisLabel"]["color"], "#d4d4d4");
     }
 
     /// `chart_defaults` must read the constant rather than repeat a literal,

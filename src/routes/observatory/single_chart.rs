@@ -167,14 +167,14 @@ fn UnknownChart(slug: Signal<String>) -> impl IntoView {
         <Meta name="robots" content="noindex"/>
         <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-8 text-center">
             <h1 class="text-xl text-white font-semibold mb-2">"No such chart"</h1>
-            <p class="text-sm text-white/50 mb-6">
+            <p class="text-sm text-white/70 mb-6">
                 "There is no chart called \"" {move || slug.get()} "\"."
             </p>
             <div class="flex flex-wrap gap-2 justify-center">
-                <a href="/observatory/charts/network" class="text-sm px-3 py-1.5 rounded-lg bg-white/5 text-white/70 hover:text-[#f7931a] transition-colors">"Network"</a>
-                <a href="/observatory/charts/fees" class="text-sm px-3 py-1.5 rounded-lg bg-white/5 text-white/70 hover:text-[#f7931a] transition-colors">"Fees"</a>
-                <a href="/observatory/charts/mining" class="text-sm px-3 py-1.5 rounded-lg bg-white/5 text-white/70 hover:text-[#f7931a] transition-colors">"Mining"</a>
-                <a href="/observatory/charts/embedded" class="text-sm px-3 py-1.5 rounded-lg bg-white/5 text-white/70 hover:text-[#f7931a] transition-colors">"Embedded Data"</a>
+                <a href="/observatory/charts/network" class="text-sm px-3 py-1.5 rounded-lg bg-white/5 text-white/85 hover:text-[#f7931a] transition-colors">"Network"</a>
+                <a href="/observatory/charts/fees" class="text-sm px-3 py-1.5 rounded-lg bg-white/5 text-white/85 hover:text-[#f7931a] transition-colors">"Fees"</a>
+                <a href="/observatory/charts/mining" class="text-sm px-3 py-1.5 rounded-lg bg-white/5 text-white/85 hover:text-[#f7931a] transition-colors">"Mining"</a>
+                <a href="/observatory/charts/embedded" class="text-sm px-3 py-1.5 rounded-lg bg-white/5 text-white/85 hover:text-[#f7931a] transition-colors">"Embedded Data"</a>
             </div>
         </div>
     }
@@ -526,16 +526,16 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
         <div class="mb-4 flex items-center gap-2 text-sm">
             <a
                 href=meta.category.page_path()
-                class="text-white/40 hover:text-[#f7931a] transition-colors"
+                class="text-white/60 hover:text-[#f7931a] transition-colors"
             >
                 {meta.category.label()} " charts"
             </a>
-            <span class="text-white/20">"/"</span>
-            <span class="text-white/60">{meta.title}</span>
+            <span class="text-white/40">"/"</span>
+            <span class="text-white/80">{meta.title}</span>
         </div>
 
         <div class=move || if rail_open.get() {
-            "grid grid-cols-1 lg:grid-cols-[1fr_15rem] gap-3 lg:gap-4 items-start"
+            "grid grid-cols-1 lg:grid-cols-[1fr_17rem] gap-3 lg:gap-4 items-start"
         } else {
             "grid grid-cols-1 gap-3 lg:gap-4 items-start"
         }>
@@ -554,7 +554,7 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                         // The same one-liner the card shows, switching with
                         // the range the way chart_desc does on the pages, so
                         // the two views describe the metric identically.
-                        <p class="text-sm text-white/60 mt-0.5">{move || {
+                        <p class="text-sm text-white/75 mt-0.5">{move || {
                             if uses_daily_aggregates(range_to_blocks(&range.get())) {
                                 meta.desc_daily
                             } else {
@@ -599,7 +599,7 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                         </Show>
                         <RailRange/>
                         <button
-                            class="hidden lg:inline-flex items-center text-white/40 hover:text-[#f7931a] transition-colors cursor-pointer p-1 rounded-md hover:bg-white/5 mt-0.5"
+                            class="hidden lg:inline-flex items-center text-white/60 hover:text-[#f7931a] transition-colors cursor-pointer p-1 rounded-md hover:bg-white/5 mt-0.5"
                             title=move || if rail_open.get() { "Hide the side panel and widen the chart" } else { "Show the side panel" }
                             on:click=move |_| set_rail_open.update(|v| *v = !*v)
                         >
@@ -637,8 +637,8 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                     <Show when=move || daily_gap.get()>
                         <div class="absolute inset-0 flex items-center justify-center bg-[#0d2137] rounded-xl px-6">
                             <div class="text-center max-w-sm">
-                                <p class="text-white/70 text-sm mb-1">"Not available at this range"</p>
-                                <p class="text-white/40 text-xs">
+                                <p class="text-white/85 text-sm mb-1">"Not available at this range"</p>
+                                <p class="text-white/60 text-xs">
                                     "This chart is computed per block, so it needs a range short
                                      enough to load individual blocks. Pick 1m or shorter."
                                 </p>
@@ -647,20 +647,20 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                     </Show>
                     <Show when=move || !daily_gap.get() && (option.get().is_empty() || data_loading.get())>
                         <div class="absolute inset-0 flex items-center justify-center bg-[#0d2137] rounded-xl">
-                            <span class="text-xs text-white/30">"Mining blocks..."</span>
+                            <span class="text-xs text-white/50">"Mining blocks..."</span>
                         </div>
                     </Show>
                 </div>
 
                 {matches!(meta.source, Source::FullnessDist | Source::TimeDist).then(|| view! {
                     <div class="mt-3 flex items-center gap-2">
-                        <span class="text-xs text-white/40">"Show as"</span>
+                        <span class="text-xs text-white/60">"Show as"</span>
                         <button
-                            class=move || if pct_mode.get() { "text-xs px-2 py-1 rounded-md bg-[#f7931a]/20 text-[#f7931a] cursor-pointer" } else { "text-xs px-2 py-1 rounded-md bg-white/5 text-white/50 cursor-pointer" }
+                            class=move || if pct_mode.get() { "text-xs px-2 py-1 rounded-md bg-[#f7931a]/20 text-[#f7931a] cursor-pointer" } else { "text-xs px-2 py-1 rounded-md bg-white/5 text-white/70 cursor-pointer" }
                             on:click=move |_| set_pct_mode.set(true)
                         >"%"</button>
                         <button
-                            class=move || if pct_mode.get() { "text-xs px-2 py-1 rounded-md bg-white/5 text-white/50 cursor-pointer" } else { "text-xs px-2 py-1 rounded-md bg-[#f7931a]/20 text-[#f7931a] cursor-pointer" }
+                            class=move || if pct_mode.get() { "text-xs px-2 py-1 rounded-md bg-white/5 text-white/70 cursor-pointer" } else { "text-xs px-2 py-1 rounded-md bg-[#f7931a]/20 text-[#f7931a] cursor-pointer" }
                             on:click=move |_| set_pct_mode.set(false)
                         >"count"</button>
                     </div>
@@ -668,13 +668,13 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
 
                 {matches!(meta.source, Source::Fees).then(|| view! {
                     <div class="mt-3 flex items-center gap-2">
-                        <span class="text-xs text-white/40">"Unit"</span>
+                        <span class="text-xs text-white/60">"Unit"</span>
                         <button
-                            class=move || if fee_sats.get() { "text-xs px-2 py-1 rounded-md bg-white/5 text-white/50 cursor-pointer" } else { "text-xs px-2 py-1 rounded-md bg-[#f7931a]/20 text-[#f7931a] cursor-pointer" }
+                            class=move || if fee_sats.get() { "text-xs px-2 py-1 rounded-md bg-white/5 text-white/70 cursor-pointer" } else { "text-xs px-2 py-1 rounded-md bg-[#f7931a]/20 text-[#f7931a] cursor-pointer" }
                             on:click=move |_| set_fee_sats.set(false)
                         >"BTC"</button>
                         <button
-                            class=move || if fee_sats.get() { "text-xs px-2 py-1 rounded-md bg-[#f7931a]/20 text-[#f7931a] cursor-pointer" } else { "text-xs px-2 py-1 rounded-md bg-white/5 text-white/50 cursor-pointer" }
+                            class=move || if fee_sats.get() { "text-xs px-2 py-1 rounded-md bg-[#f7931a]/20 text-[#f7931a] cursor-pointer" } else { "text-xs px-2 py-1 rounded-md bg-white/5 text-white/70 cursor-pointer" }
                             on:click=move |_| set_fee_sats.set(true)
                         >"sats"</button>
                     </div>
@@ -694,7 +694,7 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                     // "Over selected range", not "visible": these follow the
                     // range slice, not the zoom slider, which changes only the
                     // view. Making them follow zoom needs a datazoom handler.
-                    <p class="text-[0.65rem] uppercase tracking-widest text-white/40 mb-2">
+                    <p class="text-[0.65rem] uppercase tracking-widest text-white/70 mb-2">
                         "over selected range"
                     </p>
                     <KeyFacts kpis=kpis unit=meta.unit/>
@@ -730,7 +730,7 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                                 {rel.into_iter().map(|r| view! {
                                     <a
                                         href=format!("/observatory/chart/{}", r.slug)
-                                        class="inline-block px-2.5 py-1.5 rounded-lg bg-white/5 text-sm text-white/70 hover:text-[#f7931a] hover:bg-white/10 transition-colors lg:block lg:px-0 lg:py-0 lg:bg-transparent lg:hover:bg-transparent"
+                                        class="inline-block px-2.5 py-1.5 rounded-lg bg-white/5 text-sm text-white/85 hover:text-[#f7931a] hover:bg-white/10 transition-colors lg:block lg:px-0 lg:py-0 lg:bg-transparent lg:hover:bg-transparent"
                                     >
                                         {r.title}
                                     </a>
@@ -746,12 +746,12 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
         // downloading is what you do after reading, and a paragraph needs the
         // width to be readable.
         <div class=move || if rail_open.get() {
-            "mt-3 lg:mt-4 space-y-3 lg:space-y-4 lg:pr-[15.75rem]"
+            "mt-3 lg:mt-4 space-y-3 lg:space-y-4 lg:pr-[17.75rem]"
         } else {
             "mt-3 lg:mt-4 space-y-3 lg:space-y-4"
         }>
             <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-4">
-                <h2 class="text-[0.7rem] uppercase tracking-widest text-white/55 mb-3">
+                <h2 class="text-[0.7rem] uppercase tracking-widest text-white/75 mb-3">
                     "Get this data"
                 </h2>
                 <div class="flex flex-wrap items-center gap-2">
@@ -779,7 +779,7 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                             move || download_chart_png(&id, meta.title)
                         }
                     />
-                    <span class="text-xs text-white/30 ml-1">
+                    <span class="text-xs text-white/50 ml-1">
                         "exports the selected range, without overlay series"
                     </span>
                 </div>
@@ -792,7 +792,7 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
             // they did not come for. Charts without the long copy fall back
             // to the one-liner rather than an empty heading.
             <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-4 lg:p-5">
-                <h2 class="text-[0.7rem] uppercase tracking-widest text-white/55 mb-3">
+                <h2 class="text-[0.7rem] uppercase tracking-widest text-white/75 mb-3">
                     "About this metric"
                 </h2>
                 {match meta.about {
@@ -803,17 +803,17 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                             // this shows what exists rather than an empty
                             // heading.
                             {copy.definition.map(|d| view! {
-                                <p class="text-sm text-white/70 leading-relaxed">
-                                    <span class="text-white/50">"Definition. "</span>
+                                <p class="text-sm text-white/85 leading-relaxed">
+                                    <span class="text-white/70">"Definition. "</span>
                                     {d}
                                 </p>
                             })}
-                            <p class="text-sm text-white/70 leading-relaxed">
-                                <span class="text-white/50">"How it is measured. "</span>
+                            <p class="text-sm text-white/85 leading-relaxed">
+                                <span class="text-white/70">"How it is measured. "</span>
                                 {copy.technical}
                             </p>
                         </div>
-                        <p class="text-xs text-white/35 mt-3">
+                        <p class="text-xs text-white/55 mt-3">
                             "Measured from my own Bitcoin node. "
                             <a href="/observatory/learn/methodology" class="hover:text-[#f7931a] transition-colors">
                                 "Methodology"
@@ -821,12 +821,12 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                         </p>
                     }.into_any(),
                     None => view! {
-                        <p class="text-sm text-white/70 leading-relaxed max-w-3xl">
-                            <span class="text-white/50">"Definition. "</span>
+                        <p class="text-sm text-white/85 leading-relaxed max-w-3xl">
+                            <span class="text-white/70">"Definition. "</span>
                             {meta.desc_per_block}
                             "."
                         </p>
-                        <p class="text-xs text-white/35 mt-2">
+                        <p class="text-xs text-white/55 mt-2">
                             "Measured from my own Bitcoin node. "
                             <a href="/observatory/learn/methodology" class="hover:text-[#f7931a] transition-colors">
                                 "Methodology"
@@ -870,7 +870,7 @@ fn ScaleSwitch(
                 <InfoTip text="A linear axis spaces values evenly, so 0 to 100 takes the same height as 100 to 200. A logarithmic axis spaces them by ratio, so each step up is a multiplication. Log is the readable choice for anything that grows by multiplying, such as price or difficulty, where a linear axis flattens the early years into a line along the bottom."/>
             })}
             <Show when=move || !axis_label.get().is_empty()>
-                <span class="text-[11px] text-white/35 whitespace-nowrap">
+                <span class="text-[11px] text-white/55 whitespace-nowrap">
                     {move || axis_label.get()}
                 </span>
             </Show>
@@ -914,7 +914,7 @@ fn segmented_button(active: bool) -> &'static str {
     if active {
         "px-2 py-1 text-xs rounded-md bg-[#f7931a] text-[#1a1a2e] font-semibold cursor-pointer"
     } else {
-        "px-2 py-1 text-xs rounded-md text-white/50 hover:text-white/85 hover:bg-white/10 transition-colors cursor-pointer"
+        "px-2 py-1 text-xs rounded-md text-white/70 hover:text-white/95 hover:bg-white/10 transition-colors cursor-pointer"
     }
 }
 
@@ -1029,7 +1029,7 @@ fn RailRange() -> impl IntoView {
                 "Custom"
             </button>
         </div>
-        <p class="text-[0.7rem] text-white/45 mt-1.5 inline-flex items-center gap-1">
+        <p class="text-[0.7rem] text-white/65 mt-1.5 inline-flex items-center gap-1">
             <span class="whitespace-nowrap">{mode}</span>
             <InfoTip text="Short ranges plot one point per block, about one every ten minutes. Longer ranges plot one point per day, averaged from every block in that day, so brief spikes are smoothed away."/>
         </p>
@@ -1045,7 +1045,7 @@ fn ExportButton(
 ) -> impl IntoView {
     view! {
         <button
-            class="text-xs px-3 py-1.5 rounded-lg bg-white/5 text-white/70 hover:text-[#f7931a] hover:bg-white/10 transition-colors cursor-pointer inline-flex items-center gap-1.5"
+            class="text-xs px-3 py-1.5 rounded-lg bg-white/5 text-white/85 hover:text-[#f7931a] hover:bg-white/10 transition-colors cursor-pointer inline-flex items-center gap-1.5"
             title=hint
             on:click=move |_| on_click()
         >
@@ -1077,13 +1077,13 @@ fn RailSection(
             // `list-none` kills the marker in Firefox and Chrome;
             // `::-webkit-details-marker` is still needed for Safari, which
             // would otherwise draw a triangle beside our own chevron.
-            <summary class="text-[0.7rem] uppercase tracking-widest text-white/55 flex items-center gap-1 cursor-pointer list-none [&::-webkit-details-marker]:hidden lg:cursor-default">
+            <summary class="text-[0.7rem] uppercase tracking-widest text-white font-semibold flex items-center gap-1 cursor-pointer list-none [&::-webkit-details-marker]:hidden lg:cursor-default">
                 {title}
                 {(!explain.is_empty()).then(|| view! { <InfoTip text=explain/> })}
                 // The chevron is the only affordance saying this collapses,
                 // so it is hidden where collapsing is pointless.
                 <svg
-                    class="w-3.5 h-3.5 ml-auto text-white/35 transition-transform group-open/sec:rotate-180 lg:hidden"
+                    class="w-3.5 h-3.5 ml-auto text-white/55 transition-transform group-open/sec:rotate-180 lg:hidden"
                     fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"
                 >
                     <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"/>
@@ -1113,7 +1113,7 @@ fn InfoTip(text: &'static str) -> impl IntoView {
         <span class="relative inline-flex group/tip align-middle shrink-0">
             <button
                 type="button"
-                class="w-3.5 h-3.5 rounded-full border border-white/25 text-white/45 hover:text-[#f7931a] hover:border-[#f7931a]/60 focus:text-[#f7931a] focus:border-[#f7931a]/60 focus:outline-none text-[0.6rem] leading-none flex items-center justify-center cursor-help transition-colors normal-case"
+                class="w-3.5 h-3.5 rounded-full border border-white/45 text-white/80 hover:text-[#f7931a] hover:border-[#f7931a]/60 focus:text-[#f7931a] focus:border-[#f7931a]/60 focus:outline-none text-[0.6rem] leading-none flex items-center justify-center cursor-help transition-colors normal-case"
                 aria-label=format!("What this means: {text}")
             >
                 "i"
@@ -1135,7 +1135,7 @@ fn InfoTip(text: &'static str) -> impl IntoView {
             // `z-40` clears the chart canvas and the rail cards. It stays
             // under the navbar's `z-30` stacking context rather than fighting
             // it, which is safe now that nothing opens upward into it.
-            <span class="pointer-events-none absolute top-full left-0 lg:left-auto lg:right-0 mt-1.5 w-56 max-w-[calc(100vw-3rem)] z-40 opacity-0 invisible group-hover/tip:opacity-100 group-hover/tip:visible group-focus-within/tip:opacity-100 group-focus-within/tip:visible group-active/tip:opacity-100 group-active/tip:visible transition-opacity duration-150 bg-[#06131f] border border-white/15 rounded-lg px-2.5 py-2 text-[0.7rem] leading-relaxed text-white/75 font-normal tracking-normal normal-case whitespace-normal text-left shadow-lg shadow-black/50">
+            <span class="pointer-events-none absolute top-full left-0 lg:left-auto lg:right-0 mt-1.5 w-56 max-w-[calc(100vw-3rem)] z-40 opacity-0 invisible group-hover/tip:opacity-100 group-hover/tip:visible group-focus-within/tip:opacity-100 group-focus-within/tip:visible group-active/tip:opacity-100 group-active/tip:visible transition-opacity duration-150 bg-[#06131f] border border-white/15 rounded-lg px-2.5 py-2 text-[0.7rem] leading-relaxed text-white font-normal tracking-normal normal-case whitespace-normal text-left shadow-lg shadow-black/50">
                 {text}
             </span>
         </span>
@@ -1228,7 +1228,7 @@ fn KeyFacts(kpis: Signal<Kpis>, unit: registry::Unit) -> impl IntoView {
             }
             // A zero here would be a claim about the data. This is not.
             Kpis::Unavailable => view! {
-                <p class="text-sm text-white/40">"Not available for this range."</p>
+                <p class="text-sm text-white/60">"Not available for this range."</p>
             }.into_any(),
         }}
     }
@@ -1246,14 +1246,14 @@ fn Fact(
     let hint = fact_hint(label);
     view! {
         <div class="flex items-baseline justify-between gap-3">
-            <span class="text-xs text-white/55 shrink-0 inline-flex items-center gap-1">
+            <span class="text-xs text-white/90 shrink-0 inline-flex items-center gap-1">
                 {label}
                 {(!hint.is_empty()).then(|| view! { <InfoTip text=hint/> })}
             </span>
             <span class="text-right min-w-0">
                 <span class="text-sm text-white font-mono">{value}</span>
                 {note.map(|n| view! {
-                    <span class="block text-[0.7rem] text-white/55 font-mono">{n}</span>
+                    <span class="block text-[0.7rem] text-white/75 font-mono">{n}</span>
                 })}
             </span>
         </div>
@@ -1301,7 +1301,7 @@ fn OverlayToggles(
         Signal::derive(move || registry::comparable_with(meta, daily.get()));
     let never = Signal::derive(|| false);
     view! {
-        <p class="text-[0.6rem] uppercase tracking-widest text-white/30 mb-1.5">
+        <p class="text-[0.6rem] uppercase tracking-widest text-white/50 mb-1.5">
             "Event markers"
         </p>
         <div class="space-y-1.5">
@@ -1326,7 +1326,7 @@ fn OverlayToggles(
                 hint="Dated moments outside the protocol that moved the numbers: exchange failures, country-level bans, the first Ordinals inscriptions."
             />
         </div>
-        <p class="text-[0.6rem] uppercase tracking-widest text-white/30 mt-3 mb-1.5">
+        <p class="text-[0.6rem] uppercase tracking-widest text-white/50 mt-3 mb-1.5">
             "Comparison series"
         </p>
         <div class="space-y-1.5">
@@ -1349,7 +1349,7 @@ fn OverlayToggles(
         // fit in a 15rem rail, and the native control brings its own keyboard
         // handling, type-ahead and mobile picker for nothing.
         <Show when=move || !groups.get().is_empty()>
-            <p class="text-[0.6rem] uppercase tracking-widest text-white/30 mt-3 mb-1.5">
+            <p class="text-[0.6rem] uppercase tracking-widest text-white/50 mt-3 mb-1.5">
                 "Compare with"
             </p>
             <select
@@ -1361,9 +1361,9 @@ fn OverlayToggles(
                 // belt to that brace, since a few platforms honour one and
                 // not the other.
                 class=move || if overlay_holds_axis.get() {
-                    "w-full text-xs bg-white/5 border border-white/10 rounded-md px-2 py-1.5 text-white/30 cursor-not-allowed [color-scheme:dark]"
+                    "w-full text-xs bg-white/5 border border-white/10 rounded-md px-2 py-1.5 text-white/50 cursor-not-allowed [color-scheme:dark]"
                 } else {
-                    "w-full text-xs bg-white/5 border border-white/10 rounded-md px-2 py-1.5 text-white/70 hover:border-white/25 cursor-pointer [color-scheme:dark]"
+                    "w-full text-xs bg-white/5 border border-white/10 rounded-md px-2 py-1.5 text-white/85 hover:border-white/25 cursor-pointer [color-scheme:dark]"
                 }
                 prop:disabled=move || overlay_holds_axis.get()
                 prop:value=move || compare.get()
@@ -1388,7 +1388,7 @@ fn OverlayToggles(
                     key=|(cat, members)| (cat.label(), members.len())
                     let:group
                 >
-                    <optgroup class="bg-[#0d2137] text-white/50" label=group.0.label()>
+                    <optgroup class="bg-[#0d2137] text-white/70" label=group.0.label()>
                         {group.1.iter().map(|c| {
                             // Copied out of the borrow: these are `&'static`
                             // already, and the `selected` closure outlives
@@ -1416,7 +1416,7 @@ fn OverlayToggles(
         // since that is when it applies.
         {move || match compare_meta.get() {
             Some(c) => view! {
-                <p class="text-[0.65rem] text-white/45 mt-1.5 leading-relaxed">
+                <p class="text-[0.65rem] text-white/65 mt-1.5 leading-relaxed">
                     <span class="inline-block w-2 h-2 rounded-full bg-[#60a5fa] mr-1 align-middle"></span>
                     // The same one-liner that chart's own page shows, and it
                     // switches with the range the way that page's does, so a
@@ -1436,7 +1436,7 @@ fn OverlayToggles(
                     // the effect cleared it again.
                     <a
                         href=format!("/observatory/chart/{}", c.slug)
-                        class="text-white/60 hover:text-[#f7931a] underline decoration-white/20 underline-offset-2 transition-colors"
+                        class="text-white/80 hover:text-[#f7931a] underline decoration-white/20 underline-offset-2 transition-colors"
                         on:click=move |_| set_compare.set(String::new())
                     >
                         "Open its chart"
@@ -1444,7 +1444,7 @@ fn OverlayToggles(
                 </p>
             }.into_any(),
             None => view! {
-                <p class="text-[0.6rem] text-white/25 mt-1.5">
+                <p class="text-[0.6rem] text-white/45 mt-1.5">
                     "one at a time: they share the right axis"
                 </p>
             }.into_any(),
@@ -1492,7 +1492,7 @@ fn Toggle(
                     }
                 }
             />
-            <span class="text-sm text-white/60 group-hover:text-white/80 transition-colors truncate">{label}</span>
+            <span class="text-sm text-white/80 group-hover:text-white/90 transition-colors truncate">{label}</span>
         </label>
         // Outside the label, or clicking the icon would toggle the overlay.
         {(!hint.is_empty()).then(|| view! { <InfoTip text=hint/> })}

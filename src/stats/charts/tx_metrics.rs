@@ -282,7 +282,7 @@ pub fn address_type_pct_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
-        "yAxis": { "type": "value", "name": "%", "max": 100, "nameTextStyle": { "color": "#aaa" }, "axisLabel": { "color": "#aaa" }, "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.05)", "type": "dashed" } } },
+        "yAxis": { "type": "value", "name": "%", "max": 100, "nameTextStyle": { "color": "#d4d4d4" }, "axisLabel": { "color": "#d4d4d4" }, "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.05)", "type": "dashed" } } },
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
         "legend": { "show": true },
@@ -326,7 +326,7 @@ pub fn address_type_pct_chart_daily(
 
     build_option(json!({
         "xAxis": x_axis_for(true, &cats),
-        "yAxis": { "type": "value", "name": "%", "max": 100, "nameTextStyle": { "color": "#aaa" }, "axisLabel": { "color": "#aaa" }, "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.05)", "type": "dashed" } } },
+        "yAxis": { "type": "value", "name": "%", "max": 100, "nameTextStyle": { "color": "#d4d4d4" }, "axisLabel": { "color": "#d4d4d4" }, "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.05)", "type": "dashed" } } },
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
         "legend": { "show": true },

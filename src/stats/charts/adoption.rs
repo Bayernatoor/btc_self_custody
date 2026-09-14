@@ -298,9 +298,9 @@ pub fn witness_version_pct_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
         "yAxis": { "type": "value", "name": "%", "max": 100,
-            "nameTextStyle": { "color": "#aaa" },
-            "axisLabel": { "color": "#aaa" },
-            "axisLine": { "lineStyle": { "color": "#555" } },
+            "nameTextStyle": { "color": "#d4d4d4" },
+            "axisLabel": { "color": "#d4d4d4" },
+            "axisLine": { "lineStyle": { "color": "#7a7a7a" } },
             "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.20)", "type": "dashed" } }
         },
         "dataZoom": data_zoom(),
@@ -360,9 +360,9 @@ pub fn witness_version_pct_chart_daily(
     build_option(json!({
         "xAxis": x_axis_for(true, &cats),
         "yAxis": { "type": "value", "name": "%", "max": 100,
-            "nameTextStyle": { "color": "#aaa" },
-            "axisLabel": { "color": "#aaa" },
-            "axisLine": { "lineStyle": { "color": "#555" } },
+            "nameTextStyle": { "color": "#d4d4d4" },
+            "axisLabel": { "color": "#d4d4d4" },
+            "axisLine": { "lineStyle": { "color": "#7a7a7a" } },
             "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.20)", "type": "dashed" } }
         },
         "dataZoom": data_zoom(),
@@ -430,9 +430,9 @@ pub fn witness_version_tx_pct_chart(
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
         "yAxis": { "type": "value", "name": "% of Outputs", "max": 100,
-            "nameTextStyle": { "color": "#aaa" },
-            "axisLabel": { "color": "#aaa" },
-            "axisLine": { "lineStyle": { "color": "#555" } },
+            "nameTextStyle": { "color": "#d4d4d4" },
+            "axisLabel": { "color": "#d4d4d4" },
+            "axisLine": { "lineStyle": { "color": "#7a7a7a" } },
             "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.20)", "type": "dashed" } }
         },
         "dataZoom": data_zoom(),
@@ -501,9 +501,9 @@ pub fn witness_version_tx_pct_chart_daily(
     build_option(json!({
         "xAxis": x_axis_for(true, &cats),
         "yAxis": { "type": "value", "name": "% of Outputs", "max": 100,
-            "nameTextStyle": { "color": "#aaa" },
-            "axisLabel": { "color": "#aaa" },
-            "axisLine": { "lineStyle": { "color": "#555" } },
+            "nameTextStyle": { "color": "#d4d4d4" },
+            "axisLabel": { "color": "#d4d4d4" },
+            "axisLine": { "lineStyle": { "color": "#7a7a7a" } },
             "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.20)", "type": "dashed" } }
         },
         "dataZoom": data_zoom(),
@@ -674,7 +674,7 @@ pub fn taproot_velocity_chart(blocks: &[BlockSummary]) -> serde_json::Value {
                 "markLine": {
                     "silent": true,
                     "data": [{ "yAxis": 0 }],
-                    "lineStyle": { "color": "#aaa", "type": "dashed" },
+                    "lineStyle": { "color": "#d4d4d4", "type": "dashed" },
                     "label": { "show": false }
                 }
             }
@@ -743,7 +743,7 @@ pub fn taproot_velocity_chart_daily(
                 "markLine": {
                     "silent": true,
                     "data": [{ "yAxis": 0 }],
-                    "lineStyle": { "color": "#aaa", "type": "dashed" },
+                    "lineStyle": { "color": "#d4d4d4", "type": "dashed" },
                     "label": { "show": false }
                 }
             }

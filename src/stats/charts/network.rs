@@ -1291,22 +1291,22 @@ pub fn weekday_activity_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         "xAxis": {
             "type": "category",
             "data": day_names,
-            "axisLabel": { "color": "#aaa" },
-            "axisLine": { "lineStyle": { "color": "#555" } }
+            "axisLabel": { "color": "#d4d4d4" },
+            "axisLine": { "lineStyle": { "color": "#7a7a7a" } }
         },
         "yAxis": [
             {
                 "type": "value", "name": "Avg Tx Count",
-                "nameTextStyle": { "color": "#aaa" },
-                "axisLabel": { "color": "#aaa" },
-                "axisLine": { "lineStyle": { "color": "#555" } },
+                "nameTextStyle": { "color": "#d4d4d4" },
+                "axisLabel": { "color": "#d4d4d4" },
+                "axisLine": { "lineStyle": { "color": "#7a7a7a" } },
                 "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.10)", "type": "dashed" } }
             },
             {
                 "type": "value", "name": "Avg Fees (BTC)",
-                "nameTextStyle": { "color": "#aaa" },
-                "axisLabel": { "color": "#aaa" },
-                "axisLine": { "lineStyle": { "color": "#555" } },
+                "nameTextStyle": { "color": "#d4d4d4" },
+                "axisLabel": { "color": "#d4d4d4" },
+                "axisLine": { "lineStyle": { "color": "#7a7a7a" } },
                 "splitLine": { "show": false }
             }
         ],
@@ -1374,22 +1374,22 @@ pub fn weekday_activity_chart_daily(
         "xAxis": {
             "type": "category",
             "data": day_names,
-            "axisLabel": { "color": "#aaa" },
-            "axisLine": { "lineStyle": { "color": "#555" } }
+            "axisLabel": { "color": "#d4d4d4" },
+            "axisLine": { "lineStyle": { "color": "#7a7a7a" } }
         },
         "yAxis": [
             {
                 "type": "value", "name": "Avg Tx Count",
-                "nameTextStyle": { "color": "#aaa" },
-                "axisLabel": { "color": "#aaa" },
-                "axisLine": { "lineStyle": { "color": "#555" } },
+                "nameTextStyle": { "color": "#d4d4d4" },
+                "axisLabel": { "color": "#d4d4d4" },
+                "axisLine": { "lineStyle": { "color": "#7a7a7a" } },
                 "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.10)", "type": "dashed" } }
             },
             {
                 "type": "value", "name": "Avg Fees (BTC)",
-                "nameTextStyle": { "color": "#aaa" },
-                "axisLabel": { "color": "#aaa" },
-                "axisLine": { "lineStyle": { "color": "#555" } },
+                "nameTextStyle": { "color": "#d4d4d4" },
+                "axisLabel": { "color": "#d4d4d4" },
+                "axisLine": { "lineStyle": { "color": "#7a7a7a" } },
                 "splitLine": { "show": false }
             }
         ],

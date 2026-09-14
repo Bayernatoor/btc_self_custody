@@ -727,9 +727,9 @@ pub fn fee_pressure_chart(blocks: &[BlockSummary]) -> serde_json::Value {
             "name": "Weight Utilization (%)",
             "nameLocation": "center",
             "nameGap": 30,
-            "nameTextStyle": { "color": "#aaa" },
-            "axisLabel": { "color": "#aaa" },
-            "axisLine": { "lineStyle": { "color": "#555" } },
+            "nameTextStyle": { "color": "#d4d4d4" },
+            "axisLabel": { "color": "#d4d4d4" },
+            "axisLine": { "lineStyle": { "color": "#7a7a7a" } },
             "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.20)", "type": "dashed" } }
         },
         "yAxis": y_axis("Median Fee Rate (sat/vB)"),
@@ -925,8 +925,8 @@ pub fn halving_era_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         "xAxis": {
             "type": "category",
             "data": metrics,
-            "axisLabel": { "color": "#aaa" },
-            "axisLine": { "lineStyle": { "color": "#555" } }
+            "axisLabel": { "color": "#d4d4d4" },
+            "axisLine": { "lineStyle": { "color": "#7a7a7a" } }
         },
         "yAxis": y_axis("% of peak"),
         "tooltip": {
@@ -1030,8 +1030,8 @@ pub fn halving_era_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     build_option(json!({
         "xAxis": {
             "type": "category", "data": metrics,
-            "axisLabel": { "color": "#aaa" },
-            "axisLine": { "lineStyle": { "color": "#555" } }
+            "axisLabel": { "color": "#d4d4d4" },
+            "axisLine": { "lineStyle": { "color": "#7a7a7a" } }
         },
         "yAxis": y_axis("% of peak"),
         "tooltip": {
