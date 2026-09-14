@@ -307,9 +307,18 @@ pub fn median_fee_rate_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 }
 
 /// Median fee rate over time (daily).
-/// DailyAggregate doesn't store median_fee_rate directly, so this approximates
-/// using total_fees / total_tx / avg_vsize. This is the average fee rate,
-/// not the true median, but it's a reasonable proxy for daily granularity.
+///
+/// Reads `avg_median_fee_rate`, the mean of each block's own median, which the
+/// ingest computes and stores.
+///
+/// This used to approximate, on a comment claiming the column did not exist.
+/// It does, and the sibling fee-band chart in this file was already reading
+/// it. The approximation divided a daily fee total by a transaction count and
+/// a vsize guessed as 75% of block size, and it was not close: on 2024-04-20
+/// the stored median is 880.163 sat/vB and the proxy gave 0.183, low by
+/// essentially the whole value. The axis said "(approx)" while being wrong by
+/// three orders of magnitude, which reads as precision rather than as a
+/// warning.
 pub fn median_fee_rate_chart_daily(
     days: &[DailyAggregate],
 ) -> serde_json::Value {
@@ -318,22 +327,9 @@ pub fn median_fee_rate_chart_daily(
     }
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    // Approximate: total_fees / (total_tx * avg_vsize_per_tx)
-    // avg_vsize ≈ avg_size * 0.75 (SegWit discount estimate)
     let vals: Vec<f64> = days
         .iter()
-        .map(|d| {
-            let total_tx = d.avg_tx_count * d.block_count as f64;
-            let avg_vsize = d.avg_size * 0.75; // approximate vsize from size
-            if total_tx > 1.0 && avg_vsize > 0.0 {
-                let avg_fee_per_tx = d.total_fees as f64 / total_tx;
-                let avg_tx_vsize = avg_vsize / d.avg_tx_count;
-                let rate = avg_fee_per_tx / avg_tx_vsize;
-                (rate * 100.0).round() / 100.0
-            } else {
-                0.0
-            }
-        })
+        .map(|d| round(d.avg_median_fee_rate, 2))
         .collect();
 
     let ma = moving_average(&vals, 7);
@@ -347,7 +343,7 @@ pub fn median_fee_rate_chart_daily(
 
     build_option(json!({
         "xAxis": x_axis_for(true, &cats),
-        "yAxis": y_axis("sat/vB (approx)"),
+        "yAxis": y_axis("sat/vB"),
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
         "series": [
@@ -807,7 +803,12 @@ pub fn fee_spike_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         "legend": { "show": true },
         "series": [
             {
-                "name": "144-block Avg", "type": "line", "data": ma_data,
+                // "MA", not "Avg". `kpi::is_moving_average` matches on " ma",
+            // "moving average" and a trailing "ma", so this was the one
+            // companion series in the codebase it did not recognise, and the
+            // key figures reported the smoothing line instead of the spikes
+            // the chart exists to show.
+            "name": "144-block MA", "type": "line", "data": ma_data,
                 "lineStyle": { "width": 2, "color": DATA_COLOR },
                 "itemStyle": { "color": DATA_COLOR }, "symbol": "none"
             },

@@ -461,12 +461,27 @@
             }
             // Custom tooltip: show block height in per-block mode, format values
             if (opts.tooltip && opts.tooltip.trigger === 'axis' && !opts.tooltip.formatter) {
-                var yName = '';
+                // Per series, not per chart. A comparison series sits on the
+                // right axis with its own unit, and reading the unit off
+                // yAxis[0] labelled a transaction count as "3354.00%" because
+                // the chart it was laid over happened to be a percentage.
+                var axisNames = [];
                 if (opts.yAxis) {
-                    var ya = Array.isArray(opts.yAxis) ? opts.yAxis[0] : opts.yAxis;
-                    yName = (ya && ya.name) || '';
+                    var axes = Array.isArray(opts.yAxis) ? opts.yAxis : [opts.yAxis];
+                    for (var ai = 0; ai < axes.length; ai++) {
+                        axisNames.push((axes[ai] && axes[ai].name) || '');
+                    }
                 }
-                var isPct = yName.indexOf('%') !== -1;
+                var seriesAxis = [];
+                if (Array.isArray(opts.series)) {
+                    for (var sj = 0; sj < opts.series.length; sj++) {
+                        seriesAxis.push((opts.series[sj] || {}).yAxisIndex || 0);
+                    }
+                }
+                function isPctSeries(seriesIndex) {
+                    var name = axisNames[seriesAxis[seriesIndex] || 0] || '';
+                    return name.indexOf('%') !== -1;
+                }
                 var chartEl = el;
                 opts.tooltip.formatter = function(params) {
                     try {
@@ -524,7 +539,7 @@
                             formatted = NO_VALUE;
                         } else if (typeof val !== 'number') {
                             formatted = val;
-                        } else if (isPct) {
+                        } else if (isPctSeries(si)) {
                             formatted = parseFloat(val.toPrecision(10)).toFixed(2) + '%';
                         } else if (Number.isInteger(val)) {
                             formatted = val.toLocaleString();

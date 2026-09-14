@@ -1753,20 +1753,41 @@ pub fn apply_comparison(
             o.entry("yAxisIndex").or_insert(json!(0));
         }
     }
-    arr.push(json!({
+    // Drawn the way its own chart draws it. Forcing everything to a smoothed
+    // line turned the difficulty-adjustment series, which is sparse bars at
+    // retargets and null in between, into a continuous curve through data
+    // that does not exist.
+    let bars = other
+        .get("series")
+        .and_then(|s| s.as_array())
+        .and_then(|a| a.first())
+        .and_then(|s| s.get("type"))
+        .and_then(|t| t.as_str())
+        == Some("bar");
+    let mut series = json!({
         "name": label,
-        "type": "line",
+        "type": if bars { "bar" } else { "line" },
         "yAxisIndex": axis_idx,
         "data": data,
-        "connectNulls": true,
-        "lineStyle": {
-            "color": COMPARISON_COLOR, "width": 1.5, "opacity": 0.85
-        },
         "itemStyle": { "color": COMPARISON_COLOR },
-        "symbol": "none",
-        "smooth": true,
         "z": 1
-    }));
+    });
+    if let Some(o) = series.as_object_mut() {
+        if bars {
+            o.insert("barMaxWidth".into(), json!(6));
+        } else {
+            o.insert(
+                "lineStyle".into(),
+                json!({ "color": COMPARISON_COLOR, "width": 1.5, "opacity": 0.85 }),
+            );
+            o.insert("symbol".into(), json!("none"));
+            o.insert("smooth".into(), json!(true));
+            // No `connectNulls`. A gap in the compared chart is a gap in its
+            // data, and bridging it draws a line the source never claimed.
+            o.insert("connectNulls".into(), json!(false));
+        }
+    }
+    arr.push(series);
     obj.insert("series".into(), json!(arr));
     // Two unlabelled lines is a puzzle rather than a comparison.
     if let Some(l) = obj.get_mut("legend").and_then(|l| l.as_object_mut()) {
@@ -2613,6 +2634,47 @@ mod tests {
             "exactly one right axis, held by the overlay"
         );
         assert_eq!(v["yAxis"][1]["name"], "USD");
+    }
+
+    /// A comparison is drawn the way its own chart draws it.
+    ///
+    /// Everything used to become a smoothed line with `connectNulls`, which
+    /// turned difficulty adjustment, sparse bars at retargets with nulls
+    /// between, into a continuous curve through data that does not exist.
+    #[test]
+    fn a_comparison_keeps_the_shape_of_its_source() {
+        let mut v = daily_chart(&[1.0, 2.0, 3.0]);
+        let mut bars = daily_chart(&[10.0, 20.0, 30.0]);
+        bars["series"][0]["type"] = json!("bar");
+        assert!(apply_comparison(&mut v, &bars, "Adjustment", "%"));
+        let laid = &v["series"][1];
+        assert_eq!(laid["type"], "bar");
+        assert!(laid.get("smooth").is_none(), "a bar was smoothed");
+        assert!(laid.get("connectNulls").is_none());
+
+        // A line source still arrives as a line.
+        let mut w = daily_chart(&[1.0, 2.0, 3.0]);
+        assert!(apply_comparison(
+            &mut w,
+            &daily_chart(&[9.0, 8.0, 7.0]),
+            "Other",
+            "count"
+        ));
+        assert_eq!(w["series"][1]["type"], "line");
+    }
+
+    /// A gap in the compared chart is a gap in its data. Bridging it draws a
+    /// line the source never claimed.
+    #[test]
+    fn a_comparison_does_not_bridge_gaps_in_its_source() {
+        let mut v = daily_chart(&[1.0, 2.0, 3.0]);
+        let mut sparse = daily_chart(&[10.0, 20.0, 30.0]);
+        sparse["series"][0]["data"] =
+            json!([10.0, serde_json::Value::Null, 30.0]);
+        assert!(apply_comparison(&mut v, &sparse, "Sparse", "count"));
+        assert_eq!(v["series"][1]["connectNulls"], false);
+        // And the gap survives into the plotted data rather than being filled.
+        assert!(v["series"][1]["data"][1].is_null());
     }
 
     /// A daily chart: bare numbers positioned by the category axis.

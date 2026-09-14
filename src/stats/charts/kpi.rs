@@ -145,7 +145,21 @@ fn is_moving_average(s: &serde_json::Value) -> bool {
     n.contains(" ma") || n.contains("moving average") || n.ends_with("ma")
 }
 
+/// Key figures for the metric's own axis, which is the usual case.
 pub fn compute(option_json: &str, shape: Shape) -> Kpis {
+    compute_axis(option_json, shape, 0)
+}
+
+/// Key figures for one axis of a chart.
+///
+/// Axis 0 is the metric. Axis 1 is whatever was laid over it, and a reader
+/// comparing two series wants the same five numbers for both: an overlay you
+/// can see the shape of but not read the peak of is half a comparison.
+///
+/// `shape` is the *compared* chart's shape when reading axis 1, not the host
+/// chart's, since it decides whether these read as a series, as bands or as
+/// categories.
+pub fn compute_axis(option_json: &str, shape: Shape, axis: u64) -> Kpis {
     let Ok(opt) = serde_json::from_str::<serde_json::Value>(option_json) else {
         return Kpis::Unavailable;
     };
@@ -166,7 +180,7 @@ pub fn compute(option_json: &str, shape: Shape) -> Kpis {
     let series: Vec<serde_json::Value> = series
         .iter()
         .filter(|s| {
-            s.get("yAxisIndex").and_then(|i| i.as_u64()).unwrap_or(0) == 0
+            s.get("yAxisIndex").and_then(|i| i.as_u64()).unwrap_or(0) == axis
         })
         .cloned()
         .collect();
@@ -185,16 +199,37 @@ fn single_series(
     opt: &serde_json::Value,
     series: &[serde_json::Value],
 ) -> Kpis {
-    // Prefer the first series that is not a moving average; fall back to the
-    // first with data at all, so a chart made only of averages still reports.
-    let chosen = series
+    // Prefer series that are not moving averages; fall back to everything, so
+    // a chart made only of averages still reports.
+    let metric: Vec<&serde_json::Value> = series
         .iter()
-        .find(|s| !is_moving_average(s) && !series_points(s).is_empty())
-        .or_else(|| series.iter().find(|s| !series_points(s).is_empty()));
-    let Some(s) = chosen else {
-        return Kpis::Unavailable;
+        .filter(|s| !is_moving_average(s) && !series_points(s).is_empty())
+        .collect();
+    let metric = if metric.is_empty() {
+        series
+            .iter()
+            .filter(|s| !series_points(s).is_empty())
+            .collect()
+    } else {
+        metric
     };
-    let pts = series_points(s);
+    if metric.is_empty() {
+        return Kpis::Unavailable;
+    }
+    // Every one of them, not just the first.
+    //
+    // A chart can split one measurement across several series for rendering
+    // reasons. Difficulty adjustment draws "Harder" and "Easier" separately
+    // so the bars can be coloured by sign, and each holds only its own half.
+    // Reading the first meant the average excluded every easing retarget, the
+    // low could never be negative, and the count was short by however many
+    // there were.
+    //
+    // Concatenating is right for that case and harmless where there is one
+    // series. Where there are genuinely several metrics the chart is stacked
+    // or categorical, and neither routes through here.
+    let pts: Vec<Point> =
+        metric.iter().flat_map(|s| series_points(s)).collect();
     if pts.is_empty() {
         return Kpis::Unavailable;
     }
@@ -565,5 +600,90 @@ mod tests {
             {"name": "Price (USD)", "yAxisIndex": 1, "data": [[1, 9.0]]}
         ]}"#;
         assert!(matches!(compute(json, Shape::Line), Kpis::Unavailable));
+    }
+
+    /// A chart may split one measurement across several series so the bars
+    /// can be coloured by sign. Difficulty adjustment draws "Harder" and
+    /// "Easier" separately, each holding only its own half, and reading the
+    /// first meant the average excluded every easing retarget, the low could
+    /// never be negative, and the count was short.
+    #[test]
+    fn a_metric_split_across_series_is_read_whole() {
+        let json = r#"{"series": [
+            {"name": "Harder", "data": [[1, 5.0], [3, 11.0]]},
+            {"name": "Easier", "data": [[2, -27.9], [4, -3.0]]}
+        ]}"#;
+        match compute(json, Shape::Bar) {
+            Kpis::Series {
+                peak,
+                low,
+                observations,
+                average,
+                ..
+            } => {
+                assert_eq!(observations, 4, "counted only one half");
+                assert_eq!(peak.y, 11.0);
+                assert_eq!(low.y, -27.9, "the largest easing never appeared");
+                assert!(
+                    (average - (5.0 + 11.0 - 27.9 - 3.0) / 4.0).abs() < 1e-9
+                );
+            }
+            other => panic!("expected a series: {other:?}"),
+        }
+    }
+
+    /// A moving average is still a smoothing of its neighbour, not a second
+    /// half of the metric, and must stay out of the figures.
+    #[test]
+    fn a_moving_average_is_still_excluded_when_several_series_are_read() {
+        let json = r#"{"series": [
+            {"name": "Fee Rate", "data": [[1, 10.0], [2, 20.0]]},
+            {"name": "144-block MA", "data": [[1, 1000.0], [2, 2000.0]]}
+        ]}"#;
+        match compute(json, Shape::Line) {
+            Kpis::Series {
+                peak, observations, ..
+            } => {
+                assert_eq!(observations, 2);
+                assert_eq!(peak.y, 20.0, "read the smoothing line");
+            }
+            other => panic!("expected a series: {other:?}"),
+        }
+    }
+
+    /// Axis 1 is the comparison, and reading it must give that series'
+    /// figures rather than the metric's. The same filter that keeps an
+    /// overlay out of the metric's numbers is what makes this possible.
+    #[test]
+    fn each_axis_reports_its_own_series() {
+        let json = r#"{"series": [
+            {"name": "Difficulty", "yAxisIndex": 0,
+             "data": [[1, 100.0], [2, 300.0]]},
+            {"name": "Tx Count", "yAxisIndex": 1,
+             "data": [[1, 4000.0], [2, 5000.0]]}
+        ]}"#;
+        match (
+            compute_axis(json, Shape::Line, 0),
+            compute_axis(json, Shape::Line, 1),
+        ) {
+            (Kpis::Series { peak: a, .. }, Kpis::Series { peak: b, .. }) => {
+                assert_eq!(a.y, 300.0, "axis 0 should read the metric");
+                assert_eq!(b.y, 5000.0, "axis 1 should read the comparison");
+            }
+            other => panic!("expected two series: {other:?}"),
+        }
+    }
+
+    /// Asking for an axis nothing is plotted against reports nothing, rather
+    /// than falling back to the metric and labelling it as the comparison.
+    #[test]
+    fn an_axis_with_no_series_reports_nothing() {
+        let json = r#"{"series": [
+            {"name": "Difficulty", "yAxisIndex": 0, "data": [[1, 100.0]]}
+        ]}"#;
+        assert!(matches!(
+            compute_axis(json, Shape::Line, 1),
+            Kpis::Unavailable
+        ));
     }
 }

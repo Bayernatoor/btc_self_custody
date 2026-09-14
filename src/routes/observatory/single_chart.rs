@@ -502,6 +502,16 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
     });
 
     let kpis = Signal::derive(move || kpi::compute(&option.get(), meta.shape));
+    // The same five numbers for the comparison. Seeing the shape of a second
+    // series but not being able to read its peak is half a comparison, and
+    // the reader would otherwise have to open the other chart to get them.
+    // Read off axis 1, with the compared chart's own shape, since that
+    // decides whether they are a series, bands or categories.
+    let compare_kpis = Signal::derive(move || {
+        compare_meta
+            .get()
+            .map(|c| (c, kpi::compute_axis(&option.get(), c.shape, 1)))
+    });
 
     // A chart with no daily builder draws nothing at long ranges. Saying which
     // ranges it supports is the honest version of an empty frame.
@@ -698,6 +708,17 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                         "over selected range"
                     </p>
                     <KeyFacts kpis=kpis unit=meta.unit/>
+                    // Under a rule and behind the comparison's own colour, so
+                    // the two sets are never mistaken for one.
+                    {move || compare_kpis.get().map(|(c, k)| view! {
+                        <div class="border-t border-white/10 mt-3 pt-3">
+                            <p class="text-[0.65rem] uppercase tracking-widest text-white/70 mb-2 flex items-center gap-1.5">
+                                <span class="inline-block w-2 h-2 rounded-full bg-[#60a5fa] shrink-0"></span>
+                                {c.title}
+                            </p>
+                            <KeyFacts kpis=Signal::derive(move || k.clone()) unit=c.unit/>
+                        </div>
+                    })}
                 </RailSection>
 
                 <RailSection
