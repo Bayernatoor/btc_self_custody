@@ -443,6 +443,67 @@ mod tests {
         }
     }
 
+    /// Every series on a daily chart spans the whole category axis.
+    ///
+    /// Daily points are bare numbers positioned by index, and two things
+    /// depend on that index meaning the same thing in every series: the key
+    /// figures date a peak by looking `idx` up in `xAxis.data`, and
+    /// `single_series` now concatenates the metric's series so a measurement
+    /// split across two is read whole. A series shorter than the axis would
+    /// silently shift both.
+    ///
+    /// Per-block charts are exempt: their points carry their own timestamp,
+    /// so a filtered series is self-locating and its index means nothing.
+    #[test]
+    fn daily_series_all_span_the_category_axis() {
+        for (meta, daily, opt) in built_charts() {
+            if !daily {
+                continue;
+            }
+            let Some(cats) = opt
+                .get("xAxis")
+                .and_then(|x| x.get("data"))
+                .and_then(|d| d.as_array())
+            else {
+                continue;
+            };
+            for s in opt["series"].as_array().into_iter().flatten() {
+                let Some(data) = s.get("data").and_then(|d| d.as_array())
+                else {
+                    continue;
+                };
+                // Only positional series: an array element carries its own x.
+                if data.first().is_some_and(|v| v.is_array()) {
+                    continue;
+                }
+                // A series with no data at all is a carrier for a markLine,
+                // which is how the reference lines are drawn. It plots
+                // nothing, so it has no indices to misalign, and the key
+                // figures already skip it.
+                if data.is_empty() {
+                    assert!(
+                        s.get("markLine").is_some(),
+                        "{} series {:?} is empty and carries no markLine, so \
+                         it draws nothing at all",
+                        meta.slug,
+                        s.get("name").and_then(|n| n.as_str()).unwrap_or("?")
+                    );
+                    continue;
+                }
+                assert_eq!(
+                    data.len(),
+                    cats.len(),
+                    "{} series {:?} has {} points against {} categories, so \
+                     its indices do not line up with the dates",
+                    meta.slug,
+                    s.get("name").and_then(|n| n.as_str()).unwrap_or("?"),
+                    data.len(),
+                    cats.len()
+                );
+            }
+        }
+    }
+
     /// **The one that matters.** The picker is driven by metadata and the
     /// drawing is driven by the built option, and they are allowed to
     /// disagree in exactly one direction.
