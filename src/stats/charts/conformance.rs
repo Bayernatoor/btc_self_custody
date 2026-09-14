@@ -443,6 +443,72 @@ mod tests {
         }
     }
 
+    /// Every data array a builder produces survives being serialised and
+    /// parsed back.
+    ///
+    /// The batching defect is now unreachable rather than merely tested:
+    /// `build_data_array_f64` writes `null` for anything non-finite, so an
+    /// unrepresentable value becomes a gap instead of an unparseable array.
+    /// This guards the assembled `Value` for the same class arriving by
+    /// another route, `json!` with a computed float among them.
+    ///
+    /// It deliberately does **not** flag empty series. A filtered scatter
+    /// with no matches is legitimately empty, and from outside that is
+    /// indistinguishable from an array that failed to parse. Trying to tell
+    /// them apart produced a false positive on `fee-spikes` immediately,
+    /// which is why the fix moved to the point of construction.
+    ///
+    /// The data arrays are assembled as **text**, by `write!` into a String,
+    /// and then parsed. `write!` will happily emit `NaN` or `inf` for an f64,
+    /// neither of which is JSON, so one such value makes the whole array
+    /// unparseable and `data_array_value` returns an empty one. The chart
+    /// then renders blank, silently, and the chart-specific test passed
+    /// because indexing a missing element yields null exactly as a real gap
+    /// does.
+    ///
+    /// One assertion across every chart in both resolutions beats a null
+    /// check per builder, because it does not depend on anyone remembering
+    /// that `write!` and `serde_json` disagree about what a float is.
+    #[test]
+    fn no_built_chart_contains_a_value_json_cannot_represent() {
+        fn walk(v: &serde_json::Value, path: &str, bad: &mut Vec<String>) {
+            match v {
+                serde_json::Value::Number(n) => {
+                    if n.as_f64().is_some_and(|f| !f.is_finite()) {
+                        bad.push(format!("{path} = {n}"));
+                    }
+                }
+                serde_json::Value::Array(a) => {
+                    for (i, x) in a.iter().enumerate() {
+                        walk(x, &format!("{path}[{i}]"), bad);
+                    }
+                }
+                serde_json::Value::Object(o) => {
+                    for (k, x) in o {
+                        walk(x, &format!("{path}.{k}"), bad);
+                    }
+                }
+                _ => {}
+            }
+        }
+        for (meta, daily, opt) in built_charts() {
+            let at = format!(
+                "{} ({})",
+                meta.slug,
+                if daily { "daily" } else { "per block" }
+            );
+            // Round-trips, so a text-assembled array that failed to parse
+            // shows up as an empty series rather than passing silently.
+            let text = serde_json::to_string(&opt)
+                .unwrap_or_else(|e| panic!("{at} will not serialise: {e}"));
+            let back: serde_json::Value = serde_json::from_str(&text)
+                .unwrap_or_else(|e| panic!("{at} will not parse back: {e}"));
+            let mut bad = Vec::new();
+            walk(&back, "", &mut bad);
+            assert!(bad.is_empty(), "{at} carries non-finite numbers: {bad:?}");
+        }
+    }
+
     /// Every series on a daily chart spans the whole category axis.
     ///
     /// Daily points are bare numbers positioned by index, and two things

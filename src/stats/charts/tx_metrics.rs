@@ -162,23 +162,44 @@ pub fn batching_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     //
     // `segwit` and `rbf` already subtract the coinbase for the same reason;
     // this was the outlier.
-    let per_real_tx = |count: u64, tx_count: u64| {
-        match tx_count.checked_sub(1).filter(|n| *n > 0) {
-            Some(real) => round(count as f64 / real as f64, 2),
-            // A block with only a coinbase has no transactions to average
-            // over. Zero would read as "nothing was batched here".
-            None => f64::NAN,
-        }
+    // `Option`, not NaN. NaN is not representable in JSON and
+    // `build_data_array_f64` writes it with `write!`, so a single
+    // coinbase-only block emitted the literal token `NaN`, the whole array
+    // failed to parse, and both series rendered empty. Roughly 90,000 blocks
+    // carry only a coinbase, so any early range hit it.
+    let per_real_tx = |count: u64, tx_count: u64| -> Option<f64> {
+        tx_count
+            .checked_sub(1)
+            .filter(|n| *n > 0)
+            .map(|real| round(count as f64 / real as f64, 2))
     };
     let out_fn = |b: &BlockSummary| per_real_tx(b.output_count, b.tx_count);
     let in_fn = |b: &BlockSummary| per_real_tx(b.input_count, b.tx_count);
-    let out_raw_str = build_data_array_f64(blocks, out_fn);
+    let out_raw_str = build_data_array_opt_f64(blocks, out_fn);
     let out_raw = data_array_value(&out_raw_str);
-    let in_raw_str = build_data_array_f64(blocks, in_fn);
+    let in_raw_str = build_data_array_opt_f64(blocks, in_fn);
     let in_raw = data_array_value(&in_raw_str);
 
-    let out_per_tx: Vec<f64> = blocks.iter().map(out_fn).collect();
-    let in_per_tx: Vec<f64> = blocks.iter().map(in_fn).collect();
+    // The moving average takes plain floats, and a block with nothing to
+    // measure should neither count as zero nor poison the window. Zero would
+    // drag the average toward a value no block had; NaN would spread across
+    // all 144 positions the window touches. Carrying the previous reading is
+    // the least wrong of the three for a smoothing line.
+    let carry_forward = |vals: &[Option<f64>]| -> Vec<f64> {
+        let mut last = 0.0;
+        vals.iter()
+            .map(|v| {
+                if let Some(x) = v {
+                    last = *x;
+                }
+                last
+            })
+            .collect()
+    };
+    let out_opt: Vec<Option<f64>> = blocks.iter().map(out_fn).collect();
+    let in_opt: Vec<Option<f64>> = blocks.iter().map(in_fn).collect();
+    let out_per_tx = carry_forward(&out_opt);
+    let in_per_tx = carry_forward(&in_opt);
     let out_ma = moving_average(&out_per_tx, 144);
     let in_ma = moving_average(&in_per_tx, 144);
     let out_ma_str = build_ma_array(blocks, &out_ma);
@@ -768,6 +789,38 @@ pub fn tx_type_evolution_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 mod utxo_tests {
     use super::*;
 
+    /// One coinbase-only block in a range must not take the other points
+    /// with it. NaN made the whole array unparseable, so a single empty block
+    /// anywhere in view blanked both series, and about 90,000 blocks carry
+    /// only a coinbase.
+    #[test]
+    fn one_empty_block_does_not_blank_the_range() {
+        let blocks = vec![
+            BlockSummary {
+                tx_count: 3,
+                output_count: 6,
+                input_count: 4,
+                ..Default::default()
+            },
+            BlockSummary {
+                tx_count: 1,
+                ..Default::default()
+            },
+            BlockSummary {
+                tx_count: 5,
+                output_count: 12,
+                input_count: 8,
+                ..Default::default()
+            },
+        ];
+        let chart = batching_chart(&blocks);
+        let data = chart["series"][0]["data"].as_array().expect("a data array");
+        assert_eq!(data.len(), 3, "the array failed to parse");
+        assert_eq!(data[0][1].as_f64(), Some(3.0));
+        assert!(data[1][1].is_null(), "the empty block should be a gap");
+        assert_eq!(data[2][1].as_f64(), Some(3.0));
+    }
+
     /// `tx_count` includes the coinbase and `output_count` does not, so
     /// dividing one by the other measured a numerator against a population it
     /// never came from. 1.46% low on average and 50% low on the 12,777 blocks
@@ -800,16 +853,18 @@ mod utxo_tests {
             ..Default::default()
         };
         let chart = batching_chart(std::slice::from_ref(&b));
-        let point = &chart["series"][0]["data"][0];
-        // NaN cannot be represented in JSON, so the builder emits null for
-        // it, which is also what ECharts wants for a gap.
-        let value = point
-            .as_array()
-            .map(|a| a[1].clone())
-            .unwrap_or_else(|| point.clone());
+        let data = chart["series"][0]["data"].as_array().expect("a data array");
+        // The point that matters: the array still has its point. The first
+        // version of this returned NaN, which `write!` emits as the literal
+        // token `NaN`, so the whole array failed to parse and came back
+        // empty. This test passed anyway, because indexing a missing element
+        // also yields null. Assert the length first, or the null below proves
+        // nothing.
+        assert_eq!(data.len(), 1, "the series was emptied by a parse failure");
         assert!(
-            value.is_null(),
-            "a block with no real transactions reported {value:?}"
+            data[0][1].is_null(),
+            "a block with no real transactions reported {:?}",
+            data[0][1]
         );
     }
 

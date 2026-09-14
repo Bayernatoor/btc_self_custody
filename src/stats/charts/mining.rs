@@ -272,9 +272,9 @@ pub fn hash_rate_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let raw = data_array_value(&raw_str);
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
-        // SI-abbreviated rather than a fixed unit: this runs from a few
-        // hundred thousand hashes a second at genesis to nine hundred
-        // quintillion today, so any divisor is wrong at one end.
+        // SI-abbreviated rather than a fixed unit: difficulty 1 implies
+        // about 7.2 million hashes a second, against nine hundred quintillion
+        // today, so any fixed divisor is wrong at one end.
         "yAxis": y_axis_si("Hashes/sec"),
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
@@ -478,51 +478,6 @@ pub fn difficulty_adjustment_chart_daily(
               "itemStyle": { "color": "#ef4444" } }
         ]
     }))
-}
-
-/// Blocks found per day against the 144 the protocol aims for.
-///
-/// Difficulty holds the *average* at ten minutes, and this is what that
-/// average is made of. Any single day is chance: the last five years run from
-/// 58 blocks to 197, averaging 145.5. A reader who thinks ten minutes is a
-/// promise learns more here than from the interval chart, which shows the
-/// same randomness one gap at a time.
-///
-/// Per-block ranges have no sensible reading, so this is daily only.
-pub fn mining_luck_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
-    if days.is_empty() {
-        return no_data_chart("Mining Luck");
-    }
-    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let vals: Vec<f64> = days.iter().map(|d| d.block_count as f64).collect();
-    build_option(json!({
-        "xAxis": x_axis_for(true, &cats),
-        "yAxis": y_axis("Blocks"),
-        "dataZoom": data_zoom(),
-        "tooltip": tooltip_axis(),
-        "legend": { "show": true },
-        "series": [
-            { "name": "Blocks found", "type": "bar", "data": vals,
-              "itemStyle": { "color": DATA_COLOR }, "barMaxWidth": 4 },
-            // The target, drawn rather than described. Without it the bars
-            // are a number with nothing to be high or low against.
-            { "name": "Target (144)", "type": "line",
-              "data": vec![144.0; days.len()],
-              "lineStyle": { "width": 2, "color": MA_COLOR, "type": "dashed" },
-              "itemStyle": { "color": MA_COLOR }, "symbol": "none" }
-        ]
-    }))
-}
-
-/// Placeholder for charts that only make sense over daily aggregates.
-///
-/// `Source::Dashboard` needs a per-block builder, and mining luck is a count
-/// per day: at per-block resolution there is no day to count within. Saying
-/// so is better than plotting something that looks like an answer.
-pub fn no_data_for_per_block_ranges(
-    _blocks: &[BlockSummary],
-) -> serde_json::Value {
-    no_data_chart("Mining Luck (daily ranges only)")
 }
 
 #[cfg(test)]

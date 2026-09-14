@@ -311,14 +311,9 @@ pub fn median_fee_rate_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 /// Reads `avg_median_fee_rate`, the mean of each block's own median, which the
 /// ingest computes and stores.
 ///
-/// This used to approximate, on a comment claiming the column did not exist.
-/// It does, and the sibling fee-band chart in this file was already reading
-/// it. The approximation divided a daily fee total by a transaction count and
-/// a vsize guessed as 75% of block size, and it was not close: on 2024-04-20
-/// the stored median is 880.163 sat/vB and the proxy gave 0.183, low by
-/// essentially the whole value. The axis said "(approx)" while being wrong by
-/// three orders of magnitude, which reads as precision rather than as a
-/// warning.
+/// Not derived from daily fee totals and a guessed vsize. That proxy gave
+/// 0.183 sat/vB for 2024-04-20 against a stored median of 880.163, so it is
+/// not an approximation in any useful sense.
 pub fn median_fee_rate_chart_daily(
     days: &[DailyAggregate],
 ) -> serde_json::Value {

@@ -73,7 +73,11 @@ pub enum Kpis {
 
 /// Pull the y value out of one data element, which builders emit either as a
 /// bare number or as `[x, y, ..]` with the extra slot carrying block height.
-fn point_of(idx: usize, v: &serde_json::Value) -> Option<Point> {
+fn point_of(
+    idx: usize,
+    v: &serde_json::Value,
+    x_is_time: bool,
+) -> Option<Point> {
     match v {
         serde_json::Value::Number(n) => Some(Point {
             x: None,
@@ -82,7 +86,12 @@ fn point_of(idx: usize, v: &serde_json::Value) -> Option<Point> {
         }),
         serde_json::Value::Array(a) => match a.as_slice() {
             [x, y, ..] => Some(Point {
-                x: x.as_f64(),
+                // Only where the axis actually is time. A scatter against a
+                // value axis puts its x in the same slot: fee pressure plots
+                // [weight_util_pct, median_fee, height], and reading 95.2 as
+                // a millisecond timestamp dated its peak to 1970-01-01. A
+                // confidently wrong fact reads worse than a missing one.
+                x: if x_is_time { x.as_f64() } else { None },
                 y: y.as_f64()?,
                 idx,
             }),
@@ -118,13 +127,22 @@ fn axis_labels(opt: &serde_json::Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
-fn series_points(s: &serde_json::Value) -> Vec<Point> {
+/// Whether the chart's x axis carries timestamps.
+fn x_axis_is_time(opt: &serde_json::Value) -> bool {
+    let axis = match opt.get("xAxis") {
+        Some(serde_json::Value::Array(a)) => a.first(),
+        other => other,
+    };
+    axis.and_then(|a| a.get("type")).and_then(|t| t.as_str()) == Some("time")
+}
+
+fn series_points(s: &serde_json::Value, x_is_time: bool) -> Vec<Point> {
     s.get("data")
         .and_then(|d| d.as_array())
         .map(|a| {
             a.iter()
                 .enumerate()
-                .filter_map(|(i, v)| point_of(i, v))
+                .filter_map(|(i, v)| point_of(i, v, x_is_time))
                 .collect()
         })
         .unwrap_or_default()
@@ -190,7 +208,9 @@ pub fn compute_axis(option_json: &str, shape: Shape, axis: u64) -> Kpis {
 
     match shape {
         Shape::Donut | Shape::Histogram => categorical(&opt, &series),
-        Shape::StackedAbsolute | Shape::StackedPercent => bands(&series),
+        Shape::StackedAbsolute | Shape::StackedPercent => {
+            bands(&series, x_axis_is_time(&opt))
+        }
         _ => single_series(&opt, &series),
     }
 }
@@ -199,16 +219,19 @@ fn single_series(
     opt: &serde_json::Value,
     series: &[serde_json::Value],
 ) -> Kpis {
+    let x_is_time = x_axis_is_time(opt);
     // Prefer series that are not moving averages; fall back to everything, so
     // a chart made only of averages still reports.
     let metric: Vec<&serde_json::Value> = series
         .iter()
-        .filter(|s| !is_moving_average(s) && !series_points(s).is_empty())
+        .filter(|s| {
+            !is_moving_average(s) && !series_points(s, x_is_time).is_empty()
+        })
         .collect();
     let metric = if metric.is_empty() {
         series
             .iter()
-            .filter(|s| !series_points(s).is_empty())
+            .filter(|s| !series_points(s, x_is_time).is_empty())
             .collect()
     } else {
         metric
@@ -228,8 +251,25 @@ fn single_series(
     // Concatenating is right for that case and harmless where there is one
     // series. Where there are genuinely several metrics the chart is stacked
     // or categorical, and neither routes through here.
-    let pts: Vec<Point> =
-        metric.iter().flat_map(|s| series_points(s)).collect();
+    let mut pts: Vec<Point> = metric
+        .iter()
+        .flat_map(|s| series_points(s, x_is_time))
+        .collect();
+    // Chronological, not concatenated.
+    //
+    // A metric split for rendering arrives as all of one series then all of
+    // the other, and `first`/`last` read that order. On difficulty adjustment
+    // that made "change" the distance from the first rise to the last fall: a
+    // real sequence of -10, +20, -10, +20 reported -30 instead of +30.
+    // Sorting by x restores the order the reader sees.
+    if metric.len() > 1 {
+        pts.sort_by(|a, b| match (a.x, b.x) {
+            (Some(x), Some(y)) => {
+                x.partial_cmp(&y).unwrap_or(std::cmp::Ordering::Equal)
+            }
+            _ => a.idx.cmp(&b.idx),
+        });
+    }
     if pts.is_empty() {
         return Kpis::Unavailable;
     }
@@ -256,13 +296,13 @@ fn single_series(
     }
 }
 
-fn bands(series: &[serde_json::Value]) -> Kpis {
+fn bands(series: &[serde_json::Value], x_is_time: bool) -> Kpis {
     // The latest point of each band, which is what a stacked chart's right
     // edge shows. Bands with no data are skipped rather than counted as zero.
     let mut latest: Vec<(String, f64)> = Vec::new();
     let mut observations = 0usize;
     for s in series {
-        let pts = series_points(s);
+        let pts = series_points(s, x_is_time);
         if pts.is_empty() {
             continue;
         }
@@ -292,9 +332,13 @@ fn bands(series: &[serde_json::Value]) -> Kpis {
 }
 
 fn categorical(opt: &serde_json::Value, series: &[serde_json::Value]) -> Kpis {
+    let x_is_time = x_axis_is_time(opt);
     // A donut carries its labels on the data objects; a histogram carries them
     // on the category axis, positionally.
-    let s = match series.iter().find(|s| !series_points(s).is_empty()) {
+    let s = match series
+        .iter()
+        .find(|s| !series_points(s, x_is_time).is_empty())
+    {
         Some(s) => s,
         None => return Kpis::Unavailable,
     };
@@ -306,7 +350,9 @@ fn categorical(opt: &serde_json::Value, series: &[serde_json::Value]) -> Kpis {
 
     let mut entries: Vec<(String, f64)> = Vec::new();
     for (i, v) in data.iter().enumerate() {
-        let Some(p) = point_of(i, v) else { continue };
+        let Some(p) = point_of(i, v, x_is_time) else {
+            continue;
+        };
         let name = v
             .get("name")
             .and_then(|n| n.as_str())
@@ -342,7 +388,7 @@ mod tests {
 
     #[test]
     fn series_figures_come_from_the_plotted_points() {
-        let json = r#"{"series":[{"name":"TPS","data":[
+        let json = r#"{"xAxis": {"type": "time"}, "series":[{"name":"TPS","data":[
             [1000,3.0,900],[2000,7.0,901],[3000,5.0,902]]}]}"#;
         match compute(json, Shape::Line) {
             Kpis::Series {
@@ -383,7 +429,7 @@ mod tests {
     /// the chart's average would quietly answer a different question.
     #[test]
     fn moving_average_series_is_not_mistaken_for_the_primary() {
-        let json = r#"{"series":[
+        let json = r#"{"xAxis": {"type": "time"}, "series":[
             {"name":"144-block MA","data":[[1000,100.0],[2000,100.0]]},
             {"name":"Fees","data":[[1000,1.0],[2000,3.0]]}]}"#;
         match compute(json, Shape::Line) {
@@ -397,7 +443,7 @@ mod tests {
     /// If every series is an average, report one rather than nothing.
     #[test]
     fn a_chart_made_only_of_averages_still_reports() {
-        let json = r#"{"series":[{"name":"7d MA","data":[[1,2.0],[2,4.0]]}]}"#;
+        let json = r#"{"xAxis": {"type": "time"}, "series":[{"name":"7d MA","data":[[1,2.0],[2,4.0]]}]}"#;
         assert!(matches!(
             compute(json, Shape::Line),
             Kpis::Series {
@@ -409,7 +455,7 @@ mod tests {
 
     #[test]
     fn stacked_reports_total_and_leading_band_not_an_average() {
-        let json = r#"{"series":[
+        let json = r#"{"xAxis": {"type": "time"}, "series":[
             {"name":"P2PKH","data":[[1,10.0],[2,20.0]],"stack":"t"},
             {"name":"P2TR","data":[[1,50.0],[2,60.0]],"stack":"t"}]}"#;
         match compute(json, Shape::StackedAbsolute) {
@@ -432,7 +478,7 @@ mod tests {
 
     #[test]
     fn donut_reports_concentration_from_named_slices() {
-        let json = r#"{"series":[{"name":"Pools","data":[
+        let json = r#"{"xAxis": {"type": "time"}, "series":[{"name":"Pools","data":[
             {"name":"Foundry","value":30.0},{"name":"AntPool","value":70.0}]}]}"#;
         match compute(json, Shape::Donut) {
             Kpis::Categorical {
@@ -473,9 +519,9 @@ mod tests {
         for json in [
             "",
             "{}",
-            r#"{"series":[]}"#,
+            r#"{"xAxis": {"type": "time"}, "series":[]}"#,
             "not json",
-            r#"{"series":[{"data":[]}]}"#,
+            r#"{"xAxis": {"type": "time"}, "series":[{"data":[]}]}"#,
         ] {
             assert_eq!(
                 compute(json, Shape::Line),
@@ -513,8 +559,7 @@ mod tests {
     /// reported date flickers between two dates with the same value.
     #[test]
     fn equal_extremes_resolve_deterministically() {
-        let json =
-            r#"{"series":[{"name":"x","data":[[1,5.0],[2,5.0],[3,5.0]]}]}"#;
+        let json = r#"{"xAxis": {"type": "time"}, "series":[{"name":"x","data":[[1,5.0],[2,5.0],[3,5.0]]}]}"#;
         match compute(json, Shape::Line) {
             Kpis::Series { peak, low, .. } => {
                 assert_eq!(peak.x, Some(1.0));
@@ -577,7 +622,7 @@ mod tests {
     /// laid over it, whatever order the series end up in.
     #[test]
     fn right_axis_series_are_not_mistaken_for_the_metric() {
-        let json = r#"{"series": [
+        let json = r#"{"xAxis": {"type": "time"}, "series": [
             {"name": "Difficulty", "yAxisIndex": 0,
              "data": [[1, 100.0], [2, 200.0]]},
             {"name": "Price (USD)", "yAxisIndex": 1,
@@ -596,10 +641,40 @@ mod tests {
     /// about data the chart is not about.
     #[test]
     fn a_chart_with_nothing_on_the_left_axis_reports_nothing() {
-        let json = r#"{"series": [
+        let json = r#"{"xAxis": {"type": "time"}, "series": [
             {"name": "Price (USD)", "yAxisIndex": 1, "data": [[1, 9.0]]}
         ]}"#;
         assert!(matches!(compute(json, Shape::Line), Kpis::Unavailable));
+    }
+
+    /// A scatter against a value axis puts its x in the same slot a time
+    /// series does. Fee pressure plots [weight_util_pct, median_fee, height],
+    /// and reading 95.2 as a millisecond timestamp dated its peak to
+    /// 1970-01-01 in the Key facts rail.
+    #[test]
+    fn a_value_axis_x_is_not_read_as_a_timestamp() {
+        let json = r#"{"xAxis": {"type": "value"}, "series": [
+            {"name": "Fee pressure", "data": [[95.2, 12.0, 800000],
+                                              [40.1, 3.0, 800001]]}
+        ]}"#;
+        match compute(json, Shape::Scatter) {
+            Kpis::Series { peak, low, .. } => {
+                assert_eq!(peak.y, 12.0);
+                assert!(peak.x.is_none(), "95.2 was read as a timestamp");
+                assert!(low.x.is_none());
+            }
+            other => panic!("expected a series: {other:?}"),
+        }
+        // And a real time axis still carries its timestamp through.
+        let timed = r#"{"xAxis": {"type": "time"}, "series": [
+            {"name": "Difficulty", "data": [[1700000000000.0, 5.0]]}
+        ]}"#;
+        match compute(timed, Shape::Line) {
+            Kpis::Series { peak, .. } => {
+                assert_eq!(peak.x, Some(1700000000000.0))
+            }
+            other => panic!("expected a series: {other:?}"),
+        }
     }
 
     /// A chart may split one measurement across several series so the bars
@@ -609,7 +684,7 @@ mod tests {
     /// never be negative, and the count was short.
     #[test]
     fn a_metric_split_across_series_is_read_whole() {
-        let json = r#"{"series": [
+        let json = r#"{"xAxis": {"type": "time"}, "series": [
             {"name": "Harder", "data": [[1, 5.0], [3, 11.0]]},
             {"name": "Easier", "data": [[2, -27.9], [4, -3.0]]}
         ]}"#;
@@ -632,11 +707,37 @@ mod tests {
         }
     }
 
+    /// Concatenating put all of one series before all of the other, and
+    /// `change` read that order rather than time. A real sequence of -10,
+    /// +20, -10, +20 reported -30 instead of +30.
+    #[test]
+    fn a_split_metric_reports_change_in_time_order() {
+        // Interleaved in time, split by sign for colouring.
+        let json = r#"{"xAxis": {"type": "time"}, "series": [
+            {"name": "Harder", "data": [[2, 20.0], [4, 20.0]]},
+            {"name": "Easier", "data": [[1, -10.0], [3, -10.0]]}
+        ]}"#;
+        match compute(json, Shape::Bar) {
+            Kpis::Series {
+                first,
+                last,
+                observations,
+                ..
+            } => {
+                assert_eq!(observations, 4);
+                assert_eq!(first, -10.0, "the earliest point is at x=1");
+                assert_eq!(last, 20.0, "the latest point is at x=4");
+                assert_eq!(last - first, 30.0, "change read in series order");
+            }
+            other => panic!("expected a series: {other:?}"),
+        }
+    }
+
     /// A moving average is still a smoothing of its neighbour, not a second
     /// half of the metric, and must stay out of the figures.
     #[test]
     fn a_moving_average_is_still_excluded_when_several_series_are_read() {
-        let json = r#"{"series": [
+        let json = r#"{"xAxis": {"type": "time"}, "series": [
             {"name": "Fee Rate", "data": [[1, 10.0], [2, 20.0]]},
             {"name": "144-block MA", "data": [[1, 1000.0], [2, 2000.0]]}
         ]}"#;
@@ -656,7 +757,7 @@ mod tests {
     /// overlay out of the metric's numbers is what makes this possible.
     #[test]
     fn each_axis_reports_its_own_series() {
-        let json = r#"{"series": [
+        let json = r#"{"xAxis": {"type": "time"}, "series": [
             {"name": "Difficulty", "yAxisIndex": 0,
              "data": [[1, 100.0], [2, 300.0]]},
             {"name": "Tx Count", "yAxisIndex": 1,
@@ -678,7 +779,7 @@ mod tests {
     /// than falling back to the metric and labelling it as the comparison.
     #[test]
     fn an_axis_with_no_series_reports_nothing() {
-        let json = r#"{"series": [
+        let json = r#"{"xAxis": {"type": "time"}, "series": [
             {"name": "Difficulty", "yAxisIndex": 0, "data": [[1, 100.0]]}
         ]}"#;
         assert!(matches!(

@@ -145,16 +145,6 @@ pub(super) fn sync_url_to_state(
         .replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&url));
 }
 
-/// Build the full shareable URL for a specific chart, including current state.
-#[cfg(feature = "hydrate")]
-pub fn build_share_url(chart_id: &str) -> String {
-    let window = leptos::prelude::window();
-    let origin = window.location().origin().unwrap_or_default();
-    let pathname = window.location().pathname().unwrap_or_default();
-    let search = window.location().search().unwrap_or_default();
-    format!("{origin}{pathname}{search}#{chart_id}")
-}
-
 /// A shareable link to one chart's own page, carrying the current view.
 ///
 /// The card's copy button used to produce `{grid page}#{card id}`, which

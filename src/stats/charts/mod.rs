@@ -565,10 +565,24 @@ fn set_axis_scale(
     );
 
     if !on {
-        // Hand the linear axis back exactly as the builder configured it.
-        o.remove("min");
-        o.remove("max");
-        o.remove("splitNumber");
+        // Remove only what the log path added.
+        //
+        // This used to strip `min` and `max` unconditionally, on a comment
+        // claiming it handed the axis back as the builder configured it. It
+        // did the opposite: a percentage chart declares `max: 100` so its
+        // bands are read against a fixed frame, and that was being deleted on
+        // every render with log off, which is the default. Hiding one band
+        // then let the axis refit to the remainder, so a 90% band vanishing
+        // rescaled the chart from 0-100 to 0-10. That reaches the existing
+        // multi-chart pages, not just this view.
+        //
+        // The marker is how the two are told apart. Bounds carrying it came
+        // from here; anything else belongs to the builder and is left alone.
+        if o.remove(LOG_BOUNDS_MARKER).is_some() {
+            o.remove("min");
+            o.remove("max");
+            o.remove("splitNumber");
+        }
         o.remove("minorTick");
         o.remove("minorSplitLine");
         return;
@@ -607,6 +621,8 @@ fn set_axis_scale(
         // ALL, difficulty got three gridlines across fourteen decades. This
         // is a hint rather than a guarantee, which is all ECharts offers.
         o.insert("splitNumber".to_string(), json!(LOG_AXIS_SPLITS));
+        // So the switch back knows these bounds are ours to remove.
+        o.insert(LOG_BOUNDS_MARKER.to_string(), json!(true));
         // Minor ticks are the only way to give a log axis structure between
         // its labels, because ECharts labels a log axis at powers of the base
         // and nowhere else. `splitNumber` above is a hint it can only honour
@@ -718,6 +734,11 @@ fn set_log_notice(option: &mut serde_json::Value, dropped: usize) {
 
 /// Marks the notice so it can be removed rather than duplicated on re-apply.
 const LOG_NOTICE_ID: &str = "log-scale-notice";
+
+/// Marks an axis whose bounds this module set, so switching back to linear
+/// removes those and not the builder's own. Not an ECharts option; the double
+/// underscore marks it as ours to anyone reading a serialised option.
+const LOG_BOUNDS_MARKER: &str = "__logBounds";
 
 /// Which way `round_sig` breaks, so a bound never crops the data it is meant
 /// to contain: the lower bound rounds down, the upper rounds up.
@@ -950,8 +971,24 @@ pub(crate) fn build_data_array_f64(
         if i > 0 {
             buf.push(',');
         }
+        // `null` for anything JSON cannot hold. These arrays are assembled
+        // as text and parsed afterwards, and `write!` will happily emit `NaN`
+        // or `inf` for an f64. One of those makes the whole array
+        // unparseable, so `data_array_value` returns an empty one and the
+        // chart renders blank, silently, with no clue which value did it.
+        //
+        // Writing null instead turns that into a gap at the one point that
+        // had no value, which is both survivable and the correct rendering.
+        // Guarding here rather than at each call site is what makes the whole
+        // class unreachable: the batching chart hit it by returning NaN for a
+        // block with no transactions to average over, and 90,000 blocks
+        // qualify.
         let v = value_fn(b);
-        let _ = write!(buf, "[{},{},{}]", ts_ms(b.timestamp), v, b.height);
+        let _ = if v.is_finite() {
+            write!(buf, "[{},{},{}]", ts_ms(b.timestamp), v, b.height)
+        } else {
+            write!(buf, "[{},null,{}]", ts_ms(b.timestamp), b.height)
+        };
     }
     buf.push(']');
     buf
@@ -1710,6 +1747,26 @@ pub fn apply_comparison(
     if !accepts_comparison_series(option) {
         return false;
     }
+    // Refuse a source with more than one real metric, and a source whose x
+    // means something different.
+    //
+    // Only `series[0]` is lifted, so a multi-metric source arrives as one of
+    // its parts under the whole chart's name: comparing the fee spike
+    // detector drew its moving average while the rail reported the spikes,
+    // and comparing difficulty adjustment dropped every easing retarget.
+    //
+    // And sharing dashboard rows does not mean sharing an x domain. Fee
+    // pressure plots block fullness on a value axis, so overlaying it on a
+    // time axis put percentages where milliseconds belong and dated its
+    // extrema to 1970.
+    //
+    // **Temporary, and narrower than the feature should be.** The right fix
+    // is to offer named measurements rather than charts, so "Transaction
+    // Batching: Outputs per Transaction" is selectable and complete. Until
+    // then refusing is the honest answer; see `notes/phase-2-spec.md`.
+    if metric_series_count(other) != 1 || !x_domains_match(option, other) {
+        return false;
+    }
     let Some(data) = other
         .get("series")
         .and_then(|s| s.as_array())
@@ -1794,6 +1851,58 @@ pub fn apply_comparison(
         l.insert("show".into(), json!(true));
     }
     true
+}
+
+/// How many real metrics an option plots, excluding smoothing companions.
+///
+/// Leans on `kpi::is_moving_average`, which matches on the naming convention
+/// every companion series follows. That convention had exactly one exception
+/// and it has been corrected, so the check is currently accurate; it is still
+/// a name-based proxy and the phase-2 contract replaces it with a declared
+/// role.
+fn metric_series_count(option: &serde_json::Value) -> usize {
+    option
+        .get("series")
+        .and_then(|s| s.as_array())
+        .map(|a| {
+            a.iter()
+                .filter(|s| {
+                    let named_ma = s
+                        .get("name")
+                        .and_then(|n| n.as_str())
+                        .map(|n| {
+                            let n = n.to_ascii_lowercase();
+                            n.contains(" ma")
+                                || n.contains("moving average")
+                                || n.ends_with("ma")
+                        })
+                        .unwrap_or(false);
+                    let has_points = s
+                        .get("data")
+                        .and_then(|d| d.as_array())
+                        .is_some_and(|d| !d.is_empty());
+                    !named_ma && has_points
+                })
+                .count()
+        })
+        .unwrap_or(0)
+}
+
+/// Whether two options put the same kind of thing on their x axis.
+fn x_domains_match(a: &serde_json::Value, b: &serde_json::Value) -> bool {
+    let kind = |v: &serde_json::Value| {
+        let axis = match v.get("xAxis") {
+            Some(serde_json::Value::Array(arr)) => arr.first().cloned(),
+            other => other.cloned(),
+        };
+        axis.and_then(|x| {
+            x.get("type").and_then(|t| t.as_str()).map(str::to_string)
+        })
+    };
+    match (kind(a), kind(b)) {
+        (Some(x), Some(y)) => x == y,
+        _ => false,
+    }
 }
 
 /// Whether this option can hold a second series on a right axis without lying.
@@ -2675,6 +2784,49 @@ mod tests {
         assert_eq!(v["series"][1]["connectNulls"], false);
         // And the gap survives into the plotted data rather than being filled.
         assert!(v["series"][1]["data"][1].is_null());
+    }
+
+    /// A percentage chart declares `max: 100` so its bands are read against
+    /// a fixed frame. That was being stripped on every render with log off,
+    /// which is the default, so hiding one band let the axis refit to the
+    /// remainder: a 90% band vanishing rescaled the chart from 0-100 to 0-10.
+    /// It reached the existing multi-chart pages, not just this view.
+    #[test]
+    fn a_builders_own_axis_bounds_survive_the_linear_path() {
+        let mut pct = json!({
+            "yAxis": {"type": "value", "max": 100.0, "min": 0.0},
+            "series": [
+                {"name": "P2PKH", "stack": "t", "data": [60.0, 55.0]},
+                {"name": "P2WPKH", "stack": "t", "data": [40.0, 45.0]}
+            ]
+        });
+        let before = pct.clone();
+        // The default state, which is what almost every render is.
+        apply_scales(&mut pct, &OverlayFlags::default());
+        assert_eq!(
+            pct["yAxis"]["max"], 100.0,
+            "the percentage frame was removed"
+        );
+        assert_eq!(pct["yAxis"]["min"], 0.0);
+        assert_eq!(pct, before, "the linear path changed the axis at all");
+    }
+
+    /// And bounds this module sets for a log axis still come off again, or a
+    /// log view would leave its fitted bounds on a linear chart.
+    #[test]
+    fn log_bounds_are_still_removed_on_the_way_back() {
+        let mut v = json!({
+            "yAxis": {"type": "value"},
+            "series": [{"name": "Count", "data": [[1, 1.0], [2, 1000.0]]}]
+        });
+        apply_log_scale(&mut v, true);
+        assert!(v["yAxis"]["min"].as_f64().is_some(), "log set no bounds");
+        apply_log_scale(&mut v, false);
+        assert!(v["yAxis"].get("min").is_none(), "stale log floor");
+        assert!(v["yAxis"].get("max").is_none(), "stale log ceiling");
+        assert!(v["yAxis"].get("splitNumber").is_none());
+        // And the marker itself does not leak into the option.
+        assert!(v["yAxis"].get(LOG_BOUNDS_MARKER).is_none());
     }
 
     /// A daily chart: bare numbers positioned by the category axis.

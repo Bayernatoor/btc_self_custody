@@ -23,9 +23,9 @@ use crate::stats::charts::registry::{
 };
 use crate::stats::charts::OverlayFlags;
 use crate::stats::server_fns::{
-    fetch_empty_blocks_by_pool, fetch_empty_blocks_monthly,
-    fetch_fullness_histogram, fetch_miner_dominance,
-    fetch_miner_dominance_daily, fetch_stats_summary,
+    fetch_block_time_histogram, fetch_empty_blocks_by_pool,
+    fetch_empty_blocks_monthly, fetch_fullness_histogram,
+    fetch_miner_dominance, fetch_miner_dominance_daily, fetch_stats_summary,
 };
 use crate::stats::types::{uses_daily_aggregates, HistogramBucket, MinerShare};
 
@@ -96,6 +96,65 @@ fn fmt_ms(ms: Option<f64>) -> Option<String> {
 /// Beyond this ratio between the first and last value, a percentage change
 /// stops informing: the number is dominated by how small the baseline was.
 const PCT_MEANINGFUL_RATIO: f64 = 10_000.0;
+
+/// The custom end date as a timestamp, or the tip when there is not one.
+fn to_or_tip(
+    to: Option<&str>,
+    stats: &crate::stats::types::StatsSummary,
+) -> u64 {
+    to.and_then(super::shared::date_to_ts)
+        .map(|t| t + 86_400)
+        .unwrap_or(stats.latest_timestamp)
+}
+
+/// The timestamp window a range actually asks for.
+///
+/// The dashboard resource resolves custom dates; the histogram and mining
+/// resources did not, so they read `range` alone and a custom window became
+/// all of history. Shared here so the three cannot disagree, which is the
+/// narrow version of the one-resolved-range change phase 2 wants.
+fn resolved_window(
+    range: &str,
+    custom_from: &Option<String>,
+    custom_to: &Option<String>,
+    stats: &crate::stats::types::StatsSummary,
+    blocks: u64,
+) -> (u64, u64) {
+    if range == "custom" {
+        if let (Some(f), Some(t)) = (custom_from, custom_to) {
+            if let (Some(from), Some(to)) =
+                (super::shared::date_to_ts(f), super::shared::date_to_ts(t))
+            {
+                // Include the whole end day, as the dashboard resource does.
+                return (from, to + 86_400);
+            }
+        }
+    }
+    (
+        stats.latest_timestamp.saturating_sub(blocks * 600),
+        stats.latest_timestamp,
+    )
+}
+
+/// Which server-side histogram a chart needs over a long range.
+///
+/// The two distribution charts have no daily builder and read pre-bucketed
+/// counts instead, and they read *different* buckets. Naming that here rather
+/// than with a bool is what stops one being fetched for the other.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Buckets {
+    Fullness,
+    Time,
+    None,
+}
+
+/// The buckets themselves, tagged, so the render arm cannot read a fullness
+/// histogram as a block-time one.
+#[derive(Clone)]
+enum Histogram {
+    Fullness(Vec<HistogramBucket>),
+    Time(Vec<HistogramBucket>),
+}
 
 /// Build a chart from the dashboard rows already loaded for this range.
 ///
@@ -213,6 +272,21 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
     // compared with this one, or one with nothing to draw at this range.
     // Resolving it here, on every render, through the registry's single
     // validator is what makes all of those a no-op instead of a broken chart.
+    // Which resolution is actually in play, from the data rather than from
+    // the range name. `range_to_blocks` maps "custom" to 999,999 so it always
+    // reads as daily, while the data resource correctly fetches per-block
+    // rows for a short custom window. Everything downstream that asked the
+    // range string was therefore wrong for every custom range: a two-day
+    // window on a chart with no daily builder built 281 valid points and then
+    // covered them with an "unavailable" overlay.
+    let resolved_daily = Signal::derive(move || match dashboard_data.get() {
+        Some(Ok(DashboardData::Daily(_))) => true,
+        Some(Ok(DashboardData::PerBlock(_))) => false,
+        // Nothing resolved yet: fall back to what the range implies, so the
+        // first paint is not wrong in the common case.
+        _ => uses_daily_aggregates(range_to_blocks(&range.get())),
+    });
+
     let compare_meta = Signal::derive(move || {
         // Price and chain size are applied first and take the right axis, so
         // a comparison cannot be drawn beside them. `apply_comparison`
@@ -233,11 +307,7 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
         if state.overlay_price.get() || state.overlay_chain_size.get() {
             return None;
         }
-        registry::comparison_for(
-            meta,
-            &compare.get(),
-            uses_daily_aggregates(range_to_blocks(&range.get())),
-        )
+        registry::comparison_for(meta, &compare.get(), resolved_daily.get())
     });
     // One occupant at a time, the constraint the price and chain-size
     // toggles already enforce between themselves. A comparison joins that
@@ -268,14 +338,20 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
     });
 
     let needs_mining = matches!(meta.source, Source::Mining(_));
-    let needs_buckets =
-        matches!(meta.source, Source::FullnessDist | Source::TimeDist);
+    let which_buckets = match meta.source {
+        Source::FullnessDist => Buckets::Fullness,
+        Source::TimeDist => Buckets::Time,
+        _ => Buckets::None,
+    };
+    let needs_buckets = !matches!(which_buckets, Buckets::None);
 
     // Both resources are created unconditionally so the component's shape does
     // not depend on the slug, but neither fetches unless this chart needs it.
     // Firing four mining requests to render a TPS chart would be a real cost.
     let mining_data = LocalResource::new(move || {
         let r = range.get();
+        let custom_from = state.custom_from.get();
+        let custom_to = state.custom_to.get();
         async move {
             if !needs_mining {
                 return Err(String::new());
@@ -283,6 +359,22 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
             let stats =
                 fetch_stats_summary().await.map_err(|e| e.to_string())?;
             let n = range_to_blocks(&r);
+            // Heights, not timestamps, for the mining queries. A custom
+            // window is converted through the block interval rather than
+            // being ignored, which is what left this fetching all of history
+            // while the URL advertised two days. Approximate by construction:
+            // the mining charts group by pool and month, so a boundary block
+            // either way does not move the picture.
+            let n = match (r.as_str(), custom_from.as_deref()) {
+                ("custom", Some(f)) => match super::shared::date_to_ts(f) {
+                    Some(from) => (to_or_tip(custom_to.as_deref(), &stats)
+                        .saturating_sub(from)
+                        / 600)
+                        .max(1),
+                    None => n,
+                },
+                _ => n,
+            };
             let from = stats.min_height.max(stats.max_height.saturating_sub(n));
             let empty_monthly =
                 fetch_empty_blocks_monthly(from, stats.max_height)
@@ -311,16 +403,34 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
     // expressed as a per-block/daily pair like the other 53.
     let buckets = LocalResource::new(move || {
         let r = range.get();
+        // Read here so the resource re-runs when the dates change. A custom
+        // window that only tracked `range` fetched from timestamp 0 to the
+        // tip, which is all of history, and never refetched when the dates
+        // were edited because `range` stayed "custom".
+        let cf = state.custom_from.get();
+        let ct = state.custom_to.get();
         async move {
             let n = range_to_blocks(&r);
             if !needs_buckets || !uses_daily_aggregates(n) {
                 return None;
             }
             let stats = fetch_stats_summary().await.ok()?;
-            let from_ts = stats.latest_timestamp.saturating_sub(n * 600);
-            fetch_fullness_histogram(from_ts, stats.latest_timestamp)
-                .await
-                .ok()
+            let (from_ts, to_ts) = resolved_window(&r, &cf, &ct, &stats, n);
+            // Which histogram depends on the chart. Fetching only the
+            // fullness one left time-dist with nothing to read, so its daily
+            // arm returned empty and the page showed a loading state that
+            // never resolved.
+            match which_buckets {
+                Buckets::Fullness => fetch_fullness_histogram(from_ts, to_ts)
+                    .await
+                    .ok()
+                    .map(Histogram::Fullness),
+                Buckets::Time => fetch_block_time_histogram(from_ts, to_ts)
+                    .await
+                    .ok()
+                    .map(Histogram::Time),
+                Buckets::None => None,
+            }
         }
     });
 
@@ -481,7 +591,8 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                     // Long ranges: the distributions come from server-side
                     // buckets rather than from the daily aggregates.
                     (DashboardData::Daily(_), Source::FullnessDist) => {
-                        let Some(Some(b)) = buckets.get() else {
+                        let Some(Some(Histogram::Fullness(b))) = buckets.get()
+                        else {
                             return String::new();
                         };
                         let v = if pct {
@@ -492,7 +603,16 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                         serde_json::to_string(&v).unwrap_or_default()
                     }
                     (DashboardData::Daily(_), Source::TimeDist) => {
-                        String::new()
+                        let Some(Some(Histogram::Time(b))) = buckets.get()
+                        else {
+                            return String::new();
+                        };
+                        let v = if pct {
+                            crate::stats::charts::block_time_histogram_from_buckets_pct(&b)
+                        } else {
+                            crate::stats::charts::block_time_histogram_from_buckets(&b)
+                        };
+                        serde_json::to_string(&v).unwrap_or_default()
                     }
                     // Mining is handled above; the compiler cannot see that.
                     (_, Source::Mining(_)) => String::new(),
@@ -515,10 +635,8 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
 
     // A chart with no daily builder draws nothing at long ranges. Saying which
     // ranges it supports is the honest version of an empty frame.
-    let daily_gap = Signal::derive(move || {
-        !meta.has_daily()
-            && uses_daily_aggregates(range_to_blocks(&range.get()))
-    });
+    let daily_gap =
+        Signal::derive(move || !meta.has_daily() && resolved_daily.get());
 
     let cid = canvas_id(meta.slug);
     let title_tag = format!("{} | Bitcoin Chart | We Hodl BTC", meta.title);
@@ -565,7 +683,7 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                         // the range the way chart_desc does on the pages, so
                         // the two views describe the metric identically.
                         <p class="text-sm text-white/75 mt-0.5">{move || {
-                            if uses_daily_aggregates(range_to_blocks(&range.get())) {
+                            if resolved_daily.get() {
                                 meta.desc_daily
                             } else {
                                 meta.desc_per_block
@@ -707,7 +825,20 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                     <p class="text-[0.65rem] uppercase tracking-widest text-white/70 mb-2">
                         "over selected range"
                     </p>
-                    <KeyFacts kpis=kpis unit=meta.unit/>
+                    // The active unit, not the registry's. The fee chart
+                    // switches between BTC and sats, and passing the static
+                    // declaration printed "2.00M BTC" over a figure that was
+                    // two million satoshis.
+                    <KeyFacts
+                        kpis=kpis
+                        unit=Signal::derive(move || {
+                            if matches!(meta.source, Source::Fees) && fee_sats.get() {
+                                registry::Unit::Sats
+                            } else {
+                                meta.unit
+                            }
+                        })
+                    />
                     // Under a rule and behind the comparison's own colour, so
                     // the two sets are never mistaken for one.
                     {move || compare_kpis.get().map(|(c, k)| view! {
@@ -731,7 +862,7 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                         set_compare=set_compare
                         compare_meta=compare_meta
                         compare_holds_axis=compare_holds_axis
-                        daily=Signal::derive(move || uses_daily_aggregates(range_to_blocks(&range.get())))
+                        daily=resolved_daily
                     />
                 </RailSection>
 
@@ -1188,7 +1319,13 @@ fn fact_hint(label: &str) -> &'static str {
 }
 
 #[component]
-fn KeyFacts(kpis: Signal<Kpis>, unit: registry::Unit) -> impl IntoView {
+fn KeyFacts(
+    kpis: Signal<Kpis>,
+    /// The unit currently plotted, which is not always the registry's: the
+    /// fee chart switches between BTC and sats at the reader's request.
+    #[prop(into)]
+    unit: Signal<registry::Unit>,
+) -> impl IntoView {
     view! {
         {move || match kpis.get() {
             Kpis::Series { average, peak, low, first, last, observations, axis_labels } => {
@@ -1208,7 +1345,7 @@ fn KeyFacts(kpis: Signal<Kpis>, unit: registry::Unit) -> impl IntoView {
                     // label-value rows leaves most of the line empty. Back to
                     // rows in the 15rem rail, where two columns would not fit.
                     <div class="grid grid-cols-2 gap-x-4 gap-y-2 lg:grid-cols-1 lg:gap-0 lg:space-y-2">
-                        <Fact label="average" value=fmt_num(average) note=(unit != registry::Unit::Count).then(|| unit.label().to_string())/>
+                        <Fact label="average" value=fmt_num(average) note=(unit.get() != registry::Unit::Count).then(|| unit.get().label().to_string())/>
                         <Fact label="peak" value=fmt_num(peak.y) note=point_label(&peak, &axis_labels)/>
                         <Fact label="low" value=fmt_num(low.y) note=point_label(&low, &axis_labels)/>
                         <Fact

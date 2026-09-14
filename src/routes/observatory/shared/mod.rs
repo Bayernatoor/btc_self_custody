@@ -15,7 +15,7 @@ pub use drawer::*;
 pub use range::*;
 pub use state::*;
 #[cfg(feature = "hydrate")]
-pub use url_sync::{build_chart_page_url, build_share_url};
+pub use url_sync::build_chart_page_url;
 
 use leptos::portal::Portal;
 use leptos::prelude::*;

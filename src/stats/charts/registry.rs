@@ -1268,7 +1268,7 @@ pub const CHARTS: &[ChartMeta] = &[
     ChartMeta {
         slug: "utxo-growth",
         title: "UTXO Growth Rate",
-        desc_per_block: "Net UTXO set change per block (outputs created minus inputs consumed). Positive means the UTXO set is growing, negative means consolidation",
+        desc_per_block: "Net UTXO set change per block, counting only outputs that can be spent. Positive means the UTXO set is growing, negative means consolidation",
         desc_daily: "Daily net UTXO change across all blocks",
         category: Category::Network,
         unit: Unit::Count,
