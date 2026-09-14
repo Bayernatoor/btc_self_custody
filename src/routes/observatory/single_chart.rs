@@ -822,7 +822,7 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                     // "Over selected range", not "visible": these follow the
                     // range slice, not the zoom slider, which changes only the
                     // view. Making them follow zoom needs a datazoom handler.
-                    <p class="text-[0.65rem] uppercase tracking-widest text-white/70 mb-2">
+                    <p class="text-[0.7rem] uppercase tracking-widest text-white/70 mb-2">
                         "over selected range"
                     </p>
                     // The active unit, not the registry's. The fee chart
@@ -843,7 +843,7 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                     // the two sets are never mistaken for one.
                     {move || compare_kpis.get().map(|(c, k)| view! {
                         <div class="border-t border-white/10 mt-3 pt-3">
-                            <p class="text-[0.65rem] uppercase tracking-widest text-white/70 mb-2 flex items-center gap-1.5">
+                            <p class="text-[0.7rem] uppercase tracking-widest text-white/70 mb-2 flex items-center gap-1.5">
                                 <span class="inline-block w-2 h-2 rounded-full bg-[#60a5fa] shrink-0"></span>
                                 {c.title}
                             </p>
@@ -1182,8 +1182,12 @@ fn RailRange() -> impl IntoView {
             </button>
         </div>
         <p class="text-[0.7rem] text-white/65 mt-1.5 inline-flex items-center gap-1">
-            <span class="whitespace-nowrap">{mode}</span>
-            <InfoTip text="Short ranges plot one point per block, about one every ten minutes. Longer ranges plot one point per day, averaged from every block in that day, so brief spikes are smoothed away."/>
+            <span class="whitespace-nowrap">
+                <DefinedTerm
+                    label=Signal::derive(mode)
+                    text="Short ranges plot one point per block, about one every ten minutes. Longer ranges plot one point per day, averaged from every block in that day, so brief spikes are smoothed away."
+                />
+            </span>
         </p>
         </div>
     }
@@ -1246,6 +1250,49 @@ fn RailSection(
     }
 }
 
+/// The explanation bubble, shared by both triggers.
+///
+/// Opens downward: upward overflow at the top of the page goes behind the
+/// navbar and then off the document, where it cannot be scrolled to. Anchored
+/// right from `lg` up, where these sit near the edge of a 17rem rail, and
+/// left below it, where the rail is full width and the trigger follows a
+/// label near the left.
+///
+/// Resets `whitespace`, `text-transform` and the rest because it is placed
+/// inside arbitrary copy and inherits whatever that copy set. A label with
+/// `truncate` on it once made the bubble refuse to wrap.
+const TIP_BUBBLE: &str = "pointer-events-none absolute top-full left-0 lg:left-auto lg:right-0 mt-1.5 w-56 max-w-[calc(100vw-3rem)] z-40 opacity-0 invisible group-hover/tip:opacity-100 group-hover/tip:visible group-focus-within/tip:opacity-100 group-focus-within/tip:visible group-active/tip:opacity-100 group-active/tip:visible transition-opacity duration-150 bg-[#06131f] border border-white/15 rounded-lg px-2.5 py-2 text-[0.7rem] leading-relaxed text-white font-normal tracking-normal normal-case whitespace-normal text-left shadow-lg shadow-black/50";
+
+/// A term that explains itself when hovered, focused or tapped.
+///
+/// The dotted underline is the affordance, and it replaced an "i" icon on
+/// every row. Eleven icons in a 17rem rail competed with the numbers the rail
+/// exists to show, and an icon beside every single item teaches people to
+/// ignore all of them. A dotted underline under the word being explained is
+/// the long-standing convention for "definition available" and puts the
+/// affordance on the term itself.
+///
+/// A `button` rather than a `span`, so it is reachable by keyboard and
+/// tappable on a touch screen where there is no hover.
+#[component]
+fn DefinedTerm(
+    #[prop(into)] label: Signal<String>,
+    text: &'static str,
+) -> impl IntoView {
+    view! {
+        <span class="relative inline-flex group/tip">
+            <button
+                type="button"
+                class="text-left decoration-dotted decoration-white/40 underline underline-offset-2 hover:decoration-[#f7931a] focus:decoration-[#f7931a] focus:outline-none cursor-help transition-colors"
+                aria-label=move || format!("{}: {text}", label.get())
+            >
+                {move || label.get()}
+            </button>
+            <span class=TIP_BUBBLE>{text}</span>
+        </span>
+    }
+}
+
 /// An "i" that explains a term on hover, on keyboard focus and on tap.
 ///
 /// The site's purpose is teaching, so a reader who does not know what
@@ -1287,9 +1334,7 @@ fn InfoTip(text: &'static str) -> impl IntoView {
             // `z-40` clears the chart canvas and the rail cards. It stays
             // under the navbar's `z-30` stacking context rather than fighting
             // it, which is safe now that nothing opens upward into it.
-            <span class="pointer-events-none absolute top-full left-0 lg:left-auto lg:right-0 mt-1.5 w-56 max-w-[calc(100vw-3rem)] z-40 opacity-0 invisible group-hover/tip:opacity-100 group-hover/tip:visible group-focus-within/tip:opacity-100 group-focus-within/tip:visible group-active/tip:opacity-100 group-active/tip:visible transition-opacity duration-150 bg-[#06131f] border border-white/15 rounded-lg px-2.5 py-2 text-[0.7rem] leading-relaxed text-white font-normal tracking-normal normal-case whitespace-normal text-left shadow-lg shadow-black/50">
-                {text}
-            </span>
+            <span class=TIP_BUBBLE>{text}</span>
         </span>
     }
 }
@@ -1404,14 +1449,17 @@ fn Fact(
     let hint = fact_hint(label);
     view! {
         <div class="flex items-baseline justify-between gap-3">
-            <span class="text-xs text-white/90 shrink-0 inline-flex items-center gap-1">
-                {label}
-                {(!hint.is_empty()).then(|| view! { <InfoTip text=hint/> })}
+            <span class="text-sm text-white/90 shrink-0">
+                {if hint.is_empty() {
+                    view! { {label} }.into_any()
+                } else {
+                    view! { <DefinedTerm label=label text=hint/> }.into_any()
+                }}
             </span>
             <span class="text-right min-w-0">
                 <span class="text-sm text-white font-mono">{value}</span>
                 {note.map(|n| view! {
-                    <span class="block text-[0.7rem] text-white/75 font-mono">{n}</span>
+                    <span class="block text-xs text-white/75 font-mono">{n}</span>
                 })}
             </span>
         </div>
@@ -1459,7 +1507,7 @@ fn OverlayToggles(
         Signal::derive(move || registry::comparable_with(meta, daily.get()));
     let never = Signal::derive(|| false);
     view! {
-        <p class="text-[0.6rem] uppercase tracking-widest text-white/50 mb-1.5">
+        <p class="text-[0.7rem] uppercase tracking-widest text-white/50 mb-1.5">
             "Event markers"
         </p>
         <div class="space-y-1.5">
@@ -1484,7 +1532,7 @@ fn OverlayToggles(
                 hint="Dated moments outside the protocol that moved the numbers: exchange failures, country-level bans, the first Ordinals inscriptions."
             />
         </div>
-        <p class="text-[0.6rem] uppercase tracking-widest text-white/50 mt-3 mb-1.5">
+        <p class="text-[0.7rem] uppercase tracking-widest text-white/50 mt-3 mb-1.5">
             "Comparison series"
         </p>
         <div class="space-y-1.5">
@@ -1507,7 +1555,7 @@ fn OverlayToggles(
         // fit in a 15rem rail, and the native control brings its own keyboard
         // handling, type-ahead and mobile picker for nothing.
         <Show when=move || !groups.get().is_empty()>
-            <p class="text-[0.6rem] uppercase tracking-widest text-white/50 mt-3 mb-1.5">
+            <p class="text-[0.7rem] uppercase tracking-widest text-white/50 mt-3 mb-1.5">
                 "Compare with"
             </p>
             <select
@@ -1519,9 +1567,9 @@ fn OverlayToggles(
                 // belt to that brace, since a few platforms honour one and
                 // not the other.
                 class=move || if overlay_holds_axis.get() {
-                    "w-full text-xs bg-white/5 border border-white/10 rounded-md px-2 py-1.5 text-white/50 cursor-not-allowed [color-scheme:dark]"
+                    "w-full text-sm bg-white/5 border border-white/10 rounded-md px-2 py-1.5 text-white/50 cursor-not-allowed [color-scheme:dark]"
                 } else {
-                    "w-full text-xs bg-white/5 border border-white/10 rounded-md px-2 py-1.5 text-white/85 hover:border-white/25 cursor-pointer [color-scheme:dark]"
+                    "w-full text-sm bg-white/5 border border-white/10 rounded-md px-2 py-1.5 text-white/85 hover:border-white/25 cursor-pointer [color-scheme:dark]"
                 }
                 prop:disabled=move || overlay_holds_axis.get()
                 prop:value=move || compare.get()
@@ -1574,7 +1622,7 @@ fn OverlayToggles(
         // since that is when it applies.
         {move || match compare_meta.get() {
             Some(c) => view! {
-                <p class="text-[0.65rem] text-white/65 mt-1.5 leading-relaxed">
+                <p class="text-xs text-white/65 mt-1.5 leading-relaxed">
                     <span class="inline-block w-2 h-2 rounded-full bg-[#60a5fa] mr-1 align-middle"></span>
                     // The same one-liner that chart's own page shows, and it
                     // switches with the range the way that page's does, so a
@@ -1602,7 +1650,7 @@ fn OverlayToggles(
                 </p>
             }.into_any(),
             None => view! {
-                <p class="text-[0.6rem] text-white/45 mt-1.5">
+                <p class="text-xs text-white/45 mt-1.5">
                     "one at a time: they share the right axis"
                 </p>
             }.into_any(),
@@ -1650,10 +1698,17 @@ fn Toggle(
                     }
                 }
             />
-            <span class="text-sm text-white/80 group-hover:text-white/90 transition-colors truncate">{label}</span>
+            <span class="text-sm text-white/80 group-hover:text-white/90 transition-colors truncate">
+                {(hint.is_empty()).then_some(label)}
+            </span>
         </label>
-        // Outside the label, or clicking the icon would toggle the overlay.
-        {(!hint.is_empty()).then(|| view! { <InfoTip text=hint/> })}
+        // Outside the label, or explaining the term would toggle the overlay
+        // it sits beside.
+        {(!hint.is_empty()).then(|| view! {
+            <span class="text-sm text-white/80">
+                <DefinedTerm label=label text=hint/>
+            </span>
+        })}
         </div>
     }
 }

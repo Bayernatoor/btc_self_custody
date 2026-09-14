@@ -543,6 +543,15 @@
                             formatted = parseFloat(val.toPrecision(10)).toFixed(2) + '%';
                         } else if (Number.isInteger(val)) {
                             formatted = val.toLocaleString();
+                        } else if (Math.abs(val) < 0.01) {
+                            // Two decimals turns every small value into
+                            // "0.00". Max transaction fee is in BTC, so a
+                            // real 0.000077 BTC fee read as zero in the
+                            // tooltip while the bar was plainly there. Three
+                            // significant figures keeps the magnitude
+                            // whatever the unit, which matters because the
+                            // same formatter serves BTC, sat/vB and counts.
+                            formatted = parseFloat(val.toPrecision(3)).toString();
                         } else {
                             formatted = parseFloat(val.toPrecision(10)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                         }

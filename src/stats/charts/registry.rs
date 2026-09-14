@@ -270,7 +270,9 @@ impl ChartMeta {
             && self.unit != Unit::Mixed
             && !matches!(
                 self.shape,
-                Shape::StackedAbsolute
+                Shape::Bar
+                    | Shape::BarWithLine
+                    | Shape::StackedAbsolute
                     | Shape::StackedPercent
                     | Shape::Donut
                     | Shape::Histogram
@@ -428,8 +430,8 @@ pub const CHARTS: &[ChartMeta] = &[
             daily: Daily::Fn(super::inscription_chart_daily),
         },
         about: Some(About {
-            definition: Some("Inscriptions attach data such as an image or text to an individual satoshi, using the Ordinals convention introduced in 2023. The data rides in the witness part of a Taproot transaction, the cheapest room in a block. Whether this is a good use of the chain is disputed; that it happens, and at what scale, is not."),
-            technical: "Counted by matching the inscription envelope pattern in Taproot witness data. This is a convention, not a consensus rule: nothing in the protocol knows what an inscription is, so a different encoding would not appear here. Inscriptions compete for the same block space as ordinary payments, which is visible in the fee charts over the same periods.",
+            definition: Some("Inscriptions attach data such as an image or text to an individual satoshi, using the Ordinals convention introduced in 2023. The data rides in the witness part of a Taproot transaction, which is the cheapest room in a block."),
+            technical: "Counted by matching the inscription envelope pattern in Taproot witness data. This is a convention, not a consensus rule: nothing in the protocol knows what an inscription is, so a different encoding would not appear here. Inscriptions compete for the same block space as ordinary payments, which shows up in the fee charts over the same periods.",
         }),
     },
     ChartMeta {
@@ -664,8 +666,8 @@ pub const CHARTS: &[ChartMeta] = &[
         shape: Shape::Line,
         source: Source::Fees,
         about: Some(About {
-            definition: Some("What everyone paid, in total, to get into a given block. Each transaction pays a fee to be included, and the miner keeps every fee in the block they find. It is one half of what a miner earns; the other is the subsidy, which halves every four years and eventually reaches zero."),
-            technical: "A transaction does not state its fee anywhere, so this is computed as inputs minus outputs. Denominated in BTC rather than the dollars they were worth at the time, which is what makes it comparable across the chain's history.",
+            definition: Some("What everyone paid, in total, to get into a given block. Each transaction pays a fee to be included, and the miner keeps every fee in the block they find. It is one half of what a miner earns. The other is the subsidy, which halves every four years and eventually reaches zero."),
+            technical: "A transaction does not state its fee anywhere, so it is computed as inputs minus outputs. Denominated in BTC, not the dollars they were worth at the time, so the figure is comparable across the whole chain.",
         }),
     },
     ChartMeta {
@@ -714,8 +716,8 @@ pub const CHARTS: &[ChartMeta] = &[
             daily: Daily::Fn(super::median_fee_rate_chart_daily),
         },
         about: Some(About {
-            definition: Some("How much a transaction paid per unit of size to get into a block, taking the middle transaction rather than the average. Fees are charged by the room a transaction takes, not the value it moves, so sending a large amount can cost less than sending a small one."),
-            technical: "Fee divided by virtual size for every transaction in the block, then the middle value. Virtual size is weight divided by four, the unit the fee market actually prices in. The median rather than the mean, because one very large fee drags an average somewhere no real transaction sat. The coinbase transaction is excluded, since it pays no fee.",
+            definition: Some("How much a transaction paid per unit of size to get into a block, taking the middle transaction. Fees are charged by the room a transaction takes, not the value it moves, so sending a large amount can cost less than sending a small one."),
+            technical: "Fee divided by virtual size for every transaction in the block, then the middle value. Virtual size is weight divided by four, which is the unit the fee market prices in. The median, because one very large fee drags an average somewhere no real transaction sat. The coinbase transaction pays no fee and is excluded.",
         }),
     },
     ChartMeta {
@@ -764,8 +766,8 @@ pub const CHARTS: &[ChartMeta] = &[
             daily: Daily::Fn(super::hash_rate_chart_daily),
         },
         about: Some(About {
-            definition: Some("How much computing work the whole network is throwing at mining, per second. Miners guess numbers until one produces a block hash below a target, and the hash rate is how many guesses per second everyone is making together. It is the clearest single measure of how much it would cost to attack Bitcoin, because an attacker has to out-compute everyone already mining."),
-            technical: "Not measured, derived. Nobody can count the network's guesses, so this is inferred from the difficulty the network has settled on: difficulty times 2^32 divided by the 600 second target gives the rate that would produce blocks on schedule. Difficulty only moves every 2,016 blocks, so the line steps rather than curves and is flat between retargets while the real rate is not. A sustained gap between the two shows up as blocks arriving faster or slower than ten minutes until the next adjustment closes it.",
+            definition: Some("How much computing work the whole network is doing, per second. Miners guess numbers until one produces a block hash below the target, and the hash rate is how many guesses everyone is making together. It is the closest thing to a price tag on attacking Bitcoin: an attacker has to out-compute everyone already mining."),
+            technical: "An estimate. Nobody can count the network's guesses, so it is inferred from the difficulty the network settled on: difficulty times 2^32, divided by the 600 second block target. Difficulty only moves every 2,016 blocks, so the line is flat between retargets while the real rate is not. When the two drift apart, blocks arrive faster or slower than ten minutes until the next adjustment closes the gap.",
         }),
     },
     ChartMeta {
@@ -781,8 +783,8 @@ pub const CHARTS: &[ChartMeta] = &[
             daily: Daily::Fn(super::difficulty_adjustment_chart_daily),
         },
         about: Some(About {
-            definition: Some("Every 2,016 blocks, roughly a fortnight, Bitcoin measures how long those blocks actually took and resets difficulty so the next 2,016 should take exactly two weeks. Nobody votes and nobody decides. If miners leave, blocks come slower and the network makes itself easier; if they arrive, it makes itself harder. This is that correction, as a percentage."),
-            technical: "Read as the change between one block's difficulty and the previous different value, rather than computed from heights, because a selected range rarely starts on an epoch boundary and the daily series carries no heights. Rises and falls are separate series so the sign is visible in the colour. The largest fall on record is 27.94% at height 689,472, the week of the 2021 mining ban in China; the largest rises are from 2010, when the network was small enough for one operator to move it.",
+            definition: Some("Every 2,016 blocks, roughly a fortnight, Bitcoin measures how long those blocks took and resets difficulty so the next 2,016 should take exactly two weeks. Nobody votes and nobody decides. If miners leave, blocks come slower and the network makes itself easier. If they arrive, it makes itself harder. This is that correction, as a percentage."),
+            technical: "The largest fall on record is 27.94%, at height 689,472 in the week of the 2021 mining ban in China. The largest rises are from 2010, when the network was small enough for one operator to move it. Rises and falls are coloured separately so the sign is readable at a glance.",
         }),
     },
     ChartMeta {
@@ -817,8 +819,8 @@ pub const CHARTS: &[ChartMeta] = &[
             daily: Daily::Fn(super::difficulty_chart_daily),
         },
         about: Some(About {
-            definition: Some("Difficulty is how hard it currently is to mine a block. Every miner is racing to find a number that makes the block's hash fall below a target, and difficulty is that target expressed as a multiple of the easiest one the protocol allows. Nobody sets it: it moves automatically with how much mining power is on the network."),
-            technical: "Read from the header of every block in the range, so it is the protocol's own value and not a derived one. It changes once every 2,016 blocks, roughly every two weeks, which is why the line steps rather than curves. Multiply by 2^32 for the expected number of hashes per block, the figure hash-rate estimates are built on.",
+            definition: Some("How hard it currently is to mine a block. Every miner races to find a number that makes the block's hash fall below a target, and difficulty is that target expressed as a multiple of the easiest one the protocol allows. Nobody sets it. It moves automatically with how much mining power is on the network."),
+            technical: "Read from the header of every block, so this is the protocol's own value. It changes once every 2,016 blocks, roughly every two weeks, which is why the line steps. Multiply by 2^32 for the expected number of hashes per block, the figure hash-rate estimates are built on.",
         }),
     },
     ChartMeta {
@@ -874,8 +876,8 @@ pub const CHARTS: &[ChartMeta] = &[
         shape: Shape::Donut,
         source: Source::Mining(MiningChart::Dominance),
         about: Some(About {
-            definition: Some("Which mining pools are finding blocks, and in what proportion. Miners join a pool to get a steady payout instead of a rare large one, and the pool chooses which transactions its members' blocks include. Concentration is worth watching because it shows how much of block production a few operators direct."),
-            technical: "Attributed from the coinbase transaction, where pools identify themselves by convention rather than by requirement. A pool that stops tagging its blocks, or tags them differently, moves between these categories without anything changing on the network. Unattributed blocks are counted as unknown rather than shared out among the named pools.",
+            definition: Some("Which mining pools are finding blocks, and in what proportion. Miners join a pool to get a steady payout instead of a rare large one, and the pool chooses which transactions its members' blocks include. The shares therefore show how much of block production a few operators direct."),
+            technical: "Attributed from the coinbase transaction, where pools tag themselves by convention. Nothing requires it, so a pool that stops tagging, or tags differently, moves between these categories while nothing changes on the network. Untagged blocks are counted as unknown, never shared out among the named pools.",
         }),
     },
     ChartMeta {
@@ -1279,7 +1281,7 @@ pub const CHARTS: &[ChartMeta] = &[
         },
         about: Some(About {
             definition: Some("Whether the set of spendable coins is growing or shrinking. Every transaction consumes existing outputs and creates new ones, and the running total of unspent ones is the UTXO set. Positive means more were created than consumed; negative means wallets are consolidating many small coins into fewer large ones."),
-            technical: "Outputs created, minus the ones that can never be spent, minus inputs consumed. OP_RETURN outputs are excluded because they are provably unspendable and never enter the set; counting them made this series 2.6 times too large when summed over the chain. The coinbase transaction is not in these counts, so its own outputs are missing and this runs about three per block short of a node's own figure. Net rather than cumulative, which is why it goes negative and why a log axis cannot plot every point. The set matters because every node holds it in memory to validate, so it is a running cost to the whole network.",
+            technical: "Outputs created, minus the ones that can never be spent, minus inputs consumed. OP_RETURN outputs are provably unspendable and never enter the set, so they do not count as growth. The coinbase transaction is absent from these counts, so its own outputs are missing and this runs about three per block short of a node's own figure. Net, not cumulative, which is why it goes negative and why a log axis cannot plot every point. The set matters because every node holds it in memory to validate, making it a running cost to the whole network.",
         }),
     },
     ChartMeta {

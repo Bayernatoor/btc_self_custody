@@ -764,7 +764,32 @@ fn round_sig(v: f64, digits: i32, dir: RoundDir) -> f64 {
         RoundDir::Down => scaled.floor(),
         RoundDir::Up => scaled.ceil(),
     };
-    snapped / scale
+    // Multiply by the reciprocal power rather than dividing by `scale`.
+    //
+    // For a value in the tens of millions `scale` is 1e-5, and 229 / 1e-5 is
+    // 22899999.999999996, not 22900000. ECharts prints an explicit max
+    // verbatim, so the axis label read "22,899,999.999999996" where three
+    // significant figures were the entire point of rounding.
+    //
+    // The same class of defect this function was written to fix, one layer
+    // down: it stopped the raw padded float reaching the label and then
+    // produced its own.
+    let rounded = snapped * 10f64.powi(mag as i32 - (digits - 1));
+    // Clamped, because neither form of the scaling is exact. Dividing by a
+    // fractional scale turned 22,900,000 into 22,899,999.999999996, and
+    // multiplying by the reciprocal turns 0.00123 into
+    // 0.0012300000000000002. The first printed a nonsense axis label; the
+    // second breaks the promise this function exists for, that a floor never
+    // rises above the data it is meant to contain.
+    //
+    // So round, then refuse to cross the input. Where the float cooperates
+    // the bound is exact to the significant figures asked for; where it does
+    // not, the bound is the original value, which is a worse label and a
+    // correct one.
+    match dir {
+        RoundDir::Down => rounded.min(v),
+        RoundDir::Up => rounded.max(v),
+    }
 }
 
 /// Tick hint for a logarithmic axis. Eight reads as a readable ladder across
@@ -829,6 +854,21 @@ fn log_scale_is_meaningful(option: &serde_json::Value) -> bool {
         return false;
     };
     if series.iter().any(|s| s.get("stack").is_some()) {
+        return false;
+    }
+    // Bars, for the reason `fit_value_axis` already refuses them: a bar's
+    // length is read from zero, and a log axis has no zero. Every bar then
+    // runs from the axis floor to its value, so on max-tx-fee with a floor of
+    // 0.00001 and values to 0.379 the whole plot filled solid and the shape
+    // of the data disappeared.
+    //
+    // The reasoning was written for axis fitting and never applied here,
+    // where it matters more: fitting only rescales, this makes the chart
+    // unreadable.
+    if series
+        .iter()
+        .any(|s| s.get("type").and_then(|t| t.as_str()) == Some("bar"))
+    {
         return false;
     }
     let bounded_to_100 = |a: &serde_json::Value| {
@@ -2827,6 +2867,35 @@ mod tests {
         assert!(v["yAxis"].get("splitNumber").is_none());
         // And the marker itself does not leak into the option.
         assert!(v["yAxis"].get(LOG_BOUNDS_MARKER).is_none());
+    }
+
+    /// The bounds print verbatim as axis labels, so they have to be numbers a
+    /// person would write. Dividing by a fractional scale reintroduced the
+    /// float the rounding existed to remove: the fee-per-transaction chart's
+    /// max read "22,899,999.999999996".
+    #[test]
+    fn rounded_bounds_are_exact_at_every_magnitude() {
+        for (v, digits, want) in [
+            (22_817_400.0, 3, 22_900_000.0),
+            (0.000_123_4, 3, 0.000_124),
+            (1_600_000_000_000_000.0, 3, 1_600_000_000_000_000.0),
+            (7.2, 2, 7.2),
+        ] {
+            let up = round_sig(v, digits, RoundDir::Up);
+            assert!(up >= v, "{up} does not contain {v}");
+            // Exact to the significant figures asked for, not one ulp off.
+            let scaled =
+                up / 10f64.powi(up.abs().log10().floor() as i32 - (digits - 1));
+            assert!(
+                (scaled - scaled.round()).abs() < 1e-9,
+                "round_sig({v}, {digits}) gave {up}, which is not {digits} \
+                 significant figures"
+            );
+            assert!(
+                (up - want).abs() <= want.abs() * 1e-12,
+                "got {up}, want {want}"
+            );
+        }
     }
 
     /// A daily chart: bare numbers positioned by the category axis.
