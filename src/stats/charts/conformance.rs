@@ -570,6 +570,47 @@ mod tests {
         }
     }
 
+    /// `registry::MULTI_METRIC` is exactly the set of charts whose built
+    /// option plots more than one metric.
+    ///
+    /// The list is hardcoded because the fact is not derivable from metadata:
+    /// `diff-adjustment` is `Shape::Bar`, the same declaration single-series
+    /// bar charts carry. This is what makes a hardcoded list safe. It
+    /// computes the truth from the real builders and fails in both
+    /// directions, so a chart that gains a second metric cannot stay
+    /// offerable and one that loses it cannot stay excluded.
+    #[test]
+    fn the_multi_metric_list_is_exactly_right() {
+        use std::collections::BTreeSet;
+        let mut actual: BTreeSet<&str> = BTreeSet::new();
+        for (meta, _, opt) in built_charts() {
+            // Stacked charts and donuts are already refused on shape, and
+            // their bands are one measurement split by category rather than
+            // several metrics. The list is about charts that look
+            // single-metric and are not.
+            if !meta.can_compare() {
+                continue;
+            }
+            if super::super::metric_series_count(&opt) > 1 {
+                actual.insert(meta.slug);
+            }
+        }
+        let declared: BTreeSet<&str> =
+            registry::MULTI_METRIC.iter().copied().collect();
+        let missing: Vec<&&str> = actual.difference(&declared).collect();
+        let stale: Vec<&&str> = declared.difference(&actual).collect();
+        assert!(
+            missing.is_empty(),
+            "these plot more than one metric and are still offered as \
+             comparisons: {missing:?}"
+        );
+        assert!(
+            stale.is_empty(),
+            "these are excluded but plot a single metric, so the exclusion \
+             is costing a working comparison: {stale:?}"
+        );
+    }
+
     /// **The one that matters.** The picker is driven by metadata and the
     /// drawing is driven by the built option, and they are allowed to
     /// disagree in exactly one direction.

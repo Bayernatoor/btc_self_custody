@@ -1444,6 +1444,55 @@ pub fn related(meta: &ChartMeta, max: usize) -> Vec<&'static ChartMeta> {
 /// would mean nothing. What a chart can *structurally* hold without lying is
 /// answered by `charts::apply_comparison`, from the built option, and that is
 /// the check no caller can skip.
+/// Charts that plot more than one metric, and so cannot be laid over another.
+///
+/// Only the first series is lifted, so offering one of these means offering a
+/// part of it under the whole chart's name. They are refused structurally by
+/// `charts::apply_comparison` too, but that refusal happens three layers below
+/// the picker, which then advertises a comparison that never draws and
+/// explains it as "not available for this range". It is available at no range.
+///
+/// A hardcoded list because the fact is not derivable from metadata:
+/// `diff-adjustment` is `Shape::Bar`, exactly like the single-series bar
+/// charts. `the_multi_metric_list_is_exactly_right` in the conformance suite
+/// computes the truth from the real builders and fails if this drifts, which
+/// is what keeps a hardcoded list honest.
+///
+/// **Twenty charts, which is a third of them.** I guessed three before running
+/// the test. That gap is the measure of how far "offer every dashboard chart"
+/// was from "offer every chart that can actually be laid over another", and it
+/// is the strongest argument for the phase-2 contract: the feature loses a
+/// third of its candidates to a limitation nobody had noticed, and the only
+/// reason to accept that is that the alternative was showing one band of a
+/// stacked chart under the whole chart's name.
+///
+/// **Temporary.** Phase 2 offers named measurements instead, at which point
+/// "Difficulty Adjustment: Signed Retarget Change" and "Transaction Batching:
+/// Outputs per Transaction" are selectable and complete, and this list deletes
+/// itself. See `notes/phase-2-spec.md`.
+pub const MULTI_METRIC: &[&str] = &[
+    "address-types",
+    "all-embedded-share",
+    "batching",
+    "cumulative-adoption",
+    "diff-adjustment",
+    "fee-heatmap",
+    "halving-era",
+    "inscription-envelope",
+    "multi-velocity",
+    "opreturn-bytes",
+    "opreturn-count",
+    "protocol-fee-competition",
+    "protocol-fees",
+    "subsidy-fees",
+    "taproot-spend-types",
+    "tx-type-evolution",
+    "unified-count",
+    "unified-volume",
+    "utxo-flow",
+    "witness-versions",
+];
+
 pub fn is_valid_comparison(
     primary: &ChartMeta,
     candidate: &ChartMeta,
@@ -1451,6 +1500,8 @@ pub fn is_valid_comparison(
 ) -> bool {
     primary.can_compare()
         && candidate.can_compare()
+        // Not offerable as a comparison, whatever the range.
+        && !MULTI_METRIC.contains(&candidate.slug)
         // A chart laid over itself draws two identical lines on two axes,
         // which reads as a rendering fault rather than a comparison.
         && candidate.slug != primary.slug
