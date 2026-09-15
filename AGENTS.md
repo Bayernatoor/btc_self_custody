@@ -195,12 +195,33 @@ prefer an editor-style edit over `sed`/`python` rewrites when the anchor may alr
 
 Three things about the library that are not bugs in our code and cost a session each to work out.
 
-**A log axis labels only at powers of the base.** `splitNumber` is a hint it can only honour by
-choosing how many decades to step, so a range spanning under one decade gets two or three labels
-and there is no way to add more: ECharts 5 has no explicit tick list for a value or log axis. What
-it does place is **minor ticks**, at 2, 3, 4 and so on within each decade, so `minorTick` plus
-`minorSplitLine` is the whole of what can be done. Sub-decade spans turn up routinely on the
-right-hand axis, where the series is whatever the reader chose to compare against.
+**A log axis labels every decade only when its bounds are exact powers of the base.** Otherwise it
+labels the minimum, 1, and the maximum, and nothing else, however wide the span. Measured
+2026-09-15 in Chrome 153 against ECharts 5.6.0, reading `axis.getViewLabels()` off the model:
+
+    min 1,        max 1e8     -> 9 labels, one per decade
+    min 0.000285, max 2.29e7  -> 3 labels: min, 1, max      (same span, fitted bounds)
+
+`splitNumber` makes **no difference to either case**, at any height from 200px to 3200px. An
+earlier version of this section said it was "a hint it can only honour by choosing how many
+decades to step", which sounds right and is not what governs the label count. ECharts 5 has no
+explicit tick list for a value or log axis, so bounds are the only lever, and **minor ticks**
+(`minorTick` plus `minorSplitLine`, at 2, 3, 4 within each decade) are the only way to add
+structure between labels.
+
+That makes the sparse axis a direct cost of fitting bounds to data, which `set_axis_scale` does
+deliberately: over 1Y difficulty spans 140T to 160T, under one decade, and rounding out to
+enclosing decades pins every point to the axis floor. A span-dependent rule would get both.
+
+Two consequences worth knowing before touching axis code. **The bound you set is not the bound
+ECharts reports**, because a log axis holds its extent as an exponent: 22,900,000 comes back as
+`10^log10(22900000)` = 22900000.00000002 and prints in full, and 140e12 comes back as
+139,999,999,999,999. An `axisLabel.formatter` is therefore load-bearing rather than cosmetic on
+every log axis. And the site loads **`echarts@5`, a floating major**, so there is no pinned
+version; `echarts.version` reported 5.6.0 on 2026-09-15 while a version string inside the bundle
+reads 5.6.1. Trust the runtime value.
+
+Probe: `notes/chart-quality-2026-09-15/runs/axis-label-probe.md` and the pages beside it.
 
 **A JS function cannot be serialised from Rust, so use a sentinel.** Rust writes a marker string
 where the function belongs, and `stats.js` swaps in the real one. Used for SI axis labels, date

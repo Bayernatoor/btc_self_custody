@@ -672,24 +672,34 @@ fn set_axis_scale(
         // significant figures keeps the fit tight and the label legible.
         o.insert("min".to_string(), json!(round_sig(lo, 3, RoundDir::Down)));
         o.insert("max".to_string(), json!(round_sig(hi, 3, RoundDir::Up)));
-        // No `splitNumber`. It reads like the remedy for a sparse log axis
-        // and is the opposite.
+        // No `splitNumber`, because measurement says it does nothing here.
         //
-        // ECharts labels a log axis only at whole powers of the base, and
-        // honours `splitNumber` by dividing the *exponent* range. Our bounds
-        // fit the data and so are never decade-aligned: Avg Fee/Tx over ALL
-        // spans about 7.36 decades, which at 8 splits puts ticks every 0.92
-        // decades, and not one of those positions is a power of ten. The axis
-        // then drew a single interior label across seven decades, having been
-        // asked for eight.
+        // Rendered in Chrome 153 against ECharts 5.6.0, this axis produces the
+        // same three labels with `splitNumber: 8` and without it, at every
+        // height from 200px to 3200px. An earlier version of this comment
+        // asserted that 8 splits across 7.36 decades placed ticks at
+        // fractional powers of ten which ECharts then declined to label. That
+        // was a plausible mechanism and it is false; removing the hint is
+        // tidying, not a fix.
         //
-        // Left alone, ECharts steps by whole decades and labels every one.
-        // Structure between the labels comes from the minor ticks below,
-        // which is what that mechanism is for and what the comment here used
-        // to claim `splitNumber` was doing.
+        // What actually governs the label count is whether the **bounds are
+        // exact powers of the base**. Measured, same span either way:
         //
-        // An explicit tick list would settle it outright, and ECharts 5 has
-        // none for a value or log axis.
+        //     min 1, max 1e8            -> 9 labels, every decade
+        //     min 0.000285, max 2.29e7  -> 3 labels: min, 1, max
+        //
+        // So the sparse axis is a direct cost of fitting bounds to the data,
+        // which is deliberate and is the right trade for a narrow range: over
+        // 1Y difficulty spans 140T to 160T, under one decade, and rounding out
+        // to enclosing decades pins every point to the floor. Confirmed by the
+        // same probe, where that range yields two labels whatever is done.
+        //
+        // A span-dependent rule, fitting narrow ranges and aligning wide ones,
+        // would get both and is recorded as chart-quality work rather than
+        // done here. ECharts 5 offers no explicit tick list for a value or log
+        // axis, so that is the only lever.
+        //
+        // Evidence: notes/chart-quality-2026-09-15/runs/axis-label-probe.md
 
         // Guarantee a formatter, because ECharts prints an explicit bound
         // verbatim and its own idea of the bound is not the number we set.
