@@ -648,6 +648,28 @@ pub async fn fetch_miner_dominance_daily(
         .collect())
 }
 
+/// The block heights spanned by a date window.
+///
+/// The mining charts group by pool and by month and so query by height, while
+/// the range picker deals in dates. Converting between the two needs the
+/// chain, not arithmetic: block intervals have varied from seconds to hours,
+/// so counting back from the tip at 600 seconds each drifts by thousands of
+/// blocks over a historical window and cannot express a *position* at all.
+///
+/// `None` means no block falls in the window.
+#[server(prefix = "/api", endpoint = "stats_height_range")]
+pub async fn fetch_height_range(
+    from_ts: u64,
+    to_ts: u64,
+) -> Result<Option<(u64, u64)>, ServerFnError> {
+    if from_ts > to_ts {
+        return Err(bad_request("from_ts must not exceed to_ts"));
+    }
+    let conn = conn().await?;
+    super::db::query_height_range_for_window(&conn, from_ts, to_ts)
+        .map_err(|e| internal_err("DB query", e))
+}
+
 /// Empty blocks per calendar month, aggregated in SQL.
 ///
 /// Replaces a per-row query that returned every empty block in range: 89,926

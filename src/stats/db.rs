@@ -2171,6 +2171,43 @@ pub fn query_miner_dominance_daily(
     rows.collect()
 }
 
+/// The lowest and highest block height inside a timestamp window.
+///
+/// Exists because the mining queries take heights while the range picker deals
+/// in dates, and the conversion cannot be done arithmetically. Dividing a
+/// window's duration by the 600-second target and counting back from the tip
+/// gives a *length* in blocks, not a *position*, which is how a request for
+/// April 2024 came back holding the most recent 61 days. Even anchored
+/// correctly, 600 seconds per block is only true on average: the interval has
+/// run from seconds to hours, so an estimate drifts by thousands of blocks
+/// over historical windows.
+///
+/// `None` when no block falls in the window, which a date range entirely
+/// before the first block or after the tip produces. That is a real answer and
+/// the caller shows an empty chart rather than substituting the tip.
+///
+/// `idx_blocks_timestamp` covers this, so it is an index scan of the window's
+/// two ends rather than a table scan.
+pub fn query_height_range_for_window(
+    conn: &Connection,
+    from_ts: u64,
+    to_ts: u64,
+) -> rusqlite::Result<Option<(u64, u64)>> {
+    conn.query_row(
+        "SELECT MIN(height), MAX(height) FROM blocks \
+         WHERE timestamp >= ?1 AND timestamp <= ?2",
+        params![from_ts, to_ts],
+        |row| {
+            // Both are NULL together when the window holds nothing, since
+            // SQLite's MIN and MAX skip NULLs and there are no rows at all.
+            Ok(match (row.get::<_, Option<u64>>(0)?, row.get(1)?) {
+                (Some(lo), Some(hi)) => Some((lo, hi)),
+                _ => None,
+            })
+        },
+    )
+}
+
 /// Empty blocks (tx_count == 1, coinbase only) for a height range
 /// Empty blocks (coinbase-only) per calendar month, as (YYYY-MM, count).
 ///
@@ -3421,6 +3458,60 @@ mod tests {
             },
         )
         .unwrap();
+    }
+
+    /// A date window has to resolve to the heights that are actually inside
+    /// it, at both ends.
+    ///
+    /// Written against fixed dates rather than against the implementation: the
+    /// April 2024 window must return the April blocks and nothing else. The
+    /// bug this replaces divided the window's duration by 600 and counted back
+    /// from the tip, which returns a correctly sized window in the wrong
+    /// period, and no assertion about a length would have caught it.
+    #[test]
+    fn a_date_window_resolves_to_the_heights_inside_it() {
+        let conn = setup_db();
+        let mk = |h: u64, ts: u64| {
+            conn.execute(
+                "INSERT INTO blocks (height, hash, timestamp, tx_count, size,
+                 weight, difficulty) VALUES (?1,?2,?3,1,0,0,1.0)",
+                rusqlite::params![h as i64, format!("h{h}"), ts as i64],
+            )
+            .unwrap();
+        };
+        // 2024-03-31, three in 2024-04, then 2024-05-02.
+        mk(100, 1711843200);
+        mk(101, 1711929600);
+        mk(102, 1711940000);
+        mk(103, 1714435200);
+        mk(104, 1714608000);
+
+        // The whole of April 2024.
+        assert_eq!(
+            query_height_range_for_window(&conn, 1711929600, 1714521599)
+                .unwrap(),
+            Some((101, 103)),
+            "the window's own blocks, not the most recent three"
+        );
+
+        // A single block's timestamp at both ends is a window of one.
+        assert_eq!(
+            query_height_range_for_window(&conn, 1711940000, 1711940000)
+                .unwrap(),
+            Some((102, 102))
+        );
+
+        // Before the first block and after the last: real answers, and the
+        // caller must not substitute the tip for either.
+        assert_eq!(
+            query_height_range_for_window(&conn, 0, 1_000_000).unwrap(),
+            None
+        );
+        assert_eq!(
+            query_height_range_for_window(&conn, 1_900_000_000, 2_000_000_000)
+                .unwrap(),
+            None
+        );
     }
 
     #[test]

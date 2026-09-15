@@ -59,6 +59,34 @@ instruction is dead on a fresh clone.
 `cargo run --bin backfill_missing_heights` is a one-shot maintenance utility and needs
 `--features ssr`.
 
+### The debug binary can fail to link, and the fix is `debug = 0`
+
+**Observed 2026-09-14.** `cargo build --features ssr --bin we_hodl_btc` failed at the link step
+with
+
+    rust-lld: error: ...(.debug_str): section too large
+
+and, at `debug = "line-tables-only"`, with hundreds of
+
+    relocation R_X86_64_32 out of range: 4313024424 is not in [0, 4294967295]
+
+which is the same cause seen twice: the debug info across the linked rlibs exceeds the 4 GB
+addressable by 32-bit relocations. At full `debug = 2` on thunder it did not reach the linker at
+all, getting SIGKILLed by the OOM killer instead (31 GB RAM, ~17 GB free).
+
+`target/debug/incremental` had grown to **46 GB**, which is worth clearing on its own, but doing so
+did not fix the link. What works:
+
+    CARGO_PROFILE_DEV_DEBUG=0 cargo build --features ssr --bin we_hodl_btc
+
+That is the probe as well as the fix, and it links in about 90 seconds. Nothing is committed to
+change the profile, because a debugger-less dev build is the wrong default to impose; reach for the
+env var when you need to run the binary.
+
+**Untested:** whether `cargo leptos watch` hits the same wall. It builds the same bin, so expect
+it to, and use the env var there too if it does. The lib, all tests and both `cargo check` targets
+are unaffected, so the three CI gates never see this.
+
 ## The toolchain pin is deliberate
 
 `rust-toolchain.toml` pins **1.97.1 exactly**, and nothing in `.github/workflows` names a

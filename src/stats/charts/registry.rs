@@ -1446,10 +1446,14 @@ pub fn related(meta: &ChartMeta, max: usize) -> Vec<&'static ChartMeta> {
 /// would mean nothing. What a chart can *structurally* hold without lying is
 /// answered by `charts::apply_comparison`, from the built option, and that is
 /// the check no caller can skip.
-/// Charts that plot more than one metric, and so cannot be laid over another.
+/// Charts that do not present exactly one metric, and so cannot be laid over
+/// another.
 ///
-/// Only the first series is lifted, so offering one of these means offering a
-/// part of it under the whole chart's name. They are refused structurally by
+/// Both ends of that count. Most of these plot several measurements, and
+/// offering one means offering a part of it under the whole chart's name.
+/// `diff-ribbon` is the other end: seven moving averages with no base series,
+/// so there is no metric to lift at all and no honest label for whichever of
+/// the seven was chosen. They are refused structurally by
 /// `charts::apply_comparison` too, but that refusal happens three layers below
 /// the picker, which then advertises a comparison that never draws and
 /// explains it as "not available for this range". It is available at no range.
@@ -1460,7 +1464,7 @@ pub fn related(meta: &ChartMeta, max: usize) -> Vec<&'static ChartMeta> {
 /// computes the truth from the real builders and fails if this drifts, which
 /// is what keeps a hardcoded list honest.
 ///
-/// **Twenty charts, which is a third of them.** I guessed three before running
+/// **Twenty-one charts, a third of them.** I guessed three before running
 /// the test. That gap is the measure of how far "offer every dashboard chart"
 /// was from "offer every chart that can actually be laid over another", and it
 /// is the strongest argument for the phase-2 contract: the feature loses a
@@ -1478,6 +1482,7 @@ pub const MULTI_METRIC: &[&str] = &[
     "batching",
     "cumulative-adoption",
     "diff-adjustment",
+    "diff-ribbon",
     "fee-heatmap",
     "halving-era",
     "inscription-envelope",
@@ -1495,6 +1500,37 @@ pub const MULTI_METRIC: &[&str] = &[
     "witness-versions",
 ];
 
+/// Charts whose x axis is not time, and so cannot take part in a comparison
+/// at either end.
+///
+/// A comparison lays a second series along the primary's x axis, which only
+/// means anything if both ends agree on what x *is*. Every other comparable
+/// chart positions its points by when they happened: timestamps per block,
+/// dates on a category axis once the rows are daily. These two do not.
+///
+/// - **`fee-pressure`** plots fee rate against block fullness, so x is a
+///   percentage. Overlaying a time series on it put milliseconds where
+///   percentages belong and dated the result to 1970.
+/// - **`halving-era`** draws one bar per halving era, so x is four labels.
+///   A 600-point series laid along four categories is not a comparison.
+///
+/// Excluded as primary as well as candidate, which is the part a narrower
+/// rule got wrong. These charts have no x domain a second series can join, so
+/// the picker does not appear on them at all rather than appearing full of
+/// options that are all refused three layers down.
+///
+/// Hardcoded for the same reason `MULTI_METRIC` is, and the reason is sharper
+/// here: this is **not** derivable from `shape`. `propagation` is
+/// `Shape::Scatter` like `fee-pressure` and carries an ordinary time axis, so
+/// the two scatter charts sit on opposite sides of this list. Shape describes
+/// how a chart draws, not what it measures, which is exactly the substitution
+/// phase 2 removes.
+///
+/// `the_x_axis_exceptions_are_exactly_right` computes the truth from the real
+/// builders, and `the_offered_comparisons_can_all_actually_be_drawn` proves
+/// the exclusion is sufficient rather than merely present.
+pub const NON_TIME_X_AXIS: &[&str] = &["fee-pressure", "halving-era"];
+
 pub fn is_valid_comparison(
     primary: &ChartMeta,
     candidate: &ChartMeta,
@@ -1504,6 +1540,12 @@ pub fn is_valid_comparison(
         && candidate.can_compare()
         // Not offerable as a comparison, whatever the range.
         && !MULTI_METRIC.contains(&candidate.slug)
+        // Both ends have to mean the same thing by x, and these two mean
+        // something a time series cannot join. Checked on the primary as
+        // well, or the picker fills with candidates that are all refused
+        // when drawn.
+        && !NON_TIME_X_AXIS.contains(&primary.slug)
+        && !NON_TIME_X_AXIS.contains(&candidate.slug)
         // A chart laid over itself draws two identical lines on two axes,
         // which reads as a rendering fault rather than a comparison.
         && candidate.slug != primary.slug

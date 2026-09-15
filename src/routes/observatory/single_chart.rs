@@ -24,7 +24,7 @@ use crate::stats::charts::registry::{
 use crate::stats::charts::OverlayFlags;
 use crate::stats::server_fns::{
     fetch_block_time_histogram, fetch_empty_blocks_by_pool,
-    fetch_empty_blocks_monthly, fetch_fullness_histogram,
+    fetch_empty_blocks_monthly, fetch_fullness_histogram, fetch_height_range,
     fetch_miner_dominance, fetch_miner_dominance_daily, fetch_stats_summary,
 };
 use crate::stats::types::{uses_daily_aggregates, HistogramBucket, MinerShare};
@@ -359,38 +359,70 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
             let stats =
                 fetch_stats_summary().await.map_err(|e| e.to_string())?;
             let n = range_to_blocks(&r);
-            // Heights, not timestamps, for the mining queries. A custom
-            // window is converted through the block interval rather than
-            // being ignored, which is what left this fetching all of history
-            // while the URL advertised two days. Approximate by construction:
-            // the mining charts group by pool and month, so a boundary block
-            // either way does not move the picture.
-            let n = match (r.as_str(), custom_from.as_deref()) {
-                ("custom", Some(f)) => match super::shared::date_to_ts(f) {
-                    Some(from) => (to_or_tip(custom_to.as_deref(), &stats)
-                        .saturating_sub(from)
-                        / 600)
-                        .max(1),
-                    None => n,
-                },
-                _ => n,
+            // The mining queries take heights and the picker gives dates, and
+            // the window has to be anchored at **both** ends.
+            //
+            // Converting the window's duration to a block count and counting
+            // back from the tip gives a length, not a position: a request for
+            // April 2024 came back holding the most recent 61 days, correctly
+            // sized and entirely the wrong period. Silently answering a
+            // historical question with recent data is the worst failure this
+            // page can have, because nothing about the result looks wrong.
+            //
+            // So a custom window asks the chain where it sits. The named
+            // ranges keep counting back from the tip, which is exactly what
+            // they mean.
+            let (from, to, from_ts, to_ts) = if r == "custom" {
+                let from_ts = custom_from
+                    .as_deref()
+                    .and_then(super::shared::date_to_ts)
+                    .unwrap_or(0);
+                let to_ts = to_or_tip(custom_to.as_deref(), &stats);
+                match fetch_height_range(from_ts, to_ts)
+                    .await
+                    .map_err(|e| e.to_string())?
+                {
+                    Some((lo, hi)) => (lo, hi, from_ts, to_ts),
+                    // A window with no blocks in it. Querying the tip instead
+                    // would answer a question nobody asked, so this asks for
+                    // an empty height range and the charts draw nothing.
+                    None => (1, 0, from_ts, to_ts),
+                }
+            } else {
+                (
+                    stats.min_height.max(stats.max_height.saturating_sub(n)),
+                    stats.max_height,
+                    stats.latest_timestamp.saturating_sub(n * 600),
+                    stats.latest_timestamp,
+                )
             };
-            let from = stats.min_height.max(stats.max_height.saturating_sub(n));
-            let empty_monthly =
-                fetch_empty_blocks_monthly(from, stats.max_height)
-                    .await
-                    .map_err(|e| e.to_string())?;
-            let empty_by_pool =
-                fetch_empty_blocks_by_pool(from, stats.max_height)
-                    .await
-                    .map_err(|e| e.to_string())?;
-            let miners = if uses_daily_aggregates(n) {
-                let from_ts = stats.latest_timestamp.saturating_sub(n * 600);
-                fetch_miner_dominance_daily(from_ts, stats.latest_timestamp)
+            // An empty window, so nothing is fetched at all. The endpoints
+            // reject a reversed range, and a 500 would read as a server fault
+            // rather than as a range holding no blocks.
+            if from > to {
+                return Ok::<MiningPayload, String>((
+                    Vec::new(),
+                    Vec::new(),
+                    Vec::new(),
+                ));
+            }
+            let empty_monthly = fetch_empty_blocks_monthly(from, to)
+                .await
+                .map_err(|e| e.to_string())?;
+            let empty_by_pool = fetch_empty_blocks_by_pool(from, to)
+                .await
+                .map_err(|e| e.to_string())?;
+            // Which resolution, from the window that is actually being
+            // fetched rather than from the range name. `range_to_blocks` maps
+            // "custom" to 999,999, so this always read as daily even for a
+            // two-day window.
+            let span = to.saturating_sub(from) + 1;
+            let miners = if uses_daily_aggregates(span) {
+                fetch_miner_dominance_daily(from_ts, to_ts)
                     .await
                     .map_err(|e| e.to_string())?
             } else {
-                fetch_miner_dominance(from, stats.max_height)
+                fetch_miner_dominance(from, to)
                     .await
                     .map_err(|e| e.to_string())?
             };
@@ -841,14 +873,43 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                     />
                     // Under a rule and behind the comparison's own colour, so
                     // the two sets are never mistaken for one.
-                    {move || compare_kpis.get().map(|(c, k)| view! {
-                        <div class="border-t border-white/10 mt-3 pt-3">
-                            <p class="text-[0.7rem] uppercase tracking-widest text-white/70 mb-2 flex items-center gap-1.5">
-                                <span class="inline-block w-2 h-2 rounded-full bg-[#60a5fa] shrink-0"></span>
-                                {c.title}
-                            </p>
-                            <KeyFacts kpis=Signal::derive(move || k.clone()) unit=c.unit/>
-                        </div>
+                    {move || compare_kpis.get().map(|(c, k)| {
+                        // Read off axis 1 of the built option, so "no figures"
+                        // means the line is genuinely not on the chart rather
+                        // than that the rail failed to find it.
+                        //
+                        // The picker only offers pairings that can be drawn,
+                        // which the conformance suite proves for every pair at
+                        // both resolutions. What it cannot know is the
+                        // reader's range: the fee spike detector plots nothing
+                        // over a week with no spikes, so a valid choice still
+                        // arrives empty. Saying so is the difference between a
+                        // chart that explains itself and one that looks
+                        // broken.
+                        // A plain branch rather than `<Show>`: this closure
+                        // already reruns whenever the option does, and `Show`
+                        // wants children it can call repeatedly, which the
+                        // owned `Kpis` here cannot give it.
+                        let body = if matches!(k, kpi::Kpis::Unavailable) {
+                            view! {
+                                <p class="text-xs text-white/55 leading-relaxed">
+                                    "Nothing to draw over this range, so it is not on the chart. Try a longer one."
+                                </p>
+                            }.into_any()
+                        } else {
+                            view! {
+                                <KeyFacts kpis=Signal::derive(move || k.clone()) unit=c.unit/>
+                            }.into_any()
+                        };
+                        view! {
+                            <div class="border-t border-white/10 mt-3 pt-3">
+                                <p class="text-[0.7rem] uppercase tracking-widest text-white/70 mb-2 flex items-center gap-1.5">
+                                    <span class="inline-block w-2 h-2 rounded-full bg-[#60a5fa] shrink-0"></span>
+                                    {c.title}
+                                </p>
+                                {body}
+                            </div>
+                        }
                     })}
                 </RailSection>
 

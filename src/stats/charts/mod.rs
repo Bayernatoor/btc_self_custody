@@ -1772,9 +1772,12 @@ fn add_series_overlay(
 /// worst available outcome on a chart whose whole claim is that the numbers
 /// are checkable.
 ///
-/// Takes the other chart's **first** series only. Anything with more is
-/// already excluded by `Shape::accepts_second_series`, so reaching a
-/// multi-series chart here is a registry error rather than a case to handle.
+/// Takes the other chart's one **metric** series, which is not the same thing
+/// as its first. `fee-spikes` draws its 144-block moving average at index 0
+/// and the spikes themselves at index 1, so lifting by position drew the
+/// smoothing companion under the label "Fee Spike Detector" while the rail
+/// beside it reported the spikes. Position is a proxy for meaning and this is
+/// what it costs; `metric_series` answers the question actually being asked.
 ///
 /// Returns whether it applied, so the caller can say "not available over this
 /// range" instead of showing a picker that quietly does nothing.
@@ -1790,10 +1793,10 @@ pub fn apply_comparison(
     // Refuse a source with more than one real metric, and a source whose x
     // means something different.
     //
-    // Only `series[0]` is lifted, so a multi-metric source arrives as one of
-    // its parts under the whole chart's name: comparing the fee spike
-    // detector drew its moving average while the rail reported the spikes,
-    // and comparing difficulty adjustment dropped every easing retarget.
+    // One series is lifted, so a multi-metric source would arrive as one of
+    // its parts under the whole chart's name: comparing difficulty adjustment
+    // dropped every easing retarget, and comparing transaction batching drew
+    // outputs per transaction while calling itself both.
     //
     // And sharing dashboard rows does not mean sharing an x domain. Fee
     // pressure plots block fullness on a value axis, so overlaying it on a
@@ -1804,14 +1807,13 @@ pub fn apply_comparison(
     // is to offer named measurements rather than charts, so "Transaction
     // Batching: Outputs per Transaction" is selectable and complete. Until
     // then refusing is the honest answer; see `notes/phase-2-spec.md`.
-    if metric_series_count(other) != 1 || !x_domains_match(option, other) {
+    let metrics = metric_series(other);
+    if metrics.len() != 1 || !x_domains_match(option, other) {
         return false;
     }
-    let Some(data) = other
-        .get("series")
-        .and_then(|s| s.as_array())
-        .and_then(|a| a.first())
-        .and_then(|s| s.get("data"))
+    let source = metrics[0];
+    let Some(data) = source
+        .get("data")
         .and_then(|d| d.as_array())
         .filter(|d| !d.is_empty())
     else {
@@ -1854,13 +1856,7 @@ pub fn apply_comparison(
     // line turned the difficulty-adjustment series, which is sparse bars at
     // retargets and null in between, into a continuous curve through data
     // that does not exist.
-    let bars = other
-        .get("series")
-        .and_then(|s| s.as_array())
-        .and_then(|a| a.first())
-        .and_then(|s| s.get("type"))
-        .and_then(|t| t.as_str())
-        == Some("bar");
+    let bars = source.get("type").and_then(|t| t.as_str()) == Some("bar");
     let mut series = json!({
         "name": label,
         "type": if bars { "bar" } else { "line" },
@@ -1900,7 +1896,7 @@ pub fn apply_comparison(
 /// and it has been corrected, so the check is currently accurate; it is still
 /// a name-based proxy and the phase-2 contract replaces it with a declared
 /// role.
-fn metric_series_count(option: &serde_json::Value) -> usize {
+fn metric_series(option: &serde_json::Value) -> Vec<&serde_json::Value> {
     option
         .get("series")
         .and_then(|s| s.as_array())
@@ -1923,9 +1919,15 @@ fn metric_series_count(option: &serde_json::Value) -> usize {
                         .is_some_and(|d| !d.is_empty());
                     !named_ma && has_points
                 })
-                .count()
+                .collect()
         })
-        .unwrap_or(0)
+        .unwrap_or_default()
+}
+
+/// The count alone, which is what the conformance suite asserts on.
+#[cfg(test)]
+fn metric_series_count(option: &serde_json::Value) -> usize {
+    metric_series(option).len()
 }
 
 /// Whether two options put the same kind of thing on their x axis.

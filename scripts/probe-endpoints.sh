@@ -89,6 +89,7 @@ probe 200 "stats_signaling"        -X POST "$(sfn stats_signaling)"            -
 probe 200 "stats_signaling_periods" -X POST "$(sfn stats_signaling_periods)"   -d 'bit=2&method=bit'
 probe 200 "stats_miner_dominance"  -X POST "$(sfn stats_miner_dominance)"      -d "from=$((TIP-1000))&to=$TIP"
 probe 200 "stats_miner_dom_daily"  -X POST "$(sfn stats_miner_dominance_daily)" -d 'from_ts=1700000000&to_ts=1710000000'
+probe 200 "stats_height_range"     -X POST "$(sfn stats_height_range)"        -d 'from_ts=1711929600&to_ts=1714521599'
 probe 200 "empty_blocks_monthly"   -X POST "$(sfn stats_empty_blocks_monthly)" -d "from=0&to=$TIP"
 probe 200 "empty_blocks_by_pool"   -X POST "$(sfn stats_empty_blocks_by_pool)" -d "from=0&to=$TIP"
 probe 200 "stats_price_history"    -X POST "$(sfn stats_price_history)"        -d 'from_ts=0&to_ts=4000000000'

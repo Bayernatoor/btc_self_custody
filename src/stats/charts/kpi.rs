@@ -239,18 +239,47 @@ fn single_series(
     if metric.is_empty() {
         return Kpis::Unavailable;
     }
-    // Every one of them, not just the first.
+    // Several series on one axis are one of two different things, and the
+    // claim that "where there are genuinely several metrics the chart is
+    // stacked or categorical" was simply false. `batching` is a plain line
+    // chart plotting two measurements, so it routed straight through here.
     //
-    // A chart can split one measurement across several series for rendering
-    // reasons. Difficulty adjustment draws "Harder" and "Easier" separately
-    // so the bars can be coloured by sign, and each holds only its own half.
-    // Reading the first meant the average excluded every easing retarget, the
-    // low could never be negative, and the count was short by however many
-    // there were.
+    // - **One measurement split for rendering.** `diff-adjustment` draws
+    //   "Harder" and "Easier" as separate series so the bars can be coloured
+    //   by sign. Every retarget belongs to exactly one of them, so their x
+    //   positions are **disjoint** and concatenating reconstructs the single
+    //   series the reader sees. Reading only the first excluded every easing
+    //   retarget and made the low unable to go negative.
     //
-    // Concatenating is right for that case and harmless where there is one
-    // series. Where there are genuinely several metrics the chart is stacked
-    // or categorical, and neither routes through here.
+    // - **Several measurements at the same x.** `batching` plots inputs per
+    //   transaction and outputs per transaction, both at every block.
+    //   Concatenating averages two different quantities into one number and
+    //   counts every x twice: the rail reported 8,622 observations across
+    //   4,321 blocks and a change that described neither series.
+    //
+    // Disjoint x separates the two, and it is a property of the data rather
+    // than of a series' name or position, which is why it can be decided
+    // here. Where they overlap there is no single honest answer, so the rail
+    // says nothing rather than blending them. Phase 2 replaces this with
+    // named measurements, at which point both cases report properly.
+    if metric.len() > 1 {
+        let mut seen = std::collections::HashSet::new();
+        let concurrent = metric.iter().any(|s| {
+            series_points(s, x_is_time).iter().any(|p| {
+                // Keyed on x where the axis carries it and on position
+                // otherwise, with the discriminant in the key so a bit
+                // pattern can never collide with an index.
+                let key = match p.x {
+                    Some(x) => (true, x.to_bits()),
+                    None => (false, p.idx as u64),
+                };
+                !seen.insert(key)
+            })
+        });
+        if concurrent {
+            return Kpis::Unavailable;
+        }
+    }
     let mut pts: Vec<Point> = metric
         .iter()
         .flat_map(|s| series_points(s, x_is_time))
@@ -385,6 +414,77 @@ fn categorical(opt: &serde_json::Value, series: &[serde_json::Value]) -> Kpis {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Two series on one axis, disjoint in x: one measurement drawn in two
+    /// colours. Every point belongs to the reader's single series, so all of
+    /// them count.
+    ///
+    /// Written from what the reader sees rather than from the code: a real
+    /// sequence of -10, +20, -10, +20 has four observations, averages +5 and
+    /// runs from -10 to +20. Restating the implementation is how the last
+    /// three bugs in this file survived their own tests.
+    #[test]
+    fn a_metric_split_by_sign_is_read_as_one_series() {
+        let json = r#"{"xAxis": {"type": "time"}, "series":[
+            {"name":"Harder","data":[[2000,20.0],[4000,20.0]]},
+            {"name":"Easier","data":[[1000,-10.0],[3000,-10.0]]}]}"#;
+        match compute(json, Shape::Bar) {
+            Kpis::Series {
+                average,
+                peak,
+                low,
+                first,
+                last,
+                observations,
+                ..
+            } => {
+                assert_eq!(observations, 4);
+                assert!((average - 5.0).abs() < 1e-9);
+                assert_eq!(peak.y, 20.0);
+                assert_eq!(low.y, -10.0);
+                // Chronological, so the earliest easing and the latest rise,
+                // not the first and last array elements.
+                assert_eq!(first, -10.0);
+                assert_eq!(last, 20.0);
+            }
+            other => panic!("expected Series, got {other:?}"),
+        }
+    }
+
+    /// Two series at the same x: two different measurements. There is no
+    /// honest single average, peak or change across them, so the rail must
+    /// decline rather than blend.
+    ///
+    /// The blend is what shipped: inputs and outputs per transaction were
+    /// concatenated into one figure, doubling the observation count and
+    /// reporting a change that described neither series.
+    #[test]
+    fn two_measurements_at_the_same_x_report_nothing() {
+        let json = r#"{"xAxis": {"type": "time"}, "series":[
+            {"name":"Outputs/Tx","data":[[1000,2.0],[2000,2.2]]},
+            {"name":"Inputs/Tx","data":[[1000,1.4],[2000,1.5]]}]}"#;
+        assert!(matches!(compute(json, Shape::Line), Kpis::Unavailable));
+    }
+
+    /// The same distinction on a category axis, where points carry no x and
+    /// position is all there is. A sparse series pads with nulls, so the
+    /// positions stay disjoint and the split metric still reads as one.
+    #[test]
+    fn the_split_survives_a_category_axis() {
+        let json = r#"{"xAxis": {"type": "category", "data":["a","b","c","d"]},
+            "series":[
+            {"name":"Harder","data":[null,20.0,null,20.0]},
+            {"name":"Easier","data":[-10.0,null,-10.0,null]}]}"#;
+        match compute(json, Shape::Bar) {
+            Kpis::Series { observations, .. } => assert_eq!(observations, 4),
+            other => panic!("expected Series, got {other:?}"),
+        }
+        let both = r#"{"xAxis": {"type": "category", "data":["a","b"]},
+            "series":[
+            {"name":"Outputs/Tx","data":[2.0,2.2]},
+            {"name":"Inputs/Tx","data":[1.4,1.5]}]}"#;
+        assert!(matches!(compute(both, Shape::Line), Kpis::Unavailable));
+    }
 
     #[test]
     fn series_figures_come_from_the_plotted_points() {

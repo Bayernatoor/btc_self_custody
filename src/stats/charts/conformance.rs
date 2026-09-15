@@ -71,7 +71,13 @@ fn synthetic_blocks(n: usize) -> Vec<BlockSummary> {
                 difficulty: 1.0e14 + f * 1.0e11,
                 total_fees: 10_000_000 + i * 5_000,
                 median_fee: 2_000 + i * 7,
-                median_fee_rate: 5.0 + f * 0.1,
+                // A real spike near the end, because the fee spike detector
+                // plots only blocks above 5x their trailing 144-block
+                // average and a smoothly rising series never crosses that.
+                // Without one its metric series is empty, which reads as
+                // "this chart cannot be compared" when the truth is "this
+                // fixture gave it nothing to draw".
+                median_fee_rate: if i == 500 { 600.0 } else { 5.0 + f * 0.1 },
                 segwit_spend_count: 700 + i,
                 taproot_spend_count: 100 + i,
                 multisig_count: 10 + i,
@@ -591,7 +597,12 @@ mod tests {
             if !meta.can_compare() {
                 continue;
             }
-            if super::super::metric_series_count(&opt) > 1 {
+            // Not `> 1`. Zero is the same defect from the other end:
+            // `diff-ribbon` is seven moving averages with no base series, so
+            // there is no one metric to lift and no honest label for whichever
+            // one was. Both answers mean "this chart does not present a single
+            // measurement", which is what the list is for.
+            if super::super::metric_series_count(&opt) != 1 {
                 actual.insert(meta.slug);
             }
         }
@@ -631,6 +642,101 @@ mod tests {
                  wrong, or the builder changed under it.",
                 meta.slug,
                 if daily { "daily" } else { "per block" }
+            );
+        }
+    }
+
+    /// `registry::NON_TIME_X_AXIS` has to name exactly the charts whose
+    /// builders produce a non-time x axis, or the comparison rule built on it
+    /// is guessing.
+    ///
+    /// Checked per block only. Every daily builder puts dates on a category
+    /// axis, so at that resolution the kinds agree trivially and the check
+    /// would prove nothing; per block is where a chart either carries
+    /// timestamps or does not.
+    #[test]
+    fn the_x_axis_exceptions_are_exactly_right() {
+        use std::collections::BTreeSet;
+        let mut actual: BTreeSet<&str> = BTreeSet::new();
+        for (meta, daily, opt) in built_charts() {
+            if daily || !meta.can_compare() {
+                continue;
+            }
+            let axis = match opt.get("xAxis") {
+                Some(serde_json::Value::Array(a)) => a.first().cloned(),
+                other => other.cloned(),
+            };
+            let kind = axis.and_then(|x| {
+                x.get("type").and_then(|t| t.as_str()).map(str::to_string)
+            });
+            if kind.as_deref() != Some("time") {
+                actual.insert(meta.slug);
+            }
+        }
+        let declared: BTreeSet<&str> =
+            registry::NON_TIME_X_AXIS.iter().copied().collect();
+        assert_eq!(
+            actual, declared,
+            "NON_TIME_X_AXIS disagrees with what the builders produce. A \
+             chart missing from it is offered comparisons that cannot be \
+             drawn; one listed wrongly loses comparisons that would work."
+        );
+    }
+
+    /// The same contract, pairwise, which is where it was actually failing.
+    ///
+    /// The test above asks whether a chart can hold *a* second series. Two of
+    /// `apply_comparison`'s three refusals cannot be answered by one chart
+    /// alone: how many metrics the candidate plots, and whether the two agree
+    /// on what their x axis means. Neither was ever checked against a real
+    /// pair, so `fee-pressure` was offered on every time-axis chart and
+    /// refused on every one of them at draw time. The picker advertised a
+    /// comparison, the reader selected it, and nothing appeared.
+    ///
+    /// Testing one chart at a time cannot find a defect that only exists
+    /// between two, which is the general lesson: the unit under test has to
+    /// be the unit the invariant is about.
+    #[test]
+    fn the_offered_comparisons_can_all_actually_be_drawn() {
+        for daily in [false, true] {
+            let at: Vec<(&'static ChartMeta, serde_json::Value)> =
+                built_charts()
+                    .into_iter()
+                    .filter(|(_, d, _)| *d == daily)
+                    .map(|(m, _, o)| (m, o))
+                    .collect();
+            let mut checked = 0usize;
+            for (primary, primary_opt) in &at {
+                for (candidate, candidate_opt) in &at {
+                    if !registry::is_valid_comparison(primary, candidate, daily)
+                    {
+                        continue;
+                    }
+                    let mut v = primary_opt.clone();
+                    assert!(
+                        super::super::apply_comparison(
+                            &mut v,
+                            candidate_opt,
+                            candidate.title,
+                            candidate.unit.label(),
+                        ),
+                        "{} is offered as a comparison on {} (daily={daily}) \
+                         and then refused when drawn. Either it belongs in \
+                         registry::MULTI_METRIC or registry::VALUE_X_AXIS, or \
+                         the pairing is fine and the refusal in \
+                         apply_comparison is too broad.",
+                        candidate.slug,
+                        primary.slug
+                    );
+                    checked += 1;
+                }
+            }
+            // The pairs have to actually exist, or a rule that accidentally
+            // refused everything would pass this silently.
+            assert!(
+                checked > 400,
+                "only {checked} pairs offered at daily={daily}, which is too \
+                 few for the feature to be working at all"
             );
         }
     }
@@ -680,6 +786,7 @@ mod tests {
     #[test]
     fn every_chart_produces_the_key_figures_its_shape_implies() {
         use super::super::kpi::{self, Kpis};
+        let mut suppressed: Vec<String> = Vec::new();
         for (meta, daily, opt) in built_charts() {
             let json = serde_json::to_string(&opt).expect("serialisable");
             let at = format!(
@@ -698,8 +805,51 @@ mod tests {
                     panic!("{at} produced {k:?} for shape {:?}", meta.shape)
                 }
                 (_, Kpis::Series { .. }) => {}
+                // A chart plotting several measurements at the same x has no
+                // single average, peak or change, so the rail says nothing
+                // rather than blending them into a number that describes
+                // neither. `MULTI_METRIC` is exactly the set that does not
+                // present one measurement, which is why the allowance is
+                // keyed on it rather than listed again here.
+                (_, Kpis::Unavailable) => suppressed.push(at),
                 (_, k) => panic!("{at} produced {k:?} rather than a series"),
             }
         }
+        // Pinned by name, so a chart going quiet is a visible change rather
+        // than a silent one, and so the list can be read as what it is: the
+        // rails that show no figures today.
+        //
+        // Every one plots several measurements at the same x, which has no
+        // single average, peak or change. Six plot genuinely different
+        // quantities. `chain-size` is the odd one and the one to revisit
+        // first: its two series measure the same thing, the second being the
+        // first scaled into a disk-size estimate, so it is a companion rather
+        // than a second metric. Distinguishing those is a declared role,
+        // which is phase 2, not another name-based guess.
+        //
+        // This list should shrink. It must never grow without a reason
+        // written down beside it.
+        suppressed.sort();
+        let expected = [
+            "batching (daily)",
+            "batching (per block)",
+            "chain-size (daily)",
+            "cumulative-adoption (daily)",
+            "cumulative-adoption (per block)",
+            "diff-ribbon (daily)",
+            "diff-ribbon (per block)",
+            "halving-era (daily)",
+            "halving-era (per block)",
+            "multi-velocity (daily)",
+            "multi-velocity (per block)",
+            "utxo-flow (daily)",
+            "utxo-flow (per block)",
+        ];
+        assert_eq!(
+            suppressed, expected,
+            "the set of rails with no key figures changed. A chart added here \
+             is one whose numbers a reader can no longer see; a chart removed \
+             is progress and should update this list."
+        );
     }
 }
