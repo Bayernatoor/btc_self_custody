@@ -1012,7 +1012,17 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::median_fee_rate_chart,
             daily: Daily::Fn(super::median_fee_rate_chart_daily),
         },
-        measurements: &[],
+        measurements: &[
+            Measurement {
+                series: "",
+                quantity: "Mean of per-block median transaction fee rates",
+                method_per_block: Method::Measured,
+                method_daily: Method::Calculated,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "Each block contributes its own median fee rate, and the daily point averages those. A mean of medians is not the median of the day's transactions, and the two differ whenever blocks hold different numbers of transactions.",
+            },
+        ],
         about: Some(About {
             definition: Some("How much a transaction paid per unit of size to get into a block, taking the middle transaction. Fees are charged by the room a transaction takes, not the value it moves, so sending a large amount can cost less than sending a small one."),
             technical: "Fee divided by virtual size for every transaction in the block, then the middle value. Virtual size is weight divided by four, which is the unit the fee market prices in. The median, because one very large fee drags an average somewhere no real transaction sat. The coinbase transaction pays no fee and is excluded.",
@@ -1158,7 +1168,17 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::difficulty_ribbon_chart,
             daily: Daily::Fn(super::difficulty_ribbon_chart_daily),
         },
-        measurements: &[],
+        measurements: &[
+            Measurement {
+                series: "",
+                quantity: "Mining difficulty, smoothed over several windows",
+                method_per_block: Method::Measured,
+                method_daily: Method::Estimated,
+                per_block: Aggregation::WindowedDerived,
+                daily: Aggregation::WindowedDerived,
+                population: "Seven moving averages of one quantity: 9, 14, 25, 40, 60, 90 and 128 blocks per block, and 7, 14, 25, 40, 60, 90 and 128 days daily. There is no unsmoothed series, so every line is derived. Inherits the retarget blending of the daily difficulty column.",
+            },
+        ],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -1178,7 +1198,17 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::difficulty_chart,
             daily: Daily::Fn(super::difficulty_chart_daily),
         },
-        measurements: &[],
+        measurements: &[
+            Measurement {
+                series: "",
+                quantity: "Mining difficulty as the protocol reports it",
+                method_per_block: Method::Measured,
+                method_daily: Method::Estimated,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "Difficulty holds flat for 2,016 blocks and changes only at a retarget, so a daily mean equals the difficulty on every day except a retarget day, where it is a blend of two epochs and is no protocol difficulty. That is why the daily method is an estimate while the per-block one is not.",
+            },
+        ],
         about: Some(About {
             definition: Some("How hard it currently is to mine a block. Every miner races to find a number that makes the block's hash fall below a target, and difficulty is that target expressed as a multiple of the easiest one the protocol allows. Nobody sets it. It moves automatically with how much mining power is on the network."),
             technical: "Read from the header of every block, so this is the protocol's own value. It changes once every 2,016 blocks, roughly every two weeks, which is why the line steps. Multiply by 2^32 for the expected number of hashes per block, the figure hash-rate estimates are built on.",
@@ -1448,7 +1478,17 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::block_interval_chart,
             daily: Daily::Fn(super::block_interval_chart_daily),
         },
-        measurements: &[],
+        measurements: &[
+            Measurement {
+                series: "",
+                quantity: "Time between blocks",
+                method_per_block: Method::Calculated,
+                method_daily: Method::Estimated,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::WindowedDerived,
+                population: "Per block this is the difference between consecutive header timestamps, which miners choose, so it can be zero or negative. Daily it is 1,440 minutes divided by the day's block count, which is not the mean of those differences and is wrong for an incomplete day; days with very few blocks are omitted.",
+            },
+        ],
         about: Some(About {
             definition: Some("The time between one block and the next. Bitcoin targets ten minutes on average and holds that average by adjusting difficulty, but any single gap is close to random: a two-minute gap and a fifty-minute gap are both ordinary."),
             technical: "The difference between consecutive block header timestamps. Miners set those timestamps and the protocol only loosely constrains them, so a handful of intervals in the chain's history are negative or implausibly long. They are plotted as found, because a cleaned series would be my data rather than the chain's.",
@@ -1611,7 +1651,17 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::block_size_chart,
             daily: Daily::Fn(super::block_size_chart_daily),
         },
-        measurements: &[],
+        measurements: &[
+            Measurement {
+                series: "",
+                quantity: "Serialized block size",
+                method_per_block: Method::Measured,
+                method_daily: Method::Measured,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "Every block in the window, including header and transaction-count overhead. Size is not weight: a block near the weight limit can be well under the size its witness discount allows.",
+            },
+        ],
         about: Some(About {
             definition: Some("How much data each block carries. Block space is limited and shared, so this is the clearest view of how full the chain is running. A larger block is not better or worse; it means more, or larger, transactions were included."),
             technical: "The serialised size of the block as my node stores it, witness data included. Consensus limits weight rather than bytes, to 4 million weight units, and witness bytes count a quarter as much toward that. This is why blocks pass the old one-megabyte figure. Weight utilisation has its own chart.",
@@ -1629,7 +1679,17 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::taproot_chart,
             daily: Daily::Fn(super::taproot_chart_daily),
         },
-        measurements: &[],
+        measurements: &[
+            Measurement {
+                series: "",
+                quantity: "Taproot outputs created",
+                method_per_block: Method::Measured,
+                method_daily: Method::Measured,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "Reads the taproot_spend_count column, which counts created P2TR outputs rather than inputs spending them; the column name is wrong and is being corrected. Outputs of non-coinbase transactions only.",
+            },
+        ],
         about: Some(About {
             definition: Some("How many new Taproot outputs are being created. Taproot, activated in 2021, is the most recent change to how Bitcoin outputs can be locked. It makes a complex spending condition, such as a multi-signature wallet, look the same on chain as an ordinary payment, which helps both privacy and fees."),
             technical: "Counts outputs with a pay-to-taproot script created in each block. Created, not spent: an output can sit unspent for years, so this leads the share of transactions that actually use Taproot. Inscriptions are stored in Taproot witness data, which is why this and the inscription charts move together from 2023.",
@@ -1710,7 +1770,17 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::tx_density_chart,
             daily: Daily::Fn(super::tx_density_chart_daily),
         },
-        measurements: &[],
+        measurements: &[
+            Measurement {
+                series: "",
+                quantity: "Transactions per 1,000 serialized block bytes",
+                method_per_block: Method::Calculated,
+                method_daily: Method::Calculated,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::RatioOfTotals,
+                population: "Transaction count over serialized size in kB, where size includes header and count overhead and the count includes the coinbase. It measures how many transactions fit in the bytes used, not payments per transaction and not fee efficiency: batching lowers density while using less space per payment.",
+            },
+        ],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -1784,7 +1854,26 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::utxo_flow_chart,
             daily: Daily::Fn(super::utxo_flow_chart_daily),
         },
-        measurements: &[],
+        measurements: &[
+            Measurement {
+                series: "Outputs (created)",
+                quantity: "Outputs created by non-coinbase transactions",
+                method_per_block: Method::Measured,
+                method_daily: Method::Measured,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "Includes provably unspendable OP_RETURN outputs, which never enter the spendable set, so outputs exceeding inputs does not by itself mean that set grew. Coinbase transactions are excluded by ingestion, so their outputs are missing.",
+            },
+            Measurement {
+                series: "Inputs (consumed)",
+                quantity: "Inputs spent by non-coinbase transactions",
+                method_per_block: Method::Measured,
+                method_daily: Method::Measured,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "Coinbase transactions are excluded by ingestion, so the coinbase input is not counted.",
+            },
+        ],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -1837,7 +1926,17 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::weight_utilization_chart,
             daily: Daily::Fn(super::weight_utilization_chart_daily),
         },
-        measurements: &[],
+        measurements: &[
+            Measurement {
+                series: "",
+                quantity: "Share of the four-million-unit weight limit a block used",
+                method_per_block: Method::Calculated,
+                method_daily: Method::Calculated,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "Block weight over 4,000,000. This is the capacity measure, unlike serialized size, because the limit is denominated in weight.",
+            },
+        ],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -1872,7 +1971,17 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::witness_share_chart,
             daily: Daily::Fn(super::witness_share_chart_daily),
         },
-        measurements: &[],
+        measurements: &[
+            Measurement {
+                series: "",
+                quantity: "Witness bytes as a share of serialized block bytes",
+                method_per_block: Method::Calculated,
+                method_daily: Method::Calculated,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::RatioOfTotals,
+                population: "Witness bytes over total block bytes. A byte fraction, not a measure of fee saving: the witness discount changes what those bytes cost in weight, not how many bytes they are.",
+            },
+        ],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -1907,7 +2016,26 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::witness_version_chart,
             daily: Daily::Fn(super::witness_version_chart_daily),
         },
-        measurements: &[],
+        measurements: &[
+            Measurement {
+                series: "SegWit",
+                quantity: "Outputs created to a v0 witness program",
+                method_per_block: Method::Measured,
+                method_daily: Method::Measured,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "P2WPKH plus P2WSH outputs of non-coinbase transactions. Not every possible witness program: unrecognised or future witness versions are not counted here. The band is drawn as \"SegWit\", which understates that it is native v0 only; renaming it is copy work.",
+            },
+            Measurement {
+                series: "Taproot",
+                quantity: "Outputs created to a v1 witness program",
+                method_per_block: Method::Measured,
+                method_daily: Method::Measured,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "P2TR outputs of non-coinbase transactions.",
+            },
+        ],
         about: None,
     },
 ];

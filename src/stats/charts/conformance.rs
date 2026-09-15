@@ -1001,7 +1001,7 @@ mod tests {
             .collect();
         assert_eq!(
             undeclared.len(),
-            40,
+            29,
             "declared cohort changed. If you added a chart, declare its \
              measurements; if you declared one, lower this number. Still \
              undeclared: {undeclared:?}"
