@@ -4143,6 +4143,62 @@ mod tests {
         assert_eq!(all.len(), 10);
     }
 
+    /// A date window returns exactly the days asked for.
+    ///
+    /// 1 January to 31 March 2020 is 91 days, 2020 being a leap year. The UI
+    /// used to advance its end boundary by a whole day to "include the entire
+    /// end day", which is right against a half-open query and wrong against
+    /// both of these, since one compares `day <= date(to_ts)` and the other
+    /// `timestamp <= to_ts`. The result was 92 rows ending on 1 April, in the
+    /// chart, the key figures and the CSV export alike.
+    ///
+    /// Asserted against a calendar count rather than against either query's
+    /// expression, and on both twins, because the pre-computed table and the
+    /// raw scan are chosen by whether the table has been built and a reader
+    /// cannot tell which one answered.
+    #[test]
+    fn a_date_window_returns_exactly_the_days_asked_for() {
+        let conn = setup_db();
+        // One block a day from 2019-12-30 to 2020-04-03, so the boundaries
+        // have real days on both sides to wrongly include.
+        let start = 1_577_664_000; // 2019-12-30 00:00:00 UTC
+        for i in 0..96u64 {
+            insert_test_block(
+                &conn,
+                i + 1,
+                start + i * 86_400 + 43_200,
+                2_000_000,
+                100,
+                1_000,
+            );
+        }
+        rebuild_daily_blocks_force(&conn).unwrap();
+
+        let from_ts = 1_577_836_800; // 2020-01-01 00:00:00
+                                     // What `date_to_ts_end("2020-03-31")` produces.
+        let to_ts = 1_585_612_800 + 86_399; // 2020-03-31 23:59:59
+
+        for (label, rows) in [
+            ("fast", query_daily_aggregates_fast(&conn, from_ts, to_ts)),
+            ("raw", query_daily_aggregates(&conn, from_ts, to_ts)),
+        ] {
+            let rows = rows.unwrap();
+            assert_eq!(
+                rows.len(),
+                91,
+                "{label}: 31 + 29 + 31 days in Jan-Mar 2020, got {} ending {}",
+                rows.len(),
+                rows.last().map(|r| r.date.clone()).unwrap_or_default()
+            );
+            assert_eq!(
+                rows.first().unwrap().date,
+                "2020-01-01",
+                "{label} start"
+            );
+            assert_eq!(rows.last().unwrap().date, "2020-03-31", "{label} end");
+        }
+    }
+
     #[test]
     fn daily_fallback_only_fires_when_the_table_was_never_built() {
         let conn = setup_db();

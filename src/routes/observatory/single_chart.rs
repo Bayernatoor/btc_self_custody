@@ -102,8 +102,7 @@ fn to_or_tip(
     to: Option<&str>,
     stats: &crate::stats::types::StatsSummary,
 ) -> u64 {
-    to.and_then(super::shared::date_to_ts)
-        .map(|t| t + 86_400)
+    to.and_then(super::shared::date_to_ts_end)
         .unwrap_or(stats.latest_timestamp)
 }
 
@@ -122,11 +121,13 @@ fn resolved_window(
 ) -> (u64, u64) {
     if range == "custom" {
         if let (Some(f), Some(t)) = (custom_from, custom_to) {
-            if let (Some(from), Some(to)) =
-                (super::shared::date_to_ts(f), super::shared::date_to_ts(t))
-            {
-                // Include the whole end day, as the dashboard resource does.
-                return (from, to + 86_400);
+            if let (Some(from), Some(to)) = (
+                super::shared::date_to_ts(f),
+                super::shared::date_to_ts_end(t),
+            ) {
+                // Closed at both ends, as every timestamp query in `db.rs`
+                // is, and as the dashboard resource now is.
+                return (from, to);
             }
         }
     }
@@ -466,6 +467,28 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
         }
     });
 
+    // A `Memo`, not `get_untracked`, and not a plain `.get()` either.
+    //
+    // Untracked was the bug: the live stats arrive after the first render, so
+    // `chain_size_gb` was 0 when the option was built and the arrival never
+    // triggered a rebuild. Chain Size then drew Block Data alone, and clicking
+    // any unrelated toggle made a second series appear, because that
+    // recomputation finally read the value. A scale control that adds data is
+    // not a scale control.
+    //
+    // A plain `.get()` fixes that and rebuilds every chart on every live tick,
+    // which is several times a minute for a value that changes when a block
+    // arrives. `Memo` compares before notifying, so the rebuild happens when
+    // the number actually moves, which is exactly when the chart should
+    // change.
+    let disk_size_gb = Memo::new(move |_| {
+        state
+            .cached_live
+            .get()
+            .map(|s| s.network.chain_size_gb)
+            .unwrap_or(0.0)
+    });
+
     let option = Signal::derive(move || {
         // The macro-driven charts return empty while a range refetches so the
         // previous range's rows are never serialized under the new key. Same
@@ -503,13 +526,19 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                     c.unit.label(),
                 );
             }
-            // After both, so it only ever touches the left axis the metric
-            // owns rather than the right one an overlay or a comparison added.
-            crate::stats::charts::apply_log_scale(&mut v, logv);
-            // The metric's scale is this page's own signal; the right axis
-            // belongs to whatever is occupying it, which is shared state.
-            crate::stats::charts::apply_right_log_scale(
+            // After the overlays and the comparison, so both axes exist and
+            // each is judged on the series it actually holds. The metric's
+            // scale is this page's own signal, gated on `supports_log`; the
+            // right axis belongs to whatever is occupying it, which is shared
+            // state.
+            //
+            // One call rather than two, because the dropped-point notice has
+            // to count both axes before either is sanitised. Calling the two
+            // separately gave a notice that counted only the left, so turning
+            // on the overlay's log axis dropped points silently.
+            crate::stats::charts::apply_scales_with(
                 &mut v,
+                logv,
                 flags.right_log_scale,
             );
             serde_json::to_string(&v).unwrap_or_default()
@@ -560,12 +589,9 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                 let finish = |v: serde_json::Value, is_daily: bool| -> String {
                     decorate(v, is_daily, cmp_option.clone())
                 };
-                let disk_gb = state
-                    .cached_live
-                    .get_untracked()
-                    .map(|s| s.network.chain_size_gb)
-                    .unwrap_or(0.0);
+                let disk_gb = disk_size_gb.get();
                 let offset = state.chain_size_offset.get().unwrap_or(0);
+                let chain_total = state.chain_size_total.get().unwrap_or(0);
                 let unit = if sats { "sats" } else { "btc" };
 
                 match (&data, meta.source) {
@@ -583,14 +609,20 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                     (DashboardData::PerBlock(blocks), Source::ChainSize) => {
                         finish(
                             crate::stats::charts::chain_size_chart(
-                                blocks, disk_gb, offset,
+                                blocks,
+                                disk_gb,
+                                offset,
+                                chain_total,
                             ),
                             false,
                         )
                     }
                     (DashboardData::Daily(days), Source::ChainSize) => finish(
                         crate::stats::charts::chain_size_chart_daily(
-                            days, disk_gb, offset,
+                            days,
+                            disk_gb,
+                            offset,
+                            chain_total,
                         ),
                         true,
                     ),

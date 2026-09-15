@@ -427,23 +427,55 @@ pub(crate) fn y_axis(name: &str) -> serde_json::Value {
 /// clipping bug in `fix/chart-zoom-axis` happened. A category axis is left
 /// alone, since there is nothing to rescale.
 ///
-/// ECharts drops non-positive points on a log axis instead of erroring, so
-/// callers must only offer this where the series is positive; see
-/// `registry::ChartMeta::supports_log`.
+/// ECharts does not so much drop a non-positive point on a log axis as fail to
+/// place it, so switching also nulls the points the axis cannot plot and
+/// reports how many; see [`drop_non_positive`]. Which charts are offered the
+/// switch at all is `registry::ChartMeta::supports_log`.
+///
+/// **Apply once, to a freshly built option.** Sanitising is destructive, so a
+/// second application has nothing left to count and would clear the notice
+/// while leaving the gap. That is how the chart views work already: every
+/// render rebuilds the option from the rows and decorates it once.
 pub fn apply_log_scale(option: &mut serde_json::Value, on: bool) {
-    if on && !log_scale_is_meaningful(option) {
+    // Counted before the axis is switched, because switching it nulls the
+    // points being counted. Getting this backwards leaves the gap in the line
+    // with nothing to explain it.
+    let dropped = if on && log_scale_is_meaningful(option, 0) {
+        non_positive_count(option, 0)
+    } else {
+        0
+    };
+    apply_axis_log(option, 0, on);
+    // Reconciled unconditionally, so switching back to linear clears a notice
+    // the log view left behind. Doing it inside the axis block meant the
+    // `!on` path returned before reaching it, and the warning stayed on a
+    // linear chart.
+    //
+    // Left-axis only, which is why `apply_scales_with` exists: it counts both
+    // axes and writes one notice covering them.
+    set_log_notice(option, dropped);
+}
+
+/// Switch one value axis, and make its own series safe to draw there.
+///
+/// Per axis, which is the part that was wrong. Eligibility was decided from
+/// **every** series in the option, so a bar comparison landing on the right
+/// axis disabled the metric's own log scale: Difficulty with a `max-tx-fee`
+/// comparison reported Log as selected and rendered linear, because the
+/// refusal that exists to stop bars running from a log floor was being applied
+/// to an axis that had no bars on it. The right axis meanwhile applied no
+/// refusal at all, so the bars it did hold were free to do exactly that.
+fn apply_axis_log(option: &mut serde_json::Value, axis_idx: u64, on: bool) {
+    if on && !log_scale_is_meaningful(option, axis_idx) {
         return;
     }
     // Read before the axis is borrowed mutably: both come from the series
     // alongside it.
-    let extent = positive_extent(option, 0);
-    let dropped = if on { non_positive_count(option, 0) } else { 0 };
-    set_axis_scale(option, 0, on, extent);
-    // Reconciled unconditionally, and after the axis, so switching back to
-    // linear clears a notice the log view left behind. Doing it inside the
-    // axis block meant the `!on` path returned before reaching it, and the
-    // warning stayed on a linear chart.
-    set_log_notice(option, dropped);
+    let extent = positive_extent(option, axis_idx);
+    set_axis_scale(option, axis_idx, on, extent);
+    if on {
+        drop_non_positive(option, axis_idx);
+    }
 }
 
 /// Switch the right value axis, the one an overlay owns, to a logarithmic
@@ -475,8 +507,7 @@ pub fn apply_right_log_scale(option: &mut serde_json::Value, on: bool) {
     if !has_right_value_axis(option) {
         return;
     }
-    let extent = positive_extent(option, RIGHT_AXIS_IDX);
-    set_axis_scale(option, RIGHT_AXIS_IDX, on, extent);
+    apply_axis_log(option, RIGHT_AXIS_IDX, on);
 }
 
 /// Apply both axis scales in the order they depend on, and reconcile the one
@@ -491,21 +522,40 @@ pub fn apply_right_log_scale(option: &mut serde_json::Value, on: bool) {
 /// both, which is what a reader needs to know, and the wording does not name
 /// an axis for that reason.
 pub fn apply_scales(option: &mut serde_json::Value, flags: &OverlayFlags) {
-    apply_log_scale(option, flags.log_scale);
-    apply_right_log_scale(option, flags.right_log_scale);
-    // After both, and unconditionally, so turning either one off clears a
-    // notice the other did not put there. `apply_log_scale` has already
-    // written the left-axis count; this replaces it with the combined one,
-    // which is why `set_log_notice` removes before it adds.
-    let dropped = if flags.log_scale {
+    apply_scales_with(option, flags.log_scale, flags.right_log_scale)
+}
+
+/// [`apply_scales`] with the two switches passed separately.
+///
+/// The single-chart view needs this because its left-axis switch is its own
+/// page state gated on `supports_log`, not the shared overlay flag, and it was
+/// therefore calling the two axis functions itself and getting a notice that
+/// counted only one of them.
+///
+/// **The counting has to happen first.** Switching an axis to log now nulls
+/// the points that axis cannot plot, so counting afterwards counts nothing and
+/// the notice explaining the gap disappears with the gap still there.
+pub fn apply_scales_with(
+    option: &mut serde_json::Value,
+    left: bool,
+    right: bool,
+) {
+    let dropped = if left && log_scale_is_meaningful(option, 0) {
         non_positive_count(option, 0)
     } else {
         0
-    } + if flags.right_log_scale && has_right_value_axis(option) {
+    } + if right
+        && has_right_value_axis(option)
+        && log_scale_is_meaningful(option, RIGHT_AXIS_IDX)
+    {
         non_positive_count(option, RIGHT_AXIS_IDX)
     } else {
         0
     };
+    apply_axis_log(option, 0, left);
+    if has_right_value_axis(option) {
+        apply_axis_log(option, RIGHT_AXIS_IDX, right);
+    }
     set_log_notice(option, dropped);
 }
 
@@ -581,7 +631,13 @@ fn set_axis_scale(
         if o.remove(LOG_BOUNDS_MARKER).is_some() {
             o.remove("min");
             o.remove("max");
-            o.remove("splitNumber");
+        }
+        if o.remove(LOG_FORMATTER_MARKER).is_some() {
+            if let Some(label) =
+                o.get_mut("axisLabel").and_then(|l| l.as_object_mut())
+            {
+                label.remove("formatter");
+            }
         }
         o.remove("minorTick");
         o.remove("minorSplitLine");
@@ -616,11 +672,63 @@ fn set_axis_scale(
         // significant figures keeps the fit tight and the label legible.
         o.insert("min".to_string(), json!(round_sig(lo, 3, RoundDir::Down)));
         o.insert("max".to_string(), json!(round_sig(hi, 3, RoundDir::Up)));
-        // ECharts is sparing with ticks on a log axis whose bounds are not
-        // decade-aligned, and ours never are since they fit the data: over
-        // ALL, difficulty got three gridlines across fourteen decades. This
-        // is a hint rather than a guarantee, which is all ECharts offers.
-        o.insert("splitNumber".to_string(), json!(LOG_AXIS_SPLITS));
+        // No `splitNumber`. It reads like the remedy for a sparse log axis
+        // and is the opposite.
+        //
+        // ECharts labels a log axis only at whole powers of the base, and
+        // honours `splitNumber` by dividing the *exponent* range. Our bounds
+        // fit the data and so are never decade-aligned: Avg Fee/Tx over ALL
+        // spans about 7.36 decades, which at 8 splits puts ticks every 0.92
+        // decades, and not one of those positions is a power of ten. The axis
+        // then drew a single interior label across seven decades, having been
+        // asked for eight.
+        //
+        // Left alone, ECharts steps by whole decades and labels every one.
+        // Structure between the labels comes from the minor ticks below,
+        // which is what that mechanism is for and what the comment here used
+        // to claim `splitNumber` was doing.
+        //
+        // An explicit tick list would settle it outright, and ECharts 5 has
+        // none for a value or log axis.
+
+        // Guarantee a formatter, because ECharts prints an explicit bound
+        // verbatim and its own idea of the bound is not the number we set.
+        //
+        // `round_sig` hands over exactly 22,900,000, and the axis rendered
+        // "22,899,999.9999999739": log extents are held as exponents, so the
+        // value comes back as 10^log10(22900000), which is 22900000.00000002,
+        // and then prints in full. Rust cannot round its way out of that. The
+        // abbreviating formatter reads it as 22.9M and is what `push_right_axis`
+        // has always installed; a log axis needs it just as much, and the
+        // builders that never asked for it are exactly the ones that showed
+        // the raw float.
+        //
+        // Only where the builder has not chosen its own, since a percentage or
+        // unit-suffixed formatter is a deliberate choice.
+        let has_formatter = o
+            .get("axisLabel")
+            .and_then(|l| l.get("formatter"))
+            .is_some();
+        if !has_formatter {
+            match o.get_mut("axisLabel").and_then(|l| l.as_object_mut()) {
+                Some(label) => {
+                    label.insert(
+                        "formatter".to_string(),
+                        json!(SI_AXIS_SENTINEL),
+                    );
+                }
+                None => {
+                    o.insert(
+                        "axisLabel".to_string(),
+                        json!({
+                            "color": "#d4d4d4",
+                            "formatter": SI_AXIS_SENTINEL
+                        }),
+                    );
+                }
+            }
+            o.insert(LOG_FORMATTER_MARKER.to_string(), json!(true));
+        }
         // So the switch back knows these bounds are ours to remove.
         o.insert(LOG_BOUNDS_MARKER.to_string(), json!(true));
         // Minor ticks are the only way to give a log axis structure between
@@ -646,6 +754,63 @@ fn set_axis_scale(
                 }
             }),
         );
+    }
+}
+
+/// Replace the points a log axis cannot plot with `null`.
+///
+/// ECharts does not skip a non-positive point on a log axis so much as fail to
+/// place it, and the damage is not confined to the point: on Chain Size over
+/// ALL, whose first readings are fractions of a gigabyte, the filled area
+/// under the line was drawn as a straight diagonal wedge from the bottom left
+/// corner to the top right. Seven decades of real curve with a triangle
+/// pasted over it, and nothing in the data corresponds to that edge.
+///
+/// A `null` is a gap, which ECharts does handle, so the series simply starts
+/// where it becomes plottable. The count is taken before this runs and shown
+/// as a notice, so the reader is told how many readings are missing rather
+/// than left to infer it.
+///
+/// This also settles a disagreement the rail could not win. `kpi` reads its
+/// figures back out of the built option precisely so they describe the series
+/// that was drawn; with the points still present it reported a low of zero for
+/// a chart whose axis could not reach zero. Now both sides see the same
+/// series.
+fn drop_non_positive(option: &mut serde_json::Value, axis_idx: u64) {
+    let Some(series) = option.get_mut("series").and_then(|s| s.as_array_mut())
+    else {
+        return;
+    };
+    for s in series.iter_mut() {
+        if series_axis(s) != axis_idx {
+            continue;
+        }
+        let Some(data) = s.get_mut("data").and_then(|d| d.as_array_mut())
+        else {
+            continue;
+        };
+        for point in data.iter_mut() {
+            match point {
+                // Daily builders emit bare numbers positioned by the category
+                // axis, so the slot has to stay occupied: removing it would
+                // shift every later point one place to the left.
+                serde_json::Value::Number(n) => {
+                    if n.as_f64().is_some_and(|y| y <= 0.0) {
+                        *point = serde_json::Value::Null;
+                    }
+                }
+                // Per-block builders emit [ts, value, height]. Only the value
+                // is nulled, so the tooltip still knows which block it was.
+                serde_json::Value::Array(a)
+                    if a.get(1)
+                        .and_then(|y| y.as_f64())
+                        .is_some_and(|y| y <= 0.0) =>
+                {
+                    a[1] = serde_json::Value::Null;
+                }
+                _ => {}
+            }
+        }
     }
 }
 
@@ -740,6 +905,27 @@ const LOG_NOTICE_ID: &str = "log-scale-notice";
 /// underscore marks it as ours to anyone reading a serialised option.
 const LOG_BOUNDS_MARKER: &str = "__logBounds";
 
+/// Marks a series that accompanies another rather than measuring something of
+/// its own, so the key figures and the comparison lift can skip it.
+///
+/// A **declared** role, which is the point. The existing test for this is
+/// `kpi::is_moving_average`, matching " ma" and "moving average" in a series
+/// name, and it works only because every smoothing series happens to be named
+/// that way. Chain Size's "Disk Size (est.)" is the same kind of thing, block
+/// data multiplied by today's storage overhead, and no naming convention
+/// covers it: the rail read the two series as separate measurements and
+/// reported an average across a quantity and its own rescaling.
+///
+/// Extending the name matcher to catch "(est.)" would have been a second
+/// guess of the same kind. A builder knows which of its series is the
+/// measurement, so it says so. This is the narrow form of the declared roles
+/// phase 2 generalises; see `notes/phase-2-spec.md`.
+pub(crate) const COMPANION_MARKER: &str = "__companion";
+
+/// Marks an axis whose SI label formatter this module installed, so switching
+/// back to linear removes it and leaves a builder's own formatter alone.
+const LOG_FORMATTER_MARKER: &str = "__logFormatter";
+
 /// Which way `round_sig` breaks, so a bound never crops the data it is meant
 /// to contain: the lower bound rounds down, the upper rounds up.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -791,10 +977,6 @@ fn round_sig(v: f64, digits: i32, dir: RoundDir) -> f64 {
         RoundDir::Up => rounded.max(v),
     }
 }
-
-/// Tick hint for a logarithmic axis. Eight reads as a readable ladder across
-/// the fourteen decades difficulty covers without crowding a narrow range.
-const LOG_AXIS_SPLITS: u32 = 8;
 
 /// Breathing room above and below the plotted range on a log axis, as a
 /// fraction. Multiplicative rather than absolute, since that is scale
@@ -849,10 +1031,18 @@ fn positive_extent(
 ///   erroring, so a chart with a single zero would quietly lose it. Several
 ///   here legitimately hit zero (empty blocks, fees on an empty block) and
 ///   `utxo-growth` is net, so it goes negative.
-fn log_scale_is_meaningful(option: &serde_json::Value) -> bool {
-    let Some(series) = option.get("series").and_then(|s| s.as_array()) else {
+fn log_scale_is_meaningful(option: &serde_json::Value, axis_idx: u64) -> bool {
+    let Some(all) = option.get("series").and_then(|s| s.as_array()) else {
         return false;
     };
+    // This axis's own series, not every series in the option. A comparison
+    // draws on the right axis and has no say in whether the left one can be
+    // logarithmic, and vice versa.
+    let series: Vec<&serde_json::Value> =
+        all.iter().filter(|s| series_axis(s) == axis_idx).collect();
+    if series.is_empty() {
+        return false;
+    }
     if series.iter().any(|s| s.get("stack").is_some()) {
         return false;
     }
@@ -874,10 +1064,15 @@ fn log_scale_is_meaningful(option: &serde_json::Value) -> bool {
     let bounded_to_100 = |a: &serde_json::Value| {
         a.get("max").and_then(|m| m.as_f64()) == Some(100.0)
     };
+    // Also this axis's own bound. A percentage metric beside a comparison on
+    // an unbounded right axis must still refuse, and must not make the
+    // comparison refuse with it.
     let percent_axis = match option.get("yAxis") {
-        Some(serde_json::Value::Array(a)) => a.iter().any(bounded_to_100),
-        Some(other) => bounded_to_100(other),
-        None => false,
+        Some(serde_json::Value::Array(a)) => {
+            a.get(axis_idx as usize).is_some_and(bounded_to_100)
+        }
+        Some(other) if axis_idx == 0 => bounded_to_100(other),
+        _ => false,
     };
     if percent_axis {
         return false;
@@ -974,7 +1169,7 @@ pub(crate) fn moving_average(data: &[f64], window: usize) -> Vec<Option<f64>> {
             let start = i + 1 - window;
             let sum: f64 = data[start..=i].iter().sum();
             let avg = sum / window as f64;
-            result.push(Some((avg * 1000.0).round() / 1000.0));
+            result.push(Some(round_plot(avg)));
         }
     }
     result
@@ -1139,6 +1334,39 @@ pub(crate) fn data_array_value(raw: &str) -> serde_json::Value {
 /// Round to N decimal places.
 pub(crate) fn round(val: f64, decimals: u32) -> f64 {
     let factor = 10f64.powi(decimals as i32);
+    (val * factor).round() / factor
+}
+
+/// Round a plotted value, keeping the payload small **without** deleting it.
+///
+/// Three decimal places is the wrong tool for a unit-converted quantity, and
+/// it was silently destroying data. Block size is plotted in megabytes, so the
+/// genesis block's 285 bytes is 0.000285 and rounded to `0.000`; block fees are
+/// plotted in BTC, so a block carrying 19,818 sats became `0.0`. Across ALL
+/// that turned 564 daily size averages and 1,073 fee readings into zeros, and
+/// on a log axis, which cannot plot zero, they were then dropped with a notice
+/// blaming the data.
+///
+/// Significant figures instead. Six of them hold four bytes' worth of size and
+/// a single satoshi, while keeping a serialised point to roughly the same
+/// width as before, which is what the rounding was for: the payload, not the
+/// precision of the underlying measurement.
+///
+/// The floor is not a display concern. A chart label showing `0.00 BTC` is a
+/// formatting choice and `stats.js` makes it; a **plotted value** of zero is a
+/// different number from 0.000285 and no formatter downstream can recover it.
+pub(crate) fn round_plot(val: f64) -> f64 {
+    const DIGITS: i32 = 6;
+    if val == 0.0 || !val.is_finite() {
+        return val;
+    }
+    let mag = val.abs().log10().floor() as i32;
+    // Already coarser than six significant figures, so rounding is a no-op
+    // and the scaling below would only introduce float noise.
+    if mag >= DIGITS {
+        return val.round();
+    }
+    let factor = 10f64.powi(DIGITS - 1 - mag);
     (val * factor).round() / factor
 }
 
@@ -1891,7 +2119,7 @@ pub fn apply_comparison(
 
 /// How many real metrics an option plots, excluding smoothing companions.
 ///
-/// Leans on `kpi::is_moving_average`, which matches on the naming convention
+/// Honours `COMPANION_MARKER` first, then falls back to the naming convention
 /// every companion series follows. That convention had exactly one exception
 /// and it has been corrected, so the check is currently accurate; it is still
 /// a name-based proxy and the phase-2 contract replaces it with a declared
@@ -1903,6 +2131,9 @@ fn metric_series(option: &serde_json::Value) -> Vec<&serde_json::Value> {
         .map(|a| {
             a.iter()
                 .filter(|s| {
+                    let declared =
+                        s.get(COMPANION_MARKER).and_then(|v| v.as_bool())
+                            == Some(true);
                     let named_ma = s
                         .get("name")
                         .and_then(|n| n.as_str())
@@ -1917,7 +2148,7 @@ fn metric_series(option: &serde_json::Value) -> Vec<&serde_json::Value> {
                         .get("data")
                         .and_then(|d| d.as_array())
                         .is_some_and(|d| !d.is_empty());
-                    !named_ma && has_points
+                    !declared && !named_ma && has_points
                 })
                 .collect()
         })
@@ -3335,21 +3566,68 @@ mod tests {
         assert_eq!(opt["yAxis"]["name"], "Difficulty");
     }
 
-    /// A log axis that fits its data never lands on decade boundaries, and
-    /// ECharts is sparing with ticks there: difficulty over ALL got three
-    /// gridlines across fourteen decades.
+    /// A log axis must not ask for a tick count it cannot honour.
+    ///
+    /// `splitNumber: 8` divided the exponent range, and since these bounds fit
+    /// the data they never align to decades: 7.36 decades over 8 splits put
+    /// every tick at a fractional power of ten, which ECharts declines to
+    /// label. Avg Fee/Tx over ALL therefore carried one interior label across
+    /// seven decades, having asked for eight.
     #[test]
-    fn log_axis_asks_for_more_ticks_and_gives_them_back() {
+    fn a_log_axis_does_not_ask_for_fractional_decade_ticks() {
         let mut v = json!({
             "yAxis": {"type": "value"},
             "series": [{"name": "d", "data": [[1, 1.0], [2, 1.6e14]]}]
         });
         apply_log_scale(&mut v, true);
-        assert_eq!(v["yAxis"]["splitNumber"], json!(LOG_AXIS_SPLITS));
-        apply_log_scale(&mut v, false);
         assert!(
             v["yAxis"].get("splitNumber").is_none(),
-            "the hint must not persist onto the linear axis"
+            "let ECharts step by whole decades"
+        );
+    }
+
+    /// Every log axis gets an abbreviating formatter, because ECharts prints
+    /// an explicit bound verbatim and its own idea of that bound is not the
+    /// number we set: the max comes back as 10^log10(max), so 22,900,000
+    /// rendered as "22,899,999.9999999739". No amount of rounding in Rust
+    /// reaches that, since the corruption happens after it.
+    #[test]
+    fn a_log_axis_always_has_a_label_formatter() {
+        let mut v = json!({
+            "yAxis": {"type": "value"},
+            "series": [{"name": "fees", "data": [[1, 1.0], [2, 22_373_000.0]]}]
+        });
+        apply_log_scale(&mut v, true);
+        assert_eq!(
+            v["yAxis"]["axisLabel"]["formatter"], SI_AXIS_SENTINEL,
+            "an unformatted log axis prints the raw float"
+        );
+        // And it is given back, or the linear view inherits abbreviations the
+        // builder never asked for.
+        apply_log_scale(&mut v, false);
+        assert!(
+            v["yAxis"]["axisLabel"].get("formatter").is_none(),
+            "our formatter must not persist onto the linear axis"
+        );
+    }
+
+    /// A builder that chose its own formatter keeps it. A percentage or a
+    /// unit-suffixed axis is a deliberate decision, not an omission.
+    #[test]
+    fn a_log_axis_keeps_the_builders_own_formatter() {
+        let mut v = json!({
+            "yAxis": {
+                "type": "value",
+                "axisLabel": {"color": "#d4d4d4", "formatter": "{value}%"}
+            },
+            "series": [{"name": "pct", "data": [[1, 0.5], [2, 40.0]]}]
+        });
+        apply_log_scale(&mut v, true);
+        assert_eq!(v["yAxis"]["axisLabel"]["formatter"], "{value}%");
+        apply_log_scale(&mut v, false);
+        assert_eq!(
+            v["yAxis"]["axisLabel"]["formatter"], "{value}%",
+            "removing ours must not remove theirs"
         );
     }
 
@@ -3566,26 +3844,162 @@ mod tests {
         let lo = v["yAxis"]["min"].as_f64().unwrap();
         assert!(lo > 2.9 && lo < 3.0, "min was {lo}");
 
-        // Re-applying must not stack notices, since the option is rebuilt and
-        // re-decorated on every range and overlay change.
-        apply_log_scale(&mut v, true);
-        assert_eq!(
-            v["graphic"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .filter(|g| g["id"] == "log-scale-notice")
-                .count(),
-            1
+        // The unplottable points are gone from the series, so the gap the
+        // notice describes is a real gap rather than a mis-drawn one.
+        let data = v["series"][0]["data"].as_array().unwrap();
+        assert_eq!(data.len(), 4, "positions must be preserved");
+        assert!(
+            data[1][1].is_null(),
+            "the zero must be a gap: {:?}",
+            data[1]
         );
+        assert!(data[2][1].is_null(), "the negative must be a gap");
+        assert_eq!(data[1][0], 2, "the timestamp stays, so the tooltip knows");
+        assert_eq!(data[3][1], 900.0, "a plottable point is untouched");
+
+        // Notices must not stack. Seeded as if a previous render left one,
+        // because `set_log_notice` removes before it adds.
+        let mut stale = json!({
+            "graphic": [
+                {"type": "text", "style": {"text": "wehodlbtc"}},
+                {"id": "log-scale-notice", "type": "text",
+                 "style": {"text": "99 points are stale"}}
+            ],
+            "yAxis": {"type": "value"},
+            "series": [{"name": "fees", "data": [[1, 3.0], [2, 0.0]]}]
+        });
+        apply_log_scale(&mut stale, true);
+        let notices: Vec<&serde_json::Value> = stale["graphic"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|g| g["id"] == "log-scale-notice")
+            .collect();
+        assert_eq!(notices.len(), 1, "stacked: {notices:?}");
+        assert!(notices[0]["style"]["text"]
+            .as_str()
+            .unwrap()
+            .starts_with("1 point"));
 
         // And going back to linear clears it.
-        apply_log_scale(&mut v, false);
-        assert!(!v["graphic"]
+        apply_log_scale(&mut stale, false);
+        assert!(!stale["graphic"]
             .as_array()
             .unwrap()
             .iter()
             .any(|g| g["id"] == "log-scale-notice"));
+    }
+
+    /// A bar on one axis must not decide the other axis's scale.
+    ///
+    /// The refusal exists because a bar's length is read from zero and a log
+    /// axis has no zero, so every bar runs from the floor and the plot fills
+    /// solid. Applied to the whole option rather than to one axis, it meant a
+    /// bar **comparison** silently disabled the metric's own log scale:
+    /// Difficulty with `?compare=max-tx-fee&scale=log` reported Log as
+    /// selected and rendered linear.
+    #[test]
+    fn a_bar_comparison_does_not_disable_the_metrics_log_axis() {
+        let mut v = json!({
+            "yAxis": [{"type": "value"}, {"type": "value"}],
+            "series": [
+                {"name": "Difficulty", "type": "line",
+                 "yAxisIndex": 0, "data": [[1, 1.0e12], [2, 1.4e14]]},
+                {"name": "Max Tx Fee", "type": "bar",
+                 "yAxisIndex": 1, "data": [[1, 0.01], [2, 0.38]]}
+            ]
+        });
+        apply_scales_with(&mut v, true, false);
+        assert_eq!(v["yAxis"][0]["type"], "log", "the line's own axis");
+        assert_eq!(v["yAxis"][1]["type"], "value", "untouched");
+    }
+
+    /// And the reverse, which had no refusal at all: the right axis was free
+    /// to put its bars on a log scale and fill solid.
+    #[test]
+    fn the_right_axis_refuses_a_log_scale_for_its_own_bars() {
+        let mut v = json!({
+            "yAxis": [{"type": "value"}, {"type": "value"}],
+            "series": [
+                {"name": "Difficulty", "type": "line",
+                 "yAxisIndex": 0, "data": [[1, 1.0e12], [2, 1.4e14]]},
+                {"name": "Max Tx Fee", "type": "bar",
+                 "yAxisIndex": 1, "data": [[1, 0.01], [2, 0.38]]}
+            ]
+        });
+        apply_scales_with(&mut v, false, true);
+        assert_eq!(v["yAxis"][1]["type"], "value", "bars refuse log");
+        assert_eq!(v["yAxis"][0]["type"], "value", "and not by accident");
+
+        // A line on the right axis is the ordinary case and still switches.
+        let mut ok = json!({
+            "yAxis": [{"type": "value"}, {"type": "value"}],
+            "series": [
+                {"name": "Difficulty", "type": "line",
+                 "yAxisIndex": 0, "data": [[1, 1.0e12], [2, 1.4e14]]},
+                {"name": "Price", "type": "line",
+                 "yAxisIndex": 1, "data": [[1, 0.05], [2, 120000.0]]}
+            ]
+        });
+        apply_scales_with(&mut ok, false, true);
+        assert_eq!(ok["yAxis"][1]["type"], "log");
+    }
+
+    /// A percentage metric must refuse for itself without dragging down an
+    /// unbounded comparison beside it.
+    #[test]
+    fn a_bounded_percentage_axis_refuses_only_itself() {
+        let mut v = json!({
+            "yAxis": [
+                {"type": "value", "max": 100.0},
+                {"type": "value"}
+            ],
+            "series": [
+                {"name": "SegWit %", "type": "line",
+                 "yAxisIndex": 0, "data": [[1, 5.0], [2, 90.0]]},
+                {"name": "Tx Count", "type": "line",
+                 "yAxisIndex": 1, "data": [[1, 200.0], [2, 4000.0]]}
+            ]
+        });
+        apply_scales_with(&mut v, true, true);
+        assert_eq!(v["yAxis"][0]["type"], "value", "0-100 stays linear");
+        assert_eq!(
+            v["yAxis"][1]["type"], "log",
+            "the comparison still gets log"
+        );
+    }
+
+    /// Both axes dropping points yields one notice counting both, which is
+    /// what the single-chart view was missing when it called the two axis
+    /// functions itself.
+    #[test]
+    fn one_notice_counts_both_axes() {
+        let mut v = json!({
+            "graphic": [],
+            "yAxis": [{"type": "value"}, {"type": "value"}],
+            "series": [
+                {"name": "metric", "yAxisIndex": 0,
+                 "data": [[1, 0.0], [2, 5.0]]},
+                {"name": "compared", "yAxisIndex": 1,
+                 "data": [[1, -2.0], [2, 8.0]]}
+            ]
+        });
+        apply_scales_with(&mut v, true, true);
+        let notices: Vec<&serde_json::Value> = v["graphic"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|g| g["id"] == "log-scale-notice")
+            .collect();
+        assert_eq!(notices.len(), 1, "one notice, not one per axis");
+        assert!(
+            notices[0]["style"]["text"]
+                .as_str()
+                .unwrap()
+                .starts_with("2 points"),
+            "got {:?}",
+            notices[0]["style"]["text"]
+        );
     }
 
     /// The singular wording, since "1 points" reads as a bug.
@@ -3838,7 +4252,7 @@ mod tests {
                         None
                     } else {
                         let sum: f64 = data[i + 1 - window..=i].iter().sum();
-                        Some(((sum / window as f64) * 1000.0).round() / 1000.0)
+                        Some(round_plot(sum / window as f64))
                     }
                 })
                 .collect();
@@ -3856,10 +4270,54 @@ mod tests {
     }
 
     #[test]
-    fn ma_rounds_to_3_decimals() {
-        // 1/3 = 0.33333... should round to 0.333
+    fn ma_rounds_without_destroying_small_values() {
+        // 1/3 = 0.33333..., kept to six significant figures.
         let result = moving_average(&[0.0, 0.0, 1.0], 3);
-        assert_eq!(result[2], Some(0.333));
+        assert_eq!(result[2], Some(0.333333));
+
+        // The case three decimal places got wrong. A block carrying 19,818
+        // sats is 0.00019818 BTC, and the average of a window holding it must
+        // still be a number: rounding to 0.000 deleted a real reading and a
+        // log axis then dropped it as unplottable.
+        let btc = 19_818.0 / 100_000_000.0;
+        let avg = moving_average(&[btc, btc, btc], 3);
+        assert_eq!(avg[2], Some(btc), "a real fee must survive the average");
+        assert!(avg[2].unwrap() > 0.0);
+    }
+
+    // -----------------------------------------------------------------------
+    // round_plot
+    // -----------------------------------------------------------------------
+
+    /// The contract is "never turn a real reading into nothing", stated in the
+    /// units the charts actually plot rather than in terms of the scaling.
+    #[test]
+    fn round_plot_keeps_small_readings() {
+        // The genesis block, plotted in megabytes.
+        let genesis_mb = 285.0 / 1_000_000.0;
+        assert_eq!(round_plot(genesis_mb), 0.000285);
+
+        // A block carrying 19,818 sats, plotted in BTC.
+        assert_eq!(round_plot(19_818.0 / 100_000_000.0), 0.00019818);
+
+        // One satoshi in BTC, which is the smallest reading that exists.
+        assert!(round_plot(1.0 / 100_000_000.0) > 0.0);
+
+        // The first day of the chain, plotted in gigabytes.
+        assert!(round_plot(285.0 * 100.0 / 1_000_000_000.0) > 0.0);
+    }
+
+    /// And it still has to round, or it is not doing its job: the reason this
+    /// exists at all is payload size.
+    #[test]
+    fn round_plot_still_rounds() {
+        assert_eq!(round_plot(1.0 / 3.0), 0.333333);
+        assert_eq!(round_plot(1.234_567_891), 1.23457);
+        // Above six significant figures there is nothing to keep, so a whole
+        // megabyte count stays whole rather than gaining float noise.
+        assert_eq!(round_plot(3_998_274.6), 3_998_275.0);
+        assert_eq!(round_plot(0.0), 0.0);
+        assert_eq!(round_plot(-0.000_285), -0.000285);
     }
 
     // -----------------------------------------------------------------------

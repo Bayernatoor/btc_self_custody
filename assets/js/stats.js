@@ -141,17 +141,30 @@
                 if (n >= units[i].at) { u = units[i]; break; }
             }
             if (u) {
-                // Up to one decimal, but no trailing ".0": 160T not 160.0T.
-                var scaled = n / u.at;
-                out = (scaled < 10 ? Number(scaled.toFixed(1))
-                                   : Math.round(scaled)) + u.s;
+                // One decimal, dropped when it is zero: 160T, but 126.4T.
+                //
+                // Rounding to a whole number above 10 collided adjacent
+                // ticks. Difficulty over 1M runs 126.2T to 127.1T, so two
+                // gridlines at different heights both printed "126T" and the
+                // axis read as a rendering fault. ECharts passes the
+                // formatter a value and not the tick interval, so there is no
+                // way to choose the precision from the spacing; one decimal
+                // is the least that separates ticks at this scale, and
+                // Number() takes it back off when it is ".0".
+                out = Number((n / u.at).toFixed(1)) + u.s;
             } else if (n >= 1) {
                 out = String(Number(n.toPrecision(3)));
             } else {
-                // Below 1 a log axis can still place ticks; keep them short
-                // rather than printing ten leading zeros.
-                out = n >= 0.001 ? String(Number(n.toPrecision(2)))
-                                 : n.toExponential(0);
+                // Three significant figures below 1, not one or two.
+                //
+                // A log axis floor is set by `round_sig(lo, 3, Down)` so that
+                // the printed bound contains the data. Rounding it again here
+                // undoes that: a floor of 0.000285 shown as "3e-4" claims the
+                // axis starts above the point sitting on it. Number() gives
+                // the decimal form down to 1e-6 and switches to an exponent
+                // below that, which is where the leading zeros stop being
+                // readable anyway.
+                out = String(Number(n.toPrecision(3)));
             }
         }
         return neg ? '-' + out : out;

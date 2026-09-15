@@ -101,7 +101,7 @@ pub fn fees_chart_unit(
             raw_buf.push(',');
         }
         if b.total_fees > 0 {
-            let v = (b.total_fees as f64 / divisor * 1000.0).round() / 1000.0;
+            let v = round_plot(b.total_fees as f64 / divisor);
             let _ =
                 write!(raw_buf, "[{},{},{}]", ts_ms(b.timestamp), v, b.height);
         } else {
@@ -145,7 +145,7 @@ pub fn fees_chart_daily_unit(
         .map(|d| {
             if d.total_fees > 0 && d.block_count > 0 {
                 let v = d.total_fees as f64 / d.block_count as f64 / divisor;
-                let rounded = (v * 1000.0).round() / 1000.0;
+                let rounded = round_plot(v);
                 json!(rounded)
             } else {
                 json!(null)
@@ -175,20 +175,42 @@ pub fn avg_fee_per_tx_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Avg Fee per Tx");
     }
 
+    // `None`, not zero, where there is no transaction to average over.
+    //
+    // A coinbase-only block has no user transaction, and "the average fee was
+    // 0 sats" is a different claim from "there was no fee to average": the
+    // first is a reading and the second is its absence. Emitting zero put
+    // 1,073 of them on the chart over ALL, drew the line down to the axis
+    // through the whole of 2010, dragged the average and the low in the key
+    // figures to zero, and on a log axis produced a notice announcing that
+    // 1,073 points could not be plotted, as though the data were at fault.
+    //
+    // Same distinction the sibling fee builders already make with
+    // `[ts, null]`. A null is a gap, which every consumer handles.
     let fee_fn = |b: &BlockSummary| {
         let user_tx = b.tx_count.saturating_sub(1); // exclude coinbase
-        if user_tx > 0 {
-            b.total_fees as f64 / user_tx as f64
-        } else {
-            0.0
-        }
+        (user_tx > 0).then(|| round_plot(b.total_fees as f64 / user_tx as f64))
     };
-    let raw_str = build_data_array_f64(blocks, fee_fn);
+    let raw_str = build_data_array_opt_f64(blocks, fee_fn);
     let raw = data_array_value(&raw_str);
 
-    let vals: Vec<f64> = blocks.iter().map(fee_fn).collect();
+    // The moving average carries the gaps forward rather than treating them
+    // as zeros, which would pull the smoothed line down just as the raw one
+    // was pulled.
+    let vals: Vec<f64> = blocks.iter().filter_map(fee_fn).collect();
     let ma = moving_average(&vals, 144);
-    let ma_str = build_ma_array(blocks, &ma);
+    let mut ma_iter = ma.into_iter();
+    let aligned: Vec<Option<f64>> = blocks
+        .iter()
+        .map(|b| {
+            if fee_fn(b).is_some() {
+                ma_iter.next().flatten()
+            } else {
+                None
+            }
+        })
+        .collect();
+    let ma_str = build_ma_array(blocks, &aligned);
     let ma_data = data_array_value(&ma_str);
 
     let has_ma = show_ma(blocks.len());
@@ -226,24 +248,33 @@ pub fn avg_fee_per_tx_chart_daily(
     }
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let vals: Vec<f64> = days
-        .iter()
-        .map(|d| {
-            let user_tx =
-                (d.avg_tx_count * d.block_count as f64) - d.block_count as f64;
-            if user_tx > 0.0 && d.total_fees > 0 {
-                d.total_fees as f64 / user_tx
-            } else {
-                0.0
-            }
-        })
-        .collect();
-
-    let ma = moving_average(&vals, 7);
-    let ma_vals: Vec<serde_json::Value> = ma
+    // `None` where the day has no transaction to average over; see the
+    // per-block twin for why that is not a zero.
+    let fee_of = |d: &DailyAggregate| -> Option<f64> {
+        let user_tx =
+            (d.avg_tx_count * d.block_count as f64) - d.block_count as f64;
+        (user_tx > 0.0 && d.total_fees > 0)
+            .then(|| round_plot(d.total_fees as f64 / user_tx))
+    };
+    let readings: Vec<Option<f64>> = days.iter().map(fee_of).collect();
+    let vals: Vec<serde_json::Value> = readings
         .iter()
         .map(|v| match v {
             Some(x) => json!(x),
+            None => json!(null),
+        })
+        .collect();
+
+    let present: Vec<f64> = readings.iter().filter_map(|v| *v).collect();
+    let ma = moving_average(&present, 7);
+    let mut ma_iter = ma.into_iter();
+    let ma_vals: Vec<serde_json::Value> = readings
+        .iter()
+        .map(|r| match r {
+            Some(_) => match ma_iter.next().flatten() {
+                Some(x) => json!(x),
+                None => json!(null),
+            },
             None => json!(null),
         })
         .collect();
@@ -466,13 +497,13 @@ pub fn subsidy_vs_fees_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 
     let subsidy_str = build_data_array_f64(blocks, |b| {
         let sub = block_subsidy(b.height) as f64 / 100_000_000.0;
-        (sub * 1000.0).round() / 1000.0
+        round_plot(sub)
     });
     let subsidy_data = data_array_value(&subsidy_str);
 
     let fee_str = build_data_array_f64(blocks, |b| {
         let fee = b.total_fees as f64 / 100_000_000.0;
-        (fee * 1000.0).round() / 1000.0
+        round_plot(fee)
     });
     let fee_data = data_array_value(&fee_str);
 
@@ -516,7 +547,7 @@ pub fn subsidy_vs_fees_chart_daily(
             if d.total_fees > 0 && d.block_count > 0 {
                 let v =
                     d.total_fees as f64 / d.block_count as f64 / 100_000_000.0;
-                let rounded = (v * 1000.0).round() / 1000.0;
+                let rounded = round_plot(v);
                 json!(rounded)
             } else {
                 json!(null)

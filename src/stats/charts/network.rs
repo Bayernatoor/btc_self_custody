@@ -12,7 +12,7 @@ pub fn block_size_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Block Size");
     }
 
-    let size_fn = |b: &BlockSummary| round(b.size as f64 / 1_000_000.0, 3);
+    let size_fn = |b: &BlockSummary| round_plot(b.size as f64 / 1_000_000.0);
     let raw_str = build_data_array_f64(blocks, size_fn);
     let raw_data = data_array_value(&raw_str);
 
@@ -56,7 +56,7 @@ pub fn block_size_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
     let sizes: Vec<f64> = days
         .iter()
-        .map(|d| round(d.avg_size / 1_000_000.0, 3))
+        .map(|d| round_plot(d.avg_size / 1_000_000.0))
         .collect();
     let ma = moving_average(&sizes, 7);
     let ma_vals: Vec<serde_json::Value> = ma
@@ -625,12 +625,29 @@ pub fn avg_tx_size_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
 }
 
 /// Cumulative chain size over time (per-block).
-/// `disk_size_gb` is the current size_on_disk from getblockchaininfo.
-/// `offset_bytes` is the total block data before the first block in this window.
+///
+/// `disk_size_gb` is the current size_on_disk from getblockchaininfo and
+/// `offset_bytes` the total block data before the first block in this window.
+///
+/// `chain_total_bytes` is the block data of the **whole chain today**, and it
+/// is what calibrates the disk estimate. Dividing today's disk size by the
+/// selected window's ending cumulative instead forced every historical window
+/// to end at today's number: January to March 2020 drew 270 GB of block data
+/// against an 876 GB disk line, which is the node's size now and was nowhere
+/// near its size then. A ratio taken from the window makes the window's last
+/// point the answer, whatever the window is.
+///
+/// What the series claims, now that the ratio is fixed: block data scaled by
+/// the storage overhead a node carries today, which is a present-day
+/// measurement applied backwards rather than a reconstruction of historical
+/// disk usage. Chainstate and index overhead have changed over the years, so a
+/// true history of disk size is not derivable from block sizes and this does
+/// not pretend to be one.
 pub fn chain_size_chart(
     blocks: &[BlockSummary],
     disk_size_gb: f64,
     offset_bytes: u64,
+    chain_total_bytes: u64,
 ) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Chain Size");
@@ -641,13 +658,13 @@ pub fn chain_size_chart(
         .iter()
         .map(|b| {
             cumulative += b.size as f64 / 1_000_000_000.0;
-            dp(b, (cumulative * 1000.0).round() / 1000.0)
+            dp(b, round_plot(cumulative))
         })
         .collect();
 
-    // The final cumulative is the total block data size
-    let block_total = cumulative;
-    let show_disk = block_total >= 20.0 && disk_size_gb > 0.0;
+    // Calibrated against the whole chain, not against this window.
+    let chain_total_gb = chain_total_bytes as f64 / 1_000_000_000.0;
+    let show_disk = chain_total_gb > 0.0 && disk_size_gb > 0.0;
 
     let mut series = vec![json!({
         "name": "Block Data", "type": "line", "data": block_data,
@@ -657,18 +674,20 @@ pub fn chain_size_chart(
     })];
 
     if show_disk {
-        let ratio = disk_size_gb / block_total;
+        let ratio = disk_size_gb / chain_total_gb;
         let offset_disk = offset_bytes as f64 / 1_000_000_000.0 * ratio;
         let mut cumulative2 = offset_disk;
         let disk_data: Vec<serde_json::Value> = blocks
             .iter()
             .map(|b| {
                 cumulative2 += b.size as f64 / 1_000_000_000.0 * ratio;
-                dp(b, (cumulative2 * 1000.0).round() / 1000.0)
+                dp(b, round_plot(cumulative2))
             })
             .collect();
         series.push(json!({
             "name": "Disk Size (est.)", "type": "line", "data": disk_data,
+            // Block data times today's overhead, not a second measurement.
+            "__companion": true,
             "lineStyle": { "width": 1.5, "color": DISK_COLOR, "type": "dashed" },
             "itemStyle": { "color": DISK_COLOR }, "symbol": "none"
         }));
@@ -685,10 +704,12 @@ pub fn chain_size_chart(
 }
 
 /// Cumulative chain size over time (daily).
+/// Daily twin of [`chain_size_chart`], including its calibration.
 pub fn chain_size_chart_daily(
     days: &[DailyAggregate],
     disk_size_gb: f64,
     offset_bytes: u64,
+    chain_total_bytes: u64,
 ) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Chain Size");
@@ -700,12 +721,12 @@ pub fn chain_size_chart_daily(
         .iter()
         .map(|d| {
             cumulative += d.avg_size * d.block_count as f64 / 1_000_000_000.0;
-            (cumulative * 1000.0).round() / 1000.0
+            round_plot(cumulative)
         })
         .collect();
 
-    let block_total = cumulative;
-    let show_disk = block_total >= 20.0 && disk_size_gb > 0.0;
+    let chain_total_gb = chain_total_bytes as f64 / 1_000_000_000.0;
+    let show_disk = chain_total_gb > 0.0 && disk_size_gb > 0.0;
 
     let mut series = vec![json!({
         "name": "Block Data", "type": "line", "data": block_data,
@@ -715,7 +736,7 @@ pub fn chain_size_chart_daily(
     })];
 
     if show_disk {
-        let ratio = disk_size_gb / block_total;
+        let ratio = disk_size_gb / chain_total_gb;
         let offset_disk = offset_bytes as f64 / 1_000_000_000.0 * ratio;
         let mut cumulative2 = offset_disk;
         let disk_data: Vec<f64> = days
@@ -723,11 +744,13 @@ pub fn chain_size_chart_daily(
             .map(|d| {
                 cumulative2 +=
                     d.avg_size * d.block_count as f64 / 1_000_000_000.0 * ratio;
-                (cumulative2 * 1000.0).round() / 1000.0
+                round_plot(cumulative2)
             })
             .collect();
         series.push(json!({
             "name": "Disk Size (est.)", "type": "line", "data": disk_data,
+            // Block data times today's overhead, not a second measurement.
+            "__companion": true,
             "lineStyle": { "width": 1.5, "color": DISK_COLOR, "type": "dashed" },
             "itemStyle": { "color": DISK_COLOR }, "symbol": "none"
         }));
@@ -1007,10 +1030,25 @@ pub fn block_propagation_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let mut dots: Vec<serde_json::Value> = Vec::new();
 
     for i in 1..blocks.len() {
+        // Signed, and backward pairs are skipped rather than clamped.
+        //
+        // A block's timestamp is chosen by whoever mined it and only has to
+        // fall inside a consensus window, so it can be earlier than its
+        // parent's. `saturating_sub` on unsigned turned every one of those
+        // into an interval of exactly 0, which then passed the under-a-minute
+        // filter: 139 fabricated zero-second arrivals over 1M, a fifth of the
+        // chart, all of them at heights where the interval is really
+        // negative. Log mode then dropped the same points as unplottable,
+        // which is how the count came to depend on the axis.
+        //
+        // Zero itself is kept. Two blocks sharing a timestamp is a real
+        // zero-second interval and the fastest arrival there is; it is the
+        // backward pairs that are not intervals at all. They are visible as
+        // negatives on Block Interval, which computes this signed.
         let interval =
-            blocks[i].timestamp.saturating_sub(blocks[i - 1].timestamp);
-        if interval < 60 {
-            dots.push(dp(&blocks[i], interval));
+            blocks[i].timestamp as i64 - blocks[i - 1].timestamp as i64;
+        if (0..60).contains(&interval) {
+            dots.push(dp(&blocks[i], interval as u64));
         }
     }
 

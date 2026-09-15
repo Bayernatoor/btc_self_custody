@@ -218,12 +218,17 @@ fn built_charts() -> Vec<(&'static ChartMeta, bool, serde_json::Value)> {
                 out.push((
                     meta,
                     false,
-                    super::chain_size_chart(&blocks, 620.0, 0),
+                    super::chain_size_chart(&blocks, 620.0, 0, 785_000_000_000),
                 ));
                 out.push((
                     meta,
                     true,
-                    super::chain_size_chart_daily(&days, 620.0, 0),
+                    super::chain_size_chart_daily(
+                        &days,
+                        620.0,
+                        0,
+                        785_000_000_000,
+                    ),
                 ));
             }
             Source::Fees => {
@@ -646,6 +651,319 @@ mod tests {
         }
     }
 
+    /// Early-chain readings must survive being plotted.
+    ///
+    /// The regression this pins is not a shape or a declaration but arithmetic
+    /// inside the builders: block size is plotted in megabytes and fees in
+    /// BTC, and rounding those to three decimal places turned the genesis
+    /// block's 285 bytes and a block's 19,818 sats into zero. On a log axis,
+    /// which cannot plot zero, they were then dropped with a notice blaming
+    /// the data. 564 daily size averages and 1,073 fee readings across ALL.
+    ///
+    /// Stated as "a positive reading stays positive", in the charts' own
+    /// units, so it holds whatever the rounding is rewritten to do. Checking
+    /// the first plotted point specifically, because that is the oldest and
+    /// therefore the smallest, and an average over a long window hides it.
+    #[test]
+    fn a_tiny_reading_still_plots_as_more_than_zero() {
+        // Genesis-scale: 285-byte blocks, a handful of transactions, fees of
+        // a few thousand satoshis. Every one of these is a real value from
+        // the early chain rather than an invented edge case.
+        let blocks: Vec<BlockSummary> = (0..400)
+            .map(|i| BlockSummary {
+                height: i,
+                hash: format!("{i:064x}"),
+                timestamp: 1_231_006_505 + i * 600,
+                tx_count: 1 + i % 3,
+                size: 285 + i * 2,
+                weight: (285 + i * 2) * 4,
+                difficulty: 1.0,
+                total_fees: 19_818 + i,
+                median_fee: 100,
+                median_fee_rate: 0.5,
+                input_count: 1,
+                output_count: 2,
+                total_output_value: 5_000_000_000,
+                total_input_value: 5_000_000_000,
+                coinbase_text: format!("/early{i}/"),
+                ..Default::default()
+            })
+            .collect();
+
+        let first_plotted = |opt: &serde_json::Value, series: usize| -> f64 {
+            let point = opt["series"][series]["data"]
+                .as_array()
+                .and_then(|a| a.first())
+                .cloned()
+                .unwrap_or(serde_json::Value::Null);
+            match point {
+                // Per-block builders emit [ts, value, height]; daily ones
+                // emit the bare number.
+                serde_json::Value::Array(a) => {
+                    a.get(1).and_then(|v| v.as_f64()).unwrap_or(0.0)
+                }
+                other => other.as_f64().unwrap_or(0.0),
+            }
+        };
+
+        let size = super::super::block_size_chart(&blocks);
+        assert!(
+            first_plotted(&size, 0) > 0.0,
+            "a 285-byte block plotted 0 MB: {}",
+            first_plotted(&size, 0)
+        );
+
+        let fees = super::super::fees_chart_unit(&blocks, "btc");
+        assert!(
+            first_plotted(&fees, 0) > 0.0,
+            "19,818 sats plotted 0 BTC: {}",
+            first_plotted(&fees, 0)
+        );
+
+        let chain =
+            super::super::chain_size_chart(&blocks, 620.0, 0, 785_000_000_000);
+        assert!(
+            first_plotted(&chain, 0) > 0.0,
+            "the first day of the chain plotted 0 GB: {}",
+            first_plotted(&chain, 0)
+        );
+
+        // And the same in the daily builders, which have their own arithmetic.
+        let days: Vec<DailyAggregate> = (0..40)
+            .map(|i| DailyAggregate {
+                date: format!("2009-01-{:02}", i % 28 + 1),
+                block_count: 120,
+                avg_size: 285.0 + i as f64,
+                avg_weight: 1_140.0,
+                avg_tx_count: 1.0,
+                avg_difficulty: 1.0,
+                total_fees: 19_818 + i,
+                ..Default::default()
+            })
+            .collect();
+
+        let size_daily = super::super::block_size_chart_daily(&days);
+        assert!(
+            first_plotted(&size_daily, 0) > 0.0,
+            "a 285-byte daily average plotted 0 MB: {}",
+            first_plotted(&size_daily, 0)
+        );
+
+        let fees_daily = super::super::fees_chart_daily_unit(&days, "btc");
+        assert!(
+            first_plotted(&fees_daily, 0) > 0.0,
+            "a daily fee average plotted 0 BTC: {}",
+            first_plotted(&fees_daily, 0)
+        );
+    }
+
+    /// The disk estimate must not depend on which window you are looking at.
+    ///
+    /// Stated as the symptom a reader saw: selecting January to March 2020
+    /// drew 270 GB of block data against a disk line ending at 876 GB, which
+    /// is the node's size today. The ratio came from the window's own ending
+    /// cumulative, so the last point was always today's disk size no matter
+    /// how far back the window sat.
+    ///
+    /// Asserted as a ratio between two different windows over the same chain,
+    /// which is a property no single window can fake.
+    #[test]
+    fn the_disk_estimate_is_calibrated_to_the_chain_not_the_window() {
+        const CHAIN_TOTAL: u64 = 800_000_000_000; // 800 GB of block data
+        const DISK_GB: f64 = 1_000.0; // 1 TB on disk, so a 1.25x overhead
+
+        let last_of = |opt: &serde_json::Value, name: &str| -> f64 {
+            let series = opt["series"]
+                .as_array()
+                .expect("series")
+                .iter()
+                .find(|s| s["name"] == name)
+                .unwrap_or_else(|| panic!("no series named {name}"));
+            let point =
+                series["data"].as_array().expect("data").last().cloned();
+            match point {
+                Some(serde_json::Value::Array(a)) => {
+                    a.get(1).and_then(|v| v.as_f64()).unwrap_or(0.0)
+                }
+                Some(other) => other.as_f64().unwrap_or(0.0),
+                None => 0.0,
+            }
+        };
+
+        // A historical window: 100 blocks starting 300 GB into the chain.
+        let blocks = synthetic_blocks(100);
+        let historical = super::super::chain_size_chart(
+            &blocks,
+            DISK_GB,
+            300_000_000_000,
+            CHAIN_TOTAL,
+        );
+        let hist_blocks = last_of(&historical, "Block Data");
+        let hist_disk = last_of(&historical, "Disk Size (est.)");
+
+        assert!(
+            hist_disk < DISK_GB,
+            "a window ending 300 GB into the chain must not end at today's \
+             {DISK_GB} GB disk size, got {hist_disk}"
+        );
+        // The overhead factor, which is the only thing this series asserts.
+        let factor = hist_disk / hist_blocks;
+        assert!(
+            (factor - 1.25).abs() < 0.01,
+            "expected today's 1.25x overhead, got {factor}"
+        );
+
+        // A window further along the same chain must carry the same factor.
+        let later = super::super::chain_size_chart(
+            &blocks,
+            DISK_GB,
+            700_000_000_000,
+            CHAIN_TOTAL,
+        );
+        let later_factor =
+            last_of(&later, "Disk Size (est.)") / last_of(&later, "Block Data");
+        assert!(
+            (later_factor - factor).abs() < 0.01,
+            "the factor moved with the window: {factor} then {later_factor}"
+        );
+
+        // No calibration, no series. Drawing block data scaled by an unknown
+        // ratio would be inventing a line.
+        let uncalibrated =
+            super::super::chain_size_chart(&blocks, DISK_GB, 0, 0);
+        assert!(
+            !uncalibrated["series"]
+                .as_array()
+                .expect("series")
+                .iter()
+                .any(|s| s["name"] == "Disk Size (est.)"),
+            "an uncalibrated disk estimate must be omitted, not guessed"
+        );
+    }
+
+    /// A backward timestamp is not a zero-second block arrival.
+    ///
+    /// Miners choose their own timestamps, so a block can be stamped earlier
+    /// than its parent. Subtracting on unsigned clamped those to 0, which then
+    /// passed the under-a-minute filter and put 139 fabricated zero-second
+    /// points on the 1M chart, a fifth of everything drawn there.
+    ///
+    /// Zero stays. Two blocks sharing a timestamp really did arrive zero
+    /// seconds apart, and that is the fastest reading the chart exists to
+    /// show; only pairs that run backwards are excluded.
+    #[test]
+    fn a_backward_timestamp_is_not_a_rapid_block() {
+        let mk = |heights: &[(u64, u64)]| -> Vec<BlockSummary> {
+            heights
+                .iter()
+                .map(|&(h, ts)| BlockSummary {
+                    height: h,
+                    hash: format!("{h:064x}"),
+                    timestamp: ts,
+                    tx_count: 1,
+                    size: 1_000_000,
+                    ..Default::default()
+                })
+                .collect()
+        };
+
+        // One genuine 30-second gap, one exact tie, one backward pair, and a
+        // normal ten-minute gap.
+        let blocks = mk(&[
+            (1, 1_700_000_000),
+            (2, 1_700_000_030), //  +30s, rapid
+            (3, 1_700_000_030), //    0s, rapid (a real tie)
+            (4, 1_700_000_000), //  -30s, not an interval
+            (5, 1_700_000_600), // +600s, not rapid
+        ]);
+
+        let opt = super::super::block_propagation_chart(&blocks);
+        let data = opt["series"][0]["data"].as_array().expect("data");
+        assert_eq!(
+            data.len(),
+            2,
+            "expected the +30s and the tie, got {data:?}"
+        );
+
+        let heights: Vec<u64> = data
+            .iter()
+            .map(|p| p[2].as_u64().expect("height in the third slot"))
+            .collect();
+        assert_eq!(heights, vec![2, 3], "the backward pair must not appear");
+
+        // And a chart made only of backward pairs draws nothing rather than a
+        // run of zeros.
+        let backward =
+            mk(&[(1, 1_700_000_600), (2, 1_700_000_300), (3, 1_700_000_000)]);
+        let opt = super::super::block_propagation_chart(&backward);
+        assert!(
+            opt["series"][0]["data"]
+                .as_array()
+                .is_none_or(|d| d.is_empty()),
+            "backward pairs alone must not produce zero-second points"
+        );
+    }
+
+    /// No transaction to average over is not an average of zero.
+    ///
+    /// A coinbase-only block has no user transaction, and most of 2010 is
+    /// coinbase-only. Emitting zero for those put 1,073 points on the axis
+    /// floor over ALL, pulled the line and the key figures down with them, and
+    /// on a log axis produced a notice saying 1,073 readings could not be
+    /// plotted, blaming the data for a value the builder had invented.
+    #[test]
+    fn a_block_with_no_user_transaction_reports_no_fee_average() {
+        let mk = |tx_count: u64, total_fees: u64| BlockSummary {
+            height: 1,
+            hash: "a".repeat(64),
+            timestamp: 1_700_000_000,
+            tx_count,
+            total_fees,
+            size: 1_000,
+            ..Default::default()
+        };
+        // Coinbase only, a real fee-bearing block, and a block whose only
+        // transaction is the coinbase but which somehow records fees.
+        let blocks = vec![mk(1, 0), mk(3, 6_000), mk(1, 500)];
+
+        let opt = super::super::avg_fee_per_tx_chart(&blocks);
+        let data = opt["series"][0]["data"].as_array().expect("data");
+        assert_eq!(data.len(), 3, "every block keeps its position");
+        assert!(data[0][1].is_null(), "coinbase only: {:?}", data[0]);
+        assert_eq!(data[1][1], 3_000.0, "6000 sats over two user txs");
+        assert!(data[2][1].is_null(), "still no transaction to divide by");
+
+        // And the same for the daily builder, whose zero was the one the
+        // browser pass counted.
+        let day = |avg_tx_count: f64, block_count: u64, total_fees: u64| {
+            DailyAggregate {
+                date: "2010-05-14".to_string(),
+                avg_tx_count,
+                block_count,
+                total_fees,
+                avg_size: 285.0,
+                ..Default::default()
+            }
+        };
+        let days = vec![day(1.0, 100, 0), day(2.0, 100, 500_000)];
+        let opt = super::super::avg_fee_per_tx_chart_daily(&days);
+        let data = opt["series"][0]["data"].as_array().expect("data");
+        assert!(data[0].is_null(), "a day of coinbase-only blocks");
+        assert_eq!(data[1], 5_000.0, "500k sats over 100 user txs");
+
+        // Which is what clears the log notice: there is nothing unplottable
+        // left to warn about.
+        let mut v = super::super::avg_fee_per_tx_chart(&blocks);
+        super::super::apply_log_scale(&mut v, true);
+        assert_eq!(v["yAxis"]["type"], "log");
+        assert!(
+            v["graphic"].as_array().is_none_or(|g| !g
+                .iter()
+                .any(|e| e["id"] == "log-scale-notice")),
+            "a gap is not an unplottable point"
+        );
+    }
+
     /// `registry::NON_TIME_X_AXIS` has to name exactly the charts whose
     /// builders produce a non-time x axis, or the comparison rule built on it
     /// is guessing.
@@ -750,7 +1068,7 @@ mod tests {
                 continue;
             }
             assert!(
-                super::super::log_scale_is_meaningful(&opt),
+                super::super::log_scale_is_meaningful(&opt, 0),
                 "{} ({}) offers a log axis but its built option refuses one",
                 meta.slug,
                 if daily { "daily" } else { "per block" }
@@ -819,13 +1137,15 @@ mod tests {
         // than a silent one, and so the list can be read as what it is: the
         // rails that show no figures today.
         //
-        // Every one plots several measurements at the same x, which has no
-        // single average, peak or change. Six plot genuinely different
-        // quantities. `chain-size` is the odd one and the one to revisit
-        // first: its two series measure the same thing, the second being the
-        // first scaled into a disk-size estimate, so it is a companion rather
-        // than a second metric. Distinguishing those is a declared role,
-        // which is phase 2, not another name-based guess.
+        // Every one plots several genuinely different measurements at the
+        // same x, which has no single average, peak or change.
+        //
+        // `chain-size` was here and is not any more. Its two series measure
+        // the same thing, the second being the first scaled into a disk-size
+        // estimate, so it is a companion rather than a second metric, and it
+        // now says so with `COMPANION_MARKER` instead of being guessed at
+        // from its name. That is the shape every remaining entry wants and
+        // what phase 2 generalises.
         //
         // This list should shrink. It must never grow without a reason
         // written down beside it.
@@ -833,7 +1153,6 @@ mod tests {
         let expected = [
             "batching (daily)",
             "batching (per block)",
-            "chain-size (daily)",
             "cumulative-adoption (daily)",
             "cumulative-adoption (per block)",
             "diff-ribbon (daily)",

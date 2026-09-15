@@ -155,10 +155,19 @@ fn series_name(s: &serde_json::Value) -> String {
         .to_string()
 }
 
-/// A moving average is a smoothing of the series it accompanies, not a second
-/// metric, so it must not be mistaken for the primary series when one is
-/// picked. Builders name them consistently ("144-block MA", "7d MA").
-fn is_moving_average(s: &serde_json::Value) -> bool {
+/// A series that accompanies another rather than measuring something of its
+/// own, so it must not be mistaken for the metric when one is picked.
+///
+/// Two ways to be one, and the order matters. A builder that **declares** it
+/// with `COMPANION_MARKER` is believed outright; that is how Chain Size's
+/// "Disk Size (est.)" is recognised, being block data times today's storage
+/// overhead rather than a second measurement. Everything else falls back to
+/// the naming convention the smoothing series follow ("144-block MA", "7d
+/// MA"), which is a proxy and is kept only because it already covers them all.
+fn is_companion(s: &serde_json::Value) -> bool {
+    if s.get(super::COMPANION_MARKER).and_then(|v| v.as_bool()) == Some(true) {
+        return true;
+    }
     let n = series_name(s).to_ascii_lowercase();
     n.contains(" ma") || n.contains("moving average") || n.ends_with("ma")
 }
@@ -220,13 +229,11 @@ fn single_series(
     series: &[serde_json::Value],
 ) -> Kpis {
     let x_is_time = x_axis_is_time(opt);
-    // Prefer series that are not moving averages; fall back to everything, so
-    // a chart made only of averages still reports.
+    // Prefer series that measure something; fall back to everything, so a
+    // chart made only of companions still reports.
     let metric: Vec<&serde_json::Value> = series
         .iter()
-        .filter(|s| {
-            !is_moving_average(s) && !series_points(s, x_is_time).is_empty()
-        })
+        .filter(|s| !is_companion(s) && !series_points(s, x_is_time).is_empty())
         .collect();
     let metric = if metric.is_empty() {
         series

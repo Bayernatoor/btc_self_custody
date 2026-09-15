@@ -102,6 +102,14 @@ pub struct ObservatoryState {
     /// it previously ran an identical LocalResource of its own, so every range
     /// change fired two identical requests for it.
     pub chain_size_offset: LocalResource<u64>,
+    /// Block data for the whole chain today, in bytes.
+    ///
+    /// Calibrates the chain-size chart's disk estimate. Range-independent by
+    /// design, which is the whole point: deriving the ratio from the selected
+    /// window pinned every historical window's disk line to today's disk size.
+    /// It has no reactive dependencies, so it is fetched once per page rather
+    /// than per range change.
+    pub chain_size_total: LocalResource<u64>,
     // true while the dashboard data resource hasn't yet resolved a value
     // for the *currently selected* range/custom-window.
     pub data_loading: Signal<bool>,
@@ -118,6 +126,26 @@ pub fn date_to_ts(date: &str) -> Option<u64> {
         .ok()
         .and_then(|d| d.and_hms_opt(0, 0, 0))
         .map(|dt| dt.and_utc().timestamp() as u64)
+}
+
+/// The last second of a date, for the **inclusive** end of a window.
+///
+/// Every timestamp query in `db.rs` is inclusive at both ends, and the tip
+/// timestamp that the named ranges pass as their end is a real block time, so
+/// an exclusive convention would drop the newest block from every chart. The
+/// window therefore has to be closed, and a date picked as "to" has to become
+/// the last instant of that day rather than the first instant of the next one.
+///
+/// Adding a whole day was the bug. It reads as "include the entire end day"
+/// and is correct against a half-open query, but `query_daily_aggregates_fast`
+/// reads the pre-computed table with `day <= date(to_ts)`, and `date` of the
+/// next midnight is the next day: a request for 1 January to 31 March 2020
+/// returned 92 rows ending on 1 April. The raw twin has
+/// `timestamp <= to_ts`, which instead let a single block landing exactly on
+/// midnight open a one-block partial day. One convention, one helper, so the
+/// two cannot disagree again.
+pub fn date_to_ts_end(date: &str) -> Option<u64> {
+    date_to_ts(date).map(|t| t + 86_399)
 }
 
 /// Create a `LocalResource` that fetches dashboard data for the given range.
@@ -140,8 +168,7 @@ pub fn create_dashboard_resource(
             if r == "custom" {
                 if let (Some(from_str), Some(to_str)) = (cf, ct) {
                     let from_ts = date_to_ts(&from_str).unwrap_or(0);
-                    let to_ts = date_to_ts(&to_str)
-                        .map(|t| t + 86_400) // include entire end day (midnight next day)
+                    let to_ts = date_to_ts_end(&to_str)
                         .unwrap_or(stats.latest_timestamp);
                     let approx_blocks = to_ts.saturating_sub(from_ts) / 600;
                     if uses_daily_aggregates(approx_blocks) {
@@ -435,6 +462,15 @@ pub fn provide_observatory_state() -> ObservatoryState {
         }
     });
 
+    // A timestamp past any block, so this asks for the whole chain. Not
+    // `u64::MAX`, which cannot bind to the query's i64 parameter; 4e9 is the
+    // year 2096 and comfortably inside it.
+    let chain_size_total = LocalResource::new(|| async move {
+        fetch_cumulative_size_before_ts(4_000_000_000)
+            .await
+            .unwrap_or(0)
+    });
+
     // Pre-compute chain size cumulative data (with offset for absolute values)
     let cached_chain_size_data = {
         let (cached, set_cached) = signal::<Vec<(u64, f64)>>(Vec::new());
@@ -533,6 +569,7 @@ pub fn provide_observatory_state() -> ObservatoryState {
         range,
         set_range,
         chain_size_offset,
+        chain_size_total,
         overlay_flags,
         dashboard_data,
         cached_live,
