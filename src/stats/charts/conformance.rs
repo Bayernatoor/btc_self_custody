@@ -966,6 +966,148 @@ mod tests {
         );
     }
 
+    // -----------------------------------------------------------------------
+    // Structured measurement declarations
+    // -----------------------------------------------------------------------
+
+    /// The migration can only move one way, and chart 64 cannot arrive without
+    /// a declaration.
+    ///
+    /// Pinned rather than asserted empty because the cohort proving the design
+    /// is deliberately small. Lower this number as entries are filled in; it
+    /// must never rise.
+    #[test]
+    fn the_undeclared_chart_count_only_shrinks() {
+        let undeclared: Vec<&str> = registry::CHARTS
+            .iter()
+            .filter(|c| c.measurements.is_empty())
+            .map(|c| c.slug)
+            .collect();
+        assert_eq!(
+            undeclared.len(),
+            57,
+            "declared cohort changed. If you added a chart, declare its \
+             measurements; if you declared one, lower this number. Still \
+             undeclared: {undeclared:?}"
+        );
+    }
+
+    /// A declaration names the series it describes, so it has to match what
+    /// the builder emits. Renaming a series in a builder without updating the
+    /// declaration would otherwise leave a badge attached to nothing.
+    #[test]
+    fn every_declared_series_name_exists_in_the_built_option() {
+        for (meta, daily, opt) in built_charts() {
+            for m in meta.measurements {
+                if m.series.is_empty() {
+                    continue; // the chart's only measurement
+                }
+                let names: Vec<&str> = opt["series"]
+                    .as_array()
+                    .map(|a| {
+                        a.iter().filter_map(|s| s["name"].as_str()).collect()
+                    })
+                    .unwrap_or_default();
+                assert!(
+                    names.contains(&m.series),
+                    "{} ({}) declares a measurement for series {:?}, but the \
+                     built option has {names:?}",
+                    meta.slug,
+                    if daily { "daily" } else { "per block" },
+                    m.series
+                );
+            }
+        }
+    }
+
+    /// Declaring a daily aggregation for a chart with no daily builder would
+    /// promise a result that cannot exist, which is the mirror of the
+    /// `coinbase-msg-length` defect.
+    #[test]
+    fn a_declared_daily_aggregation_implies_a_daily_builder() {
+        for meta in registry::CHARTS.iter() {
+            for m in meta.measurements {
+                let declares_daily =
+                    m.daily != registry::Aggregation::Unsupported;
+                assert_eq!(
+                    declares_daily,
+                    meta.has_daily(),
+                    "{} declares daily aggregation {:?} but has_daily() is {}",
+                    meta.slug,
+                    m.daily,
+                    meta.has_daily()
+                );
+            }
+        }
+    }
+
+    /// SegWit Adoption's daily point is a pooled ratio, and the numbers here
+    /// distinguish that from the two ways it could be wrong.
+    ///
+    /// A day of 10 blocks averaging 2.0 transactions and 0.5 witness spends
+    /// holds 20 transactions, 10 of them coinbase, and 5 witness spends. So
+    /// the pooled share is 5/10 = **50%**. Computed by hand, and each wrong
+    /// alternative lands somewhere else:
+    ///
+    /// - forgetting the coinbase gives 5/20 = 25%
+    /// - reading the stored means as a share directly gives 0.5/2.0 = 25%
+    ///
+    /// So a single assertion separates the declared `RatioOfTotals` from the
+    /// mistake the copy audit found elsewhere in the catalog.
+    #[test]
+    fn segwit_daily_is_a_pooled_ratio_that_excludes_the_coinbase() {
+        let day =
+            |block_count: u64, avg_tx: f64, avg_segwit: f64| DailyAggregate {
+                date: "2024-04-01".to_string(),
+                block_count,
+                avg_tx_count: avg_tx,
+                avg_segwit_spend_count: avg_segwit,
+                avg_size: 900_000.0,
+                ..Default::default()
+            };
+        let opt = super::super::segwit_adoption_chart_daily(&[
+            day(10, 2.0, 0.5),
+            // A second day where the two alternatives also differ: 100
+            // transactions over 20 blocks is 80 non-coinbase, and 40 witness
+            // spends is half of them.
+            day(20, 5.0, 2.0),
+        ]);
+        let data = opt["series"][0]["data"].as_array().expect("data");
+        assert_eq!(data[0].as_f64().unwrap(), 50.0, "5 of 10 non-coinbase");
+        assert_eq!(data[1].as_f64().unwrap(), 50.0, "40 of 80 non-coinbase");
+    }
+
+    /// Address Type Evolution's daily point is a total, which is the finding
+    /// behind its declaration: the subtitle said "Daily average output types"
+    /// and the builder multiplies the stored mean back up by the block count.
+    ///
+    /// 3.0 per block over 10 blocks is **30**, not 3.0. One assertion, and the
+    /// wrong alternative is an order of magnitude away.
+    #[test]
+    fn address_types_daily_plots_totals_not_averages() {
+        let days = vec![DailyAggregate {
+            date: "2024-04-01".to_string(),
+            block_count: 10,
+            avg_tx_count: 5.0,
+            avg_p2pkh_count: 3.0,
+            avg_p2tr_count: 1.5,
+            avg_size: 900_000.0,
+            ..Default::default()
+        }];
+        let opt = super::super::address_type_chart_daily(&days);
+        let series = opt["series"].as_array().expect("series");
+        let find = |name: &str| -> f64 {
+            series
+                .iter()
+                .find(|s| s["name"] == name)
+                .unwrap_or_else(|| panic!("no series {name}"))["data"][0]
+                .as_f64()
+                .expect("a number")
+        };
+        assert_eq!(find("P2PKH"), 30.0, "3.0 per block over 10 blocks");
+        assert_eq!(find("P2TR"), 15.0, "1.5 per block over 10 blocks");
+    }
+
     /// `registry::NON_TIME_X_AXIS` has to name exactly the charts whose
     /// builders produce a non-time x axis, or the comparison rule built on it
     /// is guessing.

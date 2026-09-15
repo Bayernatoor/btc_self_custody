@@ -89,6 +89,130 @@ pub enum Unit {
     Mixed,
 }
 
+/// How a resolution's points relate to the underlying per-block readings.
+///
+/// The site had one global sentence, "one point per day, averaged from every
+/// block", applied to charts that plot daily totals, pooled ratios, cumulative
+/// running sums and grouped summaries. It is correct for a minority of them.
+/// `address-types` says "Daily average output types" and plots
+/// `avg * block_count`, a total.
+///
+/// Declared rather than inferred, because nothing in the built option
+/// distinguishes these: a daily total and a daily mean are both an array of
+/// numbers on a category axis.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Aggregation {
+    /// One reading per block, plotted as it was measured.
+    PerBlockObservation,
+    /// The day's readings summed. `address-types` multiplies the stored mean
+    /// back up by the block count to get here.
+    DailyTotal,
+    /// The unweighted mean of the day's per-block values, which is what the
+    /// `avg_*` columns already hold.
+    MeanOfPerBlockValues,
+    /// A ratio formed from two daily totals, not the mean of per-block
+    /// ratios. The two differ whenever the denominator varies between blocks,
+    /// and the difference is large: two blocks with 1-of-1 and 0-of-9 matching
+    /// transactions pool to 10% and average to 50%.
+    RatioOfTotals,
+    /// A running total across the selected window, so the first point is not
+    /// the chain's beginning unless the window is.
+    CumulativeInWindow,
+    /// Derived over a trailing window, such as a moving average or a change
+    /// across N blocks or days.
+    WindowedDerived,
+    /// Grouped into buckets or categories rather than positioned in time:
+    /// histograms, donuts, era comparisons.
+    GroupedSummary,
+    /// The chart has no builder at this resolution.
+    Unsupported,
+}
+
+/// How a number came to exist, kept separate from where it came from and from
+/// how it was aggregated.
+///
+/// The distinction the site most needs and least had. Hash rate is inferred
+/// from difficulty, UTXO growth is an estimate that omits coinbase outputs,
+/// inscriptions are matched by a witness marker, and block size is read off
+/// the block. A reader who can see which is which can calibrate; one who
+/// cannot has to trust.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Method {
+    /// Read from the block or the node and plotted, allowing deterministic
+    /// unit conversion. A conversion alone does not make a reading an
+    /// estimate.
+    Measured,
+    /// Derived arithmetically from measured inputs by a defined formula, with
+    /// no unknowns: a share, a rate, a difference.
+    Calculated,
+    /// Derived using an assumption that may not hold, so the result is
+    /// approximate even when the inputs are exact. Hash rate assumes a
+    /// 600-second mean interval; the block total for fees is taken as coinbase
+    /// value minus the scheduled subsidy, which a miner underclaiming the
+    /// reward makes wrong.
+    Estimated,
+    /// Identified by a pattern match that can miss and can over-match.
+    /// Inscription detection scans witness items for the Ordinals marker.
+    HeuristicallyDetected,
+}
+
+impl Method {
+    /// The short label a reader sees.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Measured => "Measured",
+            Self::Calculated => "Calculated",
+            Self::Estimated => "Estimated",
+            Self::HeuristicallyDetected => "Detected",
+        }
+    }
+
+    /// The one-line explanation behind that label. Every badge explains
+    /// itself, or it is decoration.
+    pub fn explanation(self) -> &'static str {
+        match self {
+            Self::Measured => "Read directly from the blocks my node stores.",
+            Self::Calculated => {
+                "Worked out from measured values by a fixed formula."
+            }
+            Self::Estimated => {
+                "Worked out using an assumption that may not hold, so the \
+                 result is approximate even where the inputs are exact."
+            }
+            Self::HeuristicallyDetected => {
+                "Found by matching a pattern, which can miss some cases and \
+                 wrongly include others."
+            }
+        }
+    }
+}
+
+/// What one of a chart's measurements is, per resolution.
+///
+/// A chart is not always one quantity. `chain-size` plots measured block bytes
+/// beside an estimated disk figure, and giving the pair a single badge would
+/// be false for one of them. So the declaration is per measurement, and a
+/// chart carries one or more.
+#[derive(Clone, Copy)]
+pub struct Measurement {
+    /// Series name as the built option emits it, which is how a consumer ties
+    /// this declaration to what is drawn. Empty means the chart's only
+    /// measurement.
+    pub series: &'static str,
+    /// What is counted or measured, in the chart's own units.
+    pub quantity: &'static str,
+    pub method: Method,
+    /// Aggregation at per-block resolution.
+    pub per_block: Aggregation,
+    /// Aggregation at daily resolution.
+    pub daily: Aggregation,
+    /// Numerator and denominator population, and what is excluded. Stated
+    /// even when it is "every block in the window", because the exclusions
+    /// are where the copy kept going wrong: coinbase, OP_RETURN outputs,
+    /// unknown script types.
+    pub population: &'static str,
+}
+
 impl Unit {
     pub fn label(self) -> &'static str {
         match self {
@@ -240,6 +364,13 @@ pub struct ChartMeta {
     pub source: Source,
     /// Long-form copy for the flagship charts. `None` renders the short
     /// description alone rather than an empty section.
+    /// What this chart measures, per measurement and per resolution.
+    ///
+    /// Empty during the migration: the cohort that proves the design carries
+    /// declarations and the rest are being filled in.
+    /// `the_undeclared_chart_count_only_shrinks` pins the remainder so the
+    /// gap cannot grow and a new chart cannot be added without one.
+    pub measurements: &'static [Measurement],
     pub about: Option<About>,
 }
 
@@ -329,6 +460,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::all_embedded_share_chart,
             daily: Daily::Fn(super::all_embedded_share_chart_daily),
         },
+        measurements: &[],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -353,6 +485,7 @@ pub const CHARTS: &[ChartMeta] = &[
             // suppressed the "this chart needs a shorter range" notice.
             daily: Daily::Unavailable,
         },
+        measurements: &[],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -372,6 +505,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::inscription_envelope_chart,
             daily: Daily::Fn(super::inscription_envelope_chart_daily),
         },
+        measurements: &[],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -391,6 +525,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::inscription_fee_share_chart,
             daily: Daily::Fn(super::inscription_fee_share_chart_daily),
         },
+        measurements: &[],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -410,6 +545,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::inscription_share_chart,
             daily: Daily::Fn(super::inscription_share_chart_daily),
         },
+        measurements: &[],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -429,6 +565,14 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::inscription_chart,
             daily: Daily::Fn(super::inscription_chart_daily),
         },
+        measurements: &[Measurement {
+            series: "",
+            quantity: "Witness items matching the Ordinals marker",
+            method: Method::HeuristicallyDetected,
+            per_block: Aggregation::PerBlockObservation,
+            daily: Aggregation::MeanOfPerBlockValues,
+            population: "Every witness item in the block is scanned; a matching item counts once, so several envelopes in one item count once. The scan is not restricted to verified Taproot scripts.",
+        }],
         about: Some(About {
             definition: Some("Inscriptions attach data such as an image or text to an individual satoshi, using the Ordinals convention introduced in 2023. The data rides in the witness part of a Taproot transaction, which is the cheapest room in a block."),
             technical: "Counted by matching the inscription envelope pattern in Taproot witness data. This is a convention, not a consensus rule: nothing in the protocol knows what an inscription is, so a different encoding would not appear here. Inscriptions compete for the same block space as ordinary payments, which shows up in the fee charts over the same periods.",
@@ -446,6 +590,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::op_return_block_share_chart,
             daily: Daily::Fn(super::op_return_block_share_chart_daily),
         },
+        measurements: &[],
         about: None,
     },
     ChartMeta {
@@ -460,6 +605,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::op_return_bytes_chart,
             daily: Daily::Fn(super::op_return_bytes_chart_daily),
         },
+        measurements: &[],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -479,6 +625,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::op_return_count_chart,
             daily: Daily::Fn(super::op_return_count_chart_daily),
         },
+        measurements: &[],
         about: None,
     },
     ChartMeta {
@@ -493,6 +640,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::protocol_fee_competition_chart,
             daily: Daily::Fn(super::protocol_fee_competition_chart_daily),
         },
+        measurements: &[],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -512,6 +660,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::runes_pct_chart,
             daily: Daily::Fn(super::runes_pct_chart_daily),
         },
+        measurements: &[],
         about: None,
     },
     ChartMeta {
@@ -526,6 +675,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::unified_embedded_count_chart,
             daily: Daily::Fn(super::unified_embedded_count_chart_daily),
         },
+        measurements: &[],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -545,6 +695,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::unified_embedded_volume_chart,
             daily: Daily::Fn(super::unified_embedded_volume_chart_daily),
         },
+        measurements: &[],
         about: None,
     },
     ChartMeta {
@@ -559,6 +710,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::avg_fee_per_tx_chart,
             daily: Daily::Fn(super::avg_fee_per_tx_chart_daily),
         },
+        measurements: &[],
         about: None,
     },
     ChartMeta {
@@ -573,6 +725,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::btc_volume_chart,
             daily: Daily::Fn(super::btc_volume_chart_daily),
         },
+        measurements: &[],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -592,6 +745,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::fee_rate_heatmap_chart,
             daily: Daily::Unavailable,
         },
+        measurements: &[],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -611,6 +765,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::fee_pressure_chart,
             daily: Daily::Unavailable,
         },
+        measurements: &[],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -630,6 +785,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::fee_revenue_share_chart,
             daily: Daily::Fn(super::fee_revenue_share_chart_daily),
         },
+        measurements: &[],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -649,6 +805,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::fee_spike_chart,
             daily: Daily::Unavailable,
         },
+        measurements: &[],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -665,6 +822,19 @@ pub const CHARTS: &[ChartMeta] = &[
         unit: Unit::Btc,
         shape: Shape::Line,
         source: Source::Fees,
+        measurements: &[Measurement {
+            series: "",
+            quantity: "Fees paid to the miner of a block, in the selected denomination",
+            // Not measured, and this is the finding behind the declaration.
+            // The block total is extracted as coinbase output value minus the
+            // scheduled subsidy, so a miner who underclaims the reward makes
+            // the figure wrong. Summing each transaction's inputs minus
+            // outputs would be measured; that is not what ingestion does.
+            method: Method::Estimated,
+            per_block: Aggregation::PerBlockObservation,
+            daily: Aggregation::MeanOfPerBlockValues,
+            population: "Every block in the window. The denomination follows the BTC/sats toggle, so the active unit is not fixed by this entry.",
+        }],
         about: Some(About {
             definition: Some("What everyone paid, in total, to get into a given block. Each transaction pays a fee to be included, and the miner keeps every fee in the block they find. It is one half of what a miner earns. The other is the subsidy, which halves every four years and eventually reaches zero."),
             technical: "A transaction does not state its fee anywhere, so it is computed as inputs minus outputs. Denominated in BTC, not the dollars they were worth at the time, so the figure is comparable across the whole chain.",
@@ -682,6 +852,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::halving_era_chart,
             daily: Daily::Fn(super::halving_era_chart_daily),
         },
+        measurements: &[],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -701,6 +872,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::max_tx_fee_chart,
             daily: Daily::Unavailable,
         },
+        measurements: &[],
         about: None,
     },
     ChartMeta {
@@ -715,6 +887,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::median_fee_rate_chart,
             daily: Daily::Fn(super::median_fee_rate_chart_daily),
         },
+        measurements: &[],
         about: Some(About {
             definition: Some("How much a transaction paid per unit of size to get into a block, taking the middle transaction. Fees are charged by the room a transaction takes, not the value it moves, so sending a large amount can cost less than sending a small one."),
             technical: "Fee divided by virtual size for every transaction in the block, then the middle value. Virtual size is weight divided by four, which is the unit the fee market prices in. The median, because one very large fee drags an average somewhere no real transaction sat. The coinbase transaction pays no fee and is excluded.",
@@ -732,6 +905,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::protocol_fee_breakdown_chart,
             daily: Daily::Unavailable,
         },
+        measurements: &[],
         about: None,
     },
     ChartMeta {
@@ -746,6 +920,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::subsidy_vs_fees_chart,
             daily: Daily::Fn(super::subsidy_vs_fees_chart_daily),
         },
+        measurements: &[],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -765,6 +940,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::hash_rate_chart,
             daily: Daily::Fn(super::hash_rate_chart_daily),
         },
+        measurements: &[],
         about: Some(About {
             definition: Some("How much computing work the whole network is doing, per second. Miners guess numbers until one produces a block hash below the target, and the hash rate is how many guesses everyone is making together. It is the closest thing to a price tag on attacking Bitcoin: an attacker has to out-compute everyone already mining."),
             technical: "An estimate. Nobody can count the network's guesses, so it is inferred from the difficulty the network settled on: difficulty times 2^32, divided by the 600 second block target. Difficulty only moves every 2,016 blocks, so the line is flat between retargets while the real rate is not. When the two drift apart, blocks arrive faster or slower than ten minutes until the next adjustment closes the gap.",
@@ -782,6 +958,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::difficulty_adjustment_chart,
             daily: Daily::Fn(super::difficulty_adjustment_chart_daily),
         },
+        measurements: &[],
         about: Some(About {
             definition: Some("Every 2,016 blocks, roughly a fortnight, Bitcoin measures how long those blocks took and resets difficulty so the next 2,016 should take exactly two weeks. Nobody votes and nobody decides. If miners leave, blocks come slower and the network makes itself easier. If they arrive, it makes itself harder. This is that correction, as a percentage."),
             technical: "The largest fall on record is 27.94%, at height 689,472 in the week of the 2021 mining ban in China. The largest rises are from 2010, when the network was small enough for one operator to move it. Rises and falls are coloured separately so the sign is readable at a glance.",
@@ -799,6 +976,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::difficulty_ribbon_chart,
             daily: Daily::Fn(super::difficulty_ribbon_chart_daily),
         },
+        measurements: &[],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -818,6 +996,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::difficulty_chart,
             daily: Daily::Fn(super::difficulty_chart_daily),
         },
+        measurements: &[],
         about: Some(About {
             definition: Some("How hard it currently is to mine a block. Every miner races to find a number that makes the block's hash fall below a target, and difficulty is that target expressed as a multiple of the easiest one the protocol allows. Nobody sets it. It moves automatically with how much mining power is on the network."),
             technical: "Read from the header of every block, so this is the protocol's own value. It changes once every 2,016 blocks, roughly every two weeks, which is why the line steps. Multiply by 2^32 for the expected number of hashes per block, the figure hash-rate estimates are built on.",
@@ -832,6 +1011,7 @@ pub const CHARTS: &[ChartMeta] = &[
         unit: Unit::Count,
         shape: Shape::Donut,
         source: Source::Mining(MiningChart::Diversity),
+        measurements: &[],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -848,6 +1028,7 @@ pub const CHARTS: &[ChartMeta] = &[
         unit: Unit::Count,
         shape: Shape::Histogram,
         source: Source::Mining(MiningChart::EmptyBlocks),
+        measurements: &[],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -864,6 +1045,7 @@ pub const CHARTS: &[ChartMeta] = &[
         unit: Unit::Count,
         shape: Shape::Bar,
         source: Source::Mining(MiningChart::EmptyByPool),
+        measurements: &[],
         about: None,
     },
     ChartMeta {
@@ -875,6 +1057,7 @@ pub const CHARTS: &[ChartMeta] = &[
         unit: Unit::Percent,
         shape: Shape::Donut,
         source: Source::Mining(MiningChart::Dominance),
+        measurements: &[],
         about: Some(About {
             definition: Some("Which mining pools are finding blocks, and in what proportion. Miners join a pool to get a steady payout instead of a rare large one, and the pool chooses which transactions its members' blocks include. The shares therefore show how much of block production a few operators direct."),
             technical: "Attributed from the coinbase transaction, where pools tag themselves by convention. Nothing requires it, so a pool that stops tagging, or tags differently, moves between these categories while nothing changes on the network. Untagged blocks are counted as unknown, never shared out among the named pools.",
@@ -892,6 +1075,16 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::address_type_chart,
             daily: Daily::Fn(super::address_type_chart_daily),
         },
+        measurements: &[Measurement {
+            series: "",
+            quantity: "Outputs created, by script type",
+            method: Method::Measured,
+            per_block: Aggregation::PerBlockObservation,
+            // `avg * block_count`, so a total, which is why the old subtitle
+            // "Daily average output types" was wrong.
+            daily: Aggregation::DailyTotal,
+            population: "Outputs of non-coinbase transactions. Six script types are plotted; OP_RETURN, bare multisig and unrecognised scripts are not among them, so the bands do not sum to every output.",
+        }],
         about: None,
     },
     ChartMeta {
@@ -906,6 +1099,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::address_type_pct_chart,
             daily: Daily::Fn(super::address_type_pct_chart_daily),
         },
+        measurements: &[],
         about: None,
     },
     ChartMeta {
@@ -920,6 +1114,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::avg_tx_size_chart,
             daily: Daily::Fn(super::avg_tx_size_chart_daily),
         },
+        measurements: &[],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -939,6 +1134,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::batching_chart,
             daily: Daily::Fn(super::batching_chart_daily),
         },
+        measurements: &[],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -955,6 +1151,26 @@ pub const CHARTS: &[ChartMeta] = &[
         unit: Unit::Gigabytes,
         shape: Shape::Line,
         source: Source::ChainSize,
+        measurements: &[
+            Measurement {
+                series: "Block Data",
+                quantity: "Serialized block bytes, accumulated",
+                method: Method::Measured,
+                per_block: Aggregation::CumulativeInWindow,
+                daily: Aggregation::CumulativeInWindow,
+                population: "Every block in the window, plus the stored total for everything before it, so the value is absolute rather than range-relative.",
+            },
+            Measurement {
+                series: "Disk Size (est.)",
+                quantity: "Block bytes scaled by the storage overhead a node carries today",
+                // The one that makes a single per-chart badge impossible: a
+                // measured series beside an estimated companion.
+                method: Method::Estimated,
+                per_block: Aggregation::CumulativeInWindow,
+                daily: Aggregation::CumulativeInWindow,
+                population: "Present-day disk size divided by present-day block data, applied to the accumulated series. Not a reconstruction of historical disk usage, which block sizes cannot give.",
+            },
+        ],
         about: Some(About {
             definition: Some("The total size of the block chain on disk. Every full node stores all of it, back to 2009, and that is what lets a node check the rules for itself instead of trusting anyone. The number matters because it sets the floor on what running one costs."),
             technical: "Blocks summed across the range and anchored to the size my node reports on disk now, so the present-day figure is measured rather than estimated. Block data only: it excludes the chainstate and index databases a node also keeps, so a full data directory is larger. A pruned node stores a fraction of this and still verifies everything.",
@@ -972,6 +1188,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::cumulative_adoption_chart,
             daily: Daily::Fn(super::cumulative_adoption_chart_daily),
         },
+        measurements: &[],
         about: None,
     },
     ChartMeta {
@@ -983,6 +1200,7 @@ pub const CHARTS: &[ChartMeta] = &[
         unit: Unit::Count,
         shape: Shape::Histogram,
         source: Source::FullnessDist,
+        measurements: &[],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -1002,6 +1220,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::block_interval_chart,
             daily: Daily::Fn(super::block_interval_chart_daily),
         },
+        measurements: &[],
         about: Some(About {
             definition: Some("The time between one block and the next. Bitcoin targets ten minutes on average and holds that average by adjusting difficulty, but any single gap is close to random: a two-minute gap and a fifty-minute gap are both ordinary."),
             technical: "The difference between consecutive block header timestamps. Miners set those timestamps and the protocol only loosely constrains them, so a handful of intervals in the chain's history are negative or implausibly long. They are plotted as found, because a cleaned series would be my data rather than the chain's.",
@@ -1022,6 +1241,7 @@ pub const CHARTS: &[ChartMeta] = &[
             // `coinbase-msg-length` for what declaring one costs.
             daily: Daily::Unavailable,
         },
+        measurements: &[],
         about: None,
     },
     ChartMeta {
@@ -1036,6 +1256,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::multi_velocity_chart,
             daily: Daily::Fn(super::multi_velocity_chart_daily),
         },
+        measurements: &[],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -1055,6 +1276,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::address_sunset_chart,
             daily: Daily::Fn(super::address_sunset_chart_daily),
         },
+        measurements: &[],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -1074,6 +1296,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::block_propagation_chart,
             daily: Daily::Unavailable,
         },
+        measurements: &[],
         about: None,
     },
     ChartMeta {
@@ -1088,6 +1311,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::rbf_chart,
             daily: Daily::Fn(super::rbf_chart_daily),
         },
+        measurements: &[],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -1107,6 +1331,18 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::segwit_adoption_chart,
             daily: Daily::Fn(super::segwit_adoption_chart_daily),
         },
+        measurements: &[Measurement {
+            series: "",
+            quantity: "Share of transactions spending a witness input",
+            method: Method::Calculated,
+            per_block: Aggregation::PerBlockObservation,
+            // `avg_segwit_spend_count / (avg_tx_count - 1)`. Both terms carry
+            // the same block count, so this is the day's pooled ratio rather
+            // than the mean of per-block shares: it equals total segwit spends
+            // over total non-coinbase transactions.
+            daily: Aggregation::RatioOfTotals,
+            population: "Numerator: inputs spending a witness program. Denominator: non-coinbase transactions, obtained by subtracting one coinbase per block.",
+        }],
         about: Some(About {
             definition: Some("The share of transactions using Segregated Witness. SegWit, activated in 2017, moves signatures into a part of the block that counts less toward the size limit, which makes those transactions cheaper to send. Adoption took years rather than months."),
             technical: "A transaction counts as SegWit when at least one of its inputs carries witness data, which is what determines the fee saving. How many outputs are SegWit is a different question, answered by the address-type charts, and it moved on a different schedule.",
@@ -1124,6 +1360,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::block_size_chart,
             daily: Daily::Fn(super::block_size_chart_daily),
         },
+        measurements: &[],
         about: Some(About {
             definition: Some("How much data each block carries. Block space is limited and shared, so this is the clearest view of how full the chain is running. A larger block is not better or worse; it means more, or larger, transactions were included."),
             technical: "The serialised size of the block as my node stores it, witness data included. Consensus limits weight rather than bytes, to 4 million weight units, and witness bytes count a quarter as much toward that. This is why blocks pass the old one-megabyte figure. Weight utilisation has its own chart.",
@@ -1141,6 +1378,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::taproot_chart,
             daily: Daily::Fn(super::taproot_chart_daily),
         },
+        measurements: &[],
         about: Some(About {
             definition: Some("How many new Taproot outputs are being created. Taproot, activated in 2021, is the most recent change to how Bitcoin outputs can be locked. It makes a complex spending condition, such as a multi-signature wallet, look the same on chain as an ordinary payment, which helps both privacy and fees."),
             technical: "Counts outputs with a pay-to-taproot script created in each block. Created, not spent: an output can sit unspent for years, so this leads the share of transactions that actually use Taproot. Inscriptions are stored in Taproot witness data, which is why this and the inscription charts move together from 2023.",
@@ -1158,6 +1396,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::taproot_spend_type_chart,
             daily: Daily::Fn(super::taproot_spend_type_chart_daily),
         },
+        measurements: &[],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -1174,6 +1413,7 @@ pub const CHARTS: &[ChartMeta] = &[
         unit: Unit::Count,
         shape: Shape::Histogram,
         source: Source::TimeDist,
+        measurements: &[],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -1193,6 +1433,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::tps_chart,
             daily: Daily::Fn(super::tps_chart_daily),
         },
+        measurements: &[],
         about: Some(About {
             definition: Some("How many transactions per second the chain is settling. It is a small number next to a card network, and deliberately so: every full node verifies every transaction, and that is what the limit buys."),
             technical: "Transactions in the block divided by the seconds since the previous one, so a short interval reads high and a long one reads low even at a steady rate. Base-chain settlement only. Nothing carried over Lightning or netted inside an exchange appears here, which makes this a floor on activity rather than a measure of it.",
@@ -1210,6 +1451,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::tx_density_chart,
             daily: Daily::Fn(super::tx_density_chart_daily),
         },
+        measurements: &[],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -1229,6 +1471,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::tx_type_evolution_chart,
             daily: Daily::Unavailable,
         },
+        measurements: &[],
         about: None,
     },
     ChartMeta {
@@ -1243,6 +1486,16 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::tx_count_chart,
             daily: Daily::Fn(super::tx_count_chart_daily),
         },
+        measurements: &[Measurement {
+            series: "",
+            quantity: "Transactions confirmed in a block, including the coinbase",
+            method: Method::Measured,
+            per_block: Aggregation::PerBlockObservation,
+            // The stored `avg_tx_count` column, plotted as it is: the
+            // unweighted mean of the day's per-block counts.
+            daily: Aggregation::MeanOfPerBlockValues,
+            population: "Every block in the window. Counts include each block's coinbase transaction.",
+        }],
         about: Some(About {
             definition: Some("How many transactions each block contains. It moves with two things at once: how much people are transacting, and how much room each transaction takes. A block of many small payments and a block of a few large ones can carry the same data and count very differently."),
             technical: "Counted from the block as my node stores it, including the coinbase transaction that pays the miner. That adds exactly one to every block, which matters when comparing against sources that leave it out. A transaction counts in the block that confirmed it, so this says nothing about how long it waited in the mempool.",
@@ -1260,6 +1513,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::utxo_flow_chart,
             daily: Daily::Fn(super::utxo_flow_chart_daily),
         },
+        measurements: &[],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -1279,6 +1533,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::utxo_growth_chart,
             daily: Daily::Fn(super::utxo_growth_chart_daily),
         },
+        measurements: &[],
         about: Some(About {
             definition: Some("Whether the set of spendable coins is growing or shrinking. Every transaction consumes existing outputs and creates new ones, and the running total of unspent ones is the UTXO set. Positive means more were created than consumed; negative means wallets are consolidating many small coins into fewer large ones."),
             technical: "Outputs created, minus the ones that can never be spent, minus inputs consumed. OP_RETURN outputs are provably unspendable and never enter the set, so they do not count as growth. The coinbase transaction is absent from these counts, so its own outputs are missing and this runs about three per block short of a node's own figure. Net, not cumulative, which is why it goes negative and why a log axis cannot plot every point. The set matters because every node holds it in memory to validate, making it a running cost to the whole network.",
@@ -1296,6 +1551,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::weekday_activity_chart,
             daily: Daily::Fn(super::weekday_activity_chart_daily),
         },
+        measurements: &[],
         about: None,
     },
     ChartMeta {
@@ -1310,6 +1566,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::weight_utilization_chart,
             daily: Daily::Fn(super::weight_utilization_chart_daily),
         },
+        measurements: &[],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -1329,6 +1586,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::witness_version_pct_chart,
             daily: Daily::Fn(super::witness_version_pct_chart_daily),
         },
+        measurements: &[],
         about: None,
     },
     ChartMeta {
@@ -1343,6 +1601,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::witness_share_chart,
             daily: Daily::Fn(super::witness_share_chart_daily),
         },
+        measurements: &[],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -1362,6 +1621,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::witness_version_tx_pct_chart,
             daily: Daily::Fn(super::witness_version_tx_pct_chart_daily),
         },
+        measurements: &[],
         about: None,
     },
     ChartMeta {
@@ -1376,6 +1636,7 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::witness_version_chart,
             daily: Daily::Fn(super::witness_version_chart_daily),
         },
+        measurements: &[],
         about: None,
     },
 ];
