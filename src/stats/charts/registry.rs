@@ -564,7 +564,15 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::inscription_fee_share_chart,
             daily: Daily::Fn(super::inscription_fee_share_chart_daily),
         },
-        measurements: &[],
+        measurements: &[Measurement {
+            series: "",
+            quantity: "Share of fees paid by transactions matching the inscription detector",
+            method_per_block: Method::HeuristicallyDetected,
+            method_daily: Method::HeuristicallyDetected,
+            per_block: Aggregation::PerBlockObservation,
+            daily: Aggregation::RatioOfTotals,
+            population: "Detected inscription fees over total fees. Both terms are estimates: the numerator is a detector match and the denominator is coinbase-derived.",
+        }],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -584,7 +592,15 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::inscription_share_chart,
             daily: Daily::Fn(super::inscription_share_chart_daily),
         },
-        measurements: &[],
+        measurements: &[Measurement {
+            series: "",
+            quantity: "Share of transactions matching the inscription detector",
+            method_per_block: Method::HeuristicallyDetected,
+            method_daily: Method::HeuristicallyDetected,
+            per_block: Aggregation::PerBlockObservation,
+            daily: Aggregation::RatioOfTotals,
+            population: "Matching witness items over the block's transactions. A matching item counts once, so several envelopes in one item count once.",
+        }],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -630,7 +646,15 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::op_return_block_share_chart,
             daily: Daily::Fn(super::op_return_block_share_chart_daily),
         },
-        measurements: &[],
+        measurements: &[Measurement {
+            series: "",
+            quantity: "Share of block bytes in OP_RETURN scripts",
+            method_per_block: Method::Measured,
+            method_daily: Method::Measured,
+            per_block: Aggregation::PerBlockObservation,
+            daily: Aggregation::RatioOfTotals,
+            population: "OP_RETURN scriptPubKey bytes over serialized block bytes. Script bytes only: the output's value and length fields are not included, so this understates the space those outputs occupy.",
+        }],
         about: None,
     },
     ChartMeta {
@@ -700,7 +724,15 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::runes_pct_chart,
             daily: Daily::Fn(super::runes_pct_chart_daily),
         },
-        measurements: &[],
+        measurements: &[Measurement {
+            series: "",
+            quantity: "Share of OP_RETURN outputs, by protocol",
+            method_per_block: Method::HeuristicallyDetected,
+            method_daily: Method::HeuristicallyDetected,
+            per_block: Aggregation::PerBlockObservation,
+            daily: Aggregation::RatioOfTotals,
+            population: "Each detector's count over the block's OP_RETURN count. Detectors match a prefix, so the residual band is whatever matched none of them rather than a named protocol.",
+        }],
         about: None,
     },
     ChartMeta {
@@ -750,7 +782,15 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::avg_fee_per_tx_chart,
             daily: Daily::Fn(super::avg_fee_per_tx_chart_daily),
         },
-        measurements: &[],
+        measurements: &[Measurement {
+            series: "",
+            quantity: "Fees per non-coinbase transaction",
+            method_per_block: Method::Estimated,
+            method_daily: Method::Estimated,
+            per_block: Aggregation::PerBlockObservation,
+            daily: Aggregation::RatioOfTotals,
+            population: "Block fees over the block's transactions less one for the coinbase. A block or day with no user transaction reports no reading rather than zero. The fee total is itself coinbase-derived, so this inherits that estimate.",
+        }],
         about: None,
     },
     ChartMeta {
@@ -765,7 +805,15 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::btc_volume_chart,
             daily: Daily::Fn(super::btc_volume_chart_daily),
         },
-        measurements: &[],
+        measurements: &[Measurement {
+            series: "",
+            quantity: "Value carried by a block's outputs",
+            method_per_block: Method::Measured,
+            method_daily: Method::Measured,
+            per_block: Aggregation::PerBlockObservation,
+            daily: Aggregation::DailyTotal,
+            population: "Sum of non-coinbase output values. Counts change returning to the sender, so it is throughput rather than value transferred between parties.",
+        }],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -887,7 +935,15 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::fee_revenue_share_chart,
             daily: Daily::Fn(super::fee_revenue_share_chart_daily),
         },
-        measurements: &[],
+        measurements: &[Measurement {
+            series: "",
+            quantity: "Fees as a share of what the miner earned",
+            method_per_block: Method::Estimated,
+            method_daily: Method::Estimated,
+            per_block: Aggregation::PerBlockObservation,
+            daily: Aggregation::RatioOfTotals,
+            population: "Fees over subsidy plus fees. The subsidy comes from the block height schedule and the fees are coinbase-derived, so the share inherits that estimate. A falling share can mean falling fees rather than a growing subsidy.",
+        }],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -966,7 +1022,15 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::halving_era_chart,
             daily: Daily::Fn(super::halving_era_chart_daily),
         },
-        measurements: &[],
+        measurements: &[Measurement {
+            series: "",
+            quantity: "Comparison of metrics across halving eras",
+            method_per_block: Method::Measured,
+            method_daily: Method::Measured,
+            per_block: Aggregation::GroupedSummary,
+            daily: Aggregation::GroupedSummary,
+            population: "Blocks grouped by subsidy era, then each metric normalised so its largest era reads 100, which is why every era peaks at 100 by construction. Only eras present in the window appear.",
+        }],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -1347,7 +1411,15 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::address_type_pct_chart,
             daily: Daily::Fn(super::address_type_pct_chart_daily),
         },
-        measurements: &[],
+        measurements: &[Measurement {
+            series: "",
+            quantity: "Share of outputs created, by script type",
+            method_per_block: Method::Measured,
+            method_daily: Method::Measured,
+            per_block: Aggregation::PerBlockObservation,
+            daily: Aggregation::RatioOfTotals,
+            population: "Six classified output types normalised against their own sum, so OP_RETURN, bare multisig and unrecognised scripts are excluded from the denominator and the bands describe those six rather than every output.",
+        }],
         about: None,
     },
     ChartMeta {
@@ -1362,7 +1434,15 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::avg_tx_size_chart,
             daily: Daily::Fn(super::avg_tx_size_chart_daily),
         },
-        measurements: &[],
+        measurements: &[Measurement {
+            series: "",
+            quantity: "Mean serialized bytes per transaction",
+            method_per_block: Method::Calculated,
+            method_daily: Method::Calculated,
+            per_block: Aggregation::PerBlockObservation,
+            daily: Aggregation::RatioOfTotals,
+            population: "Whole block size over transaction count, so header and transaction-count overhead are included and the coinbase is counted.",
+        }],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -1535,7 +1615,15 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::multi_velocity_chart,
             daily: Daily::Fn(super::multi_velocity_chart_daily),
         },
-        measurements: &[],
+        measurements: &[Measurement {
+            series: "",
+            quantity: "Change in each script type's share of outputs",
+            method_per_block: Method::Calculated,
+            method_daily: Method::Calculated,
+            per_block: Aggregation::WindowedDerived,
+            daily: Aggregation::WindowedDerived,
+            population: "The difference between a smoothed share now and the same share one window earlier: 144 blocks per block, 30 days daily. The result is in percentage points, so a share moving from 10 to 15 is 5 points and not 5 percent. Divergent lines do not establish that users migrated between types.",
+        }],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -1555,7 +1643,15 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::address_sunset_chart,
             daily: Daily::Fn(super::address_sunset_chart_daily),
         },
-        measurements: &[],
+        measurements: &[Measurement {
+            series: "",
+            quantity: "Share of outputs created to P2PKH",
+            method_per_block: Method::Measured,
+            method_daily: Method::Measured,
+            per_block: Aggregation::PerBlockObservation,
+            daily: Aggregation::RatioOfTotals,
+            population: "P2PKH outputs over the six classified output types, so OP_RETURN, bare multisig and unrecognised scripts are outside the denominator. The 90-day smoothing exists only at daily resolution. A falling share does not establish that those users moved to another type.",
+        }],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -1601,7 +1697,15 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::rbf_chart,
             daily: Daily::Fn(super::rbf_chart_daily),
         },
-        measurements: &[],
+        measurements: &[Measurement {
+            series: "",
+            quantity: "Share of transactions signalling replaceability",
+            method_per_block: Method::Measured,
+            method_daily: Method::Measured,
+            per_block: Aggregation::PerBlockObservation,
+            daily: Aggregation::RatioOfTotals,
+            population: "Confirmed non-coinbase transactions whose input sequence numbers signal under BIP 125, over all confirmed non-coinbase transactions. Not the share actually replaced, and not wallet adoption: full-RBF policy means absence of the signal does not prevent replacement.",
+        }],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -1752,7 +1856,15 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::tps_chart,
             daily: Daily::Fn(super::tps_chart_daily),
         },
-        measurements: &[],
+        measurements: &[Measurement {
+            series: "",
+            quantity: "Transactions per second",
+            method_per_block: Method::Calculated,
+            method_daily: Method::Calculated,
+            per_block: Aggregation::PerBlockObservation,
+            daily: Aggregation::WindowedDerived,
+            population: "Per block this is the block's transaction count over the gap to its predecessor, with a non-positive gap substituted as zero and the first block having none. Daily it is the day's transaction count over 86,400 seconds, including coinbase transactions, which is wrong for an incomplete day.",
+        }],
         about: Some(About {
             definition: Some("How many transactions per second the chain is settling. It is a small number next to a card network, and deliberately so: every full node verifies every transaction, and that is what the limit buys."),
             technical: "Transactions in the block divided by the seconds since the previous one, so a short interval reads high and a long one reads low even at a steady rate. Base-chain settlement only. Nothing carried over Lightning or netted inside an exchange appears here, which makes this a floor on activity rather than a measure of it.",
@@ -1893,7 +2005,15 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::utxo_growth_chart,
             daily: Daily::Fn(super::utxo_growth_chart_daily),
         },
-        measurements: &[],
+        measurements: &[Measurement {
+            series: "",
+            quantity: "Estimated net change in the spendable output set",
+            method_per_block: Method::Estimated,
+            method_daily: Method::Estimated,
+            per_block: Aggregation::PerBlockObservation,
+            daily: Aggregation::DailyTotal,
+            population: "Outputs created less detected OP_RETURN outputs less inputs consumed, over non-coinbase transactions. Coinbase outputs are missing because ingestion excludes the coinbase, which leaves the series short by about three per block. Negative means a net reduction; it does not establish consolidation.",
+        }],
         about: Some(About {
             definition: Some("Whether the set of spendable coins is growing or shrinking. Every transaction consumes existing outputs and creates new ones, and the running total of unspent ones is the UTXO set. Positive means more were created than consumed; negative means wallets are consolidating many small coins into fewer large ones."),
             technical: "Outputs created, minus the ones that can never be spent, minus inputs consumed. OP_RETURN outputs are provably unspendable and never enter the set, so they do not count as growth. The coinbase transaction is absent from these counts, so its own outputs are missing and this runs about three per block short of a node's own figure. Net, not cumulative, which is why it goes negative and why a log axis cannot plot every point. The set matters because every node holds it in memory to validate, making it a running cost to the whole network.",
@@ -1956,7 +2076,15 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::witness_version_pct_chart,
             daily: Daily::Fn(super::witness_version_pct_chart_daily),
         },
-        measurements: &[],
+        measurements: &[Measurement {
+            series: "",
+            quantity: "Share of outputs created to a witness program",
+            method_per_block: Method::Measured,
+            method_daily: Method::Measured,
+            per_block: Aggregation::PerBlockObservation,
+            daily: Aggregation::RatioOfTotals,
+            population: "Native v0 and Taproot outputs against the classified output total. Unrecognised or future witness versions are not counted.",
+        }],
         about: None,
     },
     ChartMeta {
@@ -2001,7 +2129,15 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::witness_version_tx_pct_chart,
             daily: Daily::Fn(super::witness_version_tx_pct_chart_daily),
         },
-        measurements: &[],
+        measurements: &[Measurement {
+            series: "",
+            quantity: "Share of outputs by script generation",
+            method_per_block: Method::Measured,
+            method_daily: Method::Measured,
+            per_block: Aggregation::PerBlockObservation,
+            daily: Aggregation::RatioOfTotals,
+            population: "Three bands over the classified output total. The Legacy band is the residual after native v0 and Taproot, so it includes OP_RETURN, P2SH-wrapped witness outputs and anything unrecognised; it is not a count of legacy payment usage.",
+        }],
         about: None,
     },
     ChartMeta {

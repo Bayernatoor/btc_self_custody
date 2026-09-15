@@ -1001,7 +1001,7 @@ mod tests {
             .collect();
         assert_eq!(
             undeclared.len(),
-            29,
+            12,
             "declared cohort changed. If you added a chart, declare its \
              measurements; if you declared one, lower this number. Still \
              undeclared: {undeclared:?}"
@@ -1124,14 +1124,43 @@ mod tests {
     fn a_declared_aggregation_predicts_how_the_builder_responds() {
         use registry::Aggregation::*;
 
-        let days_with = |block_count: u64| -> Vec<DailyAggregate> {
-            synthetic_days(900)
-                .into_iter()
-                .map(|d| DailyAggregate { block_count, ..d })
-                .collect()
+        // Scaling `block_count` alone produces a day that cannot exist,
+        // because the stored `total_*` columns are sums over that same day.
+        // `op-block-share` divides `total_op_return_bytes` by
+        // `avg_size * block_count`, so an unscaled numerator against a scaled
+        // denominator made a correctly declared ratio look like it moved. The
+        // day has to stay internally consistent for the probe to mean
+        // anything, so the totals scale with it.
+        let scaled = |k: u64, d: DailyAggregate| -> DailyAggregate {
+            let m = |v: u64| v * k;
+            DailyAggregate {
+                block_count: d.block_count * k,
+                total_op_return_count: m(d.total_op_return_count),
+                total_op_return_bytes: m(d.total_op_return_bytes),
+                total_runes_count: m(d.total_runes_count),
+                total_runes_bytes: m(d.total_runes_bytes),
+                total_omni_count: m(d.total_omni_count),
+                total_omni_bytes: m(d.total_omni_bytes),
+                total_counterparty_count: m(d.total_counterparty_count),
+                total_counterparty_bytes: m(d.total_counterparty_bytes),
+                total_data_carrier_count: m(d.total_data_carrier_count),
+                total_data_carrier_bytes: m(d.total_data_carrier_bytes),
+                total_fees: m(d.total_fees),
+                total_output_value: m(d.total_output_value),
+                total_input_value: m(d.total_input_value),
+                total_inscription_fees: m(d.total_inscription_fees),
+                total_runes_fees: m(d.total_runes_fees),
+                ..d
+            }
         };
-        let base = days_with(100);
-        let doubled = days_with(200);
+        let base: Vec<DailyAggregate> = synthetic_days(900)
+            .into_iter()
+            .map(|d| scaled(1, d))
+            .collect();
+        let doubled: Vec<DailyAggregate> = synthetic_days(900)
+            .into_iter()
+            .map(|d| scaled(2, d))
+            .collect();
 
         let plotted = |opt: &serde_json::Value| -> Vec<f64> {
             opt["series"]
