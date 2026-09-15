@@ -513,7 +513,18 @@ pub const CHARTS: &[ChartMeta] = &[
             // suppressed the "this chart needs a shorter range" notice.
             daily: Daily::Unavailable,
         },
-        measurements: &[],
+        measurements: &[
+            Measurement {
+                series: "",
+                quantity: "Printable characters in the block's coinbase input",
+                method_per_block: Method::Measured,
+                // No daily builder, so there is no daily method either.
+                method_daily: Method::Measured,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::Unsupported,
+                population: "Decoded ASCII run found in the coinbase scriptSig. No daily builder: the daily table stores no coinbase text, so a daily point would have nothing behind it.",
+            },
+        ],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -774,7 +785,58 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::fee_rate_heatmap_chart,
             daily: Daily::Unavailable,
         },
-        measurements: &[],
+        measurements: &[
+            Measurement {
+                series: "p10",
+                quantity: "10th percentile transaction fee rate in the block",
+                method_per_block: Method::Measured,
+                // No daily builder, so there is no daily method either.
+                method_daily: Method::Measured,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::Unsupported,
+                population: "Stored per-block percentile. Currently drawn as a stacked band, so the upper boundary of the plot is the sum of the five percentiles rather than p90; correcting the rendering is a separate measurement fix.",
+            },
+            Measurement {
+                series: "p25",
+                quantity: "25th percentile transaction fee rate in the block",
+                method_per_block: Method::Measured,
+                // No daily builder, so there is no daily method either.
+                method_daily: Method::Measured,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::Unsupported,
+                population: "As p10. Stacked, so the drawn height is not the percentile.",
+            },
+            Measurement {
+                series: "Median",
+                quantity: "Median transaction fee rate in the block",
+                method_per_block: Method::Measured,
+                // No daily builder, so there is no daily method either.
+                method_daily: Method::Measured,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::Unsupported,
+                population: "As p10. Stacked, so the drawn height is not the percentile.",
+            },
+            Measurement {
+                series: "p75",
+                quantity: "75th percentile transaction fee rate in the block",
+                method_per_block: Method::Measured,
+                // No daily builder, so there is no daily method either.
+                method_daily: Method::Measured,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::Unsupported,
+                population: "As p10. Stacked, so the drawn height is not the percentile.",
+            },
+            Measurement {
+                series: "p90",
+                quantity: "90th percentile transaction fee rate in the block",
+                method_per_block: Method::Measured,
+                // No daily builder, so there is no daily method either.
+                method_daily: Method::Measured,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::Unsupported,
+                population: "As p10. p10 to p90 is the central 80 percent of transactions, not the full spread.",
+            },
+        ],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -794,7 +856,18 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::fee_pressure_chart,
             daily: Daily::Unavailable,
         },
-        measurements: &[],
+        measurements: &[
+            Measurement {
+                series: "Fee Pressure",
+                quantity: "Median fee rate against block weight utilisation",
+                method_per_block: Method::Measured,
+                // No daily builder, so there is no daily method either.
+                method_daily: Method::Measured,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::Unsupported,
+                population: "One point per block. The x axis is a percentage, not time, so this chart shares no domain with the time-series charts and takes no comparison. No daily builder.",
+            },
+        ],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -834,7 +907,18 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::fee_spike_chart,
             daily: Daily::Unavailable,
         },
-        measurements: &[],
+        measurements: &[
+            Measurement {
+                series: "Spike (>5x avg)",
+                quantity: "Blocks whose median fee rate exceeded five times the trailing 144-block mean",
+                method_per_block: Method::Calculated,
+                // No daily builder, so there is no daily method either.
+                method_daily: Method::Calculated,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::Unsupported,
+                population: "Needs at least 300 blocks of context to establish the trailing mean, so short ranges draw nothing. The accompanying moving average is a companion, not a second measurement. No daily builder.",
+            },
+        ],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -902,7 +986,18 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::max_tx_fee_chart,
             daily: Daily::Unavailable,
         },
-        measurements: &[],
+        measurements: &[
+            Measurement {
+                series: "Max Tx Fee",
+                quantity: "Largest single transaction fee in the block",
+                method_per_block: Method::Measured,
+                // No daily builder, so there is no daily method either.
+                method_daily: Method::Measured,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::Unsupported,
+                population: "One transaction per block, so this is an extreme rather than a total or a rate. No daily builder.",
+            },
+        ],
         about: None,
     },
     ChartMeta {
@@ -935,7 +1030,38 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::protocol_fee_breakdown_chart,
             daily: Daily::Unavailable,
         },
-        measurements: &[],
+        measurements: &[
+            Measurement {
+                series: "Inscriptions",
+                quantity: "Fees paid by transactions matching the inscription detector",
+                method_per_block: Method::HeuristicallyDetected,
+                // No daily builder, so there is no daily method either.
+                method_daily: Method::HeuristicallyDetected,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::Unsupported,
+                population: "Detector match, not a parse. A transaction matching both the inscription and Runes detectors has its whole fee credited to both, so these categories can overlap and are not a partition of the block's fees despite being stacked.",
+            },
+            Measurement {
+                series: "Runes",
+                quantity: "Fees paid by transactions matching the Runes detector",
+                method_per_block: Method::HeuristicallyDetected,
+                // No daily builder, so there is no daily method either.
+                method_daily: Method::HeuristicallyDetected,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::Unsupported,
+                population: "As Inscriptions, and can double-count the same transaction's fee.",
+            },
+            Measurement {
+                series: "Other",
+                quantity: "The block's remaining fees",
+                method_per_block: Method::Calculated,
+                // No daily builder, so there is no daily method either.
+                method_daily: Method::Calculated,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::Unsupported,
+                population: "The residual after subtracting both detector totals, so it can be understated wherever they overlap. It does not establish that those transactions are ordinary payments.",
+            },
+        ],
         about: None,
     },
     ChartMeta {
@@ -1067,7 +1193,15 @@ pub const CHARTS: &[ChartMeta] = &[
         unit: Unit::Count,
         shape: Shape::Donut,
         source: Source::Mining(MiningChart::Diversity),
-        measurements: &[],
+        measurements: &[Measurement {
+            series: "",
+            quantity: "Concentration of block production across identified pools",
+            method_per_block: Method::HeuristicallyDetected,
+            method_daily: Method::HeuristicallyDetected,
+            per_block: Aggregation::GroupedSummary,
+            daily: Aggregation::GroupedSummary,
+            population: "A Herfindahl index over pool shares for the window, normalised across identified blocks only, so unattributed blocks do not dilute it. The band thresholds are a presentation convention, not a security threshold.",
+        }],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -1084,7 +1218,15 @@ pub const CHARTS: &[ChartMeta] = &[
         unit: Unit::Count,
         shape: Shape::Histogram,
         source: Source::Mining(MiningChart::EmptyBlocks),
-        measurements: &[],
+        measurements: &[Measurement {
+            series: "",
+            quantity: "Blocks containing only a coinbase transaction, by month",
+            method_per_block: Method::Measured,
+            method_daily: Method::Measured,
+            per_block: Aggregation::GroupedSummary,
+            daily: Aggregation::GroupedSummary,
+            population: "Counted where tx_count is one, grouped by calendar month. An empty block is a valid block; the count does not establish why it was empty.",
+        }],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -1101,7 +1243,15 @@ pub const CHARTS: &[ChartMeta] = &[
         unit: Unit::Count,
         shape: Shape::Bar,
         source: Source::Mining(MiningChart::EmptyByPool),
-        measurements: &[],
+        measurements: &[Measurement {
+            series: "",
+            quantity: "Blocks containing only a coinbase transaction, by pool",
+            method_per_block: Method::HeuristicallyDetected,
+            method_daily: Method::HeuristicallyDetected,
+            per_block: Aggregation::GroupedSummary,
+            daily: Aggregation::GroupedSummary,
+            population: "As Empty Blocks, grouped by matched coinbase tag instead of by month, so it inherits the attribution gap: unmatched blocks group as Unknown, and the early chain is largely unmatched.",
+        }],
         about: None,
     },
     ChartMeta {
@@ -1270,7 +1420,15 @@ pub const CHARTS: &[ChartMeta] = &[
         unit: Unit::Count,
         shape: Shape::Histogram,
         source: Source::FullnessDist,
-        measurements: &[],
+        measurements: &[Measurement {
+            series: "",
+            quantity: "Blocks grouped by how much of the weight limit they used",
+            method_per_block: Method::Calculated,
+            method_daily: Method::Calculated,
+            per_block: Aggregation::GroupedSummary,
+            daily: Aggregation::GroupedSummary,
+            population: "Weight divided by the four-million-unit limit, bucketed. Buckets are computed server-side for long ranges and from the blocks themselves for short ones; the count/percentage toggle changes the active unit.",
+        }],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -1311,7 +1469,18 @@ pub const CHARTS: &[ChartMeta] = &[
             // `coinbase-msg-length` for what declaring one costs.
             daily: Daily::Unavailable,
         },
-        measurements: &[],
+        measurements: &[
+            Measurement {
+                series: "Largest Tx",
+                quantity: "Size of the largest transaction in the block",
+                method_per_block: Method::Measured,
+                // No daily builder, so there is no daily method either.
+                method_daily: Method::Measured,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::Unsupported,
+                population: "Serialized size of one transaction per block, not an average. No daily builder: the daily table stores no per-block maximum.",
+            },
+        ],
         about: None,
     },
     ChartMeta {
@@ -1366,7 +1535,18 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::block_propagation_chart,
             daily: Daily::Unavailable,
         },
-        measurements: &[],
+        measurements: &[
+            Measurement {
+                series: "Interval",
+                quantity: "Gap to the previous block, where it is under 60 seconds",
+                method_per_block: Method::Calculated,
+                // No daily builder, so there is no daily method either.
+                method_daily: Method::Calculated,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::Unsupported,
+                population: "Difference between consecutive block header timestamps, which miners choose, so this is not a measure of network propagation or of stale-block races. Backward pairs are excluded rather than clamped to zero. No daily builder.",
+            },
+        ],
         about: None,
     },
     ChartMeta {
@@ -1484,7 +1664,15 @@ pub const CHARTS: &[ChartMeta] = &[
         unit: Unit::Count,
         shape: Shape::Histogram,
         source: Source::TimeDist,
-        measurements: &[],
+        measurements: &[Measurement {
+            series: "",
+            quantity: "Blocks grouped by the gap to their predecessor",
+            method_per_block: Method::Calculated,
+            method_daily: Method::Calculated,
+            per_block: Aggregation::GroupedSummary,
+            daily: Aggregation::GroupedSummary,
+            population: "Differences between consecutive block header timestamps, bucketed. Ten minutes is the target mean, not the most common bucket: the distribution is exponential, so the shortest bucket is the largest. Miners choose timestamps, so backward gaps exist.",
+        }],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -1542,7 +1730,18 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::tx_type_evolution_chart,
             daily: Daily::Unavailable,
         },
-        measurements: &[],
+        measurements: &[
+            Measurement {
+                series: "",
+                quantity: "Share of transactions by input script type",
+                method_per_block: Method::Measured,
+                // No daily builder, so there is no daily method either.
+                method_daily: Method::Measured,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::Unsupported,
+                population: "Three bands over the block's non-coinbase transactions. No daily builder: the daily table stores the component counts but this builder was never given a daily arm.",
+            },
+        ],
         about: None,
     },
     ChartMeta {
