@@ -38,7 +38,9 @@
 //! of the two is telling the truth.
 
 use super::registry::{self, ChartMeta, Daily, Shape, Source, Unit};
-use crate::stats::types::{BlockSummary, DailyAggregate};
+use crate::stats::types::{
+    BlockSummary, DailyAggregate, HistogramBucket, MinerShare,
+};
 
 /// Synthetic blocks, every numeric field populated and varying.
 ///
@@ -1170,5 +1172,155 @@ mod tests {
              is one whose numbers a reader can no longer see; a chart removed \
              is progress and should update this list."
         );
+    }
+}
+
+#[cfg(test)]
+mod inventory {
+    use super::*;
+
+    /// Dump the structural facts of every registered chart, for the G0
+    /// measurement inventory. Not an assertion: the semantic columns
+    /// (aggregation, method, population) cannot be read off the option and are
+    /// classified by hand from the builders. Run with --ignored --nocapture.
+    #[test]
+    #[ignore]
+    fn dump_measurement_inventory() {
+        println!("SLUG\tRES\tUNIT\tSHAPE\tXAXIS\tYAXES\tSERIES\tMETRICS\tCOMPANIONS\tSTACK\tPCT_BOUND\tNULLS\tSERIES_NAMES");
+        // `built_charts()` covers Dashboard, ChainSize and Fees only, so the
+        // four mining charts and the two histograms sit outside it and
+        // therefore outside every conformance guard. Built here from their own
+        // inputs so the G0 inventory is complete at 63; extending the shared
+        // harness is G1 work, since it may surface real failures in six charts
+        // that no test has ever built.
+        let miners: Vec<MinerShare> =
+            ["Foundry USA", "AntPool", "F2Pool", "Unknown"]
+                .iter()
+                .enumerate()
+                .map(|(i, m)| MinerShare {
+                    miner: (*m).to_string(),
+                    count: 400 - (i as u64) * 90,
+                    percentage: 40.0 - (i as f64) * 9.0,
+                })
+                .collect();
+        let buckets: Vec<HistogramBucket> = (0..8)
+            .map(|i| HistogramBucket {
+                label: format!("2024-{:02}", i + 1),
+                count: 100 + i * 7,
+            })
+            .collect();
+        let blocks_for_dist = synthetic_blocks(600);
+        let extra: Vec<(&'static ChartMeta, bool, serde_json::Value)> =
+            registry::CHARTS
+                .iter()
+                .filter_map(|meta| {
+                    let v = match meta.source {
+                        Source::Mining(which) => match which {
+                            registry::MiningChart::Dominance => {
+                                super::super::miner_dominance_chart(&miners)
+                            }
+                            registry::MiningChart::Diversity => {
+                                super::super::mining_diversity_chart(&miners)
+                            }
+                            registry::MiningChart::EmptyBlocks => {
+                                super::super::empty_blocks_chart(&buckets)
+                            }
+                            registry::MiningChart::EmptyByPool => {
+                                super::super::empty_blocks_by_pool_chart(
+                                    &buckets,
+                                )
+                            }
+                        },
+                        Source::FullnessDist => {
+                            super::super::block_fullness_distribution_chart(
+                                &blocks_for_dist,
+                            )
+                        }
+                        Source::TimeDist => {
+                            super::super::block_time_distribution_chart(
+                                &blocks_for_dist,
+                            )
+                        }
+                        _ => return None,
+                    };
+                    Some((meta, false, v))
+                })
+                .collect();
+        for (meta, daily, opt) in built_charts().into_iter().chain(extra) {
+            let axis = match opt.get("xAxis") {
+                Some(serde_json::Value::Array(a)) => a.first().cloned(),
+                other => other.cloned(),
+            };
+            let xkind = axis
+                .and_then(|x| {
+                    x.get("type").and_then(|t| t.as_str()).map(str::to_string)
+                })
+                .unwrap_or_else(|| "none".into());
+            let yaxes = match opt.get("yAxis") {
+                Some(serde_json::Value::Array(a)) => a.len(),
+                Some(_) => 1,
+                None => 0,
+            };
+            let empty: Vec<serde_json::Value> = vec![];
+            let series = opt
+                .get("series")
+                .and_then(|s| s.as_array())
+                .unwrap_or(&empty);
+            let names: Vec<String> = series
+                .iter()
+                .map(|s| {
+                    s.get("name")
+                        .and_then(|n| n.as_str())
+                        .unwrap_or("<unnamed>")
+                        .to_string()
+                })
+                .collect();
+            let companions = series
+                .iter()
+                .filter(|s| {
+                    s.get(super::super::COMPANION_MARKER)
+                        .and_then(|v| v.as_bool())
+                        == Some(true)
+                })
+                .count();
+            let nulls: usize = series
+                .iter()
+                .filter_map(|s| s.get("data").and_then(|d| d.as_array()))
+                .map(|d| {
+                    d.iter()
+                        .filter(|p| match p {
+                            serde_json::Value::Null => true,
+                            serde_json::Value::Array(a) => {
+                                a.get(1).is_some_and(|v| v.is_null())
+                            }
+                            _ => false,
+                        })
+                        .count()
+                })
+                .sum();
+            let pct_bound = match opt.get("yAxis") {
+                Some(serde_json::Value::Array(a)) => a.iter().any(|x| {
+                    x.get("max").and_then(|m| m.as_f64()) == Some(100.0)
+                }),
+                Some(o) => o.get("max").and_then(|m| m.as_f64()) == Some(100.0),
+                None => false,
+            };
+            println!(
+                "{}\t{}\t{:?}\t{:?}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                meta.slug,
+                if daily { "daily" } else { "block" },
+                meta.unit,
+                meta.shape,
+                xkind,
+                yaxes,
+                series.len(),
+                super::super::metric_series(&opt).len(),
+                companions,
+                has_stack(&opt),
+                pct_bound,
+                nulls,
+                names.join(" | ")
+            );
+        }
     }
 }
