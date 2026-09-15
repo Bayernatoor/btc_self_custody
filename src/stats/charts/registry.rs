@@ -81,7 +81,18 @@ pub enum Unit {
     Megabytes,
     Gigabytes,
     Percent,
+    /// The difference between two percentages, which is not a percentage.
+    ///
+    /// A share moving from 10% to 15% has risen 5 **percentage points**, not
+    /// 5%: as a percentage of itself it rose 50%. Adoption Velocity plots
+    /// exactly that difference, `current - previous` on two shares, and
+    /// labelled its axis "% Change", so the one reading a reader is most
+    /// likely to take was the wrong one.
+    PercentagePoints,
     TxPerSec,
+    /// Hashes per second. Declared `Count` before, which is what let the hash
+    /// rate chart present an inferred rate as though it were a tally.
+    HashesPerSecond,
     Minutes,
     Seconds,
     Difficulty,
@@ -196,12 +207,27 @@ impl Method {
 #[derive(Clone, Copy)]
 pub struct Measurement {
     /// Series name as the built option emits it, which is how a consumer ties
-    /// this declaration to what is drawn. Empty means the chart's only
-    /// measurement.
+    /// this declaration to what is drawn.
+    ///
+    /// Empty means the declaration covers **every** series, because they are
+    /// renderings of one quantity rather than separate measurements.
+    /// `diff-ribbon` is seven moving averages of difficulty and
+    /// `diff-adjustment` splits one retarget series by sign into Harder and
+    /// Easier; in both, naming a series would imply the others measure
+    /// something else.
     pub series: &'static str,
     /// What is counted or measured, in the chart's own units.
     pub quantity: &'static str,
-    pub method: Method,
+    /// Method at per-block resolution.
+    ///
+    /// Per resolution, not per chart, because the two genuinely differ.
+    /// `diff-adjustment` reads the actual retarget blocks when it has them and
+    /// reconstructs retargets from daily difficulty plateaus when it does not,
+    /// so the same chart is exact at one resolution and estimated at the
+    /// other. A single badge would be wrong at one of them.
+    pub method_per_block: Method,
+    /// Method at daily resolution.
+    pub method_daily: Method,
     /// Aggregation at per-block resolution.
     pub per_block: Aggregation,
     /// Aggregation at daily resolution.
@@ -225,7 +251,9 @@ impl Unit {
             Self::Megabytes => "MB",
             Self::Gigabytes => "GB",
             Self::Percent => "%",
+            Self::PercentagePoints => "pp",
             Self::TxPerSec => "tx/s",
+            Self::HashesPerSecond => "hashes/s",
             Self::Minutes => "minutes",
             Self::Seconds => "seconds",
             // No unit multiplier: the difficulty charts plot the raw protocol
@@ -568,7 +596,8 @@ pub const CHARTS: &[ChartMeta] = &[
         measurements: &[Measurement {
             series: "",
             quantity: "Witness items matching the Ordinals marker",
-            method: Method::HeuristicallyDetected,
+            method_per_block: Method::HeuristicallyDetected,
+            method_daily: Method::HeuristicallyDetected,
             per_block: Aggregation::PerBlockObservation,
             daily: Aggregation::MeanOfPerBlockValues,
             population: "Every witness item in the block is scanned; a matching item counts once, so several envelopes in one item count once. The scan is not restricted to verified Taproot scripts.",
@@ -830,7 +859,8 @@ pub const CHARTS: &[ChartMeta] = &[
             // scheduled subsidy, so a miner who underclaims the reward makes
             // the figure wrong. Summing each transaction's inputs minus
             // outputs would be measured; that is not what ingestion does.
-            method: Method::Estimated,
+            method_per_block: Method::Estimated,
+            method_daily: Method::Estimated,
             per_block: Aggregation::PerBlockObservation,
             daily: Aggregation::MeanOfPerBlockValues,
             population: "Every block in the window. The denomination follows the BTC/sats toggle, so the active unit is not fixed by this entry.",
@@ -934,13 +964,26 @@ pub const CHARTS: &[ChartMeta] = &[
         desc_per_block: "Estimated hashes per second the network is computing, derived from difficulty",
         desc_daily: "Estimated daily hash rate, derived from difficulty",
         category: Category::Mining,
-        unit: Unit::Count,
+        unit: Unit::HashesPerSecond,
         shape: Shape::Line,
         source: Source::Dashboard {
             per_block: super::hash_rate_chart,
             daily: Daily::Fn(super::hash_rate_chart_daily),
         },
-        measurements: &[],
+        measurements: &[Measurement {
+            series: "",
+            quantity: "Hash rate implied by the current difficulty",
+            // Inferred, not measured: difficulty x 2^32 / 600 assumes blocks
+            // arrive at the 600-second target on average. Nothing counts
+            // hashes.
+            method_per_block: Method::Estimated,
+            method_daily: Method::Estimated,
+            per_block: Aggregation::PerBlockObservation,
+            // Linear in difficulty, so the mean of the day's implied rates
+            // equals the rate implied by the day's mean difficulty.
+            daily: Aggregation::MeanOfPerBlockValues,
+            population: "Every block in the window. Assumes a 600-second mean interval, so short-run values move with luck as well as with hardware.",
+        }],
         about: Some(About {
             definition: Some("How much computing work the whole network is doing, per second. Miners guess numbers until one produces a block hash below the target, and the hash rate is how many guesses everyone is making together. It is the closest thing to a price tag on attacking Bitcoin: an attacker has to out-compute everyone already mining."),
             technical: "An estimate. Nobody can count the network's guesses, so it is inferred from the difficulty the network settled on: difficulty times 2^32, divided by the 600 second block target. Difficulty only moves every 2,016 blocks, so the line is flat between retargets while the real rate is not. When the two drift apart, blocks arrive faster or slower than ten minutes until the next adjustment closes the gap.",
@@ -958,7 +1001,20 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::difficulty_adjustment_chart,
             daily: Daily::Fn(super::difficulty_adjustment_chart_daily),
         },
-        measurements: &[],
+        measurements: &[Measurement {
+            series: "",
+            quantity: "Difficulty change at a retarget, as a percentage of the previous epoch",
+            // The case that forced method to be per resolution. Per block it
+            // reads the actual retarget blocks and the step is exact; daily it
+            // reconstructs retargets from difficulty plateaus in the daily
+            // column, so a window ending on a retarget day can carry a blended
+            // value that is not any protocol difficulty.
+            method_per_block: Method::Calculated,
+            method_daily: Method::Estimated,
+            per_block: Aggregation::WindowedDerived,
+            daily: Aggregation::WindowedDerived,
+            population: "One point per retarget, every 2,016 blocks, not per block. Drawn as two series split by sign so the bars can be coloured; together they are one series of retargets.",
+        }],
         about: Some(About {
             definition: Some("Every 2,016 blocks, roughly a fortnight, Bitcoin measures how long those blocks took and resets difficulty so the next 2,016 should take exactly two weeks. Nobody votes and nobody decides. If miners leave, blocks come slower and the network makes itself easier. If they arrive, it makes itself harder. This is that correction, as a percentage."),
             technical: "The largest fall on record is 27.94%, at height 689,472 in the week of the 2021 mining ban in China. The largest rises are from 2010, when the network was small enough for one operator to move it. Rises and falls are coloured separately so the sign is readable at a glance.",
@@ -1057,7 +1113,18 @@ pub const CHARTS: &[ChartMeta] = &[
         unit: Unit::Percent,
         shape: Shape::Donut,
         source: Source::Mining(MiningChart::Dominance),
-        measurements: &[],
+        measurements: &[Measurement {
+            series: "",
+            quantity: "Share of blocks found, by mining pool",
+            // Attribution is pattern-matching on coinbase contents, not a
+            // signature. Roughly half of all blocks ever mined carry no tag
+            // this can match.
+            method_per_block: Method::HeuristicallyDetected,
+            method_daily: Method::HeuristicallyDetected,
+            per_block: Aggregation::GroupedSummary,
+            daily: Aggregation::GroupedSummary,
+            population: "Blocks in the window grouped by matched pool tag. Unmatched blocks are grouped as Unknown rather than dropped; attribution is far weaker before 2012, when pools did not tag coinbases.",
+        }],
         about: Some(About {
             definition: Some("Which mining pools are finding blocks, and in what proportion. Miners join a pool to get a steady payout instead of a rare large one, and the pool chooses which transactions its members' blocks include. The shares therefore show how much of block production a few operators direct."),
             technical: "Attributed from the coinbase transaction, where pools tag themselves by convention. Nothing requires it, so a pool that stops tagging, or tags differently, moves between these categories while nothing changes on the network. Untagged blocks are counted as unknown, never shared out among the named pools.",
@@ -1078,7 +1145,8 @@ pub const CHARTS: &[ChartMeta] = &[
         measurements: &[Measurement {
             series: "",
             quantity: "Outputs created, by script type",
-            method: Method::Measured,
+            method_per_block: Method::Measured,
+            method_daily: Method::Measured,
             per_block: Aggregation::PerBlockObservation,
             // `avg * block_count`, so a total, which is why the old subtitle
             // "Daily average output types" was wrong.
@@ -1155,7 +1223,8 @@ pub const CHARTS: &[ChartMeta] = &[
             Measurement {
                 series: "Block Data",
                 quantity: "Serialized block bytes, accumulated",
-                method: Method::Measured,
+                method_per_block: Method::Measured,
+                method_daily: Method::Measured,
                 per_block: Aggregation::CumulativeInWindow,
                 daily: Aggregation::CumulativeInWindow,
                 population: "Every block in the window, plus the stored total for everything before it, so the value is absolute rather than range-relative.",
@@ -1165,7 +1234,8 @@ pub const CHARTS: &[ChartMeta] = &[
                 quantity: "Block bytes scaled by the storage overhead a node carries today",
                 // The one that makes a single per-chart badge impossible: a
                 // measured series beside an estimated companion.
-                method: Method::Estimated,
+                method_per_block: Method::Estimated,
+                method_daily: Method::Estimated,
                 per_block: Aggregation::CumulativeInWindow,
                 daily: Aggregation::CumulativeInWindow,
                 population: "Present-day disk size divided by present-day block data, applied to the accumulated series. Not a reconstruction of historical disk usage, which block sizes cannot give.",
@@ -1250,7 +1320,7 @@ pub const CHARTS: &[ChartMeta] = &[
         desc_per_block: "Rate of change for major address types. P2PKH declining, P2WPKH flattening, P2TR growing. Shows the transition between eras",
         desc_daily: "Rate of change for major address types. P2PKH declining, P2WPKH flattening, P2TR growing. Shows the transition between eras",
         category: Category::Network,
-        unit: Unit::Percent,
+        unit: Unit::PercentagePoints,
         shape: Shape::Line,
         source: Source::Dashboard {
             per_block: super::multi_velocity_chart,
@@ -1334,7 +1404,8 @@ pub const CHARTS: &[ChartMeta] = &[
         measurements: &[Measurement {
             series: "",
             quantity: "Share of transactions spending a witness input",
-            method: Method::Calculated,
+            method_per_block: Method::Calculated,
+            method_daily: Method::Calculated,
             per_block: Aggregation::PerBlockObservation,
             // `avg_segwit_spend_count / (avg_tx_count - 1)`. Both terms carry
             // the same block count, so this is the day's pooled ratio rather
@@ -1489,7 +1560,8 @@ pub const CHARTS: &[ChartMeta] = &[
         measurements: &[Measurement {
             series: "",
             quantity: "Transactions confirmed in a block, including the coinbase",
-            method: Method::Measured,
+            method_per_block: Method::Measured,
+            method_daily: Method::Measured,
             per_block: Aggregation::PerBlockObservation,
             // The stored `avg_tx_count` column, plotted as it is: the
             // unweighted mean of the day's per-block counts.

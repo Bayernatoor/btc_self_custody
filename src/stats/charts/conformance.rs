@@ -985,7 +985,7 @@ mod tests {
             .collect();
         assert_eq!(
             undeclared.len(),
-            57,
+            54,
             "declared cohort changed. If you added a chart, declare its \
              measurements; if you declared one, lower this number. Still \
              undeclared: {undeclared:?}"
@@ -1038,6 +1038,48 @@ mod tests {
                     meta.has_daily()
                 );
             }
+        }
+    }
+
+    /// A measurement whose method differs by resolution is the case a single
+    /// per-chart badge cannot express.
+    ///
+    /// `diff-adjustment` reads actual retarget blocks per block and
+    /// reconstructs retargets from daily difficulty plateaus at daily
+    /// resolution, so it is exact at one and estimated at the other. This
+    /// pins that the declaration keeps them apart, because collapsing them
+    /// back to one field would silently relabel the daily view as exact.
+    #[test]
+    fn a_method_may_differ_between_resolutions() {
+        let m = registry::find("diff-adjustment")
+            .expect("diff-adjustment is registered")
+            .measurements;
+        assert_eq!(m.len(), 1, "one measurement drawn as two signed series");
+        assert_eq!(m[0].method_per_block, registry::Method::Calculated);
+        assert_eq!(m[0].method_daily, registry::Method::Estimated);
+        assert_ne!(
+            m[0].method_per_block, m[0].method_daily,
+            "if these are ever equal for this chart, the daily \
+             reconstruction has been made exact or the declaration is wrong"
+        );
+    }
+
+    /// Every method label a reader can see must explain itself, or the badge
+    /// is decoration.
+    #[test]
+    fn every_method_label_has_an_explanation() {
+        for m in [
+            registry::Method::Measured,
+            registry::Method::Calculated,
+            registry::Method::Estimated,
+            registry::Method::HeuristicallyDetected,
+        ] {
+            assert!(!m.label().is_empty(), "{m:?} has no label");
+            assert!(
+                m.explanation().len() > 30,
+                "{m:?} explanation is too short to explain anything: {:?}",
+                m.explanation()
+            );
         }
     }
 

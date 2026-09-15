@@ -663,7 +663,7 @@ pub fn taproot_velocity_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
-        "yAxis": y_axis("Taproot % Change (144-block)"),
+        "yAxis": y_axis("Taproot pp change (144-block)"),
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
         "series": [
@@ -732,7 +732,7 @@ pub fn taproot_velocity_chart_daily(
 
     build_option(json!({
         "xAxis": x_axis_for(true, &cats),
-        "yAxis": y_axis("Taproot % Change (30-day)"),
+        "yAxis": y_axis("Taproot pp change (30-day)"),
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
         "series": [
@@ -1006,7 +1006,7 @@ pub fn multi_velocity_chart_daily(
 
     build_option(json!({
         "xAxis": x_axis_for(true, &cats),
-        "yAxis": y_axis("% Change (30-day)"),
+        "yAxis": y_axis("pp change (30-day)"),
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
         "legend": { "show": true },
@@ -1155,7 +1155,7 @@ pub fn multi_velocity_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
-        "yAxis": y_axis("% Change (144-block)"),
+        "yAxis": y_axis("pp change (144-block)"),
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
         "legend": { "show": true },
