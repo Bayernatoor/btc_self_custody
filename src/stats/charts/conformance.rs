@@ -135,6 +135,11 @@ fn synthetic_blocks(n: usize) -> Vec<BlockSummary> {
 
 /// Synthetic daily rows, on the same principle as [`synthetic_blocks`].
 ///
+/// "Never zero" is a claim this has to earn field by field. The six
+/// `avg_p2*_count` columns were left at their `Default` of zero until
+/// 2026-09-15, so `address-types` and `address-types-pct` were built from
+/// nothing in every test that touched them.
+///
 /// Spans enough days to cross the threshold where the category axis starts
 /// naming months, so the calendar-tick path is exercised here too rather than
 /// only in its own tests.
@@ -170,6 +175,17 @@ fn synthetic_days(n: usize) -> Vec<DailyAggregate> {
                 total_fees: 1_400_000_000 + u * 900,
                 avg_segwit_spend_count: 1_400.0 + f,
                 avg_taproot_spend_count: 200.0 + f,
+                // The six output-type columns. Absent until 2026-09-15,
+                // which meant every daily chart reading them was built from
+                // zeros and every assertion about its values was vacuous.
+                // Distinct and rising, so a chart that swaps two of them is
+                // visible rather than symmetric.
+                avg_p2pkh_count: 900.0 - f * 0.4,
+                avg_p2sh_count: 300.0 + f * 0.1,
+                avg_p2wpkh_count: 700.0 + f * 0.5,
+                avg_p2wsh_count: 120.0 + f * 0.2,
+                avg_p2tr_count: 200.0 + f * 0.9,
+                avg_p2pk_count: 4.0 + f * 0.01,
                 avg_multisig_count: 15.0 + f * 0.1,
                 avg_unknown_script_count: 2.0 + f * 0.01,
                 avg_input_count: 5_000.0 + f * 2.0,
@@ -1081,6 +1097,130 @@ mod tests {
                 m.explanation()
             );
         }
+    }
+
+    /// A declared aggregation must survive contact with its own builder.
+    ///
+    /// The gap this closes: nothing tied a classification to the arithmetic it
+    /// claims to describe. A bulk survey that paired one chart's slug with
+    /// another chart's builder produced exactly that error during this work,
+    /// and every existing check passed, because series names still existed and
+    /// the daily flag still matched. The mistake was caught by memory, which
+    /// is not a mechanism.
+    ///
+    /// The probe needs no knowledge of which column a chart reads. Build each
+    /// chart twice from days that are identical except that `block_count` is
+    /// doubled, holding every `avg_*` field fixed. Then the declaration
+    /// predicts the outcome:
+    ///
+    /// - `MeanOfPerBlockValues` plots a stored mean, so it must **not** move.
+    /// - `RatioOfTotals` scales numerator and denominator together, so it must
+    ///   **not** move.
+    /// - `DailyTotal` and `CumulativeInWindow` multiply by the block count, so
+    ///   they **must** move.
+    ///
+    /// A chart classified into the wrong one of those pairs fails here.
+    #[test]
+    fn a_declared_aggregation_predicts_how_the_builder_responds() {
+        use registry::Aggregation::*;
+
+        let days_with = |block_count: u64| -> Vec<DailyAggregate> {
+            synthetic_days(900)
+                .into_iter()
+                .map(|d| DailyAggregate { block_count, ..d })
+                .collect()
+        };
+        let base = days_with(100);
+        let doubled = days_with(200);
+
+        let plotted = |opt: &serde_json::Value| -> Vec<f64> {
+            opt["series"]
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .flat_map(|s| {
+                            s["data"]
+                                .as_array()
+                                .map(|d| d.as_slice())
+                                .unwrap_or_default()
+                                .iter()
+                                .filter_map(|p| match p {
+                                    serde_json::Value::Number(n) => n.as_f64(),
+                                    serde_json::Value::Array(a) => {
+                                        a.get(1).and_then(|v| v.as_f64())
+                                    }
+                                    _ => None,
+                                })
+                        })
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+
+        let mut checked = 0usize;
+        for meta in registry::CHARTS.iter() {
+            let Source::Dashboard {
+                daily: Daily::Fn(f),
+                ..
+            } = meta.source
+            else {
+                continue;
+            };
+            // One expectation per chart, so a chart whose measurements
+            // disagree about scaling is skipped rather than guessed at.
+            let kinds: std::collections::BTreeSet<&str> = meta
+                .measurements
+                .iter()
+                .map(|m| match m.daily {
+                    DailyTotal | CumulativeInWindow => "scales",
+                    MeanOfPerBlockValues | RatioOfTotals => "fixed",
+                    _ => "unpredicted",
+                })
+                .collect();
+            if kinds.len() != 1 {
+                continue;
+            }
+            let expectation = *kinds.iter().next().expect("one kind");
+            if expectation == "unpredicted" {
+                continue;
+            }
+
+            let a = plotted(&f(&base));
+            let b = plotted(&f(&doubled));
+            assert_eq!(
+                a.len(),
+                b.len(),
+                "{}: doubling block_count changed the point count",
+                meta.slug
+            );
+            let moved =
+                a.iter().zip(b.iter()).any(|(x, y)| (x - y).abs() > 1e-9);
+            match expectation {
+                "scales" => assert!(
+                    moved,
+                    "{} declares a daily total or cumulative series, so \
+                     doubling the block count must change what is plotted. It \
+                     did not, so the declaration describes a different \
+                     builder.",
+                    meta.slug
+                ),
+                "fixed" => assert!(
+                    !moved,
+                    "{} declares a per-block mean or a ratio of totals, so \
+                     doubling the block count must not change what is \
+                     plotted. It did, so the declaration describes a \
+                     different builder.",
+                    meta.slug
+                ),
+                _ => unreachable!(),
+            }
+            checked += 1;
+        }
+        assert!(
+            checked >= 5,
+            "only {checked} charts had a predictable declaration; the probe \
+             is not covering enough to be worth running"
+        );
     }
 
     /// SegWit Adoption's daily point is a pooled ratio, and the numbers here
