@@ -230,12 +230,9 @@ pub fn ChartCard(
                             </button>
                         })}
                     </div>
-                    // The same words the chart's own page shows under "About
-                    // this metric", read from the registry rather than passed
-                    // in. They used to be a separate hand-written prop on the
-                    // page, which meant the two views explained the same chart
-                    // in two voices, and 36 charts had one while 13 had the
-                    // other.
+                    // Read from the registry, not passed in, so the card and
+                    // the chart's own page cannot explain one chart in two
+                    // voices.
                     {about.map(|copy| view! {
                         <Show when=move || info_open.get()>
                             <div class="mt-2 p-3 bg-white/[0.03] border border-white/5 rounded-lg text-sm text-white/60 leading-relaxed space-y-2 max-w-3xl">
@@ -282,10 +279,9 @@ pub fn ChartCard(
                             move |_| download_chart_png(&id, &t)
                         }
                     >
-                        // A picture frame, not a second download arrow. The
-                        // toolbox's save icon used to sit a centimetre away
-                        // from the header's CSV arrow, two similar glyphs for
-                        // two different formats.
+                        // A picture frame rather than a download arrow: the
+                        // header's CSV control is an arrow, and two similar
+                        // glyphs for two formats read as one control twice.
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M18 9.75h.008v.008H18V9.75zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0z"/>
                             <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3h16.5A1.5 1.5 0 0 1 21.75 4.5v15a1.5 1.5 0 0 1-1.5 1.5H3.75a1.5 1.5 0 0 1-1.5-1.5v-15A1.5 1.5 0 0 1 3.75 3z"/>

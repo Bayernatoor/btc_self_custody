@@ -209,9 +209,9 @@ pub fn SingleChartPage() -> impl IntoView {
 
 #[component]
 fn UnknownChart(slug: Signal<String>) -> impl IntoView {
-    // A real 404, not a 200 carrying an apology. 61 of these paths are
-    // indexable, so a soft 404 on the rest would invite search engines to
-    // index "no such chart" pages for every typo and stale link. Same defect
+    // A real 404, not a 200 carrying an apology. Every registered slug is
+    // an indexable path, so a soft 404 on the rest would invite search
+    // engines to index "no such chart" pages for every typo and stale link. Same defect
     // as /blocks/{height} answering 200 with an error body, fixed in
     // fix/input-validation.
     #[cfg(feature = "ssr")]
@@ -1224,18 +1224,15 @@ fn right_axis_label(
 /// wrapping grid over the same signals rather than the shared component being
 /// reshaped for both.
 ///
-/// **The dates are here too, as of 2026-09-16.** Custom used to open the
-/// settings panel in the bottom-right corner instead, on the reasoning that
-/// one date picker was enough. Two things made that wrong in use: the panel
-/// opens on a tab labelled **Axes**, so the control a reader just asked for
-/// is not on a tab with its name, and the panel's own picker starts closed,
-/// so reaching the dates took a *second* Custom click in a different corner
-/// of the screen. Clicking a control should reveal that control.
+/// **The date inputs belong here, beside the Custom button that asks for
+/// them.** Routing that button to the settings panel instead put the control
+/// in another corner of the screen, on a tab labelled Axes, with its own
+/// picker still collapsed.
 ///
-/// Only the two inputs are duplicated, not the preset row, which is what
-/// actually overflowed before. The validation is shared with the panel's
-/// picker through `validate_custom_range`, so the two cannot disagree about
-/// what a valid window is.
+/// Only the two inputs are duplicated, not the preset row: the row is what
+/// overflows a narrow rail. Validation is shared with the panel's picker
+/// through `validate_custom_range`, so two pickers cannot disagree about what
+/// a valid window is.
 #[component]
 fn RailRange() -> impl IntoView {
     const PRESETS: &[&str] = &[
@@ -1278,7 +1275,7 @@ fn RailRange() -> impl IntoView {
 
     // Whether the selected range is served per block or from daily
     // aggregates. Worth surfacing because it changes what a point means, and
-    // seven charts have no daily variant at all.
+    // nine charts have no daily variant at all.
     let mode = move || {
         let r = range.get();
         if r == "custom" {

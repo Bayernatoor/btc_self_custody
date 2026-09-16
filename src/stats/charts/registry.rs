@@ -394,17 +394,15 @@ pub struct About {
     /// What the metric is, for a reader who has not met it. No jargon that
     /// is not defined in the same sentence.
     ///
-    /// Optional, and the only optional half, because that is what the copy
-    /// actually looks like: 36 charts arrived with a paragraph explaining how
-    /// their number is computed and nothing explaining what it is. The
-    /// subtitle carries a short answer meanwhile, and
-    /// `most_charts_define_themselves` counts the gap so it cannot grow.
+    /// Optional, and the only optional half: many charts explain how their
+    /// number is computed without saying what it is. The subtitle carries a
+    /// short answer meanwhile, and `most_charts_define_themselves` counts the
+    /// gap so it cannot grow.
     pub definition: Option<&'static str>,
     /// How this site computes it, and what that excludes.
     ///
-    /// Required, because it is the half that earns the word observatory, and
-    /// because it is what the card's expandable held before the two were
-    /// reconciled into one place.
+    /// Required: this is the half that says what the figure is computed
+    /// from and what it leaves out.
     pub technical: &'static str,
 }
 
@@ -561,8 +559,6 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            // Migrated from the card's expandable, which was the
-            // only place this was written. Definition still to come.
             definition: None,
             technical: "Combines OP_RETURN data (in outputs) and inscription data (in witness) as a percentage of total block size. These are disjoint categories that together represent all classified embedded data.",
         }),
@@ -598,8 +594,6 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            // Migrated from the card's expandable, which was the
-            // only place this was written. Definition still to come.
             definition: None,
             technical: "Every block's coinbase transaction contains a scriptSig with arbitrary data. Miners use this to embed their pool identifier, block height (required since BIP-34), and sometimes custom messages or political statements. Longer messages indicate pools that pack additional data into this field.",
         }),
@@ -639,8 +633,6 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            // Migrated from the card's expandable, which was the
-            // only place this was written. Definition still to come.
             definition: None,
             technical: "Every Ordinals inscription wraps content in a witness envelope: OP_FALSE OP_IF ... OP_ENDIF with push opcodes and the 'ord' marker. The split is estimated, not parsed: the envelope header, content-type section and terminator are located by pattern and subtracted, and anything not found falls back to 10 bytes. Measured across the 190,252 blocks holding a detection, that overhead is 7.7% of all matching witness bytes, while the median block puts it at 17.9% and individual blocks run from nothing to 94%. The share is high where inscriptions are small, since the envelope cost is close to fixed, which is why BRC-20 JSON operations sit at the top of that range.",
         }),
@@ -668,8 +660,6 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Detected inscription fees over total fees. Both terms are estimates: the numerator is a detector match and the denominator is coinbase-derived.",
         }],
         about: Some(About {
-            // Migrated from the card's expandable, which was the
-            // only place this was written. Definition still to come.
             definition: None,
             technical: "Tracks how much of the block's fee revenue comes from transactions containing Ordinals inscriptions. During high-demand periods like BRC-20 launches, inscription fees can spike significantly as inscribers compete for block space.",
         }),
@@ -697,8 +687,6 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Envelope bytes of matching witness items over serialized block bytes, so a byte fraction and not a count of anything. Falls back to payload bytes for blocks ingested before envelope sizes were stored, which makes the early series slightly lower than the late one on the same activity.",
         }],
         about: Some(About {
-            // Migrated from the card's expandable, which was the
-            // only place this was written. Definition still to come.
             definition: None,
             technical: "Includes both the inscription content (images, text, JSON) and the witness envelope structure (OP_FALSE OP_IF, push opcodes, 'ord' marker). This is the whole matching witness item, payload and envelope together, as the detector found it. Witness bytes count one weight unit each instead of four, so an inscription consumes a quarter of the block weight its byte count suggests.",
         }),
@@ -809,8 +797,6 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            // Migrated from the card's expandable, which was the
-            // only place this was written. Definition still to come.
             definition: None,
             technical: "Byte counts include the full scriptPubKey: the OP_RETURN opcode, push opcodes, and the protocol payload. This is the actual on-chain storage footprint of each OP_RETURN output.",
         }),
@@ -906,8 +892,6 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            // Migrated from the card's expandable, which was the
-            // only place this was written. Definition still to come.
             definition: None,
             technical: "Fees paid by the transactions each detector matched, drawn as two totals beside the block's whole fee take rather than as parts of it. A transaction carrying both an inscription and a Runes payload is credited to both, so the two cannot be added: 125,180 blocks have both detectors firing and in 1,326 of them the sum exceeds the block's entire fee take. Which detector is larger in a period is a fact about the detectors, not about what drove the fee market.",
         }),
@@ -1011,8 +995,6 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            // Migrated from the card's expandable, which was the
-            // only place this was written. Definition still to come.
             definition: None,
             technical: "Stacked count of embedded data items by protocol. BRC-20 is a subset of Inscriptions (do not add them). Runes, Omni, and Counterparty are mutually exclusive subsets of OP_RETURN. See the Methodology page for the full taxonomy.",
         }),
@@ -1136,8 +1118,6 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Sum of non-coinbase output values. Counts change returning to the sender, so it is throughput rather than value transferred between parties.",
         }],
         about: Some(About {
-            // Migrated from the card's expandable, which was the
-            // only place this was written. Definition still to come.
             definition: None,
             technical: "Total value of all non-coinbase outputs. This includes both the payment and the change output, so it overstates actual economic activity. Still useful for relative comparisons across time periods.",
         }),
@@ -1212,8 +1192,6 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            // Migrated from the card's expandable, which was the
-            // only place this was written. Definition still to come.
             definition: None,
             technical: "Five percentile lines, each read directly off the block: p10 is the rate a tenth of that block's transactions paid less than, the median is the middle one, and p90 is the rate a tenth paid more than. Not stacked, because percentiles do not add: stacking them made the top boundary the sum of five quantiles rather than p90. The gap between p10 and p90 is the central 80% and says nothing about why any transaction paid what it did. Click legend items to isolate lines.",
         }),
@@ -1244,8 +1222,6 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            // Migrated from the card's expandable, which was the
-            // only place this was written. Definition still to come.
             definition: None,
             technical: "Each dot is one block. X-axis shows how full the block is (weight utilization %), Y-axis shows the median fee rate. Top-right is a full block whose median fee rate was also high; bottom-right is a full block at a low rate, which is most of them; top-left is a high rate in a block that was not full. The pair of coordinates is what the chart shows. It does not establish why either number was what it was, and a block's fullness is set by what the miner included rather than by demand alone.",
         }),
@@ -1273,8 +1249,6 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Fees over subsidy plus fees. The subsidy comes from the block height schedule and the fees are coinbase-derived, so the share inherits that estimate. A falling share can mean falling fees rather than a growing subsidy.",
         }],
         about: Some(About {
-            // Migrated from the card's expandable, which was the
-            // only place this was written. Definition still to come.
             definition: None,
             technical: "Shows fees as a percentage of total miner revenue (subsidy + fees). As the subsidy halves, this ratio increases. Typically 1-5% during normal periods, but has spiked to 10-40% during high-demand events.",
         }),
@@ -1305,8 +1279,6 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            // Migrated from the card's expandable, which was the
-            // only place this was written. Definition still to come.
             definition: None,
             technical: "The line is the 144-block trailing average of the median fee rate, which is about a day of blocks. A dot marks a block whose own median fee rate was more than five times that average. What produced the jump is not in this data: a burst of fee-paying transactions and a thin block from an unlucky interval both show up the same way. Needs at least 300 blocks, so a 1W or longer range.",
         }),
@@ -1366,8 +1338,6 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Blocks grouped by subsidy era, drawn with **the four metrics along the x axis and one series per era**, then **each metric normalised so its largest era reads 100**, which is why something always peaks at 100 and why the plotted numbers are an index rather than a quantity. The four metrics do not share a provenance: block size and transaction count are measured, while total fees and the fee share of miner revenue are both coinbase-derived estimates. Only eras present in the window appear.",
         }],
         about: Some(About {
-            // Migrated from the card's expandable, which was the
-            // only place this was written. Definition still to come.
             definition: None,
             technical: "Each group on the x axis is one metric, with a bar per halving era, so the comparison runs across eras within a metric rather than across metrics within an era. Every metric is divided by its own highest era, which is why something always reads 100 and why the plotted numbers are an index rather than a quantity. Only eras present in the selected range appear. Hover for the underlying values; two of the four are coinbase-derived estimates rather than measured.",
         }),
@@ -1501,8 +1471,6 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            // Migrated from the card's expandable, which was the
-            // only place this was written. Definition still to come.
             definition: None,
             technical: "The block subsidy (new BTC created) halves every 210,000 blocks (~4 years). After the 2024 halving, the subsidy is 3.125 BTC per block. The subsidy schedule is fixed by the protocol; the fee side is not. Fees are a larger share of revenue when they hold up as the subsidy falls, and a smaller one when they fall faster, so the balance between the two is an outcome to watch rather than a guarantee.",
         }),
@@ -1600,8 +1568,6 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            // Migrated from the card's expandable, which was the
-            // only place this was written. Definition still to come.
             definition: None,
             technical: "Seven moving averages of difficulty (7, 14, 25, 40, 60, 90, 128 days) form a ribbon. When the ribbon is wide, difficulty is rising steadily. When it compresses or inverts (short MAs drop below long MAs), difficulty is declining, which can indicate less efficient miners are going offline. Historically, ribbon inversions have coincided with periods of reduced mining activity.",
         }),
@@ -1655,8 +1621,6 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "A Herfindahl index over pool shares for the window, normalised across identified blocks only, so unattributed blocks do not dilute it. The band thresholds are a presentation convention, not a security threshold.",
         }],
         about: Some(About {
-            // Migrated from the card's expandable, which was the
-            // only place this was written. Definition still to come.
             definition: None,
             technical: "The HHI is calculated by squaring each pool's market share percentage and summing the results. A monopoly scores 10,000, perfectly distributed mining scores near 0. Below 1,000 (green): competitive market. 1,000-1,800 (yellow): moderate concentration. Above 1,800 (red): high concentration, meaning a small number of pools control most of the hashrate. Unknown miners are excluded from the calculation.",
         }),
@@ -1681,8 +1645,6 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Counted where tx_count is one, grouped by calendar month. An empty block is a valid block; the count does not establish why it was empty.",
         }],
         about: Some(About {
-            // Migrated from the card's expandable, which was the
-            // only place this was written. Definition still to come.
             definition: None,
             technical: "A block with only a coinbase transaction (no user transactions). This happens when a miner finds a block before propagating the previous block's transactions. Common in early Bitcoin, rare today. Modern pools typically include transactions within seconds of receiving a new block.",
         }),
@@ -1808,8 +1770,6 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Whole block size over transaction count, so header and transaction-count overhead are included and the coinbase is counted.",
         }],
         about: Some(About {
-            // Migrated from the card's expandable, which was the
-            // only place this was written. Definition still to come.
             definition: None,
             technical: "Serialized block bytes divided by the number of transactions, including the coinbase and the block's own header and counters. Moving signature data into the witness does not remove those bytes, it discounts their weight, so a SegWit or Taproot transaction is not necessarily smaller here than a legacy one of the same shape. Weight is what the 4,000,000 unit limit constrains, so a falling byte average does not by itself mean more transactions fit.",
         }),
@@ -1849,8 +1809,6 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            // Migrated from the card's expandable, which was the
-            // only place this was written. Definition still to come.
             definition: None,
             technical: "Higher output counts per transaction indicate batching, where exchanges and services combine multiple payments into one transaction. This is more efficient use of block space. A typical non-batched transaction has 1-2 inputs and 2 outputs (payment + change).",
         }),
@@ -1949,8 +1907,6 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Weight divided by the four-million-unit limit, bucketed. Buckets are computed server-side for long ranges and from the blocks themselves for short ones; the count/percentage toggle changes the active unit.",
         }],
         about: Some(About {
-            // Migrated from the card's expandable, which was the
-            // only place this was written. Definition still to come.
             definition: None,
             technical: "A histogram of block fullness. Most modern blocks cluster near 100% because miners maximize fee revenue. Near-empty blocks do occur, and this chart does not establish why: a miner can be working from a coinbase-only template while validating a new tip, and the data shows only the result. On longer ranges that include early Bitcoin history, more blocks appear at lower percentages since demand was much lower.",
         }),
@@ -2037,8 +1993,6 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "The difference between a smoothed share now and the same share one window earlier: 144 blocks per block, 30 days daily. The result is in percentage points, so a share moving from 10 to 15 is 5 points and not 5 percent. Divergent lines do not establish that users migrated between types.",
         }],
         about: Some(About {
-            // Migrated from the card's expandable, which was the
-            // only place this was written. Definition still to come.
             definition: None,
             technical: "Shows the 30-day rate of change for each address type's share. Positive values mean the type is gaining share, negative means declining. When P2TR velocity is positive and P2PKH is negative, Taproot is actively replacing legacy usage.",
         }),
@@ -2066,8 +2020,6 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "P2PKH outputs over eight classified output types: the six payment types plus bare multisig and unrecognised scripts. OP_RETURN outputs are outside it, and so are coinbase outputs, which ingestion excludes. Note this is a wider denominator than Address Type Share uses, so P2PKH reads lower here than there. The 90-day smoothing exists only at daily resolution. A falling share does not establish that those users moved to another type.",
         }],
         about: Some(About {
-            // Migrated from the card's expandable, which was the
-            // only place this was written. Definition still to come.
             definition: None,
             technical: "P2PKH outputs as a share of the eight classified output types, with a 90-day moving average at daily resolution only. The horizontal lines at 10% and 5% are reference marks chosen for this chart, not protocol thresholds. A falling share means other output types grew faster; it does not follow that any particular wallet or user moved.",
         }),
@@ -2122,8 +2074,6 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Confirmed non-coinbase transactions whose input sequence numbers signal under BIP 125, over all confirmed non-coinbase transactions. Not the share actually replaced, and not wallet adoption: full-RBF policy means absence of the signal does not prevent replacement.",
         }],
         about: Some(About {
-            // Migrated from the card's expandable, which was the
-            // only place this was written. Definition still to come.
             definition: None,
             technical: "Replace-By-Fee (BIP 125) lets senders bump fees on unconfirmed transactions. A transaction signals RBF by setting at least one input's sequence number below 0xfffffffe. Higher adoption means more wallets support fee bumping, which can help users during congestion.",
         }),
@@ -2252,8 +2202,6 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            // Migrated from the card's expandable, which was the
-            // only place this was written. Definition still to come.
             definition: None,
             technical: "Key-path spends reveal a single signature and nothing else. That is the point of Taproot: a single signer, an aggregated multisignature and the cooperative close of a contract are **indistinguishable on chain**, because BIP 341 makes them the same shape. So a high key-path share does not mean simple payments. It means most Taproot spenders took the path that reveals nothing, which is what a well-designed contract does when everyone cooperates. Script-path spends reveal one branch of the script tree, which is usually the case where cooperation broke down or was never possible. Both counts come from classifying witness shape, so they are detector counts rather than verified totals.",
         }),
@@ -2278,8 +2226,6 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Differences between consecutive block header timestamps, bucketed. Ten minutes is the target mean, not the most common bucket: the distribution is exponential, so the shortest bucket is the largest. Miners choose timestamps, so backward gaps exist.",
         }],
         about: Some(About {
-            // Migrated from the card's expandable, which was the
-            // only place this was written. Definition still to come.
             definition: None,
             technical: "The shortest bucket is always the largest one, which surprises people who expect a peak at ten minutes. Mining is memoryless: every hash attempt has the same tiny chance of winning whatever has happened already, so the waiting time is exponentially distributed and the most likely gap is a short one. Measured across all 951,275 intervals in the chain: the median is 6.9 minutes, 63.9% of blocks arrive in under ten minutes, 4.5% take more than half an hour and 0.3% take over an hour. An exponential distribution with a ten-minute mean predicts 63.2%, 5.0% and 0.25%, so the chain tracks the theory to within half a percentage point. Miners choose their own timestamps, so a block can appear to arrive before its predecessor.",
         }),
@@ -2336,8 +2282,6 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            // Migrated from the card's expandable, which was the
-            // only place this was written. Definition still to come.
             definition: None,
             technical: "More transactions per KB means the average transaction is smaller and block space is used more efficiently. SegWit and Taproot tend to improve density by moving signatures to the discounted witness section.",
         }),
@@ -2433,8 +2377,6 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            // Migrated from the card's expandable, which was the
-            // only place this was written. Definition still to come.
             definition: None,
             technical: "Every transaction consumes UTXOs (inputs) and creates new ones (outputs). When outputs exceed inputs, the UTXO set grows, increasing the memory requirements for full nodes. Consolidation transactions (many inputs, few outputs) shrink the set.",
         }),
@@ -2527,8 +2469,6 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            // Migrated from the card's expandable, which was the
-            // only place this was written. Definition still to come.
             definition: None,
             technical: "The consensus limit is 4,000,000 weight units (4 MWU) per block. Witness data gets a 75% discount, so a block full of SegWit transactions can fit more data than one full of legacy transactions. Consistently high utilization (>90%) means demand for block space is near capacity.",
         }),
@@ -2582,8 +2522,6 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            // Migrated from the card's expandable, which was the
-            // only place this was written. Definition still to come.
             definition: None,
             technical: "Witness data receives a 75% weight discount under SegWit rules. A higher witness share means more of the block is discounted data, effectively increasing the block's capacity beyond the old 1 MB limit. Modern blocks typically have 60-70% witness data.",
         }),
@@ -2704,12 +2642,9 @@ pub fn related(meta: &ChartMeta, max: usize) -> Vec<&'static ChartMeta> {
 /// consumers, one answer, so they cannot drift into disagreeing about what is
 /// offerable versus what is renderable.
 ///
-/// That split mattered. This used to be spread between `comparable_with` and
-/// the picker's own gating, which meant "you cannot select an invalid
-/// comparison" was enforced by the select not rendering. Safe only while the
-/// selection died with the page; the moment it became shared state and
-/// survived navigation, a comparison could arrive on a chart that never
-/// offered it.
+/// One place because the selection is **shared state that survives
+/// navigation**: a rule enforced by the picker not rendering would let a
+/// comparison arrive on a chart that never offered it.
 ///
 /// Editorial, not structural. This answers "should we offer this", which
 /// includes taste: a histogram could technically hold a second line and it
@@ -2730,22 +2665,12 @@ pub fn related(meta: &ChartMeta, max: usize) -> Vec<&'static ChartMeta> {
 ///
 /// A hardcoded list because the fact is not derivable from metadata:
 /// `diff-adjustment` is `Shape::Bar`, exactly like the single-series bar
-/// charts. `the_multi_metric_list_is_exactly_right` in the conformance suite
-/// computes the truth from the real builders and fails if this drifts, which
-/// is what keeps a hardcoded list honest.
+/// charts. `the_multi_metric_list_is_exactly_right` computes the truth from
+/// the real builders in both directions, so a drifting list fails rather
+/// than silently costing a working comparison.
 ///
-/// **Twenty-one charts, a third of them.** I guessed three before running
-/// the test. That gap is the measure of how far "offer every dashboard chart"
-/// was from "offer every chart that can actually be laid over another", and it
-/// is the strongest argument for the phase-2 contract: the feature loses a
-/// third of its candidates to a limitation nobody had noticed, and the only
-/// reason to accept that is that the alternative was showing one band of a
-/// stacked chart under the whole chart's name.
-///
-/// **Temporary.** Phase 2 offers named measurements instead, at which point
-/// "Difficulty Adjustment: Signed Retarget Change" and "Transaction Batching:
-/// Outputs per Transaction" are selectable and complete, and this list deletes
-/// itself. See `notes/phase-2-spec.md`.
+/// Twenty-one of the 63, and the list dissolves once comparisons name a
+/// measurement rather than a chart: `notes/phase-2-spec.md`.
 pub const MULTI_METRIC: &[&str] = &[
     "address-types",
     "all-embedded-share",
@@ -2851,7 +2776,7 @@ pub fn is_valid_comparison(
         // A chart laid over itself draws two identical lines on two axes,
         // which reads as a rendering fault rather than a comparison.
         && candidate.slug != primary.slug
-        // Seven charts have no daily builder, so over a long range they would
+        // Nine charts have no daily builder, so over a long range they would
         // add an axis and no line.
         && (!daily || candidate.has_daily())
 }
@@ -2991,13 +2916,11 @@ mod tests {
     /// How many charts still lack the definition half, pinned so it can only
     /// shrink.
     ///
-    /// 36 charts arrived with a paragraph explaining how their number is
-    /// computed and nothing explaining what it is, because that copy was
-    /// written as a card expandable rather than as a definition. Making
-    /// `definition` optional is what let the migration happen without losing
-    /// any of it; this is what stops optional turning into ignored.
+    /// `definition` is optional because much of the copy explains how a
+    /// number is computed without saying what it is. This is what stops
+    /// optional from turning into ignored.
     ///
-    /// Lower the number when copy is written. Raising it is the thing this
+    /// Lower the ceiling when copy is written. Raising it is the thing this
     /// test exists to make someone argue for.
     #[test]
     fn the_definition_gap_only_shrinks() {
@@ -3514,7 +3437,7 @@ mod tests {
     ///
     /// Everything else the picker must not offer is covered by
     /// `the_picker_and_the_resolver_agree_on_every_pair`, which asserts the
-    /// two answer identically for all 61 by 61 pairs at both resolutions.
+    /// two answer identically for all 63 by 63 pairs at both resolutions.
     #[test]
     fn the_picker_leads_with_the_readers_own_category() {
         let meta = CHARTS

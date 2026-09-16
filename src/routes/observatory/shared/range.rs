@@ -230,11 +230,6 @@ pub fn RangeSelector() -> impl IntoView {
     }
 }
 
-// FloatingRangePicker was merged into ChartSettingsPanel (shared/mod.rs)
-// so Overlays + Range share a single floating button in the bottom-right
-// corner instead of two distinct toggles. Kept the diff here as a
-// tombstone comment for the next reader.
-
 #[cfg(test)]
 mod tests {
     use super::validate_custom_range;

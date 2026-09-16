@@ -344,7 +344,7 @@ fn built_charts() -> Vec<(&'static ChartMeta, bool, serde_json::Value)> {
             }
             // The four mining charts and the two histograms, built from their
             // own inputs. Outside this function until 2026-09-15, which meant
-            // six of 63 charts sat outside every conformance guard.
+            // six charts sat outside every conformance guard.
             Source::Mining(which) => {
                 let miners: Vec<MinerShare> =
                     ["Foundry USA", "AntPool", "F2Pool", "Unknown"]
