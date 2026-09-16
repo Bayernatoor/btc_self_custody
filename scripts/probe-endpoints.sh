@@ -85,6 +85,10 @@ probe 200 "stats_block_detail"     -X POST "$(sfn stats_block_detail)"         -
 probe 200 "stats_cumulative_size"  -X POST "$(sfn stats_cumulative_size)"      -d 'below_height=840000'
 probe 200 "stats_cumulative_ts"    -X POST "$(sfn stats_cumulative_size_ts)"   -d 'before_ts=1700000000'
 probe 200 "stats_daily_aggregates" -X POST "$(sfn stats_daily_aggregates)"     -d 'from_ts=1700000000&to_ts=1710000000'
+# The window here straddles the 2021-07-03 retarget, so a non-empty answer is
+# the interesting one: the response must carry the epoch before the window as
+# well as the ones inside it.
+probe 200 "stats_retargets"        -X POST "$(sfn stats_retargets)"            -d 'from_ts=1622505600&to_ts=1625356800'
 probe 200 "stats_signaling"        -X POST "$(sfn stats_signaling)"            -d "bit=2&method=bit&from=$((TIP-2016))&to=$TIP"
 probe 200 "stats_signaling_periods" -X POST "$(sfn stats_signaling_periods)"   -d 'bit=2&method=bit'
 probe 200 "stats_miner_dominance"  -X POST "$(sfn stats_miner_dominance)"      -d "from=$((TIP-1000))&to=$TIP"
@@ -127,6 +131,7 @@ note "stats_blocks reversed"        -X POST "$(sfn stats_blocks)"        -d "fro
 note "stats_blocks over-wide"       -X POST "$(sfn stats_blocks)"        -d "from=0&to=$TIP"
 note "stats_blocks_by_ts over-wide" -X POST "$(sfn stats_blocks_by_ts)"  -d 'from_ts=0&to_ts=4000000000'
 note "stats_daily reversed"         -X POST "$(sfn stats_daily_aggregates)" -d 'from_ts=1710000000&to_ts=1700000000'
+note "stats_retargets reversed"     -X POST "$(sfn stats_retargets)"     -d 'from_ts=1710000000&to_ts=1700000000'
 note "range_summary reversed"       -X POST "$(sfn range_summary)"       -d 'from_ts=1710000000&to_ts=1700000000'
 note "extremes reversed"            -X POST "$(sfn extremes)"            -d 'from_ts=1710000000&to_ts=1700000000'
 note "fullness_histogram reversed"  -X POST "$(sfn fullness_histogram)"  -d 'from_ts=1710000000&to_ts=1700000000'
