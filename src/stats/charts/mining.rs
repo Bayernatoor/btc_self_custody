@@ -384,135 +384,87 @@ pub fn difficulty_adjustment_chart(
     }))
 }
 
-/// Retarget steps from a daily series, ignoring the blended day.
+/// The retargets a daily window can draw, as (day index, percent).
 ///
-/// `avg_difficulty` is the mean across the blocks in a UTC day, and a retarget
-/// lands mid-day, so the day it happens on averages blocks from both epochs.
-/// Stepping between consecutive daily values therefore draws the adjustment
-/// twice and gets both halves wrong: February 2026 retargeted from 125.86T to
-/// 144.40T, one step of +14.73%, and the naive reading produced +2.59% on the
-/// blend day followed by +11.83% on the next.
+/// Read off the retarget blocks themselves rather than reconstructed from the
+/// daily difficulty column, which is what this chart did until 2026-09-16.
+/// Two facts defeat reconstruction, and the second one has no workaround:
 ///
-/// So step between *plateaus* instead. An epoch is 2,016 blocks, about a
-/// fortnight, so a settled difficulty holds for a dozen days or more and a
-/// run of a single day is always a blend. The step is placed on the first day
-/// of the new plateau, which is the first full day at the new difficulty.
+/// - **A retarget lands mid-day**, so the day it happens on averages blocks
+///   from both epochs and its mean is no protocol difficulty. February 2026
+///   went from 125.86T to 144.40T, one step of +14.73%, and stepping through
+///   the blend drew +2.59% then +11.83%.
+/// - **Sometimes there is no blend day.** Block 899,136 is stamped
+///   2025-05-31 00:01:30, so all 161 blocks that day carry the new
+///   difficulty. From daily means, that day is indistinguishable from a
+///   blend, and every rule that treated one-day runs as blends lost this
+///   retarget or invented one.
 ///
-/// A range too short to contain a whole plateau yields nothing, which is the
-/// honest answer: there is no retarget in view to measure.
-/// Retargets found in a daily difficulty series, as (day index, percent).
+/// A retarget block's own difficulty is the new epoch's difficulty exactly,
+/// and its own timestamp is when the epoch changed, so both halves of a bar
+/// come from stored values and the result is exact by construction at every
+/// range boundary. `query_retargets_for_window` supplies the epoch before the
+/// window as well, so the first retarget inside it has something to be a
+/// percentage of.
 ///
-/// Difficulty is constant for all 2,016 blocks of an epoch, verified across
-/// every one of the 480 epochs stored here, so a day wholly inside an epoch
-/// carries that epoch's difficulty exactly and a **plateau value is exact**.
-/// What is not exact is the date, and that was the defect.
+/// Consecutive pairs only, and only 2,016 apart. A gap in the retarget rows
+/// would otherwise let one bar carry two epochs' worth of change dated to the
+/// later one, which is a wrong reading rather than a missing one.
 ///
-/// A retarget almost never lands on midnight, so the day it happens holds
-/// blocks from both epochs and its mean is a blend of the two. The previous
-/// version discarded that day as noise and dated the retarget to the first day
-/// of the new plateau, which is the day *after* it happened. The China-ban
-/// retarget is the worked example: block 689,472 at 2021-07-03 06:34 UTC, and
-/// `daily_blocks` holds the old difficulty on 07-02, a blend on 07-03 and the
-/// new difficulty from 07-04. It was reported as 07-04.
-///
-/// **The blend day is the retarget day.** A single day whose value sits
-/// strictly between the plateaus either side of it is the day the epoch
-/// changed, so it dates the step. Where a retarget does land near enough to
-/// midnight to leave no blend, the plateaus are adjacent and the first day of
-/// the new one is already right.
-///
-/// A trailing blend is dropped rather than reported. If the range ends on a
-/// retarget day, the new epoch's difficulty is not yet visible in any full
-/// day, so there is nothing to compute a step against, and the blend is not a
-/// protocol difficulty. The previous version kept the final run whatever its
-/// length, which meant a range ending on a retarget day published a blended
-/// value as a difficulty.
-///
-/// The per-block view has none of this to worry about: it reads difficulty off
-/// real blocks and its steps are exact by construction.
-fn daily_difficulty_steps(days: &[DailyAggregate]) -> Vec<(usize, f64)> {
-    // Runs of equal difficulty, as (first index, value, length).
-    let mut runs: Vec<(usize, f64, usize)> = Vec::new();
-    for (i, d) in days.iter().enumerate() {
-        if d.avg_difficulty <= 0.0 {
+/// Unchanged difficulty is not a step: the first sixteen epochs all sat at
+/// difficulty 1.0, and a bar of 0% would read as a retarget that did nothing
+/// rather than as the network having nothing to correct.
+fn retarget_steps(
+    days: &[DailyAggregate],
+    retargets: &[Retarget],
+) -> Vec<(usize, f64)> {
+    let index_of: std::collections::HashMap<&str, usize> = days
+        .iter()
+        .enumerate()
+        .map(|(i, d)| (d.date.as_str(), i))
+        .collect();
+    let mut steps = Vec::new();
+    for pair in retargets.windows(2) {
+        let (before, after) = (&pair[0], &pair[1]);
+        if before.difficulty <= 0.0 || after.height != before.height + 2016 {
             continue;
         }
-        match runs.last_mut() {
-            Some(last)
-                if (d.avg_difficulty - last.1).abs() / last.1 <= 1e-9 =>
-            {
-                last.2 += 1;
-            }
-            _ => runs.push((i, d.avg_difficulty, 1)),
+        if (after.difficulty - before.difficulty).abs() / before.difficulty
+            <= 1e-9
+        {
+            continue;
         }
-    }
-
-    // A plateau is a run of at least two days, which is an epoch seen whole.
-    // Anything shorter is either a blend or a fragment at the range edge, and
-    // neither is a difficulty.
-    let is_plateau = |r: &(usize, f64, usize)| r.2 > 1;
-
-    // A trailing run of one day is an epoch too, when the evidence says so.
-    //
-    // Requiring two days meant a range ending the day *after* a retarget
-    // reported nothing, even though the new difficulty was plainly visible in
-    // that final full day. Ending on 2021-07-04 lost the China-ban retarget
-    // that ending on 07-05 showed.
-    //
-    // The evidence is the same betweenness that identifies a blend. If the
-    // last run is one day, and the run before it is also one day, and that
-    // one's value lies strictly between the previous plateau and this one,
-    // then the middle day is the retarget's blend and this day is the new
-    // epoch seen whole. A range ending *on* the blend day still reports
-    // nothing, which is correct rather than conservative: the new difficulty
-    // has not appeared in any full day yet, and the blend is not a difficulty.
-    let last_is_settled_epoch = matches!(
-        runs.as_slice(),
-        [.., before, blend, last]
-            if blend.2 == 1
-                && last.2 == 1
-                && before.2 > 1
-                && blend.1 > before.1.min(last.1)
-                && blend.1 < before.1.max(last.1)
-    );
-    let last_index = runs.len().saturating_sub(1);
-    let is_plateau = |i: usize, r: &(usize, f64, usize)| {
-        is_plateau(r) || (i == last_index && last_is_settled_epoch)
-    };
-
-    let mut steps = Vec::new();
-    let mut previous: Option<(usize, f64)> = None;
-    let mut pending_blend: Option<usize> = None;
-
-    for (i, r) in runs.iter().enumerate() {
-        if is_plateau(i, r) {
-            if let Some((_, before)) = previous {
-                // Dated at the blend day where there is one, since that is
-                // when the epoch actually changed, and at the first day of
-                // this plateau otherwise.
-                let at = pending_blend.unwrap_or(r.0);
-                steps.push((at, (r.1 / before - 1.0) * 100.0));
-            }
-            previous = Some((r.0, r.1));
-            pending_blend = None;
-        } else {
-            // A one-day run between two plateaus is the retarget day. Keep its
-            // index to date the next step, and keep its value out of the
-            // arithmetic.
-            pending_blend = Some(r.0);
-        }
+        // The retarget block's own UTC day. A retarget whose day is outside
+        // the loaded window has no slot to sit in, which happens at the far
+        // end when the window stops mid-day.
+        let Some(&i) =
+            chrono::DateTime::from_timestamp(after.timestamp as i64, 0)
+                .map(|t| t.format("%Y-%m-%d").to_string())
+                .as_deref()
+                .and_then(|d| index_of.get(d))
+        else {
+            continue;
+        };
+        steps.push((i, (after.difficulty / before.difficulty - 1.0) * 100.0));
     }
     steps
 }
 
+/// Difficulty Adjustment, daily: one bar per retarget in the window.
+///
+/// Takes the retarget rows alongside the days because the days supply only
+/// the category axis here. Every value on the bars comes from
+/// [`retarget_steps`], which reads the retarget blocks; the daily
+/// `avg_difficulty` column is not consulted at all.
 pub fn difficulty_adjustment_chart_daily(
     days: &[DailyAggregate],
+    retargets: &[Retarget],
 ) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Difficulty Adjustment");
     }
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let steps = daily_difficulty_steps(days);
+    let steps = retarget_steps(days, retargets);
     // Positioned by category index, so every day needs a slot and the ones
     // without a retarget carry null rather than zero. Zero would draw a bar
     // of no height at every point and read as "no change today", which is a
@@ -558,74 +510,66 @@ pub fn difficulty_adjustment_chart_daily(
 mod adjustment_tests {
     use super::*;
 
-    fn day(date: &str, difficulty: f64) -> DailyAggregate {
+    fn day(date: &str) -> DailyAggregate {
         DailyAggregate {
             date: date.to_string(),
-            avg_difficulty: difficulty,
+            // Deliberately zero. The daily difficulty column is not an input
+            // to this chart any more, and a fixture that filled it could let
+            // a reconstruction creep back in without a test noticing.
+            avg_difficulty: 0.0,
             ..Default::default()
         }
     }
 
-    /// The real case, from February 2026: 125.86T to 144.40T is one retarget
-    /// of +14.73%. Averaging across the day it lands on produced a blended
-    /// value, and stepping through it drew two bars of +2.59% and +11.83%.
-    #[test]
-    fn a_retarget_is_one_step_not_two() {
-        let days = vec![
-            day("2026-02-16", 125_864_590_119_494.0),
-            day("2026-02-17", 125_864_590_119_494.0),
-            day("2026-02-18", 125_864_590_119_494.0),
-            // The blend: this day carries blocks from both epochs.
-            day("2026-02-19", 129_128_405_963_274.0),
-            day("2026-02-20", 144_398_401_518_101.0),
-            day("2026-02-21", 144_398_401_518_101.0),
-            day("2026-02-22", 144_398_401_518_101.0),
-        ];
-        let steps = daily_difficulty_steps(&days);
-        assert_eq!(steps.len(), 1, "got {steps:?}");
-        let (idx, pct) = steps[0];
-        // Index 3, the blended day, because that is the day the epoch changed.
-        //
-        // This asserted index 4 until 2026-09-16, on the reasoning that the
-        // step belonged on the first full day at the new value. That is the
-        // day *after* the retarget, and it was wrong for the same reason the
-        // blend exists: a retarget lands mid-day, so the day holding blocks
-        // from both epochs is the day it happened. The old assertion restated
-        // what the code did rather than what the chain did.
-        assert_eq!(
-            idx, 3,
-            "the retarget happened on the blended day, not the day after"
-        );
-        assert!(
-            (pct - 14.725).abs() < 0.01,
-            "expected the whole adjustment, got {pct}"
-        );
+    fn days_from(start: &str, n: usize) -> Vec<DailyAggregate> {
+        let d0 = chrono::NaiveDate::parse_from_str(start, "%Y-%m-%d")
+            .expect("valid date");
+        (0..n)
+            .map(|i| {
+                day(&(d0 + chrono::Duration::days(i as i64))
+                    .format("%Y-%m-%d")
+                    .to_string())
+            })
+            .collect()
     }
 
-    /// The China-ban retarget, with the node's own numbers.
+    fn at(stamp: &str) -> u64 {
+        chrono::NaiveDateTime::parse_from_str(stamp, "%Y-%m-%d %H:%M:%S")
+            .expect("valid timestamp")
+            .and_utc()
+            .timestamp() as u64
+    }
+
+    fn rt(height: u64, stamp: &str, difficulty: f64) -> Retarget {
+        Retarget {
+            height,
+            timestamp: at(stamp),
+            difficulty,
+        }
+    }
+
+    // The China-ban retarget as the node stores it. Heights 687,456 and
+    // 689,472, read out of `bitcoin_stats.db` on 2026-09-16, so the tests
+    // below say the chart agrees with the chain rather than with itself.
+    const BAN_OLD: f64 = 19_932_791_027_262.73;
+    const BAN_NEW: f64 = 14_363_025_673_659.96;
+    fn china_ban() -> Vec<Retarget> {
+        vec![
+            rt(687_456, "2021-06-13 20:07:16", BAN_OLD),
+            rt(689_472, "2021-07-03 06:34:06", BAN_NEW),
+        ]
+    }
+
+    /// The largest fall on record, dated to the day the block landed.
     ///
     /// Block 689,472 at 2021-07-03 06:34:06 UTC took difficulty from
-    /// 19,932,791,027,262.74 to 14,363,025,673,659.96, a change of -27.9427%.
-    /// `daily_blocks` on this machine holds the old value through 07-02, the
-    /// blend 15,634,861,856,766.105 on 07-03, and the new value from 07-04.
-    ///
-    /// Every figure here is read from the database rather than chosen, so the
-    /// test says the chart agrees with the chain, not with itself.
+    /// 19,932,791,027,262.73 to 14,363,025,673,659.96, a change of -27.9427%.
+    /// Both figures are the stored difficulties of the two retarget blocks,
+    /// not a day's mean, so the bar is exact.
     #[test]
     fn the_china_ban_retarget_is_dated_to_the_day_it_happened() {
-        const OLD: f64 = 19_932_791_027_262.74;
-        const BLEND: f64 = 15_634_861_856_766.105;
-        const NEW: f64 = 14_363_025_673_659.96;
-        let days = vec![
-            day("2021-06-30", OLD),
-            day("2021-07-01", OLD),
-            day("2021-07-02", OLD),
-            day("2021-07-03", BLEND),
-            day("2021-07-04", NEW),
-            day("2021-07-05", NEW),
-            day("2021-07-06", NEW),
-        ];
-        let steps = daily_difficulty_steps(&days);
+        let days = days_from("2021-06-30", 7);
+        let steps = retarget_steps(&days, &china_ban());
         assert_eq!(steps.len(), 1, "one retarget: {steps:?}");
         let (idx, pct) = steps[0];
         assert_eq!(
@@ -633,146 +577,330 @@ mod adjustment_tests {
             "the retarget block's own timestamp is 2021-07-03 06:34 UTC"
         );
         assert!(
-            (pct - (NEW / OLD - 1.0) * 100.0).abs() < 1e-9,
+            (pct - (BAN_NEW / BAN_OLD - 1.0) * 100.0).abs() < 1e-9,
             "expected -27.9427%, got {pct}"
         );
-        // The blend must not reach the arithmetic. Computing from it would
-        // give -21.6% into 07-03 and -8.1% out of it, neither of which
-        // happened.
         assert!(
             (pct + 27.9427).abs() < 0.001,
-            "the step was computed through the blended day: {pct}"
+            "the percentage came from something other than the two retarget \
+             blocks: {pct}"
         );
     }
 
-    /// The boundary cases Astra reproduced, as a range being cut short.
+    /// **The R3 acceptance case.** A retarget in the window is reported
+    /// whatever day the range stops on.
     ///
-    /// Ending the day *after* a retarget must report it: the new difficulty is
-    /// visible in that final full day even though it is not yet a two-day
-    /// plateau. Ending *on* the retarget day must still report nothing,
-    /// because the only value for that day is a blend of two epochs and no
-    /// full day of the new one exists.
+    /// Reconstruction from daily means could not do this. It needed a settled
+    /// day of the new epoch after the blend, so the same retarget appeared or
+    /// vanished depending on data from *after* it: ending 2021-07-03 or 07-04
+    /// reported nothing while 07-05 reported -27.94%. Now the bar depends only
+    /// on the two retarget blocks, both of which are inside any window that
+    /// contains 07-03 at all.
     #[test]
-    fn a_retarget_survives_the_range_ending_just_after_it() {
-        const OLD: f64 = 19_932_791_027_262.74;
-        const BLEND: f64 = 15_634_861_856_766.105;
-        const NEW: f64 = 14_363_025_673_659.96;
-        let all = [
-            day("2021-06-30", OLD),
-            day("2021-07-01", OLD),
-            day("2021-07-02", OLD),
-            day("2021-07-03", BLEND),
-            day("2021-07-04", NEW),
-            day("2021-07-05", NEW),
-        ];
-
-        // Cut on the blend day: nothing to report, and nothing invented.
-        let steps = daily_difficulty_steps(&all[..4]);
-        assert!(
-            steps.is_empty(),
-            "a range ending on the blend day has no settled new epoch: \
-             {steps:?}"
-        );
-
-        // Cut the day after: the retarget is there, dated to the blend day,
-        // with the exact percentage.
-        for end in [5, 6] {
-            let steps = daily_difficulty_steps(&all[..end]);
-            assert_eq!(steps.len(), 1, "end={end} gave {steps:?}");
+    fn a_retarget_is_reported_whatever_day_the_range_ends_on() {
+        for last in ["2021-07-03", "2021-07-04", "2021-07-05"] {
+            let n = chrono::NaiveDate::parse_from_str(last, "%Y-%m-%d")
+                .expect("valid")
+                .signed_duration_since(
+                    chrono::NaiveDate::from_ymd_opt(2021, 6, 30)
+                        .expect("valid"),
+                )
+                .num_days() as usize
+                + 1;
+            let days = days_from("2021-06-30", n);
+            let steps = retarget_steps(&days, &china_ban());
             assert_eq!(
-                all[steps[0].0].date, "2021-07-03",
-                "end={end}: dated to the day the epoch changed"
+                steps.len(),
+                1,
+                "a range ending {last} lost the retarget: {steps:?}"
             );
+            assert_eq!(days[steps[0].0].date, "2021-07-03");
             assert!(
-                (steps[0].1 - (NEW / OLD - 1.0) * 100.0).abs() < 1e-9,
-                "end={end}: expected -27.9427%, got {}",
+                (steps[0].1 + 27.9427).abs() < 0.001,
+                "range ending {last} gave {}",
                 steps[0].1
             );
         }
     }
 
-    /// A range ending on a retarget day reports nothing for it.
+    /// **The case that made the query necessary.** A retarget just after
+    /// midnight leaves no blend day at all.
     ///
-    /// The new epoch's difficulty is not visible in any full day yet, so there
-    /// is nothing to compute a step against, and the blend is not a protocol
-    /// difficulty. The previous version kept the final run whatever its
-    /// length, so a range cut here published the blend as one.
+    /// Block 899,136 is stamped 2025-05-31 00:01:30 and the 161 blocks stored
+    /// for that day all carry the new difficulty, so from daily means the day
+    /// looks exactly like a settled one-day fragment. Every rule that read
+    /// one-day runs as blends either lost this retarget or invented one, and
+    /// no further exception could separate the two. From the retarget blocks
+    /// it is +4.38%, with no special case.
     #[test]
-    fn a_range_ending_on_a_retarget_day_publishes_no_difficulty() {
-        const OLD: f64 = 19_932_791_027_262.74;
-        const BLEND: f64 = 15_634_861_856_766.105;
-        let days = vec![
-            day("2021-06-30", OLD),
-            day("2021-07-01", OLD),
-            day("2021-07-02", OLD),
-            day("2021-07-03", BLEND),
-        ];
-        let steps = daily_difficulty_steps(&days);
+    fn a_retarget_just_after_midnight_is_found_without_a_blend_day() {
+        let days = days_from("2025-05-25", 10);
+        let steps = retarget_steps(
+            &days,
+            &[
+                rt(897_120, "2025-05-17 14:01:56", 121_658_450_774_825.0),
+                rt(899_136, "2025-05-31 00:01:30", 126_982_285_146_989.3),
+            ],
+        );
+        assert_eq!(steps.len(), 1, "got {steps:?}");
+        assert_eq!(days[steps[0].0].date, "2025-05-31");
         assert!(
-            steps.is_empty(),
-            "a blended day is not a difficulty and cannot end a step: \
-             {steps:?}"
+            (round(steps[0].1, 2) - 4.38).abs() < 1e-9,
+            "expected +4.38%, got {}",
+            steps[0].1
         );
     }
 
-    /// A retarget landing close enough to midnight leaves no blend, and the
-    /// first day of the new plateau is then the right date.
+    /// The row before the window is context, not a bar.
+    ///
+    /// The query returns the last retarget stamped before the range starts so
+    /// the first one inside it has a denominator. That earlier retarget
+    /// happened outside the window and drawing it would put a bar on a day
+    /// the chart is not showing.
     #[test]
-    fn a_midnight_retarget_needs_no_blend_day() {
-        const OLD: f64 = 100_000_000_000_000.0;
-        const NEW: f64 = 110_000_000_000_000.0;
-        let days = vec![
-            day("2026-01-01", OLD),
-            day("2026-01-02", OLD),
-            day("2026-01-03", NEW),
-            day("2026-01-04", NEW),
-        ];
-        let steps = daily_difficulty_steps(&days);
-        assert_eq!(steps.len(), 1, "got {steps:?}");
-        assert_eq!(days[steps[0].0].date, "2026-01-03");
-        assert!((steps[0].1 - 10.0).abs() < 1e-9);
+    fn the_epoch_before_the_window_supplies_a_denominator_not_a_bar() {
+        // The window starts 2021-06-30, well after 687,456 on 06-13.
+        let days = days_from("2021-06-30", 7);
+        let steps = retarget_steps(&days, &china_ban());
+        assert_eq!(steps.len(), 1);
+        assert_eq!(days[steps[0].0].date, "2021-07-03");
+
+        // And with only the predecessor in view there is nothing to draw,
+        // rather than a bar of 0% or a panic.
+        assert!(retarget_steps(&days, &china_ban()[..1]).is_empty());
+        assert!(retarget_steps(&days, &[]).is_empty());
     }
 
-    /// A range holding no settled plateau has no retarget to report, and
-    /// saying nothing is better than reporting a blend as though it were one.
+    /// A retarget that changed nothing is not a bar.
+    ///
+    /// The first sixteen epochs sat at difficulty 1.0. A 0% bar would read as
+    /// a retarget that did nothing, which is a different claim from the
+    /// network having nothing to correct, and 464 of the ~480 stored
+    /// retargets are the ones that moved.
     #[test]
-    fn too_short_a_range_reports_nothing() {
-        let days = vec![day("2026-02-19", 129.0), day("2026-02-20", 144.0)];
-        // Two runs of one day each: the first is a blend with nothing settled
-        // before it, so there is no plateau-to-plateau step.
-        assert!(daily_difficulty_steps(&days).len() <= 1);
-        assert!(daily_difficulty_steps(&[]).is_empty());
-    }
-
-    /// Flat difficulty is not a retarget, and floating point noise between
-    /// two reads of the same epoch must not become one.
-    #[test]
-    fn a_settled_epoch_produces_no_bars() {
-        let days: Vec<_> = (0..20)
+    fn an_unchanged_difficulty_is_not_a_retarget() {
+        let days = days_from("2009-01-09", 30);
+        let flat: Vec<Retarget> = (0..5)
             .map(|i| {
-                day(&format!("2026-03-{:02}", i + 1), 144_398_401_518_101.0)
+                rt(
+                    i * 2016,
+                    &format!("2009-01-{:02} 12:00:00", 10 + i * 3),
+                    1.0,
+                )
             })
             .collect();
-        assert!(daily_difficulty_steps(&days).is_empty());
+        assert!(retarget_steps(&days, &flat).is_empty());
     }
 
-    /// Downward retargets are the interesting ones, and the sign has to
-    /// survive: the largest on record is the 2021 mining ban.
+    /// A missing retarget row is a gap, not a bigger bar.
+    ///
+    /// Two rows 4,032 apart span two adjustments. Multiplying them together
+    /// and dating the product to the later block would be a wrong reading of
+    /// a real retarget, which is worse than showing nothing.
     #[test]
-    fn a_downward_retarget_keeps_its_sign() {
-        let days = vec![
-            day("2021-07-01", 19_932_791_027_263.0),
-            day("2021-07-02", 19_932_791_027_263.0),
-            day("2021-07-03", 16_000_000_000_000.0),
-            day("2021-07-04", 14_363_025_673_660.0),
-            day("2021-07-05", 14_363_025_673_660.0),
-        ];
-        let steps = daily_difficulty_steps(&days);
-        assert_eq!(steps.len(), 1);
+    fn a_missing_retarget_row_does_not_merge_two_epochs() {
+        let days = days_from("2021-06-30", 30);
+        let steps = retarget_steps(
+            &days,
+            &[
+                rt(687_456, "2021-06-13 20:07:16", BAN_OLD),
+                // 689,472 absent, so this is 4,032 above its predecessor.
+                rt(691_488, "2021-07-17 23:32:17", 13_672_594_272_814.1),
+            ],
+        );
+        assert!(steps.is_empty(), "two epochs became one bar: {steps:?}");
+    }
+
+    /// A retarget whose day is not in the window has no slot to sit in.
+    ///
+    /// This is the window's far end: a range ending mid-day, or a retarget
+    /// block returned by timestamp whose UTC day the daily rows do not carry.
+    /// Positioning it anyway would mean choosing a wrong day.
+    #[test]
+    fn a_retarget_outside_the_loaded_days_is_dropped() {
+        let days = days_from("2021-07-10", 5);
+        assert!(retarget_steps(&days, &china_ban()).is_empty());
+    }
+
+    /// Every day without a retarget carries null, not zero.
+    ///
+    /// Zero would draw a flat bar on all 366 categories and read as "no
+    /// change today", which is a different statement from "no retarget
+    /// today". The two series also must not both hold a value in one slot: a
+    /// retarget is either a rise or a fall.
+    #[test]
+    fn days_without_a_retarget_are_null_in_both_series() {
+        let days = days_from("2021-06-30", 7);
+        let opt = difficulty_adjustment_chart_daily(&days, &china_ban());
+        let series = opt["series"].as_array().expect("two series");
+        assert_eq!(series.len(), 2);
+        let harder = series[0]["data"].as_array().expect("data");
+        let easier = series[1]["data"].as_array().expect("data");
+        assert_eq!(harder.len(), 7);
+        assert_eq!(easier.len(), 7);
         assert!(
-            steps[0].1 < -27.0 && steps[0].1 > -28.0,
-            "got {:?}",
-            steps[0]
+            harder.iter().all(|v| v.is_null()),
+            "a fall put a value in Harder: {harder:?}"
+        );
+        for (i, v) in easier.iter().enumerate() {
+            if i == 3 {
+                assert_eq!(v.as_f64(), Some(-27.94), "the bar's own value");
+            } else {
+                assert!(v.is_null(), "day {i} is not a retarget but holds {v}");
+            }
+        }
+    }
+
+    /// No days means no chart, and no retargets means an empty frame rather
+    /// than a missing one.
+    #[test]
+    fn an_empty_window_draws_nothing_rather_than_guessing() {
+        let empty = difficulty_adjustment_chart_daily(&[], &china_ban());
+        assert_eq!(empty, no_data_chart("Difficulty Adjustment"));
+
+        let days = days_from("2024-01-01", 5);
+        let opt = difficulty_adjustment_chart_daily(&days, &[]);
+        let series = opt["series"].as_array().expect("two series");
+        for s in series {
+            assert!(
+                s["data"]
+                    .as_array()
+                    .expect("data")
+                    .iter()
+                    .all(|v| v.is_null()),
+                "no retargets in the window, but a bar was drawn"
+            );
+        }
+    }
+
+    /// The four R3 acceptance windows, end to end against the live database.
+    ///
+    /// The unit tests above use the retarget blocks as constants, which
+    /// proves the arithmetic and the dating. This proves the other half: that
+    /// `query_retargets_for_window` hands the builder the right two rows for
+    /// a window cut at each of these boundaries. Ignored because it needs the
+    /// real `bitcoin_stats.db`.
+    ///
+    ///     cargo test --features ssr the_r3_acceptance -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn the_r3_acceptance_windows_against_the_live_database() {
+        let conn = rusqlite::Connection::open_with_flags(
+            "bitcoin_stats.db",
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )
+        .expect("bitcoin_stats.db in the working directory");
+
+        // (first day, last day, the day the bar must land on, its value)
+        let cases = [
+            ("2021-04-01", "2021-07-03", "2021-07-03", -27.94),
+            ("2021-04-01", "2021-07-04", "2021-07-03", -27.94),
+            ("2021-04-01", "2021-07-05", "2021-07-03", -27.94),
+            ("2025-04-01", "2025-05-31", "2025-05-31", 4.38),
+        ];
+        for (from, to, want_day, want_pct) in cases {
+            let d0 = chrono::NaiveDate::parse_from_str(from, "%Y-%m-%d")
+                .expect("valid");
+            let d1 = chrono::NaiveDate::parse_from_str(to, "%Y-%m-%d")
+                .expect("valid");
+            let days = days_from(from, (d1 - d0).num_days() as usize + 1);
+            let rows = crate::stats::db::query_retargets_for_window(
+                &conn,
+                d0.and_hms_opt(0, 0, 0)
+                    .expect("valid")
+                    .and_utc()
+                    .timestamp() as u64,
+                d1.and_hms_opt(23, 59, 59)
+                    .expect("valid")
+                    .and_utc()
+                    .timestamp() as u64,
+            )
+            .expect("query");
+            let steps = retarget_steps(&days, &rows);
+            let found: Vec<(&str, f64)> = steps
+                .iter()
+                .map(|&(i, pct)| (days[i].date.as_str(), round(pct, 2)))
+                .collect();
+            assert!(
+                found.contains(&(want_day, want_pct)),
+                "{from}..{to} should hold {want_day} at {want_pct}%, got \
+                 {found:?} from {} retarget rows",
+                rows.len()
+            );
+            println!("{from}..{to}: {found:?}");
+            // With `CQ_OPTION` set, the built option for the matching window
+            // goes to stdout so it can be rendered in a browser and read back
+            // off the chart model rather than judged from the JSON.
+            if std::env::var("CQ_OPTION").as_deref() == Ok(to) {
+                println!(
+                    "{}",
+                    serde_json::to_string(&difficulty_adjustment_chart_daily(
+                        &days, &rows
+                    ))
+                    .expect("json")
+                );
+            }
+        }
+    }
+
+    /// Tooling, not coverage: every bar this chart would draw over the whole
+    /// stored history, as TSV, so it can be diffed against the same question
+    /// asked in SQL.
+    ///
+    /// Ignored because it needs the real `bitcoin_stats.db`, which is not in
+    /// the repository. The comparison it feeds is the full-history check:
+    /// `LAG(difficulty)` over the retarget blocks, in SQLite, against what
+    /// the chart actually emits, in Rust. Neither side can be right for the
+    /// other's reason.
+    ///
+    ///     cargo test --features ssr dump_retarget_steps -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn dump_retarget_steps_over_the_whole_history() {
+        let conn = rusqlite::Connection::open_with_flags(
+            "bitcoin_stats.db",
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )
+        .expect("bitcoin_stats.db in the working directory");
+        let rows = crate::stats::db::query_retargets_for_window(
+            &conn,
+            0,
+            4_000_000_000,
+        )
+        .expect("query");
+
+        // Every UTC day from the first retarget to the last, so a bar has a
+        // slot wherever it lands. This is the widest window the chart can be
+        // asked for.
+        let first = chrono::DateTime::from_timestamp(
+            rows.first().expect("retargets").timestamp as i64,
+            0,
+        )
+        .expect("valid")
+        .date_naive();
+        let last = chrono::DateTime::from_timestamp(
+            rows.last().expect("retargets").timestamp as i64,
+            0,
+        )
+        .expect("valid")
+        .date_naive();
+        let days: Vec<DailyAggregate> = (0..=(last - first).num_days())
+            .map(|i| DailyAggregate {
+                date: (first + chrono::Duration::days(i))
+                    .format("%Y-%m-%d")
+                    .to_string(),
+                ..Default::default()
+            })
+            .collect();
+
+        println!("DATE\tPCT");
+        for (i, pct) in retarget_steps(&days, &rows) {
+            println!("{}\t{:.4}", days[i].date, pct);
+        }
+        eprintln!(
+            "{} retarget rows, {} bars",
+            rows.len(),
+            retarget_steps(&days, &rows).len()
         );
     }
 }

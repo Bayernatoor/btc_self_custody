@@ -626,6 +626,31 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                         ),
                         true,
                     ),
+                    (
+                        DashboardData::PerBlock(blocks),
+                        Source::DiffAdjustment,
+                    ) => finish(
+                        crate::stats::charts::difficulty_adjustment_chart(
+                            blocks,
+                        ),
+                        false,
+                    ),
+                    // Daily needs the retarget blocks, since a day's mean
+                    // difficulty is a blend wherever a retarget lands
+                    // mid-day. Until they arrive, nothing is drawn rather
+                    // than a chart with no bars, which would read as a window
+                    // holding no retargets.
+                    (DashboardData::Daily(days), Source::DiffAdjustment) => {
+                        let Some(Ok(rows)) = state.retargets.get() else {
+                            return String::new();
+                        };
+                        finish(
+                            crate::stats::charts::difficulty_adjustment_chart_daily(
+                                days, &rows,
+                            ),
+                            true,
+                        )
+                    }
                     (DashboardData::PerBlock(blocks), Source::Fees) => finish(
                         crate::stats::charts::fees_chart_unit(blocks, unit),
                         false,

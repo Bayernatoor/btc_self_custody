@@ -110,6 +110,21 @@ pub struct ObservatoryState {
     /// It has no reactive dependencies, so it is fetched once per page rather
     /// than per range change.
     pub chain_size_total: LocalResource<u64>,
+    /// The difficulty retargets inside the loaded daily window, plus the
+    /// epoch before it.
+    ///
+    /// Read by Difficulty Adjustment at daily resolution and by nothing else.
+    /// Held here rather than in the mining page because the single-chart view
+    /// needs the same rows, and because it is derived from
+    /// `dashboard_data`: the retargets always describe the window the days
+    /// describe. Empty at per-block ranges, where difficulty is read off the
+    /// blocks themselves.
+    ///
+    /// The cost of holding it here is one request per daily range change on
+    /// every observatory page, including the ones with no difficulty chart,
+    /// which is the same trade `chain_size_offset` already makes. It is a
+    /// 2.1ms query returning at most ~480 rows for the whole chain.
+    pub retargets: LocalResource<Result<Vec<Retarget>, String>>,
     // true while the dashboard data resource hasn't yet resolved a value
     // for the *currently selected* range/custom-window.
     pub data_loading: Signal<bool>,
@@ -471,6 +486,50 @@ pub fn provide_observatory_state() -> ObservatoryState {
             .unwrap_or(0)
     });
 
+    // The retarget blocks inside the loaded window, for the one chart that
+    // cannot read them off the daily rows.
+    //
+    // Keyed on the resolved days rather than on the range, which is what
+    // keeps this honest: the window asked for here is exactly the window the
+    // days describe, so the two payloads cannot end up covering different
+    // periods. Deriving it from `range` again would be a second
+    // interpretation of the same question, and the two would drift the first
+    // time either changed.
+    //
+    // Empty for per-block ranges, which read difficulty off the blocks they
+    // already have.
+    let retargets = LocalResource::new(move || {
+        let window = dashboard_data.get().and_then(|r| r.ok()).and_then(
+            |data| match data {
+                DashboardData::Daily(ref days) => {
+                    let first = days.first()?;
+                    let last = days.last()?;
+                    Some((
+                        date_to_ts(&first.date)?,
+                        date_to_ts_end(&last.date)?,
+                    ))
+                }
+                DashboardData::PerBlock(_) => None,
+            },
+        );
+        async move {
+            match window {
+                // The error is kept rather than flattened to an empty list.
+                // An empty list is a real answer here ("no retarget in this
+                // window"), so a failed fetch that became one would draw a
+                // chart asserting that nothing happened. The consumer shows
+                // the loading state instead.
+                Some((from_ts, to_ts)) => {
+                    fetch_retargets(from_ts, to_ts).await.map_err(|e| {
+                        leptos::logging::warn!("Retarget fetch failed: {e}");
+                        e.to_string()
+                    })
+                }
+                None => Ok(Vec::new()),
+            }
+        }
+    });
+
     // Pre-compute chain size cumulative data (with offset for absolute values)
     let cached_chain_size_data = {
         let (cached, set_cached) = signal::<Vec<(u64, f64)>>(Vec::new());
@@ -570,6 +629,7 @@ pub fn provide_observatory_state() -> ObservatoryState {
         set_range,
         chain_size_offset,
         chain_size_total,
+        retargets,
         overlay_flags,
         dashboard_data,
         cached_live,

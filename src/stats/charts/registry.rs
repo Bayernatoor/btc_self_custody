@@ -230,10 +230,16 @@ pub struct Measurement {
     /// Method at per-block resolution.
     ///
     /// Per resolution, not per chart, because the two genuinely differ.
-    /// `diff-adjustment` reads the actual retarget blocks when it has them and
-    /// reconstructs retargets from daily difficulty plateaus when it does not,
-    /// so the same chart is exact at one resolution and estimated at the
-    /// other. A single badge would be wrong at one of them.
+    /// `difficulty` is the example: per block it reads the value off the
+    /// block, and daily it plots the day's mean, which is a blend of two
+    /// epochs on the day a retarget lands. A single badge would be wrong at
+    /// one of them.
+    ///
+    /// `diff-adjustment` was this field's original justification, while its
+    /// daily arm reconstructed retargets from difficulty plateaus. It now
+    /// reads the retarget blocks at both resolutions and is measured at both,
+    /// which is the outcome to want: the field stays because the distinction
+    /// is real, not because a chart is stuck on the wrong side of it.
     pub method_per_block: Method,
     /// Method at daily resolution.
     pub method_daily: Method,
@@ -354,6 +360,15 @@ pub enum Source {
     },
     /// Needs `disk_size_gb` and a byte offset from state.
     ChainSize,
+    /// Needs the window's retarget blocks, which the daily rows cannot
+    /// reconstruct.
+    ///
+    /// Per block it reads difficulty off the blocks it already has. Daily, the
+    /// days supply only the category axis and every value comes from
+    /// `fetch_retargets`: a day's mean difficulty is a blend wherever a
+    /// retarget lands mid-day, and where one lands just after midnight there
+    /// is no blend day to find. See `retarget_steps`.
+    DiffAdjustment,
     /// Needs the BTC/sats unit toggle.
     Fees,
     /// Count or percent, per-block or from histogram buckets.
@@ -478,7 +493,11 @@ impl ChartMeta {
     ///   series are guaranteed to cover the same span. The mining charts and
     ///   the two distributions each need their own fetch over their own
     ///   window, which would mean overlaying two series that quietly do not
-    ///   describe the same period.
+    ///   describe the same period. `DiffAdjustment` is included despite
+    ///   fetching too, because its fetch is *derived from* the days already
+    ///   loaded rather than from its own window, so the span guarantee holds.
+    ///   It is also in `MULTI_METRIC`, so it can only ever be the primary
+    ///   here, which is the side that needs no second builder.
     /// - **A shape that accepts a second series.** Stacked percentage bands
     ///   already fill 0 to 100, and a donut or histogram has no shared x
     ///   domain to lay anything along.
@@ -489,8 +508,10 @@ impl ChartMeta {
     /// newly registered chart gets the right answer from what it already
     /// declares.
     pub fn can_compare(&self) -> bool {
-        matches!(self.source, Source::Dashboard { .. })
-            && self.shape.accepts_second_series()
+        matches!(
+            self.source,
+            Source::Dashboard { .. } | Source::DiffAdjustment
+        ) && self.shape.accepts_second_series()
             && !self.unit.occupies_both_axes()
     }
 }
@@ -1328,7 +1349,7 @@ pub const CHARTS: &[ChartMeta] = &[
             method_daily: Method::Calculated,
             per_block: Aggregation::GroupedSummary,
             daily: Aggregation::GroupedSummary,
-            population: "Blocks grouped by subsidy era along the x axis with one series per era, then **each metric normalised so its largest era reads 100**, which is why something always peaks at 100 and why the plotted numbers are an index rather than a quantity. The four metrics do not share a provenance: block size and transaction count are measured, while total fees and the fee share of miner revenue are both coinbase-derived estimates. Only eras present in the window appear.",
+            population: "Blocks grouped by subsidy era, drawn with **the four metrics along the x axis and one series per era**, then **each metric normalised so its largest era reads 100**, which is why something always peaks at 100 and why the plotted numbers are an index rather than a quantity. The four metrics do not share a provenance: block size and transaction count are measured, while total fees and the fee share of miner revenue are both coinbase-derived estimates. Only eras present in the window appear.",
         }],
         about: Some(About {
             // Migrated from the card's expandable, which was the
@@ -1512,26 +1533,21 @@ pub const CHARTS: &[ChartMeta] = &[
         category: Category::Mining,
         unit: Unit::Percent,
         shape: Shape::Bar,
-        source: Source::Dashboard {
-            per_block: super::difficulty_adjustment_chart,
-            daily: Daily::Fn(super::difficulty_adjustment_chart_daily),
-        },
+        source: Source::DiffAdjustment,
         measurements: &[Measurement {
             series: "",
             series_daily: "",
             quantity: "Difficulty change at a retarget, as a percentage of the previous epoch",
-            // Per block this reads the actual retarget blocks. Daily it
-            // identifies retargets from the plateaus in the daily difficulty
-            // column, where the values are exact because difficulty is
-            // constant for all 2,016 blocks of an epoch, and the date is the
-            // blended day, which is the day the epoch changed. Still declared
-            // calculated rather than measured at both resolutions because the
-            // daily date is resolved to the day rather than to the block.
-            method_per_block: Method::Calculated,
-            method_daily: Method::Calculated,
+            // Both resolutions read the retarget blocks themselves: their
+            // stored difficulty is the new epoch's difficulty exactly and
+            // their timestamp is when the epoch changed. Measured rather than
+            // calculated, since the only arithmetic is the ratio of two
+            // stored values, and nothing is inferred from a mean.
+            method_per_block: Method::Measured,
+            method_daily: Method::Measured,
             per_block: Aggregation::WindowedDerived,
             daily: Aggregation::WindowedDerived,
-            population: "One point per retarget, every 2,016 blocks, not per block. Drawn as two series split by sign so the bars can be coloured; together they are one series of retargets. Daily, the date is the day the epoch changed and the percentage comes from the settled difficulty either side of it, so a blended day never becomes a difficulty and a range ending on one reports no step.",
+            population: "One point per retarget, every 2,016 blocks, not per block. Drawn as two series split by sign so the bars can be coloured; together they are one series of retargets. Both the date and the percentage come from the two retarget blocks, so the bar is the same wherever the range happens to end. A retarget that changed nothing is not drawn: the first sixteen epochs all sat at difficulty 1.0.",
         }],
         about: Some(About {
             definition: Some("Every 2,016 blocks, roughly a fortnight, Bitcoin measures how long those blocks took and resets difficulty so the next 2,016 should take exactly two weeks. Nobody votes and nobody decides. If miners leave, blocks come slower and the network makes itself easier. If they arrive, it makes itself harder. This is that correction, as a percentage."),
@@ -3005,22 +3021,46 @@ mod tests {
         }
     }
 
-    /// Comparison candidates are built from the dashboard rows already loaded
-    /// for the range. A chart with any other source needs its own fetch over
-    /// its own window, so overlaying it would put two series that describe
-    /// different periods on one plot.
+    /// A comparison **candidate** has to be buildable from the dashboard rows
+    /// already loaded for the range, because `build_from_dashboard` is the
+    /// only thing that draws the overlaid series and it answers for nothing
+    /// else. A chart needing its own fetch would either draw nothing or
+    /// describe a different period.
+    ///
+    /// Being the **primary** asks less: the page builds it the same way it
+    /// always does and the comparison is laid over it. So the rule is not
+    /// "only dashboard charts can compare" but "only dashboard charts can be
+    /// overlaid", and the two came apart on 2026-09-16 when
+    /// `diff-adjustment` started reading the retarget blocks. It keeps its
+    /// picker, and it is barred as a candidate by `MULTI_METRIC`, which is
+    /// what this now checks rather than assuming.
     #[test]
-    fn only_dashboard_charts_can_be_compared() {
+    fn only_dashboard_charts_can_be_overlaid_on_another() {
         for c in CHARTS {
-            let dashboard = matches!(c.source, Source::Dashboard { .. });
-            if !dashboard {
-                assert!(
-                    !c.can_compare(),
-                    "{} is not built from the dashboard rows but offers \
-                     comparison",
-                    c.slug
-                );
+            if matches!(c.source, Source::Dashboard { .. }) || !c.can_compare()
+            {
+                continue;
             }
+            // Not buildable as the overlaid series, so no primary may offer
+            // it. Checked against the real validator over every primary
+            // rather than against the exclusion lists, so a chart that
+            // slipped out of both is caught here.
+            let offered_by: Vec<&str> = CHARTS
+                .iter()
+                .filter(|p| {
+                    [false, true]
+                        .iter()
+                        .any(|&daily| is_valid_comparison(p, c, daily))
+                })
+                .map(|p| p.slug)
+                .collect();
+            assert!(
+                offered_by.is_empty(),
+                "{} needs an input beyond the dashboard rows, so it cannot \
+                 be drawn as an overlaid series, but it is offered as a \
+                 comparison on {offered_by:?}",
+                c.slug
+            );
         }
         // And the shape and unit refusals actually bite, rather than the rule
         // collapsing to "every dashboard chart".

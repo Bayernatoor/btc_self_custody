@@ -2223,6 +2223,53 @@ pub fn query_height_range_for_window(
     )
 }
 
+/// The difficulty retargets a timestamp window can draw, plus the one before
+/// it.
+///
+/// Every multiple of 2,016 is a retarget block and its stored difficulty is
+/// the new epoch's difficulty exactly, so an adjustment is two consecutive
+/// rows of this and no reconstruction. The window's first retarget needs the
+/// epoch before it to have a percentage at all, which is what the inner
+/// subquery fetches: the highest retarget block stamped before the window
+/// starts. Its own adjustment happened outside the window and is not drawn.
+///
+/// **Generated rather than scanned.** `WHERE height % 2016 = 0` cannot use an
+/// index, so it reads every row: 19.3ms warm against 2.1ms for this, measured
+/// read-only over the live 967,000-row database on 2026-09-16. The recursive
+/// term produces the ~480 candidate heights and each one is a primary-key
+/// lookup.
+///
+/// Rows come back in height order, which is also timestamp order across
+/// retargets, so the caller can walk consecutive pairs.
+pub fn query_retargets_for_window(
+    conn: &Connection,
+    from_ts: u64,
+    to_ts: u64,
+) -> rusqlite::Result<Vec<super::types::Retarget>> {
+    let mut stmt = conn.prepare(
+        "WITH RECURSIVE r(h) AS (
+           SELECT 0
+           UNION ALL SELECT h + 2016 FROM r
+           WHERE h + 2016 <= (SELECT MAX(height) FROM blocks)
+         )
+         SELECT b.height, b.timestamp, b.difficulty
+         FROM r JOIN blocks b ON b.height = r.h
+         WHERE b.timestamp <= ?2
+           AND b.height >= (SELECT COALESCE(MAX(b2.height), 0)
+                            FROM r r2 JOIN blocks b2 ON b2.height = r2.h
+                            WHERE b2.timestamp < ?1)
+         ORDER BY b.height",
+    )?;
+    let rows = stmt.query_map(params![from_ts, to_ts], |row| {
+        Ok(super::types::Retarget {
+            height: row.get(0)?,
+            timestamp: row.get(1)?,
+            difficulty: row.get(2)?,
+        })
+    })?;
+    rows.collect()
+}
+
 /// Empty blocks (tx_count == 1, coinbase only) for a height range
 /// Empty blocks (coinbase-only) per calendar month, as (YYYY-MM, count).
 ///
@@ -3527,6 +3574,71 @@ mod tests {
                 .unwrap(),
             None
         );
+    }
+
+    /// A retarget window has to carry the epoch before it, and nothing from
+    /// further back.
+    ///
+    /// The Difficulty Adjustment chart needs the predecessor to have a
+    /// percentage at all, which is why the query reaches one retarget behind
+    /// the window. Reaching further would draw bars on days the range is not
+    /// showing; reaching no further would lose the first bar in every window,
+    /// which is the boundary defect this replaced.
+    #[test]
+    fn a_retarget_window_reaches_back_exactly_one_epoch() {
+        let conn = setup_db();
+        let mk = |h: u64, ts: u64, d: f64| {
+            conn.execute(
+                "INSERT INTO blocks (height, hash, timestamp, tx_count, size,
+                 weight, difficulty) VALUES (?1,?2,?3,1,0,0,?4)",
+                rusqlite::params![h as i64, format!("h{h}"), ts as i64, d],
+            )
+            .unwrap();
+        };
+        // Five retarget blocks a fortnight apart, plus ordinary blocks
+        // between them that must never be returned. 1,000,000 is a Monday in
+        // 1970 arithmetic; only the ordering matters here.
+        const FORTNIGHT: u64 = 14 * 86_400;
+        for i in 0..5u64 {
+            mk(i * 2016, 1_000_000 + i * FORTNIGHT, 100.0 + i as f64);
+            mk(
+                i * 2016 + 7,
+                1_000_000 + i * FORTNIGHT + 4_000,
+                100.0 + i as f64,
+            );
+        }
+
+        let heights = |from: u64, to: u64| -> Vec<u64> {
+            query_retargets_for_window(&conn, from, to)
+                .unwrap()
+                .into_iter()
+                .map(|r| r.height)
+                .collect()
+        };
+
+        // A window around the third retarget: it comes back with the second
+        // as its denominator, and the first is not included.
+        let third = 1_000_000 + 2 * FORTNIGHT;
+        assert_eq!(
+            heights(third - 86_400, third + 86_400),
+            vec![2016, 4032],
+            "one retarget behind the window, no further"
+        );
+
+        // A window starting before the chain starts has no predecessor, and
+        // the first retarget is then the first row rather than a missing one.
+        assert_eq!(heights(0, third), vec![0, 2016, 4032]);
+
+        // Nothing after the window's end, however far past the last retarget
+        // it runs.
+        assert_eq!(heights(third, 9_999_999_999), vec![2016, 4032, 6048, 8064]);
+
+        // Values come from the retarget block itself, not from a neighbour.
+        let rows = query_retargets_for_window(&conn, third, third).unwrap();
+        let last = rows.last().expect("a retarget");
+        assert_eq!(last.height, 4032);
+        assert_eq!(last.timestamp, third);
+        assert!((last.difficulty - 102.0).abs() < 1e-9);
     }
 
     /// The block detail modal reads fields off this endpoint's response, and

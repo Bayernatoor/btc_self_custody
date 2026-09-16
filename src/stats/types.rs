@@ -749,6 +749,31 @@ pub struct MinerShare {
     pub percentage: f64,
 }
 
+/// One difficulty retarget, read off the block that introduced it.
+///
+/// A retarget happens at every height that is a multiple of 2,016, and the
+/// difficulty stored on that block is the new epoch's difficulty exactly. So
+/// the adjustment is a property of two consecutive rows of this type and needs
+/// no reconstruction: the percentage comes from the pair of difficulties and
+/// the date comes from the later block's own timestamp.
+///
+/// Exists because the daily aggregates cannot supply either half reliably. A
+/// retarget lands at an arbitrary moment in a UTC day, so the day's mean
+/// difficulty is a blend of two epochs, and when it lands near midnight there
+/// is no blend day at all: block 899,136 is stamped 2025-05-31 00:01:30, so
+/// all 161 blocks that day carry the new difficulty. A single settled day and
+/// a blend day are then indistinguishable from daily means alone, which is
+/// why the reconstruction was replaced by these rows.
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+pub struct Retarget {
+    /// Height of the retarget block, always a multiple of 2,016.
+    pub height: u64,
+    /// That block's timestamp, which is when the epoch changed.
+    pub timestamp: u64,
+    /// The new epoch's difficulty, constant for its 2,016 blocks.
+    pub difficulty: f64,
+}
+
 // ---------------------------------------------------------------------------
 // Whale Watch / Notable Transactions
 // ---------------------------------------------------------------------------

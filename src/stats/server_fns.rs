@@ -466,6 +466,31 @@ pub async fn fetch_daily_aggregates(
         .await
 }
 
+/// The difficulty retargets inside a window, plus the epoch before it.
+///
+/// Separate from `stats_daily_aggregates` rather than folded into it because
+/// the two have different shapes: a day per row against a retarget per row,
+/// roughly one per fortnight. Only the Difficulty Adjustment chart reads it,
+/// and only at daily resolution, where the day's mean difficulty cannot
+/// recover either the date or the percentage of a retarget.
+///
+/// Uncached, unlike the daily aggregates. The query is 2.1ms warm and returns
+/// at most ~480 rows for the whole chain, so a cache would cost more state
+/// than it saves. Revisit if it ever appears in a profile.
+#[server(prefix = "/api", endpoint = "stats_retargets")]
+pub async fn fetch_retargets(
+    from_ts: u64,
+    to_ts: u64,
+) -> Result<Vec<Retarget>, ServerFnError> {
+    if from_ts > to_ts {
+        return Err(bad_request("from_ts must not exceed to_ts"));
+    }
+    let state = state().await?;
+    let conn = state.db.get().map_err(|e| internal_err("DB pool", e))?;
+    super::db::query_retargets_for_window(&conn, from_ts, to_ts)
+        .map_err(|e| internal_err("DB query", e))
+}
+
 #[server(prefix = "/api", endpoint = "stats_signaling")]
 pub async fn fetch_signaling(
     bit: u32,

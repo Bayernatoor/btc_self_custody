@@ -280,6 +280,17 @@ environment:
 `*.db`, `*.db-shm`, `*.db-wal` are gitignored. `bitcoin_stats.db` is ~500 MB locally and is not
 reproducible quickly, so do not delete it casually.
 
+**`WHERE height % 2016 = 0` cannot use an index, so generate the heights instead.** A recursive CTE
+producing multiples of 2,016 and joining `blocks` by primary key measured **2.1ms warm against
+19.3ms** for the modulo form on 967,000 rows (2026-09-16); `query_retargets_for_window` is the
+worked example. The same shape applies to any "every Nth height" question.
+
+**A daily mean cannot recover a per-block event, and difficulty is the worked example.** A retarget
+lands at an arbitrary moment, so the day holds blocks from two epochs and its mean is neither of
+them. Worse, block 899,136 is stamped 2025-05-31 00:01:30, so that day carries only the new
+difficulty and is indistinguishable from a blend day. Read the event's own row; do not infer it
+from `daily_blocks`.
+
 ## Deployment
 
 `.github/workflows/deploy.yml` on push to master: builds on the runner, runs `cargo test --lib`,

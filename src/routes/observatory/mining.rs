@@ -20,6 +20,7 @@ pub fn MiningChartsPage() -> impl IntoView {
     let range = state.range;
     let overlay_flags = state.overlay_flags;
     let dashboard_data = state.dashboard_data;
+    let retargets = state.retargets;
 
     // Mining-specific data (pool dominance + empty blocks)
     let mining_data = LocalResource::new(move || {
@@ -88,9 +89,19 @@ pub fn MiningChartsPage() -> impl IntoView {
                     |blocks| crate::stats::charts::hash_rate_chart(blocks),
                     |days| crate::stats::charts::hash_rate_chart_daily(days)
                 );
+                // The daily arm needs the window's retarget blocks, which the
+                // daily rows cannot supply: a day's mean difficulty is a
+                // blend wherever a retarget lands mid-day. While those rows
+                // are in flight, or if their fetch failed, this returns null
+                // so the card keeps its loading state. Null is also what
+                // keeps the chart cache correct, since the macro stores
+                // nothing for a null value and recomputes once the rows land.
                 let diff_adjustment_option = chart_memo!(dashboard_data, range, overlay_flags,
                     |blocks| crate::stats::charts::difficulty_adjustment_chart(blocks),
-                    |days| crate::stats::charts::difficulty_adjustment_chart_daily(days)
+                    |days| match retargets.get().map(|r| r.ok()) {
+                        Some(Some(rows)) => crate::stats::charts::difficulty_adjustment_chart_daily(days, &rows),
+                        _ => serde_json::Value::Null,
+                    }
                 );
 
                 let miner_chart_option = Signal::derive(move || {

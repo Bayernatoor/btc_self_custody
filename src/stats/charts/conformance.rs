@@ -39,7 +39,7 @@
 
 use super::registry::{self, ChartMeta, Daily, Shape, Source, Unit};
 use crate::stats::types::{
-    BlockSummary, DailyAggregate, HistogramBucket, MinerShare,
+    BlockSummary, DailyAggregate, HistogramBucket, MinerShare, Retarget,
 };
 
 /// Synthetic blocks, every numeric field populated and varying.
@@ -225,6 +225,36 @@ fn synthetic_days(n: usize) -> Vec<DailyAggregate> {
         .collect()
 }
 
+/// Retarget blocks matching a run of synthetic days.
+///
+/// One every 14 days, at 06:34 UTC so it lands mid-day like almost every real
+/// retarget, with the same stepped difficulty the days carry. Heights are
+/// consecutive multiples of 2,016, which `retarget_steps` requires: a gap
+/// there means a missing row rather than a bigger adjustment.
+///
+/// The step is `1.4e11` on a base of `1.0e12`, so early bars are +14% and
+/// later ones smaller, which is the shape of the real series and keeps every
+/// bar well clear of the 1e-9 no-change threshold.
+fn synthetic_retargets(days: &[DailyAggregate]) -> Vec<Retarget> {
+    days.iter()
+        .enumerate()
+        .filter(|(i, _)| i % 14 == 0)
+        .map(|(i, d)| {
+            let day = chrono::NaiveDate::parse_from_str(&d.date, "%Y-%m-%d")
+                .expect("synthetic dates are valid");
+            Retarget {
+                height: 800_000 + (i / 14) as u64 * 2016,
+                timestamp: day
+                    .and_hms_opt(6, 34, 6)
+                    .expect("valid time")
+                    .and_utc()
+                    .timestamp() as u64,
+                difficulty: 1.0e12 + (i / 14) as f64 * 1.4e11,
+            }
+        })
+        .collect()
+}
+
 /// Every chart this can build without a second data source, in both
 /// resolutions it has.
 ///
@@ -259,6 +289,21 @@ fn built_charts() -> Vec<(&'static ChartMeta, bool, serde_json::Value)> {
                         620.0,
                         0,
                         785_000_000_000,
+                    ),
+                ));
+            }
+            Source::DiffAdjustment => {
+                out.push((
+                    meta,
+                    false,
+                    super::difficulty_adjustment_chart(&blocks),
+                ));
+                out.push((
+                    meta,
+                    true,
+                    super::difficulty_adjustment_chart_daily(
+                        &days,
+                        &synthetic_retargets(&days),
                     ),
                 ));
             }
@@ -1152,10 +1197,10 @@ mod tests {
     /// where it is a blend of two epochs and is no protocol difficulty.
     ///
     /// `diff-adjustment` was the example here until 2026-09-16, when its daily
-    /// arm stopped being an estimate: it now dates a retarget to the blended
-    /// day, which is the day the epoch changed, and takes the percentage from
-    /// the settled difficulty either side. A chart graduating out of this test
-    /// is the outcome to want.
+    /// arm stopped being an estimate: it reads the retarget blocks at both
+    /// resolutions, so both the date and the percentage come from stored
+    /// values and the two methods are the same. A chart graduating out of
+    /// this test is the outcome to want.
     #[test]
     fn a_method_may_differ_between_resolutions() {
         let m = registry::find("difficulty")
@@ -1271,35 +1316,57 @@ mod tests {
             .map(|d| scaled(2, d))
             .collect();
 
-        // Per series rather than flattened, so one series cannot mask
-        // another. Gaps are kept as `None` so a point's position is preserved
-        // and the two runs stay aligned.
-        let per_series = |opt: &serde_json::Value| -> Vec<Vec<f64>> {
+        // Per series and by name, with gaps preserved as `None`.
+        //
+        // The name is what ties a series to the measurement that declares
+        // it, which is how coverage became a per-measurement question. And
+        // `None` stays `None` rather than becoming `0.0`: this test spent a
+        // revision mapping nulls to zero, which threw away the
+        // missing-versus-measured-zero distinction the rest of this branch
+        // exists to protect, and then skipped every zero, so an absence
+        // turning into a reading was invisible twice over.
+        type Series = (String, bool, Vec<Option<f64>>);
+        let per_series = |opt: &serde_json::Value| -> Vec<Series> {
             opt["series"]
                 .as_array()
                 .map(|a| {
                     a.iter()
                         .map(|s| {
-                            s["data"]
+                            let name = s["name"]
+                                .as_str()
+                                .unwrap_or_default()
+                                .to_string();
+                            let points = s["data"]
                                 .as_array()
                                 .map(|d| d.as_slice())
                                 .unwrap_or_default()
                                 .iter()
                                 .map(|p| match p {
-                                    serde_json::Value::Number(n) => {
-                                        n.as_f64().unwrap_or(0.0)
+                                    serde_json::Value::Number(n) => n.as_f64(),
+                                    // `[x, y]` and `{value: y}` points:
+                                    // the reading is the second element
+                                    // or the field, and a null there is
+                                    // still a gap.
+                                    serde_json::Value::Array(a) => {
+                                        a.get(1).and_then(|v| v.as_f64())
                                     }
-                                    serde_json::Value::Array(a) => a
-                                        .get(1)
-                                        .and_then(|v| v.as_f64())
-                                        .unwrap_or(0.0),
-                                    _ => 0.0,
+                                    serde_json::Value::Object(o) => {
+                                        o.get("value").and_then(|v| v.as_f64())
+                                    }
+                                    _ => None,
                                 })
-                                .collect()
+                                .collect();
+                            (name, super::super::is_companion_series(s), points)
                         })
                         .collect()
                 })
                 .unwrap_or_default()
+        };
+        // What a measurement's declaration predicts when the day doubles.
+        let expectation = |m: &registry::Measurement| match m.daily {
+            DailyTotal | CumulativeInWindow => Some(2.0),
+            MeanOfPerBlockValues | RatioOfTotals => Some(1.0),
+            _ => None,
         };
         let mut checked = 0usize;
         for meta in registry::CHARTS.iter() {
@@ -1310,34 +1377,6 @@ mod tests {
             else {
                 continue;
             };
-            // One expectation per chart, so a chart whose measurements
-            // disagree about scaling is skipped rather than guessed at.
-            let kinds: std::collections::BTreeSet<&str> = meta
-                .measurements
-                .iter()
-                .map(|m| match m.daily {
-                    DailyTotal | CumulativeInWindow => "scales",
-                    MeanOfPerBlockValues | RatioOfTotals => "fixed",
-                    _ => "unpredicted",
-                })
-                .collect();
-            if kinds.len() != 1 {
-                continue;
-            }
-            let expectation = *kinds.iter().next().expect("one kind");
-            if expectation == "unpredicted" {
-                continue;
-            }
-
-            // Per series, and against the expected factor.
-            //
-            // This compared flattened value lists and accepted any change at
-            // all, which is weaker than the claim made for it: one correctly
-            // scaled series could hide another that stayed fixed, and a total
-            // that scaled the wrong way passed as readily as one that scaled
-            // right. Now every series must move by the factor its declaration
-            // implies.
-            let want = if expectation == "scales" { 2.0 } else { 1.0 };
             let a = per_series(&f(&base));
             let b = per_series(&f(&doubled));
             assert_eq!(
@@ -1346,97 +1385,399 @@ mod tests {
                 "{}: doubling the day changed the series count",
                 meta.slug
             );
-            let mut compared_here = 0usize;
-            for (si, (sa, sb)) in a.iter().zip(b.iter()).enumerate() {
-                // A series with no points is decoration, not a measurement:
-                // the threshold markers on P2PKH Sunset carry their values in
-                // `markLine` and have an empty data array. Requiring those to
-                // scale asked the wrong thing of them.
-                if sa.is_empty() && sb.is_empty() {
+
+            // Per measurement, not per chart. A chart whose measurements
+            // disagree about scaling used to be skipped entirely, which is
+            // most of the catalog's interesting charts: `subsidy-fees` plots
+            // a mean beside a total and neither was ever checked. Each
+            // declaration is now held to its own series.
+            let mut covered_series: std::collections::BTreeSet<usize> =
+                Default::default();
+            for m in meta.measurements {
+                let want_name = if m.series_daily.is_empty() {
+                    m.series
+                } else {
+                    m.series_daily
+                };
+                // An empty name covers every series, because the series are
+                // renderings of one quantity rather than separate
+                // measurements.
+                let mine: Vec<usize> = a
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, (name, _, _))| {
+                        want_name.is_empty() || name == want_name
+                    })
+                    .map(|(i, _)| i)
+                    .collect();
+                covered_series.extend(mine.iter().copied());
+                let Some(want) = expectation(m) else {
                     continue;
-                }
-                assert_eq!(
-                    sa.len(),
-                    sb.len(),
-                    "{} series {si}: point count changed",
-                    meta.slug
-                );
-                for (x, y) in sa.iter().zip(sb.iter()) {
-                    // A zero or a gap says nothing about scaling either way.
-                    if x.abs() < 1e-12 {
+                };
+                let mut compared = 0usize;
+                let mut decoration_only = true;
+                for si in mine {
+                    let (name, _, sa) = &a[si];
+                    let sb = &b[si].2;
+                    // A series with no points at all is decoration: the
+                    // threshold markers on P2PKH Sunset carry their values in
+                    // `markLine`. That is the only exemption, and it is read
+                    // off the series itself rather than granted because a
+                    // sibling passed.
+                    if sa.is_empty() && sb.is_empty() {
                         continue;
                     }
-                    let factor = y / x;
-                    // One percent, not float epsilon. Builders round their
-                    // output, typically to two or four decimals, so doubling
-                    // the input and rounding is not the same number as
-                    // rounding and doubling: 0.9 becomes 1.8001 rather than
-                    // 1.8. The question is whether a series moved by a factor
-                    // of two or not at all, and those differ by a hundred
-                    // percent, so a tolerance that absorbs rounding still
-                    // separates them and still catches a total that scales the
-                    // wrong way.
-                    assert!(
-                        (factor - want).abs() < 0.01 * want,
-                        "{} series {si} declares {expectation}, so every \
-                         value should move by {want}x when the day doubles, \
-                         but {x} became {y}, a factor of {factor}",
+                    decoration_only = false;
+                    assert_eq!(
+                        sa.len(),
+                        sb.len(),
+                        "{} series {name:?}: point count changed",
                         meta.slug
                     );
-                    compared_here += 1;
+                    for (x, y) in sa.iter().zip(sb.iter()) {
+                        match (x, y) {
+                            // A gap has to stay a gap. An absence that
+                            // becomes a number when the block count doubles
+                            // is a builder substituting a computed zero for
+                            // "no reading", which is the defect
+                            // `an_absent_reading_is_a_gap_not_a_zero` guards
+                            // at one resolution and this guards under
+                            // scaling.
+                            (None, None) => {}
+                            (None, Some(v)) | (Some(v), None) => panic!(
+                                "{} series {name:?}: a gap and a reading \
+                                 swapped places when the day doubled ({v} \
+                                 against nothing)",
+                                meta.slug
+                            ),
+                            (Some(x), Some(y)) => {
+                                if x.abs() < 1e-12 {
+                                    // Zero is checked rather than skipped.
+                                    // Skipping it accepted a zero baseline
+                                    // becoming nonzero, which no declaration
+                                    // here permits: twice nothing is
+                                    // nothing, and a stored mean of zero
+                                    // does not move either.
+                                    assert!(
+                                        y.abs() < 1e-12,
+                                        "{} series {name:?}: a zero became \
+                                         {y} when the day doubled",
+                                        meta.slug
+                                    );
+                                    continue;
+                                }
+                                let factor = y / x;
+                                // One percent, not float epsilon. Builders
+                                // round their output, typically to two or
+                                // four decimals, so doubling the input and
+                                // rounding is not the same number as
+                                // rounding and doubling: 0.9 becomes 1.8001
+                                // rather than 1.8. The question is whether a
+                                // series moved by a factor of two or not at
+                                // all, and those differ by a hundred percent.
+                                assert!(
+                                    (factor - want).abs() < 0.01 * want,
+                                    "{} series {name:?} declares {:?}, so \
+                                     every value should move by {want}x when \
+                                     the day doubles, but {x} became {y}, a \
+                                     factor of {factor}",
+                                    meta.slug,
+                                    m.daily
+                                );
+                                compared += 1;
+                            }
+                        }
+                    }
+                }
+                // Coverage per measurement. Asserted per chart until
+                // 2026-09-16, which let one discriminating series stand in
+                // for every declaration the chart made: a second series
+                // could go entirely unexercised and the chart still passed.
+                assert!(
+                    compared > 0 || decoration_only,
+                    "{}: the measurement for {:?} declares {:?} but nothing \
+                     in its series was comparable, so that declaration was \
+                     not checked; give the fixture non-zero values for the \
+                     columns it reads",
+                    meta.slug,
+                    if want_name.is_empty() {
+                        "every series"
+                    } else {
+                        want_name
+                    },
+                    m.daily
+                );
+                if !decoration_only {
+                    checked += 1;
                 }
             }
-            // Coverage is a property of the chart, not of each series.
-            assert!(
-                compared_here > 0,
-                "{} declares {expectation} but nothing in it was comparable, \
-                 so this chart was not actually checked; give the fixture \
-                 non-zero values for the columns it reads",
-                meta.slug
-            );
-            checked += 1;
+
+            // And no series may sit outside every declaration. A new series
+            // added to a builder without a declaration would otherwise be
+            // exempt from all of the above, which is the hole that makes
+            // per-measurement coverage worth having.
+            for (i, (name, companion, points)) in a.iter().enumerate() {
+                if covered_series.contains(&i) || points.is_empty() {
+                    continue;
+                }
+                // A companion is allowed to go undeclared, because it
+                // renders a measurement the chart already declares: Transaction
+                // Batching draws each ratio and its 7-day mean. Anything else
+                // is a series the declarations do not know about, and it would
+                // be exempt from every check above.
+                assert!(
+                    companion,
+                    "{} emits series {name:?} that no measurement declares \
+                     and that is not a companion, so nothing here checks it",
+                    meta.slug
+                );
+                // A smoothed measurement still scales the way the
+                // measurement does, so the companion is held to it whenever
+                // the chart's declarations agree on a factor.
+                let wants: Vec<f64> =
+                    meta.measurements.iter().filter_map(expectation).collect();
+                if wants.is_empty() || wants.iter().any(|w| *w != wants[0]) {
+                    continue;
+                }
+                let want = wants[0];
+                for (x, y) in points.iter().zip(b[i].2.iter()) {
+                    if let (Some(x), Some(y)) = (x, y) {
+                        if x.abs() < 1e-12 {
+                            assert!(
+                                y.abs() < 1e-12,
+                                "{} companion {name:?}: a zero became {y}",
+                                meta.slug
+                            );
+                            continue;
+                        }
+                        let factor = y / x;
+                        assert!(
+                            (factor - want).abs() < 0.01 * want,
+                            "{} companion {name:?} smooths measurements that \
+                             move by {want}x, but {x} became {y}, a factor \
+                             of {factor}",
+                            meta.slug
+                        );
+                    }
+                }
+            }
         }
         assert!(
-            checked >= 5,
-            "only {checked} charts had a predictable declaration; the probe \
-             is not covering enough to be worth running"
+            checked >= 10,
+            "only {checked} measurements had a predictable declaration; the \
+             probe is not covering enough to be worth running"
         );
     }
 
-    /// SegWit Adoption's daily point is a pooled ratio, and the numbers here
-    /// distinguish that from the two ways it could be wrong.
+    /// SegWit Adoption's daily point is a pooled ratio **of its own day**,
+    /// and the numbers here separate that from every neighbouring reading.
     ///
     /// A day of 10 blocks averaging 2.0 transactions and 0.5 witness spends
-    /// holds 20 transactions, 10 of them coinbase, and 5 witness spends. So
-    /// the pooled share is 5/10 = **50%**. Computed by hand, and each wrong
-    /// alternative lands somewhere else:
+    /// holds 20 transactions, 10 of them coinbase, and 5 witness spends, so
+    /// its pooled share is 5/10 = **50%**. A second day of 100 blocks
+    /// averaging 11.0 transactions and 10.0 witness spends holds 1,100
+    /// transactions, 100 of them coinbase, and 1,000 witness spends:
+    /// **100%**.
     ///
-    /// - forgetting the coinbase gives 5/20 = 25%
-    /// - reading the stored means as a share directly gives 0.5/2.0 = 25%
+    /// The populations are deliberately unequal, which is what the earlier
+    /// version of this test was missing. Both of its days came out at 50%, so
+    /// a builder pooling across the whole window rather than within each day
+    /// produced the same two numbers and passed. Here every wrong reading
+    /// lands somewhere different:
     ///
-    /// So a single assertion separates the declared `RatioOfTotals` from the
-    /// mistake the copy audit found elsewhere in the catalog.
+    /// - forgetting the coinbase gives 25% and 90.9%
+    /// - reading the stored means as a share gives 25% and 90.9%
+    /// - pooling across the window gives 1,005/1,010 = **99.5% on both days**
+    /// - an unweighted mean of the two days gives **75% on both**
+    ///
+    /// Note what cannot be tested this way, since it is the other half of the
+    /// same question: within a single day, a pooled ratio and a
+    /// block-count-weighted one are the same number. The stored columns are
+    /// already means over that day's blocks, so the count cancels between
+    /// numerator and denominator. The distinction is only observable across
+    /// days of unequal size, which is exactly what this fixture is.
     #[test]
-    fn segwit_daily_is_a_pooled_ratio_that_excludes_the_coinbase() {
-        let day =
-            |block_count: u64, avg_tx: f64, avg_segwit: f64| DailyAggregate {
-                date: "2024-04-01".to_string(),
-                block_count,
-                avg_tx_count: avg_tx,
-                avg_segwit_spend_count: avg_segwit,
-                avg_size: 900_000.0,
-                ..Default::default()
-            };
+    fn segwit_daily_is_a_pooled_ratio_of_its_own_day() {
+        let day = |date: &str,
+                   block_count: u64,
+                   avg_tx: f64,
+                   avg_segwit: f64| DailyAggregate {
+            date: date.to_string(),
+            block_count,
+            avg_tx_count: avg_tx,
+            avg_segwit_spend_count: avg_segwit,
+            avg_size: 900_000.0,
+            ..Default::default()
+        };
         let opt = super::super::segwit_adoption_chart_daily(&[
-            day(10, 2.0, 0.5),
-            // A second day where the two alternatives also differ: 100
-            // transactions over 20 blocks is 80 non-coinbase, and 40 witness
-            // spends is half of them.
-            day(20, 5.0, 2.0),
+            day("2024-04-01", 10, 2.0, 0.5),
+            day("2024-04-02", 100, 11.0, 10.0),
         ]);
         let data = opt["series"][0]["data"].as_array().expect("data");
         assert_eq!(data[0].as_f64().unwrap(), 50.0, "5 of 10 non-coinbase");
-        assert_eq!(data[1].as_f64().unwrap(), 50.0, "40 of 80 non-coinbase");
+        assert_eq!(
+            data[1].as_f64().unwrap(),
+            100.0,
+            "1,000 of 1,000 non-coinbase, on a day 10 times the size"
+        );
+    }
+
+    /// A cumulative total accumulates **inside the window** and a daily total
+    /// does not, so dropping the window's first day tells them apart.
+    ///
+    /// The scaling probe cannot: doubling every day's block count doubles
+    /// both, which is why `DailyTotal` and `CumulativeInWindow` share an
+    /// expectation there. This is the property that separates them, and it is
+    /// the declaration's own words: a cumulative point is the sum of
+    /// everything loaded up to it, so removing the first day moves every
+    /// later point down, while a daily point is a property of its own day and
+    /// does not move at all.
+    ///
+    /// Matched by date rather than by index, since the two builds are
+    /// different lengths.
+    #[test]
+    fn dropping_the_first_day_moves_a_cumulative_total_and_nothing_else() {
+        use registry::Aggregation::*;
+        let days = synthetic_days(120);
+        let by_date = |opt: &serde_json::Value,
+                       dates: &[String]|
+         -> Vec<(String, String, Option<f64>)> {
+            let cats: Vec<String> = opt["xAxis"]["data"]
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .map(|v| v.as_str().unwrap_or_default().to_string())
+                        .collect()
+                })
+                .unwrap_or_else(|| dates.to_vec());
+            let mut out = Vec::new();
+            for s in opt["series"].as_array().unwrap_or(&Vec::new()) {
+                let name = s["name"].as_str().unwrap_or_default().to_string();
+                for (i, p) in s["data"]
+                    .as_array()
+                    .map(|d| d.as_slice())
+                    .unwrap_or_default()
+                    .iter()
+                    .enumerate()
+                {
+                    let v = match p {
+                        serde_json::Value::Number(n) => n.as_f64(),
+                        serde_json::Value::Array(a) => {
+                            a.get(1).and_then(|v| v.as_f64())
+                        }
+                        serde_json::Value::Object(o) => {
+                            o.get("value").and_then(|v| v.as_f64())
+                        }
+                        _ => None,
+                    };
+                    if let Some(date) = cats.get(i) {
+                        out.push((name.clone(), date.clone(), v));
+                    }
+                }
+            }
+            out
+        };
+        let all_dates: Vec<String> =
+            days.iter().map(|d| d.date.clone()).collect();
+        // Chain Size is here as well as the dashboard charts, because it is
+        // the catalog's other cumulative one and skipping it would leave the
+        // "cumulative" side of this property resting on a single chart.
+        let build = |meta: &ChartMeta,
+                     rows: &[DailyAggregate]|
+         -> Option<serde_json::Value> {
+            match meta.source {
+                Source::Dashboard {
+                    daily: Daily::Fn(f),
+                    ..
+                } => Some(f(rows)),
+                Source::ChainSize => {
+                    Some(super::super::chain_size_chart_daily(
+                        rows,
+                        620.0,
+                        0,
+                        785_000_000_000,
+                    ))
+                }
+                _ => None,
+            }
+        };
+        let mut cumulative_checked = 0usize;
+        let mut daily_checked = 0usize;
+        for meta in registry::CHARTS.iter() {
+            let kinds: std::collections::BTreeSet<&str> = meta
+                .measurements
+                .iter()
+                .map(|m| match m.daily {
+                    CumulativeInWindow => "cumulative",
+                    DailyTotal | MeanOfPerBlockValues | RatioOfTotals => {
+                        "per day"
+                    }
+                    _ => "unpredicted",
+                })
+                .collect();
+            if kinds.len() != 1 {
+                continue;
+            }
+            let kind = *kinds.iter().next().expect("one kind");
+            if kind == "unpredicted" {
+                continue;
+            }
+            let (Some(a_opt), Some(b_opt)) =
+                (build(meta, &days), build(meta, &days[1..]))
+            else {
+                continue;
+            };
+            let full = by_date(&a_opt, &all_dates);
+            let short = by_date(&b_opt, &all_dates[1..]);
+            let mut moved = 0usize;
+            let mut compared = 0usize;
+            for (name, date, a) in &full {
+                let Some((_, _, b)) =
+                    short.iter().find(|(n, d, _)| n == name && d == date)
+                else {
+                    continue;
+                };
+                let (Some(a), Some(b)) = (a, b) else { continue };
+                if a.abs() < 1e-12 {
+                    continue;
+                }
+                compared += 1;
+                if (a - b).abs() > 0.01 * a.abs() {
+                    moved += 1;
+                }
+            }
+            if compared == 0 {
+                continue;
+            }
+            match kind {
+                "cumulative" => {
+                    assert!(
+                        moved > 0,
+                        "{} declares a cumulative total, but dropping the \
+                         window's first day changed none of its {compared} \
+                         points, so it is not accumulating inside the window",
+                        meta.slug
+                    );
+                    cumulative_checked += 1;
+                }
+                _ => {
+                    assert_eq!(
+                        moved, 0,
+                        "{} declares a per-day quantity, but {moved} of its \
+                         {compared} points changed when an earlier day was \
+                         dropped, which is what a cumulative total does",
+                        meta.slug
+                    );
+                    daily_checked += 1;
+                }
+            }
+        }
+        assert!(
+            cumulative_checked > 0 && daily_checked >= 5,
+            "the property only bites if both sides are present: \
+             {cumulative_checked} cumulative and {daily_checked} per-day \
+             charts were compared"
+        );
     }
 
     /// Address Type Evolution's daily point is a total, which is the finding
@@ -1468,6 +1809,90 @@ mod tests {
         };
         assert_eq!(find("P2PKH"), 30.0, "3.0 per block over 10 blocks");
         assert_eq!(find("P2TR"), 15.0, "1.5 per block over 10 blocks");
+    }
+
+    /// A halving day takes the **whole date** at the new subsidy, which is a
+    /// step at the wrong moment rather than a blend of the two eras.
+    ///
+    /// One of the four declarations the round-one review found wrong, and the
+    /// two that can be pinned by a fixture are pinned here rather than left
+    /// as corrected prose. `daily_subsidy_btc` is `50 / 2^era_for_date` with
+    /// the era read off the date, so 2020-05-11 is entirely 6.25 BTC even
+    /// though the halving landed at block 630,000 part-way through it.
+    ///
+    /// Each wrong alternative lands somewhere else: a true mean of that day's
+    /// 157 stored blocks is 11.544586 BTC, and an even split of the two eras
+    /// would be 9.375. The day before must still be 12.5, or the boundary is
+    /// off by one.
+    #[test]
+    fn a_halving_day_takes_the_whole_dates_subsidy() {
+        assert_eq!(super::super::daily_subsidy_btc("2020-05-10"), 12.5);
+        assert_eq!(
+            super::super::daily_subsidy_btc("2020-05-11"),
+            6.25,
+            "the halving date is attributed entirely to the new era"
+        );
+        assert_eq!(super::super::daily_subsidy_btc("2020-05-12"), 6.25);
+        // And the chart that reads it plots that, rather than a mean of the
+        // blocks actually mined under each subsidy.
+        let days: Vec<DailyAggregate> = ["2020-05-10", "2020-05-11"]
+            .iter()
+            .map(|d| DailyAggregate {
+                date: (*d).to_string(),
+                block_count: 157,
+                total_fees: 100_000_000,
+                avg_size: 900_000.0,
+                ..Default::default()
+            })
+            .collect();
+        let opt = super::super::subsidy_vs_fees_chart_daily(&days);
+        let subsidy = opt["series"]
+            .as_array()
+            .expect("series")
+            .iter()
+            .find(|s| s["name"] == "Subsidy")
+            .expect("a Subsidy series");
+        assert_eq!(subsidy["data"][0].as_f64(), Some(12.5));
+        assert_eq!(
+            subsidy["data"][1].as_f64(),
+            Some(6.25),
+            "not 9.375, which is what blending the halving day would give"
+        );
+    }
+
+    /// Inscription Block Share divides **bytes by bytes**, so it does not
+    /// move with transaction or item counts at all.
+    ///
+    /// The second of the four round-one declaration errors, which said it was
+    /// matching witness items over transactions. A fixture that varies the
+    /// counts while holding the bytes fixed is what separates the two
+    /// readings: 200 envelope bytes in a 1,000-byte block is 20% whether the
+    /// block holds one inscription or fifty.
+    #[test]
+    fn inscription_block_share_is_bytes_over_bytes() {
+        let block = |inscriptions: u64, tx_count: u64| BlockSummary {
+            height: 800_000,
+            timestamp: 1_700_000_000,
+            size: 1_000,
+            inscription_envelope_bytes: 200,
+            inscription_count: inscriptions,
+            tx_count,
+            ..Default::default()
+        };
+        let share = |b: BlockSummary| -> f64 {
+            let opt = super::super::inscription_share_chart(&[b]);
+            opt["series"][0]["data"][0][1]
+                .as_f64()
+                .expect("a plotted share")
+        };
+        assert_eq!(share(block(1, 2)), 20.0, "200 bytes of a 1,000-byte block");
+        assert_eq!(
+            share(block(50, 3_000)),
+            20.0,
+            "fifty inscriptions across 3,000 transactions carrying the same \
+             200 bytes is the same share; if this moved, the chart is \
+             counting items or transactions"
+        );
     }
 
     /// Percentiles are not additive, so the chart must not stack them.
@@ -2198,12 +2623,11 @@ mod inventory {
     #[ignore]
     fn dump_measurement_inventory() {
         println!("SLUG\tRES\tUNIT\tSHAPE\tXAXIS\tYAXES\tSERIES\tMETRICS\tCOMPANIONS\tSTACK\tPCT_BOUND\tNULLS\tSERIES_NAMES");
-        // `built_charts()` covers Dashboard, ChainSize and Fees only, so the
-        // four mining charts and the two histograms sit outside it and
-        // therefore outside every conformance guard. Built here from their own
-        // inputs so the G0 inventory is complete at 63; extending the shared
-        // harness is G1 work, since it may surface real failures in six charts
-        // that no test has ever built.
+        // Its own fixtures rather than `built_charts()`, which is now
+        // complete and would do. Kept separate because this dump is the G0
+        // inventory and its columns are read by hand against the notes from
+        // that pass; the shared harness is free to change shape without
+        // invalidating them.
         let miners: Vec<MinerShare> =
             ["Foundry USA", "AntPool", "F2Pool", "Unknown"]
                 .iter()

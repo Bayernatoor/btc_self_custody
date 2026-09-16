@@ -2179,28 +2179,37 @@ fn metric_series(option: &serde_json::Value) -> Vec<&serde_json::Value> {
         .map(|a| {
             a.iter()
                 .filter(|s| {
-                    let declared =
-                        s.get(COMPANION_MARKER).and_then(|v| v.as_bool())
-                            == Some(true);
-                    let named_ma = s
-                        .get("name")
-                        .and_then(|n| n.as_str())
-                        .map(|n| {
-                            let n = n.to_ascii_lowercase();
-                            n.contains(" ma")
-                                || n.contains("moving average")
-                                || n.ends_with("ma")
-                        })
-                        .unwrap_or(false);
                     let has_points = s
                         .get("data")
                         .and_then(|d| d.as_array())
                         .is_some_and(|d| !d.is_empty());
-                    !declared && !named_ma && has_points
+                    !is_companion_series(s) && has_points
                 })
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// Whether a series accompanies another rather than measuring something of
+/// its own.
+///
+/// The declared marker first, then the naming convention every smoothing
+/// series follows. Named rather than inlined because two places need the same
+/// answer: the key figures skip companions, and the conformance suite has to
+/// know which series a measurement declaration is allowed not to name.
+pub(crate) fn is_companion_series(s: &serde_json::Value) -> bool {
+    if s.get(COMPANION_MARKER).and_then(|v| v.as_bool()) == Some(true) {
+        return true;
+    }
+    s.get("name")
+        .and_then(|n| n.as_str())
+        .map(|n| {
+            let n = n.to_ascii_lowercase();
+            n.contains(" ma")
+                || n.contains("moving average")
+                || n.ends_with("ma")
+        })
+        .unwrap_or(false)
 }
 
 /// The count alone, which is what the conformance suite asserts on.
