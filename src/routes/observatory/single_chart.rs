@@ -1749,7 +1749,7 @@ fn OverlayToggles(
                 get=s.overlay_chain_size
                 set=s.set_overlay_chain_size
                 disabled=price_holds_axis
-                hint="The total size of the block chain on disk, growing as blocks are added. A full node has to store all of it."
+                hint="The total size of the block chain on disk, growing as blocks are added. An archival node keeps every byte of it; a pruned one verifies the same blocks and then discards the old ones."
             />
         </div>
         // A select rather than a list of toggles: 50-odd candidates will not

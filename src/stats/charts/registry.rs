@@ -1876,7 +1876,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: Some("The total size of the block chain on disk. Every full node stores all of it, back to 2009, and that is what lets a node check the rules for itself instead of trusting anyone. The number matters because it sets the floor on what running one costs."),
+            definition: Some("The total size of the block chain on disk, back to 2009. What makes a node trustless is that it checked every one of those blocks itself, not that it still has them: an archival node keeps them all, while a pruned node verifies each block as it arrives and then discards the old ones, keeping a few gigabytes. So this is the floor for archiving the chain, not the price of running a node."),
             technical: "Blocks summed across the range and anchored to the size my node reports on disk now, so the present-day figure is measured rather than estimated. Block data only: it excludes the chainstate and index databases a node also keeps, so a full data directory is larger. A pruned node stores a fraction of this and still verifies everything.",
         }),
     },
@@ -2207,8 +2207,8 @@ pub const CHARTS: &[ChartMeta] = &[
     ChartMeta {
         slug: "taproot-spend-types",
         title: "Taproot Spend Types",
-        desc_per_block: "Key-path vs script-path spends per block. How Taproot is actually being used",
-        desc_daily: "Daily average key-path vs script-path spends. How Taproot is actually being used",
+        desc_per_block: "Key-path against script-path spends per block. Which spends revealed a script and which revealed nothing",
+        desc_daily: "Daily average key-path against script-path spends. Which spends revealed a script and which revealed nothing",
         category: Category::Network,
         unit: Unit::Count,
         shape: Shape::StackedAbsolute,
@@ -2242,14 +2242,14 @@ pub const CHARTS: &[ChartMeta] = &[
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
             definition: None,
-            technical: "Key-path spends look like regular single-sig transactions on-chain, revealing no script details. Script-path spends reveal that a more complex script was involved (multisig, timelocks, etc.). A high key-path ratio suggests most Taproot usage is for simple payments rather than complex contracts.",
+            technical: "Key-path spends reveal a single signature and nothing else. That is the point of Taproot: a single signer, an aggregated multisignature and the cooperative close of a contract are **indistinguishable on chain**, because BIP 341 makes them the same shape. So a high key-path share does not mean simple payments. It means most Taproot spenders took the path that reveals nothing, which is what a well-designed contract does when everyone cooperates. Script-path spends reveal one branch of the script tree, which is usually the case where cooperation broke down or was never possible. Both counts come from classifying witness shape, so they are detector counts rather than verified totals.",
         }),
     },
     ChartMeta {
         slug: "time-dist",
         title: "Block Time Distribution",
-        desc_per_block: "Distribution of time between consecutive blocks. Most cluster near the 10-minute target",
-        desc_daily: "Distribution of time between consecutive blocks. Most cluster near the 10-minute target",
+        desc_per_block: "How long each block waited for the one before it. Ten minutes is the average, not the typical gap",
+        desc_daily: "How long each block waited for the one before it. Ten minutes is the average, not the typical gap",
         category: Category::Network,
         unit: Unit::Count,
         shape: Shape::Histogram,
@@ -2268,7 +2268,7 @@ pub const CHARTS: &[ChartMeta] = &[
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
             definition: None,
-            technical: "Shows how block intervals are distributed. The theoretical distribution is exponential with a 10-minute mean. Most blocks arrive within 20 minutes, but the long tail extends to 60+ minutes. This is normal Poisson process behavior, not a network problem.",
+            technical: "The shortest bucket is always the largest one, which surprises people who expect a peak at ten minutes. Mining is memoryless: every hash attempt has the same tiny chance of winning whatever has happened already, so the waiting time is exponentially distributed and the most likely gap is a short one. Measured across all 951,275 intervals in the chain: the median is 6.9 minutes, 63.9% of blocks arrive in under ten minutes, 4.5% take more than half an hour and 0.3% take over an hour. An exponential distribution with a ten-minute mean predicts 63.2%, 5.0% and 0.25%, so the chain tracks the theory to within half a percentage point. Miners choose their own timestamps, so a block can appear to arrive before its predecessor.",
         }),
     },
     ChartMeta {
@@ -3032,6 +3032,103 @@ mod tests {
                     );
                 }
             }
+        }
+    }
+
+    /// Claims this site used to make and will not make again.
+    ///
+    /// The point of a list rather than a diff: a copy correction is the one
+    /// kind of fix nothing defends. A wrong divisor gets a regression test
+    /// and a wrong sentence gets rewritten, and the next person to reach for
+    /// a confident-sounding line reintroduces it, because the reason it was
+    /// wrong lived in a review document nobody reads twice. The review of
+    /// 2026-09-16 made exactly that criticism of four declaration fixes that
+    /// had no test behind them.
+    ///
+    /// Each entry carries why it is retired, in the failure message, so the
+    /// test teaches rather than just refusing. Searched across the chart copy
+    /// **and** the page sources, since a description exists in both.
+    ///
+    /// This grows as the copy work proceeds. A phrase belongs here once the
+    /// claim has been checked against the protocol or the database and found
+    /// wrong, not merely reworded for style.
+    #[test]
+    fn retired_claims_do_not_come_back() {
+        const RETIRED: &[(&str, &str)] = &[
+            (
+                "full node stores all of it",
+                "a pruned node verifies every block and keeps a few \
+                 gigabytes. What makes a node trustless is having checked \
+                 the blocks, not still holding them.",
+            ),
+            (
+                "full node has to store all of it",
+                "as above: pruning is not a lesser node.",
+            ),
+            (
+                "Most cluster near the 10-minute target",
+                "measured over all 951,275 intervals: the median is 6.9 \
+                 minutes, the shortest bucket is the largest, and 63.9% \
+                 arrive in under ten minutes. Mining is memoryless, so the \
+                 distribution is exponential and has no peak at the mean.",
+            ),
+            (
+                "simple payments rather than complex contracts",
+                "BIP 341 makes a single signer, an aggregated \
+                 multisignature and a cooperative contract close \
+                 indistinguishable. A key-path spend reveals nothing about \
+                 which it was.",
+            ),
+            (
+                "61 charts",
+                "there are 63, and a hardcoded count in a comment goes \
+                 stale silently. Say \"every registered chart\" instead.",
+            ),
+        ];
+
+        let mut copy: Vec<String> = Vec::new();
+        for c in CHARTS {
+            copy.push(c.desc_per_block.to_string());
+            copy.push(c.desc_daily.to_string());
+            if let Some(a) = c.about {
+                copy.push(a.technical.to_string());
+                if let Some(d) = a.definition {
+                    copy.push(d.to_string());
+                }
+            }
+            for m in c.measurements {
+                copy.push(m.quantity.to_string());
+                copy.push(m.population.to_string());
+            }
+        }
+        for (phrase, why) in RETIRED {
+            for text in &copy {
+                assert!(
+                    !text.contains(phrase),
+                    "retired claim {phrase:?} is back in chart copy: {why}\n\
+                     in: {text}"
+                );
+            }
+            // The pages carry the same descriptions and their own prose, so
+            // a phrase can return through either.
+            for (i, src) in PAGES.iter().enumerate() {
+                assert!(
+                    !src.contains(phrase),
+                    "retired claim {phrase:?} is back in page {i}: {why}"
+                );
+            }
+            assert!(
+                !include_str!("../../routes/observatory/single_chart.rs")
+                    .contains(phrase),
+                "retired claim {phrase:?} is back in the single-chart view: \
+                 {why}"
+            );
+            assert!(
+                !include_str!("../../routes/observatory/mod.rs")
+                    .contains(phrase),
+                "retired claim {phrase:?} is back in the observatory shell: \
+                 {why}"
+            );
         }
     }
 

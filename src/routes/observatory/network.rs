@@ -488,7 +488,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
         <ChartPageLayout
             title="Network"
             description="Block size, weight, intervals, adoption trends, and transaction metrics"
-            seo_text="Explore Bitcoin's network fundamentals from the genesis block to the latest tip. Block size and weight utilization show how full blocks are relative to the 4 million weight unit consensus limit. Transaction counts and block intervals reveal network throughput and how closely miners track the 10-minute target. Chain size growth charts the cumulative blockchain footprint over 16 years. Adoption charts track the shift from legacy P2PKH to SegWit and Taproot, including key-path versus script-path spend breakdowns that show how Taproot's privacy and programmability features are actually being used."
+            seo_text="Explore Bitcoin's network fundamentals from the genesis block to the latest tip. Block size and weight utilization show how full blocks are relative to the 4 million weight unit consensus limit. Transaction counts and block intervals reveal network throughput and how widely block intervals scatter around their ten-minute average. Chain size growth charts the cumulative blockchain footprint over 16 years. Adoption charts track the shift from legacy P2PKH to SegWit and Taproot, including key-path versus script-path spend breakdowns that show how Taproot's privacy and programmability features are actually being used."
         >
             // Error overlay (only on actual errors, not during refetch)
             {move || match dashboard_data.get() {
@@ -517,7 +517,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
                         {move || if fullness_pct_mode.get() { "%" } else { "#" }}
                     </button>
                 </ChartCard>
-                <ChartCard title="Block Time Distribution" description="Distribution of time between consecutive blocks. Most cluster near the 10-minute target" chart_id="chart-time-dist" option=time_toggled>
+                <ChartCard title="Block Time Distribution" description="How long each block waited for the one before it. Ten minutes is the average, not the typical gap" chart_id="chart-time-dist" option=time_toggled>
                     <button
                         class=move || if time_pct_mode.get() { "text-xs px-2 py-1 rounded-md cursor-pointer transition-colors bg-[#f7931a]/20 text-[#f7931a]" } else { "text-xs px-2 py-1 rounded-md cursor-pointer transition-colors bg-white/10 text-white/50" }
                         on:click=move |_| set_time_pct_mode.update(|v| *v = !*v)
@@ -536,7 +536,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
                 <ChartCard title="Output Type Breakdown" description="Legacy vs SegWit vs Taproot as a percentage of all outputs" chart_id="chart-witness-tx-pct" option=witness_tx_pct_option/>
                 <ChartCard title="Witness Version Comparison" description=chart_desc(range, "SegWit v0 (P2WPKH + P2WSH) vs Taproot (P2TR) output counts per block", "Daily average SegWit v0 vs Taproot output counts") chart_id="chart-witness-versions" option=witness_version_option/>
                 <ChartCard title="Witness Version Share" description="SegWit v0 vs Taproot as a percentage of all witness outputs" chart_id="chart-witness-pct" option=witness_pct_option/>
-                <ChartCard title="Taproot Spend Types" description=chart_desc(range, "Key-path vs script-path spends per block. How Taproot is actually being used", "Daily average key-path vs script-path spends. How Taproot is actually being used") chart_id="chart-taproot-spend-types" option=taproot_spend_type_option/>
+                <ChartCard title="Taproot Spend Types" description=chart_desc(range, "Key-path against script-path spends per block. Which spends revealed a script and which revealed nothing", "Daily average key-path against script-path spends. Which spends revealed a script and which revealed nothing") chart_id="chart-taproot-spend-types" option=taproot_spend_type_option/>
                 <ChartCard title="Witness Data Share" description="Witness data as percentage of block size. Higher means more SegWit discount savings" chart_id="chart-witness-share" option=witness_share_option/>
                 <ChartCard title="Cumulative Adoption" description=chart_desc(range, "Running total of SegWit transactions and Taproot outputs within this range. Select ALL for lifetime totals", "Cumulative SegWit and Taproot counts within this range. Select ALL for lifetime totals") chart_id="chart-cumulative-adoption" option=cumulative_adoption_option/>
                 <ChartCard title="Adoption Velocity" description="Rate of change for major address types. P2PKH declining, P2WPKH flattening, P2TR growing. Shows the transition between eras" chart_id="chart-multi-velocity" option=multi_velocity_option/>

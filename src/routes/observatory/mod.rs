@@ -78,7 +78,7 @@ pub fn ObservatoryPage() -> impl IntoView {
     // The single-chart view is meant to be dominated by the chart, so it drops
     // the section nav and takes the full width. The nav is still one click
     // away: the breadcrumb goes back to the chart's page, and the chart
-    // drawer on the left edge reaches all 61 charts directly.
+    // drawer on the left edge reaches every registered chart directly.
     let solo_chart = Signal::derive(move || {
         location.pathname.get().starts_with("/observatory/chart/")
     });
