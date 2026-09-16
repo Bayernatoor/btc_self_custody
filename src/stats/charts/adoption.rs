@@ -1058,12 +1058,21 @@ pub fn address_sunset_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     }
 
     let data = build_data_array_f64(blocks, |b| {
+        // Eight classified types, matching the daily arm.
+        //
+        // This divided by six and the daily builder by eight, so the same
+        // chart plotted a different share depending on the range: with bare
+        // multisig and unrecognised scripts out of the denominator, P2PKH read
+        // 12.2% per block where it read 11.11% daily on identical data. A
+        // reader switching range saw the line step.
         let total = b.p2pkh_count
             + b.p2sh_count
             + b.p2wpkh_count
             + b.p2wsh_count
             + b.p2tr_count
-            + b.p2pk_count;
+            + b.p2pk_count
+            + b.multisig_count
+            + b.unknown_script_count;
         if total > 0 {
             round(b.p2pkh_count as f64 / total as f64 * 100.0, 2)
         } else {
@@ -1114,12 +1123,16 @@ pub fn multi_velocity_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         blocks
             .iter()
             .map(|b| {
+                // Eight classified types, matching the daily arm; see the
+                // note on `address_sunset_chart`.
                 let total = b.p2pkh_count
                     + b.p2sh_count
                     + b.p2wpkh_count
                     + b.p2wsh_count
                     + b.p2tr_count
-                    + b.p2pk_count;
+                    + b.p2pk_count
+                    + b.multisig_count
+                    + b.unknown_script_count;
                 if total > 0 {
                     extract(b) as f64 / total as f64 * 100.0
                 } else {

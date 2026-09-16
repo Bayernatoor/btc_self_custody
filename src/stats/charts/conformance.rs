@@ -1633,6 +1633,224 @@ mod tests {
         }
     }
 
+    /// The four share charts use four different denominators, and each has to
+    /// keep the one it declares.
+    ///
+    /// They answer different questions, so the differences are not defects in
+    /// themselves. What would be a defect is drift: a reader comparing P2PKH
+    /// across two charts is already seeing two numbers, and the declarations
+    /// now say why. This pins each denominator so a builder cannot quietly
+    /// adopt another chart's.
+    ///
+    /// The fixture puts real values in the categories each denominator
+    /// includes or excludes, which is what separates them. A block of 1,000
+    /// outputs: 100 P2PKH, 100 P2SH, 200 P2WPKH, 100 P2WSH, 300 P2TR, 20 P2PK,
+    /// 50 bare multisig, 30 unrecognised, and the remaining 100 OP_RETURN and
+    /// other outputs that no classifier counts.
+    ///
+    /// - Address Type Share divides by the six payment types, 820, so its
+    ///   bands total 100 by construction.
+    /// - P2PKH Sunset divides by eight, 900, so P2PKH reads 11.11 rather than
+    ///   the 12.20 the six-type denominator would give.
+    /// - Witness Version Share divides by native v0 plus Taproot, 600, so
+    ///   Taproot reads 50.
+    /// - Output Type Breakdown divides by every output, 1,000, so Taproot
+    ///   reads 30 and the Legacy residual absorbs the rest.
+    #[test]
+    fn each_share_chart_keeps_the_denominator_it_declares() {
+        let blocks: Vec<BlockSummary> = (0..400)
+            .map(|i| BlockSummary {
+                height: 850_000 + i,
+                hash: format!("{i:064x}"),
+                timestamp: 1_720_000_000 + i * 600,
+                tx_count: 500,
+                size: 1_400_000,
+                weight: 3_900_000,
+                output_count: 1_000,
+                p2pkh_count: 100,
+                p2sh_count: 100,
+                p2wpkh_count: 200,
+                p2wsh_count: 100,
+                p2tr_count: 300,
+                p2pk_count: 20,
+                multisig_count: 50,
+                unknown_script_count: 30,
+                op_return_count: 60,
+                ..Default::default()
+            })
+            .collect();
+
+        let first = |opt: &serde_json::Value, name: &str| -> f64 {
+            let s = opt["series"]
+                .as_array()
+                .expect("series")
+                .iter()
+                .find(|s| s["name"] == name)
+                .unwrap_or_else(|| panic!("no series {name}"));
+            let p = &s["data"][0];
+            match p {
+                serde_json::Value::Array(a) => a[1].as_f64().expect("a number"),
+                other => other.as_f64().expect("a number"),
+            }
+        };
+
+        // Six payment types: 100+100+200+100+300+20 = 820.
+        let pct = super::super::address_type_pct_chart(&blocks);
+        assert!(
+            (first(&pct, "P2PKH") - 100.0 / 820.0 * 100.0).abs() < 0.02,
+            "Address Type Share must divide by the six payment types, got {}",
+            first(&pct, "P2PKH")
+        );
+
+        // Eight classified types: 820 + 50 + 30 = 900.
+        let sunset = super::super::address_sunset_chart(&blocks);
+        assert!(
+            (first(&sunset, "P2PKH %") - 100.0 / 900.0 * 100.0).abs() < 0.02,
+            "P2PKH Sunset must divide by eight classified types, got {}",
+            first(&sunset, "P2PKH %")
+        );
+
+        // Witness outputs only: 300 native v0 + 300 Taproot = 600.
+        let wit = super::super::witness_version_pct_chart(&blocks);
+        assert!(
+            (first(&wit, "Taproot") - 50.0).abs() < 0.02,
+            "Witness Version Share must divide by witness outputs alone, \
+             got {}",
+            first(&wit, "Taproot")
+        );
+
+        // Every output: 1,000.
+        let brk = super::super::witness_version_tx_pct_chart(&blocks);
+        assert!(
+            (first(&brk, "Taproot") - 30.0).abs() < 0.02,
+            "Output Type Breakdown must divide by every output, got {}",
+            first(&brk, "Taproot")
+        );
+        // And its residual absorbs everything the other two bands miss.
+        assert!(
+            (first(&brk, "Legacy") - 40.0).abs() < 0.02,
+            "the residual must carry the 400 outputs that are neither native \
+             v0 nor Taproot, got {}",
+            first(&brk, "Legacy")
+        );
+    }
+
+    /// A share must not change because the range changed.
+    ///
+    /// This is the defect CQ-11 reported and I initially dismissed, having
+    /// read the daily denominator and assumed the per-block arm matched.
+    /// `p2pkh-sunset` divided by six classified output types per block and
+    /// eight daily, and `multi-velocity` did the same, so switching range
+    /// moved the line on identical data: P2PKH read 12.20% per block and
+    /// 11.11% daily. Both per-block arms now use eight.
+    ///
+    /// The fixture gives a day whose per-block averages are exactly one
+    /// block's counts, so the two resolutions are looking at the same chain
+    /// and any difference is arithmetic rather than data.
+    #[test]
+    fn a_share_does_not_move_when_the_resolution_does() {
+        let block = BlockSummary {
+            height: 850_000,
+            hash: "a".repeat(64),
+            timestamp: 1_720_000_000,
+            tx_count: 500,
+            size: 1_400_000,
+            weight: 3_900_000,
+            output_count: 1_000,
+            p2pkh_count: 100,
+            p2sh_count: 100,
+            p2wpkh_count: 200,
+            p2wsh_count: 100,
+            p2tr_count: 300,
+            p2pk_count: 20,
+            multisig_count: 50,
+            unknown_script_count: 30,
+            ..Default::default()
+        };
+        let blocks: Vec<BlockSummary> = (0..400)
+            .map(|i| BlockSummary {
+                height: 850_000 + i,
+                hash: format!("{i:064x}"),
+                timestamp: 1_720_000_000 + i * 600,
+                ..block.clone()
+            })
+            .collect();
+        let days: Vec<DailyAggregate> = (0..120)
+            .map(|i| DailyAggregate {
+                date: format!(
+                    "{}",
+                    chrono::NaiveDate::from_ymd_opt(2024, 6, 1).expect("valid")
+                        + chrono::Duration::days(i)
+                ),
+                block_count: 144,
+                avg_tx_count: block.tx_count as f64,
+                avg_size: block.size as f64,
+                avg_weight: block.weight as f64,
+                avg_output_count: block.output_count as f64,
+                avg_p2pkh_count: block.p2pkh_count as f64,
+                avg_p2sh_count: block.p2sh_count as f64,
+                avg_p2wpkh_count: block.p2wpkh_count as f64,
+                avg_p2wsh_count: block.p2wsh_count as f64,
+                avg_p2tr_count: block.p2tr_count as f64,
+                avg_p2pk_count: block.p2pk_count as f64,
+                avg_multisig_count: block.multisig_count as f64,
+                avg_unknown_script_count: block.unknown_script_count as f64,
+                ..Default::default()
+            })
+            .collect();
+
+        let last = |opt: &serde_json::Value, name: &str| -> f64 {
+            let s = opt["series"]
+                .as_array()
+                .expect("series")
+                .iter()
+                .find(|s| s["name"] == name)
+                .unwrap_or_else(|| panic!("no series {name}"));
+            let d = s["data"].as_array().expect("data");
+            let p = d.last().expect("a point");
+            match p {
+                serde_json::Value::Array(a) => a[1].as_f64().expect("a number"),
+                other => other.as_f64().expect("a number"),
+            }
+        };
+
+        for (label, pb, dl, series) in [
+            (
+                "p2pkh-sunset",
+                super::super::address_sunset_chart(&blocks),
+                super::super::address_sunset_chart_daily(&days),
+                "P2PKH %",
+            ),
+            (
+                "address-types-pct",
+                super::super::address_type_pct_chart(&blocks),
+                super::super::address_type_pct_chart_daily(&days),
+                "P2PKH",
+            ),
+            (
+                "witness-pct",
+                super::super::witness_version_pct_chart(&blocks),
+                super::super::witness_version_pct_chart_daily(&days),
+                "Taproot",
+            ),
+            (
+                "witness-tx-pct",
+                super::super::witness_version_tx_pct_chart(&blocks),
+                super::super::witness_version_tx_pct_chart_daily(&days),
+                "Taproot",
+            ),
+        ] {
+            let a = last(&pb, series);
+            let b = last(&dl, series);
+            assert!(
+                (a - b).abs() < 0.02,
+                "{label}: {series} reads {a} per block and {b} daily on the \
+                 same chain, so the two resolutions divide by different \
+                 populations"
+            );
+        }
+    }
+
     /// `registry::NON_TIME_X_AXIS` has to name exactly the charts whose
     /// builders produce a non-time x axis, or the comparison rule built on it
     /// is guessing.
