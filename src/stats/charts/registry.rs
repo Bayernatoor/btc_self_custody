@@ -660,12 +660,12 @@ pub const CHARTS: &[ChartMeta] = &[
         measurements: &[Measurement {
             series: "",
             series_daily: "",
-            quantity: "Share of transactions matching the inscription detector",
+            quantity: "Share of block bytes in detected inscription envelopes",
             method_per_block: Method::HeuristicallyDetected,
             method_daily: Method::HeuristicallyDetected,
             per_block: Aggregation::PerBlockObservation,
             daily: Aggregation::RatioOfTotals,
-            population: "Matching witness items over the block's transactions. A matching item counts once, so several envelopes in one item count once.",
+            population: "Envelope bytes of matching witness items over serialized block bytes, so a byte fraction and not a count of anything. Falls back to payload bytes for blocks ingested before envelope sizes were stored, which makes the early series slightly lower than the late one on the same activity.",
         }],
         about: Some(About {
             // Migrated from the card's expandable, which was the
@@ -1321,11 +1321,14 @@ pub const CHARTS: &[ChartMeta] = &[
             series: "",
             series_daily: "",
             quantity: "Comparison of metrics across halving eras",
-            method_per_block: Method::Measured,
-            method_daily: Method::Measured,
+            // The plotted value is a normalised index, so calculated
+            // whatever the inputs were, and two of the four inputs are
+            // coinbase-derived estimates.
+            method_per_block: Method::Calculated,
+            method_daily: Method::Calculated,
             per_block: Aggregation::GroupedSummary,
             daily: Aggregation::GroupedSummary,
-            population: "Blocks grouped by subsidy era, then each metric normalised so its largest era reads 100, which is why every era peaks at 100 by construction. Only eras present in the window appear.",
+            population: "Blocks grouped by subsidy era along the x axis with one series per era, then **each metric normalised so its largest era reads 100**, which is why something always peaks at 100 and why the plotted numbers are an index rather than a quantity. The four metrics do not share a provenance: block size and transaction count are measured, while total fees and the fee share of miner revenue are both coinbase-derived estimates. Only eras present in the window appear.",
         }],
         about: Some(About {
             // Migrated from the card's expandable, which was the
@@ -1449,7 +1452,7 @@ pub const CHARTS: &[ChartMeta] = &[
                 method_daily: Method::Estimated,
                 per_block: Aggregation::PerBlockObservation,
                 daily: Aggregation::MeanOfPerBlockValues,
-                population: "Per block the subsidy follows from the height's halving era and is exact. Daily it is derived from the date rather than the height, so a halving day blends two eras.",
+                population: "Per block the subsidy follows from the height's halving era and is exact. Daily it is derived from the date, which assigns the whole day a single era, so on a halving day every block is credited the era the date falls in and the blocks on the other side of the halving are wrong by a factor of two. It is a step at the wrong moment rather than a blend.",
             },
             Measurement {
                 series: "Fees",
@@ -2112,7 +2115,7 @@ pub const CHARTS: &[ChartMeta] = &[
             // than the mean of per-block shares: it equals total segwit spends
             // over total non-coinbase transactions.
             daily: Aggregation::RatioOfTotals,
-            population: "Numerator: inputs spending a witness program. Denominator: non-coinbase transactions, obtained by subtracting one coinbase per block.",
+            population: "Numerator: **transactions** containing at least one witness input, which is what ingestion counts, one per transaction rather than one per input. Denominator: non-coinbase transactions, obtained by subtracting one coinbase per block. A transaction spending ten witness inputs counts once, so this is the share of transactions using witness data and not a share of inputs.",
         }],
         about: Some(About {
             definition: Some("The share of transactions using Segregated Witness. SegWit, activated in 2017, moves signatures into a part of the block that counts less toward the size limit, which makes those transactions cheaper to send. Adoption took years rather than months."),

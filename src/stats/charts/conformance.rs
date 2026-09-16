@@ -144,7 +144,12 @@ fn synthetic_blocks(n: usize) -> Vec<BlockSummary> {
 /// naming months, so the calendar-tick path is exercised here too rather than
 /// only in its own tests.
 fn synthetic_days(n: usize) -> Vec<DailyAggregate> {
-    let start = chrono::NaiveDate::from_ymd_opt(2018, 1, 1).expect("valid");
+    // Straddles 2023-01-01, which several embedded builders use as a cutoff:
+    // they emit `null` before it because inscriptions did not exist, so a
+    // fixture wholly before that date left those bands null in every test that
+    // built them. 900 days from here gives roughly 120 days on the early side
+    // and 780 on the late one, so both branches are exercised.
+    let start = chrono::NaiveDate::from_ymd_opt(2022, 9, 1).expect("valid");
     (0..n)
         .map(|i| {
             let f = i as f64;
@@ -186,6 +191,14 @@ fn synthetic_days(n: usize) -> Vec<DailyAggregate> {
                 avg_p2wsh_count: 120.0 + f * 0.2,
                 avg_p2tr_count: 200.0 + f * 0.9,
                 avg_p2pk_count: 4.0 + f * 0.01,
+                // The last three columns any builder reads that this
+                // fixture left at `Default`, found by comparing every
+                // `d.<field>` in the builders against the fields set here.
+                // BRC-20 left the sixth band of Unified Embedded Count at
+                // zero in every test that built it.
+                avg_brc20_count: 2.0 + f * 0.01,
+                avg_fee_rate_p10: 2.0 + f * 0.02,
+                avg_fee_rate_p90: 14.0 + f * 0.12,
                 avg_multisig_count: 15.0 + f * 0.1,
                 avg_unknown_script_count: 2.0 + f * 0.01,
                 avg_input_count: 5_000.0 + f * 2.0,
@@ -1258,30 +1271,36 @@ mod tests {
             .map(|d| scaled(2, d))
             .collect();
 
-        let plotted = |opt: &serde_json::Value| -> Vec<f64> {
+        // Per series rather than flattened, so one series cannot mask
+        // another. Gaps are kept as `None` so a point's position is preserved
+        // and the two runs stay aligned.
+        let per_series = |opt: &serde_json::Value| -> Vec<Vec<f64>> {
             opt["series"]
                 .as_array()
                 .map(|a| {
                     a.iter()
-                        .flat_map(|s| {
+                        .map(|s| {
                             s["data"]
                                 .as_array()
                                 .map(|d| d.as_slice())
                                 .unwrap_or_default()
                                 .iter()
-                                .filter_map(|p| match p {
-                                    serde_json::Value::Number(n) => n.as_f64(),
-                                    serde_json::Value::Array(a) => {
-                                        a.get(1).and_then(|v| v.as_f64())
+                                .map(|p| match p {
+                                    serde_json::Value::Number(n) => {
+                                        n.as_f64().unwrap_or(0.0)
                                     }
-                                    _ => None,
+                                    serde_json::Value::Array(a) => a
+                                        .get(1)
+                                        .and_then(|v| v.as_f64())
+                                        .unwrap_or(0.0),
+                                    _ => 0.0,
                                 })
+                                .collect()
                         })
                         .collect()
                 })
                 .unwrap_or_default()
         };
-
         let mut checked = 0usize;
         for meta in registry::CHARTS.iter() {
             let Source::Dashboard {
@@ -1310,35 +1329,71 @@ mod tests {
                 continue;
             }
 
-            let a = plotted(&f(&base));
-            let b = plotted(&f(&doubled));
+            // Per series, and against the expected factor.
+            //
+            // This compared flattened value lists and accepted any change at
+            // all, which is weaker than the claim made for it: one correctly
+            // scaled series could hide another that stayed fixed, and a total
+            // that scaled the wrong way passed as readily as one that scaled
+            // right. Now every series must move by the factor its declaration
+            // implies.
+            let want = if expectation == "scales" { 2.0 } else { 1.0 };
+            let a = per_series(&f(&base));
+            let b = per_series(&f(&doubled));
             assert_eq!(
                 a.len(),
                 b.len(),
-                "{}: doubling block_count changed the point count",
+                "{}: doubling the day changed the series count",
                 meta.slug
             );
-            let moved =
-                a.iter().zip(b.iter()).any(|(x, y)| (x - y).abs() > 1e-9);
-            match expectation {
-                "scales" => assert!(
-                    moved,
-                    "{} declares a daily total or cumulative series, so \
-                     doubling the block count must change what is plotted. It \
-                     did not, so the declaration describes a different \
-                     builder.",
+            let mut compared_here = 0usize;
+            for (si, (sa, sb)) in a.iter().zip(b.iter()).enumerate() {
+                // A series with no points is decoration, not a measurement:
+                // the threshold markers on P2PKH Sunset carry their values in
+                // `markLine` and have an empty data array. Requiring those to
+                // scale asked the wrong thing of them.
+                if sa.is_empty() && sb.is_empty() {
+                    continue;
+                }
+                assert_eq!(
+                    sa.len(),
+                    sb.len(),
+                    "{} series {si}: point count changed",
                     meta.slug
-                ),
-                "fixed" => assert!(
-                    !moved,
-                    "{} declares a per-block mean or a ratio of totals, so \
-                     doubling the block count must not change what is \
-                     plotted. It did, so the declaration describes a \
-                     different builder.",
-                    meta.slug
-                ),
-                _ => unreachable!(),
+                );
+                for (x, y) in sa.iter().zip(sb.iter()) {
+                    // A zero or a gap says nothing about scaling either way.
+                    if x.abs() < 1e-12 {
+                        continue;
+                    }
+                    let factor = y / x;
+                    // One percent, not float epsilon. Builders round their
+                    // output, typically to two or four decimals, so doubling
+                    // the input and rounding is not the same number as
+                    // rounding and doubling: 0.9 becomes 1.8001 rather than
+                    // 1.8. The question is whether a series moved by a factor
+                    // of two or not at all, and those differ by a hundred
+                    // percent, so a tolerance that absorbs rounding still
+                    // separates them and still catches a total that scales the
+                    // wrong way.
+                    assert!(
+                        (factor - want).abs() < 0.01 * want,
+                        "{} series {si} declares {expectation}, so every \
+                         value should move by {want}x when the day doubles, \
+                         but {x} became {y}, a factor of {factor}",
+                        meta.slug
+                    );
+                    compared_here += 1;
+                }
             }
+            // Coverage is a property of the chart, not of each series.
+            assert!(
+                compared_here > 0,
+                "{} declares {expectation} but nothing in it was comparable, \
+                 so this chart was not actually checked; give the fixture \
+                 non-zero values for the columns it reads",
+                meta.slug
+            );
             checked += 1;
         }
         assert!(

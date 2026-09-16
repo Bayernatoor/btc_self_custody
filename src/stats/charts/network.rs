@@ -224,18 +224,8 @@ pub fn tps_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     raw_buf.push(']');
     let raw = data_array_value(&raw_buf);
 
-    // Smoothed over the readings that exist, then realigned, so a gap neither
-    // counts as zero nor shifts the curve sideways.
-    let present: Vec<f64> = all_vals.iter().filter_map(|v| *v).collect();
-    let ma = moving_average(&present, 144);
-    let mut ma_iter = ma.into_iter();
-    let ma: Vec<Option<f64>> = all_vals
-        .iter()
-        .map(|v| match v {
-            Some(_) => ma_iter.next().flatten(),
-            None => None,
-        })
-        .collect();
+    // 144 *blocks*, not 144 readings; see `moving_average_over_gaps`.
+    let ma = moving_average_over_gaps(&all_vals, 144);
     let ma_str = build_ma_array(blocks, &ma);
     let ma_data = data_array_value(&ma_str);
 

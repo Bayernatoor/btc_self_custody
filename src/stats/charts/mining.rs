@@ -452,12 +452,40 @@ fn daily_difficulty_steps(days: &[DailyAggregate]) -> Vec<(usize, f64)> {
     // neither is a difficulty.
     let is_plateau = |r: &(usize, f64, usize)| r.2 > 1;
 
+    // A trailing run of one day is an epoch too, when the evidence says so.
+    //
+    // Requiring two days meant a range ending the day *after* a retarget
+    // reported nothing, even though the new difficulty was plainly visible in
+    // that final full day. Ending on 2021-07-04 lost the China-ban retarget
+    // that ending on 07-05 showed.
+    //
+    // The evidence is the same betweenness that identifies a blend. If the
+    // last run is one day, and the run before it is also one day, and that
+    // one's value lies strictly between the previous plateau and this one,
+    // then the middle day is the retarget's blend and this day is the new
+    // epoch seen whole. A range ending *on* the blend day still reports
+    // nothing, which is correct rather than conservative: the new difficulty
+    // has not appeared in any full day yet, and the blend is not a difficulty.
+    let last_is_settled_epoch = matches!(
+        runs.as_slice(),
+        [.., before, blend, last]
+            if blend.2 == 1
+                && last.2 == 1
+                && before.2 > 1
+                && blend.1 > before.1.min(last.1)
+                && blend.1 < before.1.max(last.1)
+    );
+    let last_index = runs.len().saturating_sub(1);
+    let is_plateau = |i: usize, r: &(usize, f64, usize)| {
+        is_plateau(r) || (i == last_index && last_is_settled_epoch)
+    };
+
     let mut steps = Vec::new();
     let mut previous: Option<(usize, f64)> = None;
     let mut pending_blend: Option<usize> = None;
 
-    for r in &runs {
-        if is_plateau(r) {
+    for (i, r) in runs.iter().enumerate() {
+        if is_plateau(i, r) {
             if let Some((_, before)) = previous {
                 // Dated at the blend day where there is one, since that is
                 // when the epoch actually changed, and at the first day of
@@ -615,6 +643,52 @@ mod adjustment_tests {
             (pct + 27.9427).abs() < 0.001,
             "the step was computed through the blended day: {pct}"
         );
+    }
+
+    /// The boundary cases Astra reproduced, as a range being cut short.
+    ///
+    /// Ending the day *after* a retarget must report it: the new difficulty is
+    /// visible in that final full day even though it is not yet a two-day
+    /// plateau. Ending *on* the retarget day must still report nothing,
+    /// because the only value for that day is a blend of two epochs and no
+    /// full day of the new one exists.
+    #[test]
+    fn a_retarget_survives_the_range_ending_just_after_it() {
+        const OLD: f64 = 19_932_791_027_262.74;
+        const BLEND: f64 = 15_634_861_856_766.105;
+        const NEW: f64 = 14_363_025_673_659.96;
+        let all = [
+            day("2021-06-30", OLD),
+            day("2021-07-01", OLD),
+            day("2021-07-02", OLD),
+            day("2021-07-03", BLEND),
+            day("2021-07-04", NEW),
+            day("2021-07-05", NEW),
+        ];
+
+        // Cut on the blend day: nothing to report, and nothing invented.
+        let steps = daily_difficulty_steps(&all[..4]);
+        assert!(
+            steps.is_empty(),
+            "a range ending on the blend day has no settled new epoch: \
+             {steps:?}"
+        );
+
+        // Cut the day after: the retarget is there, dated to the blend day,
+        // with the exact percentage.
+        for end in [5, 6] {
+            let steps = daily_difficulty_steps(&all[..end]);
+            assert_eq!(steps.len(), 1, "end={end} gave {steps:?}");
+            assert_eq!(
+                all[steps[0].0].date, "2021-07-03",
+                "end={end}: dated to the day the epoch changed"
+            );
+            assert!(
+                (steps[0].1 - (NEW / OLD - 1.0) * 100.0).abs() < 1e-9,
+                "end={end}: expected -27.9427%, got {}",
+                steps[0].1
+            );
+        }
     }
 
     /// A range ending on a retarget day reports nothing for it.

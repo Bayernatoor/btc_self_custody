@@ -1203,7 +1203,18 @@ pub struct FullBlockRow {
     pub coinbase_sequence: u64,
     pub miner: String,
     pub segwit_spend_count: u64,
+    /// Misnamed: counts created P2TR outputs. Kept because it is serialized
+    /// and consumers may still read it; `p2tr_count` is the same value under
+    /// the right name.
     pub taproot_spend_count: u64,
+    /// Added 2026-09-16. The block detail modal reads all three of these and
+    /// the endpoint did not send them, so `p2tr_count` was `undefined` and
+    /// threw on `.toLocaleString()`, and the Inputs / Outputs row was silently
+    /// skipped by its own `> 0` guard and had never rendered. All three
+    /// columns were already stored; only this DTO omitted them.
+    pub p2tr_count: u64,
+    pub input_count: u64,
+    pub output_count: u64,
 }
 
 /// Query a single block by height. Returns None if not found.
@@ -1218,7 +1229,8 @@ pub fn query_block_by_height(
                 inscription_envelope_bytes,
                 version, total_fees, miner,
                 median_fee, median_fee_rate, coinbase_locktime, coinbase_sequence,
-                segwit_spend_count, taproot_spend_count
+                segwit_spend_count, taproot_spend_count,
+                p2tr_count, input_count, output_count
          FROM blocks WHERE height = ?1",
         params![height],
         |row| {
@@ -1248,6 +1260,9 @@ pub fn query_block_by_height(
                 coinbase_sequence: row.get(22)?,
                 segwit_spend_count: row.get(23)?,
                 taproot_spend_count: row.get(24)?,
+                p2tr_count: row.get(25)?,
+                input_count: row.get(26)?,
+                output_count: row.get(27)?,
             }))
         },
     )
@@ -3511,6 +3526,92 @@ mod tests {
             query_height_range_for_window(&conn, 1_900_000_000, 2_000_000_000)
                 .unwrap(),
             None
+        );
+    }
+
+    /// The block detail modal reads fields off this endpoint's response, and
+    /// every one of them has to be in it.
+    ///
+    /// This is the check that was missing when `assets/js/stats.js` was moved
+    /// from `taproot_spend_count` to `p2tr_count`. The chart builders use a
+    /// different DTO that does have `p2tr_count`, and a Rust test against them
+    /// passed; the modal's endpoint returns `FullBlockRow`, which did not, so
+    /// `b.p2tr_count.toLocaleString()` threw and the modal never opened.
+    /// Evaluating the module's top level does not exercise a callback, so that
+    /// passed too.
+    ///
+    /// Reading the field list out of the JavaScript rather than restating it
+    /// here is the point: a new `b.something` in the modal fails this test
+    /// until the endpoint sends it.
+    #[test]
+    fn the_block_detail_response_carries_every_field_the_modal_reads() {
+        let row = FullBlockRow {
+            height: 840_655,
+            hash: "a".repeat(64),
+            timestamp: 1_713_962_889,
+            tx_count: 186,
+            size: 1_400_000,
+            weight: 3_900_000,
+            difficulty: 8.8e13,
+            op_return_count: 3,
+            op_return_bytes: 120,
+            runes_count: 1,
+            runes_bytes: 40,
+            data_carrier_count: 2,
+            data_carrier_bytes: 80,
+            inscription_count: 5,
+            inscription_bytes: 2_048,
+            inscription_envelope_bytes: 3_048,
+            version: 0x2000_0000,
+            total_fees: 12_345_678,
+            median_fee: 2_000,
+            median_fee_rate: 7.5,
+            coinbase_locktime: 0,
+            coinbase_sequence: 0xffff_ffff,
+            miner: "F2Pool".to_string(),
+            segwit_spend_count: 120,
+            taproot_spend_count: 22_367,
+            p2tr_count: 22_367,
+            input_count: 327,
+            output_count: 22_679,
+        };
+        let json = serde_json::to_value(&row).expect("serialisable");
+        let obj = json.as_object().expect("an object");
+
+        // Every `b.<field>` the shipped JavaScript reads, taken from the file
+        // rather than restated here so the two cannot drift.
+        //
+        // Scanning the whole file is correct rather than lazy: `b` is bound
+        // exactly once, in the `.then` of the block-detail fetch, so every
+        // `b.<field>` in the module belongs to this response.
+        let js = include_str!("../../assets/js/stats.js");
+        let mut wanted: Vec<String> = Vec::new();
+        for part in js.split("b.").skip(1) {
+            let name: String = part
+                .chars()
+                .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                .collect();
+            // `error` is the endpoint's failure branch, not a block field.
+            if name.is_empty() || name == "error" || wanted.contains(&name) {
+                continue;
+            }
+            wanted.push(name);
+        }
+        assert!(
+            wanted.len() > 20,
+            "only found {wanted:?}; the scan has stopped matching and this \
+             test is no longer checking anything"
+        );
+
+        let missing: Vec<&String> = wanted
+            .iter()
+            .filter(|f| !obj.contains_key(f.as_str()))
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "the modal reads {missing:?} off the block detail response and \
+             FullBlockRow does not serialise them, so those rows are either \
+             skipped by a guard or throw on a method call"
         );
     }
 

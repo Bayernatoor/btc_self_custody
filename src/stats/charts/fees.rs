@@ -194,22 +194,11 @@ pub fn avg_fee_per_tx_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let raw_str = build_data_array_opt_f64(blocks, fee_fn);
     let raw = data_array_value(&raw_str);
 
-    // The moving average carries the gaps forward rather than treating them
-    // as zeros, which would pull the smoothed line down just as the raw one
-    // was pulled.
-    let vals: Vec<f64> = blocks.iter().filter_map(fee_fn).collect();
-    let ma = moving_average(&vals, 144);
-    let mut ma_iter = ma.into_iter();
-    let aligned: Vec<Option<f64>> = blocks
-        .iter()
-        .map(|b| {
-            if fee_fn(b).is_some() {
-                ma_iter.next().flatten()
-            } else {
-                None
-            }
-        })
-        .collect();
+    // 144 *blocks*, not 144 readings. Filtering the gaps out before
+    // averaging let the window reach past its own name; see
+    // `moving_average_over_gaps`.
+    let readings: Vec<Option<f64>> = blocks.iter().map(fee_fn).collect();
+    let aligned = moving_average_over_gaps(&readings, 144);
     let ma_str = build_ma_array(blocks, &aligned);
     let ma_data = data_array_value(&ma_str);
 
@@ -265,19 +254,15 @@ pub fn avg_fee_per_tx_chart_daily(
         })
         .collect();
 
-    let present: Vec<f64> = readings.iter().filter_map(|v| *v).collect();
-    let ma = moving_average(&present, 7);
-    let mut ma_iter = ma.into_iter();
-    let ma_vals: Vec<serde_json::Value> = readings
-        .iter()
-        .map(|r| match r {
-            Some(_) => match ma_iter.next().flatten() {
+    // Seven days, not seven readings; see `moving_average_over_gaps`.
+    let ma_vals: Vec<serde_json::Value> =
+        moving_average_over_gaps(&readings, 7)
+            .into_iter()
+            .map(|v| match v {
                 Some(x) => json!(x),
                 None => json!(null),
-            },
-            None => json!(null),
-        })
-        .collect();
+            })
+            .collect();
 
     build_option(json!({
         "xAxis": x_axis_for(true, &cats),

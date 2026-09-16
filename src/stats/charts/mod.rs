@@ -1347,6 +1347,44 @@ pub(crate) fn round(val: f64, decimals: u32) -> f64 {
     (val * factor).round() / factor
 }
 
+/// Moving average over a series that has gaps, keeping the window's meaning.
+///
+/// Take the chronological window first, then average whatever readings are
+/// inside it. The obvious alternative, filtering the gaps out and averaging
+/// the survivors, silently redefines the window: "7-day MA" becomes "the mean
+/// of the last seven days that had data", which can reach arbitrarily far
+/// back. Measured on a series with one reading of 100, then eight gaps, then
+/// six zeroes, that produced **14.2857** at the final position by pulling the
+/// 100 in from fourteen positions away, where the last seven positions hold
+/// nothing but zeroes and the honest answer is **0**.
+///
+/// `None` where the window holds no reading at all, since an average of
+/// nothing is not zero. A window holding some readings averages those, which
+/// is the standard treatment and keeps the line continuous across short gaps
+/// without inventing values for them.
+pub(crate) fn moving_average_over_gaps(
+    readings: &[Option<f64>],
+    window: usize,
+) -> Vec<Option<f64>> {
+    if window == 0 {
+        return vec![None; readings.len()];
+    }
+    (0..readings.len())
+        .map(|i| {
+            let lo = (i + 1).saturating_sub(window);
+            let present: Vec<f64> =
+                readings[lo..=i].iter().filter_map(|v| *v).collect();
+            if present.is_empty() {
+                None
+            } else {
+                Some(round_plot(
+                    present.iter().sum::<f64>() / present.len() as f64,
+                ))
+            }
+        })
+        .collect()
+}
+
 /// Round a plotted value, keeping the payload small **without** deleting it.
 ///
 /// Three decimal places is the wrong tool for a unit-converted quantity, and
@@ -4293,6 +4331,79 @@ mod tests {
         let avg = moving_average(&[btc, btc, btc], 3);
         assert_eq!(avg[2], Some(btc), "a real fee must survive the average");
         assert!(avg[2].unwrap() > 0.0);
+    }
+
+    // -----------------------------------------------------------------------
+    // moving_average_over_gaps
+    // -----------------------------------------------------------------------
+
+    /// A named window has to mean what it says.
+    ///
+    /// The independently computed case: one reading of 100, eight gaps, then
+    /// six zeroes. The last seven positions hold nothing but zeroes, so a
+    /// seven-position mean is 0. Filtering the gaps out first and averaging
+    /// the survivors gives 100/7 = 14.2857, because it reaches fourteen
+    /// positions back to find its seventh reading. That is the defect this
+    /// replaces, and it affected the 7-day windows on SegWit Adoption and
+    /// Avg Fee/Tx and the 144-block windows on TPS and Avg Fee/Tx.
+    #[test]
+    fn a_named_window_does_not_reach_past_its_own_length() {
+        let mut readings: Vec<Option<f64>> = vec![Some(100.0)];
+        readings.extend(std::iter::repeat_n(None, 8));
+        readings.extend(std::iter::repeat_n(Some(0.0), 6));
+
+        let ma = moving_average_over_gaps(&readings, 7);
+        assert_eq!(
+            ma.last().copied().flatten(),
+            Some(0.0),
+            "the last seven positions hold only zeroes; 14.2857 would mean \
+             the 100 was pulled in from fourteen positions back"
+        );
+    }
+
+    /// Short gaps are bridged by averaging what the window does hold, which
+    /// keeps the line continuous without inventing values for the gaps.
+    #[test]
+    fn a_window_averages_the_readings_it_contains() {
+        let readings =
+            vec![Some(10.0), None, Some(20.0), None, None, Some(30.0)];
+        let ma = moving_average_over_gaps(&readings, 3);
+        // Positions 3..=5 hold one reading, 30, so the mean is 30.
+        assert_eq!(ma[5], Some(30.0));
+        // Positions 0..=2 hold 10 and 20.
+        assert_eq!(ma[2], Some(15.0));
+        // A window with nothing in it is not zero.
+        assert_eq!(
+            moving_average_over_gaps(&[None, None], 2),
+            vec![None, None]
+        );
+    }
+
+    /// With no gaps it must agree with the plain moving average, or the two
+    /// are silently different functions.
+    #[test]
+    fn with_no_gaps_it_matches_the_plain_moving_average() {
+        let data: Vec<f64> = (0..60)
+            .map(|i| ((i * 7919 % 613) as f64) / 3.0 + (i as f64) * 0.25)
+            .collect();
+        let opt: Vec<Option<f64>> = data.iter().map(|v| Some(*v)).collect();
+        for window in [1usize, 3, 7, 30] {
+            let plain = moving_average(&data, window);
+            let gapped = moving_average_over_gaps(&opt, window);
+            for i in 0..data.len() {
+                match (plain[i], gapped[i]) {
+                    // The plain version emits None until the window fills;
+                    // this one averages the shorter prefix instead, which is
+                    // the deliberate difference and the only one.
+                    (None, Some(_)) => assert!(i + 1 < window),
+                    (Some(a), Some(b)) => assert!(
+                        (a - b).abs() < 1e-9,
+                        "window {window} position {i}: {a} against {b}"
+                    ),
+                    other => panic!("window {window} position {i}: {other:?}"),
+                }
+            }
+        }
     }
 
     // -----------------------------------------------------------------------

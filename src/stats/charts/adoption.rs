@@ -90,18 +90,10 @@ pub fn segwit_adoption_chart_daily(
             None => json!(null),
         })
         .collect();
-    // The moving average skips the gaps rather than treating them as zeros,
-    // which would drag the smoothed line toward an absence.
-    let present: Vec<f64> = readings.iter().filter_map(|v| *v).collect();
-    let ma = moving_average(&present, 7);
-    let mut ma_iter = ma.into_iter();
-    let ma: Vec<Option<f64>> = readings
-        .iter()
-        .map(|r| match r {
-            Some(_) => ma_iter.next().flatten(),
-            None => None,
-        })
-        .collect();
+    // Seven *days*, not seven readings. Filtering the gaps out before
+    // averaging made the window reach past its own name; see
+    // `moving_average_over_gaps`.
+    let ma = moving_average_over_gaps(&readings, 7);
     let ma_vals: Vec<serde_json::Value> = ma
         .iter()
         .map(|v| match v {

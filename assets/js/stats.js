@@ -833,7 +833,7 @@
                 var fmtSize = function(bytes) {
                     if (bytes == null) return '\u2014';
                     if (bytes >= 1000000) return (bytes / 1e6).toFixed(2) + ' MB';
-                    if (bytes >= 1000) return (bytes / 1e3).toFixed(1) + ' KB';
+                    if (bytes >= 1000) return (bytes / 1e3).toFixed(1) + ' kB';
                     return bytes + ' B';
                 };
                 var halvings = Math.floor(b.height / 210000);
@@ -973,7 +973,7 @@
         var fmtSize = function(bytes) {
             if (bytes == null) return '\u2014';
             if (bytes >= 1000000) return (bytes / 1e6).toFixed(2) + ' MB';
-            if (bytes >= 1000) return (bytes / 1e3).toFixed(1) + ' KB';
+            if (bytes >= 1000) return (bytes / 1e3).toFixed(1) + ' kB';
             return bytes + ' B';
         };
 
