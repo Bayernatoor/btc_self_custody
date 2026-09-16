@@ -837,7 +837,9 @@ mod adjustment_tests {
     /// a window cut at each of these boundaries. Ignored because it needs the
     /// real `bitcoin_stats.db`.
     ///
-    ///     cargo test --features ssr the_r3_acceptance -- --ignored --nocapture
+    /// ```text
+    /// cargo test --features ssr the_r3_acceptance -- --ignored --nocapture
+    /// ```
     #[test]
     #[ignore]
     fn the_r3_acceptance_windows_against_the_live_database() {
@@ -909,7 +911,9 @@ mod adjustment_tests {
     /// the chart actually emits, in Rust. Neither side can be right for the
     /// other's reason.
     ///
-    ///     cargo test --features ssr dump_retarget_steps -- --ignored --nocapture
+    /// ```text
+    /// cargo test --features ssr dump_retarget_steps -- --ignored --nocapture
+    /// ```
     #[test]
     #[ignore]
     fn dump_retarget_steps_over_the_whole_history() {

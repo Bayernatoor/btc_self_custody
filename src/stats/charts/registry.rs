@@ -1548,11 +1548,18 @@ pub const CHARTS: &[ChartMeta] = &[
             quantity: "Difficulty change at a retarget, as a percentage of the previous epoch",
             // Both resolutions read the retarget blocks themselves: their
             // stored difficulty is the new epoch's difficulty exactly and
-            // their timestamp is when the epoch changed. Measured rather than
-            // calculated, since the only arithmetic is the ratio of two
-            // stored values, and nothing is inferred from a mean.
-            method_per_block: Method::Measured,
-            method_daily: Method::Measured,
+            // their timestamp is when the epoch changed.
+            //
+            // **Calculated, not measured.** The plotted value is
+            // `(new / previous - 1) * 100`, which `Method::Calculated`
+            // describes precisely: worked out from measured values by a
+            // fixed formula. `Measured` means read directly off a block,
+            // and no block carries this percentage. Raised from Estimated
+            // to Measured on 2026-09-16 and corrected to Calculated the same
+            // day, after the review pointed out that the badge has a
+            // definition and the definition decides this.
+            method_per_block: Method::Calculated,
+            method_daily: Method::Calculated,
             per_block: Aggregation::WindowedDerived,
             daily: Aggregation::WindowedDerived,
             population: "One point per retarget, every 2,016 blocks, not per block. Drawn as two series split by sign so the bars can be coloured; together they are one series of retargets. Both the date and the percentage come from the two retarget blocks, so the bar is the same wherever the range happens to end. A retarget that changed nothing is not drawn: the first sixteen epochs all sat at difficulty 1.0.",

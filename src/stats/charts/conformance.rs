@@ -1225,8 +1225,9 @@ mod tests {
     ///
     /// `diff-adjustment` was the example here until 2026-09-16, when its daily
     /// arm stopped being an estimate: it reads the retarget blocks at both
-    /// resolutions, so both the date and the percentage come from stored
-    /// values and the two methods are the same. A chart graduating out of
+    /// resolutions, so the two methods are the same. Both are `Calculated`,
+    /// because the plotted value is a ratio of two stored difficulties
+    /// rather than a reading off either of them. A chart graduating out of
     /// this test is the outcome to want.
     #[test]
     fn a_method_may_differ_between_resolutions() {
@@ -1441,11 +1442,16 @@ mod tests {
                 let Some(want) = expectation(m) else {
                     continue;
                 };
-                let mut compared = 0usize;
-                let mut decoration_only = true;
+                // Counted per series rather than per measurement. A
+                // declaration with an empty name covers every series the
+                // chart draws, so one comparable series was standing in for
+                // all of them: `address-types` passed with an entirely zero
+                // P2PK band because another output type supplied the
+                // coverage. Found by the review of 2026-09-16.
                 for si in mine {
                     let (name, _, sa) = &a[si];
                     let sb = &b[si].2;
+                    let mut compared = 0usize;
                     // A series with no points at all is decoration: the
                     // threshold markers on P2PKH Sunset carry their values in
                     // `markLine`. That is the only exemption, and it is read
@@ -1454,7 +1460,6 @@ mod tests {
                     if sa.is_empty() && sb.is_empty() {
                         continue;
                     }
-                    decoration_only = false;
                     assert_eq!(
                         sa.len(),
                         sb.len(),
@@ -1515,26 +1520,18 @@ mod tests {
                             }
                         }
                     }
-                }
-                // Coverage per measurement. Asserted per chart until
-                // 2026-09-16, which let one discriminating series stand in
-                // for every declaration the chart made: a second series
-                // could go entirely unexercised and the chart still passed.
-                assert!(
-                    compared > 0 || decoration_only,
-                    "{}: the measurement for {:?} declares {:?} but nothing \
-                     in its series was comparable, so that declaration was \
-                     not checked; give the fixture non-zero values for the \
-                     columns it reads",
-                    meta.slug,
-                    if want_name.is_empty() {
-                        "every series"
-                    } else {
-                        want_name
-                    },
-                    m.daily
-                );
-                if !decoration_only {
+                    // Every non-empty series this declaration covers has
+                    // to contain at least one discriminating point of its
+                    // own.
+                    assert!(
+                        compared > 0,
+                        "{} series {name:?} is covered by the {:?} \
+                         declaration but holds nothing comparable, so that \
+                         series was not checked; give the fixture non-zero \
+                         values for the column it reads",
+                        meta.slug,
+                        m.daily
+                    );
                     checked += 1;
                 }
             }
@@ -1567,26 +1564,83 @@ mod tests {
                     continue;
                 }
                 let want = wants[0];
-                for (x, y) in points.iter().zip(b[i].2.iter()) {
-                    if let (Some(x), Some(y)) = (x, y) {
-                        if x.abs() < 1e-12 {
+                // The same three checks the declared series get, rather than
+                // the weaker loop this was. `zip` silently truncated, so a
+                // companion could lose every point but its warmup nulls and
+                // pass, and only numeric pairs were compared, so a warmup
+                // null turning into a zero was invisible. Both were
+                // reproduced by the review of 2026-09-16 against the real
+                // `Outputs MA` series.
+                let other = &b[i].2;
+                assert_eq!(
+                    points.len(),
+                    other.len(),
+                    "{} companion {name:?}: point count changed",
+                    meta.slug
+                );
+
+                // A moving average has no value until its window fills, so
+                // its first positions must be gaps. This is the one escape
+                // scaling cannot see: substituting zero for the warmup
+                // changes both runs together, so every factor still agrees
+                // and the series is quietly claiming a reading it does not
+                // have. Checked by name rather than by the declared marker,
+                // because Chain Size's "Disk Size (est.)" is a companion
+                // with no window and no warmup.
+                let smoothed = name.to_ascii_lowercase();
+                if smoothed.contains(" ma")
+                    || smoothed.contains("moving average")
+                    || smoothed.ends_with("ma")
+                {
+                    assert!(
+                        points.first().is_some_and(|v| v.is_none()),
+                        "{} companion {name:?} is a moving average, so its \
+                         first point cannot have a value: a window needs \
+                         more than one reading to fill. A zero here is a \
+                         substituted gap",
+                        meta.slug
+                    );
+                }
+                let mut compared = 0usize;
+                for (x, y) in points.iter().zip(other.iter()) {
+                    match (x, y) {
+                        (None, None) => {}
+                        (None, Some(v)) | (Some(v), None) => panic!(
+                            "{} companion {name:?}: a gap and a reading \
+                             swapped places when the day doubled ({v} \
+                             against nothing). A moving average's warmup \
+                             nulls are the usual case here, and they must \
+                             stay null",
+                            meta.slug
+                        ),
+                        (Some(x), Some(y)) => {
+                            if x.abs() < 1e-12 {
+                                assert!(
+                                    y.abs() < 1e-12,
+                                    "{} companion {name:?}: a zero became \
+                                     {y}",
+                                    meta.slug
+                                );
+                                continue;
+                            }
+                            let factor = y / x;
                             assert!(
-                                y.abs() < 1e-12,
-                                "{} companion {name:?}: a zero became {y}",
+                                (factor - want).abs() < 0.01 * want,
+                                "{} companion {name:?} smooths measurements \
+                                 that move by {want}x, but {x} became {y}, \
+                                 a factor of {factor}",
                                 meta.slug
                             );
-                            continue;
+                            compared += 1;
                         }
-                        let factor = y / x;
-                        assert!(
-                            (factor - want).abs() < 0.01 * want,
-                            "{} companion {name:?} smooths measurements that \
-                             move by {want}x, but {x} became {y}, a factor \
-                             of {factor}",
-                            meta.slug
-                        );
                     }
                 }
+                assert!(
+                    compared > 0,
+                    "{} companion {name:?} holds nothing comparable, so it \
+                     was not checked at all",
+                    meta.slug
+                );
             }
         }
         assert!(

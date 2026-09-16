@@ -1618,28 +1618,29 @@ const BIP_ACTIVATIONS: &[(u64, u64, &str)] = &[
 
 /// Bitcoin Core major release timestamps (Unix seconds) and labels.
 ///
-/// **Source: the GitHub release object's `published_at`**, fetched 2026-09-16.
-/// Probe:
+/// **Source: the release announcement's own URL on bitcoincore.org**, whose
+/// path carries the date. Probe, which is a plain existence check:
 ///
-///     gh api repos/bitcoin/bitcoin/releases/tags/v27.0 \
-///       --jq '[.name, (.published_at|split("T")[0])]|@tsv'
+/// ```text
+/// curl -s -o /dev/null -w "%{http_code}" \
+///   https://bitcoincore.org/en/2024/04/16/release-27.0/
+/// ```
 ///
-/// Eight were wrong, and v27 was wrong in a way worth recording: it read
-/// 2024-04-02, which is **v26.1's** release date. Both dates also appear on
-/// bitcoincore.org's own v27.0 page, which says "published on April 02, 2024"
-/// while the release was published on the 16th, so that page is not a usable
-/// source and is probably where the original list came from. The others were
-/// out by one to sixteen days: v0.18, v0.19, v0.21, v26, v28, v29 and v30.
+/// **Not the GitHub release object's `published_at`, which this list used
+/// until the review of 2026-09-16 caught it.** That field records when the
+/// release object was published and drifts from the announcement by up to
+/// sixteen days: v0.18.0 was announced 2019-05-02 and its GitHub object says
+/// 05-18. Nine entries were wrong against the announcement, six of them
+/// because a previous pass "corrected" them to the GitHub date.
 ///
-/// v0.19 is dated from **v0.19.0.1**, which is the release GitHub carries;
-/// v0.19.0 has no release object.
+/// Nor is it the date on bitcoincore.org's own per-release page, which is
+/// unreliable in the other direction: the v27.0 page says "published on
+/// April 02, 2024", which is v26.1's date.
 ///
-/// **The eleven entries before v0.14 are unverified.** GitHub has no release
-/// object for them, and the three it does answer for (v0.10, v0.12, v0.13)
-/// all return 2016-11-01, which is when those objects were bulk-created
-/// rather than when the software shipped. Their dates here are plausible and
-/// unchecked; correcting them needs the release announcements on the
-/// bitcoin-dev mailing list.
+/// **The nine entries before v0.12 are unverified.** No announcement exists
+/// at that path for them, checked across each release month: the site's blog
+/// does not reach back that far. Their dates are plausible and unchecked,
+/// and corroborating them needs the bitcoin-dev announcements.
 const CORE_RELEASES: &[(u64, &str)] = &[
     (1231444060, "v0.1"),
     (1316736000, "v0.4"),
@@ -1653,22 +1654,22 @@ const CORE_RELEASES: &[(u64, &str)] = &[
     (1456185600, "v0.12"),
     (1471910400, "v0.13"),
     (1488931200, "v0.14"),
-    (1505347200, "v0.15"),
+    (1504224000, "v0.15"),
     (1519603200, "v0.16"),
-    (1538524800, "v0.17"),
-    (1558137600, "v0.18"),
+    (1538438400, "v0.17"),
+    (1556755200, "v0.18"),
     (1574553600, "v0.19"),
     (1591142400, "v0.20"),
-    (1610668800, "v0.21"),
-    (1631577600, "v22"),
+    (1610582400, "v0.21"),
+    (1631491200, "v22"),
     (1650844800, "v23"),
     (1670803200, "v24"),
     (1685059200, "v25"),
-    (1701907200, "v26"),
+    (1701820800, "v26"),
     (1713225600, "v27"),
-    (1728086400, "v28"),
-    (1744675200, "v29"),
-    (1760313600, "v30"),
+    (1727827200, "v28"),
+    (1744588800, "v29"),
+    (1760054400, "v30"),
 ];
 
 /// Notable Bitcoin events (timestamp unix seconds, label).
@@ -4850,7 +4851,9 @@ mod tests {
     /// positioned by the timestamp. Halvings were already correct, and are
     /// included so they stay that way.
     ///
-    ///     cargo test --features ssr activation_timestamps -- --ignored
+    /// ```text
+    /// cargo test --features ssr activation_timestamps -- --ignored
+    /// ```
     #[test]
     #[ignore]
     fn activation_timestamps_match_the_chain() {
