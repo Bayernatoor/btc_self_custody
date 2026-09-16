@@ -878,7 +878,7 @@
                     if (b.segwit_spend_count > 0)
                         body.appendChild(bdRow('SegWit Txs', b.segwit_spend_count.toLocaleString()));
                     if (b.taproot_spend_count > 0)
-                        body.appendChild(bdRow('Taproot Spends', b.taproot_spend_count.toLocaleString()));
+                        body.appendChild(bdRow('Taproot outputs created', b.p2tr_count.toLocaleString()));
                 }
 
                 // -- Embedded Data --

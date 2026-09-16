@@ -1122,36 +1122,43 @@ pub fn fee_rate_heatmap_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
         "legend": { "show": true },
+        // Five percentile lines, not a stack.
+        //
+        // These were stacked, so the top of the plot was p10 + p25 + median +
+        // p75 + p90 rather than p90: for percentiles 1, 2, 3, 4 and 5 the
+        // upper boundary read 15. Every value a reader could take off the
+        // chart above the first band was a cumulative sum of quantiles, which
+        // is not a quantity.
+        //
+        // Lines rather than bands between adjacent percentiles, because a
+        // band's tooltip would report the gap between two quantiles while the
+        // legend named a percentile. The exact stored value stays readable at
+        // every series, which is what the export and the tooltip need.
         "series": [
             {
-                "name": "p10", "type": "line", "stack": "fee", "data": p10_data,
-                "lineStyle": { "width": 0 }, "symbol": "none",
-                "areaStyle": { "opacity": 0.6 },
-                "itemStyle": { "color": P10_COLOR }
+                "name": "p10", "type": "line", "data": p10_data,
+                "lineStyle": { "width": 1.5, "color": P10_COLOR },
+                "symbol": "none", "itemStyle": { "color": P10_COLOR }
             },
             {
-                "name": "p25", "type": "line", "stack": "fee", "data": p25_data,
-                "lineStyle": { "width": 0 }, "symbol": "none",
-                "areaStyle": { "opacity": 0.6 },
-                "itemStyle": { "color": P25_COLOR }
+                "name": "p25", "type": "line", "data": p25_data,
+                "lineStyle": { "width": 1.5, "color": P25_COLOR },
+                "symbol": "none", "itemStyle": { "color": P25_COLOR }
             },
             {
-                "name": "Median", "type": "line", "stack": "fee", "data": median_data,
-                "lineStyle": { "width": 0 }, "symbol": "none",
-                "areaStyle": { "opacity": 0.6 },
-                "itemStyle": { "color": MED_COLOR }
+                "name": "Median", "type": "line", "data": median_data,
+                "lineStyle": { "width": 2, "color": MED_COLOR },
+                "symbol": "none", "itemStyle": { "color": MED_COLOR }
             },
             {
-                "name": "p75", "type": "line", "stack": "fee", "data": p75_data,
-                "lineStyle": { "width": 0 }, "symbol": "none",
-                "areaStyle": { "opacity": 0.6 },
-                "itemStyle": { "color": P75_COLOR }
+                "name": "p75", "type": "line", "data": p75_data,
+                "lineStyle": { "width": 1.5, "color": P75_COLOR },
+                "symbol": "none", "itemStyle": { "color": P75_COLOR }
             },
             {
-                "name": "p90", "type": "line", "stack": "fee", "data": p90_data,
-                "lineStyle": { "width": 0 }, "symbol": "none",
-                "areaStyle": { "opacity": 0.6 },
-                "itemStyle": { "color": P90_COLOR }
+                "name": "p90", "type": "line", "data": p90_data,
+                "lineStyle": { "width": 1.5, "color": P90_COLOR },
+                "symbol": "none", "itemStyle": { "color": P90_COLOR }
             }
         ]
     }))

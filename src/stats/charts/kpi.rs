@@ -217,6 +217,11 @@ pub fn compute_axis(option_json: &str, shape: Shape, axis: u64) -> Kpis {
 
     match shape {
         Shape::Donut | Shape::Histogram => categorical(&opt, &series),
+        // A gauge carries one value against a band. There is no average, no
+        // extreme and no set of categories to concentrate, so reading it as a
+        // one-slice donut produced "largest: Moderate, 100.0% of total, 1
+        // entries": all three figures describe the widget.
+        Shape::Gauge => Kpis::Unavailable,
         Shape::StackedAbsolute | Shape::StackedPercent => {
             bands(&series, x_axis_is_time(&opt))
         }

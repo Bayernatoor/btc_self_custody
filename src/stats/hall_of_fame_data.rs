@@ -360,10 +360,18 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
     },
     HallOfFameEntry {
         slug: "most-taproot-spends",
-        title: "Most Taproot Spends in a Block (22,367)",
-        // DB: height 840655, taproot_spend_count 22,367, 186 txs, miner F2Pool
-        description: "Block 840,655 had 22,367 Taproot (P2TR) spend inputs from just 186 transactions, with each transaction spending over 100 Taproot UTXOs on average. Mined by F2Pool four days after the fourth halving.",
-        short_context: Some("22,367 Taproot inputs from only 186 transactions, averaging over 100 Taproot UTXOs spent per transaction"),
+        title: "Most Taproot Outputs in a Block (22,367)",
+        // Corrected 2026-09-15. This read "22,367 Taproot spend inputs",
+        // which the block disproves: it has 327 inputs in total, so it cannot
+        // hold 22,367 of them. The figure came from taproot_spend_count,
+        // which despite its name counts *created* P2TR outputs and is
+        // byte-identical to p2tr_count in all 967,187 rows.
+        //
+        // DB: height 840655, p2tr_count 22,367, output_count 22,679,
+        // input_count 327, 186 txs, miner F2Pool, 2024-04-24.
+        // The slug stays as it is because it is a public anchor.
+        description: "Block 840,655 created 22,367 Taproot (P2TR) outputs across just 186 transactions, about 120 outputs per transaction. That is batch creation rather than spending: the block holds only 327 inputs in total. Mined by F2Pool four days after the fourth halving.",
+        short_context: Some("22,367 Taproot outputs created by only 186 transactions, about 120 per transaction"),
         almanac: true,
         category: Records,
         date: "2024-04-24",

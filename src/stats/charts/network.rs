@@ -171,20 +171,26 @@ pub fn tps_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Transactions per Second");
     }
 
-    let vals: Vec<f64> = blocks
+    // `None` where there is no interval to divide by, rather than zero.
+    //
+    // Two cases, and both were written as a measurement of zero throughput.
+    // The first block in the range has no predecessor, so it has no interval
+    // at all. And a miner can stamp a block at or before its parent's time,
+    // which gives a non-positive interval that is not a rate of zero
+    // transactions per second; the chain kept moving, the clock did not.
+    // Together those put fabricated zeros on the axis and dragged the moving
+    // average toward them.
+    let vals: Vec<Option<f64>> = blocks
         .windows(2)
         .map(|w| {
-            let interval = w[1].timestamp.saturating_sub(w[0].timestamp);
-            if interval > 0 {
-                round(w[1].tx_count as f64 / interval as f64, 2)
-            } else {
-                0.0
-            }
+            let interval = w[1].timestamp as i64 - w[0].timestamp as i64;
+            (interval > 0)
+                .then(|| round(w[1].tx_count as f64 / interval as f64, 2))
         })
         .collect();
 
-    // First block has no previous — use 0
-    let mut all_vals = vec![0.0];
+    // The first block has no predecessor, so no reading.
+    let mut all_vals = vec![None];
     all_vals.extend_from_slice(&vals);
 
     let mut raw_buf = String::with_capacity(blocks.len() * 30);
@@ -193,12 +199,43 @@ pub fn tps_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         if i > 0 {
             raw_buf.push(',');
         }
-        let _ = write!(raw_buf, "[{},{},{}]", ts_ms(b.timestamp), v, b.height);
+        // The timestamp and height stay so the tooltip still identifies the
+        // block; only the rate is absent.
+        match v {
+            Some(v) => {
+                let _ = write!(
+                    raw_buf,
+                    "[{},{},{}]",
+                    ts_ms(b.timestamp),
+                    v,
+                    b.height
+                );
+            }
+            None => {
+                let _ = write!(
+                    raw_buf,
+                    "[{},null,{}]",
+                    ts_ms(b.timestamp),
+                    b.height
+                );
+            }
+        }
     }
     raw_buf.push(']');
     let raw = data_array_value(&raw_buf);
 
-    let ma = moving_average(&all_vals, 144);
+    // Smoothed over the readings that exist, then realigned, so a gap neither
+    // counts as zero nor shifts the curve sideways.
+    let present: Vec<f64> = all_vals.iter().filter_map(|v| *v).collect();
+    let ma = moving_average(&present, 144);
+    let mut ma_iter = ma.into_iter();
+    let ma: Vec<Option<f64>> = all_vals
+        .iter()
+        .map(|v| match v {
+            Some(_) => ma_iter.next().flatten(),
+            None => None,
+        })
+        .collect();
     let ma_str = build_ma_array(blocks, &ma);
     let ma_data = data_array_value(&ma_str);
 

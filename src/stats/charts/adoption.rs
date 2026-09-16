@@ -67,19 +67,41 @@ pub fn segwit_adoption_chart_daily(
     }
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let vals: Vec<f64> = days
+    // `None`, not zero, for a day with no transaction to take a share of.
+    //
+    // A day whose blocks are all coinbase-only has no denominator. "0% of
+    // transactions used a witness input" is a measurement; "there were no
+    // transactions" is its absence, and writing the first put a real zero on
+    // the axis for the early chain and pulled the smoothed line down with it.
+    let readings: Vec<Option<f64>> = days
         .iter()
         .map(|d| {
-            if d.avg_tx_count > 1.0 {
+            (d.avg_tx_count > 1.0).then(|| {
                 let pct =
                     d.avg_segwit_spend_count / (d.avg_tx_count - 1.0) * 100.0;
                 (pct * 100.0).round() / 100.0
-            } else {
-                0.0
-            }
+            })
         })
         .collect();
-    let ma = moving_average(&vals, 7);
+    let vals: Vec<serde_json::Value> = readings
+        .iter()
+        .map(|v| match v {
+            Some(x) => json!(x),
+            None => json!(null),
+        })
+        .collect();
+    // The moving average skips the gaps rather than treating them as zeros,
+    // which would drag the smoothed line toward an absence.
+    let present: Vec<f64> = readings.iter().filter_map(|v| *v).collect();
+    let ma = moving_average(&present, 7);
+    let mut ma_iter = ma.into_iter();
+    let ma: Vec<Option<f64>> = readings
+        .iter()
+        .map(|r| match r {
+            Some(_) => ma_iter.next().flatten(),
+            None => None,
+        })
+        .collect();
     let ma_vals: Vec<serde_json::Value> = ma
         .iter()
         .map(|v| match v {
@@ -114,14 +136,10 @@ pub fn taproot_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Taproot Outputs");
     }
 
-    let raw_str =
-        build_data_array_f64(blocks, |b| b.taproot_spend_count as f64);
+    let raw_str = build_data_array_f64(blocks, |b| b.p2tr_count as f64);
     let raw = data_array_value(&raw_str);
 
-    let vals: Vec<f64> = blocks
-        .iter()
-        .map(|b| b.taproot_spend_count as f64)
-        .collect();
+    let vals: Vec<f64> = blocks.iter().map(|b| b.p2tr_count as f64).collect();
     let ma = moving_average(&vals, 144);
     let ma_str = build_ma_array(blocks, &ma);
     let ma_series = data_array_value(&ma_str);
@@ -159,10 +177,8 @@ pub fn taproot_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     }
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let vals: Vec<f64> = days
-        .iter()
-        .map(|d| round(d.avg_taproot_spend_count, 1))
-        .collect();
+    let vals: Vec<f64> =
+        days.iter().map(|d| round(d.avg_p2tr_count, 1)).collect();
     let ma = moving_average(&vals, 7);
     let ma_vals: Vec<serde_json::Value> = ma
         .iter()

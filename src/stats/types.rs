@@ -52,6 +52,13 @@ pub struct BlockSummary {
     /// Number of transactions with at least one SegWit input.
     pub segwit_spend_count: u64,
     /// Number of P2TR (taproot) outputs created in this block.
+    /// **Misnamed and deprecated.** Counts created P2TR *outputs*, not inputs
+    /// spending them, and is byte-identical to `p2tr_count` in all 967,187
+    /// stored rows. Read `p2tr_count` instead.
+    ///
+    /// Retained rather than removed because it is a serialized field on a type
+    /// that crosses the server-function boundary, and because dropping a
+    /// column is never the move here. Nothing reads it as of 2026-09-15.
     pub taproot_spend_count: u64,
     /// Number of P2PK (pay-to-pubkey) outputs.
     pub p2pk_count: u64,

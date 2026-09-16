@@ -216,6 +216,15 @@ pub struct Measurement {
     /// Easier; in both, naming a series would imply the others measure
     /// something else.
     pub series: &'static str,
+    /// The daily builder's name for the same series, where it differs.
+    ///
+    /// Empty means it does not. Three charts legitimately rename a series
+    /// between resolutions because the quantity shifts with it: `subsidy-fees`
+    /// draws "Fees" per block and "Avg Fees" daily, and both are accurate for
+    /// what they plot. A single name would be wrong at one resolution, so the
+    /// declaration carries the pair rather than forcing the builders to agree
+    /// on a word that fits only one of them.
+    pub series_daily: &'static str,
     /// What is counted or measured, in the chart's own units.
     pub quantity: &'static str,
     /// Method at per-block resolution.
@@ -285,12 +294,21 @@ pub enum Shape {
     StackedAbsolute,
     StackedPercent,
     Donut,
+    /// One number against a band, which is a different thing from a donut
+    /// even though both are circular.
+    ///
+    /// `diversity` declared `Donut` and drew a gauge, and nothing noticed
+    /// because its source sat outside the conformance harness. The key figures
+    /// then read it as a one-slice donut and reported "largest: Moderate,
+    /// 100.0% of total, 1 entries", which is three facts about the rendering
+    /// and none about the chain.
+    Gauge,
     Histogram,
 }
 
 impl Shape {
-    /// Donuts and histograms bucket their x axis, so "change over the range"
-    /// and a shared time domain do not apply to them.
+    /// Donuts, gauges and histograms bucket or collapse their x axis, so
+    /// "change over the range" and a shared time domain do not apply.
     pub fn has_time_axis(self) -> bool {
         !matches!(self, Self::Donut | Self::Histogram)
     }
@@ -299,7 +317,10 @@ impl Shape {
     /// cannot be read against them. Refusing this here is why the clipping bug
     /// fixed in `fix/chart-zoom-axis` cannot recur through the compare path.
     pub fn accepts_second_series(self) -> bool {
-        !matches!(self, Self::StackedPercent | Self::Donut | Self::Histogram)
+        !matches!(
+            self,
+            Self::StackedPercent | Self::Donut | Self::Gauge | Self::Histogram
+        )
     }
 }
 
@@ -394,10 +415,10 @@ pub struct ChartMeta {
     /// description alone rather than an empty section.
     /// What this chart measures, per measurement and per resolution.
     ///
-    /// Empty during the migration: the cohort that proves the design carries
-    /// declarations and the rest are being filled in.
-    /// `the_undeclared_chart_count_only_shrinks` pins the remainder so the
-    /// gap cannot grow and a new chart cannot be added without one.
+    /// Never empty. `every_chart_declares_what_it_measures` holds that, so a
+    /// new chart cannot be registered without saying what its points mean at
+    /// each resolution, how the number came to exist, and what its population
+    /// excludes.
     pub measurements: &'static [Measurement],
     pub about: Option<About>,
 }
@@ -488,7 +509,28 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::all_embedded_share_chart,
             daily: Daily::Fn(super::all_embedded_share_chart_daily),
         },
-        measurements: &[],
+        measurements: &[
+            Measurement {
+                series: "OP_RETURN",
+                series_daily: "",
+                quantity: "Share of block bytes in OP_RETURN scripts",
+                method_per_block: Method::Measured,
+                method_daily: Method::Measured,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::RatioOfTotals,
+                population: "OP_RETURN script bytes over serialized block bytes. Script bytes only, so the output's value and length fields are outside the numerator.",
+            },
+            Measurement {
+                series: "Inscriptions",
+                series_daily: "",
+                quantity: "Share of block bytes in inscription payloads",
+                method_per_block: Method::HeuristicallyDetected,
+                method_daily: Method::HeuristicallyDetected,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::RatioOfTotals,
+                population: "Estimated inscription payload over serialized block bytes. The two bands measure bytes on different bases, since one is exact script bytes and the other an estimated payload, so their sum is not a single well-defined quantity.",
+            },
+        ],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -516,6 +558,7 @@ pub const CHARTS: &[ChartMeta] = &[
         measurements: &[
             Measurement {
                 series: "",
+                series_daily: "",
                 quantity: "Printable characters in the block's coinbase input",
                 method_per_block: Method::Measured,
                 // No daily builder, so there is no daily method either.
@@ -544,7 +587,28 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::inscription_envelope_chart,
             daily: Daily::Fn(super::inscription_envelope_chart_daily),
         },
-        measurements: &[],
+        measurements: &[
+            Measurement {
+                series: "Payload",
+                series_daily: "",
+                quantity: "Estimated inscription content bytes",
+                method_per_block: Method::HeuristicallyDetected,
+                method_daily: Method::HeuristicallyDetected,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "Matching witness item bytes less an estimated envelope overhead, so this is an estimate of content rather than a parsed payload. Divided by 1,024, which is KiB, while the axis is labelled KB.",
+            },
+            Measurement {
+                series: "Envelope Overhead",
+                series_daily: "",
+                quantity: "Estimated inscription framing bytes",
+                method_per_block: Method::HeuristicallyDetected,
+                method_daily: Method::HeuristicallyDetected,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "The remainder after subtracting the estimated payload, floored at zero. Also divided by 1,024 rather than 1,000.",
+            },
+        ],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -566,6 +630,7 @@ pub const CHARTS: &[ChartMeta] = &[
         },
         measurements: &[Measurement {
             series: "",
+            series_daily: "",
             quantity: "Share of fees paid by transactions matching the inscription detector",
             method_per_block: Method::HeuristicallyDetected,
             method_daily: Method::HeuristicallyDetected,
@@ -594,6 +659,7 @@ pub const CHARTS: &[ChartMeta] = &[
         },
         measurements: &[Measurement {
             series: "",
+            series_daily: "",
             quantity: "Share of transactions matching the inscription detector",
             method_per_block: Method::HeuristicallyDetected,
             method_daily: Method::HeuristicallyDetected,
@@ -622,6 +688,7 @@ pub const CHARTS: &[ChartMeta] = &[
         },
         measurements: &[Measurement {
             series: "",
+            series_daily: "",
             quantity: "Witness items matching the Ordinals marker",
             method_per_block: Method::HeuristicallyDetected,
             method_daily: Method::HeuristicallyDetected,
@@ -648,6 +715,7 @@ pub const CHARTS: &[ChartMeta] = &[
         },
         measurements: &[Measurement {
             series: "",
+            series_daily: "",
             quantity: "Share of block bytes in OP_RETURN scripts",
             method_per_block: Method::Measured,
             method_daily: Method::Measured,
@@ -669,7 +737,48 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::op_return_bytes_chart,
             daily: Daily::Fn(super::op_return_bytes_chart_daily),
         },
-        measurements: &[],
+        measurements: &[
+            Measurement {
+                series: "Runes",
+                series_daily: "",
+                quantity: "OP_RETURN script bytes matching the Runes prefix",
+                method_per_block: Method::HeuristicallyDetected,
+                method_daily: Method::HeuristicallyDetected,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "The day's total divided by its block count, so a per-block mean, then divided by 1,000 so the plotted unit is kB while the registry declares bytes.",
+            },
+            Measurement {
+                series: "Omni",
+                series_daily: "",
+                quantity: "OP_RETURN script bytes matching the Omni prefix",
+                method_per_block: Method::HeuristicallyDetected,
+                method_daily: Method::HeuristicallyDetected,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "As Runes.",
+            },
+            Measurement {
+                series: "Counterparty",
+                series_daily: "",
+                quantity: "OP_RETURN script bytes matching the Counterparty prefix",
+                method_per_block: Method::HeuristicallyDetected,
+                method_daily: Method::HeuristicallyDetected,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "As Runes.",
+            },
+            Measurement {
+                series: "Other",
+                series_daily: "",
+                quantity: "OP_RETURN script bytes matching no known prefix",
+                method_per_block: Method::Calculated,
+                method_daily: Method::Calculated,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "The residual, so it is whatever the detectors missed rather than a named protocol.",
+            },
+        ],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -689,7 +798,48 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::op_return_count_chart,
             daily: Daily::Fn(super::op_return_count_chart_daily),
         },
-        measurements: &[],
+        measurements: &[
+            Measurement {
+                series: "Runes",
+                series_daily: "",
+                quantity: "OP_RETURN outputs matching the Runes prefix",
+                method_per_block: Method::HeuristicallyDetected,
+                method_daily: Method::HeuristicallyDetected,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "The day's total divided by its block count, so a per-block mean rather than a daily total.",
+            },
+            Measurement {
+                series: "Omni",
+                series_daily: "",
+                quantity: "OP_RETURN outputs matching the Omni prefix",
+                method_per_block: Method::HeuristicallyDetected,
+                method_daily: Method::HeuristicallyDetected,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "As Runes.",
+            },
+            Measurement {
+                series: "Counterparty",
+                series_daily: "",
+                quantity: "OP_RETURN outputs matching the Counterparty prefix",
+                method_per_block: Method::HeuristicallyDetected,
+                method_daily: Method::HeuristicallyDetected,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "As Runes.",
+            },
+            Measurement {
+                series: "Other",
+                series_daily: "",
+                quantity: "OP_RETURN outputs matching no known prefix",
+                method_per_block: Method::Calculated,
+                method_daily: Method::Calculated,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "The residual, not a named protocol.",
+            },
+        ],
         about: None,
     },
     ChartMeta {
@@ -704,7 +854,38 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::protocol_fee_competition_chart,
             daily: Daily::Fn(super::protocol_fee_competition_chart_daily),
         },
-        measurements: &[],
+        measurements: &[
+            Measurement {
+                series: "Inscriptions",
+                series_daily: "",
+                quantity: "Fees paid by transactions matching the inscription detector",
+                method_per_block: Method::HeuristicallyDetected,
+                method_daily: Method::HeuristicallyDetected,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::DailyTotal,
+                population: "A transaction matching both this and the Runes detector has its whole fee credited to both, so these bands can double-count and are not parts of one total despite being stacked.",
+            },
+            Measurement {
+                series: "Runes",
+                series_daily: "",
+                quantity: "Fees paid by transactions matching the Runes detector",
+                method_per_block: Method::HeuristicallyDetected,
+                method_daily: Method::HeuristicallyDetected,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::DailyTotal,
+                population: "As Inscriptions, and can double-count the same fee.",
+            },
+            Measurement {
+                series: "Other",
+                series_daily: "",
+                quantity: "Remaining fees",
+                method_per_block: Method::Estimated,
+                method_daily: Method::Estimated,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::DailyTotal,
+                population: "Total fees less both detector totals, floored at zero, so it is understated wherever they overlap. The total is itself coinbase-derived.",
+            },
+        ],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -726,6 +907,7 @@ pub const CHARTS: &[ChartMeta] = &[
         },
         measurements: &[Measurement {
             series: "",
+            series_daily: "",
             quantity: "Share of OP_RETURN outputs, by protocol",
             method_per_block: Method::HeuristicallyDetected,
             method_daily: Method::HeuristicallyDetected,
@@ -747,7 +929,68 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::unified_embedded_count_chart,
             daily: Daily::Fn(super::unified_embedded_count_chart_daily),
         },
-        measurements: &[],
+        measurements: &[
+            Measurement {
+                series: "Runes",
+                series_daily: "",
+                quantity: "OP_RETURN outputs matching the Runes prefix",
+                method_per_block: Method::HeuristicallyDetected,
+                method_daily: Method::HeuristicallyDetected,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "Daily total over block count, so a per-block mean.",
+            },
+            Measurement {
+                series: "Omni",
+                series_daily: "",
+                quantity: "OP_RETURN outputs matching the Omni prefix",
+                method_per_block: Method::HeuristicallyDetected,
+                method_daily: Method::HeuristicallyDetected,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "As Runes.",
+            },
+            Measurement {
+                series: "Counterparty",
+                series_daily: "",
+                quantity: "OP_RETURN outputs matching the Counterparty prefix",
+                method_per_block: Method::HeuristicallyDetected,
+                method_daily: Method::HeuristicallyDetected,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "As Runes.",
+            },
+            Measurement {
+                series: "Other OP_RETURN",
+                series_daily: "",
+                quantity: "OP_RETURN outputs matching no known prefix",
+                method_per_block: Method::Calculated,
+                method_daily: Method::Calculated,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "The residual of the OP_RETURN detectors.",
+            },
+            Measurement {
+                series: "Inscriptions",
+                series_daily: "",
+                quantity: "Matching witness items other than BRC-20",
+                method_per_block: Method::HeuristicallyDetected,
+                method_daily: Method::HeuristicallyDetected,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "BRC-20 is subtracted so the bands are disjoint as drawn, even though BRC-20 is a subset of inscriptions in the raw taxonomy. The chart mixes OP_RETURN outputs with witness items, which are different objects.",
+            },
+            Measurement {
+                series: "BRC-20",
+                series_daily: "",
+                quantity: "Matching witness items carrying a BRC-20 marker",
+                method_per_block: Method::HeuristicallyDetected,
+                method_daily: Method::HeuristicallyDetected,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "Plotted separately, hence its removal from the Inscriptions band.",
+            },
+        ],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -767,7 +1010,58 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::unified_embedded_volume_chart,
             daily: Daily::Fn(super::unified_embedded_volume_chart_daily),
         },
-        measurements: &[],
+        measurements: &[
+            Measurement {
+                series: "Runes",
+                series_daily: "",
+                quantity: "OP_RETURN script bytes matching the Runes prefix",
+                method_per_block: Method::HeuristicallyDetected,
+                method_daily: Method::HeuristicallyDetected,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "Daily total over block count then over 1,000, so a per-block mean in kB while the registry declares bytes.",
+            },
+            Measurement {
+                series: "Omni",
+                series_daily: "",
+                quantity: "OP_RETURN script bytes matching the Omni prefix",
+                method_per_block: Method::HeuristicallyDetected,
+                method_daily: Method::HeuristicallyDetected,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "As Runes.",
+            },
+            Measurement {
+                series: "Counterparty",
+                series_daily: "",
+                quantity: "OP_RETURN script bytes matching the Counterparty prefix",
+                method_per_block: Method::HeuristicallyDetected,
+                method_daily: Method::HeuristicallyDetected,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "As Runes.",
+            },
+            Measurement {
+                series: "Other OP_RETURN",
+                series_daily: "",
+                quantity: "OP_RETURN script bytes matching no known prefix",
+                method_per_block: Method::Calculated,
+                method_daily: Method::Calculated,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "The residual.",
+            },
+            Measurement {
+                series: "Inscriptions",
+                series_daily: "",
+                quantity: "Estimated inscription payload bytes",
+                method_per_block: Method::HeuristicallyDetected,
+                method_daily: Method::HeuristicallyDetected,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "An estimated payload, whereas the OP_RETURN bands are exact script bytes, so the stack mixes two byte bases.",
+            },
+        ],
         about: None,
     },
     ChartMeta {
@@ -784,6 +1078,7 @@ pub const CHARTS: &[ChartMeta] = &[
         },
         measurements: &[Measurement {
             series: "",
+            series_daily: "",
             quantity: "Fees per non-coinbase transaction",
             method_per_block: Method::Estimated,
             method_daily: Method::Estimated,
@@ -807,6 +1102,7 @@ pub const CHARTS: &[ChartMeta] = &[
         },
         measurements: &[Measurement {
             series: "",
+            series_daily: "",
             quantity: "Value carried by a block's outputs",
             method_per_block: Method::Measured,
             method_daily: Method::Measured,
@@ -828,7 +1124,7 @@ pub const CHARTS: &[ChartMeta] = &[
         desc_daily: "Fee rate percentiles from p10 to p90 showing the full spread of fee rates per block. Click legend items to toggle bands",
         category: Category::Fees,
         unit: Unit::SatVb,
-        shape: Shape::StackedAbsolute,
+        shape: Shape::Line,
         source: Source::Dashboard {
             per_block: super::fee_rate_heatmap_chart,
             daily: Daily::Unavailable,
@@ -836,53 +1132,58 @@ pub const CHARTS: &[ChartMeta] = &[
         measurements: &[
             Measurement {
                 series: "p10",
+                series_daily: "",
                 quantity: "10th percentile transaction fee rate in the block",
                 method_per_block: Method::Measured,
                 // No daily builder, so there is no daily method either.
                 method_daily: Method::Measured,
                 per_block: Aggregation::PerBlockObservation,
                 daily: Aggregation::Unsupported,
-                population: "Stored per-block percentile. Currently drawn as a stacked band, so the upper boundary of the plot is the sum of the five percentiles rather than p90; correcting the rendering is a separate measurement fix.",
+                population: "Stored per-block percentile, drawn as its own line. Percentiles are not additive, so these were stacked until 2026-09-15 and the top of the plot was their sum rather than p90.",
             },
             Measurement {
                 series: "p25",
+                series_daily: "",
                 quantity: "25th percentile transaction fee rate in the block",
                 method_per_block: Method::Measured,
                 // No daily builder, so there is no daily method either.
                 method_daily: Method::Measured,
                 per_block: Aggregation::PerBlockObservation,
                 daily: Aggregation::Unsupported,
-                population: "As p10. Stacked, so the drawn height is not the percentile.",
+                population: "As p10, drawn as its own line.",
             },
             Measurement {
                 series: "Median",
+                series_daily: "",
                 quantity: "Median transaction fee rate in the block",
                 method_per_block: Method::Measured,
                 // No daily builder, so there is no daily method either.
                 method_daily: Method::Measured,
                 per_block: Aggregation::PerBlockObservation,
                 daily: Aggregation::Unsupported,
-                population: "As p10. Stacked, so the drawn height is not the percentile.",
+                population: "As p10, drawn as its own line.",
             },
             Measurement {
                 series: "p75",
+                series_daily: "",
                 quantity: "75th percentile transaction fee rate in the block",
                 method_per_block: Method::Measured,
                 // No daily builder, so there is no daily method either.
                 method_daily: Method::Measured,
                 per_block: Aggregation::PerBlockObservation,
                 daily: Aggregation::Unsupported,
-                population: "As p10. Stacked, so the drawn height is not the percentile.",
+                population: "As p10, drawn as its own line.",
             },
             Measurement {
                 series: "p90",
+                series_daily: "",
                 quantity: "90th percentile transaction fee rate in the block",
                 method_per_block: Method::Measured,
                 // No daily builder, so there is no daily method either.
                 method_daily: Method::Measured,
                 per_block: Aggregation::PerBlockObservation,
                 daily: Aggregation::Unsupported,
-                population: "As p10. p10 to p90 is the central 80 percent of transactions, not the full spread.",
+                population: "As p10. p10 to p90 spans the central 80 percent of a block's transactions, not the full spread.",
             },
         ],
         about: Some(About {
@@ -907,6 +1208,7 @@ pub const CHARTS: &[ChartMeta] = &[
         measurements: &[
             Measurement {
                 series: "Fee Pressure",
+                series_daily: "",
                 quantity: "Median fee rate against block weight utilisation",
                 method_per_block: Method::Measured,
                 // No daily builder, so there is no daily method either.
@@ -937,6 +1239,7 @@ pub const CHARTS: &[ChartMeta] = &[
         },
         measurements: &[Measurement {
             series: "",
+            series_daily: "",
             quantity: "Fees as a share of what the miner earned",
             method_per_block: Method::Estimated,
             method_daily: Method::Estimated,
@@ -966,6 +1269,7 @@ pub const CHARTS: &[ChartMeta] = &[
         measurements: &[
             Measurement {
                 series: "Spike (>5x avg)",
+                series_daily: "",
                 quantity: "Blocks whose median fee rate exceeded five times the trailing 144-block mean",
                 method_per_block: Method::Calculated,
                 // No daily builder, so there is no daily method either.
@@ -993,6 +1297,7 @@ pub const CHARTS: &[ChartMeta] = &[
         source: Source::Fees,
         measurements: &[Measurement {
             series: "",
+            series_daily: "",
             quantity: "Fees paid to the miner of a block, in the selected denomination",
             // Not measured, and this is the finding behind the declaration.
             // The block total is extracted as coinbase output value minus the
@@ -1024,6 +1329,7 @@ pub const CHARTS: &[ChartMeta] = &[
         },
         measurements: &[Measurement {
             series: "",
+            series_daily: "",
             quantity: "Comparison of metrics across halving eras",
             method_per_block: Method::Measured,
             method_daily: Method::Measured,
@@ -1053,6 +1359,7 @@ pub const CHARTS: &[ChartMeta] = &[
         measurements: &[
             Measurement {
                 series: "Max Tx Fee",
+                series_daily: "",
                 quantity: "Largest single transaction fee in the block",
                 method_per_block: Method::Measured,
                 // No daily builder, so there is no daily method either.
@@ -1079,6 +1386,7 @@ pub const CHARTS: &[ChartMeta] = &[
         measurements: &[
             Measurement {
                 series: "",
+                series_daily: "",
                 quantity: "Mean of per-block median transaction fee rates",
                 method_per_block: Method::Measured,
                 method_daily: Method::Calculated,
@@ -1107,6 +1415,7 @@ pub const CHARTS: &[ChartMeta] = &[
         measurements: &[
             Measurement {
                 series: "Inscriptions",
+                series_daily: "",
                 quantity: "Fees paid by transactions matching the inscription detector",
                 method_per_block: Method::HeuristicallyDetected,
                 // No daily builder, so there is no daily method either.
@@ -1117,6 +1426,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
             Measurement {
                 series: "Runes",
+                series_daily: "",
                 quantity: "Fees paid by transactions matching the Runes detector",
                 method_per_block: Method::HeuristicallyDetected,
                 // No daily builder, so there is no daily method either.
@@ -1127,6 +1437,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
             Measurement {
                 series: "Other",
+                series_daily: "",
                 quantity: "The block's remaining fees",
                 method_per_block: Method::Calculated,
                 // No daily builder, so there is no daily method either.
@@ -1150,7 +1461,28 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::subsidy_vs_fees_chart,
             daily: Daily::Fn(super::subsidy_vs_fees_chart_daily),
         },
-        measurements: &[],
+        measurements: &[
+            Measurement {
+                series: "Subsidy",
+                series_daily: "",
+                quantity: "Block subsidy",
+                method_per_block: Method::Calculated,
+                method_daily: Method::Estimated,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "Per block the subsidy follows from the height's halving era and is exact. Daily it is derived from the date rather than the height, so a halving day blends two eras.",
+            },
+            Measurement {
+                series: "Fees",
+                series_daily: "Avg Fees",
+                quantity: "Fees paid to the miner",
+                method_per_block: Method::Estimated,
+                method_daily: Method::Estimated,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "Coinbase value less the scheduled subsidy, so a miner underclaiming the reward makes it wrong. Halving cuts the subsidy, not total reward: fees are the other component and are not guaranteed to replace it.",
+            },
+        ],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -1172,6 +1504,7 @@ pub const CHARTS: &[ChartMeta] = &[
         },
         measurements: &[Measurement {
             series: "",
+            series_daily: "",
             quantity: "Hash rate implied by the current difficulty",
             // Inferred, not measured: difficulty x 2^32 / 600 assumes blocks
             // arrive at the 600-second target on average. Nothing counts
@@ -1203,6 +1536,7 @@ pub const CHARTS: &[ChartMeta] = &[
         },
         measurements: &[Measurement {
             series: "",
+            series_daily: "",
             quantity: "Difficulty change at a retarget, as a percentage of the previous epoch",
             // The case that forced method to be per resolution. Per block it
             // reads the actual retarget blocks and the step is exact; daily it
@@ -1235,6 +1569,7 @@ pub const CHARTS: &[ChartMeta] = &[
         measurements: &[
             Measurement {
                 series: "",
+                series_daily: "",
                 quantity: "Mining difficulty, smoothed over several windows",
                 method_per_block: Method::Measured,
                 method_daily: Method::Estimated,
@@ -1265,6 +1600,7 @@ pub const CHARTS: &[ChartMeta] = &[
         measurements: &[
             Measurement {
                 series: "",
+                series_daily: "",
                 quantity: "Mining difficulty as the protocol reports it",
                 method_per_block: Method::Measured,
                 method_daily: Method::Estimated,
@@ -1285,10 +1621,11 @@ pub const CHARTS: &[ChartMeta] = &[
         desc_daily: "Herfindahl-Hirschman Index (HHI) measuring mining concentration. Below 1000 is competitive, above 1800 is concentrated",
         category: Category::Mining,
         unit: Unit::Count,
-        shape: Shape::Donut,
+        shape: Shape::Gauge,
         source: Source::Mining(MiningChart::Diversity),
         measurements: &[Measurement {
             series: "",
+            series_daily: "",
             quantity: "Concentration of block production across identified pools",
             method_per_block: Method::HeuristicallyDetected,
             method_daily: Method::HeuristicallyDetected,
@@ -1314,6 +1651,7 @@ pub const CHARTS: &[ChartMeta] = &[
         source: Source::Mining(MiningChart::EmptyBlocks),
         measurements: &[Measurement {
             series: "",
+            series_daily: "",
             quantity: "Blocks containing only a coinbase transaction, by month",
             method_per_block: Method::Measured,
             method_daily: Method::Measured,
@@ -1339,6 +1677,7 @@ pub const CHARTS: &[ChartMeta] = &[
         source: Source::Mining(MiningChart::EmptyByPool),
         measurements: &[Measurement {
             series: "",
+            series_daily: "",
             quantity: "Blocks containing only a coinbase transaction, by pool",
             method_per_block: Method::HeuristicallyDetected,
             method_daily: Method::HeuristicallyDetected,
@@ -1359,6 +1698,7 @@ pub const CHARTS: &[ChartMeta] = &[
         source: Source::Mining(MiningChart::Dominance),
         measurements: &[Measurement {
             series: "",
+            series_daily: "",
             quantity: "Share of blocks found, by mining pool",
             // Attribution is pattern-matching on coinbase contents, not a
             // signature. Roughly half of all blocks ever mined carry no tag
@@ -1388,6 +1728,7 @@ pub const CHARTS: &[ChartMeta] = &[
         },
         measurements: &[Measurement {
             series: "",
+            series_daily: "",
             quantity: "Outputs created, by script type",
             method_per_block: Method::Measured,
             method_daily: Method::Measured,
@@ -1413,6 +1754,7 @@ pub const CHARTS: &[ChartMeta] = &[
         },
         measurements: &[Measurement {
             series: "",
+            series_daily: "",
             quantity: "Share of outputs created, by script type",
             method_per_block: Method::Measured,
             method_daily: Method::Measured,
@@ -1436,6 +1778,7 @@ pub const CHARTS: &[ChartMeta] = &[
         },
         measurements: &[Measurement {
             series: "",
+            series_daily: "",
             quantity: "Mean serialized bytes per transaction",
             method_per_block: Method::Calculated,
             method_daily: Method::Calculated,
@@ -1462,7 +1805,28 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::batching_chart,
             daily: Daily::Fn(super::batching_chart_daily),
         },
-        measurements: &[],
+        measurements: &[
+            Measurement {
+                series: "Outputs/Tx",
+                series_daily: "",
+                quantity: "Outputs per non-coinbase transaction",
+                method_per_block: Method::Calculated,
+                method_daily: Method::Calculated,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::RatioOfTotals,
+                population: "Outputs over transactions less one for the coinbase. Higher can mean batching or more change outputs; it does not distinguish payments from change.",
+            },
+            Measurement {
+                series: "Inputs/Tx",
+                series_daily: "",
+                quantity: "Inputs per non-coinbase transaction",
+                method_per_block: Method::Calculated,
+                method_daily: Method::Calculated,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::RatioOfTotals,
+                population: "Inputs over transactions less one for the coinbase. Higher suggests consolidation but does not establish it.",
+            },
+        ],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -1482,6 +1846,7 @@ pub const CHARTS: &[ChartMeta] = &[
         measurements: &[
             Measurement {
                 series: "Block Data",
+                series_daily: "",
                 quantity: "Serialized block bytes, accumulated",
                 method_per_block: Method::Measured,
                 method_daily: Method::Measured,
@@ -1491,6 +1856,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
             Measurement {
                 series: "Disk Size (est.)",
+                series_daily: "",
                 quantity: "Block bytes scaled by the storage overhead a node carries today",
                 // The one that makes a single per-chart badge impossible: a
                 // measured series beside an estimated companion.
@@ -1518,7 +1884,28 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::cumulative_adoption_chart,
             daily: Daily::Fn(super::cumulative_adoption_chart_daily),
         },
-        measurements: &[],
+        measurements: &[
+            Measurement {
+                series: "SegWit v0 Outputs",
+                series_daily: "",
+                quantity: "Native v0 witness outputs created, accumulated",
+                method_per_block: Method::Measured,
+                method_daily: Method::Measured,
+                per_block: Aggregation::CumulativeInWindow,
+                daily: Aggregation::CumulativeInWindow,
+                population: "P2WPKH plus P2WSH outputs, accumulated across the selected window only, so the first point is not the chain's beginning unless the window is. Outputs, not transactions.",
+            },
+            Measurement {
+                series: "Taproot Outputs",
+                series_daily: "",
+                quantity: "Taproot outputs created, accumulated",
+                method_per_block: Method::Measured,
+                method_daily: Method::Measured,
+                per_block: Aggregation::CumulativeInWindow,
+                daily: Aggregation::CumulativeInWindow,
+                population: "P2TR outputs, accumulated across the window only.",
+            },
+        ],
         about: None,
     },
     ChartMeta {
@@ -1532,6 +1919,7 @@ pub const CHARTS: &[ChartMeta] = &[
         source: Source::FullnessDist,
         measurements: &[Measurement {
             series: "",
+            series_daily: "",
             quantity: "Blocks grouped by how much of the weight limit they used",
             method_per_block: Method::Calculated,
             method_daily: Method::Calculated,
@@ -1561,6 +1949,7 @@ pub const CHARTS: &[ChartMeta] = &[
         measurements: &[
             Measurement {
                 series: "",
+                series_daily: "",
                 quantity: "Time between blocks",
                 method_per_block: Method::Calculated,
                 method_daily: Method::Estimated,
@@ -1592,6 +1981,7 @@ pub const CHARTS: &[ChartMeta] = &[
         measurements: &[
             Measurement {
                 series: "Largest Tx",
+                series_daily: "",
                 quantity: "Size of the largest transaction in the block",
                 method_per_block: Method::Measured,
                 // No daily builder, so there is no daily method either.
@@ -1617,6 +2007,7 @@ pub const CHARTS: &[ChartMeta] = &[
         },
         measurements: &[Measurement {
             series: "",
+            series_daily: "",
             quantity: "Change in each script type's share of outputs",
             method_per_block: Method::Calculated,
             method_daily: Method::Calculated,
@@ -1645,6 +2036,7 @@ pub const CHARTS: &[ChartMeta] = &[
         },
         measurements: &[Measurement {
             series: "",
+            series_daily: "",
             quantity: "Share of outputs created to P2PKH",
             method_per_block: Method::Measured,
             method_daily: Method::Measured,
@@ -1674,6 +2066,7 @@ pub const CHARTS: &[ChartMeta] = &[
         measurements: &[
             Measurement {
                 series: "Interval",
+                series_daily: "",
                 quantity: "Gap to the previous block, where it is under 60 seconds",
                 method_per_block: Method::Calculated,
                 // No daily builder, so there is no daily method either.
@@ -1699,6 +2092,7 @@ pub const CHARTS: &[ChartMeta] = &[
         },
         measurements: &[Measurement {
             series: "",
+            series_daily: "",
             quantity: "Share of transactions signalling replaceability",
             method_per_block: Method::Measured,
             method_daily: Method::Measured,
@@ -1727,6 +2121,7 @@ pub const CHARTS: &[ChartMeta] = &[
         },
         measurements: &[Measurement {
             series: "",
+            series_daily: "",
             quantity: "Share of transactions spending a witness input",
             method_per_block: Method::Calculated,
             method_daily: Method::Calculated,
@@ -1758,6 +2153,7 @@ pub const CHARTS: &[ChartMeta] = &[
         measurements: &[
             Measurement {
                 series: "",
+                series_daily: "",
                 quantity: "Serialized block size",
                 method_per_block: Method::Measured,
                 method_daily: Method::Measured,
@@ -1786,12 +2182,13 @@ pub const CHARTS: &[ChartMeta] = &[
         measurements: &[
             Measurement {
                 series: "",
+                series_daily: "",
                 quantity: "Taproot outputs created",
                 method_per_block: Method::Measured,
                 method_daily: Method::Measured,
                 per_block: Aggregation::PerBlockObservation,
                 daily: Aggregation::MeanOfPerBlockValues,
-                population: "Reads the taproot_spend_count column, which counts created P2TR outputs rather than inputs spending them; the column name is wrong and is being corrected. Outputs of non-coinbase transactions only.",
+                population: "P2TR outputs of non-coinbase transactions. Reads p2tr_count; the identically-valued taproot_spend_count column is misnamed and no longer read here.",
             },
         ],
         about: Some(About {
@@ -1811,7 +2208,28 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::taproot_spend_type_chart,
             daily: Daily::Fn(super::taproot_spend_type_chart_daily),
         },
-        measurements: &[],
+        measurements: &[
+            Measurement {
+                series: "Key-path",
+                series_daily: "",
+                quantity: "Inputs detected as key-path Taproot spends",
+                method_per_block: Method::HeuristicallyDetected,
+                method_daily: Method::HeuristicallyDetected,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "Classified from witness shape, so these are detector counts rather than verified spend totals. A key-path spend reveals a signature but not the signing arrangement: it can be a single signer, an aggregated multisignature, or a cooperative contract close, and BIP 341 makes those indistinguishable.",
+            },
+            Measurement {
+                series: "Script-path",
+                series_daily: "",
+                quantity: "Inputs detected as script-path Taproot spends",
+                method_per_block: Method::HeuristicallyDetected,
+                method_daily: Method::HeuristicallyDetected,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "As Key-path. A revealed script is not necessarily a complex contract.",
+            },
+        ],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
@@ -1830,6 +2248,7 @@ pub const CHARTS: &[ChartMeta] = &[
         source: Source::TimeDist,
         measurements: &[Measurement {
             series: "",
+            series_daily: "",
             quantity: "Blocks grouped by the gap to their predecessor",
             method_per_block: Method::Calculated,
             method_daily: Method::Calculated,
@@ -1858,6 +2277,7 @@ pub const CHARTS: &[ChartMeta] = &[
         },
         measurements: &[Measurement {
             series: "",
+            series_daily: "",
             quantity: "Transactions per second",
             method_per_block: Method::Calculated,
             method_daily: Method::Calculated,
@@ -1885,6 +2305,7 @@ pub const CHARTS: &[ChartMeta] = &[
         measurements: &[
             Measurement {
                 series: "",
+                series_daily: "",
                 quantity: "Transactions per 1,000 serialized block bytes",
                 method_per_block: Method::Calculated,
                 method_daily: Method::Calculated,
@@ -1915,6 +2336,7 @@ pub const CHARTS: &[ChartMeta] = &[
         measurements: &[
             Measurement {
                 series: "",
+                series_daily: "",
                 quantity: "Share of transactions by input script type",
                 method_per_block: Method::Measured,
                 // No daily builder, so there is no daily method either.
@@ -1940,6 +2362,7 @@ pub const CHARTS: &[ChartMeta] = &[
         },
         measurements: &[Measurement {
             series: "",
+            series_daily: "",
             quantity: "Transactions confirmed in a block, including the coinbase",
             method_per_block: Method::Measured,
             method_daily: Method::Measured,
@@ -1969,6 +2392,7 @@ pub const CHARTS: &[ChartMeta] = &[
         measurements: &[
             Measurement {
                 series: "Outputs (created)",
+                series_daily: "",
                 quantity: "Outputs created by non-coinbase transactions",
                 method_per_block: Method::Measured,
                 method_daily: Method::Measured,
@@ -1978,6 +2402,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
             Measurement {
                 series: "Inputs (consumed)",
+                series_daily: "",
                 quantity: "Inputs spent by non-coinbase transactions",
                 method_per_block: Method::Measured,
                 method_daily: Method::Measured,
@@ -2007,6 +2432,7 @@ pub const CHARTS: &[ChartMeta] = &[
         },
         measurements: &[Measurement {
             series: "",
+            series_daily: "",
             quantity: "Estimated net change in the spendable output set",
             method_per_block: Method::Estimated,
             method_daily: Method::Estimated,
@@ -2031,7 +2457,28 @@ pub const CHARTS: &[ChartMeta] = &[
             per_block: super::weekday_activity_chart,
             daily: Daily::Fn(super::weekday_activity_chart_daily),
         },
-        measurements: &[],
+        measurements: &[
+            Measurement {
+                series: "Avg Tx Count",
+                series_daily: "",
+                quantity: "Mean transactions per block, by day of week",
+                method_per_block: Method::Measured,
+                method_daily: Method::Measured,
+                per_block: Aggregation::GroupedSummary,
+                daily: Aggregation::GroupedSummary,
+                population: "Blocks grouped by the UTC weekday of their timestamp, then transactions over blocks within each group. This is why the chart declares mixed units: the second measurement is denominated in BTC.",
+            },
+            Measurement {
+                series: "Avg Fees (BTC)",
+                series_daily: "",
+                quantity: "Mean fees per block, by day of week",
+                method_per_block: Method::Estimated,
+                method_daily: Method::Estimated,
+                per_block: Aggregation::GroupedSummary,
+                daily: Aggregation::GroupedSummary,
+                population: "Fees over blocks within each weekday group. Coinbase-derived, so it inherits that estimate.",
+            },
+        ],
         about: None,
     },
     ChartMeta {
@@ -2049,6 +2496,7 @@ pub const CHARTS: &[ChartMeta] = &[
         measurements: &[
             Measurement {
                 series: "",
+                series_daily: "",
                 quantity: "Share of the four-million-unit weight limit a block used",
                 method_per_block: Method::Calculated,
                 method_daily: Method::Calculated,
@@ -2078,6 +2526,7 @@ pub const CHARTS: &[ChartMeta] = &[
         },
         measurements: &[Measurement {
             series: "",
+            series_daily: "",
             quantity: "Share of outputs created to a witness program",
             method_per_block: Method::Measured,
             method_daily: Method::Measured,
@@ -2102,6 +2551,7 @@ pub const CHARTS: &[ChartMeta] = &[
         measurements: &[
             Measurement {
                 series: "",
+                series_daily: "",
                 quantity: "Witness bytes as a share of serialized block bytes",
                 method_per_block: Method::Calculated,
                 method_daily: Method::Calculated,
@@ -2131,6 +2581,7 @@ pub const CHARTS: &[ChartMeta] = &[
         },
         measurements: &[Measurement {
             series: "",
+            series_daily: "",
             quantity: "Share of outputs by script generation",
             method_per_block: Method::Measured,
             method_daily: Method::Measured,
@@ -2155,6 +2606,7 @@ pub const CHARTS: &[ChartMeta] = &[
         measurements: &[
             Measurement {
                 series: "SegWit",
+                series_daily: "",
                 quantity: "Outputs created to a v0 witness program",
                 method_per_block: Method::Measured,
                 method_daily: Method::Measured,
@@ -2164,6 +2616,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
             Measurement {
                 series: "Taproot",
+                series_daily: "",
                 quantity: "Outputs created to a v1 witness program",
                 method_per_block: Method::Measured,
                 method_daily: Method::Measured,

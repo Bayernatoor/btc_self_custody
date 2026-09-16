@@ -257,7 +257,55 @@ fn built_charts() -> Vec<(&'static ChartMeta, bool, serde_json::Value)> {
                     super::fees_chart_daily_unit(&days, "btc"),
                 ));
             }
-            _ => {}
+            // The four mining charts and the two histograms, built from their
+            // own inputs. Outside this function until 2026-09-15, which meant
+            // six of 63 charts sat outside every conformance guard.
+            Source::Mining(which) => {
+                let miners: Vec<MinerShare> =
+                    ["Foundry USA", "AntPool", "F2Pool", "Unknown"]
+                        .iter()
+                        .enumerate()
+                        .map(|(i, m)| MinerShare {
+                            miner: (*m).to_string(),
+                            count: 400 - (i as u64) * 90,
+                            percentage: 40.0 - (i as f64) * 9.0,
+                        })
+                        .collect();
+                let buckets: Vec<HistogramBucket> = (0..8)
+                    .map(|i| HistogramBucket {
+                        label: format!("2024-{:02}", i + 1),
+                        count: 100 + i * 7,
+                    })
+                    .collect();
+                out.push((
+                    meta,
+                    false,
+                    match which {
+                        registry::MiningChart::Dominance => {
+                            super::miner_dominance_chart(&miners)
+                        }
+                        registry::MiningChart::Diversity => {
+                            super::mining_diversity_chart(&miners)
+                        }
+                        registry::MiningChart::EmptyBlocks => {
+                            super::empty_blocks_chart(&buckets)
+                        }
+                        registry::MiningChart::EmptyByPool => {
+                            super::empty_blocks_by_pool_chart(&buckets)
+                        }
+                    },
+                ));
+            }
+            Source::FullnessDist => out.push((
+                meta,
+                false,
+                super::block_fullness_distribution_chart(&blocks),
+            )),
+            Source::TimeDist => out.push((
+                meta,
+                false,
+                super::block_time_distribution_chart(&blocks),
+            )),
         }
     }
     out
@@ -326,14 +374,12 @@ mod tests {
     /// needs its own resource fails here until someone decides which it is.
     #[test]
     fn every_chart_is_either_checked_or_named() {
-        const NEEDS_ITS_OWN_RESOURCE: &[&str] = &[
-            "miner-dominance",
-            "diversity",
-            "empty-blocks",
-            "empty-by-pool",
-            "fullness-dist",
-            "time-dist",
-        ];
+        // Empty since 2026-09-15: every registered chart is built here,
+        // including the mining and histogram sources, which used to be listed
+        // as unbuildable and were therefore outside every guard in this file.
+        // The first build found that `diversity` declared a donut and drew a
+        // gauge.
+        const NEEDS_ITS_OWN_RESOURCE: &[&str] = &[];
         let covered: std::collections::HashSet<&str> =
             built_charts().iter().map(|(m, _, _)| m.slug).collect();
         for meta in registry::CHARTS {
@@ -418,6 +464,14 @@ mod tests {
             // buying no protection.
             let is_pie = types == ["pie"];
             match meta.shape {
+                Shape::Gauge => {
+                    assert_eq!(
+                        types,
+                        vec!["gauge".to_string()],
+                        "{} declares Gauge but draws {types:?}",
+                        meta.slug
+                    );
+                }
                 Shape::Donut => {
                     assert!(is_pie, "{at} declares Donut but draws {types:?}")
                 }
@@ -986,14 +1040,13 @@ mod tests {
     // Structured measurement declarations
     // -----------------------------------------------------------------------
 
-    /// The migration can only move one way, and chart 64 cannot arrive without
-    /// a declaration.
+    /// Chart 64 cannot arrive without a declaration.
     ///
-    /// Pinned rather than asserted empty because the cohort proving the design
-    /// is deliberately small. Lower this number as entries are filled in; it
-    /// must never rise.
+    /// This was a shrinking pin while the catalog was migrated in tranches.
+    /// All 63 are declared, so it is now an absolute: a registered chart
+    /// without measurements fails the build.
     #[test]
-    fn the_undeclared_chart_count_only_shrinks() {
+    fn every_chart_declares_what_it_measures() {
         let undeclared: Vec<&str> = registry::CHARTS
             .iter()
             .filter(|c| c.measurements.is_empty())
@@ -1001,10 +1054,9 @@ mod tests {
             .collect();
         assert_eq!(
             undeclared.len(),
-            12,
-            "declared cohort changed. If you added a chart, declare its \
-             measurements; if you declared one, lower this number. Still \
-             undeclared: {undeclared:?}"
+            0,
+            "every chart must declare what it measures, so a new one cannot \
+             be added without one. Undeclared: {undeclared:?}"
         );
     }
 
@@ -1015,8 +1067,16 @@ mod tests {
     fn every_declared_series_name_exists_in_the_built_option() {
         for (meta, daily, opt) in built_charts() {
             for m in meta.measurements {
-                if m.series.is_empty() {
-                    continue; // the chart's only measurement
+                // The daily builder's name where it differs, so a chart that
+                // legitimately renames a series between resolutions is
+                // checked against the name actually emitted at each.
+                let want = if daily && !m.series_daily.is_empty() {
+                    m.series_daily
+                } else {
+                    m.series
+                };
+                if want.is_empty() {
+                    continue; // covers every series
                 }
                 let names: Vec<&str> = opt["series"]
                     .as_array()
@@ -1025,12 +1085,11 @@ mod tests {
                     })
                     .unwrap_or_default();
                 assert!(
-                    names.contains(&m.series),
-                    "{} ({}) declares a measurement for series {:?}, but the \
-                     built option has {names:?}",
+                    names.contains(&want),
+                    "{} ({}) declares a measurement for series {want:?}, but \
+                     the built option has {names:?}",
                     meta.slug,
-                    if daily { "daily" } else { "per block" },
-                    m.series
+                    if daily { "daily" } else { "per block" }
                 );
             }
         }
@@ -1053,6 +1112,19 @@ mod tests {
                     m.daily,
                     meta.has_daily()
                 );
+            }
+        }
+    }
+
+    /// Dump a chart's built option for browser verification. Not an
+    /// assertion; run with --ignored --nocapture and a slug in CQ_DUMP.
+    #[test]
+    #[ignore]
+    fn dump_option_for_browser() {
+        let want = std::env::var("CQ_DUMP").unwrap_or_default();
+        for (meta, daily, opt) in built_charts() {
+            if meta.slug == want && !daily {
+                println!("{}", serde_json::to_string(&opt).expect("json"));
             }
         }
     }
@@ -1319,6 +1391,164 @@ mod tests {
         assert_eq!(find("P2TR"), 15.0, "1.5 per block over 10 blocks");
     }
 
+    /// Percentiles are not additive, so the chart must not stack them.
+    ///
+    /// The spec's own acceptance case: for percentiles 1, 2, 3, 4 and 5 the p90
+    /// boundary is 5, never 15. Stacked, every value a reader could take off
+    /// the plot above the lowest band was a cumulative sum of quantiles.
+    #[test]
+    fn fee_percentiles_are_not_stacked_or_summed() {
+        let blocks: Vec<BlockSummary> = (0..400)
+            .map(|i| BlockSummary {
+                height: 800_000 + i,
+                hash: format!("{i:064x}"),
+                timestamp: 1_700_000_000 + i * 600,
+                tx_count: 2_000,
+                size: 1_200_000,
+                weight: 3_900_000,
+                // The discriminating vector: 1, 2, 3, 4, 5.
+                fee_rate_p10: 1.0,
+                fee_rate_p25: 2.0,
+                median_fee_rate: 3.0,
+                fee_rate_p75: 4.0,
+                fee_rate_p90: 5.0,
+                ..Default::default()
+            })
+            .collect();
+
+        let opt = super::super::fee_rate_heatmap_chart(&blocks);
+        let series = opt["series"].as_array().expect("series");
+
+        for s in series {
+            assert!(
+                s.get("stack").is_none(),
+                "{:?} is stacked, so its drawn height is a running sum of \
+                 quantiles rather than a quantile",
+                s["name"]
+            );
+        }
+
+        let value_of = |name: &str| -> f64 {
+            let s = series
+                .iter()
+                .find(|s| s["name"] == name)
+                .unwrap_or_else(|| panic!("no series {name}"));
+            s["data"][0][1].as_f64().expect("a number")
+        };
+        // Each series carries its own percentile. Stacked, these would have
+        // read 1, 3, 6, 10 and 15.
+        assert_eq!(value_of("p10"), 1.0);
+        assert_eq!(value_of("p25"), 2.0);
+        assert_eq!(value_of("Median"), 3.0);
+        assert_eq!(value_of("p75"), 4.0);
+        assert_eq!(
+            value_of("p90"),
+            5.0,
+            "the top boundary is p90, not the sum"
+        );
+    }
+
+    /// An absent reading is not a measurement of zero.
+    ///
+    /// Three places wrote one. TPS has no interval for the first block in a
+    /// range and no usable interval when a miner stamps a block at or before
+    /// its parent's time; both were plotted as zero transactions per second,
+    /// which says throughput stopped when in fact the clock did. SegWit
+    /// Adoption divided by the day's non-coinbase transactions and wrote 0%
+    /// when a day had none, which reads as "nobody used witness inputs"
+    /// rather than "there were no transactions".
+    #[test]
+    fn an_absent_reading_is_a_gap_not_a_zero() {
+        // TPS: a backward stamp in the middle, and no predecessor at the start.
+        let blocks: Vec<BlockSummary> = [0u64, 600, 300, 900]
+            .iter()
+            .enumerate()
+            .map(|(i, off)| BlockSummary {
+                height: 800_000 + i as u64,
+                hash: format!("{i:064x}"),
+                timestamp: 1_700_000_000 + off,
+                tx_count: 3_000,
+                size: 1_200_000,
+                weight: 3_900_000,
+                ..Default::default()
+            })
+            .collect();
+        let opt = super::super::tps_chart(&blocks);
+        let d = opt["series"][0]["data"].as_array().expect("data");
+        assert_eq!(d.len(), 4, "every block keeps its slot");
+        assert!(
+            d[0][1].is_null(),
+            "first block has no predecessor: {:?}",
+            d[0]
+        );
+        assert!(
+            d[1][1].as_f64().expect("a rate") > 0.0,
+            "600s gap is a rate"
+        );
+        assert!(d[2][1].is_null(), "backward stamp is not zero tps");
+        assert!(d[3][1].as_f64().expect("a rate") > 0.0);
+        // The height stays so the tooltip can still name the block.
+        assert_eq!(d[2][2].as_u64(), Some(800_002));
+
+        // SegWit: a day of coinbase-only blocks has no denominator.
+        let day = |avg_tx: f64, avg_seg: f64| DailyAggregate {
+            date: "2011-02-03".to_string(),
+            block_count: 100,
+            avg_tx_count: avg_tx,
+            avg_segwit_spend_count: avg_seg,
+            avg_size: 285.0,
+            ..Default::default()
+        };
+        let opt = super::super::segwit_adoption_chart_daily(&[
+            day(1.0, 0.0),
+            day(2.0, 0.5),
+        ]);
+        let d = opt["series"][0]["data"].as_array().expect("data");
+        assert!(
+            d[0].is_null(),
+            "no user transactions, so no share: {:?}",
+            d[0]
+        );
+        assert_eq!(d[1].as_f64(), Some(50.0), "0.5 of 1.0 non-coinbase");
+    }
+
+    /// The Taproot output count must not be read from the column that calls
+    /// itself a spend count.
+    ///
+    /// `taproot_spend_count` is byte-identical to `p2tr_count` in all 967,187
+    /// stored rows, so the values never differed and the error was purely one
+    /// of naming: a chart, a modal row and a hall-of-fame record all described
+    /// created outputs as spent inputs. The record was arithmetically
+    /// impossible, claiming 22,367 Taproot inputs in a block holding 327.
+    ///
+    /// This fixture makes them differ so a consumer reading the wrong one
+    /// fails. It cannot happen in stored data, which is exactly why nothing
+    /// caught it.
+    #[test]
+    fn taproot_charts_read_the_output_count_not_the_spend_count() {
+        let blocks: Vec<BlockSummary> = (0..300)
+            .map(|i| BlockSummary {
+                height: 840_000 + i,
+                hash: format!("{i:064x}"),
+                timestamp: 1_713_000_000 + i * 600,
+                tx_count: 200,
+                size: 1_400_000,
+                weight: 3_900_000,
+                p2tr_count: 5_000,
+                // Deliberately different, which stored rows never are.
+                taproot_spend_count: 7,
+                ..Default::default()
+            })
+            .collect();
+        let opt = super::super::taproot_chart(&blocks);
+        let first = opt["series"][0]["data"][0][1].as_f64().expect("a number");
+        assert_eq!(
+            first, 5_000.0,
+            "read p2tr_count; {first} means the misnamed column is still wired \
+             in"
+        );
+    }
+
     /// `registry::NON_TIME_X_AXIS` has to name exactly the charts whose
     /// builders produce a non-time x axis, or the comparison rule built on it
     /// is guessing.
@@ -1468,7 +1698,8 @@ mod tests {
                 if daily { "daily" } else { "per block" }
             );
             match (meta.shape, kpi::compute(&json, meta.shape)) {
-                (Shape::Donut | Shape::Histogram, Kpis::Categorical { .. })
+                (Shape::Gauge, Kpis::Unavailable)
+                | (Shape::Donut | Shape::Histogram, Kpis::Categorical { .. })
                 | (
                     Shape::StackedAbsolute | Shape::StackedPercent,
                     Kpis::Bands { .. },
@@ -1512,6 +1743,12 @@ mod tests {
             "cumulative-adoption (per block)",
             "diff-ribbon (daily)",
             "diff-ribbon (per block)",
+            // Joined when the percentile bands were unstacked. As a stacked
+            // chart its rail reported "latest total" as the sum of five
+            // quantiles, which is the same defect the chart had; five
+            // percentile lines have no single average or peak, so the rail
+            // says nothing instead of something false.
+            "fee-heatmap (per block)",
             "halving-era (daily)",
             "halving-era (per block)",
             "multi-velocity (daily)",
