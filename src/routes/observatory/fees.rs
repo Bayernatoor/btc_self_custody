@@ -172,7 +172,7 @@ pub fn FeeChartsPage() -> impl IntoView {
                             />
                             <ChartCard
                                 title="Fee Rate Bands"
-                                description="Fee rate percentiles from p10 to p90 showing the full spread of fee rates per block. Click legend items to toggle bands"
+                                description="Fee rate percentiles from p10 to p90, the central 80% of each block's transactions. Click legend items to toggle lines"
                                 chart_id="chart-fee-heatmap"
                                 option=fee_heatmap_option
                             />
@@ -184,7 +184,7 @@ pub fn FeeChartsPage() -> impl IntoView {
                             />
                             <ChartCard
                                 title="Subsidy vs Fees"
-                                description=chart_desc(range, "Block reward breakdown per block. The subsidy halves every 4 years while fees must eventually replace it", "Daily average block reward breakdown. The subsidy halves every 4 years while fees must eventually replace it")
+                                description=chart_desc(range, "The two parts of what a miner collects per block: the subsidy, which halves on a fixed schedule, and fees, which do not", "The two parts of what a miner collects, averaged per block over each day: the subsidy, which halves on a fixed schedule, and fees, which do not")
                                 chart_id="chart-subsidy-fees"
                                 option=subsidy_fees_option
                             />

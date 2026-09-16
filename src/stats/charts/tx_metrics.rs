@@ -383,7 +383,7 @@ const BIP125_TIMESTAMP: u64 = 1456185600; // 2016-02-23 00:00 UTC
 
 pub fn rbf_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
-        return no_data_chart("RBF Adoption");
+        return no_data_chart("Explicit RBF Signaling");
     }
 
     let vals: Vec<f64> = blocks
@@ -448,7 +448,7 @@ pub fn rbf_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 /// RBF adoption (daily).
 pub fn rbf_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     if days.is_empty() {
-        return no_data_chart("RBF Adoption");
+        return no_data_chart("Explicit RBF Signaling");
     }
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
     let vals: Vec<serde_json::Value> = days

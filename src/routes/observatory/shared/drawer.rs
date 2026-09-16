@@ -173,7 +173,7 @@ fn drawer_pages() -> Vec<DrawerPage> {
                     label: "Transactions",
                     charts: vec![
                         DrawerChart {
-                            label: "RBF Adoption",
+                            label: "Explicit RBF Signaling",
                             card_id: "card-chart-rbf",
                         },
                         DrawerChart {
@@ -181,7 +181,7 @@ fn drawer_pages() -> Vec<DrawerPage> {
                             card_id: "card-chart-utxo-flow",
                         },
                         DrawerChart {
-                            label: "Batching Efficiency",
+                            label: "Transaction Batching",
                             card_id: "card-chart-batching",
                         },
                         DrawerChart {

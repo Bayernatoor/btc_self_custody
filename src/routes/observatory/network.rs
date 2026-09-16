@@ -488,7 +488,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
         <ChartPageLayout
             title="Network"
             description="Block size, weight, intervals, adoption trends, and transaction metrics"
-            seo_text="Explore Bitcoin's network fundamentals from the genesis block to the latest tip. Block size and weight utilization show how full blocks are relative to the 4 million weight unit consensus limit. Transaction counts and block intervals reveal network throughput and how widely block intervals scatter around their ten-minute average. Chain size growth charts the cumulative blockchain footprint over 16 years. Adoption charts track the shift from legacy P2PKH to SegWit and Taproot, including key-path versus script-path spend breakdowns that show how Taproot's privacy and programmability features are actually being used."
+            seo_text="Explore Bitcoin's network fundamentals from the genesis block to the latest tip. Block size and weight utilization show how full blocks are relative to the 4 million weight unit consensus limit. Transaction counts and block intervals reveal network throughput and how widely block intervals scatter around their ten-minute average. Chain size growth charts the cumulative blockchain footprint since 2009. Adoption charts track the shift from legacy P2PKH to SegWit and Taproot, including key-path versus script-path spend breakdowns that show how Taproot's privacy and programmability features are actually being used."
         >
             // Error overlay (only on actual errors, not during refetch)
             {move || match dashboard_data.get() {
@@ -544,7 +544,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
 
                 // ── Transactions ─────────────────────────
                 <SectionHeading id="section-tx-metrics" title="Transactions"/>
-                <ChartCard title="RBF Adoption" description=chart_desc(range, "Percentage of transactions opting into Replace-By-Fee per block", "Daily average RBF adoption percentage") chart_id="chart-rbf" option=rbf_option/>
+                <ChartCard title="Explicit RBF Signaling" description=chart_desc(range, "Share of each block's transactions whose inputs signal replaceability under BIP 125", "Daily share of transactions signalling replaceability under BIP 125") chart_id="chart-rbf" option=rbf_option/>
                 <ChartCard title="UTXO Flow" description=chart_desc(range, "Inputs spent vs outputs created per block. When outputs exceed inputs, the UTXO set grows", "Daily average inputs spent vs outputs created. When outputs exceed inputs, the UTXO set grows") chart_id="chart-utxo-flow" option=utxo_flow_option/>
                 <ChartCard title="Transaction Batching" description=chart_desc(range, "Average inputs and outputs per transaction in each block", "Daily average inputs and outputs per transaction") chart_id="chart-batching" option=batching_option/>
                 <ChartCard title="Largest Transaction" description=chart_desc(range, "Size of the largest transaction in each block. Large transactions may indicate consolidations or complex scripts", "Largest transaction (per-block ranges only)") chart_id="chart-largest-tx" option=largest_tx_option/>

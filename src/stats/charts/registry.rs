@@ -607,7 +607,7 @@ pub const CHARTS: &[ChartMeta] = &[
     ChartMeta {
         slug: "inscription-envelope",
         title: "Inscription Payload vs Envelope",
-        desc_per_block: "Breakdown of inscription witness data into actual content (payload) and protocol overhead (envelope structure)",
+        desc_per_block: "Detected inscription witness bytes split into an estimated payload and the envelope structure around it",
         desc_daily: "Daily average inscription payload vs envelope overhead per block",
         category: Category::Embedded,
         unit: Unit::Kilobytes,
@@ -642,7 +642,7 @@ pub const CHARTS: &[ChartMeta] = &[
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
             definition: None,
-            technical: "Every Ordinals inscription wraps content in a witness envelope: OP_FALSE OP_IF ... OP_ENDIF with push opcodes and the 'ord' marker. The overhead is typically 10-15% of total inscription bytes. Higher overhead ratios indicate smaller inscriptions (like BRC-20 JSON operations) where the fixed envelope cost is a larger fraction.",
+            technical: "Every Ordinals inscription wraps content in a witness envelope: OP_FALSE OP_IF ... OP_ENDIF with push opcodes and the 'ord' marker. The split is estimated, not parsed: the envelope header, content-type section and terminator are located by pattern and subtracted, and anything not found falls back to 10 bytes. Measured across the 190,252 blocks holding a detection, that overhead is 7.7% of all matching witness bytes, while the median block puts it at 17.9% and individual blocks run from nothing to 94%. The share is high where inscriptions are small, since the envelope cost is close to fixed, which is why BRC-20 JSON operations sit at the top of that range.",
         }),
     },
     ChartMeta {
@@ -700,7 +700,7 @@ pub const CHARTS: &[ChartMeta] = &[
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
             definition: None,
-            technical: "Includes both the inscription content (images, text, JSON) and the witness envelope structure (OP_FALSE OP_IF, push opcodes, 'ord' marker). This represents the true on-chain footprint. Witness data gets a 75% weight discount, so inscriptions consume less block weight than their raw byte size suggests.",
+            technical: "Includes both the inscription content (images, text, JSON) and the witness envelope structure (OP_FALSE OP_IF, push opcodes, 'ord' marker). This is the whole matching witness item, payload and envelope together, as the detector found it. Witness bytes count one weight unit each instead of four, so an inscription consumes a quarter of the block weight its byte count suggests.",
         }),
     },
     ChartMeta {
@@ -726,7 +726,7 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Every witness item in the block is scanned; a matching item counts once, so several envelopes in one item count once. The scan is not restricted to verified Taproot scripts.",
         }],
         about: Some(About {
-            definition: Some("Inscriptions attach data such as an image or text to an individual satoshi, using the Ordinals convention introduced in 2023. The data rides in the witness part of a Taproot transaction, which is the cheapest room in a block."),
+            definition: Some("Inscriptions attach data such as an image or text to an individual satoshi, using the Ordinals convention introduced in 2023. The data rides in the witness part of a Taproot transaction, where each byte counts as one weight unit against the block limit instead of four, so it costs a quarter of what the same byte costs in the transaction body."),
             technical: "Counted by matching the inscription envelope pattern in Taproot witness data. This is a convention, not a consensus rule: nothing in the protocol knows what an inscription is, so a different encoding would not appear here. Inscriptions compete for the same block space as ordinary payments, which shows up in the fee charts over the same periods.",
         }),
     },
@@ -1139,8 +1139,8 @@ pub const CHARTS: &[ChartMeta] = &[
     ChartMeta {
         slug: "fee-heatmap",
         title: "Fee Rate Bands",
-        desc_per_block: "Fee rate percentiles from p10 to p90 showing the full spread of fee rates per block. Click legend items to toggle bands",
-        desc_daily: "Fee rate percentiles from p10 to p90 showing the full spread of fee rates per block. Click legend items to toggle bands",
+        desc_per_block: "Fee rate percentiles from p10 to p90, the central 80% of each block's transactions. Click legend items to toggle lines",
+        desc_daily: "Fee rate percentiles from p10 to p90, the central 80% of each block's transactions. Click legend items to toggle lines",
         category: Category::Fees,
         unit: Unit::SatVb,
         shape: Shape::Line,
@@ -1202,14 +1202,14 @@ pub const CHARTS: &[ChartMeta] = &[
                 method_daily: Method::Measured,
                 per_block: Aggregation::PerBlockObservation,
                 daily: Aggregation::Unsupported,
-                population: "As p10. p10 to p90 spans the central 80 percent of a block's transactions, not the full spread.",
+                population: "As p10. p10 to p90 spans the central 80 percent of a block's transactions.",
             },
         ],
         about: Some(About {
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
             definition: None,
-            technical: "Five stacked bands showing fee rate percentiles. p10 (blue) is what the cheapest 10% of transactions paid. Median (orange) is the middle. p90 (red) is what urgent transactions paid. A wide spread means high fee variance. Click legend items to isolate specific bands.",
+            technical: "Five percentile lines, each read directly off the block: p10 is the rate a tenth of that block's transactions paid less than, the median is the middle one, and p90 is the rate a tenth paid more than. Not stacked, because percentiles do not add: stacking them made the top boundary the sum of five quantiles rather than p90. The gap between p10 and p90 is the central 80% and says nothing about why any transaction paid what it did. Click legend items to isolate lines.",
         }),
     },
     ChartMeta {
@@ -1463,8 +1463,8 @@ pub const CHARTS: &[ChartMeta] = &[
     ChartMeta {
         slug: "subsidy-fees",
         title: "Subsidy vs Fees",
-        desc_per_block: "Block reward breakdown per block. The subsidy halves every 4 years while fees must eventually replace it",
-        desc_daily: "Daily average block reward breakdown. The subsidy halves every 4 years while fees must eventually replace it",
+        desc_per_block: "The two parts of what a miner collects per block: the subsidy, which halves on a fixed schedule, and fees, which do not",
+        desc_daily: "The two parts of what a miner collects, averaged per block over each day: the subsidy, which halves on a fixed schedule, and fees, which do not",
         category: Category::Fees,
         unit: Unit::Btc,
         shape: Shape::StackedAbsolute,
@@ -1498,7 +1498,7 @@ pub const CHARTS: &[ChartMeta] = &[
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
             definition: None,
-            technical: "The block subsidy (new BTC created) halves every 210,000 blocks (~4 years). After the 2024 halving, the subsidy is 3.125 BTC per block. As the subsidy decreases over time, fees become a larger share of miner revenue.",
+            technical: "The block subsidy (new BTC created) halves every 210,000 blocks (~4 years). After the 2024 halving, the subsidy is 3.125 BTC per block. The subsidy schedule is fixed by the protocol; the fee side is not. Fees are a larger share of revenue when they hold up as the subsidy falls, and a smaller one when they fall faster, so the balance between the two is an outcome to watch rather than a guarantee.",
         }),
     },
     ChartMeta {
@@ -1529,7 +1529,7 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Every block in the window. Assumes a 600-second mean interval, so short-run values move with luck as well as with hardware.",
         }],
         about: Some(About {
-            definition: Some("How much computing work the whole network is doing, per second. Miners guess numbers until one produces a block hash below the target, and the hash rate is how many guesses everyone is making together. It is the closest thing to a price tag on attacking Bitcoin: an attacker has to out-compute everyone already mining."),
+            definition: Some("How much computing work the whole network is doing, per second. Miners guess numbers until one produces a block hash below the target, and the hash rate is how many guesses everyone is making together. Nobody can count those guesses, so this is inferred from the difficulty the network settled on rather than measured."),
             technical: "An estimate. Nobody can count the network's guesses, so it is inferred from the difficulty the network settled on: difficulty times 2^32, divided by the 600 second block target. Difficulty only moves every 2,016 blocks, so the line is flat between retargets while the real rate is not. When the two drift apart, blocks arrive faster or slower than ten minutes until the next adjustment closes the gap.",
         }),
     },
@@ -1558,7 +1558,7 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "One point per retarget, every 2,016 blocks, not per block. Drawn as two series split by sign so the bars can be coloured; together they are one series of retargets. Both the date and the percentage come from the two retarget blocks, so the bar is the same wherever the range happens to end. A retarget that changed nothing is not drawn: the first sixteen epochs all sat at difficulty 1.0.",
         }],
         about: Some(About {
-            definition: Some("Every 2,016 blocks, roughly every 2 weeks, Bitcoin measures how long those blocks took and resets difficulty so the next 2,016 should take exactly two weeks. Nobody votes and nobody decides. If miners leave, blocks come slower and the network makes itself easier. If they arrive, it makes itself harder. This is that correction, as a percentage."),
+            definition: Some("Every 2,016 blocks, roughly every 2 weeks, Bitcoin measures how long those blocks took and resets difficulty so that the next 2,016 are expected to take two weeks. Expected, not guaranteed: block discovery is random and hash rate keeps moving, so an epoch routinely runs days early or late. Every node computes the same correction from the same rule. If miners leave, blocks come slower and the network makes itself easier. If they arrive, it makes itself harder. This is that correction, as a percentage."),
             technical: "The largest fall on record is 27.94%, at height 689,472 in the week of the 2021 mining ban in China. The largest rises are from 2010, when the network was small enough for one operator to move it. Rises and falls are coloured separately so the sign is readable at a glance.",
         }),
     },
@@ -1618,7 +1618,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: Some("How hard it currently is to mine a block. Every miner races to find a number that makes the block's hash fall below a target, and difficulty is that target expressed as a multiple of the easiest one the protocol allows. Nobody sets it. It moves automatically with how much mining power is on the network."),
+            definition: Some("How hard it currently is to mine a block. Every miner races to find a number that makes the block's hash fall below a target, and difficulty is the easiest target the protocol allows divided by the current one. So a harder target is a smaller number and a larger difficulty. No one sets it by hand: every node derives the same value from the previous 2,016 blocks."),
             technical: "Read from the header of every block, so this is the protocol's own value. It changes once every 2,016 blocks, roughly every two weeks, which is why the line steps. Multiply by 2^32 for the expected number of hashes per block, the figure hash-rate estimates are built on.",
         }),
     },
@@ -1698,8 +1698,8 @@ pub const CHARTS: &[ChartMeta] = &[
     ChartMeta {
         slug: "miner-dominance",
         title: "Mining Pool Share",
-        desc_per_block: "Which mining pools are finding the most blocks. More distributed is healthier for the network",
-        desc_daily: "Which mining pools are finding the most blocks. More distributed is healthier for the network",
+        desc_per_block: "Share of blocks in the range by identified pool, with unattributed blocks kept separate",
+        desc_daily: "Share of blocks in the range by identified pool, with unattributed blocks kept separate",
         category: Category::Mining,
         unit: Unit::Percent,
         shape: Shape::Donut,
@@ -1798,7 +1798,7 @@ pub const CHARTS: &[ChartMeta] = &[
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
             definition: None,
-            technical: "SegWit and Taproot transactions are typically smaller than legacy because they move signature data to the witness section (which gets a weight discount). Lower values generally mean more transactions can fit per block.",
+            technical: "Serialized block bytes divided by the number of transactions, including the coinbase and the block's own header and counters. Moving signature data into the witness does not remove those bytes, it discounts their weight, so a SegWit or Taproot transaction is not necessarily smaller here than a legacy one of the same shape. Weight is what the 4,000,000 unit limit constrains, so a falling byte average does not by itself mean more transactions fit.",
         }),
     },
     ChartMeta {
@@ -1939,7 +1939,7 @@ pub const CHARTS: &[ChartMeta] = &[
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
             definition: None,
-            technical: "A histogram of block fullness. Most modern blocks cluster near 100% because miners maximize fee revenue. Empty or near-empty blocks usually appear right after a new block is found (before the miner has received transactions). On longer ranges that include early Bitcoin history, more blocks appear at lower percentages since demand was much lower.",
+            technical: "A histogram of block fullness. Most modern blocks cluster near 100% because miners maximize fee revenue. Near-empty blocks do occur, and this chart does not establish why: a miner can be working from a coinbase-only template while validating a new tip, and the data shows only the result. On longer ranges that include early Bitcoin history, more blocks appear at lower percentages since demand was much lower.",
         }),
     },
     ChartMeta {
@@ -1968,7 +1968,7 @@ pub const CHARTS: &[ChartMeta] = &[
         ],
         about: Some(About {
             definition: Some("The time between one block and the next. Bitcoin targets ten minutes on average and holds that average by adjusting difficulty, but any single gap is close to random: a two-minute gap and a fifty-minute gap are both ordinary."),
-            technical: "The difference between consecutive block header timestamps. Miners set those timestamps and the protocol only loosely constrains them, so a handful of intervals in the chain's history are negative or implausibly long. They are plotted as found, because a cleaned series would be my data rather than the chain's.",
+            technical: "The difference between consecutive block header timestamps. Miners set those timestamps and the protocol only loosely constrains them, so some intervals are negative or implausibly long: 16,020 of the 967,295 consecutive pairs stored here are negative, one in sixty. They are plotted as found rather than cleaned, so this shows what the headers say rather than a corrected series.",
         }),
     },
     ChartMeta {
@@ -2088,9 +2088,9 @@ pub const CHARTS: &[ChartMeta] = &[
     },
     ChartMeta {
         slug: "rbf",
-        title: "RBF Adoption",
-        desc_per_block: "Percentage of transactions opting into Replace-By-Fee per block",
-        desc_daily: "Daily average RBF adoption percentage",
+        title: "Explicit RBF Signaling",
+        desc_per_block: "Share of each block's transactions whose inputs signal replaceability under BIP 125",
+        desc_daily: "Daily share of transactions signalling replaceability under BIP 125",
         category: Category::Network,
         unit: Unit::Percent,
         shape: Shape::Line,
@@ -2101,7 +2101,7 @@ pub const CHARTS: &[ChartMeta] = &[
         measurements: &[Measurement {
             series: "",
             series_daily: "",
-            quantity: "Share of transactions signalling replaceability",
+            quantity: "Share of confirmed non-coinbase transactions whose input sequence numbers signal replaceability",
             method_per_block: Method::Measured,
             method_daily: Method::Measured,
             per_block: Aggregation::PerBlockObservation,
@@ -2171,7 +2171,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: Some("How much data each block carries. Block space is limited and shared, so this is the clearest view of how full the chain is running. A larger block is not better or worse; it means more, or larger, transactions were included."),
+            definition: Some("How much data each block carries, in serialized bytes. The consensus limit is 4,000,000 weight units rather than a byte count, so Weight Utilization is the measure of how full a block is and this is the raw size beside it. A larger block is not better or worse; it means more, or larger, transactions were included."),
             technical: "The serialised size of the block as my node stores it, witness data included. Consensus limits weight rather than bytes, to 4 million weight units, and witness bytes count a quarter as much toward that. This is why blocks pass the old one-megabyte figure. Weight utilisation has its own chart.",
         }),
     },
@@ -3080,6 +3080,108 @@ mod tests {
                  which it was.",
             ),
             (
+                "cheapest room in a block",
+                "witness bytes are discounted by weight, not by count. A \
+                 byte in the witness is one weight unit against four for a \
+                 byte in the transaction body.",
+            ),
+            (
+                "clearest view of how full",
+                "the consensus limit is 4,000,000 weight units, so raw size \
+                 is not the capacity measure. Weight Utilization is.",
+            ),
+            (
+                "price tag on attacking Bitcoin",
+                "hash rate here is inferred from difficulty and a \
+                 600-second assumption. It is not a cost model, and nothing \
+                 here prices an attack.",
+            ),
+            (
+                "should take exactly two weeks",
+                "retargeting sets an expectation, not an outcome. Block \
+                 discovery is random and hash rate moves, so epochs run \
+                 days early or late routinely.",
+            ),
+            (
+                "multiple of the easiest one",
+                "inverted. Difficulty is the easiest target divided by the \
+                 current one, so a harder target is a smaller number and a \
+                 larger difficulty.",
+            ),
+            (
+                "must eventually replace",
+                "the subsidy schedule is protocol, the fee outcome is not. \
+                 Fee share falls when fees fall faster than the subsidy.",
+            ),
+            (
+                "a handful",
+                "16,020 of 967,295 consecutive pairs are negative, one in \
+                 sixty. Measured, not estimated.",
+            ),
+            (
+                "full spread",
+                "p10 to p90 is the central 80% of a block's transactions.",
+            ),
+            (
+                "urgent transactions paid",
+                "a fee rate does not establish urgency, and p90 is a \
+                 percentile rather than a class of transaction.",
+            ),
+            (
+                "Five stacked bands",
+                "the percentile lines are not stacked any more, because \
+                 quantiles do not add. Stacked, the top boundary was the \
+                 sum of five percentiles rather than p90.",
+            ),
+            (
+                "true on-chain footprint",
+                "the payload/envelope split is estimated by pattern, with a \
+                 10-byte fallback. Measured overhead is 7.7% of matching \
+                 witness bytes overall and 17.9% in the median block, \
+                 ranging to 94%.",
+            ),
+            (
+                "typically 10-15%",
+                "as above: 7.7% by bytes, 17.9% in the median block, 0 to \
+                 94% across blocks. One figure cannot stand for that.",
+            ),
+            (
+                "More distributed is healthier",
+                "an editorial judgement, and the index behind it excludes \
+                 Unknown and renormalises the rest, so it is not a measure \
+                 of hash-rate ownership.",
+            ),
+            (
+                "before the miner has received transactions",
+                "the data establishes coinbase-only blocks and nothing \
+                 about why one was produced.",
+            ),
+            (
+                "RBF Adoption",
+                "it counts explicit BIP 125 signalling among confirmed \
+                 non-coinbase transactions: not replacements, not fee \
+                 bumps, not wallets. Full RBF has been default since Core \
+                 28, so no signal does not mean not replaceable.",
+            ),
+            (
+                "Batching Efficiency",
+                "no efficiency score is plotted. The chart is Transaction \
+                 Batching, and the drawer has to agree with it.",
+            ),
+            ("over 16 years", "stale by construction. Say since 2009."),
+            (
+                "'Inputs / Outputs'",
+                "the counts exclude the coinbase while the Transactions row \
+                 beside them includes it, so the label has to say \
+                 non-coinbase.",
+            ),
+            (
+                "Compliant",
+                "the BIP-54 check reads coinbase locktime and sequence only. \
+                 It is a pattern match, not compliance with the proposal, \
+                 and matching does not imply that a miner supports it.",
+            ),
+            (
                 "61 charts",
                 "there are 63, and a hardcoded count in a comment goes \
                  stale silently. Say \"every registered chart\" instead.",
@@ -3128,6 +3230,17 @@ mod tests {
                     .contains(phrase),
                 "retired claim {phrase:?} is back in the observatory shell: \
                  {why}"
+            );
+            // The drawer names charts and the modal labels block fields, so
+            // a retired phrase can return through either.
+            assert!(
+                !include_str!("../../routes/observatory/shared/drawer.rs")
+                    .contains(phrase),
+                "retired claim {phrase:?} is back in the chart drawer: {why}"
+            );
+            assert!(
+                !include_str!("../../../assets/js/stats.js").contains(phrase),
+                "retired claim {phrase:?} is back in the block modal: {why}"
             );
         }
     }

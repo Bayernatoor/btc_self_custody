@@ -858,7 +858,7 @@
                 body.appendChild(bdRow('Weight', b.weight != null ? b.weight.toLocaleString() + ' WU (' + weightUtil + ')' : '\u2014'));
                 body.appendChild(bdRow('Transactions', b.tx_count != null ? b.tx_count.toLocaleString() : '\u2014'));
                 if (b.input_count > 0)
-                    body.appendChild(bdRow('Inputs / Outputs', b.input_count.toLocaleString() + ' / ' + (b.output_count || 0).toLocaleString()));
+                    body.appendChild(bdRow('Non-coinbase inputs / outputs', b.input_count.toLocaleString() + ' / ' + (b.output_count || 0).toLocaleString()));
 
                 // -- Reward & Fees --
                 body.appendChild(bdDivider());
@@ -867,7 +867,7 @@
                 body.appendChild(bdRow('  Subsidy', subsidyBtc));
                 body.appendChild(bdRow('  Fees', feesBtc));
                 body.appendChild(bdRow('Median Fee', b.median_fee ? b.median_fee.toLocaleString() + ' sats' : '\u2014'));
-                body.appendChild(bdRow('Fee Rate', b.median_fee_rate ? b.median_fee_rate.toFixed(1) + ' sat/vB' : '\u2014'));
+                body.appendChild(bdRow('Median fee rate', b.median_fee_rate ? b.median_fee_rate.toFixed(1) + ' sat/vB' : '\u2014'));
                 body.appendChild(bdRow('Difficulty', b.difficulty != null ? (b.difficulty / 1e12).toFixed(2) + ' T' : '\u2014'));
 
                 // -- Adoption --
@@ -913,7 +913,7 @@
 
                 var sigContent = document.createElement('div');
                 sigContent.style.cssText = 'display:none;overflow:hidden';
-                sigContent.appendChild(bdRow('BIP-54', bip54 ? '\u2713 Compliant' : '\u2717 No'));
+                sigContent.appendChild(bdRow('BIP-54 coinbase pattern', bip54 ? '\u2713 Matches' : '\u2717 Does not match'));
                 sigContent.appendChild(bdCopyRow('Block Version', versionHex, versionHex));
                 body.appendChild(sigContent);
 

@@ -94,8 +94,8 @@
     },
     {
      "@type": "PropertyValue",
-     "name": "RBF Adoption",
-     "description": "Percentage of transactions signaling Replace-By-Fee (BIP 125)"
+     "name": "Explicit RBF Signaling",
+     "description": "Share of confirmed non-coinbase transactions whose inputs signal replaceability under BIP 125"
     }
    ]
   }
