@@ -1132,23 +1132,47 @@ mod tests {
     /// A measurement whose method differs by resolution is the case a single
     /// per-chart badge cannot express.
     ///
-    /// `diff-adjustment` reads actual retarget blocks per block and
-    /// reconstructs retargets from daily difficulty plateaus at daily
-    /// resolution, so it is exact at one and estimated at the other. This
-    /// pins that the declaration keeps them apart, because collapsing them
-    /// back to one field would silently relabel the daily view as exact.
+    /// `difficulty` is the example. Per block it reads the value off the
+    /// block, which is exact. Daily it plots the mean of the day's blocks, and
+    /// difficulty is constant for all 2,016 blocks of an epoch, so that mean
+    /// is the difficulty on every day except the one a retarget lands on,
+    /// where it is a blend of two epochs and is no protocol difficulty.
+    ///
+    /// `diff-adjustment` was the example here until 2026-09-16, when its daily
+    /// arm stopped being an estimate: it now dates a retarget to the blended
+    /// day, which is the day the epoch changed, and takes the percentage from
+    /// the settled difficulty either side. A chart graduating out of this test
+    /// is the outcome to want.
     #[test]
     fn a_method_may_differ_between_resolutions() {
-        let m = registry::find("diff-adjustment")
-            .expect("diff-adjustment is registered")
+        let m = registry::find("difficulty")
+            .expect("difficulty is registered")
             .measurements;
-        assert_eq!(m.len(), 1, "one measurement drawn as two signed series");
-        assert_eq!(m[0].method_per_block, registry::Method::Calculated);
+        assert_eq!(m.len(), 1);
+        assert_eq!(m[0].method_per_block, registry::Method::Measured);
         assert_eq!(m[0].method_daily, registry::Method::Estimated);
         assert_ne!(
             m[0].method_per_block, m[0].method_daily,
-            "if these are ever equal for this chart, the daily \
-             reconstruction has been made exact or the declaration is wrong"
+            "if these are ever equal for this chart, either the daily mean \
+             stopped blending across retargets or the declaration is wrong"
+        );
+
+        // And the schema has to be able to carry the distinction at all, so at
+        // least one chart in the catalog must use it. Collapsing the two
+        // fields back into one would silently relabel every such daily view.
+        let differing: Vec<&str> = registry::CHARTS
+            .iter()
+            .filter(|c| {
+                c.measurements
+                    .iter()
+                    .any(|m| m.method_per_block != m.method_daily)
+            })
+            .map(|c| c.slug)
+            .collect();
+        assert!(
+            differing.len() >= 2,
+            "only {differing:?} distinguish method by resolution, which is too \
+             few to justify the field; if that is genuinely correct, drop it"
         );
     }
 

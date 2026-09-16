@@ -1517,16 +1517,18 @@ pub const CHARTS: &[ChartMeta] = &[
             series: "",
             series_daily: "",
             quantity: "Difficulty change at a retarget, as a percentage of the previous epoch",
-            // The case that forced method to be per resolution. Per block it
-            // reads the actual retarget blocks and the step is exact; daily it
-            // reconstructs retargets from difficulty plateaus in the daily
-            // column, so a window ending on a retarget day can carry a blended
-            // value that is not any protocol difficulty.
+            // Per block this reads the actual retarget blocks. Daily it
+            // identifies retargets from the plateaus in the daily difficulty
+            // column, where the values are exact because difficulty is
+            // constant for all 2,016 blocks of an epoch, and the date is the
+            // blended day, which is the day the epoch changed. Still declared
+            // calculated rather than measured at both resolutions because the
+            // daily date is resolved to the day rather than to the block.
             method_per_block: Method::Calculated,
-            method_daily: Method::Estimated,
+            method_daily: Method::Calculated,
             per_block: Aggregation::WindowedDerived,
             daily: Aggregation::WindowedDerived,
-            population: "One point per retarget, every 2,016 blocks, not per block. Drawn as two series split by sign so the bars can be coloured; together they are one series of retargets.",
+            population: "One point per retarget, every 2,016 blocks, not per block. Drawn as two series split by sign so the bars can be coloured; together they are one series of retargets. Daily, the date is the day the epoch changed and the percentage comes from the settled difficulty either side of it, so a blended day never becomes a difficulty and a range ending on one reports no step.",
         }],
         about: Some(About {
             definition: Some("Every 2,016 blocks, roughly a fortnight, Bitcoin measures how long those blocks took and resets difficulty so the next 2,016 should take exactly two weeks. Nobody votes and nobody decides. If miners leave, blocks come slower and the network makes itself easier. If they arrive, it makes itself harder. This is that correction, as a percentage."),

@@ -400,6 +400,36 @@ pub fn difficulty_adjustment_chart(
 ///
 /// A range too short to contain a whole plateau yields nothing, which is the
 /// honest answer: there is no retarget in view to measure.
+/// Retargets found in a daily difficulty series, as (day index, percent).
+///
+/// Difficulty is constant for all 2,016 blocks of an epoch, verified across
+/// every one of the 480 epochs stored here, so a day wholly inside an epoch
+/// carries that epoch's difficulty exactly and a **plateau value is exact**.
+/// What is not exact is the date, and that was the defect.
+///
+/// A retarget almost never lands on midnight, so the day it happens holds
+/// blocks from both epochs and its mean is a blend of the two. The previous
+/// version discarded that day as noise and dated the retarget to the first day
+/// of the new plateau, which is the day *after* it happened. The China-ban
+/// retarget is the worked example: block 689,472 at 2021-07-03 06:34 UTC, and
+/// `daily_blocks` holds the old difficulty on 07-02, a blend on 07-03 and the
+/// new difficulty from 07-04. It was reported as 07-04.
+///
+/// **The blend day is the retarget day.** A single day whose value sits
+/// strictly between the plateaus either side of it is the day the epoch
+/// changed, so it dates the step. Where a retarget does land near enough to
+/// midnight to leave no blend, the plateaus are adjacent and the first day of
+/// the new one is already right.
+///
+/// A trailing blend is dropped rather than reported. If the range ends on a
+/// retarget day, the new epoch's difficulty is not yet visible in any full
+/// day, so there is nothing to compute a step against, and the blend is not a
+/// protocol difficulty. The previous version kept the final run whatever its
+/// length, which meant a range ending on a retarget day published a blended
+/// value as a difficulty.
+///
+/// The per-block view has none of this to worry about: it reads difficulty off
+/// real blocks and its steps are exact by construction.
 fn daily_difficulty_steps(days: &[DailyAggregate]) -> Vec<(usize, f64)> {
     // Runs of equal difficulty, as (first index, value, length).
     let mut runs: Vec<(usize, f64, usize)> = Vec::new();
@@ -416,19 +446,35 @@ fn daily_difficulty_steps(days: &[DailyAggregate]) -> Vec<(usize, f64)> {
             _ => runs.push((i, d.avg_difficulty, 1)),
         }
     }
-    // Drop the one-day blends. Keeping the final run whatever its length, so
-    // a retarget in the last day or two of the range is still reported.
-    let last = runs.len().saturating_sub(1);
-    let plateaus: Vec<(usize, f64)> = runs
-        .iter()
-        .enumerate()
-        .filter(|(i, r)| r.2 > 1 || *i == last)
-        .map(|(_, r)| (r.0, r.1))
-        .collect();
-    plateaus
-        .windows(2)
-        .map(|w| (w[1].0, (w[1].1 / w[0].1 - 1.0) * 100.0))
-        .collect()
+
+    // A plateau is a run of at least two days, which is an epoch seen whole.
+    // Anything shorter is either a blend or a fragment at the range edge, and
+    // neither is a difficulty.
+    let is_plateau = |r: &(usize, f64, usize)| r.2 > 1;
+
+    let mut steps = Vec::new();
+    let mut previous: Option<(usize, f64)> = None;
+    let mut pending_blend: Option<usize> = None;
+
+    for r in &runs {
+        if is_plateau(r) {
+            if let Some((_, before)) = previous {
+                // Dated at the blend day where there is one, since that is
+                // when the epoch actually changed, and at the first day of
+                // this plateau otherwise.
+                let at = pending_blend.unwrap_or(r.0);
+                steps.push((at, (r.1 / before - 1.0) * 100.0));
+            }
+            previous = Some((r.0, r.1));
+            pending_blend = None;
+        } else {
+            // A one-day run between two plateaus is the retarget day. Keep its
+            // index to date the next step, and keep its value out of the
+            // arithmetic.
+            pending_blend = Some(r.0);
+        }
+    }
+    steps
 }
 
 pub fn difficulty_adjustment_chart_daily(
@@ -510,14 +556,107 @@ mod adjustment_tests {
         let steps = daily_difficulty_steps(&days);
         assert_eq!(steps.len(), 1, "got {steps:?}");
         let (idx, pct) = steps[0];
+        // Index 3, the blended day, because that is the day the epoch changed.
+        //
+        // This asserted index 4 until 2026-09-16, on the reasoning that the
+        // step belonged on the first full day at the new value. That is the
+        // day *after* the retarget, and it was wrong for the same reason the
+        // blend exists: a retarget lands mid-day, so the day holding blocks
+        // from both epochs is the day it happened. The old assertion restated
+        // what the code did rather than what the chain did.
         assert_eq!(
-            idx, 4,
-            "the step belongs on the first full day at the new value"
+            idx, 3,
+            "the retarget happened on the blended day, not the day after"
         );
         assert!(
             (pct - 14.725).abs() < 0.01,
             "expected the whole adjustment, got {pct}"
         );
+    }
+
+    /// The China-ban retarget, with the node's own numbers.
+    ///
+    /// Block 689,472 at 2021-07-03 06:34:06 UTC took difficulty from
+    /// 19,932,791,027,262.74 to 14,363,025,673,659.96, a change of -27.9427%.
+    /// `daily_blocks` on this machine holds the old value through 07-02, the
+    /// blend 15,634,861,856,766.105 on 07-03, and the new value from 07-04.
+    ///
+    /// Every figure here is read from the database rather than chosen, so the
+    /// test says the chart agrees with the chain, not with itself.
+    #[test]
+    fn the_china_ban_retarget_is_dated_to_the_day_it_happened() {
+        const OLD: f64 = 19_932_791_027_262.74;
+        const BLEND: f64 = 15_634_861_856_766.105;
+        const NEW: f64 = 14_363_025_673_659.96;
+        let days = vec![
+            day("2021-06-30", OLD),
+            day("2021-07-01", OLD),
+            day("2021-07-02", OLD),
+            day("2021-07-03", BLEND),
+            day("2021-07-04", NEW),
+            day("2021-07-05", NEW),
+            day("2021-07-06", NEW),
+        ];
+        let steps = daily_difficulty_steps(&days);
+        assert_eq!(steps.len(), 1, "one retarget: {steps:?}");
+        let (idx, pct) = steps[0];
+        assert_eq!(
+            days[idx].date, "2021-07-03",
+            "the retarget block's own timestamp is 2021-07-03 06:34 UTC"
+        );
+        assert!(
+            (pct - (NEW / OLD - 1.0) * 100.0).abs() < 1e-9,
+            "expected -27.9427%, got {pct}"
+        );
+        // The blend must not reach the arithmetic. Computing from it would
+        // give -21.6% into 07-03 and -8.1% out of it, neither of which
+        // happened.
+        assert!(
+            (pct + 27.9427).abs() < 0.001,
+            "the step was computed through the blended day: {pct}"
+        );
+    }
+
+    /// A range ending on a retarget day reports nothing for it.
+    ///
+    /// The new epoch's difficulty is not visible in any full day yet, so there
+    /// is nothing to compute a step against, and the blend is not a protocol
+    /// difficulty. The previous version kept the final run whatever its
+    /// length, so a range cut here published the blend as one.
+    #[test]
+    fn a_range_ending_on_a_retarget_day_publishes_no_difficulty() {
+        const OLD: f64 = 19_932_791_027_262.74;
+        const BLEND: f64 = 15_634_861_856_766.105;
+        let days = vec![
+            day("2021-06-30", OLD),
+            day("2021-07-01", OLD),
+            day("2021-07-02", OLD),
+            day("2021-07-03", BLEND),
+        ];
+        let steps = daily_difficulty_steps(&days);
+        assert!(
+            steps.is_empty(),
+            "a blended day is not a difficulty and cannot end a step: \
+             {steps:?}"
+        );
+    }
+
+    /// A retarget landing close enough to midnight leaves no blend, and the
+    /// first day of the new plateau is then the right date.
+    #[test]
+    fn a_midnight_retarget_needs_no_blend_day() {
+        const OLD: f64 = 100_000_000_000_000.0;
+        const NEW: f64 = 110_000_000_000_000.0;
+        let days = vec![
+            day("2026-01-01", OLD),
+            day("2026-01-02", OLD),
+            day("2026-01-03", NEW),
+            day("2026-01-04", NEW),
+        ];
+        let steps = daily_difficulty_steps(&days);
+        assert_eq!(steps.len(), 1, "got {steps:?}");
+        assert_eq!(days[steps[0].0].date, "2026-01-03");
+        assert!((steps[0].1 - 10.0).abs() < 1e-9);
     }
 
     /// A range holding no settled plateau has no retarget to report, and
