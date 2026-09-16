@@ -1558,7 +1558,7 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "One point per retarget, every 2,016 blocks, not per block. Drawn as two series split by sign so the bars can be coloured; together they are one series of retargets. Both the date and the percentage come from the two retarget blocks, so the bar is the same wherever the range happens to end. A retarget that changed nothing is not drawn: the first sixteen epochs all sat at difficulty 1.0.",
         }],
         about: Some(About {
-            definition: Some("Every 2,016 blocks, roughly a fortnight, Bitcoin measures how long those blocks took and resets difficulty so the next 2,016 should take exactly two weeks. Nobody votes and nobody decides. If miners leave, blocks come slower and the network makes itself easier. If they arrive, it makes itself harder. This is that correction, as a percentage."),
+            definition: Some("Every 2,016 blocks, roughly every 2 weeks, Bitcoin measures how long those blocks took and resets difficulty so the next 2,016 should take exactly two weeks. Nobody votes and nobody decides. If miners leave, blocks come slower and the network makes itself easier. If they arrive, it makes itself harder. This is that correction, as a percentage."),
             technical: "The largest fall on record is 27.94%, at height 689,472 in the week of the 2021 mining ban in China. The largest rises are from 2010, when the network was small enough for one operator to move it. Rises and falls are coloured separately so the sign is readable at a glance.",
         }),
     },

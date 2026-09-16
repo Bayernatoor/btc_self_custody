@@ -1610,6 +1610,29 @@ const BIP_ACTIVATIONS: &[(u64, u64, &str)] = &[
 ];
 
 /// Bitcoin Core major release timestamps (Unix seconds) and labels.
+///
+/// **Source: the GitHub release object's `published_at`**, fetched 2026-09-16.
+/// Probe:
+///
+///     gh api repos/bitcoin/bitcoin/releases/tags/v27.0 \
+///       --jq '[.name, (.published_at|split("T")[0])]|@tsv'
+///
+/// Eight were wrong, and v27 was wrong in a way worth recording: it read
+/// 2024-04-02, which is **v26.1's** release date. Both dates also appear on
+/// bitcoincore.org's own v27.0 page, which says "published on April 02, 2024"
+/// while the release was published on the 16th, so that page is not a usable
+/// source and is probably where the original list came from. The others were
+/// out by one to sixteen days: v0.18, v0.19, v0.21, v26, v28, v29 and v30.
+///
+/// v0.19 is dated from **v0.19.0.1**, which is the release GitHub carries;
+/// v0.19.0 has no release object.
+///
+/// **The eleven entries before v0.14 are unverified.** GitHub has no release
+/// object for them, and the three it does answer for (v0.10, v0.12, v0.13)
+/// all return 2016-11-01, which is when those objects were bulk-created
+/// rather than when the software shipped. Their dates here are plausible and
+/// unchecked; correcting them needs the release announcements on the
+/// bitcoin-dev mailing list.
 const CORE_RELEASES: &[(u64, &str)] = &[
     (1231444060, "v0.1"),
     (1316736000, "v0.4"),
@@ -1626,19 +1649,19 @@ const CORE_RELEASES: &[(u64, &str)] = &[
     (1505347200, "v0.15"),
     (1519603200, "v0.16"),
     (1538524800, "v0.17"),
-    (1556755200, "v0.18"),
-    (1573171200, "v0.19"),
+    (1558137600, "v0.18"),
+    (1574553600, "v0.19"),
     (1591142400, "v0.20"),
-    (1610582400, "v0.21"),
+    (1610668800, "v0.21"),
     (1631577600, "v22"),
     (1650844800, "v23"),
     (1670803200, "v24"),
     (1685059200, "v25"),
-    (1701820800, "v26"),
-    (1712016000, "v27"),
-    (1727827200, "v28"),
-    (1744588800, "v29"),
-    (1760083200, "v30"),
+    (1701907200, "v26"),
+    (1713225600, "v27"),
+    (1728086400, "v28"),
+    (1744675200, "v29"),
+    (1760313600, "v30"),
 ];
 
 /// Notable Bitcoin events (timestamp unix seconds, label).

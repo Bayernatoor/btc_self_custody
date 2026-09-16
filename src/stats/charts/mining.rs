@@ -348,7 +348,7 @@ where
 /// An empty frame with two legend swatches and no bars is the same picture as
 /// a chart that failed to load, and the rail beside it reads "Not available
 /// for this range", which reads as the site not knowing rather than the
-/// window not containing one. Most ranges shorter than a fortnight have no
+/// window not containing one. Most ranges shorter than two weeks have no
 /// retarget in them: a 1D range is 144 blocks against the 2,016 between
 /// adjustments, and a single custom day almost never lands on one.
 ///
@@ -356,7 +356,7 @@ where
 fn no_retarget_chart() -> serde_json::Value {
     no_data_chart_with_hint(
         "No difficulty adjustment in this range",
-        "Difficulty changes every 2,016 blocks, about a fortnight. Try a longer range.",
+        "Difficulty changes every 2,016 blocks, roughly every 2 weeks. Try a longer range.",
     )
 }
 
@@ -788,8 +788,8 @@ mod adjustment_tests {
     fn a_range_with_no_retarget_says_so() {
         let expected = no_data_chart_with_hint(
             "No difficulty adjustment in this range",
-            "Difficulty changes every 2,016 blocks, about a fortnight. Try a \
-             longer range.",
+            "Difficulty changes every 2,016 blocks, roughly every 2 weeks. Try \
+             a longer range.",
         );
 
         // Daily: days loaded, and no retarget lands on any of them.
@@ -806,7 +806,7 @@ mod adjustment_tests {
         );
 
         // Per block: a run of blocks inside one epoch, which is every range
-        // shorter than a fortnight.
+        // shorter than two weeks.
         let flat: Vec<BlockSummary> = (0..144)
             .map(|i| BlockSummary {
                 height: 900_000 + i,

@@ -3595,7 +3595,7 @@ mod tests {
             )
             .unwrap();
         };
-        // Five retarget blocks a fortnight apart, plus ordinary blocks
+        // Five retarget blocks two weeks apart, plus ordinary blocks
         // between them that must never be returned. 1,000,000 is a Monday in
         // 1970 arithmetic; only the ordering matters here.
         const FORTNIGHT: u64 = 14 * 86_400;

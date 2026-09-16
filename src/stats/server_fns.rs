@@ -470,7 +470,7 @@ pub async fn fetch_daily_aggregates(
 ///
 /// Separate from `stats_daily_aggregates` rather than folded into it because
 /// the two have different shapes: a day per row against a retarget per row,
-/// roughly one per fortnight. Only the Difficulty Adjustment chart reads it,
+/// roughly one every two weeks. Only the Difficulty Adjustment chart reads it,
 /// and only at daily resolution, where the day's mean difficulty cannot
 /// recover either the date or the percentage of a retarget.
 ///
