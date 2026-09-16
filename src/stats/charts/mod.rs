@@ -1606,8 +1606,24 @@ fn utc_date(ts: u64) -> String {
 /// `activation_timestamps_match_the_chain` checks the list against the node,
 /// so a hand-edited value fails rather than drifting quietly.
 const BIP_ACTIVATIONS: &[(u64, u64, &str)] = &[
-    (227_835, 1_364_140_153, "BIP-34 (Height in Coinbase)"),
-    (227_931, 1_364_196_609, "BIP-16 (P2SH)"),
+    // P2SH activated on a **timestamp trigger**, not a height: BIP 16
+    // specifies enforcement for blocks stamped at or after 1333238400,
+    // 2012-04-01 00:00 UTC. So the marker names the first block the rule
+    // applied to, 173,805 at 00:43 that morning; 173,804 closed the previous
+    // day at 23:58:36.
+    //
+    // It sat at 227,931 until 2026-09-16, which is **54,126 blocks and 359
+    // days late** and is in fact BIP-34's enforcement height, so P2SH's
+    // label was on BIP-34's block.
+    (173_805, 1_333_240_980, "BIP-16 (P2SH)"),
+    // Core's enforcement height, where a version-1 block is rejected, chosen
+    // over 227,835 (the last version-1 block in the whole chain) so that
+    // every marker in this list means the same kind of thing: the height a
+    // rule began being enforced. The two are 96 blocks and 16 hours apart,
+    // and **no version-1 block exists between them**, so nothing about the
+    // chain's contents changed at this height. Both were drawn before, with
+    // labels near enough to read as duplicates.
+    (227_931, 1_364_196_609, "BIP-34 enforced (v2 blocks)"),
     (363_725, 1_435_974_872, "BIP-66 (Strict DER)"),
     (388_381, 1_450_113_884, "BIP-65 (CLTV)"),
     (419_328, 1_467_674_161, "BIP-68/112/113 (CSV)"),

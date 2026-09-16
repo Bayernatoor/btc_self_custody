@@ -108,9 +108,9 @@ pub fn EmbeddedChartsPage() -> impl IntoView {
                         <div class="space-y-10">
                             // ── Overview ─────────────────────────
                             <SectionHeading id="section-overview" title="Overview"/>
-                            <ChartCard title="All Embedded Data, Block Share" description=chart_desc(range, "How much of each block is non-financial data (OP_RETURN outputs plus witness inscriptions)", "Daily average non-financial data share per block") chart_id="chart-all-embedded-share" option=all_embedded_share_option/>
-                            <ChartCard title="All Embedded Data, Count" description=chart_desc(range, "Outputs per block by protocol: Runes, Omni, Counterparty, Ordinals, BRC-20, and other data", "Daily average embedded outputs per block by protocol") chart_id="chart-unified-count" option=unified_count_option/>
-                            <ChartCard title="All Embedded Data, Volume" description=chart_desc(range, "Bytes of data embedded per block by protocol", "Daily average bytes of data embedded per block by protocol") chart_id="chart-unified-volume" option=unified_volume_option/>
+                            <ChartCard title="Detected Embedded Data, Block Share" description=chart_desc(range, "Share of each block's bytes in detected protocol data: OP_RETURN script bytes plus estimated inscription payload", "Daily average share of block bytes in detected protocol data") chart_id="chart-all-embedded-share" option=all_embedded_share_option/>
+                            <ChartCard title="Detected Embedded Data, Count" description=chart_desc(range, "Per block, by protocol: OP_RETURN outputs for the first four bands and inscription-bearing witness items for the last two", "Daily average per block: OP_RETURN outputs and inscription-bearing witness items, by protocol") chart_id="chart-unified-count" option=unified_count_option/>
+                            <ChartCard title="Detected Embedded Data, Volume" description=chart_desc(range, "Bytes per block by protocol: exact OP_RETURN script bytes and estimated inscription payload, on one stack", "Daily average bytes per block by protocol, mixing exact OP_RETURN script bytes with estimated inscription payload") chart_id="chart-unified-volume" option=unified_volume_option/>
 
                             // ── Protocols ────────────────────────
                             <SectionHeading id="section-protocols" title="OP_RETURN"/>

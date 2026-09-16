@@ -816,7 +816,7 @@ pub fn unified_embedded_volume_chart(
             { "name": "Omni", "type": "bar", "stack": "total", "data": omni, "itemStyle": { "color": OMNI_COLOR } },
             { "name": "Counterparty", "type": "bar", "stack": "total", "data": xcp, "itemStyle": { "color": COUNTERPARTY_COLOR } },
             { "name": "Other OP_RETURN", "type": "bar", "stack": "total", "data": other_op, "itemStyle": { "color": CARRIER_COLOR } },
-            { "name": "Inscriptions", "type": "bar", "stack": "total", "data": inscriptions, "itemStyle": { "color": INSCRIPTION_COLOR } }
+            { "name": "Inscriptions incl. BRC-20", "type": "bar", "stack": "total", "data": inscriptions, "itemStyle": { "color": INSCRIPTION_COLOR } }
         ]
     }))
 }
@@ -868,7 +868,7 @@ pub fn unified_embedded_volume_chart_daily(
             { "name": "Omni", "type": "bar", "stack": "total", "data": omni, "itemStyle": { "color": OMNI_COLOR } },
             { "name": "Counterparty", "type": "bar", "stack": "total", "data": xcp, "itemStyle": { "color": COUNTERPARTY_COLOR } },
             { "name": "Other OP_RETURN", "type": "bar", "stack": "total", "data": other_op, "itemStyle": { "color": CARRIER_COLOR } },
-            { "name": "Inscriptions", "type": "bar", "stack": "total", "data": inscriptions, "itemStyle": { "color": INSCRIPTION_COLOR } }
+            { "name": "Inscriptions incl. BRC-20", "type": "bar", "stack": "total", "data": inscriptions, "itemStyle": { "color": INSCRIPTION_COLOR } }
         ]
     }))
 }

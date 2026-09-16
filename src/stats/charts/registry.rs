@@ -528,9 +528,9 @@ impl ChartMeta {
 pub const CHARTS: &[ChartMeta] = &[
     ChartMeta {
         slug: "all-embedded-share",
-        title: "All Embedded Data, Block Share",
-        desc_per_block: "How much of each block is non-financial data (OP_RETURN outputs plus witness inscriptions)",
-        desc_daily: "Daily average non-financial data share per block",
+        title: "Detected Embedded Data, Block Share",
+        desc_per_block: "Share of each block's bytes in detected protocol data: OP_RETURN script bytes plus estimated inscription payload",
+        desc_daily: "Daily average share of block bytes in detected protocol data",
         category: Category::Embedded,
         unit: Unit::Percent,
         shape: Shape::StackedAbsolute,
@@ -938,9 +938,9 @@ pub const CHARTS: &[ChartMeta] = &[
     },
     ChartMeta {
         slug: "unified-count",
-        title: "All Embedded Data, Count",
-        desc_per_block: "Outputs per block by protocol: Runes, Omni, Counterparty, Ordinals, BRC-20, and other data",
-        desc_daily: "Daily average embedded outputs per block by protocol",
+        title: "Detected Embedded Data, Count",
+        desc_per_block: "Per block, by protocol: OP_RETURN outputs for the first four bands and inscription-bearing witness items for the last two",
+        desc_daily: "Daily average per block: OP_RETURN outputs and inscription-bearing witness items, by protocol",
         category: Category::Embedded,
         unit: Unit::Count,
         shape: Shape::StackedAbsolute,
@@ -1019,9 +1019,9 @@ pub const CHARTS: &[ChartMeta] = &[
     },
     ChartMeta {
         slug: "unified-volume",
-        title: "All Embedded Data, Volume",
-        desc_per_block: "Bytes of data embedded per block by protocol",
-        desc_daily: "Daily average bytes of data embedded per block by protocol",
+        title: "Detected Embedded Data, Volume",
+        desc_per_block: "Bytes per block by protocol: exact OP_RETURN script bytes and estimated inscription payload, on one stack",
+        desc_daily: "Daily average bytes per block by protocol, mixing exact OP_RETURN script bytes with estimated inscription payload",
         category: Category::Embedded,
         unit: Unit::Kilobytes,
         shape: Shape::StackedAbsolute,
@@ -1071,14 +1071,20 @@ pub const CHARTS: &[ChartMeta] = &[
                 population: "The residual.",
             },
             Measurement {
-                series: "Inscriptions",
+                // Named for what it holds. The count chart's "Inscriptions"
+                // band subtracts BRC-20 and draws it separately, so the two
+                // charts had one label for two different scopes. There is no
+                // `brc20_bytes` column, so this band cannot be split the
+                // same way without an ingestion change and a backfill; see
+                // `notes/chart-quality-2026-09-15/runs/backfill-queue.md`.
+                series: "Inscriptions incl. BRC-20",
                 series_daily: "",
-                quantity: "Estimated inscription payload bytes",
+                quantity: "Estimated inscription payload bytes, BRC-20 included",
                 method_per_block: Method::HeuristicallyDetected,
                 method_daily: Method::HeuristicallyDetected,
                 per_block: Aggregation::PerBlockObservation,
                 daily: Aggregation::MeanOfPerBlockValues,
-                population: "An estimated payload, whereas the OP_RETURN bands are exact script bytes, so the stack mixes two byte bases.",
+                population: "An estimated payload, whereas the OP_RETURN bands are exact script bytes, so the stack mixes two byte bases: 6.27 GB of exact script bytes against 40.93 GB of estimate over the whole chain. BRC-20 content is inside this band because no separate byte column exists for it, unlike the count chart where the two are disjoint.",
             },
         ],
         about: None,
