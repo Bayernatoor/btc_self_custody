@@ -507,6 +507,14 @@ impl ChartMeta {
     /// Derived rather than stored for the same reason `supports_log` is: a
     /// newly registered chart gets the right answer from what it already
     /// declares.
+    /// Whether the key-figure rail may report a change across the range.
+    ///
+    /// False where every point is already a difference, so subtracting the
+    /// first from the last says nothing. See [`POINTS_ARE_CHANGES`].
+    pub fn reports_change(&self) -> bool {
+        !POINTS_ARE_CHANGES.contains(&self.slug)
+    }
+
     pub fn can_compare(&self) -> bool {
         matches!(
             self.source,
@@ -2779,6 +2787,38 @@ pub const MULTI_METRIC: &[&str] = &[
 /// builders, and `the_offered_comparisons_can_all_actually_be_drawn` proves
 /// the exclusion is sufficient rather than merely present.
 pub const NON_TIME_X_AXIS: &[&str] = &["fee-pressure", "halving-era"];
+
+/// Charts whose points are **already changes**, so the rail's "change" figure
+/// would be a change of a change.
+///
+/// The rail reports `last - first`, which answers "how much did this move
+/// across the range" and needs the plotted quantity to be a level. Where
+/// every point is itself a difference, that subtraction has no meaning: over
+/// 1Y, Difficulty Adjustment's first bar is +4.63% and its last is +1.31%, so
+/// the rail read **-3.32, -71.7%**, which a reader takes as difficulty having
+/// fallen 3.32% in a year. Difficulty actually fell **6.3%** over that window,
+/// which is the product of all 26 factors and a different number entirely.
+/// Found by browser pass on 2026-09-16, not by any test.
+///
+/// The other four figures stay, because they do mean something here: the mean
+/// retarget, the largest rise and fall with their dates, and how many
+/// retargets the range holds.
+///
+/// Suppressed rather than replaced. A compound figure is what a reader wants
+/// on this chart, but computing it in a generic rail means declaring that
+/// these points compose multiplicatively, and `utxo-growth` composes
+/// additively while `multi-velocity` does not compose at all. That is a
+/// per-measurement contract, which is phase 2; saying nothing is the honest
+/// interim.
+///
+/// - **`diff-adjustment`** plots the change at each retarget.
+/// - **`utxo-growth`** plots net change in the output set per block or day.
+/// - **`multi-velocity`** plots the change in each share over a trailing
+///   window. Its rail is already `Unavailable` because it draws several
+///   series at the same x, so listing it changes nothing today and is here so
+///   that if it ever routes through the series rail it arrives correct.
+pub const POINTS_ARE_CHANGES: &[&str] =
+    &["diff-adjustment", "multi-velocity", "utxo-growth"];
 
 pub fn is_valid_comparison(
     primary: &ChartMeta,

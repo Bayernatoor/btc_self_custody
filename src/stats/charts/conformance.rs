@@ -225,6 +225,33 @@ fn synthetic_days(n: usize) -> Vec<DailyAggregate> {
         .collect()
 }
 
+/// A run of empty days from a start date, for tests that only need the
+/// category axis. The daily difficulty column is deliberately absent: the
+/// Difficulty Adjustment chart does not read it any more.
+fn days_from_conformance(start: &str, n: usize) -> Vec<DailyAggregate> {
+    let d0 =
+        chrono::NaiveDate::parse_from_str(start, "%Y-%m-%d").expect("valid");
+    (0..n)
+        .map(|i| DailyAggregate {
+            date: (d0 + chrono::Duration::days(i as i64))
+                .format("%Y-%m-%d")
+                .to_string(),
+            ..Default::default()
+        })
+        .collect()
+}
+
+/// Noon UTC on a date, as a timestamp. Mid-day so a retarget lands inside the
+/// day it belongs to whatever the reader's offset.
+fn at_noon(date: &str) -> u64 {
+    chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d")
+        .expect("valid")
+        .and_hms_opt(12, 0, 0)
+        .expect("valid")
+        .and_utc()
+        .timestamp() as u64
+}
+
 /// Retarget blocks matching a run of synthetic days.
 ///
 /// One every 14 days, at 06:34 UTC so it lands mid-day like almost every real
@@ -2607,6 +2634,138 @@ mod tests {
             "the set of rails with no key figures changed. A chart added here \
              is one whose numbers a reader can no longer see; a chart removed \
              is progress and should update this list."
+        );
+    }
+
+    /// A chart whose points are already changes must not report a change.
+    ///
+    /// The rail's figure is `last - first`, which answers "how much did this
+    /// move across the range" and needs a level. Where every point is itself
+    /// a difference, the subtraction is a change of a change, and the sign
+    /// alone can mislead: two retargets of +10% and +5% leave difficulty
+    /// 15.5% higher than it started, while `last - first` is **-5**.
+    ///
+    /// Found in the browser on 2026-09-16, where the 1Y rail read
+    /// "change -3.32, -71.7%" over a year in which difficulty fell 6.3%.
+    /// Nothing in this suite would have caught it, which is why the list is
+    /// now checked here.
+    #[test]
+    fn a_chart_of_changes_does_not_report_a_change() {
+        use super::super::kpi::{self, Kpis};
+
+        // Both directions, computed from the declarations rather than
+        // restated, because a list that only checks its own entries cannot
+        // catch a missing one. That is the hole this suite found in its own
+        // coverage check a day earlier: iterating the list proves nothing
+        // about what is absent from it.
+        //
+        // A declared quantity is the only place "this point is a difference"
+        // is written down, so the word is the test. It is a proxy in the same
+        // way `is_companion_series` matching " ma" is a proxy: if a future
+        // chart of changes words its quantity around the word, this fails
+        // loudly at the list rather than silently at the rail.
+        let by_declaration: std::collections::BTreeSet<&str> = registry::CHARTS
+            .iter()
+            .filter(|c| {
+                c.measurements
+                    .iter()
+                    .any(|m| m.quantity.to_ascii_lowercase().contains("change"))
+            })
+            .map(|c| c.slug)
+            .collect();
+        let listed: std::collections::BTreeSet<&str> =
+            registry::POINTS_ARE_CHANGES.iter().copied().collect();
+        assert_eq!(
+            by_declaration, listed,
+            "every chart whose declared quantity is a change has to be in \
+             POINTS_ARE_CHANGES, and nothing else may be: the rail's \
+             `last - first` is a change of a change for exactly this set"
+        );
+
+        let mut load_bearing = 0usize;
+        for slug in registry::POINTS_ARE_CHANGES {
+            let meta = registry::find(slug)
+                .unwrap_or_else(|| panic!("{slug} is not a registered chart"));
+            assert!(
+                !meta.reports_change(),
+                "{slug} is listed as plotting changes but still reports one"
+            );
+            // The suppression has to be reachable. Either the chart draws the
+            // series rail, where the tile would otherwise appear, or its rail
+            // is already silent *for the one other reason a chart of changes
+            // can be silent*: several measurements at the same x, which is
+            // what `MULTI_METRIC` names. Any other silence means this entry
+            // describes a chart that never had the tile, and listing it
+            // implies a fix that did nothing.
+            for (m, daily, opt) in built_charts() {
+                if m.slug != *slug {
+                    continue;
+                }
+                let json = serde_json::to_string(&opt).expect("serialisable");
+                let at = if daily { "daily" } else { "per block" };
+                match kpi::compute(&json, m.shape) {
+                    Kpis::Series { .. } => load_bearing += 1,
+                    Kpis::Unavailable
+                        if registry::MULTI_METRIC.contains(&m.slug) => {}
+                    k => panic!(
+                        "{slug} ({at}) produced {k:?}, which has no change \
+                         tile to suppress, so listing it is misleading"
+                    ),
+                }
+            }
+        }
+        assert!(
+            load_bearing > 0,
+            "no chart in POINTS_ARE_CHANGES routes through the series rail, \
+             so the list suppresses nothing and is dead weight"
+        );
+
+        // And the figure it suppresses really is the misleading one. Two
+        // rises, so the rail's own first and last are +10 and +5.
+        let days = days_from_conformance("2024-01-01", 40);
+        let retargets = vec![
+            Retarget {
+                height: 800_000,
+                timestamp: at_noon("2024-01-02"),
+                difficulty: 1.0e14,
+            },
+            Retarget {
+                height: 802_016,
+                timestamp: at_noon("2024-01-16"),
+                difficulty: 1.1e14,
+            },
+            Retarget {
+                height: 804_032,
+                timestamp: at_noon("2024-01-30"),
+                difficulty: 1.155e14,
+            },
+        ];
+        let opt =
+            super::super::difficulty_adjustment_chart_daily(&days, &retargets);
+        let json = serde_json::to_string(&opt).expect("serialisable");
+        let Kpis::Series { first, last, .. } =
+            kpi::compute(&json, registry::Shape::Bar)
+        else {
+            panic!("the fixture should reach the series rail");
+        };
+        assert!(
+            (first - 10.0).abs() < 0.01,
+            "first bar is +10%, got {first}"
+        );
+        assert!((last - 5.0).abs() < 0.01, "last bar is +5%, got {last}");
+        // The suppressed figure against the honest one, both computed rather
+        // than written down, so the contrast cannot go stale if the fixture
+        // changes.
+        let suppressed = last - first;
+        let compound = (retargets.last().expect("retargets").difficulty
+            / retargets.first().expect("retargets").difficulty
+            - 1.0)
+            * 100.0;
+        assert!(
+            suppressed < 0.0 && compound > 0.0,
+            "the point of the suppression is that these disagree in sign: \
+             the rail would have shown {suppressed} while difficulty moved \
+             {compound}% across the same window"
         );
     }
 }

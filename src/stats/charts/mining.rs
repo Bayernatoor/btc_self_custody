@@ -343,6 +343,23 @@ where
     out
 }
 
+/// What a range holding no retarget says.
+///
+/// An empty frame with two legend swatches and no bars is the same picture as
+/// a chart that failed to load, and the rail beside it reads "Not available
+/// for this range", which reads as the site not knowing rather than the
+/// window not containing one. Most ranges shorter than a fortnight have no
+/// retarget in them: a 1D range is 144 blocks against the 2,016 between
+/// adjustments, and a single custom day almost never lands on one.
+///
+/// So say which it is. Correct before and correct now, but only legible now.
+fn no_retarget_chart() -> serde_json::Value {
+    no_data_chart_with_hint(
+        "No difficulty adjustment in this range",
+        "Difficulty changes every 2,016 blocks, about a fortnight. Try a longer range.",
+    )
+}
+
 pub fn difficulty_adjustment_chart(
     blocks: &[BlockSummary],
 ) -> serde_json::Value {
@@ -350,6 +367,9 @@ pub fn difficulty_adjustment_chart(
         return no_data_chart("Difficulty Adjustment");
     }
     let steps = difficulty_steps(blocks, |b| b.difficulty);
+    if steps.is_empty() {
+        return no_retarget_chart();
+    }
     // Two series rather than one with per-bar colours, because a colour
     // chosen per point needs a callback and this option is serialised from
     // Rust. It also gives the chart a legend that explains its own colours,
@@ -465,6 +485,9 @@ pub fn difficulty_adjustment_chart_daily(
     }
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
     let steps = retarget_steps(days, retargets);
+    if steps.is_empty() {
+        return no_retarget_chart();
+    }
     // Positioned by category index, so every day needs a slot and the ones
     // without a retarget carry null rather than zero. Zero would draw a bar
     // of no height at every point and read as "no change today", which is a
@@ -751,26 +774,59 @@ mod adjustment_tests {
         }
     }
 
-    /// No days means no chart, and no retargets means an empty frame rather
-    /// than a missing one.
+    /// A range with no retarget says so, rather than drawing an empty frame.
+    ///
+    /// Found in the browser on 2026-09-16: a custom range of 2021-07-04 to
+    /// 2021-07-04 holds no retarget, which is correct, and it drew an empty
+    /// axis with two legend swatches beside a rail reading "Not available for
+    /// this range". That is the same picture as a chart that failed to load.
+    /// Most short ranges are this case: 1D is 144 blocks against the 2,016
+    /// between adjustments.
+    ///
+    /// Both arms, because the per-block one is the common way to hit it.
     #[test]
-    fn an_empty_window_draws_nothing_rather_than_guessing() {
-        let empty = difficulty_adjustment_chart_daily(&[], &china_ban());
-        assert_eq!(empty, no_data_chart("Difficulty Adjustment"));
+    fn a_range_with_no_retarget_says_so() {
+        let expected = no_data_chart_with_hint(
+            "No difficulty adjustment in this range",
+            "Difficulty changes every 2,016 blocks, about a fortnight. Try a \
+             longer range.",
+        );
 
+        // Daily: days loaded, and no retarget lands on any of them.
         let days = days_from("2024-01-01", 5);
-        let opt = difficulty_adjustment_chart_daily(&days, &[]);
-        let series = opt["series"].as_array().expect("two series");
-        for s in series {
-            assert!(
-                s["data"]
-                    .as_array()
-                    .expect("data")
-                    .iter()
-                    .all(|v| v.is_null()),
-                "no retargets in the window, but a bar was drawn"
-            );
-        }
+        assert_eq!(difficulty_adjustment_chart_daily(&days, &[]), expected);
+        // The 2021-07-04 case exactly: the window's only retarget row is the
+        // predecessor, whose own adjustment happened the day before.
+        assert_eq!(
+            difficulty_adjustment_chart_daily(
+                &days_from("2021-07-04", 1),
+                &china_ban()[1..]
+            ),
+            expected
+        );
+
+        // Per block: a run of blocks inside one epoch, which is every range
+        // shorter than a fortnight.
+        let flat: Vec<BlockSummary> = (0..144)
+            .map(|i| BlockSummary {
+                height: 900_000 + i,
+                timestamp: 1_700_000_000 + i * 600,
+                difficulty: 1.0e14,
+                ..Default::default()
+            })
+            .collect();
+        assert_eq!(difficulty_adjustment_chart(&flat), expected);
+
+        // No blocks and no days at all is still the no-data chart rather than
+        // the hint: there is nothing to say about a window holding no blocks.
+        assert_eq!(
+            difficulty_adjustment_chart_daily(&[], &china_ban()),
+            no_data_chart("Difficulty Adjustment")
+        );
+        assert_eq!(
+            difficulty_adjustment_chart(&[]),
+            no_data_chart("Difficulty Adjustment")
+        );
     }
 
     /// The four R3 acceptance windows, end to end against the live database.

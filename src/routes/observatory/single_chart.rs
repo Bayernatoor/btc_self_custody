@@ -920,6 +920,7 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                     // two million satoshis.
                     <KeyFacts
                         kpis=kpis
+                        reports_change=meta.reports_change()
                         unit=Signal::derive(move || {
                             if matches!(meta.source, Source::Fees) && fee_sats.get() {
                                 registry::Unit::Sats
@@ -955,7 +956,7 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                             }.into_any()
                         } else {
                             view! {
-                                <KeyFacts kpis=Signal::derive(move || k.clone()) unit=c.unit/>
+                                <KeyFacts kpis=Signal::derive(move || k.clone()) unit=c.unit reports_change=c.reports_change()/>
                             }.into_any()
                         };
                         view! {
@@ -1488,6 +1489,11 @@ fn KeyFacts(
     /// fee chart switches between BTC and sats at the reader's request.
     #[prop(into)]
     unit: Signal<registry::Unit>,
+    /// Whether "change" means anything for this chart. False where every
+    /// point is already a difference, so `last - first` is a change of a
+    /// change: see `registry::POINTS_ARE_CHANGES`. The other four figures are
+    /// still right, so the tile goes rather than the rail.
+    reports_change: bool,
 ) -> impl IntoView {
     view! {
         {move || match kpis.get() {
@@ -1511,11 +1517,13 @@ fn KeyFacts(
                         <Fact label="average" value=fmt_num(average) note=(unit.get() != registry::Unit::Count).then(|| unit.get().label().to_string())/>
                         <Fact label="peak" value=fmt_num(peak.y) note=point_label(&peak, &axis_labels)/>
                         <Fact label="low" value=fmt_num(low.y) note=point_label(&low, &axis_labels)/>
-                        <Fact
-                            label="change"
-                            value=format!("{}{}", if change >= 0.0 { "+" } else { "" }, fmt_num(change))
-                            note=pct.map(|p| format!("{p:+.1}%"))
-                        />
+                        {reports_change.then(|| view! {
+                            <Fact
+                                label="change"
+                                value=format!("{}{}", if change >= 0.0 { "+" } else { "" }, fmt_num(change))
+                                note=pct.map(|p| format!("{p:+.1}%"))
+                            />
+                        })}
                         <Fact label="observations" value=observations.to_string() note=None/>
                     </div>
                 }.into_any()
