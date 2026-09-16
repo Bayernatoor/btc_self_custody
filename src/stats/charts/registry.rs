@@ -256,7 +256,7 @@ impl Unit {
             Self::Sats => "sats",
             Self::SatVb => "sat/vB",
             Self::Bytes => "bytes",
-            Self::Kilobytes => "KB",
+            Self::Kilobytes => "kB",
             Self::Megabytes => "MB",
             Self::Gigabytes => "GB",
             Self::Percent => "%",
@@ -596,7 +596,7 @@ pub const CHARTS: &[ChartMeta] = &[
                 method_daily: Method::HeuristicallyDetected,
                 per_block: Aggregation::PerBlockObservation,
                 daily: Aggregation::MeanOfPerBlockValues,
-                population: "Matching witness item bytes less an estimated envelope overhead, so this is an estimate of content rather than a parsed payload. Divided by 1,024, which is KiB, while the axis is labelled KB.",
+                population: "Matching witness item bytes less an estimated envelope overhead, so this is an estimate of content rather than a parsed payload. Denominated in kB of 1,000 bytes, matching every other byte unit on the site.",
             },
             Measurement {
                 series: "Envelope Overhead",
@@ -606,7 +606,7 @@ pub const CHARTS: &[ChartMeta] = &[
                 method_daily: Method::HeuristicallyDetected,
                 per_block: Aggregation::PerBlockObservation,
                 daily: Aggregation::MeanOfPerBlockValues,
-                population: "The remainder after subtracting the estimated payload, floored at zero. Also divided by 1,024 rather than 1,000.",
+                population: "The remainder after subtracting the estimated payload, floored at zero.",
             },
         ],
         about: Some(About {
@@ -731,7 +731,7 @@ pub const CHARTS: &[ChartMeta] = &[
         desc_per_block: "Bytes of data stored in OP_RETURN outputs per block by protocol",
         desc_daily: "Daily average OP_RETURN bytes per block by protocol",
         category: Category::Embedded,
-        unit: Unit::Bytes,
+        unit: Unit::Kilobytes,
         shape: Shape::StackedAbsolute,
         source: Source::Dashboard {
             per_block: super::op_return_bytes_chart,
@@ -746,7 +746,7 @@ pub const CHARTS: &[ChartMeta] = &[
                 method_daily: Method::HeuristicallyDetected,
                 per_block: Aggregation::PerBlockObservation,
                 daily: Aggregation::MeanOfPerBlockValues,
-                population: "The day's total divided by its block count, so a per-block mean, then divided by 1,000 so the plotted unit is kB while the registry declares bytes.",
+                population: "The day's total divided by its block count, so a per-block mean, then divided by 1,000 because the plotted unit is kB.",
             },
             Measurement {
                 series: "Omni",
@@ -994,7 +994,7 @@ pub const CHARTS: &[ChartMeta] = &[
         desc_per_block: "Bytes of data embedded per block by protocol",
         desc_daily: "Daily average bytes of data embedded per block by protocol",
         category: Category::Embedded,
-        unit: Unit::Bytes,
+        unit: Unit::Kilobytes,
         shape: Shape::StackedAbsolute,
         source: Source::Dashboard {
             per_block: super::unified_embedded_volume_chart,
@@ -1009,7 +1009,7 @@ pub const CHARTS: &[ChartMeta] = &[
                 method_daily: Method::HeuristicallyDetected,
                 per_block: Aggregation::PerBlockObservation,
                 daily: Aggregation::MeanOfPerBlockValues,
-                population: "Daily total over block count then over 1,000, so a per-block mean in kB while the registry declares bytes.",
+                population: "Daily total over block count then over 1,000, so a per-block mean in kB.",
             },
             Measurement {
                 series: "Omni",

@@ -842,7 +842,7 @@ pub fn largest_tx_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
-        "yAxis": y_axis("KB"),
+        "yAxis": y_axis("kB"),
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
         "legend": { "show": has_ma },

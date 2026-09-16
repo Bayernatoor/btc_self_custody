@@ -985,16 +985,20 @@ pub fn inscription_envelope_chart(
     }
 
     let payload_str =
-        build_data_array_f64(blocks, |b| b.inscription_bytes as f64 / 1024.0);
+        // 1,000, not 1,024. This divided by 1,024 and labelled the result
+        // KB, which is 2.4% short of what that label claims, and it was the
+        // only chart on the site doing so: block size, chain size, largest
+        // transaction and the OP_RETURN volume helpers are all decimal.
+        build_data_array_f64(blocks, |b| b.inscription_bytes as f64 / 1_000.0);
     let envelope_str = build_data_array_f64(blocks, |b| {
         b.inscription_envelope_bytes
             .saturating_sub(b.inscription_bytes) as f64
-            / 1024.0
+            / 1_000.0
     });
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
-        "yAxis": y_axis("KB"),
+        "yAxis": y_axis("kB"),
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
         "legend": { "show": true },
@@ -1024,13 +1028,13 @@ pub fn inscription_envelope_chart_daily(
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
     let payload: Vec<f64> = days
         .iter()
-        .map(|d| round(d.avg_inscription_bytes / 1024.0, 2))
+        .map(|d| round(d.avg_inscription_bytes / 1_000.0, 2))
         .collect();
     let overhead: Vec<f64> = days
         .iter()
         .map(|d| {
             let oh = d.avg_inscription_envelope_bytes - d.avg_inscription_bytes;
-            round(oh.max(0.0) / 1024.0, 2)
+            round(oh.max(0.0) / 1_000.0, 2)
         })
         .collect();
 

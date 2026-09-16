@@ -1851,6 +1851,62 @@ mod tests {
         }
     }
 
+    /// Every byte unit on the site is decimal, and the symbol matches.
+    ///
+    /// kB is 1,000 bytes and KiB is 1,024, a 2.4% difference that compounds to
+    /// 4.9% at MB and 7.4% at GB. `inscription-envelope` divided by 1,024 and
+    /// labelled the result KB, which is the one place the two were mixed, and
+    /// it was the only chart doing so: block size, chain size, largest
+    /// transaction and the OP_RETURN volume helpers were already decimal.
+    ///
+    /// Asserted by arithmetic rather than by grepping for a divisor, so it
+    /// holds however the conversion is written. 2,048 bytes is 2.048 kB
+    /// decimal and would be exactly 2 KiB binary, which is what makes it the
+    /// discriminating input.
+    #[test]
+    fn byte_units_are_decimal_not_binary() {
+        let blocks: Vec<BlockSummary> = (0..400)
+            .map(|i| BlockSummary {
+                height: 850_000 + i,
+                hash: format!("{i:064x}"),
+                timestamp: 1_720_000_000 + i * 600,
+                tx_count: 100,
+                size: 2_048_000,
+                weight: 3_900_000,
+                inscription_count: 5,
+                inscription_bytes: 2_048,
+                inscription_envelope_bytes: 3_048,
+                ..Default::default()
+            })
+            .collect();
+
+        let opt = super::super::inscription_envelope_chart(&blocks);
+        let payload = opt["series"]
+            .as_array()
+            .expect("series")
+            .iter()
+            .find(|s| s["name"] == "Payload")
+            .expect("a Payload series")["data"][0][1]
+            .as_f64()
+            .expect("a number");
+        assert!(
+            (payload - 2.048).abs() < 0.001,
+            "2,048 bytes is 2.048 kB; {payload} means the divisor is 1,024, \
+             which would be KiB under a kB label"
+        );
+
+        // And block size, which was already decimal, stays that way.
+        let size = super::super::block_size_chart(&blocks);
+        let mb = size["series"][0]["data"][0][1].as_f64().expect("a number");
+        assert!(
+            (mb - 2.048).abs() < 0.001,
+            "2,048,000 bytes is 2.048 MB decimal, got {mb}"
+        );
+
+        // The symbol has to match the arithmetic.
+        assert_eq!(registry::Unit::Kilobytes.label(), "kB");
+    }
+
     /// `registry::NON_TIME_X_AXIS` has to name exactly the charts whose
     /// builders produce a non-time x axis, or the comparison rule built on it
     /// is guessing.
