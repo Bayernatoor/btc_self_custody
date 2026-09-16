@@ -1223,6 +1223,19 @@ fn right_axis_label(
 /// a 20rem rail that overflows the panel entirely, so the rail gets its own
 /// wrapping grid over the same signals rather than the shared component being
 /// reshaped for both.
+///
+/// **The dates are here too, as of 2026-09-16.** Custom used to open the
+/// settings panel in the bottom-right corner instead, on the reasoning that
+/// one date picker was enough. Two things made that wrong in use: the panel
+/// opens on a tab labelled **Axes**, so the control a reader just asked for
+/// is not on a tab with its name, and the panel's own picker starts closed,
+/// so reaching the dates took a *second* Custom click in a different corner
+/// of the screen. Clicking a control should reveal that control.
+///
+/// Only the two inputs are duplicated, not the preset row, which is what
+/// actually overflowed before. The validation is shared with the panel's
+/// picker through `validate_custom_range`, so the two cannot disagree about
+/// what a valid window is.
 #[component]
 fn RailRange() -> impl IntoView {
     const PRESETS: &[&str] = &[
@@ -1233,8 +1246,35 @@ fn RailRange() -> impl IntoView {
     let set_range = state.set_range;
     let set_custom_from = state.set_custom_from;
     let set_custom_to = state.set_custom_to;
-    let set_panel = state.set_chart_settings_open;
-    let set_tab = state.set_chart_settings_tab;
+    let custom_from = state.custom_from;
+    let custom_to = state.custom_to;
+
+    // Prefilled from the window in force, so opening this with a custom range
+    // selected shows the dates it is showing rather than two empty inputs.
+    let (picker_open, set_picker_open) =
+        signal(range.get_untracked() == "custom");
+    let (local_from, set_local_from) =
+        signal(custom_from.get_untracked().unwrap_or_default());
+    let (local_to, set_local_to) =
+        signal(custom_to.get_untracked().unwrap_or_default());
+    let (problem, set_problem) = signal::<Option<&'static str>>(None);
+
+    let apply_custom = move |_| {
+        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        match super::shared::validate_custom_range(
+            &local_from.get(),
+            &local_to.get(),
+            &today,
+        ) {
+            Ok((from, to)) => {
+                set_problem.set(None);
+                set_custom_from.set(Some(from));
+                set_custom_to.set(Some(to));
+                set_range.set("custom".to_string());
+            }
+            Err(why) => set_problem.set(Some(why)),
+        }
+    };
 
     // Whether the selected range is served per block or from daily
     // aggregates. Worth surfacing because it changes what a point means, and
@@ -1274,6 +1314,8 @@ fn RailRange() -> impl IntoView {
                             move |_| {
                                 set_custom_from.set(None);
                                 set_custom_to.set(None);
+                                set_picker_open.set(false);
+                                set_problem.set(None);
                                 set_range.set(val.clone());
                             }
                         }
@@ -1288,18 +1330,51 @@ fn RailRange() -> impl IntoView {
             <span class="w-px self-stretch bg-white/10 mx-0.5"></span>
             <button
                 class=move || segmented_button(range.get() == "custom")
-                // The date picker itself lives in the chart settings panel.
-                // Opening it there beats a second copy in a 20rem rail, which
-                // is what overflowed when the shared selector was used here.
-                on:click=move |_| {
-                    set_tab.set(super::shared::ChartSettingsTab::Range);
-                    set_panel.set(true);
-                }
+                on:click=move |_| set_picker_open.update(|v| *v = !*v)
                 title="Pick an exact date range"
             >
                 "Custom"
             </button>
         </div>
+        // The dates, under the presets and in the same column, so they appear
+        // where the button that asks for them is. Wraps, because the header
+        // is narrow on a phone and two inputs plus a button do not fit on one
+        // line there.
+        <Show when=move || picker_open.get()>
+            <div class="flex flex-wrap items-center gap-1.5 mt-1.5 p-1 rounded-lg bg-black/25 border border-white/10">
+                <input
+                    type="date"
+                    min="2009-01-03"
+                    max=move || chrono::Utc::now().format("%Y-%m-%d").to_string()
+                    aria-label="Range start date"
+                    class="bg-[#0d2137] text-white text-xs border border-white/10 rounded-md px-1.5 py-1 focus:outline-none focus:border-[#f7931a]/40"
+                    style="color-scheme: dark"
+                    prop:value=move || local_from.get()
+                    on:input=move |ev| set_local_from.set(event_target_value(&ev))
+                />
+                <span class="text-white/30 text-xs">"to"</span>
+                <input
+                    type="date"
+                    min="2009-01-03"
+                    max=move || chrono::Utc::now().format("%Y-%m-%d").to_string()
+                    aria-label="Range end date"
+                    class="bg-[#0d2137] text-white text-xs border border-white/10 rounded-md px-1.5 py-1 focus:outline-none focus:border-[#f7931a]/40"
+                    style="color-scheme: dark"
+                    prop:value=move || local_to.get()
+                    on:input=move |ev| set_local_to.set(event_target_value(&ev))
+                />
+                <button
+                    class="px-2.5 py-1 text-xs bg-[#f7931a] text-[#1a1a2e] font-semibold rounded-md cursor-pointer hover:bg-[#f4a949] transition-colors"
+                    on:click=apply_custom
+                >
+                    "Go"
+                </button>
+            </div>
+        </Show>
+        // Why nothing happened, when nothing happened.
+        <Show when=move || problem.get().is_some()>
+            <p class="text-[0.7rem] text-[#f7931a] mt-1">{move || problem.get().unwrap_or_default()}</p>
+        </Show>
         <p class="text-[0.7rem] text-white/65 mt-1.5 inline-flex items-center gap-1">
             <span class="whitespace-nowrap">
                 <DefinedTerm

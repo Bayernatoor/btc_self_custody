@@ -11,6 +11,44 @@ use leptos::prelude::*;
 use super::state::ObservatoryState;
 use crate::routes::observatory::helpers::*;
 
+/// The first block's UTC date. A range starting before it holds no blocks.
+const GENESIS_DATE: &str = "2009-01-03";
+
+/// Check a pair of `YYYY-MM-DD` dates and clamp the end to today, or say why
+/// not.
+///
+/// Pure, and shared by both pickers, because there are two: one under the
+/// chart header and one in the settings panel. They had one validator each
+/// the moment the second was written, which is how two arms of the same
+/// question end up answering it differently.
+///
+/// The reason strings are shown to the reader. The previous version returned
+/// early on each of these conditions, so an invalid pair made "Go" a button
+/// that did nothing and said nothing.
+pub fn validate_custom_range(
+    from: &str,
+    to: &str,
+    today: &str,
+) -> Result<(String, String), &'static str> {
+    if from.is_empty() || to.is_empty() {
+        return Err("Pick both dates.");
+    }
+    if from > to {
+        return Err("The start date is after the end date.");
+    }
+    if from < GENESIS_DATE {
+        return Err("The chain starts on 3 January 2009.");
+    }
+    if from > today {
+        return Err("That start date is in the future.");
+    }
+    // A future end date is clamped rather than refused: asking for "up to the
+    // end of the month" before the month is over is a reasonable thing to
+    // type, and the answer is everything up to now.
+    let end = if to > today { today } else { to };
+    Ok((from.to_string(), end.to_string()))
+}
+
 /// Range selector bar (1D through ALL + YTD)
 #[component]
 pub fn RangeSelector() -> impl IntoView {
@@ -20,9 +58,16 @@ pub fn RangeSelector() -> impl IntoView {
     let set_custom_from = state.set_custom_from;
     let set_custom_to = state.set_custom_to;
 
-    let (picker_open, set_picker_open) = signal(false);
-    let (local_from, set_local_from) = signal(String::new());
-    let (local_to, set_local_to) = signal(String::new());
+    // Open when the current range already is a custom one, so arriving here
+    // with a window selected shows the window rather than hiding it behind a
+    // button that is already highlighted.
+    let (picker_open, set_picker_open) =
+        signal(range.get_untracked() == "custom");
+    let (local_from, set_local_from) =
+        signal(state.custom_from.get_untracked().unwrap_or_default());
+    let (local_to, set_local_to) =
+        signal(state.custom_to.get_untracked().unwrap_or_default());
+    let (problem, set_problem) = signal::<Option<&'static str>>(None);
 
     let range_label = move || {
         let r = range.get();
@@ -39,28 +84,22 @@ pub fn RangeSelector() -> impl IntoView {
     };
 
     let apply_custom = move |_| {
-        let f = local_from.get();
-        let t = local_to.get();
-        if f.is_empty() || t.is_empty() {
-            return;
-        }
-        // Validate: from <= to, not before genesis, not in the future
-        if f.as_str() > t.as_str() {
-            return;
-        }
-        if f.as_str() < "2009-01-03" {
-            return;
-        }
         let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
-        let to_clamped = if t.as_str() > today.as_str() {
-            today
-        } else {
-            t
-        };
-        set_custom_from.set(Some(f));
-        set_custom_to.set(Some(to_clamped));
-        set_range.set("custom".to_string());
-        set_picker_open.set(false);
+        match validate_custom_range(&local_from.get(), &local_to.get(), &today)
+        {
+            Ok((from, to)) => {
+                set_problem.set(None);
+                set_custom_from.set(Some(from));
+                set_custom_to.set(Some(to));
+                // Left open, like the header's picker: after applying, the
+                // window in force is worth showing rather than hiding behind
+                // a button that says only "Custom".
+                set_range.set("custom".to_string());
+            }
+            // Said rather than swallowed: this was five silent early
+            // returns, so a bad pair left the button doing nothing.
+            Err(why) => set_problem.set(Some(why)),
+        }
     };
 
     let select_preset = move |r: String| {
@@ -183,6 +222,10 @@ pub fn RangeSelector() -> impl IntoView {
                     </button>
                 </div>
             </Show>
+            // Why nothing happened, when nothing happened.
+            <Show when=move || problem.get().is_some()>
+                <p class="text-xs text-[#f7931a]">{move || problem.get().unwrap_or_default()}</p>
+            </Show>
         </div>
     }
 }
@@ -191,3 +234,90 @@ pub fn RangeSelector() -> impl IntoView {
 // so Overlays + Range share a single floating button in the bottom-right
 // corner instead of two distinct toggles. Kept the diff here as a
 // tombstone comment for the next reader.
+
+#[cfg(test)]
+mod tests {
+    use super::validate_custom_range;
+
+    const TODAY: &str = "2026-09-16";
+
+    /// The pair a reader is most likely to type, and the one the browser pass
+    /// used: a single day, start equal to end.
+    #[test]
+    fn one_day_is_a_valid_window() {
+        assert_eq!(
+            validate_custom_range("2021-07-04", "2021-07-04", TODAY),
+            Ok(("2021-07-04".to_string(), "2021-07-04".to_string()))
+        );
+    }
+
+    /// Every rejection has to say which rejection it is. These were five
+    /// silent early returns, so "Go" did nothing and explained nothing, which
+    /// is the same defect class as a comparison the picker offers and cannot
+    /// draw.
+    #[test]
+    fn each_refusal_says_what_is_wrong() {
+        assert_eq!(
+            validate_custom_range("", "2024-01-01", TODAY),
+            Err("Pick both dates.")
+        );
+        assert_eq!(
+            validate_custom_range("2024-01-01", "", TODAY),
+            Err("Pick both dates.")
+        );
+        assert_eq!(
+            validate_custom_range("2024-06-01", "2024-01-01", TODAY),
+            Err("The start date is after the end date.")
+        );
+        assert_eq!(
+            validate_custom_range("2008-12-31", "2024-01-01", TODAY),
+            Err("The chain starts on 3 January 2009.")
+        );
+        assert_eq!(
+            validate_custom_range("2030-01-01", "2030-02-01", TODAY),
+            Err("That start date is in the future.")
+        );
+    }
+
+    /// Genesis itself is inside the chain, not before it.
+    #[test]
+    fn the_first_day_of_the_chain_is_allowed() {
+        assert!(
+            validate_custom_range("2009-01-03", "2009-02-01", TODAY).is_ok()
+        );
+        assert!(
+            validate_custom_range("2009-01-02", "2009-02-01", TODAY).is_err()
+        );
+    }
+
+    /// A future end date is clamped rather than refused, because asking for
+    /// the rest of the current month is a reasonable thing to type and the
+    /// honest answer is everything up to now.
+    #[test]
+    fn a_future_end_is_clamped_to_today() {
+        assert_eq!(
+            validate_custom_range("2026-09-01", "2026-12-31", TODAY),
+            Ok(("2026-09-01".to_string(), TODAY.to_string()))
+        );
+        // Today itself is not the future.
+        assert_eq!(
+            validate_custom_range(TODAY, TODAY, TODAY),
+            Ok((TODAY.to_string(), TODAY.to_string()))
+        );
+    }
+
+    /// String comparison is a chronological comparison only because the
+    /// format is zero-padded. A test here so that reformatting the inputs
+    /// cannot quietly break the ordering checks.
+    #[test]
+    fn dates_are_compared_chronologically() {
+        assert_eq!(
+            validate_custom_range("2024-09-01", "2024-10-01", TODAY),
+            Ok(("2024-09-01".to_string(), "2024-10-01".to_string()))
+        );
+        // The case a non-padded format would get wrong: "9" > "10" as text.
+        assert!(
+            validate_custom_range("2024-10-01", "2024-09-01", TODAY).is_err()
+        );
+    }
+}
