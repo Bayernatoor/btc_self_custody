@@ -1578,8 +1578,8 @@ pub const CHARTS: &[ChartMeta] = &[
     ChartMeta {
         slug: "diff-ribbon",
         title: "Difficulty Ribbon",
-        desc_per_block: "Multiple moving averages of mining difficulty. When short MAs cross below long MAs, it may indicate miner capitulation",
-        desc_daily: "Daily difficulty ribbon showing 7 moving averages from 7-day to 128-day",
+        desc_per_block: "Seven moving averages of difficulty, from 9 to 128 blocks. There is no unsmoothed line: every series here is derived",
+        desc_daily: "Seven moving averages of difficulty, from 7 to 128 days. There is no unsmoothed line: every series here is derived",
         category: Category::Mining,
         unit: Unit::Difficulty,
         shape: Shape::Line,
@@ -2017,8 +2017,8 @@ pub const CHARTS: &[ChartMeta] = &[
     ChartMeta {
         slug: "multi-velocity",
         title: "Adoption Velocity",
-        desc_per_block: "Rate of change for major address types. P2PKH declining, P2WPKH flattening, P2TR growing. Shows the transition between eras",
-        desc_daily: "Rate of change for major address types. P2PKH declining, P2WPKH flattening, P2TR growing. Shows the transition between eras",
+        desc_per_block: "Change in each output type's share of outputs, in percentage points over a trailing window: 144 blocks per block, 30 days daily",
+        desc_daily: "Change in each output type's share of outputs, in percentage points over a trailing window: 144 blocks per block, 30 days daily",
         category: Category::Network,
         unit: Unit::PercentagePoints,
         shape: Shape::Line,
@@ -3182,6 +3182,18 @@ mod tests {
                  Batching, and the drawer has to agree with it.",
             ),
             ("over 16 years", "stale by construction. Say since 2009."),
+            (
+                "may indicate miner capitulation",
+                "seven moving averages crossing says the recent average fell \
+                 below the longer one. Nothing here observes a miner \
+                 switching off.",
+            ),
+            (
+                "P2PKH declining, P2WPKH flattening, P2TR growing",
+                "three lines moving in three directions do not establish \
+                 that users migrated between those types, and the windows \
+                 differ by resolution: 144 blocks against 30 days.",
+            ),
             (
                 "averaged from every block in that day",
                 "true of the charts that plot a mean and false of every \

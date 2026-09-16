@@ -729,12 +729,7 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
 
     let cid = canvas_id(meta.slug);
     let title_tag = format!("{} | Bitcoin Chart | We Hodl BTC", meta.title);
-    let desc_tag = format!(
-        "{} for the Bitcoin network, measured in {}, from my own node. \
-         Downloadable as CSV.",
-        meta.title,
-        meta.unit.label()
-    );
+    let desc_tag = meta_description(meta);
 
     view! {
         <Title text=title_tag/>
@@ -1538,6 +1533,30 @@ fn InfoTip(text: &'static str) -> impl IntoView {
     }
 }
 
+/// The page `<meta name="description">` for a chart.
+///
+/// The unit clause is dropped for `Unit::Count`, whose label is the word
+/// "count", because a sentence ending "measured in count" is generated from a
+/// fallback rather than describing the chart. Every other unit names
+/// something. Extracted from the component so it can be asserted: a phrase
+/// search cannot guard a sentence that exists only in the output.
+fn meta_description(meta: &ChartMeta) -> String {
+    if meta.unit == registry::Unit::Count {
+        format!(
+            "{} for the Bitcoin network, from my own node. Downloadable as \
+             CSV.",
+            meta.title
+        )
+    } else {
+        format!(
+            "{} for the Bitcoin network, measured in {}, from my own node. \
+             Downloadable as CSV.",
+            meta.title,
+            meta.unit.label()
+        )
+    }
+}
+
 /// What each key figure means, in a sentence a reader new to this can use.
 ///
 /// Here rather than beside the calculation in `kpi.rs` because these explain
@@ -1931,6 +1950,36 @@ fn Toggle(
 
 #[cfg(test)]
 mod tests {
+    /// No chart's page description may end up saying "measured in count".
+    ///
+    /// The audit's example was Hash Rate, whose unit was generic `Count` and
+    /// which now declares `HashesPerSecond`. The fallback sentence remains
+    /// for the 20-odd charts that really are counts, where naming the unit
+    /// adds nothing, so the clause is dropped rather than filled.
+    ///
+    /// Asserted against the generator rather than searched for in the
+    /// source, because this sentence exists only in the output.
+    #[test]
+    fn no_generated_description_names_a_generic_unit() {
+        for meta in super::registry::CHARTS {
+            let d = super::meta_description(meta);
+            assert!(!d.contains("measured in count"), "{}: {d}", meta.slug);
+            assert!(d.starts_with(meta.title), "{}: {d}", meta.slug);
+            // And the clause is present wherever the unit names something,
+            // or dropping it would be hiding the unit rather than the
+            // fallback.
+            if meta.unit != super::registry::Unit::Count {
+                assert!(
+                    d.contains("measured in "),
+                    "{} declares {:?} but its description does not say so: \
+                     {d}",
+                    meta.slug,
+                    meta.unit
+                );
+            }
+        }
+    }
+
     use super::*;
 
     /// This file, read back, so the guards below check what is actually
