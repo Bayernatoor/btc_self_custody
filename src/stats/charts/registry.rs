@@ -394,10 +394,10 @@ pub struct About {
     /// What the metric is, for a reader who has not met it. No jargon that
     /// is not defined in the same sentence.
     ///
-    /// Optional, and the only optional half: many charts explain how their
-    /// number is computed without saying what it is. The subtitle carries a
-    /// short answer meanwhile, and `most_charts_define_themselves` counts the
-    /// gap so it cannot grow.
+    /// `Option` only because that is what let the gap be closed a category
+    /// at a time. Every chart carries one now, and
+    /// `every_chart_defines_itself` holds that, so a new chart cannot be
+    /// registered without saying what its metric is.
     pub definition: Option<&'static str>,
     /// How this site computes it, and what that excludes.
     ///
@@ -559,7 +559,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: None,
+            definition: Some("How much of a block is data rather than payments. Bitcoin has two places to put arbitrary bytes: an OP_RETURN output, which is a small amount of provably unspendable script, and the witness of a Taproot input, which is where inscriptions live. This is both, as a share of the block."),
             technical: "Combines OP_RETURN data (in outputs) and inscription data (in witness) as a percentage of total block size. These are disjoint categories that together represent all classified embedded data.",
         }),
     },
@@ -594,7 +594,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: None,
+            definition: Some("Every block's first transaction has a field the miner fills in freely, which is where Satoshi left the Times headline in the genesis block. Most of what goes there now is a pool name and some binary. This is how many readable characters each one holds: the longest in the chain is 94."),
             technical: "Every block's coinbase transaction contains a scriptSig with arbitrary data. Miners use this to embed their pool identifier, block height (required since BIP-34), and sometimes custom messages or political statements. Longer messages indicate pools that pack additional data into this field.",
         }),
     },
@@ -633,7 +633,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: None,
+            definition: Some("An inscription is content wrapped in a small protocol structure: markers saying what follows, the content type, and a terminator. This splits the two, so the cost of the wrapper is visible next to the thing being stored. Small inscriptions pay proportionally far more wrapper."),
             technical: "Every Ordinals inscription wraps content in a witness envelope: OP_FALSE OP_IF ... OP_ENDIF with push opcodes and the 'ord' marker. The split is estimated, not parsed: the envelope header, content-type section and terminator are located by pattern and subtracted, and anything not found falls back to 10 bytes. Measured across the 190,252 blocks holding a detection, that overhead is 7.7% of all matching witness bytes, while the median block puts it at 17.9% and individual blocks run from nothing to 94%. The share is high where inscriptions are small, since the envelope cost is close to fixed, which is why BRC-20 JSON operations sit at the top of that range.",
         }),
     },
@@ -660,7 +660,7 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Detected inscription fees over total fees. Both terms are estimates: the numerator is a detector match and the denominator is coinbase-derived.",
         }],
         about: Some(About {
-            definition: None,
+            definition: Some("How much of the fee market inscriptions were paying for. Everyone bids for the same block space, so this is one way of asking how much of the competition at a given moment came from data rather than payments."),
             technical: "Tracks how much of the block's fee revenue comes from transactions containing Ordinals inscriptions. During high-demand periods like BRC-20 launches, inscription fees can spike significantly as inscribers compete for block space.",
         }),
     },
@@ -687,7 +687,7 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Envelope bytes of matching witness items over serialized block bytes, so a byte fraction and not a count of anything. Falls back to payload bytes for blocks ingested before envelope sizes were stored, which makes the early series slightly lower than the late one on the same activity.",
         }],
         about: Some(About {
-            definition: None,
+            definition: Some("How much of a block is inscription data. Inscriptions go in the witness, which the protocol charges a quarter rate for, so they can fill a block by bytes while leaving room by weight. Two blocks in the chain are 99.99% inscription by bytes: 892,279 and 899,687."),
             technical: "Includes both the inscription content (images, text, JSON) and the witness envelope structure (OP_FALSE OP_IF, push opcodes, 'ord' marker). This is the whole matching witness item, payload and envelope together, as the detector found it. Witness bytes count one weight unit each instead of four, so an inscription consumes a quarter of the block weight its byte count suggests.",
         }),
     },
@@ -740,7 +740,10 @@ pub const CHARTS: &[ChartMeta] = &[
             daily: Aggregation::RatioOfTotals,
             population: "OP_RETURN scriptPubKey bytes over serialized block bytes. Script bytes only: the output's value and length fields are not included, so this understates the space those outputs occupy.",
         }],
-        about: None,
+        about: Some(About {
+            definition: Some("How much of a block is OP_RETURN data. An OP_RETURN output is a deliberately unspendable output whose script carries a few dozen bytes, which can timestamp or label things on chain. 63.1% of all blocks contain at least one."),
+            technical: "OP_RETURN script bytes over serialized block bytes. Script bytes only, so the output's value and length fields sit outside the numerator, which makes this a floor on the true on-chain cost rather than the whole of it.",
+        }),
     },
     ChartMeta {
         slug: "opreturn-bytes",
@@ -797,7 +800,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: None,
+            definition: Some("How many bytes of OP_RETURN data each block carried, split by the protocol that put them there. Runes, Omni and Counterparty are token systems that write their state into these outputs; anything unrecognised falls into the fourth band."),
             technical: "Byte counts include the full scriptPubKey: the OP_RETURN opcode, push opcodes, and the protocol payload. This is the actual on-chain storage footprint of each OP_RETURN output.",
         }),
     },
@@ -855,7 +858,10 @@ pub const CHARTS: &[ChartMeta] = &[
                 population: "The residual, not a named protocol.",
             },
         ],
-        about: None,
+        about: Some(About {
+            definition: Some("How many OP_RETURN outputs each block carried, split by the protocol that put them there. An output rather than a byte count, so a protocol writing many small records shows up here and a protocol writing few large ones shows up on the volume chart."),
+            technical: "Detected by matching the leading bytes of each OP_RETURN script against known protocol prefixes. Unrecognised scripts fall into the fourth band, so it is a residual and not a category.",
+        }),
     },
     ChartMeta {
         slug: "protocol-fee-competition",
@@ -892,7 +898,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: None,
+            definition: Some("Which kind of data-carrying transaction was paying more into the fee market at a given time. Two detectors side by side, because a transaction can match both and is then counted by both."),
             technical: "Fees paid by the transactions each detector matched, drawn as two totals beside the block's whole fee take rather than as parts of it. A transaction carrying both an inscription and a Runes payload is credited to both, so the two cannot be added: 125,180 blocks have both detectors firing and in 1,326 of them the sum exceeds the block's entire fee take. Which detector is larger in a period is a fact about the detectors, not about what drove the fee market.",
         }),
     },
@@ -918,7 +924,10 @@ pub const CHARTS: &[ChartMeta] = &[
             daily: Aggregation::RatioOfTotals,
             population: "Each detector's count over the block's OP_RETURN count. Detectors match a prefix, so the residual band is whatever matched none of them rather than a named protocol.",
         }],
-        about: None,
+        about: Some(About {
+            definition: Some("Which protocol is using the OP_RETURN space. Runes launched in the halving block, 840,000 on 2024-04-20, and took almost all of it immediately: 96.9% of detected OP_RETURN outputs that year."),
+            technical: "Each protocol's detected OP_RETURN outputs as a share of all detected OP_RETURN outputs in the block. Detection is by script prefix, so an unrecognised protocol lands in the residual band rather than being missed entirely.",
+        }),
     },
     ChartMeta {
         slug: "unified-count",
@@ -995,7 +1004,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: None,
+            definition: Some("Everything the site detects as embedded data, in one place. The first four bands are OP_RETURN outputs and the last two are inscription-bearing witness items, which are different kinds of object: one is an output in the transaction body, the other is an item in a Taproot witness."),
             technical: "Stacked count of embedded data items by protocol. BRC-20 is a subset of Inscriptions (do not add them). Runes, Omni, and Counterparty are mutually exclusive subsets of OP_RETURN. See the Methodology page for the full taxonomy.",
         }),
     },
@@ -1069,7 +1078,10 @@ pub const CHARTS: &[ChartMeta] = &[
                 population: "An estimated payload, whereas the OP_RETURN bands are exact script bytes, so the stack mixes two byte bases: 6.27 GB of exact script bytes against 40.93 GB of estimate over the whole chain. BRC-20 content is inside this band because no separate byte column exists for it, unlike the count chart where the two are disjoint.",
             },
         ],
-        about: None,
+        about: Some(About {
+            definition: Some("Everything the site detects as embedded data, by size rather than by count. 63.1% of blocks carry an OP_RETURN output and 19.7% carry a detected inscription, and the two are measured on different bases, which the bands say."),
+            technical: "OP_RETURN bands are exact script bytes. The inscription band is an estimated payload, and it includes BRC-20 content because no separate byte column exists for it, unlike the count chart where the two are disjoint. Over the whole chain that is 6.27 GB of exact bytes against 40.93 GB of estimate, so the stack is mostly estimate.",
+        }),
     },
     ChartMeta {
         slug: "avg-fee-tx",
@@ -1093,7 +1105,10 @@ pub const CHARTS: &[ChartMeta] = &[
             daily: Aggregation::RatioOfTotals,
             population: "Block fees over the block's transactions less one for the coinbase. A block or day with no user transaction reports no reading rather than zero. The fee total is itself coinbase-derived, so this inherits that estimate.",
         }],
-        about: None,
+        about: Some(About {
+            definition: Some("What one transaction cost, on average, to get into a block. Fees are paid for space rather than for the amount being moved, so a transaction sending a fortune can pay less than one sending pennies if it takes up less room."),
+            technical: "The block's total fees divided by its transactions, less one for the coinbase, which pays nothing. The total is itself taken from the coinbase output rather than summed per transaction, so a miner who underclaims makes this read low. A block with no user transaction reports nothing rather than zero.",
+        }),
     },
     ChartMeta {
         slug: "btc-volume",
@@ -1118,7 +1133,7 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Sum of non-coinbase output values. Counts change returning to the sender, so it is throughput rather than value transferred between parties.",
         }],
         about: Some(About {
-            definition: None,
+            definition: Some("How much bitcoin moved in each block. Every transaction spends whole outputs and creates new ones, so change comes back to the sender inside the same total: a wallet sending 0.1 from a 10 BTC output shows as 10 moved, not 0.1. This counts value in motion, not value changing hands."),
             technical: "Total value of all non-coinbase outputs. This includes both the payment and the change output, so it overstates actual economic activity. Still useful for relative comparisons across time periods.",
         }),
     },
@@ -1192,7 +1207,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: None,
+            definition: Some("What different transactions in the same block paid, rather than one number for the block. Each line is a percentile: p10 is the rate a tenth of that block's transactions came in under, the median is the middle one, and p90 is the rate a tenth paid more than. The gap between them is how unequal the block was."),
             technical: "Five percentile lines, each read directly off the block: p10 is the rate a tenth of that block's transactions paid less than, the median is the middle one, and p90 is the rate a tenth paid more than. Not stacked, because percentiles do not add: stacking them made the top boundary the sum of five quantiles rather than p90. The gap between p10 and p90 is the central 80% and says nothing about why any transaction paid what it did. Click legend items to isolate lines.",
         }),
     },
@@ -1222,7 +1237,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: None,
+            definition: Some("Each dot is one block, placed by how full it was and what its middle transaction paid. Two things a reader might expect to move together, plotted against each other so it is visible when they do not."),
             technical: "Each dot is one block. X-axis shows how full the block is (weight utilization %), Y-axis shows the median fee rate. Top-right is a full block whose median fee rate was also high; bottom-right is a full block at a low rate, which is most of them; top-left is a high rate in a block that was not full. The pair of coordinates is what the chart shows. It does not establish why either number was what it was, and a block's fullness is set by what the miner included rather than by demand alone.",
         }),
     },
@@ -1249,7 +1264,7 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Fees over subsidy plus fees. The subsidy comes from the block height schedule and the fees are coinbase-derived, so the share inherits that estimate. A falling share can mean falling fees rather than a growing subsidy.",
         }],
         about: Some(About {
-            definition: None,
+            definition: Some("How much of a miner's income comes from fees rather than from new coins. The subsidy halves on a schedule and fees do not, so this is the ratio people watch when they ask what pays for mining once the subsidy is small. It has been volatile rather than trending: 6.5% across both 2023 and 2024, 1.03% in 2025, 0.63% so far in 2026."),
             technical: "Shows fees as a percentage of total miner revenue (subsidy + fees). As the subsidy halves, this ratio increases. Typically 1-5% during normal periods, but has spiked to 10-40% during high-demand events.",
         }),
     },
@@ -1279,7 +1294,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: None,
+            definition: Some("Blocks whose middle transaction paid far more than the blocks around it did. Fee rates move in bursts rather than drifting, because everyone is bidding for the same space at the same time, so a single block can settle several times higher than the day it sits in. This marks those blocks: a way of finding the moments worth a second look, not an explanation of them."),
             technical: "The line is the 144-block trailing average of the median fee rate, which is about a day of blocks. A dot marks a block whose own median fee rate was more than five times that average. What produced the jump is not in this data: a burst of fee-paying transactions and a thin block from an unlucky interval both show up the same way. Needs at least 300 blocks, so a 1W or longer range.",
         }),
     },
@@ -1338,7 +1353,7 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Blocks grouped by subsidy era, drawn with **the four metrics along the x axis and one series per era**, then **each metric normalised so its largest era reads 100**, which is why something always peaks at 100 and why the plotted numbers are an index rather than a quantity. The four metrics do not share a provenance: block size and transaction count are measured, while total fees and the fee share of miner revenue are both coinbase-derived estimates. Only eras present in the window appear.",
         }],
         about: Some(About {
-            definition: None,
+            definition: Some("Four things about an average block, compared across the subsidy eras. Every 210,000 blocks the subsidy halves, splitting the chain into periods of roughly four years, and this asks how a block in one period differs from a block in another. Each metric is scaled to its own highest era, so the bars show relative change rather than quantities."),
             technical: "Each group on the x axis is one metric, with a bar per halving era, so the comparison runs across eras within a metric rather than across metrics within an era. Every metric is divided by its own highest era, which is why something always reads 100 and why the plotted numbers are an index rather than a quantity. Only eras present in the selected range appear. Hover for the underlying values; two of the four are coinbase-derived estimates rather than measured.",
         }),
     },
@@ -1367,7 +1382,10 @@ pub const CHARTS: &[ChartMeta] = &[
                 population: "One transaction per block, so this is an extreme rather than a total or a rate. No daily builder.",
             },
         ],
-        about: None,
+        about: Some(About {
+            definition: Some("The most any single transaction paid in each block. Usually a few thousand satoshis, occasionally something extraordinary: the record is 291.24 BTC in block 409,008, which is a mistake rather than a bid, and the kind of thing this chart exists to surface."),
+            technical: "The largest single fee in the block, in BTC. Read per transaction during ingestion, so it is not derived from the block total. One outlier does not move any other series here, which is why this sits beside the median rather than replacing it.",
+        }),
     },
     ChartMeta {
         slug: "median-rate",
@@ -1434,7 +1452,10 @@ pub const CHARTS: &[ChartMeta] = &[
                 population: "As Inscriptions, and can double-count the same transaction's fee.",
             },
         ],
-        about: None,
+        about: Some(About {
+            definition: Some("How much of a block's fee income came from transactions carrying inscription or Runes data. Two detectors drawn side by side rather than as parts of one total, because a transaction carrying both is counted by both."),
+            technical: "Fees attributed to transactions each detector matched. The two are not a partition: 125,180 blocks have both firing and in 1,326 of them the totals sum to more than the block collected, so they are drawn unstacked and beside the block's own fee take. Which detector is larger in a period is a fact about the detectors.",
+        }),
     },
     ChartMeta {
         slug: "subsidy-fees",
@@ -1471,7 +1492,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: None,
+            definition: Some("The two halves of what a miner collects for a block. The subsidy is new bitcoin the protocol creates, currently 3.125 BTC and halving every 210,000 blocks. The fees are what senders paid for space. Only the first is on a schedule."),
             technical: "The block subsidy (new BTC created) halves every 210,000 blocks (~4 years). After the 2024 halving, the subsidy is 3.125 BTC per block. The subsidy schedule is fixed by the protocol; the fee side is not. Fees are a larger share of revenue when they hold up as the subsidy falls, and a smaller one when they fall faster, so the balance between the two is an outcome to watch rather than a guarantee.",
         }),
     },
@@ -1568,8 +1589,8 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: None,
-            technical: "Seven moving averages of difficulty (7, 14, 25, 40, 60, 90, 128 days) form a ribbon. When the ribbon is wide, difficulty is rising steadily. When it compresses or inverts (short MAs drop below long MAs), difficulty is declining, which can indicate less efficient miners are going offline. Historically, ribbon inversions have coincided with periods of reduced mining activity.",
+            definition: Some("Difficulty, smoothed over seven different spans at once. Each line is the same number averaged over a different length of time, so the short ones follow recent changes and the long ones lag. Together they show whether difficulty has been rising or falling for a while or has just turned."),
+            technical: "Seven moving averages of difficulty form the ribbon: 9, 14, 25, 40, 60, 90 and 128 blocks at per-block resolution and the same counts in days at daily resolution, so the spans are not the same lengths of time in the two views. When the ribbon is wide, difficulty is rising steadily. When it compresses or inverts (short MAs drop below long MAs), difficulty is declining, which can indicate less efficient miners are going offline. Historically, ribbon inversions have coincided with periods of reduced mining activity.",
         }),
     },
     ChartMeta {
@@ -1621,8 +1642,8 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "A Herfindahl index over pool shares for the window, normalised across identified blocks only, so unattributed blocks do not dilute it. The band thresholds are a presentation convention, not a security threshold.",
         }],
         about: Some(About {
-            definition: None,
-            technical: "The HHI is calculated by squaring each pool's market share percentage and summing the results. A monopoly scores 10,000, perfectly distributed mining scores near 0. Below 1,000 (green): competitive market. 1,000-1,800 (yellow): moderate concentration. Above 1,800 (red): high concentration, meaning a small number of pools control most of the hashrate. Unknown miners are excluded from the calculation.",
+            definition: Some("One number for how concentrated block production is. It is the Herfindahl-Hirschman Index, borrowed from competition economics: square each pool's percentage share and add them up. Two pools at 50% each score 5,000; a hundred pools at 1% each score 100. It rises faster than a share does, which is the point, because concentration is what it is built to be sensitive to."),
+            technical: "Computed from the shares of blocks in the selected range, by pool, after excluding blocks with no identified pool and renormalising the rest. So it describes identified block production and not ownership of hash rate, and OCEAN template miners count as separate participants because that is how they appear in the coinbase. The 1,000 and 1,800 boundaries and their colours are the conventional reading from antitrust practice, not validated thresholds for Bitcoin. A monopoly scores 10,000, perfectly distributed mining scores near 0. Below 1,000 (green): competitive market. 1,000-1,800 (yellow): moderate concentration. Above 1,800 (red): high concentration, meaning a small number of pools control most of the hashrate. Unknown miners are excluded from the calculation.",
         }),
     },
     ChartMeta {
@@ -1645,15 +1666,15 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Counted where tx_count is one, grouped by calendar month. An empty block is a valid block; the count does not establish why it was empty.",
         }],
         about: Some(About {
-            definition: None,
-            technical: "A block with only a coinbase transaction (no user transactions). This happens when a miner finds a block before propagating the previous block's transactions. Common in early Bitcoin, rare today. Modern pools typically include transactions within seconds of receiving a new block.",
+            definition: Some("A block carrying nothing but the miner's own payment to itself. Every block has that one transaction, the coinbase, so a block with a count of one collected no fees and moved nobody's coins. They are almost extinct: 89,929 exist in the whole chain and only 408 of them are in the last 167,321 blocks."),
+            technical: "Blocks whose transaction count is one, so the coinbase is all there is. This chart does not establish why a miner produced one: a pool can be building on a tip it is still validating, and the data shows the result rather than the reason. 86,656 of the 89,929 are unattributed, because pool identification depends on coinbase patterns that did not exist in 2009 and 2010, which is also when almost all of them were mined. Modern pools typically include transactions within seconds of receiving a new block.",
         }),
     },
     ChartMeta {
         slug: "empty-by-pool",
         title: "Empty Blocks by Pool",
-        desc_per_block: "Which mining pools produce the most coinbase-only blocks",
-        desc_daily: "Which mining pools produce the most coinbase-only blocks",
+        desc_per_block: "Coinbase-only blocks in the range, grouped by the pool that mined them",
+        desc_daily: "Coinbase-only blocks in the range, grouped by the pool that mined them",
         category: Category::Mining,
         unit: Unit::Count,
         shape: Shape::Bar,
@@ -1668,7 +1689,10 @@ pub const CHARTS: &[ChartMeta] = &[
             daily: Aggregation::GroupedSummary,
             population: "As Empty Blocks, grouped by matched coinbase tag instead of by month, so it inherits the attribution gap: unmatched blocks group as Unknown, and the early chain is largely unmatched.",
         }],
-        about: None,
+        about: Some(About {
+            definition: Some("Which pools mined the coinbase-only blocks. Almost all of them are unattributed, 86,656 of 89,929, because pool identification reads patterns in the coinbase that did not exist in 2009 and 2010, which is when nearly every empty block was mined. So the Unknown bar is a statement about the early chain rather than about anonymity today."),
+            technical: "Blocks with a transaction count of one, grouped by the miner string ingestion matched, with unmatched blocks under Unknown. Aggregated in SQL over the height range rather than from the loaded rows, so it answers for the whole window at any resolution.",
+        }),
     },
     ChartMeta {
         slug: "miner-dominance",
@@ -1721,7 +1745,10 @@ pub const CHARTS: &[ChartMeta] = &[
             daily: Aggregation::DailyTotal,
             population: "Outputs of non-coinbase transactions. Six script types are plotted; OP_RETURN, bare multisig and unrecognised scripts are not among them, so the bands do not sum to every output.",
         }],
-        about: None,
+        about: Some(About {
+            definition: Some("What kind of address each new output pays to. Every output commits to a script, and the shape of that script says which address format the receiver gave out: a legacy '1', a '3', a SegWit 'bc1q' or a Taproot 'bc1p'. Counting them is how the chain shows a format being adopted."),
+            technical: "Counts of outputs created per script type, from the classification stored per block. Daily values are totals for the day, not per-block averages: 3.0 per block over 10 blocks is 30. Coinbase outputs are excluded, because ingestion skips that transaction.",
+        }),
     },
     ChartMeta {
         slug: "address-types-pct",
@@ -1745,7 +1772,10 @@ pub const CHARTS: &[ChartMeta] = &[
             daily: Aggregation::RatioOfTotals,
             population: "Six classified output types normalised against their own sum, so the bands always total 100 and describe those six rather than every output. Bare multisig, unrecognised scripts and OP_RETURN are outside the denominator, which makes it narrower than the eight-type denominator P2PKH Sunset uses and narrower still than Output Type Breakdown, which divides by every output. The same script type therefore reads differently across those three charts.",
         }],
-        about: None,
+        about: Some(About {
+            definition: Some("The same output types as a share of the total rather than as counts. Counts rise and fall with how busy the chain is, which hides a format gaining ground during a quiet week; a share strips that out and shows the types competing with each other. The bands total 100% by construction, so one type can only grow at another's expense."),
+            technical: "Six payment types normalised to 100%, so the bands total the whole. OP_RETURN outputs, bare multisig and unrecognised scripts are outside that denominator, which is why this chart and P2PKH Sunset give different percentages for the same type: 12.2% against 11.11% for P2PKH on the same data.",
+        }),
     },
     ChartMeta {
         slug: "avg-tx-size",
@@ -1770,7 +1800,7 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Whole block size over transaction count, so header and transaction-count overhead are included and the coinbase is counted.",
         }],
         about: Some(About {
-            definition: None,
+            definition: Some("How big a transaction is, on average, in each block. Size drives what a transaction costs, because fees are charged for space. Divided out of the whole block, so the header and the coinbase are in the numerator too."),
             technical: "Serialized block bytes divided by the number of transactions, including the coinbase and the block's own header and counters. Moving signature data into the witness does not remove those bytes, it discounts their weight, so a SegWit or Taproot transaction is not necessarily smaller here than a legacy one of the same shape. Weight is what the 4,000,000 unit limit constrains, so a falling byte average does not by itself mean more transactions fit.",
         }),
     },
@@ -1809,7 +1839,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: None,
+            definition: Some("How many inputs and outputs a typical transaction has. A payment with one input and two outputs, one of them change, is the ordinary shape. Higher output counts suggest an exchange paying many people in one transaction, which uses less space per payment, though nothing here identifies who sent it. Currently around 2.3 outputs and 1.7 inputs per transaction."),
             technical: "Higher output counts per transaction indicate batching, where exchanges and services combine multiple payments into one transaction. This is more efficient use of block space. A typical non-batched transaction has 1-2 inputs and 2 outputs (payment + change).",
         }),
     },
@@ -1885,7 +1915,10 @@ pub const CHARTS: &[ChartMeta] = &[
                 population: "P2TR outputs, accumulated across the window only.",
             },
         ],
-        about: None,
+        about: Some(About {
+            definition: Some("A running total of SegWit and Taproot outputs created inside the selected window, so it answers how many have appeared rather than what share they hold. Select ALL for the whole stored history."),
+            technical: "Accumulated within the window only, so the first point is not the chain's beginning unless the window is. Outputs created, not transactions: the SegWit band sums P2WPKH and P2WSH outputs.",
+        }),
     },
     ChartMeta {
         slug: "fullness-dist",
@@ -1907,7 +1940,7 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Weight divided by the four-million-unit limit, bucketed. Buckets are computed server-side for long ranges and from the blocks themselves for short ones; the count/percentage toggle changes the active unit.",
         }],
         about: Some(About {
-            definition: None,
+            definition: Some("How full blocks have been, as a distribution rather than a line. Each bar counts the blocks that landed in a 10% band of the weight limit. Recently most blocks sit in the top band: 86.7% are above 99% full."),
             technical: "A histogram of block fullness. Most modern blocks cluster near 100% because miners maximize fee revenue. Near-empty blocks do occur, and this chart does not establish why: a miner can be working from a coinbase-only template while validating a new tip, and the data shows only the result. On longer ranges that include early Bitcoin history, more blocks appear at lower percentages since demand was much lower.",
         }),
     },
@@ -1968,7 +2001,10 @@ pub const CHARTS: &[ChartMeta] = &[
                 population: "Serialized size of one transaction per block, not an average. No daily builder: the daily table stores no per-block maximum.",
             },
         ],
-        about: None,
+        about: Some(About {
+            definition: Some("The biggest single transaction in each block, by bytes. A large transaction is usually one consolidating many small outputs into one, which is cheap per output and expensive in total. The largest in the chain is 3,992,821 bytes, which is almost an entire block."),
+            technical: "Serialized size of the largest transaction in the block, read per transaction during ingestion. Size rather than weight, so a witness-heavy transaction reads larger here than it costs against the limit.",
+        }),
     },
     ChartMeta {
         slug: "multi-velocity",
@@ -1993,7 +2029,7 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "The difference between a smoothed share now and the same share one window earlier: 144 blocks per block, 30 days daily. The result is in percentage points, so a share moving from 10 to 15 is 5 points and not 5 percent. Divergent lines do not establish that users migrated between types.",
         }],
         about: Some(About {
-            definition: None,
+            definition: Some("Whether an output type is gaining or losing ground, rather than how much it holds. Each line is the change in that type's share over a trailing window, so a line above zero means the share grew. Three lines moving in three directions does not establish that anyone switched between them."),
             technical: "Shows the 30-day rate of change for each address type's share. Positive values mean the type is gaining share, negative means declining. When P2TR velocity is positive and P2PKH is negative, Taproot is actively replacing legacy usage.",
         }),
     },
@@ -2020,7 +2056,7 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "P2PKH outputs over eight classified output types: the six payment types plus bare multisig and unrecognised scripts. OP_RETURN outputs are outside it, and so are coinbase outputs, which ingestion excludes. Note this is a wider denominator than Address Type Share uses, so P2PKH reads lower here than there. The 90-day smoothing exists only at daily resolution. A falling share does not establish that those users moved to another type.",
         }],
         about: Some(About {
-            definition: None,
+            definition: Some("The decline of the original Bitcoin address format. P2PKH is the '1...' address every wallet used before SegWit, and its share of outputs has been falling for years: currently 6.37%, against 7.42% for Taproot. The reference lines at 10% and 5% are markers for reading the trend, not protocol thresholds."),
             technical: "P2PKH outputs as a share of the eight classified output types, with a 90-day moving average at daily resolution only. The horizontal lines at 10% and 5% are reference marks chosen for this chart, not protocol thresholds. A falling share means other output types grew faster; it does not follow that any particular wallet or user moved.",
         }),
     },
@@ -2049,7 +2085,10 @@ pub const CHARTS: &[ChartMeta] = &[
                 population: "Difference between consecutive block header timestamps, which miners choose, so this is not a measure of network propagation or of stale-block races. Backward pairs are excluded rather than clamped to zero. No daily builder.",
             },
         ],
-        about: None,
+        about: Some(About {
+            definition: Some("Blocks that arrived very close together. Mining is random, so short gaps are ordinary and this is the tail of that distribution rather than a sign of trouble. It is measured from header timestamps, which miners choose themselves, so it says nothing about how fast blocks moved across the network."),
+            technical: "Consecutive blocks whose header timestamps are less than 60 seconds apart. Not a propagation measurement: no arrival time is recorded anywhere in a block. Backward pairs are excluded rather than clamped, and 16,020 of the chain's 967,295 consecutive pairs run backwards.",
+        }),
     },
     ChartMeta {
         slug: "rbf",
@@ -2074,7 +2113,7 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Confirmed non-coinbase transactions whose input sequence numbers signal under BIP 125, over all confirmed non-coinbase transactions. Not the share actually replaced, and not wallet adoption: full-RBF policy means absence of the signal does not prevent replacement.",
         }],
         about: Some(About {
-            definition: None,
+            definition: Some("How many transactions said, when they were sent, that they might be replaced by a higher-fee version. It is a signal in the transaction rather than a thing that happened: 67.7% of recent transactions carry it, and Bitcoin Core has allowed replacement regardless since version 28."),
             technical: "Replace-By-Fee (BIP 125) lets senders bump fees on unconfirmed transactions. A transaction signals RBF by setting at least one input's sequence number below 0xfffffffe. Higher adoption means more wallets support fee bumping, which can help users during congestion.",
         }),
     },
@@ -2202,7 +2241,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: None,
+            definition: Some("Two ways to spend a Taproot output, and which one people use. A key-path spend shows a single signature and nothing else. A script-path spend reveals one branch of the script behind the output. Currently 90.4% are key-path, which is what a working contract looks like when everyone cooperates rather than evidence of simple payments."),
             technical: "Key-path spends reveal a single signature and nothing else. That is the point of Taproot: a single signer, an aggregated multisignature and the cooperative close of a contract are **indistinguishable on chain**, because BIP 341 makes them the same shape. So a high key-path share does not mean simple payments. It means most Taproot spenders took the path that reveals nothing, which is what a well-designed contract does when everyone cooperates. Script-path spends reveal one branch of the script tree, which is usually the case where cooperation broke down or was never possible. Both counts come from classifying witness shape, so they are detector counts rather than verified totals.",
         }),
     },
@@ -2226,7 +2265,7 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Differences between consecutive block header timestamps, bucketed. Ten minutes is the target mean, not the most common bucket: the distribution is exponential, so the shortest bucket is the largest. Miners choose timestamps, so backward gaps exist.",
         }],
         about: Some(About {
-            definition: None,
+            definition: Some("How long blocks wait for each other, as a distribution. Mining is memoryless, so short gaps are the most common and the tail runs long: the median is 6.9 minutes even though the average is ten."),
             technical: "The shortest bucket is always the largest one, which surprises people who expect a peak at ten minutes. Mining is memoryless: every hash attempt has the same tiny chance of winning whatever has happened already, so the waiting time is exponentially distributed and the most likely gap is a short one. Measured across all 951,275 intervals in the chain: the median is 6.9 minutes, 63.9% of blocks arrive in under ten minutes, 4.5% take more than half an hour and 0.3% take over an hour. An exponential distribution with a ten-minute mean predicts 63.2%, 5.0% and 0.25%, so the chain tracks the theory to within half a percentage point. Miners choose their own timestamps, so a block can appear to arrive before its predecessor.",
         }),
     },
@@ -2282,7 +2321,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: None,
+            definition: Some("How many transactions fit into a kilobyte of block space. It moves with the shape of the transactions rather than with demand: a block of many small payments is denser than a block of a few large ones."),
             technical: "More transactions per KB means the average transaction is smaller and block space is used more efficiently. SegWit and Taproot tend to improve density by moving signatures to the discounted witness section.",
         }),
     },
@@ -2311,7 +2350,10 @@ pub const CHARTS: &[ChartMeta] = &[
                 population: "Three bands over the block's non-coinbase transactions. No daily builder: the daily table stores the component counts but this builder was never given a daily arm.",
             },
         ],
-        about: None,
+        about: Some(About {
+            definition: Some("Which transaction format senders are using, over time. A transaction is legacy if it has no witness at all, SegWit if it has one, and Taproot if it spends a Taproot output. Currently 88.2% of transactions carry a witness."),
+            technical: "Counted per transaction rather than per output, which is the distinction this chart keeps and several others do not: an output's type is chosen by whoever receives it, while a transaction's type is chosen by whoever spends. Detected from witness shape, so these are detector counts.",
+        }),
     },
     ChartMeta {
         slug: "txcount",
@@ -2377,7 +2419,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: None,
+            definition: Some("The two sides of every block: outputs consumed and outputs created. Bitcoin has no accounts, only discrete outputs, so spending means destroying some and making others. When creation outruns consumption the set of unspent outputs grows, and every node holds that set to validate."),
             technical: "Every transaction consumes UTXOs (inputs) and creates new ones (outputs). When outputs exceed inputs, the UTXO set grows, increasing the memory requirements for full nodes. Consolidation transactions (many inputs, few outputs) shrink the set.",
         }),
     },
@@ -2442,7 +2484,10 @@ pub const CHARTS: &[ChartMeta] = &[
                 population: "Fees over blocks within each weekday group. Coinbase-derived, so it inherits that estimate.",
             },
         ],
-        about: None,
+        about: Some(About {
+            definition: Some("Whether the chain has a working week. Transactions and fees averaged per block and grouped by UTC day, which is the simplest way to ask whether human schedules show up in on-chain activity."),
+            technical: "Averages per block within each UTC weekday, over the selected range. UTC rather than any local time, so a pattern driven by one region's working hours is smeared across the boundary rather than aligned to it.",
+        }),
     },
     ChartMeta {
         slug: "weight-util",
@@ -2469,7 +2514,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: None,
+            definition: Some("How full each block is against the limit that actually binds. The cap is 4,000,000 weight units rather than a byte count, and witness bytes count a quarter of what other bytes do, so this is the measure of a block being full. Recent blocks average 92.4%."),
             technical: "The consensus limit is 4,000,000 weight units (4 MWU) per block. Witness data gets a 75% discount, so a block full of SegWit transactions can fit more data than one full of legacy transactions. Consistently high utilization (>90%) means demand for block space is near capacity.",
         }),
     },
@@ -2495,7 +2540,10 @@ pub const CHARTS: &[ChartMeta] = &[
             daily: Aggregation::RatioOfTotals,
             population: "Native v0 against Taproot, and **only** those two: the denominator is their sum, not all outputs, so this is the split within witness outputs rather than witness adoption. Unrecognised or future witness versions are in neither band. Use Output Type Breakdown for a share of every output.",
         }],
-        about: None,
+        about: Some(About {
+            definition: Some("Native SegWit against Taproot, as shares of the witness outputs alone. This is the split within modern output types, which is a different question from what share of all outputs they hold."),
+            technical: "P2WPKH and P2WSH against P2TR, normalised to those three, so legacy and P2SH-wrapped outputs are outside the denominator entirely. A rising Taproot share here can coexist with a falling Taproot share of all outputs.",
+        }),
     },
     ChartMeta {
         slug: "witness-share",
@@ -2522,7 +2570,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: None,
+            definition: Some("How much of a block is witness data: signatures and scripts moved out of the transaction body by SegWit, where each byte counts a quarter against the weight limit. Currently about half of every block by raw bytes."),
             technical: "Witness data receives a 75% weight discount under SegWit rules. A higher witness share means more of the block is discounted data, effectively increasing the block's capacity beyond the old 1 MB limit. Modern blocks typically have 60-70% witness data.",
         }),
     },
@@ -2548,7 +2596,10 @@ pub const CHARTS: &[ChartMeta] = &[
             daily: Aggregation::RatioOfTotals,
             population: "Three bands over every output in the block, which is the widest denominator any share chart here uses. The third band is the residual after native v0 and Taproot, so it absorbs OP_RETURN, P2SH-wrapped witness outputs, bare multisig and anything unrecognised. It was labelled Legacy, which read as a count of legacy payment usage and is not one, so the band is now Other outputs.",
         }],
-        about: None,
+        about: Some(About {
+            definition: Some("Output types as shares of every output in the block, which is the widest denominator any share chart here uses. Nothing is excluded, so the residual band carries everything that is not native SegWit or Taproot."),
+            technical: "Three bands over every output: native v0, Taproot, and the rest. The third absorbs OP_RETURN, P2SH-wrapped witness outputs, bare multisig and anything unrecognised, which is why it is labelled Other outputs and not Legacy.",
+        }),
     },
     ChartMeta {
         slug: "witness-versions",
@@ -2584,7 +2635,10 @@ pub const CHARTS: &[ChartMeta] = &[
                 population: "P2TR outputs of non-coinbase transactions.",
             },
         ],
-        about: None,
+        about: Some(About {
+            definition: Some("Which version of the witness programme an output uses. SegWit v0 arrived at block 481,824 in 2017 and Taproot, which is v1, at 709,632 in 2021. An output commits to one of them, so counting versions shows the upgrade spreading through the output set."),
+            technical: "Counts of outputs by witness version, from the stored script classification. Only versions this site recognises are counted, so a future witness version would not appear until ingestion learns it.",
+        }),
     },
 ];
 
@@ -2913,27 +2967,25 @@ mod tests {
         }
     }
 
-    /// How many charts still lack the definition half, pinned so it can only
-    /// shrink.
+    /// Chart 64 cannot arrive without saying what it measures in words a
+    /// reader who has not met it can use.
     ///
-    /// `definition` is optional because much of the copy explains how a
-    /// number is computed without saying what it is. This is what stops
-    /// optional from turning into ignored.
-    ///
-    /// Lower the ceiling when copy is written. Raising it is the thing this
-    /// test exists to make someone argue for.
+    /// This was a ceiling that only ever moved down, from 48 on 2026-09-16,
+    /// because most charts explained how their number was computed without
+    /// saying what it was. All 63 carry both halves now, so it is an
+    /// absolute. The field stays `Option` because that is what let the gap
+    /// be closed incrementally rather than in one unreviewable commit.
     #[test]
-    fn the_definition_gap_only_shrinks() {
-        const UNDEFINED_CEILING: usize = 48;
+    fn every_chart_defines_itself() {
         let missing: Vec<&str> = CHARTS
             .iter()
             .filter(|c| c.about.is_none_or(|a| a.definition.is_none()))
             .map(|c| c.slug)
             .collect();
         assert!(
-            missing.len() <= UNDEFINED_CEILING,
-            "{} charts have no definition, up from {UNDEFINED_CEILING}: {missing:?}",
-            missing.len()
+            missing.is_empty(),
+            "every chart says what its metric is, so a new one cannot be \
+             registered without a definition: {missing:?}"
         );
     }
 
@@ -2946,6 +2998,9 @@ mod tests {
     /// direct, about the thing itself.
     #[test]
     fn long_copy_describes_the_metric_and_not_its_edit_history() {
+        // Crude on purpose, and "used to" is the one that bites: it also
+        // means "employed to", so write "which can" or "for" when that is
+        // the sense. A guard is not loosened to fit a sentence.
         const NARRATES_HISTORY: &[&str] = &[
             "earlier version",
             "used to",

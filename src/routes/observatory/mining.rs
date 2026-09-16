@@ -152,7 +152,7 @@ pub fn MiningChartsPage() -> impl IntoView {
                         <ChartCard title="Mining Pool Share" description="Share of blocks in the range by identified pool, with unattributed blocks kept separate" chart_id="chart-miner-dominance" option=miner_chart_option/>
                         <ChartCard title="Mining Diversity Index" description="Herfindahl-Hirschman Index (HHI) measuring mining concentration. Below 1000 is competitive, above 1800 is concentrated" chart_id="chart-diversity" option=diversity_option/>
                         <ChartCard title="Empty Blocks" description="Blocks with no user transactions, usually mined before the pool has received the previous block's transactions" chart_id="chart-empty-blocks" option=empty_blocks_option/>
-                        <ChartCard title="Empty Blocks by Pool" description="Which mining pools produce the most coinbase-only blocks" chart_id="chart-empty-by-pool" option=empty_by_pool_option/>
+                        <ChartCard title="Empty Blocks by Pool" description="Coinbase-only blocks in the range, grouped by the pool that mined them" chart_id="chart-empty-by-pool" option=empty_by_pool_option/>
                     </div>
                 }
             }
