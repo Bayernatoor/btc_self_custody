@@ -227,7 +227,7 @@ pub fn FeeChartsPage() -> impl IntoView {
                             />
                             <ChartCard
                                 title="Protocol Fee Revenue"
-                                description="Fee revenue breakdown by protocol: Ordinals inscriptions, Runes, and other transactions"
+                                description="Fees paid by transactions matching the inscription and Runes detectors. A transaction matching both is counted in both, so the two do not sum to a share of block fees"
                                 chart_id="chart-protocol-fees"
                                 option=protocol_fees_option
 

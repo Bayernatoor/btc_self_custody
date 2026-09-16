@@ -1163,7 +1163,6 @@ pub fn inscription_fee_share_chart_daily(
 // ---------------------------------------------------------------------------
 
 const RUNES_FEE_COLOR: &str = "#f7931a"; // Bitcoin orange for Runes fees
-const OTHER_FEE_COLOR: &str = "#6366f1"; // Indigo for other fees
 
 /// Fee revenue breakdown by protocol: Inscriptions, Runes, and standard transactions.
 pub fn protocol_fee_competition_chart(
@@ -1184,28 +1183,22 @@ pub fn protocol_fee_competition_chart(
     });
     let runes_str =
         build_data_array_f64(blocks, |b| b.runes_fees as f64 / 100_000_000.0);
-    let other_str = build_data_array_f64(blocks, |b| {
-        let other = b
-            .total_fees
-            .saturating_sub(b.inscription_fees)
-            .saturating_sub(b.runes_fees);
-        other as f64 / 100_000_000.0
-    });
-
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
         "yAxis": y_axis("BTC"),
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
         "legend": { "show": true },
+        // Unstacked, and the residual is gone. See the note on
+        // `protocol_fee_breakdown_chart`: a transaction matching both
+        // detectors has its whole fee counted in both, so the sum was never a
+        // quantity and the "Other" band was understated by exactly the
+        // overlap.
         "series": [
-            { "name": "Other", "type": "bar", "stack": "fees",
-              "data": data_array_value(&other_str),
-              "itemStyle": { "color": OTHER_FEE_COLOR } },
-            { "name": "Inscriptions", "type": "bar", "stack": "fees",
+            { "name": "Inscriptions", "type": "bar",
               "data": data_array_value(&insc_str),
               "itemStyle": { "color": INSCRIPTION_COLOR } },
-            { "name": "Runes", "type": "bar", "stack": "fees",
+            { "name": "Runes", "type": "bar",
               "data": data_array_value(&runes_str),
               "itemStyle": { "color": RUNES_FEE_COLOR } }
         ]
@@ -1235,16 +1228,6 @@ pub fn protocol_fee_competition_chart_daily(
         .iter()
         .map(|d| round(d.total_runes_fees as f64 / 100_000_000.0, 4))
         .collect();
-    let other: Vec<f64> = days
-        .iter()
-        .map(|d| {
-            let o = d
-                .total_fees
-                .saturating_sub(d.total_inscription_fees)
-                .saturating_sub(d.total_runes_fees);
-            round(o as f64 / 100_000_000.0, 4)
-        })
-        .collect();
 
     build_option(json!({
         "xAxis": x_axis_for(true, &cats),
@@ -1252,12 +1235,11 @@ pub fn protocol_fee_competition_chart_daily(
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
         "legend": { "show": true },
+        // Unstacked, no residual. Same reason as the per-block twin.
         "series": [
-            { "name": "Other", "type": "bar", "stack": "fees", "data": other,
-              "itemStyle": { "color": OTHER_FEE_COLOR } },
-            { "name": "Inscriptions", "type": "bar", "stack": "fees", "data": insc,
+            { "name": "Inscriptions", "type": "bar", "data": insc,
               "itemStyle": { "color": INSCRIPTION_COLOR } },
-            { "name": "Runes", "type": "bar", "stack": "fees", "data": runes,
+            { "name": "Runes", "type": "bar", "data": runes,
               "itemStyle": { "color": RUNES_FEE_COLOR } }
         ]
     }))

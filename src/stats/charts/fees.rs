@@ -1227,15 +1227,6 @@ pub fn protocol_fee_breakdown_chart(
         return no_data_chart("Protocol Fee Breakdown");
     }
 
-    let other_str = build_data_array_f64(blocks, |b| {
-        let other = b
-            .total_fees
-            .saturating_sub(b.inscription_fees)
-            .saturating_sub(b.runes_fees);
-        round(other as f64 / 100_000_000.0, 6)
-    });
-    let other_data = data_array_value(&other_str);
-
     let insc_str = build_data_array_f64(blocks, |b| {
         round(b.inscription_fees as f64 / 100_000_000.0, 6)
     });
@@ -1252,24 +1243,31 @@ pub fn protocol_fee_breakdown_chart(
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
         "legend": { "show": true },
+        // Two detector totals, unstacked, and no residual.
+        //
+        // These were stacked with an "Other" band as though the three were
+        // parts of one total. They are not: ingestion credits a transaction's
+        // *whole* fee to every detector it matches, and 125,180 blocks have
+        // both firing. In 1,326 of them the two totals exceed the block's
+        // entire fee take, which the residual hid by flooring at zero.
+        //
+        // So the sum was never a quantity, and a reader could take a
+        // share-of-total figure off this chart that did not exist. Each line
+        // on its own is sound: no single detector total ever exceeds a block's
+        // fees. The residual is dropped rather than corrected, because it was
+        // understated by exactly the overlap and cannot be recovered from what
+        // is stored. A true partition needs an ingestion change and a
+        // full-chain backfill; see notes/chart-quality-2026-09-15/runs/.
         "series": [
             {
-                "name": "Other", "type": "line", "stack": "proto", "data": other_data,
-                "lineStyle": { "width": 0, "color": DATA_COLOR },
-                "itemStyle": { "color": DATA_COLOR }, "symbol": "none",
-                "areaStyle": { "opacity": 0.6 }
+                "name": "Inscriptions", "type": "line", "data": insc_data,
+                "lineStyle": { "width": 1.5, "color": "#06b6d4" },
+                "itemStyle": { "color": "#06b6d4" }, "symbol": "none"
             },
             {
-                "name": "Inscriptions", "type": "line", "stack": "proto", "data": insc_data,
-                "lineStyle": { "width": 0, "color": "#06b6d4" },
-                "itemStyle": { "color": "#06b6d4" }, "symbol": "none",
-                "areaStyle": { "opacity": 0.6 }
-            },
-            {
-                "name": "Runes", "type": "line", "stack": "proto", "data": runes_data,
-                "lineStyle": { "width": 0, "color": RUNES_COLOR },
-                "itemStyle": { "color": RUNES_COLOR }, "symbol": "none",
-                "areaStyle": { "opacity": 0.6 }
+                "name": "Runes", "type": "line", "data": runes_data,
+                "lineStyle": { "width": 1.5, "color": RUNES_COLOR },
+                "itemStyle": { "color": RUNES_COLOR }, "symbol": "none"
             }
         ]
     }))

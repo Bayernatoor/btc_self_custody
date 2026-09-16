@@ -1549,6 +1549,66 @@ mod tests {
         );
     }
 
+    /// Overlapping detector totals must not be stacked, because their sum is
+    /// not a quantity.
+    ///
+    /// Ingestion credits a transaction's whole fee to every detector it
+    /// matches, and 125,180 stored blocks have both firing. In 1,326 of them
+    /// the two totals exceed the block's entire fee take, which the old
+    /// residual band hid by flooring at zero. A reader could therefore take a
+    /// share-of-total figure off the chart that did not exist.
+    ///
+    /// The fixture makes the overlap total: one transaction's fee counted in
+    /// full by both detectors. Stacked, the plot would show 1.5 BTC of fees in
+    /// a block that collected 1.0.
+    #[test]
+    fn overlapping_protocol_fee_detectors_are_not_stacked() {
+        let blocks: Vec<BlockSummary> = (0..300)
+            .map(|i| BlockSummary {
+                height: 840_000 + i,
+                hash: format!("{i:064x}"),
+                timestamp: 1_713_000_000 + i * 600,
+                tx_count: 500,
+                size: 1_400_000,
+                weight: 3_900_000,
+                total_fees: 100_000_000,
+                // The same 0.75 BTC counted by both.
+                inscription_fees: 75_000_000,
+                runes_fees: 75_000_000,
+                ..Default::default()
+            })
+            .collect();
+
+        for (label, opt) in [
+            (
+                "protocol-fees",
+                super::super::protocol_fee_breakdown_chart(&blocks),
+            ),
+            (
+                "protocol-fee-competition",
+                super::super::protocol_fee_competition_chart(&blocks),
+            ),
+        ] {
+            let series = opt["series"].as_array().expect("series");
+            for s in series {
+                assert!(
+                    s.get("stack").is_none(),
+                    "{label}: {:?} is stacked, so the plot sums two totals \
+                     that can count the same fee twice",
+                    s["name"]
+                );
+            }
+            let names: Vec<&str> =
+                series.iter().filter_map(|s| s["name"].as_str()).collect();
+            assert_eq!(
+                names,
+                vec!["Inscriptions", "Runes"],
+                "{label}: the residual band cannot be recovered from stored \
+                 data and must not be drawn"
+            );
+        }
+    }
+
     /// `registry::NON_TIME_X_AXIS` has to name exactly the charts whose
     /// builders produce a non-time x axis, or the comparison rule built on it
     /// is guessing.
@@ -1753,6 +1813,14 @@ mod tests {
             "halving-era (per block)",
             "multi-velocity (daily)",
             "multi-velocity (per block)",
+            // Joined when the protocol fee bands were unstacked. Stacked,
+            // their rail reported "latest total" as the sum of two detector
+            // totals that can both count the same transaction's fee, which is
+            // the defect the chart had. Two overlapping detector totals have
+            // no single average or peak.
+            "protocol-fee-competition (daily)",
+            "protocol-fee-competition (per block)",
+            "protocol-fees (per block)",
             "utxo-flow (daily)",
             "utxo-flow (per block)",
         ];
