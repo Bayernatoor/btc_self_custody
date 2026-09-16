@@ -1572,32 +1572,41 @@ const HALVINGS: &[(u64, u64, &str)] = &[
     (840_000, 1_713_571_767, "Halving #4"),
 ];
 
-/// Halving dates for daily-mode charts (YYYY-MM-DD).
-const HALVING_DATES: &[&str] =
-    &["2012-11-28", "2016-07-09", "2020-05-11", "2024-04-20"];
+/// The UTC date of a timestamp, as `YYYY-MM-DD`.
+///
+/// Every overlay used to carry two lists: timestamps for the per-block axis
+/// and dates for the daily category axis. They are the same fact twice, so
+/// they drifted, and the drift was invisible because no view shows both at
+/// once. BIP-91 was the caught case, dated 2017-07-21 in one list and
+/// 2017-07-20 in the other, while the block itself is 2017-07-23.
+///
+/// So the date is derived here and the second list is gone. An overlay now
+/// has one source and the two axes cannot disagree.
+fn utc_date(ts: u64) -> String {
+    chrono::DateTime::from_timestamp(ts as i64, 0)
+        .map(|t| t.format("%Y-%m-%d").to_string())
+        .unwrap_or_default()
+}
 
-/// Notable BIP activation block heights and timestamps.
+/// Notable BIP activation heights, each with **that block's own timestamp**.
+///
+/// Every timestamp here is what `blocks` holds for that height, read from the
+/// database on 2026-09-16. Five of the eight were not, and the per-block
+/// marker is positioned by the timestamp, so those lines sat days from the
+/// block they name: BIP-34 off by 6 days, BIP-16 by 7, BIP-66 by 6, BIP-65 by
+/// 10, CSV by 3 and BIP-91 by 3. Only BIP-141 and Taproot were right.
+///
+/// `activation_timestamps_match_the_chain` checks the list against the node,
+/// so a hand-edited value fails rather than drifting quietly.
 const BIP_ACTIVATIONS: &[(u64, u64, &str)] = &[
-    (227_835, 1_363_609_548, "BIP-34 (Height in Coinbase)"),
-    (227_931, 1_363_636_474, "BIP-16 (P2SH)"),
-    (363_725, 1_436_486_408, "BIP-66 (Strict DER)"),
-    (388_381, 1_449_187_214, "BIP-65 (CLTV)"),
-    (419_328, 1_467_331_589, "BIP-68/112/113 (CSV)"),
-    (477_120, 1_500_584_608, "BIP-91 (SegWit Signaling)"),
+    (227_835, 1_364_140_153, "BIP-34 (Height in Coinbase)"),
+    (227_931, 1_364_196_609, "BIP-16 (P2SH)"),
+    (363_725, 1_435_974_872, "BIP-66 (Strict DER)"),
+    (388_381, 1_450_113_884, "BIP-65 (CLTV)"),
+    (419_328, 1_467_674_161, "BIP-68/112/113 (CSV)"),
+    (477_120, 1_500_785_191, "BIP-91 (SegWit Signaling)"),
     (481_824, 1_503_539_857, "BIP-141 (SegWit)"),
     (709_632, 1_636_866_927, "BIP-341/342 (Taproot + Tapscript)"),
-];
-
-/// BIP activation dates for daily-mode charts (derived from block timestamps above).
-const BIP_ACTIVATION_DATES: &[(&str, &str)] = &[
-    ("2013-03-18", "BIP-34 (Height in Coinbase)"),
-    ("2013-03-18", "BIP-16 (P2SH)"),
-    ("2015-07-10", "BIP-66 (Strict DER)"),
-    ("2015-12-04", "BIP-65 (CLTV)"),
-    ("2016-07-01", "BIP-68/112/113 (CSV)"),
-    ("2017-07-21", "BIP-91 (SegWit Signaling)"),
-    ("2017-08-24", "BIP-141 (SegWit)"),
-    ("2021-11-14", "BIP-341/342 (Taproot + Tapscript)"),
 ];
 
 /// Bitcoin Core major release timestamps (Unix seconds) and labels.
@@ -1632,38 +1641,6 @@ const CORE_RELEASES: &[(u64, &str)] = &[
     (1760083200, "v30"),
 ];
 
-/// Bitcoin Core major release dates for daily-mode charts.
-const CORE_RELEASE_DATES: &[(&str, &str)] = &[
-    ("2009-01-08", "v0.1"),
-    ("2011-09-23", "v0.4"),
-    ("2011-11-21", "v0.5"),
-    ("2012-03-30", "v0.6"),
-    ("2012-09-17", "v0.7"),
-    ("2013-02-19", "v0.8"),
-    ("2014-03-19", "v0.9"),
-    ("2015-02-16", "v0.10"),
-    ("2015-07-12", "v0.11"),
-    ("2016-02-23", "v0.12"),
-    ("2016-08-23", "v0.13"),
-    ("2017-03-08", "v0.14"),
-    ("2017-09-14", "v0.15"),
-    ("2018-02-26", "v0.16"),
-    ("2018-10-03", "v0.17"),
-    ("2019-05-02", "v0.18"),
-    ("2019-11-08", "v0.19"),
-    ("2020-06-03", "v0.20"),
-    ("2021-01-14", "v0.21"),
-    ("2021-09-14", "v22"),
-    ("2022-04-25", "v23"),
-    ("2022-12-12", "v24"),
-    ("2023-05-26", "v25"),
-    ("2023-12-06", "v26"),
-    ("2024-04-02", "v27"),
-    ("2024-10-02", "v28"),
-    ("2025-04-14", "v29"),
-    ("2025-10-10", "v30"),
-];
-
 /// Notable Bitcoin events (timestamp unix seconds, label).
 const EVENTS: &[(u64, &str)] = &[
     (1392163200, "Mt. Gox Collapse"),
@@ -1676,18 +1653,6 @@ const EVENTS: &[(u64, &str)] = &[
     (1678838400, "BRC-20 Launch"),
     (1713571767, "Runes Launch"),
 ];
-const EVENT_DATES: &[(&str, &str)] = &[
-    ("2014-02-12", "Mt. Gox Collapse"),
-    ("2017-05-26", "SegWit2x (NYA)"),
-    ("2017-08-01", "BCH Fork"),
-    ("2017-11-11", "SegWit2x Cancelled"),
-    ("2018-03-15", "Lightning Mainnet"),
-    ("2021-05-25", "China Mining Ban"),
-    ("2023-01-21", "Ordinals Launch"),
-    ("2023-03-15", "BRC-20 Launch"),
-    ("2024-04-20", "Runes Launch"),
-];
-
 /// Overlay flags — which overlays to merge into a chart option.
 #[derive(Clone, Debug, Default)]
 pub struct OverlayFlags {
@@ -1767,16 +1732,15 @@ struct MarkLineStyle {
 /// `daily_data` is used for category-axis charts, `ts_data` for time-axis charts.
 fn make_mark_lines(
     is_daily: bool,
-    daily_data: &[(&str, &str)],
     ts_data: &[(u64, &str)],
     style: &MarkLineStyle,
 ) -> Vec<serde_json::Value> {
     if is_daily {
-        daily_data
+        ts_data
             .iter()
-            .map(|&(date, name)| {
+            .map(|&(ts, name)| {
                 json!({
-                    "xAxis": date,
+                    "xAxis": utc_date(ts),
                     "lineStyle": { "color": style.color, "type": style.line_type, "width": style.width },
                     "label": {
                         "show": true, "formatter": name, "color": style.color,
@@ -2413,13 +2377,10 @@ pub fn apply_overlays(
 
     if overlays.halvings {
         // Halvings use a special label ("½") instead of the name
-        let halving_daily: Vec<(&str, &str)> =
-            HALVING_DATES.iter().map(|&d| (d, "½")).collect();
         let halving_ts: Vec<(u64, &str)> =
             HALVINGS.iter().map(|&(_, ts, _)| (ts, "½")).collect();
         mark_lines.extend(make_mark_lines(
             is_daily,
-            &halving_daily,
             &halving_ts,
             &MarkLineStyle {
                 color: "#f7931a",
@@ -2439,7 +2400,6 @@ pub fn apply_overlays(
             BIP_ACTIVATIONS.iter().map(|&(_, ts, n)| (ts, n)).collect();
         mark_lines.extend(make_mark_lines(
             is_daily,
-            BIP_ACTIVATION_DATES,
             &ts_data,
             &MarkLineStyle {
                 color: "#4ecdc4",
@@ -2457,7 +2417,6 @@ pub fn apply_overlays(
     if overlays.core_releases {
         mark_lines.extend(make_mark_lines(
             is_daily,
-            CORE_RELEASE_DATES,
             CORE_RELEASES,
             &MarkLineStyle {
                 color: "#a855f7",
@@ -2475,7 +2434,6 @@ pub fn apply_overlays(
     if overlays.events {
         mark_lines.extend(make_mark_lines(
             is_daily,
-            EVENT_DATES,
             EVENTS,
             &MarkLineStyle {
                 color: "#ef4444",
@@ -4837,6 +4795,103 @@ mod tests {
         assert_eq!(block_subsidy(420_000), 1_250_000_000); // 12.5 BTC
         assert_eq!(block_subsidy(630_000), 625_000_000); // 6.25 BTC
         assert_eq!(block_subsidy(840_000), 312_500_000); // 3.125 BTC
+    }
+
+    /// Every annotation a reader can see must sit on the block it names.
+    ///
+    /// Ignored because it needs the real `bitcoin_stats.db`, and it is the
+    /// check that was missing: five of the eight BIP activation timestamps
+    /// were not their block's timestamp, by up to ten days, and the marker is
+    /// positioned by the timestamp. Halvings were already correct, and are
+    /// included so they stay that way.
+    ///
+    ///     cargo test --features ssr activation_timestamps -- --ignored
+    #[test]
+    #[ignore]
+    fn activation_timestamps_match_the_chain() {
+        let conn = rusqlite::Connection::open_with_flags(
+            "bitcoin_stats.db",
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )
+        .expect("bitcoin_stats.db in the working directory");
+        let mut wrong: Vec<String> = Vec::new();
+        let named: Vec<(u64, u64, &str)> = HALVINGS
+            .iter()
+            .chain(BIP_ACTIVATIONS.iter())
+            .copied()
+            .collect();
+        for (height, ts, label) in named {
+            let actual: u64 = conn
+                .query_row(
+                    "SELECT timestamp FROM blocks WHERE height = ?1",
+                    rusqlite::params![height],
+                    |r| r.get(0),
+                )
+                .unwrap_or_else(|e| panic!("height {height}: {e}"));
+            if actual != ts {
+                wrong.push(format!(
+                    "{label} at height {height}: constant says {ts} ({}), \
+                     the chain says {actual} ({})",
+                    utc_date(ts),
+                    utc_date(actual)
+                ));
+            }
+        }
+        assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+    }
+
+    /// The two axes cannot name different days, because there is only one
+    /// list now. This holds that: a marker's daily date is the UTC date of
+    /// the same timestamp the per-block marker uses.
+    #[test]
+    fn both_overlay_forms_name_the_same_day() {
+        let style = MarkLineStyle {
+            color: "#fff",
+            line_type: "solid",
+            width: 1.0,
+            font_size: 10,
+            font_weight: "normal",
+            rotate: None,
+            bg_alpha: "0.8",
+            padding: [2, 4],
+            border_radius: 2,
+        };
+        for list in [
+            &BIP_ACTIVATIONS
+                .iter()
+                .map(|&(_, ts, n)| (ts, n))
+                .collect::<Vec<_>>()[..],
+            CORE_RELEASES,
+            EVENTS,
+        ] {
+            let per_block = make_mark_lines(false, list, &style);
+            let daily = make_mark_lines(true, list, &style);
+            assert_eq!(per_block.len(), daily.len());
+            for (b, d) in per_block.iter().zip(daily.iter()) {
+                let ts = b["xAxis"].as_u64().expect("ms timestamp") / 1000;
+                assert_eq!(
+                    d["xAxis"].as_str().expect("date"),
+                    utc_date(ts),
+                    "the daily marker for {:?} is not the per-block \
+                     marker's own day",
+                    b["label"]["formatter"]
+                );
+            }
+        }
+    }
+
+    /// BIP-91 is the case that proves the derivation changed something: it
+    /// was dated 2017-07-21 in the daily list, 2017-07-20 by its own
+    /// constant, and the block is 2017-07-23.
+    #[test]
+    fn the_bip91_marker_is_dated_to_its_block() {
+        let (_, ts, label) = BIP_ACTIVATIONS
+            .iter()
+            .find(|(h, _, _)| *h == 477_120)
+            .copied()
+            .expect("BIP-91 is an annotated activation");
+        assert!(label.starts_with("BIP-91"));
+        assert_eq!(utc_date(ts), "2017-07-23");
     }
 
     #[test]
