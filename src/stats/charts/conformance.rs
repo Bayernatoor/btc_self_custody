@@ -1201,6 +1201,65 @@ mod tests {
         }
     }
 
+    /// Dump every chart's built option, both resolutions, as one JSON
+    /// document for the browser pass.
+    ///
+    /// V-06 asks for all 63 entries in both views, which by hand is 126
+    /// charts opened one at a time. The structural half of that is
+    /// mechanical: does ECharts accept the option, how many series does it
+    /// resolve, what does it make of the axes, does any point arrive as NaN.
+    /// This emits the inputs for that so `runs/render-all.html` can answer it
+    /// in one pass, leaving the reader to judge copy and layout, which is
+    /// the half a machine cannot.
+    ///
+    /// Not an assertion. Run with:
+    ///
+    /// ```text
+    /// cargo test --features ssr dump_all_options -- --ignored --nocapture \
+    ///   > notes/chart-quality-2026-09-15/runs/all-options.json
+    /// ```
+    #[test]
+    #[ignore]
+    fn dump_all_options() {
+        let mut out = serde_json::Map::new();
+        for (meta, daily, opt) in built_charts() {
+            let key = format!(
+                "{}::{}",
+                meta.slug,
+                if daily { "daily" } else { "per-block" }
+            );
+            out.insert(
+                key,
+                serde_json::json!({
+                    "slug": meta.slug,
+                    "title": meta.title,
+                    "daily": daily,
+                    "category": format!("{:?}", meta.category),
+                    "unit": format!("{:?}", meta.unit),
+                    "shape": format!("{:?}", meta.shape),
+                    "supports_log": meta.supports_log(),
+                    "can_compare": meta.can_compare(),
+                    "reports_change": meta.reports_change(),
+                    "declared_series": meta
+                        .measurements
+                        .iter()
+                        .map(|m| if daily && !m.series_daily.is_empty() {
+                            m.series_daily
+                        } else {
+                            m.series
+                        })
+                        .collect::<Vec<_>>(),
+                    "option": opt,
+                }),
+            );
+        }
+        println!(
+            "{}",
+            serde_json::to_string(&serde_json::Value::Object(out))
+                .expect("serialisable")
+        );
+    }
+
     /// Dump a chart's built option for browser verification. Not an
     /// assertion; run with --ignored --nocapture and a slug in CQ_DUMP.
     #[test]
