@@ -2235,10 +2235,10 @@ mod tests {
         );
         // And its residual absorbs everything the other two bands miss.
         assert!(
-            (first(&brk, "Legacy") - 40.0).abs() < 0.02,
+            (first(&brk, "Other outputs") - 40.0).abs() < 0.02,
             "the residual must carry the 400 outputs that are neither native \
              v0 nor Taproot, got {}",
-            first(&brk, "Legacy")
+            first(&brk, "Other outputs")
         );
     }
 
@@ -2563,7 +2563,7 @@ mod tests {
                 if daily { "daily" } else { "per block" }
             );
             match (meta.shape, kpi::compute(&json, meta.shape)) {
-                (Shape::Gauge, Kpis::Unavailable)
+                (Shape::Gauge, Kpis::NotSummarizable)
                 | (Shape::Donut | Shape::Histogram, Kpis::Categorical { .. })
                 | (
                     Shape::StackedAbsolute | Shape::StackedPercent,
@@ -2580,7 +2580,7 @@ mod tests {
                 // neither. `MULTI_METRIC` is exactly the set that does not
                 // present one measurement, which is why the allowance is
                 // keyed on it rather than listed again here.
-                (_, Kpis::Unavailable) => suppressed.push(at),
+                (_, Kpis::NotSummarizable) => suppressed.push(at),
                 (_, k) => panic!("{at} produced {k:?} rather than a series"),
             }
         }
@@ -2705,7 +2705,7 @@ mod tests {
                 let at = if daily { "daily" } else { "per block" };
                 match kpi::compute(&json, m.shape) {
                     Kpis::Series { .. } => load_bearing += 1,
-                    Kpis::Unavailable
+                    Kpis::NotSummarizable
                         if registry::MULTI_METRIC.contains(&m.slug) => {}
                     k => panic!(
                         "{slug} ({at}) produced {k:?}, which has no change \

@@ -68,7 +68,7 @@ fn SignalingSkeleton() -> impl IntoView {
                 <div class="h-4 w-32 bg-white/5 rounded mb-4"></div>
                 <div class="h-[200px] bg-white/5 rounded"></div>
             </div>
-            // Period history chart skeleton — block icon + "Mining blocks..." (matches other chart pages).
+            // Period history chart skeleton: block icon plus the shared loading label.
             <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6">
                 <div class="h-4 w-48 bg-white/5 rounded mb-4"></div>
                 <div class="h-[450px] flex items-center justify-center">
@@ -81,7 +81,7 @@ fn SignalingSkeleton() -> impl IntoView {
                                 </svg>
                             </div>
                         </div>
-                        <span class="text-xs text-white/30">"Mining blocks..."</span>
+                        <span class="text-xs text-white/30">"Loading chart data..."</span>
                     </div>
                 </div>
             </div>

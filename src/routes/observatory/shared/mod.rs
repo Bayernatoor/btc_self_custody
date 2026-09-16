@@ -327,7 +327,7 @@ fn ScaleSettings() -> impl IntoView {
                     </span>
                 </label>
                 <p class="text-[0.7rem] text-white/30 mt-1 ml-6">
-                    "Scales the right-hand axis on its own, so price can be read across six orders of magnitude without moving the metric beside it"
+                    "Scales the right-hand axis on its own, so an overlay spanning several orders of magnitude stays readable without moving the metric beside it"
                 </p>
             </Show>
         </div>
@@ -635,7 +635,7 @@ pub fn ChartPageSkeleton(#[prop(default = 3)] count: usize) -> impl IntoView {
                                     </svg>
                                 </div>
                             </div>
-                            <span class="text-xs text-white/30">"Mining blocks..."</span>
+                            <span class="text-xs text-white/30">"Loading chart data..."</span>
                         </div>
                     </div>
                 </div>

@@ -693,7 +693,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                                 "\u{26CF}\u{FE0F}"
                             </div>
                             <p class="mt-3 text-sm text-white/50 font-mono animate-pulse">
-                                "Mining blocks..."
+                                "Loading chart data..."
                             </p>
                         </div>
                     </Show>

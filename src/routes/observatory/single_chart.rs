@@ -808,7 +808,7 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                                 on=right_log_scale
                                 set_on=set_right_log_scale
                                 axis_label=Signal::derive(move || right_axis_label(&overlay_flags.get(), compare_meta.get()))
-                                title_log="Logarithmic axis for the overlay. Price crosses six orders of magnitude, which a linear axis flattens into a line along the bottom until 2017"
+                                title_log="Logarithmic axis for whatever is on the right: the price overlay, chain size, or a compared chart. Only positive values can be drawn on it"
                                 // The switch beside it already explains the
                                 // difference, and it is the same difference.
                                 explain=false
@@ -864,7 +864,7 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                     </Show>
                     <Show when=move || !daily_gap.get() && (option.get().is_empty() || data_loading.get())>
                         <div class="absolute inset-0 flex items-center justify-center bg-[#0d2137] rounded-xl">
-                            <span class="text-xs text-white/50">"Mining blocks..."</span>
+                            <span class="text-xs text-white/50">"Loading chart data..."</span>
                         </div>
                     </Show>
                 </div>
@@ -1050,8 +1050,12 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                             move || download_chart_png(&id, meta.title)
                         }
                     />
+                    // Two different things, and one note beside three
+                    // buttons read as though it covered all of them. CSV and
+                    // JSON are the data; PNG is a picture of the chart as it
+                    // currently looks, zoom and overlays included.
                     <span class="text-xs text-white/50 ml-1">
-                        "exports the selected range, without overlay series"
+                        "CSV and JSON take the selected range without overlay series. PNG captures the chart as it looks now."
                     </span>
                 </div>
             </div>
@@ -1091,12 +1095,13 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                             </a>
                         </p>
                     }.into_any(),
+                    // No long copy yet, so there is no definition to show.
+                    // This used to print `desc_per_block` again under a
+                    // "Definition" heading, which restated the subtitle two
+                    // lines above it and, in daily mode, restated the wrong
+                    // resolution's subtitle. An absent definition is better
+                    // left absent than filled with the sentence beside it.
                     None => view! {
-                        <p class="text-sm text-white/85 leading-relaxed max-w-3xl">
-                            <span class="text-white/70">"Definition. "</span>
-                            {meta.desc_per_block}
-                            "."
-                        </p>
                         <p class="text-xs text-white/55 mt-2">
                             "Measured from my own Bitcoin node. "
                             <a href="/observatory/learn/methodology" class="hover:text-[#f7931a] transition-colors">
@@ -1108,7 +1113,7 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
             </div>
         </div>
         // Without this the view is a dead end: four related charts and the
-        // browser back button. The drawer indexes all 61.
+        // browser back button. The drawer indexes every registered chart.
         <super::shared::ChartDrawer/>
     }
 }
@@ -1138,7 +1143,7 @@ fn ScaleSwitch(
     view! {
         <div class="flex items-center gap-1.5 mt-0.5">
             {explain.then(|| view! {
-                <InfoTip text="A linear axis spaces values evenly, so 0 to 100 takes the same height as 100 to 200. A logarithmic axis spaces them by ratio, so each step up is a multiplication. Log is the readable choice for anything that grows by multiplying, such as price or difficulty, where a linear axis flattens the early years into a line along the bottom."/>
+                <InfoTip text="Linear: equal distances are equal differences, so 0 to 100 takes the same height as 100 to 200. Logarithmic: equal distances are equal ratios, so each step up is a multiplication, and only positive values can be drawn. A series spanning several orders of magnitude, such as price or difficulty, shows its early years on a log axis and flattens into a line along the bottom on a linear one."/>
             })}
             <Show when=move || !axis_label.get().is_empty()>
                 <span class="text-[11px] text-white/55 whitespace-nowrap">
@@ -1379,7 +1384,7 @@ fn RailRange() -> impl IntoView {
             <span class="whitespace-nowrap">
                 <DefinedTerm
                     label=Signal::derive(mode)
-                    text="Short ranges plot one point per block, about one every ten minutes. Longer ranges plot one point per day, averaged from every block in that day, so brief spikes are smoothed away."
+                    text="Short ranges plot one point per block, about one every ten minutes. Longer ranges plot one point per day, computed from every block in that day. How it is computed depends on the chart: some average, some total the day up, some are a ratio of the day's sums, and each chart says which. Either way a brief spike inside a day is smoothed away."
                 />
             </span>
         </p>
@@ -1634,6 +1639,16 @@ fn KeyFacts(
             Kpis::Unavailable => view! {
                 <p class="text-sm text-white/60">"Not available for this range."</p>
             }.into_any(),
+            // And this is not a range problem, so it must not read as one.
+            // Batching plots inputs and outputs per transaction at every
+            // block: two measurements, no single average or peak between
+            // them. A shorter range cannot fix that, and the old shared
+            // message sent the reader to change the range.
+            Kpis::NotSummarizable => view! {
+                <p class="text-sm text-white/60">
+                    "This chart plots several separate measurements, so one combined summary would not describe any of them."
+                </p>
+            }.into_any(),
         }}
     }
 }
@@ -1715,7 +1730,7 @@ fn OverlayToggles(
             <Toggle
                 label="Halvings"
                 get=s.overlay_halvings set=s.set_overlay_halvings disabled=never
-                hint="Roughly every four years, the reward paid to miners for each block is cut in half. Four have happened so far, and they are the clearest scheduled events in Bitcoin's history."
+                hint="Every 210,000 blocks, roughly every four years, the block subsidy halves. Fees are the other part of what a miner collects and do not halve with it. Four halvings have happened so far."
             />
             <Toggle
                 label="BIP activations"

@@ -909,14 +909,14 @@ pub const CHARTS: &[ChartMeta] = &[
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
             definition: None,
-            technical: "Shows how total fee revenue is split between standard Bitcoin transactions, Ordinals inscription transactions, and Runes protocol transactions. Reveals which protocol type is driving fee pressure at any given time.",
+            technical: "Fees paid by the transactions each detector matched, drawn as two totals beside the block's whole fee take rather than as parts of it. A transaction carrying both an inscription and a Runes payload is credited to both, so the two cannot be added: 125,180 blocks have both detectors firing and in 1,326 of them the sum exceeds the block's entire fee take. Which detector is larger in a period is a fact about the detectors, not about what drove the fee market.",
         }),
     },
     ChartMeta {
         slug: "runes-pct",
         title: "OP_RETURN Protocol Share",
-        desc_per_block: "Which protocols are using the most OP_RETURN outputs. Runes dominate since their 2024 launch",
-        desc_daily: "Which protocols are using the most OP_RETURN outputs. Runes dominate since their 2024 launch",
+        desc_per_block: "Detected OP_RETURN outputs by protocol. Runes were 96.9% of them in 2024, the year they launched, and 97.5% so far in 2026",
+        desc_daily: "Detected OP_RETURN outputs by protocol. Runes were 96.9% of them in 2024, the year they launched, and 97.5% so far in 2026",
         category: Category::Embedded,
         unit: Unit::Percent,
         shape: Shape::StackedPercent,
@@ -1241,7 +1241,7 @@ pub const CHARTS: &[ChartMeta] = &[
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
             definition: None,
-            technical: "Each dot is one block. X-axis shows how full the block is (weight utilization %), Y-axis shows the median fee rate. When blocks are nearly full AND fees are high (top-right cluster), the network is under pressure. Dots in the bottom-right mean full blocks with low fees (normal operation). Top-left means high fees despite empty blocks (unusual).",
+            technical: "Each dot is one block. X-axis shows how full the block is (weight utilization %), Y-axis shows the median fee rate. Top-right is a full block whose median fee rate was also high; bottom-right is a full block at a low rate, which is most of them; top-left is a high rate in a block that was not full. The pair of coordinates is what the chart shows. It does not establish why either number was what it was, and a block's fullness is set by what the miner included rather than by demand alone.",
         }),
     },
     ChartMeta {
@@ -1302,7 +1302,7 @@ pub const CHARTS: &[ChartMeta] = &[
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
             definition: None,
-            technical: "The white line shows the 144-block trailing average fee rate (roughly one day). Red dots appear when a block's median fee rate exceeds 5x that average, indicating sudden demand surges. Requires at least 300 blocks (1W+ range) for meaningful detection.",
+            technical: "The line is the 144-block trailing average of the median fee rate, which is about a day of blocks. A dot marks a block whose own median fee rate was more than five times that average. What produced the jump is not in this data: a burst of fee-paying transactions and a thin block from an unlucky interval both show up the same way. Needs at least 300 blocks, so a 1W or longer range.",
         }),
     },
     ChartMeta {
@@ -1331,14 +1331,14 @@ pub const CHARTS: &[ChartMeta] = &[
         }],
         about: Some(About {
             definition: Some("What everyone paid, in total, to get into a given block. Each transaction pays a fee to be included, and the miner keeps every fee in the block they find. It is one half of what a miner earns. The other is the subsidy, which halves every four years and eventually reaches zero."),
-            technical: "A transaction does not state its fee anywhere, so it is computed as inputs minus outputs. Denominated in BTC, not the dollars they were worth at the time, so the figure is comparable across the whole chain.",
+            technical: "A transaction does not state its fee anywhere: a fee is what its inputs exceed its outputs by. This chart does not sum those, though. The block total is taken from the coinbase transaction, as the value the miner paid itself minus the subsidy the schedule allows, floored at zero. The two agree whenever a miner claims everything available, and a miner who underclaims makes this read low. Shown in BTC or satoshis by the toggle above, never in dollars of the day, so the figure is comparable across the whole chain.",
         }),
     },
     ChartMeta {
         slug: "halving-era",
         title: "Halving Era Comparison",
-        desc_per_block: "Side-by-side comparison of average block metrics across Bitcoin's halving eras. Shows how the network evolves between halvings",
-        desc_daily: "Side-by-side comparison of average block metrics across Bitcoin's halving eras. Shows how the network evolves between halvings",
+        desc_per_block: "Four block metrics compared across the halving eras present in the selected range, each normalised to its own highest era",
+        desc_daily: "Four block metrics compared across the halving eras present in the selected range, each normalised to its own highest era",
         category: Category::Fees,
         unit: Unit::Percent,
         shape: Shape::Bar,
@@ -1363,14 +1363,14 @@ pub const CHARTS: &[ChartMeta] = &[
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
             definition: None,
-            technical: "Each bar group represents one halving era (the period between two halvings). Metrics are normalized to percentages of the highest era so different scales are comparable. For example, if Era 4 has the highest average fee, it shows as 100% and other eras show relative to that. Click legend items to focus on specific metrics. Hover bars for actual values.",
+            technical: "Each group on the x axis is one metric, with a bar per halving era, so the comparison runs across eras within a metric rather than across metrics within an era. Every metric is divided by its own highest era, which is why something always reads 100 and why the plotted numbers are an index rather than a quantity. Only eras present in the selected range appear. Hover for the underlying values; two of the four are coinbase-derived estimates rather than measured.",
         }),
     },
     ChartMeta {
         slug: "max-tx-fee",
         title: "Max Transaction Fee",
-        desc_per_block: "Largest individual transaction fee per block in BTC. Fat-finger fees and high-priority transactions stand out",
-        desc_daily: "Largest individual transaction fee per block in BTC. Fat-finger fees and high-priority transactions stand out",
+        desc_per_block: "The highest single transaction fee in each block, in BTC",
+        desc_daily: "The highest single transaction fee in each block, in BTC",
         category: Category::Fees,
         unit: Unit::Btc,
         shape: Shape::BarWithLine,
@@ -1419,7 +1419,7 @@ pub const CHARTS: &[ChartMeta] = &[
         ],
         about: Some(About {
             definition: Some("How much a transaction paid per unit of size to get into a block, taking the middle transaction. Fees are charged by the room a transaction takes, not the value it moves, so sending a large amount can cost less than sending a small one."),
-            technical: "Fee divided by virtual size for every transaction in the block, then the middle value. Virtual size is weight divided by four, which is the unit the fee market prices in. The median, because one very large fee drags an average somewhere no real transaction sat. The coinbase transaction pays no fee and is excluded.",
+            technical: "Fee divided by virtual size for every transaction in the block, then the middle value. Virtual size is weight divided by four, which is the unit the fee market prices in. The median rather than the mean, because it is less sensitive to a few unusually high fees. The coinbase transaction pays no fee and is excluded.",
         }),
     },
     ChartMeta {
@@ -1725,8 +1725,8 @@ pub const CHARTS: &[ChartMeta] = &[
     ChartMeta {
         slug: "address-types",
         title: "Address Type Evolution",
-        desc_per_block: "Output types per block. Watch P2PKH (legacy) shrink as P2WPKH (SegWit) and P2TR (Taproot) grow",
-        desc_daily: "Daily average output types. Watch P2PKH (legacy) shrink as P2WPKH (SegWit) and P2TR (Taproot) grow",
+        desc_per_block: "Counts of outputs by script type in each block, one band per type",
+        desc_daily: "Daily totals of outputs by script type, one band per type",
         category: Category::Network,
         unit: Unit::Count,
         shape: Shape::StackedAbsolute,
@@ -1883,8 +1883,8 @@ pub const CHARTS: &[ChartMeta] = &[
     ChartMeta {
         slug: "cumulative-adoption",
         title: "Cumulative Adoption",
-        desc_per_block: "Running total of SegWit transactions and Taproot outputs within this range. Select ALL for lifetime totals",
-        desc_daily: "Cumulative SegWit and Taproot counts within this range. Select ALL for lifetime totals",
+        desc_per_block: "Running total of native SegWit v0 and Taproot outputs created within this range. Select ALL for the full stored history",
+        desc_daily: "Running total of native SegWit v0 and Taproot outputs created within this range. Select ALL for the full stored history",
         category: Category::Network,
         unit: Unit::Count,
         shape: Shape::Line,
@@ -2056,14 +2056,14 @@ pub const CHARTS: &[ChartMeta] = &[
             // Migrated from the card's expandable, which was the
             // only place this was written. Definition still to come.
             definition: None,
-            technical: "Tracks P2PKH (legacy '1' addresses) as a share of total outputs. The 90-day moving average smooths out noise. Horizontal lines mark the 10% and 5% thresholds. Crossing below these levels indicates the ecosystem is shifting away from legacy address formats.",
+            technical: "P2PKH outputs as a share of the eight classified output types, with a 90-day moving average at daily resolution only. The horizontal lines at 10% and 5% are reference marks chosen for this chart, not protocol thresholds. A falling share means other output types grew faster; it does not follow that any particular wallet or user moved.",
         }),
     },
     ChartMeta {
         slug: "propagation",
         title: "Rapid Consecutive Blocks",
-        desc_per_block: "Blocks arriving within 60 seconds of each other, indicating fast mining luck or potential stale block races",
-        desc_daily: "Blocks arriving within 60 seconds of each other, indicating fast mining luck or potential stale block races",
+        desc_per_block: "Consecutive blocks whose header timestamps are less than 60 seconds apart. Miners choose those timestamps, so this is not a measure of propagation",
+        desc_daily: "Consecutive blocks whose header timestamps are less than 60 seconds apart. Miners choose those timestamps, so this is not a measure of propagation",
         category: Category::Network,
         unit: Unit::Seconds,
         shape: Shape::Scatter,
@@ -2294,7 +2294,7 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Per block this is the block's transaction count over the gap to its predecessor, with a non-positive gap substituted as zero and the first block having none. Daily it is the day's transaction count over 86,400 seconds, including coinbase transactions, which is wrong for an incomplete day.",
         }],
         about: Some(About {
-            definition: Some("How many transactions per second the chain is settling. It is a small number next to a card network, and deliberately so: every full node verifies every transaction, and that is what the limit buys."),
+            definition: Some("How many transactions per second the chain confirmed. This counts base-chain transactions only, so it excludes Lightning payments and transfers inside an exchange, both of which move value without a block recording each one."),
             technical: "Transactions in the block divided by the seconds since the previous one, so a short interval reads high and a long one reads low even at a steady rate. Base-chain settlement only. Nothing carried over Lightning or netted inside an exchange appears here, which makes this a floor on activity rather than a measure of it.",
         }),
     },
@@ -2429,8 +2429,8 @@ pub const CHARTS: &[ChartMeta] = &[
     ChartMeta {
         slug: "utxo-growth",
         title: "UTXO Growth Rate",
-        desc_per_block: "Net UTXO set change per block, counting only outputs that can be spent. Positive means the UTXO set is growing, negative means consolidation",
-        desc_daily: "Daily net UTXO change across all blocks",
+        desc_per_block: "Estimated net change in the output set per block, from non-coinbase transactions and excluding detected OP_RETURN. Positive means more outputs were created than consumed",
+        desc_daily: "Estimated net change in the output set per day, from non-coinbase transactions and excluding detected OP_RETURN",
         category: Category::Network,
         unit: Unit::Count,
         shape: Shape::BarWithLine,
@@ -2456,8 +2456,8 @@ pub const CHARTS: &[ChartMeta] = &[
     ChartMeta {
         slug: "weekday",
         title: "Weekday Activity",
-        desc_per_block: "Average transaction count and fees by day of week. Reveals patterns between weekday and weekend network usage",
-        desc_daily: "Average transaction count and fees by day of week. Reveals patterns between weekday and weekend network usage",
+        desc_per_block: "Average transaction count and fees per block, grouped by UTC day of the week",
+        desc_daily: "Average transaction count and fees per block, grouped by UTC day of the week",
         category: Category::Network,
         unit: Unit::Mixed,
         shape: Shape::Bar,
@@ -2595,7 +2595,7 @@ pub const CHARTS: &[ChartMeta] = &[
             method_daily: Method::Measured,
             per_block: Aggregation::PerBlockObservation,
             daily: Aggregation::RatioOfTotals,
-            population: "Three bands over every output in the block, which is the widest denominator any share chart here uses. The Legacy band is the residual after native v0 and Taproot, so it absorbs OP_RETURN, P2SH-wrapped witness outputs, bare multisig and anything unrecognised; it is not a count of legacy payment usage.",
+            population: "Three bands over every output in the block, which is the widest denominator any share chart here uses. The third band is the residual after native v0 and Taproot, so it absorbs OP_RETURN, P2SH-wrapped witness outputs, bare multisig and anything unrecognised. It was labelled Legacy, which read as a count of legacy payment usage and is not one, so the band is now Other outputs.",
         }],
         about: None,
     },
@@ -3169,6 +3169,67 @@ mod tests {
                  Batching, and the drawer has to agree with it.",
             ),
             ("over 16 years", "stale by construction. Say since 2009."),
+            (
+                "averaged from every block in that day",
+                "true of the charts that plot a mean and false of every \
+                 total, cumulative total and pooled ratio, which is most of \
+                 the catalog. The label says how it is computed depends on \
+                 the chart now.",
+            ),
+            (
+                "Running total of SegWit transactions",
+                "it sums p2wpkh_count plus p2wsh_count, which is native v0 \
+                 outputs created. Its own legend was already more accurate \
+                 than its subtitle.",
+            ),
+            (
+                "Most Taproot Spends",
+                "the stored column counts P2TR outputs created, not inputs \
+                 spending them. The two are byte-identical in all 967,295 \
+                 rows because one of them is misnamed.",
+            ),
+            (
+                "computed as inputs minus outputs",
+                "that is what a fee is, but not what this plots: the block \
+                 total comes from the coinbase output value minus the \
+                 scheduled subsidy, floored at zero, so a miner who \
+                 underclaims makes it read low.",
+            ),
+            (
+                "only outputs that can be spent",
+                "it subtracts detected OP_RETURN and omits coinbase outputs \
+                 entirely, running about three per block short of the node's \
+                 own figure. Declared Estimated.",
+            ),
+            (
+                "potential stale block races",
+                "header timestamps are chosen by miners and do not measure \
+                 arrival, so a short interval cannot evidence a race. 16,020 \
+                 of them run backwards.",
+            ),
+            (
+                "indicating sudden demand surges",
+                "a median fee rate above its own trailing average does not \
+                 identify a cause: a thin block from a short interval looks \
+                 the same as a burst of fee-paying transactions.",
+            ),
+            (
+                "Each bar group represents one halving era",
+                "the x axis groups the four metrics and there is one series \
+                 per era, so the comparison runs across eras within a \
+                 metric. Read off fees.rs:890 and after.",
+            ),
+            (
+                "indicates the ecosystem is shifting",
+                "a falling share means other output types grew faster. It \
+                 does not establish that any wallet or user moved.",
+            ),
+            (
+                "Daily average output types",
+                "the daily builder multiplies the stored mean back up by the \
+                 block count, so 3.0 per block over 10 blocks is 30. \
+                 Pinned by address_types_daily_plots_totals_not_averages.",
+            ),
             (
                 "'Inputs / Outputs'",
                 "the counts exclude the coinbase while the Transactions row \

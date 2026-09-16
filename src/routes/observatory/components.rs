@@ -356,7 +356,7 @@ pub fn ChartCard(
                                     </svg>
                                 </div>
                             </div>
-                            <span class="text-xs text-white/30">"Mining blocks..."</span>
+                            <span class="text-xs text-white/30">"Loading chart data..."</span>
                         </div>
                     </div>
                 </Show>

@@ -448,7 +448,7 @@ pub fn witness_version_tx_pct_chart(
         "legend": { "show": true },
         "series": [
             {
-                "name": "Legacy", "type": "line", "data": legacy_data,
+                "name": "Other outputs", "type": "line", "data": legacy_data,
                 "stack": "txpct", "areaStyle": { "opacity": 0.4 },
                 "lineStyle": { "width": 0, "color": "#888" },
                 "itemStyle": { "color": "#888" }, "symbol": "none"
@@ -519,7 +519,7 @@ pub fn witness_version_tx_pct_chart_daily(
         "legend": { "show": true },
         "series": [
             {
-                "name": "Legacy", "type": "line", "data": legacy_pct,
+                "name": "Other outputs", "type": "line", "data": legacy_pct,
                 "stack": "txpct", "areaStyle": { "opacity": 0.4 },
                 "lineStyle": { "width": 0, "color": "#888" },
                 "itemStyle": { "color": "#888" }, "symbol": "none"

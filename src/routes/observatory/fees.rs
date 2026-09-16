@@ -202,7 +202,7 @@ pub fn FeeChartsPage() -> impl IntoView {
                             />
                             <ChartCard
                                 title="Halving Era Comparison"
-                                description="Side-by-side comparison of average block metrics across Bitcoin's halving eras. Shows how the network evolves between halvings"
+                                description="Four block metrics compared across the halving eras present in the selected range, each normalised to its own highest era"
                                 chart_id="chart-halving-era"
                                 option=halving_era_option
                             />
@@ -220,7 +220,7 @@ pub fn FeeChartsPage() -> impl IntoView {
                             />
                             <ChartCard
                                 title="Max Transaction Fee"
-                                description="Largest individual transaction fee per block in BTC. Fat-finger fees and high-priority transactions stand out"
+                                description="The highest single transaction fee in each block, in BTC"
                                 chart_id="chart-max-tx-fee"
                                 option=max_tx_fee_option
 

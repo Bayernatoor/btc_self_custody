@@ -226,12 +226,12 @@ fn ExtremesHero(data: ExtremesData) -> impl IntoView {
             tooltip: "Block with the most Replace-By-Fee signaling transactions",
         },
         Card {
-            label: "Most Taproot Spends",
+            label: "Most Taproot Outputs",
             value: format_number(d.most_taproot.value),
             height: d.most_taproot.height,
             miner: d.most_taproot.miner.clone(),
             date: fmt_date(d.most_taproot.timestamp),
-            tooltip: "Block with the most P2TR (Taproot) spend inputs",
+            tooltip: "Block that created the most P2TR (Taproot) outputs. The stored column counts outputs created, not inputs spending them",
         },
         Card {
             label: "Most OP_RETURNs",

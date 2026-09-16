@@ -1136,12 +1136,19 @@ pub(crate) fn y_axis_si(name: &str) -> serde_json::Value {
 /// constant of the same name there.
 pub(crate) const SI_AXIS_SENTINEL: &str = "__si_suffix__";
 
-/// Fallback chart option when no data is available for the current range.
+/// Fallback chart option when the window holds nothing to draw.
+///
+/// The hint used to say "Select a shorter range (1M or less) to view
+/// per-block data", which is the right advice for exactly one cause and was
+/// shown for every other: no detections in the window, no identified miners,
+/// a date range before the chart's data begins. Resolution is not the reason
+/// in any of those, and a reader following the instruction gets the same
+/// empty frame.
+///
+/// Charts that do know why they are empty say so: see `no_retarget_chart` and
+/// the empty-block hint. This is the honest generic.
 pub(crate) fn no_data_chart(title: &str) -> serde_json::Value {
-    no_data_chart_with_hint(
-        title,
-        "Select a shorter range (1M or less) to view per-block data",
-    )
+    no_data_chart_with_hint(title, "No data in the selected range")
 }
 
 /// Fallback chart with a custom hint message.
@@ -4611,14 +4618,29 @@ mod tests {
     // no_data_chart
     // -----------------------------------------------------------------------
 
+    /// The empty state names the chart and says what is absent, without
+    /// blaming the resolution for it.
+    ///
+    /// It advised choosing a shorter range until 2026-09-16, which is the
+    /// right advice for one cause out of several and was shown for all of
+    /// them: no detections in the window, no identified miners, a range
+    /// before the data starts. A reader who follows it gets the same empty
+    /// frame back.
     #[test]
-    fn no_data_chart_has_title() {
+    fn no_data_chart_says_what_is_missing_not_what_to_do_about_it() {
         let opt = no_data_chart("Test Chart");
         let title = opt.get("title").unwrap();
         let text = title.get("text").unwrap().as_str().unwrap();
         assert!(text.contains("Test Chart"));
         let subtext = title.get("subtext").unwrap().as_str().unwrap();
-        assert!(subtext.contains("shorter range"));
+        assert!(
+            subtext.contains("No data in the selected range"),
+            "got {subtext:?}"
+        );
+        assert!(
+            !subtext.contains("shorter range"),
+            "the generic empty state must not blame resolution: {subtext:?}"
+        );
     }
 
     // -----------------------------------------------------------------------

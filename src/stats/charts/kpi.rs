@@ -66,9 +66,17 @@ pub enum Kpis {
         top_share_pct: f64,
         entries: usize,
     },
-    /// No series, or nothing numeric in it. Rendered as "not available", never
-    /// as zero.
+    /// No series, or nothing numeric in it. Rendered as "not available for
+    /// this range", never as zero.
     Unavailable,
+    /// The chart plots several different measurements at the same x, so no
+    /// single average, peak or change describes it.
+    ///
+    /// Distinct from [`Kpis::Unavailable`] because the reader's next move
+    /// differs: a shorter range fixes an empty one and cannot fix this. The
+    /// rail said "Not available for this range" for both, which told someone
+    /// looking at Transaction Batching to go and change the range.
+    NotSummarizable,
 }
 
 /// Pull the y value out of one data element, which builders emit either as a
@@ -221,7 +229,7 @@ pub fn compute_axis(option_json: &str, shape: Shape, axis: u64) -> Kpis {
         // extreme and no set of categories to concentrate, so reading it as a
         // one-slice donut produced "largest: Moderate, 100.0% of total, 1
         // entries": all three figures describe the widget.
-        Shape::Gauge => Kpis::Unavailable,
+        Shape::Gauge => Kpis::NotSummarizable,
         Shape::StackedAbsolute | Shape::StackedPercent => {
             bands(&series, x_axis_is_time(&opt))
         }
@@ -289,7 +297,7 @@ fn single_series(
             })
         });
         if concurrent {
-            return Kpis::Unavailable;
+            return Kpis::NotSummarizable;
         }
     }
     let mut pts: Vec<Point> = metric
@@ -475,7 +483,7 @@ mod tests {
         let json = r#"{"xAxis": {"type": "time"}, "series":[
             {"name":"Outputs/Tx","data":[[1000,2.0],[2000,2.2]]},
             {"name":"Inputs/Tx","data":[[1000,1.4],[2000,1.5]]}]}"#;
-        assert!(matches!(compute(json, Shape::Line), Kpis::Unavailable));
+        assert!(matches!(compute(json, Shape::Line), Kpis::NotSummarizable));
     }
 
     /// The same distinction on a category axis, where points carry no x and
@@ -495,7 +503,7 @@ mod tests {
             "series":[
             {"name":"Outputs/Tx","data":[2.0,2.2]},
             {"name":"Inputs/Tx","data":[1.4,1.5]}]}"#;
-        assert!(matches!(compute(both, Shape::Line), Kpis::Unavailable));
+        assert!(matches!(compute(both, Shape::Line), Kpis::NotSummarizable));
     }
 
     #[test]
@@ -756,6 +764,9 @@ mod tests {
         let json = r#"{"xAxis": {"type": "time"}, "series": [
             {"name": "Price (USD)", "yAxisIndex": 1, "data": [[1, 9.0]]}
         ]}"#;
+        // `Unavailable`, not `NotSummarizable`: there is nothing here to
+        // summarise rather than too many things, and the two now render
+        // different sentences.
         assert!(matches!(compute(json, Shape::Line), Kpis::Unavailable));
     }
 
