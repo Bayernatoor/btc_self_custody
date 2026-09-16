@@ -1369,6 +1369,40 @@ pub(crate) fn round(val: f64, decimals: u32) -> f64 {
 /// nothing is not zero. A window holding some readings averages those, which
 /// is the standard treatment and keeps the line continuous across short gaps
 /// without inventing values for them.
+/// A daily rate series with the window's own edges withheld.
+///
+/// Both daily rate charts divide a day's count by a **whole day**: block
+/// interval is `1440 / block_count` minutes and TPS is the day's transactions
+/// over 86,400 seconds. That denominator is right for every day the window
+/// contains whole, and wrong for the two it may cut. A named range starts at
+/// `tip - n * 600`, which lands mid-morning, and its last day is today, still
+/// in progress. Today at 13:37 UTC with 82 blocks reads 17.6 minutes per
+/// block against an actual 9.9, because the day is 40% elapsed and the
+/// divisor says otherwise.
+///
+/// So the two edge points are `None`. A gap is the honest answer for a
+/// measurement whose denominator is unknown, and it is the same rule the rest
+/// of this module follows: absence is not zero and not a guess.
+///
+/// **What this costs.** A custom range is day-aligned at both ends, so its
+/// first day is whole and loses a real reading; the last is only partial when
+/// it is today. Two points out of a window's hundreds, traded for never
+/// drawing a rate against the wrong elapsed time.
+///
+/// **What it replaces.** The interval chart dropped every day with fewer than
+/// 50 blocks *from the category axis*, which is worse than a gap three ways
+/// over: the line joined across the missing dates as though they were
+/// consecutive, the 7-day average then meant seven surviving days, and the
+/// 40 days it removed are all in 2009, where the slow interval it hid is the
+/// most interesting reading on the chart.
+pub(crate) fn withhold_window_edges(vals: Vec<f64>) -> Vec<Option<f64>> {
+    let last = vals.len().saturating_sub(1);
+    vals.into_iter()
+        .enumerate()
+        .map(|(i, v)| (i != 0 && i != last).then_some(v))
+        .collect()
+}
+
 pub(crate) fn moving_average_over_gaps(
     readings: &[Option<f64>],
     window: usize,

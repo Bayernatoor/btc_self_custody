@@ -263,15 +263,19 @@ pub fn tps_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     }
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let vals: Vec<f64> = days
-        .iter()
-        .map(|d| {
-            let total_tx = d.avg_tx_count * d.block_count as f64;
-            round(total_tx / 86_400.0, 2)
-        })
-        .collect();
+    // The day's transactions over a whole day in seconds, so the window's
+    // own edges are withheld rather than divided by an elapsed time they do
+    // not have. See `withhold_window_edges`.
+    let vals = withhold_window_edges(
+        days.iter()
+            .map(|d| {
+                let total_tx = d.avg_tx_count * d.block_count as f64;
+                round(total_tx / 86_400.0, 2)
+            })
+            .collect(),
+    );
 
-    let ma = moving_average(&vals, 7);
+    let ma = moving_average_over_gaps(&vals, 7);
     let ma_vals: Vec<serde_json::Value> = ma
         .iter()
         .map(|v| match v {
@@ -423,7 +427,16 @@ pub fn block_interval_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     }))
 }
 
-/// Block interval from daily aggregates (avg minutes per block = 1440 / blocks_per_day).
+/// Block interval from daily aggregates: `1440 / block_count` minutes.
+///
+/// Not the mean of consecutive timestamps, which the daily table cannot give:
+/// it stores a count per day and no block times. For a day the window holds
+/// whole the two agree closely, and the declaration says which one this is.
+///
+/// Every day stays on the category axis. The previous version filtered days
+/// with fewer than 50 blocks out of the axis entirely; see
+/// [`withhold_window_edges`] for why that was worse than a gap and what it
+/// hid.
 pub fn block_interval_chart_daily(
     days: &[DailyAggregate],
 ) -> serde_json::Value {
@@ -431,18 +444,24 @@ pub fn block_interval_chart_daily(
         return no_data_chart("Block Interval (daily)");
     }
 
-    // Filter out partial days (< 50 blocks = likely start/end of range, not a full day)
-    let full_days: Vec<&DailyAggregate> =
-        days.iter().filter(|d| d.block_count >= 50).collect();
-    if full_days.is_empty() {
-        return no_data_chart("Block Interval (daily)");
-    }
-    let dates: Vec<String> = full_days.iter().map(|d| d.date.clone()).collect();
-    let vals: Vec<f64> = full_days
+    let dates: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    let vals = withhold_window_edges(
+        days.iter()
+            .map(|d| {
+                if d.block_count == 0 {
+                    return 0.0;
+                }
+                round(1440.0 / d.block_count as f64, 2)
+            })
+            .collect(),
+    );
+    // A day with no blocks has no interval, rather than an interval of zero.
+    let vals: Vec<Option<f64>> = days
         .iter()
-        .map(|d| ((1440.0 / d.block_count as f64) * 100.0).round() / 100.0)
+        .zip(vals)
+        .map(|(d, v)| if d.block_count == 0 { None } else { v })
         .collect();
-    let ma = moving_average(&vals, 7);
+    let ma = moving_average_over_gaps(&vals, 7);
 
     build_option(json!({
         "xAxis": x_axis_for(true, &dates),

@@ -1703,6 +1703,126 @@ mod tests {
         );
     }
 
+    /// The audit's third CQ-09 point, checked rather than taken from a
+    /// comment: a non-positive interval is a gap and not a rate of zero, and
+    /// the first block of a window has no predecessor.
+    #[test]
+    fn per_block_tps_gaps_what_it_cannot_divide() {
+        let mut blocks = synthetic_blocks(6);
+        // A backward timestamp, which 16,020 real pairs have, and a repeat.
+        blocks[2].timestamp = blocks[1].timestamp - 30;
+        blocks[4].timestamp = blocks[3].timestamp;
+        let opt = super::super::tps_chart(&blocks);
+        let data = opt["series"][0]["data"].as_array().expect("data");
+        let y = |i: usize| data[i].as_array().and_then(|p| p.get(1).cloned());
+        assert!(
+            y(0).is_some_and(|v| v.is_null()),
+            "the first block has no predecessor: {:?}",
+            y(0)
+        );
+        assert!(
+            y(2).is_some_and(|v| v.is_null()),
+            "a backward interval is not a rate of zero: {:?}",
+            y(2)
+        );
+        assert!(
+            y(4).is_some_and(|v| v.is_null()),
+            "a zero interval is not a rate of zero: {:?}",
+            y(4)
+        );
+        assert!(
+            y(1).is_some_and(|v| v.as_f64().is_some()),
+            "an ordinary interval still reports: {:?}",
+            y(1)
+        );
+    }
+
+    /// The two daily rate charts divide by a whole day, so the window's own
+    /// edges are gaps rather than readings.
+    ///
+    /// CQ-09. Block interval is `1440 / block_count` and TPS is the day's
+    /// transactions over 86,400 seconds. Both denominators are right for a
+    /// day the window contains whole and wrong for the two it cuts: a named
+    /// range starts at `tip - n * 600`, mid-morning, and ends on today.
+    ///
+    /// The interval chart also filtered days with fewer than 50 blocks **out
+    /// of the category axis**, which joined the line across missing dates,
+    /// made its 7-day average mean seven surviving days, and hid the 40 days
+    /// of 2009 where the interval genuinely ran long. Those days are back.
+    #[test]
+    fn a_daily_rate_withholds_the_window_edges_and_keeps_every_date() {
+        // Ten days, one of them a 2009-style slow day in the interior.
+        let mut days = days_from_conformance("2009-01-05", 10);
+        for (i, d) in days.iter_mut().enumerate() {
+            d.block_count = if i == 4 { 12 } else { 144 };
+            d.avg_tx_count = 2.0;
+        }
+        let slow_date = days[4].date.clone();
+
+        for (slug, opt) in [
+            (
+                "block-interval",
+                super::super::block_interval_chart_daily(&days),
+            ),
+            ("tps", super::super::tps_chart_daily(&days)),
+        ] {
+            let cats: Vec<&str> = opt["xAxis"]["data"]
+                .as_array()
+                .expect("category axis")
+                .iter()
+                .map(|v| v.as_str().unwrap_or_default())
+                .collect();
+            assert_eq!(
+                cats.len(),
+                10,
+                "{slug} dropped days from the axis: {cats:?}"
+            );
+            assert!(
+                cats.contains(&slow_date.as_str()),
+                "{slug} dropped the slow day, which is a real reading"
+            );
+
+            let data = opt["series"][0]["data"].as_array().expect("data");
+            assert_eq!(data.len(), 10, "{slug}: a point per day");
+            assert!(
+                data[0].is_null() && data[9].is_null(),
+                "{slug}: the window's first and last day are divided by an \
+                 elapsed time they may not have, so they are gaps: {data:?}"
+            );
+            for (i, v) in data.iter().enumerate().take(9).skip(1) {
+                assert!(
+                    v.as_f64().is_some(),
+                    "{slug}: day {i} is inside the window and measurable"
+                );
+            }
+        }
+
+        // The interval the slow day reports is the slow one, not a hidden or
+        // averaged-away value: 1440 / 12 = 120 minutes per block.
+        let opt = super::super::block_interval_chart_daily(&days);
+        assert_eq!(opt["series"][0]["data"][4].as_f64(), Some(120.0));
+        // And TPS on a 144-block day of 2.0 transactions each is
+        // 288 / 86,400 = 0.00333, rounded to two places by the builder.
+        let tps = super::super::tps_chart_daily(&days);
+        assert_eq!(tps["series"][0]["data"][1].as_f64(), Some(0.0));
+    }
+
+    /// A day with no blocks has no interval, rather than an interval of zero.
+    #[test]
+    fn a_day_with_no_blocks_reports_no_interval() {
+        let mut days = days_from_conformance("2024-01-01", 5);
+        for d in days.iter_mut() {
+            d.block_count = 144;
+            d.avg_tx_count = 2.0;
+        }
+        days[2].block_count = 0;
+        let opt = super::super::block_interval_chart_daily(&days);
+        assert!(
+            opt["series"][0]["data"][2].is_null(),
+            "a blockless day divided 1440 by zero"
+        );
+    }
+
     /// A cumulative total accumulates **inside the window** and a daily total
     /// does not, so dropping the window's first day tells them apart.
     ///

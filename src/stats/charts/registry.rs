@@ -1915,7 +1915,7 @@ pub const CHARTS: &[ChartMeta] = &[
         slug: "interval",
         title: "Block Interval",
         desc_per_block: "Minutes between consecutive blocks. Target is 10 minutes",
-        desc_daily: "Average daily block interval in minutes. Target is 10 minutes",
+        desc_daily: "Minutes per block implied by each day's block count. Target is 10 minutes",
         category: Category::Network,
         unit: Unit::Minutes,
         shape: Shape::LineWithScatter,
@@ -1932,7 +1932,7 @@ pub const CHARTS: &[ChartMeta] = &[
                 method_daily: Method::Estimated,
                 per_block: Aggregation::PerBlockObservation,
                 daily: Aggregation::WindowedDerived,
-                population: "Per block this is the difference between consecutive header timestamps, which miners choose, so it can be zero or negative. Daily it is 1,440 minutes divided by the day's block count, which is not the mean of those differences and is wrong for an incomplete day; days with very few blocks are omitted.",
+                population: "Per block this is the difference between consecutive header timestamps, which miners choose, so it can be zero or negative. Daily it is 1,440 minutes divided by the day's block count, which is close to the mean of those differences for a whole day and is not the same quantity. Every day in the window is plotted, including the 40 days of 2009 that ran genuinely slow; the window's own first and last day are gaps, because a named range starts mid-morning and ends on a day still in progress, so neither is a whole 1,440 minutes. A day with no blocks has no interval rather than an interval of zero.",
             },
         ],
         about: Some(About {
@@ -2233,8 +2233,8 @@ pub const CHARTS: &[ChartMeta] = &[
     ChartMeta {
         slug: "tps",
         title: "Transactions per Second",
-        desc_per_block: "Average TPS calculated from transactions per block interval",
-        desc_daily: "Daily average transactions per second across all blocks",
+        desc_per_block: "Transactions in each block over the seconds since the previous one",
+        desc_daily: "Each day's transactions over the 86,400 seconds in a day",
         category: Category::Network,
         unit: Unit::TxPerSec,
         shape: Shape::Line,
@@ -2250,7 +2250,7 @@ pub const CHARTS: &[ChartMeta] = &[
             method_daily: Method::Calculated,
             per_block: Aggregation::PerBlockObservation,
             daily: Aggregation::WindowedDerived,
-            population: "Per block this is the block's transaction count over the gap to its predecessor, with a non-positive gap substituted as zero and the first block having none. Daily it is the day's transaction count over 86,400 seconds, including coinbase transactions, which is wrong for an incomplete day.",
+            population: "Per block this is the block's transaction count over the gap to its predecessor. A non-positive gap has no rate rather than a rate of zero, and the first block in the window has no predecessor, so both are gaps. Daily it is the day's transaction count over 86,400 seconds, coinbase included, so the window's own first and last day are gaps: a named range starts mid-morning and ends on a day still in progress, and neither is a whole 86,400 seconds."
         }],
         about: Some(About {
             definition: Some("How many transactions per second the chain confirmed. This counts base-chain transactions only, so it excludes Lightning payments and transfers inside an exchange, both of which move value without a block recording each one."),
