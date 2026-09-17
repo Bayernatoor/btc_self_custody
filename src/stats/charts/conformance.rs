@@ -1796,20 +1796,23 @@ mod tests {
         );
     }
 
-    /// The two daily rate charts divide by a whole day, so the window's own
-    /// edges are gaps rather than readings.
+    /// The two daily rate charts divide by a whole day, so a day still in
+    /// progress is a gap rather than a reading.
     ///
     /// CQ-09. Block interval is `1440 / block_count` and TPS is the day's
-    /// transactions over 86,400 seconds. Both denominators are right for a
-    /// day the window contains whole and wrong for the two it cuts: a named
-    /// range starts at `tip - n * 600`, mid-morning, and ends on today.
+    /// transactions over 86,400 seconds, and a named range ends on today.
+    ///
+    /// The **first** day is kept. An earlier version withheld it as well, on
+    /// the reasoning that a named range starts mid-morning, but
+    /// `query_daily_aggregates_fast` reads `daily_blocks` by date and returns
+    /// that day complete. The review of 2026-09-16 caught the claim.
     ///
     /// The interval chart also filtered days with fewer than 50 blocks **out
     /// of the category axis**, which joined the line across missing dates,
     /// made its 7-day average mean seven surviving days, and hid the 40 days
     /// of 2009 where the interval genuinely ran long. Those days are back.
     #[test]
-    fn a_daily_rate_withholds_the_window_edges_and_keeps_every_date() {
+    fn a_daily_rate_withholds_the_day_in_progress_and_keeps_every_date() {
         // Ten days, one of them a 2009-style slow day in the interior.
         let mut days = days_from_conformance("2009-01-05", 10);
         for (i, d) in days.iter_mut().enumerate() {
@@ -1844,14 +1847,16 @@ mod tests {
             let data = opt["series"][0]["data"].as_array().expect("data");
             assert_eq!(data.len(), 10, "{slug}: a point per day");
             assert!(
-                data[0].is_null() && data[9].is_null(),
-                "{slug}: the window's first and last day are divided by an \
-                 elapsed time they may not have, so they are gaps: {data:?}"
+                data[9].is_null(),
+                "{slug}: the final day may still be in progress, so it is \
+                 divided by an elapsed time it does not have: {data:?}"
             );
-            for (i, v) in data.iter().enumerate().take(9).skip(1) {
+            for (i, v) in data.iter().enumerate().take(9) {
                 assert!(
                     v.as_f64().is_some(),
-                    "{slug}: day {i} is inside the window and measurable"
+                    "{slug}: day {i} has fully elapsed and is measurable, \
+                     including the first, which the daily table returns \
+                     complete whatever time of day the window starts"
                 );
             }
         }
@@ -2868,6 +2873,193 @@ mod tests {
              is one whose numbers a reader can no longer see; a chart removed \
              is progress and should update this list."
         );
+    }
+
+    /// Both interval histograms must treat a backward pair the same way,
+    /// and that way is to exclude it.
+    ///
+    /// `time-dist` switches between a per-block arm and a SQL histogram at
+    /// long ranges. The per-block arm used `saturating_sub` on unsigned
+    /// timestamps, turning each of the chain's 16,022 backward pairs into an
+    /// interval of zero in the shortest bucket, while the SQL filters
+    /// `gap >= 0`. Same range, two different shortest buckets, decided only
+    /// by which arm served it.
+    #[test]
+    fn a_backward_interval_is_excluded_from_both_histogram_arms() {
+        let mut blocks = synthetic_blocks(6);
+        // Two ordinary ten-minute gaps, then one that runs backwards, which
+        // is what a miner's chosen timestamp can do.
+        for (i, b) in blocks.iter_mut().enumerate() {
+            b.timestamp = 1_700_000_000 + i as u64 * 600;
+        }
+        blocks[4].timestamp = blocks[3].timestamp - 120;
+
+        for (label, opt) in [
+            (
+                "count",
+                super::super::block_time_distribution_chart(&blocks),
+            ),
+            (
+                "percent",
+                super::super::block_time_distribution_pct_chart(&blocks),
+            ),
+        ] {
+            let data = opt["series"][0]["data"]
+                .as_array()
+                .expect("bucket counts")
+                .iter()
+                .filter_map(|v| v.as_f64())
+                .collect::<Vec<f64>>();
+            // Five pairs, one backward and one recovering, so three ten
+            // minute gaps remain. The shortest bucket must hold none of
+            // them: a backward pair is not a block that arrived instantly.
+            assert_eq!(
+                data[0], 0.0,
+                "{label}: a backward pair was clamped into the 0-1 minute \
+                 bucket"
+            );
+            assert!(
+                data[10] > 0.0,
+                "{label}: the ordinary ten-minute gaps were lost too"
+            );
+        }
+    }
+
+    /// A block with no outputs has no share of them, and no residual.
+    ///
+    /// `witness-tx-pct` divides by `output_count`, which ingestion
+    /// accumulates over non-coinbase transactions only, so the 89,929
+    /// coinbase-only blocks have zero. Both named bands returned 0 and the
+    /// residual computed `100 - 0 - 0`, drawing **"Other outputs, 100%" for
+    /// a block with no outputs at all**. Found by review on 2026-09-16, and
+    /// the same class as the zero-for-absent defects fixed earlier here: the
+    /// wrong answer is the plausible-looking one.
+    #[test]
+    fn a_block_with_no_outputs_has_no_output_shares() {
+        let mut blocks = synthetic_blocks(4);
+        blocks[2].output_count = 0;
+        blocks[2].p2wpkh_count = 0;
+        blocks[2].p2wsh_count = 0;
+        blocks[2].p2tr_count = 0;
+        let opt = super::super::witness_version_tx_pct_chart(&blocks);
+        for s in opt["series"].as_array().expect("three bands") {
+            let name = s["name"].as_str().unwrap_or_default();
+            let y = s["data"][2][1].clone();
+            assert!(
+                y.is_null(),
+                "{name} reports {y} for a block with no outputs; the \
+                 residual reading 100 is the defect this guards"
+            );
+            // And a block that does have outputs still reports.
+            assert!(
+                s["data"][1][1].as_f64().is_some(),
+                "{name} lost an ordinary block"
+            );
+        }
+    }
+
+    /// The empty-retarget answer must be distinguishable from the real one,
+    /// or a cache keyed on the days alone re-serves it forever.
+    ///
+    /// The defect this pins, found by review on 2026-09-16: `chart_memo!`
+    /// keys on the call site, the range and a fingerprint of the dashboard
+    /// rows, and its cached-base path returns the stored string without
+    /// evaluating the builder closure. `state.retargets` is derived from the
+    /// resolved days, so it cannot fetch until they land, and a resource
+    /// keeps its previous value while refetching. Coming from a per-block
+    /// range, where it resolves to an empty list, the first build after the
+    /// switch used the new days and the old empty list.
+    ///
+    /// The output of that build is the thing to guard: it is a **non-null,
+    /// perfectly reasonable-looking chart**, so it was cached and re-served
+    /// for the session. The fix puts the rows in the key; this asserts the
+    /// two answers differ at all, which is what makes keying on them work.
+    #[test]
+    fn an_empty_retarget_list_does_not_look_like_a_real_answer() {
+        let days = days_from_conformance("2021-06-30", 7);
+        let real = super::super::difficulty_adjustment_chart_daily(
+            &days,
+            &[
+                Retarget {
+                    height: 687_456,
+                    timestamp: 1_623_614_836,
+                    difficulty: 19_932_791_027_262.73,
+                },
+                Retarget {
+                    height: 689_472,
+                    timestamp: 1_625_294_046,
+                    difficulty: 14_363_025_673_659.96,
+                },
+            ],
+        );
+        let stale = super::super::difficulty_adjustment_chart_daily(&days, &[]);
+
+        assert_ne!(
+            real, stale,
+            "the same days with and without retargets must not build the \
+             same option, or no cache key over the days can tell them apart"
+        );
+        // And the empty one is not null, which is why it was cacheable.
+        assert!(
+            !stale.is_null(),
+            "if this were null the macro would skip caching it and the \
+             defect could not have occurred; it is a real chart saying no \
+             retarget is in range"
+        );
+        assert!(
+            serde_json::to_string(&stale)
+                .expect("serialisable")
+                .contains("No difficulty adjustment in this range"),
+            "the stale answer is the honest no-retarget frame, which is \
+             exactly why it was not noticed: {stale:?}"
+        );
+    }
+
+    /// A gauge has data and no summary, which is a different answer from
+    /// having no data.
+    ///
+    /// Reproduces the review's case: two equally sized pools give one HHI
+    /// value of 5,000. That is `NotSummarizable`, because an average over one
+    /// point, a peak equal to it and a low equal to both are three
+    /// restatements of the same number. The rail said the chart "plots
+    /// several separate measurements", which was true of Transaction Batching
+    /// and false here, so the message is neutral about the reason now.
+    #[test]
+    fn a_gauge_has_no_summary_rather_than_no_data() {
+        use super::super::kpi::{self, Kpis};
+        let miners: Vec<MinerShare> = ["Foundry USA", "AntPool"]
+            .iter()
+            .map(|m| MinerShare {
+                miner: (*m).to_string(),
+                count: 500,
+                percentage: 50.0,
+            })
+            .collect();
+        let opt = super::super::mining_diversity_chart(&miners);
+        let json = serde_json::to_string(&opt).expect("serialisable");
+
+        // The value is there: 50^2 + 50^2 = 5,000.
+        assert_eq!(
+            opt["series"][0]["data"][0]["value"].as_f64(),
+            Some(5000.0),
+            "two equal pools are a concentrated market"
+        );
+        assert!(
+            matches!(
+                kpi::compute(&json, registry::Shape::Gauge),
+                Kpis::NotSummarizable
+            ),
+            "a populated gauge is not missing data"
+        );
+
+        // And an empty one is the other answer.
+        let empty =
+            serde_json::to_string(&super::super::mining_diversity_chart(&[]))
+                .expect("serialisable");
+        assert!(matches!(
+            kpi::compute(&empty, registry::Shape::Gauge),
+            Kpis::Unavailable
+        ));
     }
 
     /// A chart whose points are already changes must not report a change.

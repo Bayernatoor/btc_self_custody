@@ -1369,25 +1369,31 @@ pub(crate) fn round(val: f64, decimals: u32) -> f64 {
 /// nothing is not zero. A window holding some readings averages those, which
 /// is the standard treatment and keeps the line continuous across short gaps
 /// without inventing values for them.
-/// A daily rate series with the window's own edges withheld.
+/// A daily rate series with its final point withheld.
 ///
 /// Both daily rate charts divide a day's count by a **whole day**: block
 /// interval is `1440 / block_count` minutes and TPS is the day's transactions
-/// over 86,400 seconds. That denominator is right for every day the window
-/// contains whole, and wrong for the two it may cut. A named range starts at
-/// `tip - n * 600`, which lands mid-morning, and its last day is today, still
-/// in progress. Today at 13:37 UTC with 82 blocks reads 17.6 minutes per
-/// block against an actual 9.9, because the day is 40% elapsed and the
-/// divisor says otherwise.
+/// over 86,400 seconds. The denominator is right for any day that has fully
+/// elapsed and wrong for one still in progress. A named range ends at the
+/// tip, so its last day is today: at 13:37 UTC with 82 blocks that reads 17.6
+/// minutes per block against an actual 9.9, because the day is 40% gone and
+/// the divisor says otherwise.
 ///
-/// So the two edge points are `None`. A gap is the honest answer for a
-/// measurement whose denominator is unknown, and it is the same rule the rest
-/// of this module follows: absence is not zero and not a guess.
+/// So the final point is `None`. A gap is the honest answer for a measurement
+/// whose denominator is unknown, and it is the rule the rest of this module
+/// follows: absence is not zero and not a guess.
 ///
-/// **What this costs.** A custom range is day-aligned at both ends, so its
-/// first day is whole and loses a real reading; the last is only partial when
-/// it is today. Two points out of a window's hundreds, traded for never
-/// drawing a rate against the wrong elapsed time.
+/// **The first point is kept, and an earlier version of this withheld it
+/// too.** The reasoning was that a named range starts at `tip - n * 600`,
+/// mid-morning, so its first day is cut. It is not:
+/// `query_daily_aggregates_fast` reads `daily_blocks` by date, so a mid-day
+/// start still returns that day's complete aggregate. The review of
+/// 2026-09-16 caught the claim, and the day it was costing is a real reading.
+///
+/// **What this still costs.** A custom range ending in the past has a
+/// complete final day and loses it. One point out of a window's hundreds,
+/// against never drawing a rate over the wrong elapsed time. Knowing which
+/// case applies needs the window's end, which neither builder receives.
 ///
 /// **What it replaces.** The interval chart dropped every day with fewer than
 /// 50 blocks *from the category axis*, which is worse than a gap three ways
@@ -1395,11 +1401,11 @@ pub(crate) fn round(val: f64, decimals: u32) -> f64 {
 /// consecutive, the 7-day average then meant seven surviving days, and the
 /// 40 days it removed are all in 2009, where the slow interval it hid is the
 /// most interesting reading on the chart.
-pub(crate) fn withhold_window_edges(vals: Vec<f64>) -> Vec<Option<f64>> {
+pub(crate) fn withhold_final_day(vals: Vec<f64>) -> Vec<Option<f64>> {
     let last = vals.len().saturating_sub(1);
     vals.into_iter()
         .enumerate()
-        .map(|(i, v)| (i != 0 && i != last).then_some(v))
+        .map(|(i, v)| (i != last).then_some(v))
         .collect()
 }
 
@@ -1668,24 +1674,32 @@ const BIP_ACTIVATIONS: &[(u64, u64, &str)] = &[
 
 /// Bitcoin Core major release timestamps (Unix seconds) and labels.
 ///
-/// **Source: the release announcement's own URL on bitcoincore.org**, whose
-/// path carries the date. Probe, which is a plain existence check:
+/// **Source: the publication date the announcement displays**, read from the
+/// `datetime` attribute on its `published` element:
 ///
 /// ```text
-/// curl -s -o /dev/null -w "%{http_code}" \
-///   https://bitcoincore.org/en/2024/04/16/release-27.0/
+/// curl -s https://bitcoincore.org/en/2024/04/16/release-27.0/ \
+///   | grep -oE 'published" datetime="[0-9-]{10}'
 /// ```
 ///
-/// **Not the GitHub release object's `published_at`, which this list used
-/// until the review of 2026-09-16 caught it.** That field records when the
-/// release object was published and drifts from the announcement by up to
-/// sixteen days: v0.18.0 was announced 2019-05-02 and its GitHub object says
-/// 05-18. Nine entries were wrong against the announcement, six of them
-/// because a previous pass "corrected" them to the GitHub date.
+/// **Not the permalink path, which is the second wrong source this list has
+/// had.** A post can override its permalink, and one does: v0.15.0 lives at
+/// `/2017/09/01/release-0.15.0/` and says it was published on September 14.
+/// Its source file is `2017-09-14-release-0.15.0.md`. An HTTP 200 proves the
+/// permalink exists, not that the date in it is the release date, and the
+/// review of 2026-09-16 caught that after the same review had already caught
+/// GitHub's `published_at`.
 ///
-/// Nor is it the date on bitcoincore.org's own per-release page, which is
-/// unreliable in the other direction: the v27.0 page says "published on
-/// April 02, 2024", which is v26.1's date.
+/// Every one of the 19 entries from v0.12 on has been read from the displayed
+/// date. v0.15 is the only permalink that disagrees with it.
+///
+/// **Nor GitHub's release-object `published_at`**, which records when the
+/// object was published and drifts by up to sixteen days: v0.18.0 was
+/// announced 2019-05-02 and its GitHub object says 05-18.
+///
+/// So three candidate fields, and only one of them is the release date. The
+/// permalink path and `published_at` each looked authoritative and each was
+/// wrong for a different reason.
 ///
 /// **The nine entries before v0.12 are unverified.** No announcement exists
 /// at that path for them, checked across each release month: the site's blog
@@ -1704,7 +1718,7 @@ const CORE_RELEASES: &[(u64, &str)] = &[
     (1456185600, "v0.12"),
     (1471910400, "v0.13"),
     (1488931200, "v0.14"),
-    (1504224000, "v0.15"),
+    (1505347200, "v0.15"),
     (1519603200, "v0.16"),
     (1538438400, "v0.17"),
     (1556755200, "v0.18"),

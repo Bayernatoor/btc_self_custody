@@ -420,6 +420,21 @@ pub fn witness_version_tx_pct_chart(
             v1_buf.push(',');
             leg_buf.push(',');
         }
+        // A block with no outputs has no share of anything, and crucially
+        // no residual either. `pct_fn` returned 0 for both bands, so the
+        // residual computed 100 - 0 - 0 and the chart drew "Other outputs,
+        // 100%" for the 89,929 coinbase-only blocks, which have no outputs
+        // at all. Found by review on 2026-09-16; the same class as the
+        // zero-for-absent defects fixed earlier on this branch.
+        if b.output_count == 0 {
+            let _ =
+                write!(v0_buf, "[{},null,{}]", ts_ms(b.timestamp), b.height);
+            let _ =
+                write!(v1_buf, "[{},null,{}]", ts_ms(b.timestamp), b.height);
+            let _ =
+                write!(leg_buf, "[{},null,{}]", ts_ms(b.timestamp), b.height);
+            continue;
+        }
         let v0 = pct_fn(b.p2wpkh_count + b.p2wsh_count, b.output_count);
         let v1 = pct_fn(b.p2tr_count, b.output_count);
         let leg = (100.0 - v0 - v1).max(0.0);
@@ -478,32 +493,32 @@ pub fn witness_version_tx_pct_chart_daily(
     }
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let v0_pct: Vec<f64> = days
+    // `None` where the day has no outputs, so the residual is absent too
+    // rather than reading 100. See the per-block arm.
+    let v0_pct: Vec<Option<f64>> = days
         .iter()
         .map(|d| {
-            if d.avg_output_count > 0.0 {
+            (d.avg_output_count > 0.0).then(|| {
                 let v0 = d.avg_p2wpkh_count + d.avg_p2wsh_count;
-                (v0 / d.avg_output_count * 100.0 * 100.0).round() / 100.0
-            } else {
-                0.0
-            }
+                round(v0 / d.avg_output_count * 100.0, 2)
+            })
         })
         .collect();
-    let v1_pct: Vec<f64> = days
+    let v1_pct: Vec<Option<f64>> = days
         .iter()
         .map(|d| {
-            if d.avg_output_count > 0.0 {
-                (d.avg_p2tr_count / d.avg_output_count * 100.0 * 100.0).round()
-                    / 100.0
-            } else {
-                0.0
-            }
+            (d.avg_output_count > 0.0).then(|| {
+                round(d.avg_p2tr_count / d.avg_output_count * 100.0, 2)
+            })
         })
         .collect();
-    let legacy_pct: Vec<f64> = v0_pct
+    let legacy_pct: Vec<Option<f64>> = v0_pct
         .iter()
         .zip(v1_pct.iter())
-        .map(|(v0, v1)| (100.0 - v0 - v1).max(0.0))
+        .map(|(v0, v1)| match (v0, v1) {
+            (Some(v0), Some(v1)) => Some((100.0 - v0 - v1).max(0.0)),
+            _ => None,
+        })
         .collect();
 
     build_option(json!({

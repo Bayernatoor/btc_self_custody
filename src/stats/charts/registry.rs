@@ -1265,7 +1265,7 @@ pub const CHARTS: &[ChartMeta] = &[
         }],
         about: Some(About {
             definition: Some("How much of a miner's income comes from fees rather than from new coins. The subsidy halves on a schedule and fees do not, so this is the ratio people watch when they ask what pays for mining once the subsidy is small. It has been volatile rather than trending: 6.5% across both 2023 and 2024, 1.03% in 2025, 0.63% so far in 2026."),
-            technical: "Shows fees as a percentage of total miner revenue (subsidy + fees). As the subsidy halves, this ratio increases. Typically 1-5% during normal periods, but has spiked to 10-40% during high-demand events.",
+            technical: "Fees over subsidy plus fees, per block. The subsidy schedule is fixed and the fee side is not, so this does not rise with each halving: it was 6.5% across both 2023 and 2024, then fell to 1.03% in 2025 and 0.63% in 2026. Nor is the usual level a few per cent: 55.1% of all blocks are under 1% and the recent median is near 0.6%. The record is 93.2%, in a block that collected far more in fees than it was paid to produce.",
         }),
     },
     ChartMeta {
@@ -1649,8 +1649,8 @@ pub const CHARTS: &[ChartMeta] = &[
     ChartMeta {
         slug: "empty-blocks",
         title: "Empty Blocks",
-        desc_per_block: "Blocks with no user transactions, usually mined before the pool has received the previous block's transactions",
-        desc_daily: "Blocks with no user transactions, usually mined before the pool has received the previous block's transactions",
+        desc_per_block: "Blocks carrying only the coinbase transaction, which is almost always the early chain: 78,800 of the 89,929 are from 2009 and 2010",
+        desc_daily: "Blocks carrying only the coinbase transaction, which is almost always the early chain: 78,800 of the 89,929 are from 2009 and 2010",
         category: Category::Mining,
         unit: Unit::Count,
         shape: Shape::Histogram,
@@ -1774,7 +1774,7 @@ pub const CHARTS: &[ChartMeta] = &[
         }],
         about: Some(About {
             definition: Some("The same output types as a share of the total rather than as counts. Counts rise and fall with how busy the chain is, which hides a format gaining ground during a quiet week; a share strips that out and shows the types competing with each other. The bands total 100% by construction, so one type can only grow at another's expense."),
-            technical: "Six payment types normalised to 100%, so the bands total the whole. OP_RETURN outputs, bare multisig and unrecognised scripts are outside that denominator, which is why this chart and P2PKH Sunset give different percentages for the same type: 12.2% against 11.11% for P2PKH on the same data.",
+            technical: "Six payment types normalised to 100%, so the bands total the whole. OP_RETURN outputs, bare multisig and unrecognised scripts are outside that denominator, which is why this chart and P2PKH Sunset give different percentages for the same type: 6.20% against 5.88% for P2PKH over the last 1,000 blocks.",
         }),
     },
     ChartMeta {
@@ -1940,7 +1940,7 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Weight divided by the four-million-unit limit, bucketed. Buckets are computed server-side for long ranges and from the blocks themselves for short ones; the count/percentage toggle changes the active unit.",
         }],
         about: Some(About {
-            definition: Some("How full blocks have been, as a distribution rather than a line. Each bar counts the blocks that landed in a 10% band of the weight limit. Recently most blocks sit in the top band: 86.7% are above 99% full."),
+            definition: Some("How full blocks have been, as a distribution rather than a line. Each bar counts the blocks that landed in a 10% band of the weight limit. Recently almost everything is in the top band: 97.2% of the last four months' blocks are above 99% of the limit."),
             technical: "A histogram of block fullness. Most modern blocks cluster near 100% because miners maximize fee revenue. Near-empty blocks do occur, and this chart does not establish why: a miner can be working from a coinbase-only template while validating a new tip, and the data shows only the result. On longer ranges that include early Bitcoin history, more blocks appear at lower percentages since demand was much lower.",
         }),
     },
@@ -1965,7 +1965,7 @@ pub const CHARTS: &[ChartMeta] = &[
                 method_daily: Method::Estimated,
                 per_block: Aggregation::PerBlockObservation,
                 daily: Aggregation::WindowedDerived,
-                population: "Per block this is the difference between consecutive header timestamps, which miners choose, so it can be zero or negative. Daily it is 1,440 minutes divided by the day's block count, which is close to the mean of those differences for a whole day and is not the same quantity. Every day in the window is plotted, including the 40 days of 2009 that ran genuinely slow; the window's own first and last day are gaps, because a named range starts mid-morning and ends on a day still in progress, so neither is a whole 1,440 minutes. A day with no blocks has no interval rather than an interval of zero.",
+                population: "Per block this is the difference between consecutive header timestamps, which miners choose, so it can be zero or negative. Daily it is 1,440 minutes divided by the day's block count, which is close to the mean of those differences for a whole day and is not the same quantity. Every day in the window is plotted, including the 40 days of 2009 that ran genuinely slow. The final day is a gap, because a named range ends on a day still in progress and that day is not a whole 1,440 minutes; every earlier day is returned complete whatever time the window starts. A day with no blocks has no interval rather than an interval of zero.",
             },
         ],
         about: Some(About {
@@ -2262,11 +2262,11 @@ pub const CHARTS: &[ChartMeta] = &[
             method_daily: Method::Calculated,
             per_block: Aggregation::GroupedSummary,
             daily: Aggregation::GroupedSummary,
-            population: "Differences between consecutive block header timestamps, bucketed. Ten minutes is the target mean, not the most common bucket: the distribution is exponential, so the shortest bucket is the largest. Miners choose timestamps, so backward gaps exist.",
+            population: "Differences between consecutive block header timestamps, bucketed. Ten minutes is the target mean, not the most common bucket: the distribution is exponential, so the shortest bucket is the largest. Miners choose timestamps, so 16,020 of the chain's pairs run backwards; those are excluded from both arms rather than counted as instant blocks.",
         }],
         about: Some(About {
             definition: Some("How long blocks wait for each other, as a distribution. Mining is memoryless, so short gaps are the most common and the tail runs long: the median is 6.9 minutes even though the average is ten."),
-            technical: "The shortest bucket is always the largest one, which surprises people who expect a peak at ten minutes. Mining is memoryless: every hash attempt has the same tiny chance of winning whatever has happened already, so the waiting time is exponentially distributed and the most likely gap is a short one. Measured across all 951,275 intervals in the chain: the median is 6.9 minutes, 63.9% of blocks arrive in under ten minutes, 4.5% take more than half an hour and 0.3% take over an hour. An exponential distribution with a ten-minute mean predicts 63.2%, 5.0% and 0.25%, so the chain tracks the theory to within half a percentage point. Miners choose their own timestamps, so a block can appear to arrive before its predecessor.",
+            technical: "The shortest bucket is always the largest one, which surprises people who expect a peak at ten minutes. Mining is memoryless: every hash attempt has the same tiny chance of winning whatever has happened already, so the waiting time is exponentially distributed and the most likely gap is a short one. Measured across all 951,275 intervals in the chain: the median is 6.9 minutes, 63.9% of blocks arrive in under ten minutes, 4.5% take more than half an hour and 0.3% take over an hour. An exponential distribution with a ten-minute mean predicts 63.2%, 5.0% and 0.25%, so the chain tracks the theory to within seven tenths of a percentage point. Miners choose their own timestamps, so a block can appear to arrive before its predecessor.",
         }),
     },
     ChartMeta {
@@ -2289,7 +2289,7 @@ pub const CHARTS: &[ChartMeta] = &[
             method_daily: Method::Calculated,
             per_block: Aggregation::PerBlockObservation,
             daily: Aggregation::WindowedDerived,
-            population: "Per block this is the block's transaction count over the gap to its predecessor. A non-positive gap has no rate rather than a rate of zero, and the first block in the window has no predecessor, so both are gaps. Daily it is the day's transaction count over 86,400 seconds, coinbase included, so the window's own first and last day are gaps: a named range starts mid-morning and ends on a day still in progress, and neither is a whole 86,400 seconds."
+            population: "Per block this is the block's transaction count over the gap to its predecessor. A non-positive gap has no rate rather than a rate of zero, and the first block in the window has no predecessor, so both are gaps. Daily it is the day's transaction count over 86,400 seconds, coinbase included, so the final day is a gap: a named range ends on a day still in progress, which is not a whole 86,400 seconds."
         }],
         about: Some(About {
             definition: Some("How many transactions per second the chain confirmed. This counts base-chain transactions only, so it excludes Lightning payments and transfers inside an exchange, both of which move value without a block recording each one."),
@@ -2332,7 +2332,16 @@ pub const CHARTS: &[ChartMeta] = &[
         desc_daily: "Breakdown of transactions by input type: Legacy (non-witness), SegWit v0, and Taproot",
         category: Category::Network,
         unit: Unit::Percent,
-        shape: Shape::StackedAbsolute,
+        // **`StackedPercent`, because the builder normalises to 100.**
+        // `tx_metrics.rs:741` divides each count by the three-way total, so
+        // the bands fill the axis by construction. Declared
+        // `StackedAbsolute` until 2026-09-16, which made
+        // `accepts_second_series` true, and therefore `can_compare` true, so
+        // the picker offered to lay a price overlay or another metric over
+        // bands that already occupy 0 to 100. That is the exact case the
+        // `StackedPercent` refusal exists for. Being in `MULTI_METRIC` only
+        // barred it as the candidate, not as the primary.
+        shape: Shape::StackedPercent,
         source: Source::Dashboard {
             per_block: super::tx_type_evolution_chart,
             daily: Daily::Unavailable,
@@ -2514,7 +2523,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: Some("How full each block is against the limit that actually binds. The cap is 4,000,000 weight units rather than a byte count, and witness bytes count a quarter of what other bytes do, so this is the measure of a block being full. Recent blocks average 92.4%."),
+            definition: Some("How full each block is against the limit that actually binds. The cap is 4,000,000 weight units rather than a byte count, and witness bytes count a quarter of what other bytes do, so this is the measure of a block being full. Blocks have been running close to the limit: 98.2% on average over the last four months, and 92.4% over the last 67,000 blocks."),
             technical: "The consensus limit is 4,000,000 weight units (4 MWU) per block. Witness data gets a 75% discount, so a block full of SegWit transactions can fit more data than one full of legacy transactions. Consistently high utilization (>90%) means demand for block space is near capacity.",
         }),
     },
@@ -2571,7 +2580,7 @@ pub const CHARTS: &[ChartMeta] = &[
         ],
         about: Some(About {
             definition: Some("How much of a block is witness data: signatures and scripts moved out of the transaction body by SegWit, where each byte counts a quarter against the weight limit. Currently about half of every block by raw bytes."),
-            technical: "Witness data receives a 75% weight discount under SegWit rules. A higher witness share means more of the block is discounted data, effectively increasing the block's capacity beyond the old 1 MB limit. Modern blocks typically have 60-70% witness data.",
+            technical: "Witness data receives a 75% weight discount under SegWit rules. A higher witness share means more of the block is discounted data, effectively increasing the block's capacity beyond the old 1 MB limit. Recent blocks run near half: 51.0% over the last 10,000, with only 5.8% of them anywhere in a 60 to 70 per cent band.",
         }),
     },
     ChartMeta {
@@ -2594,10 +2603,10 @@ pub const CHARTS: &[ChartMeta] = &[
             method_daily: Method::Measured,
             per_block: Aggregation::PerBlockObservation,
             daily: Aggregation::RatioOfTotals,
-            population: "Three bands over every output in the block, which is the widest denominator any share chart here uses. The third band is the residual after native v0 and Taproot, so it absorbs OP_RETURN, P2SH-wrapped witness outputs, bare multisig and anything unrecognised. It was labelled Legacy, which read as a count of legacy payment usage and is not one, so the band is now Other outputs.",
+            population: "Every output in a block's non-coinbase transactions, which is the widest denominator any share chart here uses. The coinbase transaction is outside it, because ingestion skips that transaction entirely, so a block with only a coinbase has no outputs to take a share of and all three bands are absent rather than reading 0, 0 and 100. The third band is the residual after native v0 and Taproot, so it absorbs OP_RETURN, P2SH-wrapped witness outputs, bare multisig and anything unrecognised, and is named Other outputs rather than Legacy for that reason.",
         }],
         about: Some(About {
-            definition: Some("Output types as shares of every output in the block, which is the widest denominator any share chart here uses. Nothing is excluded, so the residual band carries everything that is not native SegWit or Taproot."),
+            definition: Some("Output types as shares of every output in the block, which is the widest denominator any share chart here uses. The coinbase transaction is the one exclusion, and the residual band carries everything else that is not native SegWit or Taproot."),
             technical: "Three bands over every output: native v0, Taproot, and the rest. The third absorbs OP_RETURN, P2SH-wrapped witness outputs, bare multisig and anything unrecognised, which is why it is labelled Other outputs and not Legacy.",
         }),
     },
@@ -2725,6 +2734,10 @@ pub fn related(meta: &ChartMeta, max: usize) -> Vec<&'static ChartMeta> {
 ///
 /// Twenty-one of the 63, and the list dissolves once comparisons name a
 /// measurement rather than a chart: `notes/phase-2-spec.md`.
+//
+// `tx-type-evolution` left this list on 2026-09-16 when it was corrected to
+// `StackedPercent`: the shape now refuses it, so listing it as well made the
+// list claim an exclusion that was doing nothing.
 pub const MULTI_METRIC: &[&str] = &[
     "address-types",
     "all-embedded-share",
@@ -2742,7 +2755,6 @@ pub const MULTI_METRIC: &[&str] = &[
     "protocol-fees",
     "subsidy-fees",
     "taproot-spend-types",
-    "tx-type-evolution",
     "unified-count",
     "unified-volume",
     "utxo-flow",
@@ -3161,6 +3173,41 @@ mod tests {
             ),
             ("over 16 years", "stale by construction. Say since 2009."),
             (
+                "non-financial",
+                "Runes, Omni, Counterparty and BRC-20 are token protocols, \
+                 so calling their data non-financial mislabels most of what \
+                 these charts count. Say protocol data and inscription \
+                 content.",
+            ),
+            (
+                "intentional miner behavior",
+                "the data shows a block carried only its coinbase, not why. \
+                 78,800 of the 89,929 are from 2009 and 2010, before pooled \
+                 mining, so intent cannot explain the bulk of them.",
+            ),
+            (
+                "60-70% witness data",
+                "measured at 51.0% over the last 10,000 blocks, with 5.8% \
+                 of them anywhere in that band. The same chart's definition \
+                 already said about half.",
+            ),
+            (
+                "this ratio increases",
+                "the fee share did not rise after the 2024 halving: 6.5% in \
+                 2023 and 2024, 1.03% in 2025, 0.63% in 2026. The subsidy \
+                 schedule is fixed and the fee side is not.",
+            ),
+            (
+                "usually mined before the pool",
+                "a cause the same chart's long copy refuses, and one that \
+                 cannot explain the 78,800 of 89,929 from 2009 and 2010.",
+            ),
+            (
+                "12.2% against 11.11%",
+                "those are the numbers from a test fixture, not the chain. \
+                 Real recent data gives 6.20% against 5.88%.",
+            ),
+            (
                 "may indicate miner capitulation",
                 "seven moving averages crossing says the recent average fell \
                  below the longer one. Nothing here observes a miner \
@@ -3305,6 +3352,16 @@ mod tests {
             assert!(
                 !include_str!("../../../assets/js/stats.js").contains(phrase),
                 "retired claim {phrase:?} is back in the block modal: {why}"
+            );
+            // The observatory shell's own prose and the Learn articles. A
+            // phrase retired from chart copy survived in three of these on
+            // 2026-09-16, because nothing searched them: the page `Meta`
+            // description, the `seo_text`, and a Learn page.
+            assert!(
+                !include_str!("../../routes/observatory/learn/protocols.rs")
+                    .contains(phrase),
+                "retired claim {phrase:?} is back in the protocols article: \
+                 {why}"
             );
         }
     }

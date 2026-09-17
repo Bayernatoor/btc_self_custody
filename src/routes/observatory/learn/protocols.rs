@@ -150,7 +150,7 @@ pub fn ProtocolGuidePage() -> impl IntoView {
             // Intro paragraph
             <div class="text-center mb-10">
                 <p class="text-base lg:text-lg text-white/70 max-w-2xl mx-auto leading-relaxed">
-                    "Since 2013, developers have found ways to embed non-financial data into Bitcoin's blockchain. From token protocols to digital art, each approach uses a different part of the transaction structure, with different trade-offs for cost, pruning, and chain impact."
+                    "Since 2013, developers have found ways to embed non-payment data into Bitcoin's blockchain. From token protocols to digital art, each approach uses a different part of the transaction structure, with different trade-offs for cost, pruning, and chain impact."
                 </p>
             </div>
 

@@ -263,10 +263,10 @@ pub fn tps_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     }
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    // The day's transactions over a whole day in seconds, so the window's
-    // own edges are withheld rather than divided by an elapsed time they do
-    // not have. See `withhold_window_edges`.
-    let vals = withhold_window_edges(
+    // The day's transactions over a whole day in seconds, so a day still
+    // in progress is withheld rather than divided by an elapsed time it
+    // does not have. See `withhold_final_day`.
+    let vals = withhold_final_day(
         days.iter()
             .map(|d| {
                 let total_tx = d.avg_tx_count * d.block_count as f64;
@@ -435,7 +435,7 @@ pub fn block_interval_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 ///
 /// Every day stays on the category axis. The previous version filtered days
 /// with fewer than 50 blocks out of the axis entirely; see
-/// [`withhold_window_edges`] for why that was worse than a gap and what it
+/// [`withhold_final_day`] for why that was worse than a gap and what it
 /// hid.
 pub fn block_interval_chart_daily(
     days: &[DailyAggregate],
@@ -445,7 +445,7 @@ pub fn block_interval_chart_daily(
     }
 
     let dates: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let vals = withhold_window_edges(
+    let vals = withhold_final_day(
         days.iter()
             .map(|d| {
                 if d.block_count == 0 {
@@ -926,8 +926,18 @@ pub fn block_time_distribution_chart(
     labels.push("60+".to_string());
 
     for i in 1..blocks.len() {
-        let interval =
-            blocks[i].timestamp.saturating_sub(blocks[i - 1].timestamp);
+        // Backward pairs are **excluded**, not clamped. `saturating_sub` on
+        // unsigned timestamps turned every one into an interval of zero, so
+        // 16,022 of the chain's 967,327 consecutive pairs were counted in
+        // the shortest bucket as though they had arrived within a minute.
+        // The histogram path this chart switches to at long ranges filters
+        // `gap >= 0` in SQL (`db.rs`), so the same range gave two different
+        // shortest buckets depending only on which arm served it. Found by
+        // review on 2026-09-16; `propagation` documents the same correction.
+        if blocks[i].timestamp < blocks[i - 1].timestamp {
+            continue;
+        }
+        let interval = blocks[i].timestamp - blocks[i - 1].timestamp;
         let mins = interval as f64 / 60.0;
         let idx = if mins >= 60.0 { 60 } else { mins as usize };
         counts[idx] += 1;
@@ -1022,8 +1032,18 @@ pub fn block_time_distribution_pct_chart(
     labels.push("60+".to_string());
 
     for i in 1..blocks.len() {
-        let interval =
-            blocks[i].timestamp.saturating_sub(blocks[i - 1].timestamp);
+        // Backward pairs are **excluded**, not clamped. `saturating_sub` on
+        // unsigned timestamps turned every one into an interval of zero, so
+        // 16,022 of the chain's 967,327 consecutive pairs were counted in
+        // the shortest bucket as though they had arrived within a minute.
+        // The histogram path this chart switches to at long ranges filters
+        // `gap >= 0` in SQL (`db.rs`), so the same range gave two different
+        // shortest buckets depending only on which arm served it. Found by
+        // review on 2026-09-16; `propagation` documents the same correction.
+        if blocks[i].timestamp < blocks[i - 1].timestamp {
+            continue;
+        }
+        let interval = blocks[i].timestamp - blocks[i - 1].timestamp;
         let mins = interval as f64 / 60.0;
         let idx = if mins >= 60.0 { 60 } else { mins as usize };
         counts[idx] += 1;

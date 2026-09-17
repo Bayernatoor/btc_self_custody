@@ -69,13 +69,31 @@ pub enum Kpis {
     /// No series, or nothing numeric in it. Rendered as "not available for
     /// this range", never as zero.
     Unavailable,
-    /// The chart plots several different measurements at the same x, so no
-    /// single average, peak or change describes it.
+    /// Nothing has resolved yet, so no figure is known and none is claimed.
+    ///
+    /// Distinct from [`Kpis::Unavailable`], which is an assertion about the
+    /// data: that this chart has nothing to show for this range. During a
+    /// load that assertion is not yet true and the rail was making it
+    /// anyway, beside a chart area correctly saying "Loading chart data".
+    /// On the slow mobile recompute that is several seconds of a wrong
+    /// claim, indistinguishable from the real no-daily-builder case. Found
+    /// by review on 2026-09-16.
+    Loading,
+    /// There is data, and no single average, peak or change describes it.
+    ///
+    /// Two causes, which is why the variant and its message are **neutral
+    /// about the reason**. Transaction Batching plots several measurements at
+    /// the same x, so any one figure would describe neither. Mining Diversity
+    /// plots a single gauge value, where an average over one point and a
+    /// peak equal to it are three restatements of the same number.
+    ///
+    /// Saying "several separate measurements" covered the first and was
+    /// simply false for the gauge, which the review of 2026-09-16 caught.
     ///
     /// Distinct from [`Kpis::Unavailable`] because the reader's next move
-    /// differs: a shorter range fixes an empty one and cannot fix this. The
-    /// rail said "Not available for this range" for both, which told someone
-    /// looking at Transaction Batching to go and change the range.
+    /// differs: a shorter range fixes an empty range and cannot fix either of
+    /// these. The rail said "Not available for this range" for all three,
+    /// which told someone looking at Batching to go and change the range.
     NotSummarizable,
 }
 
@@ -195,6 +213,11 @@ pub fn compute(option_json: &str, shape: Shape) -> Kpis {
 /// chart's, since it decides whether these read as a series, as bands or as
 /// categories.
 pub fn compute_axis(option_json: &str, shape: Shape, axis: u64) -> Kpis {
+    // An empty option is what every caller passes while its data is in
+    // flight, so it means "not yet" rather than "nothing to show".
+    if option_json.is_empty() {
+        return Kpis::Loading;
+    }
     let Ok(opt) = serde_json::from_str::<serde_json::Value>(option_json) else {
         return Kpis::Unavailable;
     };
@@ -637,7 +660,6 @@ mod tests {
     #[test]
     fn empty_and_malformed_options_are_unavailable_not_zero() {
         for json in [
-            "",
             "{}",
             r#"{"xAxis": {"type": "time"}, "series":[]}"#,
             "not json",
@@ -649,6 +671,22 @@ mod tests {
                 "expected Unavailable for {json:?}"
             );
         }
+    }
+
+    /// The empty string is what a caller passes while its data is in
+    /// flight, and it is the one input that must not read as an assertion
+    /// about the data.
+    ///
+    /// Every consumer returns `String::new()` while `data_loading` is true,
+    /// so "" meant the rail claimed "Not available for this range" beside a
+    /// chart area still showing its skeleton. A malformed or genuinely empty
+    /// option stays `Unavailable`, because those are answers.
+    #[test]
+    fn an_option_that_has_not_arrived_is_loading_not_unavailable() {
+        assert_eq!(compute("", Shape::Line), Kpis::Loading);
+        assert_eq!(compute("", Shape::Donut), Kpis::Loading);
+        // Still an assertion where the option exists and holds nothing.
+        assert_eq!(compute("{}", Shape::Line), Kpis::Unavailable);
     }
 
     /// Daily builders emit bare numbers and keep their dates on the category

@@ -37,7 +37,34 @@ use leptos_router::hooks::use_location;
 /// the next reader from noticing that the key was incomplete.
 #[macro_export]
 macro_rules! chart_memo {
-    ($data:expr, $range:expr, $overlays:expr, |$blocks:ident| $per_block:expr, |$days:ident| $daily:expr) => {{
+    // With an extra cache-key fragment, for a chart whose daily builder reads
+    // something beyond the dashboard rows.
+    //
+    // **Not optional sugar.** The cache is keyed by call site, range and a
+    // fingerprint of the dashboard rows, and the cached-base path below
+    // returns the stored string *without evaluating the builder closure*. So
+    // a second input is invisible to the key and, worse, stops being a
+    // tracked dependency the moment a base hit occurs.
+    //
+    // Difficulty Adjustment is the case. `state.retargets` is derived from
+    // the resolved days, so it cannot start fetching until they land, and a
+    // resource keeps its previous value while refetching. Switching from a
+    // per-block range, where it resolves to an empty list, to any daily
+    // range therefore builds the chart from the new days and the old empty
+    // list, which yields the honest-looking "No difficulty adjustment in
+    // this range". That is non-null, so it is cached under the new key and
+    // re-served for the rest of the session even after the real rows arrive.
+    // Found by review on 2026-09-16.
+    ($data:expr, $range:expr, $overlays:expr, $extra_key:expr,
+     |$blocks:ident| $per_block:expr, |$days:ident| $daily:expr) => {
+        $crate::chart_memo!(@build $data, $range, $overlays, $extra_key,
+            |$blocks| $per_block, |$days| $daily)
+    };
+    ($data:expr, $range:expr, $overlays:expr, |$blocks:ident| $per_block:expr, |$days:ident| $daily:expr) => {
+        $crate::chart_memo!(@build $data, $range, $overlays, String::new(),
+            |$blocks| $per_block, |$days| $daily)
+    };
+    (@build $data:expr, $range:expr, $overlays:expr, $extra_key:expr, |$blocks:ident| $per_block:expr, |$days:ident| $daily:expr) => {{
         use $crate::routes::observatory::shared::DashboardData;
         // Generate a unique cache key from the macro call site
         let cache_key =
@@ -88,7 +115,8 @@ macro_rules! chart_memo {
 
             // Two-level cache: base chart (expensive) keyed without overlays,
             // final result (with overlays) keyed with full overlay flags.
-            let base_key = format!("{}:{}:{}", cache_key, r, data_fp);
+            let base_key =
+                format!("{}:{}:{}:{}", cache_key, r, data_fp, $extra_key);
             let full_key = format!("{}:{}", base_key, flags.cache_key());
 
             // Check full cache (base + overlays)

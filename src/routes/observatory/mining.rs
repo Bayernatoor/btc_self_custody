@@ -65,7 +65,7 @@ pub fn MiningChartsPage() -> impl IntoView {
         <ChartPageLayout
             title="Mining"
             description="Difficulty adjustments and mining pool distribution"
-            seo_text="Monitor Bitcoin's mining landscape. The difficulty chart tracks the network's computational security as it adjusts every 2,016 blocks. Pool distribution shows which mining pools are producing blocks, with OCEAN template miners identified individually. Empty blocks are tracked historically, while common in Bitcoin's early years, they are rare today and typically indicate intentional miner behavior."
+            seo_text="Monitor Bitcoin's mining landscape. The difficulty chart tracks the network's computational security as it adjusts every 2,016 blocks. Pool distribution shows which mining pools are producing blocks, with OCEAN template miners identified individually. Empty blocks are tracked historically: 78,800 of the 89,929 coinbase-only blocks in the chain are from 2009 and 2010, and they are rare today. This data shows that a block carried no user transactions, not why."
         >
             // Error overlays
             {move || match dashboard_data.get() {
@@ -91,12 +91,35 @@ pub fn MiningChartsPage() -> impl IntoView {
                 );
                 // The daily arm needs the window's retarget blocks, which the
                 // daily rows cannot supply: a day's mean difficulty is a
-                // blend wherever a retarget lands mid-day. While those rows
-                // are in flight, or if their fetch failed, this returns null
-                // so the card keeps its loading state. Null is also what
-                // keeps the chart cache correct, since the macro stores
-                // nothing for a null value and recomputes once the rows land.
+                // blend wherever a retarget lands mid-day.
+                //
+                // The fourth argument puts those rows in the cache key, and
+                // it is load-bearing. `retargets` is derived from the
+                // resolved days, so it cannot fetch until they land, and a
+                // resource holds its previous value while refetching. Coming
+                // from a per-block range it resolves to an empty list, and a
+                // chart built from new days plus that stale empty list draws
+                // "No difficulty adjustment in this range", which is
+                // non-null and so was cached and re-served for the whole
+                // session. Keyed on the rows, that answer belongs to the
+                // empty list and is replaced when the real rows arrive.
+                //
+                // A pending or failed fetch still returns null, so the card
+                // keeps its loading state rather than asserting an absence.
                 let diff_adjustment_option = chart_memo!(dashboard_data, range, overlay_flags,
+                    // First and last height plus the count: the rows are
+                    // ordered and at most ~480 of them, so this identifies a
+                    // window's retargets without hashing the whole list.
+                    match retargets.get().map(|r| r.ok()) {
+                        Some(Some(rows)) => format!(
+                            "r{}:{}:{}",
+                            rows.len(),
+                            rows.first().map(|r| r.height).unwrap_or(0),
+                            rows.last().map(|r| r.height).unwrap_or(0),
+                        ),
+                        Some(None) => "r:failed".to_string(),
+                        None => "r:pending".to_string(),
+                    },
                     |blocks| crate::stats::charts::difficulty_adjustment_chart(blocks),
                     |days| match retargets.get().map(|r| r.ok()) {
                         Some(Some(rows)) => crate::stats::charts::difficulty_adjustment_chart_daily(days, &rows),
@@ -151,7 +174,7 @@ pub fn MiningChartsPage() -> impl IntoView {
                         <SectionHeading id="section-pools" title="Mining Pools"/>
                         <ChartCard title="Mining Pool Share" description="Share of blocks in the range by identified pool, with unattributed blocks kept separate" chart_id="chart-miner-dominance" option=miner_chart_option/>
                         <ChartCard title="Mining Diversity Index" description="Herfindahl-Hirschman Index (HHI) measuring mining concentration. Below 1000 is competitive, above 1800 is concentrated" chart_id="chart-diversity" option=diversity_option/>
-                        <ChartCard title="Empty Blocks" description="Blocks with no user transactions, usually mined before the pool has received the previous block's transactions" chart_id="chart-empty-blocks" option=empty_blocks_option/>
+                        <ChartCard title="Empty Blocks" description="Blocks carrying only the coinbase transaction, which is almost always the early chain: 78,800 of the 89,929 are from 2009 and 2010" chart_id="chart-empty-blocks" option=empty_blocks_option/>
                         <ChartCard title="Empty Blocks by Pool" description="Coinbase-only blocks in the range, grouped by the pool that mined them" chart_id="chart-empty-by-pool" option=empty_by_pool_option/>
                     </div>
                 }

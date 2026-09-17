@@ -943,7 +943,14 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                         // already reruns whenever the option does, and `Show`
                         // wants children it can call repeatedly, which the
                         // owned `Kpis` here cannot give it.
-                        let body = if matches!(k, kpi::Kpis::Unavailable) {
+                        let body = if matches!(k, kpi::Kpis::Loading) {
+                            // Not a range problem yet: the compared chart's
+                            // option is still in flight, and this block
+                            // blamed the range throughout every load.
+                            view! {
+                                <p class="text-xs text-white/40">"Loading..."</p>
+                            }.into_any()
+                        } else if matches!(k, kpi::Kpis::Unavailable) {
                             view! {
                                 <p class="text-xs text-white/55 leading-relaxed">
                                     "Nothing to draw over this range, so it is not on the chart. Try a longer one."
@@ -1655,14 +1662,23 @@ fn KeyFacts(
             Kpis::Unavailable => view! {
                 <p class="text-sm text-white/60">"Not available for this range."</p>
             }.into_any(),
-            // And this is not a range problem, so it must not read as one.
-            // Batching plots inputs and outputs per transaction at every
-            // block: two measurements, no single average or peak between
-            // them. A shorter range cannot fix that, and the old shared
-            // message sent the reader to change the range.
+            // And neither is this one, yet. The chart area beside the rail
+            // shows its skeleton while the rows are in flight, and the rail
+            // used to assert "Not available for this range" throughout.
+            Kpis::Loading => view! {
+                <p class="text-sm text-white/40">"Loading..."</p>
+            }.into_any(),
+            // There is data; it just has no single summary. Worded without a
+            // reason because there are two: Batching plots several
+            // measurements at one x, and Mining Diversity plots a single
+            // gauge value where an average, a peak and a low are the same
+            // number three times. Naming the first was false for the second.
+            //
+            // Not a range problem either way, which is what the shared
+            // "Not available for this range" got wrong.
             Kpis::NotSummarizable => view! {
                 <p class="text-sm text-white/60">
-                    "This chart plots several separate measurements, so one combined summary would not describe any of them."
+                    "A single average, peak or change is not meaningful for this chart."
                 </p>
             }.into_any(),
         }}

@@ -22,13 +22,13 @@ pub fn EmbeddedChartsPage() -> impl IntoView {
 
     view! {
         <Title text="Bitcoin Embedded Data: OP_RETURN, Inscriptions & Runes | We Hodl BTC"/>
-        <Meta name="description" content="Track non-financial data embedded in Bitcoin blocks: OP_RETURN protocols (Runes, Omni, Counterparty), Ordinals inscriptions and BRC-20 tokens, with counts, volumes and block share over time."/>
+        <Meta name="description" content="Track protocol data and inscription content embedded in Bitcoin blocks: OP_RETURN protocols (Runes, Omni, Counterparty), Ordinals inscriptions and BRC-20 tokens, with counts, volumes and block share over time."/>
         <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/charts/embedded"/>
         <StaticJsonLd doc=static_docs::DATASET_EMBEDDED/>
         <ChartPageLayout
             title="Embedded Data"
             description="OP_RETURN protocols, Ordinals inscriptions, protocol fee analysis, and miner coinbase messages"
-            seo_text="Analyze non-financial data embedded in Bitcoin transactions. OP_RETURN protocols like Runes, Omni Layer, and Counterparty use dedicated outputs for on-chain data. Ordinals inscriptions and BRC-20 tokens store data in witness fields. Track each protocol's count, volume, block share, fee revenue, and encoding overhead. Miner coinbase messages reveal pool identity and signaling activity."
+            seo_text="Analyze protocol data and inscription content embedded in Bitcoin transactions. OP_RETURN protocols like Runes, Omni Layer, and Counterparty use dedicated outputs for on-chain data. Ordinals inscriptions and BRC-20 tokens store data in witness fields. Track each protocol's count, volume, block share, fee revenue, and encoding overhead. Miner coinbase messages reveal pool identity and signaling activity."
             header=move || view! {
                 <a href="/observatory/learn/protocols"
                     class="text-xs text-white/30 hover:text-[#f7931a] transition-colors flex items-center gap-1.5"

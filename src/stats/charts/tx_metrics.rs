@@ -758,7 +758,7 @@ pub fn tx_type_evolution_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
-        "yAxis": y_axis("%"),
+        "yAxis": { "type": "value", "name": "%", "max": 100, "nameTextStyle": { "color": "#d4d4d4" }, "axisLabel": { "color": "#d4d4d4" }, "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.05)", "type": "dashed" } } },
         "dataZoom": data_zoom(),
         "tooltip": tooltip_axis(),
         "legend": { "show": true },
