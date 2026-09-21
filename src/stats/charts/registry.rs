@@ -605,7 +605,7 @@ pub const CHARTS: &[ChartMeta] = &[
         ],
         about: Some(About {
             definition: Some("Every block's first transaction has a field the miner fills in freely, which is where Satoshi left the Times headline in the genesis block. Most of what goes there now is a pool name and some binary. This is how many readable characters each one holds: the longest in the chain is 94."),
-            technical: "Every block's coinbase transaction contains a scriptSig with arbitrary data. Miners use this to embed their pool identifier, block height (required since BIP-34), and sometimes custom messages or political statements. Longer messages indicate pools that pack additional data into this field.",
+            technical: "Every block's coinbase transaction contains a scriptSig with arbitrary data. Miners use this to embed their pool identifier, block height (required since BIP-34), and sometimes custom messages or political statements. A longer message means more readable characters, not a particular pool or purpose.",
         }),
     },
     ChartMeta {
@@ -1224,8 +1224,8 @@ pub const CHARTS: &[ChartMeta] = &[
     ChartMeta {
         slug: "fee-pressure",
         title: "Fee Pressure vs Block Space",
-        desc_per_block: "Scatter plot showing the relationship between block fullness and fee rates. Clusters in the top-right indicate high-demand periods",
-        desc_daily: "Scatter plot showing the relationship between block fullness and fee rates. Clusters in the top-right indicate high-demand periods",
+        desc_per_block: "Each block placed by how full it was and what its middle transaction paid",
+        desc_daily: "Each block placed by how full it was and what its middle transaction paid",
         category: Category::Fees,
         unit: Unit::SatVb,
         shape: Shape::Scatter,
@@ -1600,7 +1600,7 @@ pub const CHARTS: &[ChartMeta] = &[
         ],
         about: Some(About {
             definition: Some("Difficulty, smoothed over seven different spans at once. Each line is the same number averaged over a different length of time, so the short ones follow recent changes and the long ones lag. Together they show whether difficulty has been rising or falling for a while or has just turned."),
-            technical: "Seven moving averages of difficulty form the ribbon: 9, 14, 25, 40, 60, 90 and 128 blocks at per-block resolution and the same counts in days at daily resolution, so the spans are not the same lengths of time in the two views. When the ribbon is wide, difficulty is rising steadily. When it compresses or inverts (short MAs drop below long MAs), difficulty is declining, which can indicate less efficient miners are going offline. Historically, ribbon inversions have coincided with periods of reduced mining activity.",
+            technical: "Seven moving averages of difficulty form the ribbon: 9, 14, 25, 40, 60, 90 and 128 blocks at per-block resolution and the same counts in days at daily resolution, so the spans are not the same lengths of time in the two views. When the ribbon is wide, difficulty is rising steadily. When it compresses or inverts, the recent average has fallen below the longer one, which is what a falling difficulty looks like once smoothed. Why it fell is not in this data: hash rate leaving the network and hash rate simply being unlucky for an epoch produce the same shape.",
         }),
     },
     ChartMeta {
@@ -1850,7 +1850,7 @@ pub const CHARTS: &[ChartMeta] = &[
         ],
         about: Some(About {
             definition: Some("How many inputs and outputs a typical transaction has. A payment with one input and two outputs, one of them change, is the ordinary shape. Higher output counts suggest an exchange paying many people in one transaction, which uses less space per payment, though nothing here identifies who sent it. Currently around 2.3 outputs and 1.7 inputs per transaction."),
-            technical: "Higher output counts per transaction indicate batching, where exchanges and services combine multiple payments into one transaction. This is more efficient use of block space. A typical non-batched transaction has 1-2 inputs and 2 outputs (payment + change).",
+            technical: "A higher output count per transaction is consistent with batching, where one transaction pays many recipients, but nothing here identifies the sender or separates a payment from a change output. A typical non-batched transaction has 1-2 inputs and 2 outputs (payment + change).",
         }),
     },
     ChartMeta {
@@ -1887,7 +1887,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: Some("The total size of the block chain on disk, back to 2009. What makes a node trustless is that it checked every one of those blocks itself, not that it still has them: an archival node keeps them all, while a pruned node verifies each block as it arrives and then discards the old ones, keeping a few gigabytes. So this is the floor for archiving the chain, not the price of running a node."),
+            definition: Some("The total size of the blockchain on disk, back to 2009. What makes a node trustless is that it checked every one of those blocks itself, not that it still has them: an archival node keeps them all, while a pruned node verifies each block as it arrives and then discards the old ones, keeping a few gigabytes. So this is the floor for archiving the chain, not the price of running a node."),
             technical: "Blocks summed across the range and anchored to the size my node reports on disk now, so the present-day figure is measured rather than estimated. Block data only: it excludes the chainstate and index databases a node also keeps, so a full data directory is larger. A pruned node stores a fraction of this and still verifies everything.",
         }),
     },
@@ -1986,7 +1986,7 @@ pub const CHARTS: &[ChartMeta] = &[
     ChartMeta {
         slug: "largest-tx",
         title: "Largest Transaction",
-        desc_per_block: "Size of the largest transaction in each block. Large transactions may indicate consolidations or complex scripts",
+        desc_per_block: "Size of the largest transaction in each block, in bytes",
         desc_daily: "Largest transaction (per-block ranges only)",
         category: Category::Network,
         unit: Unit::Kilobytes,
@@ -2213,7 +2213,7 @@ pub const CHARTS: &[ChartMeta] = &[
         ],
         about: Some(About {
             definition: Some("How many new Taproot outputs are being created. Taproot, activated in 2021, is the most recent change to how Bitcoin outputs can be locked. It makes a complex spending condition, such as a multi-signature wallet, look the same on chain as an ordinary payment, which helps both privacy and fees."),
-            technical: "Counts outputs with a pay-to-taproot script created in each block. Created, not spent: an output can sit unspent for years, so this leads the share of transactions that actually use Taproot. Inscriptions are stored in Taproot witness data, which is why this and the inscription charts move together from 2023.",
+            technical: "Counts outputs with a pay-to-Taproot script created in each block. Created, not spent: an output can sit unspent for years, so this leads the share of transactions that actually use Taproot. Inscriptions are stored in Taproot witness data, which is why this and the inscription charts move together from 2023.",
         }),
     },
     ChartMeta {
@@ -2315,7 +2315,7 @@ pub const CHARTS: &[ChartMeta] = &[
     ChartMeta {
         slug: "tx-density",
         title: "Transaction Density",
-        desc_per_block: "Transactions per kilobyte of block space. Higher values indicate smaller, more efficient transactions",
+        desc_per_block: "Transactions per 1,000 serialized bytes of block space",
         desc_daily: "Daily average transaction density (transactions per KB)",
         category: Category::Network,
         unit: Unit::Ratio,
@@ -2623,7 +2623,7 @@ pub const CHARTS: &[ChartMeta] = &[
         }],
         about: Some(About {
             definition: Some("Output types as shares of every output in the block, which is the widest denominator any share chart here uses. The coinbase transaction is the one exclusion, and the residual band carries everything else that is not native SegWit or Taproot."),
-            technical: "Three bands over every output: native v0, Taproot, and the rest. The third absorbs OP_RETURN, P2SH-wrapped witness outputs, bare multisig and anything unrecognised, which is why it is labelled Other outputs and not Legacy.",
+            technical: "Three bands over every output: SegWit v0, Taproot, and the rest. The third absorbs OP_RETURN, P2SH-wrapped witness outputs, bare multisig and anything unrecognised, which is why it is labelled Other outputs and not Legacy.",
         }),
     },
     ChartMeta {
@@ -2640,14 +2640,14 @@ pub const CHARTS: &[ChartMeta] = &[
         },
         measurements: &[
             Measurement {
-                series: "SegWit",
+                series: "SegWit v0",
                 series_daily: "",
                 quantity: "Outputs created to a v0 witness program",
                 method_per_block: Method::Measured,
                 method_daily: Method::Measured,
                 per_block: Aggregation::PerBlockObservation,
                 daily: Aggregation::MeanOfPerBlockValues,
-                population: "P2WPKH plus P2WSH outputs of non-coinbase transactions. Not every possible witness program: unrecognised or future witness versions are not counted here. The band is drawn as \"SegWit\", which understates that it is native v0 only; renaming it is copy work.",
+                population: "P2WPKH plus P2WSH outputs of non-coinbase transactions. Not every possible witness program: unrecognised or future witness versions are not counted here. The band is drawn as \"SegWit v0\", because \"SegWit\" alone read as every witness output rather than the two native v0 types it counts.",
             },
             Measurement {
                 series: "Taproot",
@@ -3188,6 +3188,40 @@ mod tests {
                  Batching, and the drawer has to agree with it.",
             ),
             ("over 16 years", "stale by construction. Say since 2009."),
+            (
+                "less efficient miners are going offline",
+                "a smoothed difficulty falling says difficulty fell. Hash \
+                 rate leaving and hash rate being unlucky for an epoch \
+                 produce the same shape, and neither is observed here.",
+            ),
+            (
+                "indicate high-demand periods",
+                "a block being full and its median fee being high are two \
+                 coordinates. Fullness is set by what the miner included, \
+                 so neither one establishes demand.",
+            ),
+            (
+                "indicate pools that pack additional data",
+                "a longer coinbase message is more readable characters. It \
+                 identifies neither a pool nor a purpose.",
+            ),
+            (
+                "smaller, more efficient transactions",
+                "transactions per byte says they are smaller by bytes. \
+                 Efficiency against the block limit is a weight question, \
+                 which this does not measure.",
+            ),
+            (
+                "may indicate consolidations",
+                "hedging an inference does not make it measurable. The \
+                 chart shows a size, not a purpose.",
+            ),
+            (
+                "indicate batching, where exchanges",
+                "a high output count is consistent with batching and does \
+                 not identify the sender, nor separate a payment from a \
+                 change output.",
+            ),
             (
                 "non-financial",
                 "Runes, Omni, Counterparty and BRC-20 are token protocols, \

@@ -208,7 +208,7 @@ pub fn FeeChartsPage() -> impl IntoView {
                             />
                             <ChartCard
                                 title="Fee Pressure vs Block Space"
-                                description="Scatter plot showing the relationship between block fullness and fee rates. Clusters in the top-right indicate high-demand periods"
+                                description="Each block placed by how full it was and what its middle transaction paid"
                                 chart_id="chart-fee-pressure"
                                 option=fee_pressure_option
                             />
