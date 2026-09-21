@@ -1796,14 +1796,37 @@ impl OverlayFlags {
     /// `fix/chart-correctness` fixed and the reason both scale flags are
     /// keyed even though they are applied long after the base chart is built.
     pub fn cache_key(&self) -> String {
+        // The overlay series are fingerprinted by length **and first value**,
+        // not length alone.
+        //
+        // Length alone cannot change when only the *offset* does.
+        // `chain_size_data` is accumulated from a pre-window byte total that
+        // arrives in its own resource, and a resource keeps its previous
+        // value while refetching, so a chart built with the previous range's
+        // offset has exactly as many rows as the correct one. It was
+        // therefore cached under a key the corrected data could not
+        // distinguish, and the overlay line stayed displaced by the wrong
+        // total, hundreds of GB, until a reload. Same shape as the retarget
+        // defect fixed in `chart_memo!`; found by review on 2026-09-16.
+        //
+        // The first value is what moves when the offset does, and it is O(1)
+        // to read, so this is a cheaper fix than hashing the series.
+        let head = |series: &[(u64, f64)]| -> String {
+            series
+                .first()
+                .map(|(x, y)| format!("{x}:{y}"))
+                .unwrap_or_default()
+        };
         format!(
-            "h{}b{}c{}e{}p{}s{}l{}r{}",
+            "h{}b{}c{}e{}p{}@{}s{}@{}l{}r{}",
             self.halvings as u8,
             self.bip_activations as u8,
             self.core_releases as u8,
             self.events as u8,
             self.price_data.len(),
+            head(&self.price_data),
             self.chain_size_data.len(),
+            head(&self.chain_size_data),
             self.log_scale as u8,
             self.right_log_scale as u8,
         )
@@ -4691,6 +4714,45 @@ mod tests {
     /// them: no detections in the window, no identified miners, a range
     /// before the data starts. A reader who follows it gets the same empty
     /// frame back.
+    /// Two overlay series of the same length and different values must not
+    /// share a cache key.
+    ///
+    /// The chain-size overlay is accumulated from a pre-window byte total
+    /// that arrives in its own resource, and a resource keeps its previous
+    /// value while refetching. So a chart built with the previous range's
+    /// offset has exactly as many rows as the correct one, and keying on
+    /// length alone meant the stale chart was cached under a key the
+    /// corrected data could not distinguish: the overlay line stayed
+    /// displaced by hundreds of GB until a reload.
+    #[test]
+    fn an_overlay_key_distinguishes_series_of_equal_length() {
+        let flags = |first: (u64, f64)| OverlayFlags {
+            chain_size_data: vec![first, (2_000, 2.0), (3_000, 3.0)],
+            ..Default::default()
+        };
+        // Same three rows, different starting value: a different offset.
+        assert_ne!(
+            flags((1_000, 500.0)).cache_key(),
+            flags((1_000, 900.0)).cache_key(),
+            "an offset change moves the first value and nothing else, so \
+             keying on length alone cannot see it"
+        );
+        // And identical data still shares a key, or the cache never hits.
+        assert_eq!(
+            flags((1_000, 500.0)).cache_key(),
+            flags((1_000, 500.0)).cache_key()
+        );
+        // The price overlay has the same shape and the same fix.
+        let priced = |first: (u64, f64)| OverlayFlags {
+            price_data: vec![first, (2_000, 2.0)],
+            ..Default::default()
+        };
+        assert_ne!(
+            priced((1_000, 10.0)).cache_key(),
+            priced((1_000, 20.0)).cache_key()
+        );
+    }
+
     #[test]
     fn no_data_chart_says_what_is_missing_not_what_to_do_about_it() {
         let opt = no_data_chart("Test Chart");

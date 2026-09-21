@@ -135,12 +135,26 @@ pub fn RangeSelector() -> impl IntoView {
                             }
                         }
                     >
+                        // `selected` as well as `prop:value` on the select.
+                        // AGENTS.md records why: `prop:value` is applied
+                        // after hydration, so an SSR page paints this control
+                        // empty until WASM loads, reading "1D" while the
+                        // charts show 1Y. `selected` is an attribute and does
+                        // render. The compare select on the single-chart page
+                        // already does this.
                         {presets.into_iter().map(|r| {
                             let val = r.to_string();
                             let label = r.to_uppercase();
-                            view! { <option value=val>{label}</option> }
+                            let mine = val.clone();
+                            view! {
+                                <option value=val selected=move || range.get() == mine>
+                                    {label}
+                                </option>
+                            }
                         }).collect::<Vec<_>>()}
-                        <option value="custom">"Custom"</option>
+                        <option value="custom" selected=move || range.get() == "custom">
+                            "Custom"
+                        </option>
                     </select>
                     <svg class="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none w-3.5 h-3.5 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
