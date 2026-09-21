@@ -1,6 +1,6 @@
 // Drive the served application over CDP and read back what it rendered.
 //
-//   BASE=http://127.0.0.1:8011 node scripts/probe-served-app.mjs
+//   node scripts/probe-served-app.mjs          # defaults to port 8000
 //
 // Chrome must already be listening on --remote-debugging-port=9222. The
 // wrapper that launches it, drives this, and kills it lives in
@@ -27,10 +27,18 @@
 // resolved, and the JS bridge worked. That is the hydration check the
 // acceptance matrix said nothing covered.
 
-const BASE = process.env.BASE || 'http://127.0.0.1:8011';
+const BASE = process.env.BASE || 'http://127.0.0.1:8000';
+
+// Hosts this app loads but does not own. Their failures are not findings:
+// `src/app.rs` loads poeticmetric for analytics, which cannot be reached
+// from a sandboxed headless browser at all.
+const THIRD_PARTY = ['poeticmetric.com', 'cdn.jsdelivr.net',
+  'blockchain.info', 'mempool.space'];
 const DEBUG = process.env.CDP || 'http://127.0.0.1:9222';
 
-const PAGES = [
+const PAGES = (process.env.ONLY ? [
+  [process.env.ONLY, 'single page under test'],
+] : [
   ['/observatory/charts/network', 'Network category page'],
   ['/observatory/charts/fees', 'Fees category page'],
   ['/observatory/charts/mining', 'Mining category page'],
@@ -41,7 +49,7 @@ const PAGES = [
   ['/observatory/chart/diversity', 'single chart, gauge'],
   ['/observatory/chart/batching', 'single chart, several measurements'],
   ['/observatory/chart/fee-heatmap?range=1y', 'single chart, no daily builder at a long range'],
-];
+]);
 
 // Read once per page, inside the page, after the charts have had time to draw.
 const COLLECT = `(() => {
@@ -69,7 +77,18 @@ const COLLECT = `(() => {
           return { name: s.name, type: t, points: pts };
         });
       } catch (e) { series = [{ name: 'THREW: ' + e.message, type: '?', points: 0 }]; }
-      charts.push({ id: d.id || '(anonymous)', series });
+      // The title is drawn on the canvas, not in the DOM, so a no-data
+      // frame's message is invisible to document.innerText. Reading it off
+      // the model is the only way to see it: the first version of this probe
+      // reported "the chart should say so" for a chart that was saying so.
+      let title = '';
+      try {
+        const t = inst.getOption().title;
+        const first = Array.isArray(t) ? t[0] : t;
+        title = [first && first.text, first && first.subtext]
+          .filter(Boolean).join(' | ');
+      } catch (e) { title = ''; }
+      charts.push({ id: d.id || '(anonymous)', series, title });
     });
   }
   const text = document.body.innerText || '';
@@ -78,7 +97,9 @@ const COLLECT = `(() => {
     charts,
     hasEcharts: !!window.echarts,
     // Phrases the acceptance matrix asks a human to look for.
-    saysNoAdjustment: text.includes('No difficulty adjustment in this range'),
+    saysNoAdjustment: text.includes('No difficulty adjustment in this range')
+      || charts.some((c) => c.title
+        .includes('No difficulty adjustment in this range')),
     saysShorterRange: text.includes('shorter range'),
     saysNotAvailable: text.includes('Not available for this range'),
     saysNoSummary: text.includes('A single average, peak or change is not meaningful'),
@@ -113,9 +134,27 @@ async function cdp() {
       events.push(msg);
     }
   };
+  // A dropped connection has to reject every pending call. Without this,
+  // losing the browser mid-run left the awaits unsettled and node exited
+  // with "Detected unsettled top-level await" and no cause. The usual way to
+  // lose it is two probe runs sharing a CDP port: each script's trap kills
+  // the other's Chrome.
+  const dropAll = (why) => {
+    for (const [, { no }] of pending) no(new Error(why));
+    pending.clear();
+  };
+  ws.onclose = () => dropAll('the browser closed the CDP connection');
+  ws.onerror = () => dropAll('the CDP connection errored');
+
   const send = (method, params = {}) => new Promise((ok, no) => {
     const n = ++id;
     pending.set(n, { ok, no });
+    // Never wait forever on a browser that has stopped answering.
+    const timer = setTimeout(() => {
+      if (pending.delete(n)) no(new Error(`${method} timed out after 30s`));
+    }, 30_000);
+    const settle = (f) => (v) => { clearTimeout(timer); f(v); };
+    pending.set(n, { ok: settle(ok), no: settle(no) });
     ws.send(JSON.stringify({ id: n, method, params }));
   });
   return { send, events, close: () => ws.close() };
@@ -127,16 +166,42 @@ const { send, events, close } = await cdp();
 await send('Page.enable');
 await send('Runtime.enable');
 await send('Log.enable');
+await send('Network.enable');
+
+process.stderr.write(`driving ${PAGES.length} pages at ${BASE}, ~9s each\n`);
 
 let failures = 0;
 const report = [];
 
 for (const [path, label] of PAGES) {
   events.length = 0;
+  process.stderr.write(`  ${path} ... `);
   await send('Page.navigate', { url: BASE + path });
   // Hydration plus a resource round trip plus the chart draw. Generous
   // because a cold cache on the ALL range is genuinely slow.
   await sleep(9000);
+
+  // The category pages lazy-init their charts with an IntersectionObserver
+  // (`assets/js/stats.js:42`), so a chart below the fold never draws until
+  // it is scrolled into view. Not scrolling made all four category pages
+  // report zero charts, which this probe called "hydration did not run" for
+  // three separate runs: a design feature read as a total failure.
+  //
+  // Stepped rather than jumped to the bottom, so each card passes through
+  // the viewport and its observer fires.
+  await send('Runtime.evaluate', {
+    expression: `(async () => {
+      const step = window.innerHeight * 0.8;
+      for (let y = 0; y < document.body.scrollHeight; y += step) {
+        window.scrollTo(0, y);
+        await new Promise(r => setTimeout(r, 250));
+      }
+      window.scrollTo(0, 0);
+    })()`,
+    awaitPromise: true,
+  });
+  // The charts that just came into view need their own round trip.
+  await sleep(6000);
   const { result } = await send('Runtime.evaluate', {
     expression: COLLECT, returnByValue: true, awaitPromise: false,
   });
@@ -151,8 +216,62 @@ for (const [path, label] of PAGES) {
          || e.params.exceptionDetails.text)
       : (e.params.entry?.text
          || (e.params.args || []).map((a) => a.value ?? a.description).join(' ')))
-    // The favicon and any /api 4xx a page legitimately probes are noise.
-    .filter((t) => t && !/favicon/i.test(t));
+    // Noise we do not own, named by host rather than by message. An
+    // earlier version dropped every "Failed to load resource", which would
+    // have hidden one of our own assets failing: exactly the kind of filter
+    // that makes a probe report success it has not established.
+    //
+    // `reportAllChanges` is web-vitals, which arrives with the analytics
+    // script or a browser extension as an injected VM script, so it has no
+    // URL to match on and is named directly.
+    .filter((t) => t
+      && !/favicon/i.test(t)
+      && !THIRD_PARTY.some((h) => t.includes(h))
+      // web-vitals, injected by the analytics script or a browser
+      // extension as a VM script, so it has no URL to classify by.
+      && !/reportAllChanges/.test(t)
+      // Chrome's message for a failed resource carries no URL, so it cannot
+      // be attributed by host. It is redundant: every failed request is
+      // classified from the network events above, which do have URLs, and
+      // `ours` fails the page with the path when one of them is ours.
+      && !/^Failed to load resource/.test(t));
+
+  // Failed requests, split by origin. A third party failing is not this
+  // app's defect: the site loads poeticmetric.com/pm.js for analytics, and
+  // that 422s from a headless browser, which the first version of this
+  // probe reported as a failure on all ten pages. Judge our own origin and
+  // report the rest as noise.
+  const requestUrls = new Map(
+    events.filter((e) => e.method === 'Network.requestWillBeSent')
+      .map((e) => [e.params.requestId, e.params.request.url]));
+  const failedRequests = [
+    ...events.filter((e) => e.method === 'Network.responseReceived'
+        && e.params.response.status >= 400)
+      .map((e) => ({ status: String(e.params.response.status),
+                     url: e.params.response.url })),
+    // A refused or aborted request never receives a response, so it is
+    // absent from the list above. Without this, a first-party asset failing
+    // to connect would be invisible to the URL-based classification and
+    // would have to be caught by the console message instead.
+    ...events.filter((e) => e.method === 'Network.loadingFailed')
+      .map((e) => ({ status: e.params.errorText || 'failed',
+                     url: requestUrls.get(e.params.requestId) || '(unknown)' })),
+  ];
+  // ERR_ABORTED is not a failure in a probe that navigates every few
+  // seconds and then kills the browser: a request in flight at teardown is
+  // aborted by definition. Reported separately rather than counted either
+  // way, because treating it as a pass would hide a real cancellation and
+  // treating it as a failure flagged ECharts, which had plainly loaded
+  // since the chart rendered its title.
+  const aborted = [...new Set(failedRequests
+    .filter((r) => /ERR_ABORTED/.test(r.status))
+    .map((r) => r.url.replace(BASE, '')))];
+  const ours = [...new Set(failedRequests
+    .filter((r) => r.url.startsWith(BASE) && !/ERR_ABORTED/.test(r.status))
+    .map((r) => `${r.status} ${r.url.slice(BASE.length)}`))];
+  const thirdParty = [...new Set(failedRequests
+    .filter((r) => !r.url.startsWith(BASE) && !/ERR_ABORTED/.test(r.status))
+    .map((r) => `${r.status} ${new URL(r.url).host}`))];
 
   const populated = (r.charts || []).filter(
     (c) => c.series.some((s) => s.points > 0));
@@ -165,6 +284,8 @@ for (const [path, label] of PAGES) {
   if (!r.hasEcharts) fail('ECharts never loaded on the page');
   if (consoleErrors.length) fail('console errors: '
     + JSON.stringify(consoleErrors.slice(0, 3)));
+  if (ours.length) fail('our own requests failed: '
+    + JSON.stringify(ours.slice(0, 4)));
 
   // A category page must draw something, or hydration did not complete.
   if (path.startsWith('/observatory/charts/') && populated.length === 0) {
@@ -191,13 +312,20 @@ for (const [path, label] of PAGES) {
     `       ${label}`,
     `       charts ${(r.charts || []).length} populated ${populated.length}`
       + ` empty ${empty.length} canvases ${(r.canvases || []).length}`,
-    ...(empty.length ? [`       empty: ${empty.map((c) => c.id).join(', ')}`] : []),
+    ...(empty.length ? [`       empty: ${empty.map((c) =>
+      c.id + (c.title ? ` ("${c.title}")` : '')).join(', ')}`] : []),
+    ...(aborted.length
+      ? [`       aborted at teardown, inconclusive: ${aborted.join(', ')}`]
+      : []),
+    ...(thirdParty.length
+      ? [`       third-party, not ours: ${thirdParty.join(', ')}`] : []),
     `       kpi labels: ${(r.kpiLabels || []).join(',') || 'none'}`
       + (r.saysNotAvailable ? ' | says not-available' : '')
       + (r.saysNoSummary ? ' | says no-summary' : '')
       + (r.saysShorterRange ? ' | says shorter-range' : ''),
     ...lines,
   ].join('\n'));
+  process.stderr.write(lines.length ? `FAIL\n` : `ok\n`);
 }
 
 close();

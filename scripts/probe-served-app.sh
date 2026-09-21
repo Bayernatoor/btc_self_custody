@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Launch headless Chrome, drive the served app over CDP, then kill Chrome.
 #
-#   BASE=http://127.0.0.1:8011 bash scripts/probe-served-app.sh
+#   bash scripts/probe-served-app.sh                      # dev, port 8000
+#   BASE=http://127.0.0.1:8011 bash scripts/probe-served-app.sh   # elsewhere
 #
 # One script because a backgrounded browser does not survive the tool call
 # that started it in an agent session: bwrap runs with --die-with-parent, so
@@ -20,17 +21,22 @@
 # process_singleton_posix.cc before a flag can help.
 set -uo pipefail
 
-BASE="${BASE:-http://127.0.0.1:8011}"
-PORT="${CDP_PORT:-9222}"
+# 8000 is the port `cargo leptos watch` serves on, per AGENTS.md.
+# Override with BASE for a release build on another port.
+BASE="${BASE:-http://127.0.0.1:8000}"
+# A per-run port by default. Two runs on one port each kill the other's
+# Chrome through the trap below, which closes the websocket mid-call.
+PORT="${CDP_PORT:-$((9300 + RANDOM % 400))}"
 PROFILE="${TMPDIR:-/tmp}/cdp-served-app"
 
 if ! curl -s -o /dev/null -m 10 "$BASE/api/stats/stats"; then
   echo "nothing serving at $BASE" >&2
+  echo "start it with 'cargo leptos watch', or set BASE to its port" >&2
   exit 2
 fi
 
 google-chrome --headless=new --no-sandbox --disable-gpu \
-  --user-data-dir="$PROFILE" --disable-dev-shm-usage \
+  --user-data-dir="$PROFILE-$PORT" --disable-dev-shm-usage \
   --remote-debugging-port="$PORT" about:blank \
   > "${TMPDIR:-/tmp}/chrome-served-app.log" 2>&1 &
 CHROME=$!
