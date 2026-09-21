@@ -21,36 +21,52 @@ pub fn MiningChartsPage() -> impl IntoView {
     let overlay_flags = state.overlay_flags;
     let dashboard_data = state.dashboard_data;
     let retargets = state.retargets;
+    let custom_from = state.custom_from;
+    let custom_to = state.custom_to;
 
-    // Mining-specific data (pool dominance + empty blocks)
+    // Mining-specific data (pool dominance + empty blocks).
+    //
+    // Reads the custom dates as well as the range, which it did not until
+    // 2026-09-21. `range_to_blocks("custom")` is 999,999, so `from`
+    // saturated to `min_height` and these four charts described the whole
+    // chain while the difficulty charts above them described the selected
+    // window. Editing the dates never refetched either, because `range`
+    // stays "custom" while they change. `resolve_window` is the shared
+    // resolution the single-chart view already used.
     let mining_data = LocalResource::new(move || {
         let r = range.get();
+        let cf = custom_from.get();
+        let ct = custom_to.get();
         async move {
             let stats =
                 fetch_stats_summary().await.map_err(|e| e.to_string())?;
-            let n = range_to_blocks(&r);
-            let is_daily = uses_daily_aggregates(n);
+            let is_daily = uses_daily_aggregates(range_to_blocks(&r));
+            let (from, to, from_ts, to_ts) =
+                resolve_window(&r, cf, ct, &stats).await?;
 
-            let from = stats.min_height.max(stats.max_height.saturating_sub(n));
+            // An empty window, so nothing is fetched. The endpoints reject a
+            // reversed range and a 500 would read as a server fault rather
+            // than as a window holding no blocks.
+            if from > to {
+                return Ok::<_, String>((Vec::new(), Vec::new(), Vec::new()));
+            }
+
             // Both empty-block charts are groupings, so they are aggregated
             // server-side regardless of mode. Only pool dominance differs
             // between per-block and daily.
-            let empty_monthly =
-                fetch_empty_blocks_monthly(from, stats.max_height)
-                    .await
-                    .map_err(|e| e.to_string())?;
-            let empty_by_pool =
-                fetch_empty_blocks_by_pool(from, stats.max_height)
-                    .await
-                    .map_err(|e| e.to_string())?;
+            let empty_monthly = fetch_empty_blocks_monthly(from, to)
+                .await
+                .map_err(|e| e.to_string())?;
+            let empty_by_pool = fetch_empty_blocks_by_pool(from, to)
+                .await
+                .map_err(|e| e.to_string())?;
 
             let miners = if is_daily {
-                let from_ts = stats.latest_timestamp.saturating_sub(n * 600);
-                fetch_miner_dominance_daily(from_ts, stats.latest_timestamp)
+                fetch_miner_dominance_daily(from_ts, to_ts)
                     .await
                     .map_err(|e| e.to_string())?
             } else {
-                fetch_miner_dominance(from, stats.max_height)
+                fetch_miner_dominance(from, to)
                     .await
                     .map_err(|e| e.to_string())?
             };

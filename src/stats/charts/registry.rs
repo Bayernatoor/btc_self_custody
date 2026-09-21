@@ -132,6 +132,16 @@ pub enum Aggregation {
     /// Derived over a trailing window, such as a moving average or a change
     /// across N blocks or days.
     WindowedDerived,
+    /// A constant divided by the day's block count, so the value moves
+    /// **inversely** with how many blocks the day held.
+    ///
+    /// Block Interval is the case and currently the only one: `1440 /
+    /// block_count` minutes. It was declared `WindowedDerived`, which is
+    /// wrong twice over. There is no window, and `expectation()` maps that
+    /// variant to no prediction, so the chart was exempt from the scaling
+    /// probe. Naming the shape lets the probe predict it: double the day's
+    /// blocks and the interval halves.
+    InverseOfDailyCount,
     /// Grouped into buckets or categories rather than positioned in time:
     /// histograms, donuts, era comparisons.
     GroupedSummary,
@@ -1964,7 +1974,7 @@ pub const CHARTS: &[ChartMeta] = &[
                 method_per_block: Method::Calculated,
                 method_daily: Method::Estimated,
                 per_block: Aggregation::PerBlockObservation,
-                daily: Aggregation::WindowedDerived,
+                daily: Aggregation::InverseOfDailyCount,
                 population: "Per block this is the difference between consecutive header timestamps, which miners choose, so it can be zero or negative. Daily it is 1,440 minutes divided by the day's block count, which is close to the mean of those differences for a whole day and is not the same quantity. Every day in the window is plotted, including the 40 days of 2009 that ran genuinely slow. The final day is a gap, because a named range ends on a day still in progress and that day is not a whole 1,440 minutes; every earlier day is returned complete whatever time the window starts. A day with no blocks has no interval rather than an interval of zero.",
             },
         ],
@@ -2288,7 +2298,13 @@ pub const CHARTS: &[ChartMeta] = &[
             method_per_block: Method::Calculated,
             method_daily: Method::Calculated,
             per_block: Aggregation::PerBlockObservation,
-            daily: Aggregation::WindowedDerived,
+            // The day's transaction count over a constant 86,400
+            // seconds, so it moves with the day's blocks exactly as a total
+            // does. Declared `WindowedDerived` until 2026-09-21, which
+            // `expectation()` maps to no prediction, so the primary series
+            // was exempt from the scaling probe that catches this class of
+            // error. There is no window here: the divisor is a constant.
+            daily: Aggregation::DailyTotal,
             population: "Per block this is the block's transaction count over the gap to its predecessor. A non-positive gap has no rate rather than a rate of zero, and the first block in the window has no predecessor, so both are gaps. Daily it is the day's transaction count over 86,400 seconds, coinbase included, so the final day is a gap: a named range ends on a day still in progress, which is not a whole 86,400 seconds."
         }],
         about: Some(About {

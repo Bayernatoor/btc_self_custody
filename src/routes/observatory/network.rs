@@ -17,6 +17,8 @@ use crate::stats::types::uses_daily_aggregates;
 pub fn NetworkChartsPage() -> impl IntoView {
     let state = expect_context::<ObservatoryState>();
     let range = state.range;
+    let custom_from = state.custom_from;
+    let custom_to = state.custom_to;
     let overlay_flags = state.overlay_flags;
     let dashboard_data = state.dashboard_data;
 
@@ -142,6 +144,8 @@ pub fn NetworkChartsPage() -> impl IntoView {
     });
     let fullness_server = LocalResource::new(move || {
         let r = range.get();
+        let cf = custom_from.get();
+        let ct = custom_to.get();
         async move {
             let n = crate::routes::observatory::helpers::range_to_blocks(&r);
             if !uses_daily_aggregates(n) {
@@ -149,10 +153,17 @@ pub fn NetworkChartsPage() -> impl IntoView {
             }
             let stats =
                 crate::stats::server_fns::fetch_stats_summary().await.ok()?;
-            let from_ts = stats.latest_timestamp.saturating_sub(n * 600);
+            // Resolved rather than derived: a custom window read as the
+            // whole chain until 2026-09-21, because range_to_blocks maps
+            // "custom" to 999,999.
+            let (_, _, from_ts, to_ts) =
+                crate::routes::observatory::helpers::resolve_window(
+                    &r, cf, ct, &stats,
+                )
+                .await
+                .ok()?;
             let buckets = crate::stats::server_fns::fetch_fullness_histogram(
-                from_ts,
-                stats.latest_timestamp,
+                from_ts, to_ts,
             )
             .await
             .ok()?;
@@ -184,6 +195,8 @@ pub fn NetworkChartsPage() -> impl IntoView {
     });
     let fullness_server_pct = LocalResource::new(move || {
         let r = range.get();
+        let cf = custom_from.get();
+        let ct = custom_to.get();
         async move {
             let n = crate::routes::observatory::helpers::range_to_blocks(&r);
             if !uses_daily_aggregates(n) {
@@ -191,10 +204,17 @@ pub fn NetworkChartsPage() -> impl IntoView {
             }
             let stats =
                 crate::stats::server_fns::fetch_stats_summary().await.ok()?;
-            let from_ts = stats.latest_timestamp.saturating_sub(n * 600);
+            // Resolved rather than derived: a custom window read as the
+            // whole chain until 2026-09-21, because range_to_blocks maps
+            // "custom" to 999,999.
+            let (_, _, from_ts, to_ts) =
+                crate::routes::observatory::helpers::resolve_window(
+                    &r, cf, ct, &stats,
+                )
+                .await
+                .ok()?;
             let buckets = crate::stats::server_fns::fetch_fullness_histogram(
-                from_ts,
-                stats.latest_timestamp,
+                from_ts, to_ts,
             )
             .await
             .ok()?;
@@ -241,6 +261,8 @@ pub fn NetworkChartsPage() -> impl IntoView {
     });
     let time_server = LocalResource::new(move || {
         let r = range.get();
+        let cf = custom_from.get();
+        let ct = custom_to.get();
         async move {
             let n = crate::routes::observatory::helpers::range_to_blocks(&r);
             if !uses_daily_aggregates(n) {
@@ -248,10 +270,17 @@ pub fn NetworkChartsPage() -> impl IntoView {
             }
             let stats =
                 crate::stats::server_fns::fetch_stats_summary().await.ok()?;
-            let from_ts = stats.latest_timestamp.saturating_sub(n * 600);
+            // Resolved rather than derived: a custom window read as the
+            // whole chain until 2026-09-21, because range_to_blocks maps
+            // "custom" to 999,999.
+            let (_, _, from_ts, to_ts) =
+                crate::routes::observatory::helpers::resolve_window(
+                    &r, cf, ct, &stats,
+                )
+                .await
+                .ok()?;
             let buckets = crate::stats::server_fns::fetch_block_time_histogram(
-                from_ts,
-                stats.latest_timestamp,
+                from_ts, to_ts,
             )
             .await
             .ok()?;
@@ -289,6 +318,8 @@ pub fn NetworkChartsPage() -> impl IntoView {
     });
     let time_server_pct = LocalResource::new(move || {
         let r = range.get();
+        let cf = custom_from.get();
+        let ct = custom_to.get();
         async move {
             let n = crate::routes::observatory::helpers::range_to_blocks(&r);
             if !uses_daily_aggregates(n) {
@@ -296,10 +327,17 @@ pub fn NetworkChartsPage() -> impl IntoView {
             }
             let stats =
                 crate::stats::server_fns::fetch_stats_summary().await.ok()?;
-            let from_ts = stats.latest_timestamp.saturating_sub(n * 600);
+            // Resolved rather than derived: a custom window read as the
+            // whole chain until 2026-09-21, because range_to_blocks maps
+            // "custom" to 999,999.
+            let (_, _, from_ts, to_ts) =
+                crate::routes::observatory::helpers::resolve_window(
+                    &r, cf, ct, &stats,
+                )
+                .await
+                .ok()?;
             let buckets = crate::stats::server_fns::fetch_block_time_histogram(
-                from_ts,
-                stats.latest_timestamp,
+                from_ts, to_ts,
             )
             .await
             .ok()?;

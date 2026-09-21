@@ -236,3 +236,99 @@ mod tests {
         }
     }
 }
+
+/// The height and timestamp window a range actually asks for, resolving a
+/// custom date range against the chain.
+///
+/// **Genuinely shared, which the previous version of this claim was not.**
+/// `single_chart.rs` carried a private `resolved_window` whose doc said it
+/// was "shared here so the three cannot disagree"; it was never callable
+/// from anywhere else, and the mining page and the four histogram resources
+/// went on reading `range` alone. `range_to_blocks("custom")` is 999,999, so
+/// a custom window silently became the whole chain: the pool charts
+/// described all of history while the difficulty charts above them described
+/// the selected dates, and editing the dates never refetched because
+/// `range` stayed "custom".
+///
+/// Returns `(from_height, to_height, from_ts, to_ts)`. A custom window with
+/// no blocks in it returns a **reversed height range**, `(1, 0)`, so a
+/// caller can see there is nothing to ask for. Querying the tip instead
+/// would answer a question nobody asked.
+pub async fn resolve_window(
+    range: &str,
+    custom_from: Option<String>,
+    custom_to: Option<String>,
+    stats: &crate::stats::types::StatsSummary,
+) -> Result<(u64, u64, u64, u64), String> {
+    let n = range_to_blocks(range);
+    if range != "custom" {
+        return Ok((
+            stats.min_height.max(stats.max_height.saturating_sub(n)),
+            stats.max_height,
+            stats.latest_timestamp.saturating_sub(n * 600),
+            stats.latest_timestamp,
+        ));
+    }
+    let from_ts = custom_from
+        .as_deref()
+        .and_then(super::shared::date_to_ts)
+        .unwrap_or(0);
+    let to_ts = custom_to
+        .as_deref()
+        .and_then(super::shared::date_to_ts_end)
+        .unwrap_or(stats.latest_timestamp);
+    // The conversion cannot be done arithmetically: dividing a duration by
+    // the 600-second target gives a length in blocks, not a position, which
+    // is how a request for April 2024 came back holding the most recent 61
+    // days.
+    match crate::stats::server_fns::fetch_height_range(from_ts, to_ts)
+        .await
+        .map_err(|e| e.to_string())?
+    {
+        Some((lo, hi)) => Ok((lo, hi, from_ts, to_ts)),
+        None => Ok((1, 0, from_ts, to_ts)),
+    }
+}
+
+#[cfg(test)]
+mod window_tests {
+    /// Every resource that takes a window must resolve it through
+    /// `resolve_window`, not derive one from `range` alone.
+    ///
+    /// This is a source check rather than a behavioural one, because the
+    /// defect it guards is structural: six resources each did their own
+    /// arithmetic, and `range_to_blocks("custom")` is 999,999, so a custom
+    /// window silently became the whole chain. A private helper in
+    /// `single_chart.rs` claimed in its own doc comment to be "shared here
+    /// so the three cannot disagree" while being callable from nowhere else.
+    ///
+    /// The pattern to catch is `latest_timestamp.saturating_sub(n * 600)`:
+    /// deriving a window's start by multiplying a block count by the target
+    /// interval. That is right for a named range and wrong for a custom one,
+    /// and `resolve_window` is the one place allowed to do it.
+    #[test]
+    fn no_page_derives_its_own_window() {
+        const PAGES: &[(&str, &str)] = &[
+            ("mining.rs", include_str!("mining.rs")),
+            ("network.rs", include_str!("network.rs")),
+            ("fees.rs", include_str!("fees.rs")),
+            ("embedded.rs", include_str!("embedded.rs")),
+            ("single_chart.rs", include_str!("single_chart.rs")),
+        ];
+        for (name, src) in PAGES {
+            assert!(
+                !src.contains("saturating_sub(n * 600)"),
+                "{name} derives a window from a block count. A custom range \
+                 maps to 999,999 blocks, so that reads as the whole chain. \
+                 Use helpers::resolve_window."
+            );
+        }
+        // And the shared one is the exception that does the arithmetic, so
+        // the check above is not vacuous.
+        assert!(
+            include_str!("helpers.rs").contains("saturating_sub(n * 600)"),
+            "resolve_window no longer resolves a named range, so the guard \
+             above is passing for the wrong reason"
+        );
+    }
+}

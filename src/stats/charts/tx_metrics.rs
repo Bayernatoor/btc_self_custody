@@ -386,19 +386,26 @@ pub fn rbf_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Explicit RBF Signaling");
     }
 
-    let vals: Vec<f64> = blocks
+    // `None` in two cases, and the second one was fabricating readings.
+    //
+    // Before BIP 125 the signal does not exist, and the raw series already
+    // emitted null for those blocks. But the same positions held a computed
+    // `0.0` in `vals`, which fed the 144-block average, so the smoothed line
+    // read near zero across the whole pre-2016 chain and stayed dragged down
+    // for 144 blocks past the boundary. The gap has to reach the average
+    // too, which is what `moving_average_over_gaps` is for.
+    //
+    // A block whose only transaction is the coinbase has no non-coinbase
+    // transactions to take a share of, so that is a gap as well rather than
+    // a block where nobody signalled.
+    let vals: Vec<Option<f64>> = blocks
         .iter()
         .map(|b| {
-            // Only count RBF after BIP-125 (Core v0.12, Feb 2016)
-            if b.timestamp < BIP125_TIMESTAMP {
-                return 0.0;
+            if b.timestamp < BIP125_TIMESTAMP || b.tx_count <= 1 {
+                return None;
             }
-            if b.tx_count > 1 {
-                let pct = b.rbf_count as f64 / (b.tx_count - 1) as f64 * 100.0;
-                (pct.min(100.0) * 100.0).round() / 100.0
-            } else {
-                0.0
-            }
+            let pct = b.rbf_count as f64 / (b.tx_count - 1) as f64 * 100.0;
+            Some(round(pct.min(100.0), 2))
         })
         .collect();
     let mut raw_buf = String::with_capacity(blocks.len() * 30);
@@ -407,16 +414,18 @@ pub fn rbf_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         if i > 0 {
             raw_buf.push(',');
         }
-        if b.timestamp < BIP125_TIMESTAMP {
-            let _ = write!(raw_buf, "[{},null]", ts_ms(b.timestamp));
-        } else {
-            let _ =
-                write!(raw_buf, "[{},{},{}]", ts_ms(b.timestamp), v, b.height);
-        }
+        let _ = match v {
+            Some(v) => {
+                write!(raw_buf, "[{},{},{}]", ts_ms(b.timestamp), v, b.height)
+            }
+            None => {
+                write!(raw_buf, "[{},null,{}]", ts_ms(b.timestamp), b.height)
+            }
+        };
     }
     raw_buf.push(']');
     let raw = data_array_value(&raw_buf);
-    let ma = moving_average(&vals, 144);
+    let ma = moving_average_over_gaps(&vals, 144);
     let ma_str = build_ma_array(blocks, &ma);
     let ma_data = data_array_value(&ma_str);
     let has_ma = show_ma(blocks.len());

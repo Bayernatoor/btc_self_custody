@@ -24,7 +24,7 @@ use crate::stats::charts::registry::{
 use crate::stats::charts::OverlayFlags;
 use crate::stats::server_fns::{
     fetch_block_time_histogram, fetch_empty_blocks_by_pool,
-    fetch_empty_blocks_monthly, fetch_fullness_histogram, fetch_height_range,
+    fetch_empty_blocks_monthly, fetch_fullness_histogram,
     fetch_miner_dominance, fetch_miner_dominance_daily, fetch_stats_summary,
 };
 use crate::stats::types::{uses_daily_aggregates, HistogramBucket, MinerShare};
@@ -96,46 +96,6 @@ fn fmt_ms(ms: Option<f64>) -> Option<String> {
 /// Beyond this ratio between the first and last value, a percentage change
 /// stops informing: the number is dominated by how small the baseline was.
 const PCT_MEANINGFUL_RATIO: f64 = 10_000.0;
-
-/// The custom end date as a timestamp, or the tip when there is not one.
-fn to_or_tip(
-    to: Option<&str>,
-    stats: &crate::stats::types::StatsSummary,
-) -> u64 {
-    to.and_then(super::shared::date_to_ts_end)
-        .unwrap_or(stats.latest_timestamp)
-}
-
-/// The timestamp window a range actually asks for.
-///
-/// The dashboard resource resolves custom dates; the histogram and mining
-/// resources did not, so they read `range` alone and a custom window became
-/// all of history. Shared here so the three cannot disagree, which is the
-/// narrow version of the one-resolved-range change phase 2 wants.
-fn resolved_window(
-    range: &str,
-    custom_from: &Option<String>,
-    custom_to: &Option<String>,
-    stats: &crate::stats::types::StatsSummary,
-    blocks: u64,
-) -> (u64, u64) {
-    if range == "custom" {
-        if let (Some(f), Some(t)) = (custom_from, custom_to) {
-            if let (Some(from), Some(to)) = (
-                super::shared::date_to_ts(f),
-                super::shared::date_to_ts_end(t),
-            ) {
-                // Closed at both ends, as every timestamp query in `db.rs`
-                // is, and as the dashboard resource now is.
-                return (from, to);
-            }
-        }
-    }
-    (
-        stats.latest_timestamp.saturating_sub(blocks * 600),
-        stats.latest_timestamp,
-    )
-}
 
 /// Which server-side histogram a chart needs over a long range.
 ///
@@ -359,7 +319,6 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
             }
             let stats =
                 fetch_stats_summary().await.map_err(|e| e.to_string())?;
-            let n = range_to_blocks(&r);
             // The mining queries take heights and the picker gives dates, and
             // the window has to be anchored at **both** ends.
             //
@@ -373,30 +332,13 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
             // So a custom window asks the chain where it sits. The named
             // ranges keep counting back from the tip, which is exactly what
             // they mean.
-            let (from, to, from_ts, to_ts) = if r == "custom" {
-                let from_ts = custom_from
-                    .as_deref()
-                    .and_then(super::shared::date_to_ts)
-                    .unwrap_or(0);
-                let to_ts = to_or_tip(custom_to.as_deref(), &stats);
-                match fetch_height_range(from_ts, to_ts)
-                    .await
-                    .map_err(|e| e.to_string())?
-                {
-                    Some((lo, hi)) => (lo, hi, from_ts, to_ts),
-                    // A window with no blocks in it. Querying the tip instead
-                    // would answer a question nobody asked, so this asks for
-                    // an empty height range and the charts draw nothing.
-                    None => (1, 0, from_ts, to_ts),
-                }
-            } else {
-                (
-                    stats.min_height.max(stats.max_height.saturating_sub(n)),
-                    stats.max_height,
-                    stats.latest_timestamp.saturating_sub(n * 600),
-                    stats.latest_timestamp,
-                )
-            };
+            let (from, to, from_ts, to_ts) = super::helpers::resolve_window(
+                &r,
+                custom_from.clone(),
+                custom_to.clone(),
+                &stats,
+            )
+            .await?;
             // An empty window, so nothing is fetched at all. The endpoints
             // reject a reversed range, and a 500 would read as a server fault
             // rather than as a range holding no blocks.
@@ -448,7 +390,14 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                 return None;
             }
             let stats = fetch_stats_summary().await.ok()?;
-            let (from_ts, to_ts) = resolved_window(&r, &cf, &ct, &stats, n);
+            let (_, _, from_ts, to_ts) = super::helpers::resolve_window(
+                &r,
+                cf.clone(),
+                ct.clone(),
+                &stats,
+            )
+            .await
+            .ok()?;
             // Which histogram depends on the chart. Fetching only the
             // fullness one left time-dist with nothing to read, so its daily
             // arm returned empty and the page showed a loading state that

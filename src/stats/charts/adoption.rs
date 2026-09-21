@@ -15,20 +15,25 @@ pub fn segwit_adoption_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("SegWit Adoption %");
     }
 
-    let segwit_fn = |b: &BlockSummary| {
-        if b.tx_count > 1 {
+    // A block whose only transaction is the coinbase has no non-coinbase
+    // transactions to take a share of, so there is no reading rather than a
+    // reading of zero. Returned 0.0 until 2026-09-21, which put "0% of this
+    // block used a witness" on the axis for all 89,929 coinbase-only blocks
+    // and dragged the smoothed line down with them. The daily arm below has
+    // always gapped these; this is the per-block arm catching up, and
+    // `avg-fee-tx` is the chart that already documents the convention.
+    let segwit_fn = |b: &BlockSummary| -> Option<f64> {
+        (b.tx_count > 1).then(|| {
             let pct =
                 b.segwit_spend_count as f64 / (b.tx_count - 1) as f64 * 100.0;
-            (pct * 100.0).round() / 100.0
-        } else {
-            0.0
-        }
+            round(pct, 2)
+        })
     };
-    let raw_str = build_data_array_f64(blocks, segwit_fn);
+    let raw_str = build_data_array_opt_f64(blocks, segwit_fn);
     let raw = data_array_value(&raw_str);
 
-    let vals: Vec<f64> = blocks.iter().map(segwit_fn).collect();
-    let ma = moving_average(&vals, 144);
+    let vals: Vec<Option<f64>> = blocks.iter().map(segwit_fn).collect();
+    let ma = moving_average_over_gaps(&vals, 144);
     let ma_str = build_ma_array(blocks, &ma);
     let ma_series = data_array_value(&ma_str);
 

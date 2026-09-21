@@ -1453,6 +1453,10 @@ mod tests {
         let expectation = |m: &registry::Measurement| match m.daily {
             DailyTotal | CumulativeInWindow => Some(2.0),
             MeanOfPerBlockValues | RatioOfTotals => Some(1.0),
+            // A constant over the day's block count, so doubling the day
+            // halves the value. Block Interval is the only one, and naming
+            // the shape is what lets it be checked at all.
+            InverseOfDailyCount => Some(0.5),
             _ => None,
         };
         let mut checked = 0usize;
@@ -2873,6 +2877,70 @@ mod tests {
              is one whose numbers a reader can no longer see; a chart removed \
              is progress and should update this list."
         );
+    }
+
+    /// A share of non-coinbase transactions is absent, not zero, in a block
+    /// that has none.
+    ///
+    /// Both charts' daily arms have always gapped these; their per-block
+    /// arms returned `0.0`, putting "0% of this block" on the axis for all
+    /// 89,929 coinbase-only blocks. `avg-fee-tx` is the chart that already
+    /// documents the convention, so these two were the ones outside it.
+    ///
+    /// `rbf` additionally fabricated a reading for the whole pre-BIP 125
+    /// chain: the raw series emitted null there, but the same positions held
+    /// a computed zero that fed the 144-block average, so the smoothed line
+    /// read near zero before 2016 and stayed dragged down for 144 blocks
+    /// past the boundary. The gap has to reach the average too.
+    #[test]
+    fn a_share_of_non_coinbase_transactions_gaps_when_there_are_none() {
+        let mut blocks = synthetic_blocks(8);
+        for b in blocks.iter_mut() {
+            // Well after BIP 125, so only the coinbase case is in play here.
+            b.timestamp = 1_700_000_000 + b.height * 600;
+        }
+        // A coinbase-only block: one transaction, so none to take a share of.
+        blocks[3].tx_count = 1;
+        blocks[3].segwit_spend_count = 0;
+        blocks[3].rbf_count = 0;
+
+        for (name, opt) in [
+            ("segwit", super::super::segwit_adoption_chart(&blocks)),
+            ("rbf", super::super::rbf_chart(&blocks)),
+        ] {
+            let raw = opt["series"][0]["data"].as_array().expect("raw series");
+            assert!(
+                raw[3][1].is_null(),
+                "{name}: a coinbase-only block reports {} rather than a gap",
+                raw[3][1]
+            );
+            assert!(
+                raw[2][1].as_f64().is_some(),
+                "{name}: an ordinary block lost its reading"
+            );
+        }
+
+        // And the pre-BIP 125 chain must not reach the rbf average as zero.
+        // 2014, comfortably before BIP 125. Indexed rather than derived
+        // from `height`, which the fixture sets in the 800,000s, so a
+        // height-based timestamp lands after the boundary rather than before
+        // it.
+        let mut old = synthetic_blocks(300);
+        for (i, b) in old.iter_mut().enumerate() {
+            b.timestamp = 1_400_000_000 + i as u64 * 600;
+        }
+        let opt = super::super::rbf_chart(&old);
+        for s in opt["series"].as_array().expect("series") {
+            for p in s["data"].as_array().expect("data") {
+                let y = p.get(1).cloned().unwrap_or(serde_json::Value::Null);
+                assert!(
+                    y.is_null(),
+                    "rbf reports {y} before BIP 125, when the signal did \
+                     not exist; a computed zero here is what dragged the \
+                     144-block average down"
+                );
+            }
+        }
     }
 
     /// Both interval histograms must treat a backward pair the same way,
