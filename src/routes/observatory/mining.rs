@@ -85,7 +85,7 @@ pub fn MiningChartsPage() -> impl IntoView {
         >
             // Error overlays
             {move || match dashboard_data.get() {
-                Some(Err(_)) => Some(view! {
+                Some((_, Err(_))) => Some(view! {
                     <DataLoadError on_retry=Callback::new(move |_| dashboard_data.refetch())/>
                 }),
                 _ => None,

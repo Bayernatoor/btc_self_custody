@@ -1151,6 +1151,25 @@ pub(crate) fn no_data_chart(title: &str) -> serde_json::Value {
     no_data_chart_with_hint(title, "No data in the selected range")
 }
 
+/// The frame for a chart that has **no daily builder at all**.
+///
+/// Note what this is not: a return to the blanket "select a shorter range"
+/// hint described above, which was wrong precisely because it was shown for
+/// causes that had nothing to do with resolution. Here resolution *is* the
+/// cause and it is known statically, from `Daily::Unavailable` in the
+/// registry, so the advice is actionable rather than a guess. The seven charts
+/// that declare it are the only callers.
+///
+/// It exists because the single-chart page explained this correctly and the
+/// category cards did not: the same chart said "Not available at this range.
+/// This chart is computed per block ... Pick 1M or shorter" on its own page
+/// and the bare "No data in the selected range" in its card, which leaves the
+/// reader to guess which range could have data. Found on the H-03 acceptance
+/// row on 2026-09-21. One function so the two cannot drift apart again.
+pub(crate) fn no_daily_builder_chart(title: &str) -> serde_json::Value {
+    no_data_chart_with_hint(title, "Computed per block. Pick 1M or shorter.")
+}
+
 /// Fallback chart with a custom hint message.
 pub(crate) fn no_data_chart_with_hint(
     title: &str,

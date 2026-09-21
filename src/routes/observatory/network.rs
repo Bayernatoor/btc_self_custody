@@ -91,7 +91,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
         let chain_total = state.chain_size_total.get().unwrap_or(0);
         dashboard_data
             .get()
-            .and_then(|r| r.ok())
+            .and_then(|(_, r)| r.ok())
             .map(|data| {
                 let (mut value, is_daily) = match data {
                     DashboardData::PerBlock(ref blocks) => (
@@ -128,7 +128,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
         let _r = range.get();
         dashboard_data
             .get()
-            .and_then(|r| r.ok())
+            .and_then(|(_, r)| r.ok())
             .map(|data| {
                 let value = match data {
                     DashboardData::PerBlock(ref blocks) => {
@@ -184,7 +184,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
 
     let fullness_dist_pct_option = Signal::derive(move || {
         let _r = range.get();
-        dashboard_data.get().and_then(|r| r.ok()).map(|data| {
+        dashboard_data.get().and_then(|(_, r)| r.ok()).map(|data| {
             let value = match data {
                 DashboardData::PerBlock(ref blocks) =>
                     crate::stats::charts::block_fullness_distribution_pct_chart(blocks),
@@ -245,7 +245,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
         let _r = range.get();
         dashboard_data
             .get()
-            .and_then(|r| r.ok())
+            .and_then(|(_, r)| r.ok())
             .map(|data| {
                 let value = match data {
                     DashboardData::PerBlock(ref blocks) => {
@@ -302,7 +302,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
         let _r = range.get();
         dashboard_data
             .get()
-            .and_then(|r| r.ok())
+            .and_then(|(_, r)| r.ok())
             .map(|data| {
                 let value = match data {
                     DashboardData::PerBlock(ref blocks) => {
@@ -369,7 +369,9 @@ pub fn NetworkChartsPage() -> impl IntoView {
         range,
         overlay_flags,
         |blocks| crate::stats::charts::block_propagation_chart(blocks),
-        |_days| crate::stats::charts::no_data_chart("Rapid Consecutive Blocks")
+        |_days| crate::stats::charts::no_daily_builder_chart(
+            "Rapid Consecutive Blocks"
+        )
     );
 
     let weekday_option = chart_memo!(
@@ -514,7 +516,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
         range,
         overlay_flags,
         |blocks| crate::stats::charts::tx_type_evolution_chart(blocks),
-        |_days| crate::stats::charts::no_data_chart(
+        |_days| crate::stats::charts::no_daily_builder_chart(
             "Transaction Type Evolution"
         )
     );
@@ -530,7 +532,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
         >
             // Error overlay (only on actual errors, not during refetch)
             {move || match dashboard_data.get() {
-                Some(Err(_)) => Some(view! {
+                Some((_, Err(_))) => Some(view! {
                     <DataLoadError on_retry=Callback::new(move |_| dashboard_data.refetch())/>
                 }),
                 _ => None,

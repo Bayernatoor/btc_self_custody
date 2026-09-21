@@ -1305,5 +1305,5 @@ pub fn coinbase_message_length_chart(
 pub fn coinbase_message_length_chart_daily(
     _days: &[DailyAggregate],
 ) -> serde_json::Value {
-    no_data_chart("Coinbase Message Length")
+    no_daily_builder_chart("Coinbase Message Length")
 }

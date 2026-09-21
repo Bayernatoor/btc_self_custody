@@ -493,6 +493,62 @@ mod tests {
     /// suppresses the "this chart needs a shorter range" notice in favour of
     /// an empty frame. `Daily::Unavailable` is the honest declaration and
     /// every derived rule then gets it right.
+    /// A card for a chart with no daily builder says which range to pick.
+    ///
+    /// `a_declared_daily_builder_actually_builds_something` cannot catch this,
+    /// because the registry was honest: all nine of these declare
+    /// `Daily::Unavailable`. It was the **pages** that diverged. The single
+    /// chart view drew the notice naming the range, while the category card
+    /// fell through to a bare "No data in the selected range", so the same
+    /// chart explained itself on its own page and left the reader guessing in
+    /// its card. Two of the nine reached it through a function named
+    /// `*_chart_daily` that only ever returned the generic frame, and one of
+    /// those put its reason inside the chart title. Found on the H-03
+    /// acceptance row on 2026-09-21.
+    ///
+    /// The hint is specific to this cause on purpose. `no_data_chart`'s own
+    /// documentation records that a blanket "select a shorter range" was
+    /// removed for being shown when resolution was not the reason at all;
+    /// here it is the reason, and it is known from the registry.
+    #[test]
+    fn a_chart_with_no_daily_builder_says_which_range_to_pick() {
+        const PAGES: &[(&str, &str)] = &[
+            (
+                "network.rs",
+                include_str!("../../routes/observatory/network.rs"),
+            ),
+            ("fees.rs", include_str!("../../routes/observatory/fees.rs")),
+            (
+                "mining.rs",
+                include_str!("../../routes/observatory/mining.rs"),
+            ),
+            (
+                "embedded.rs",
+                include_str!("../../routes/observatory/embedded.rs"),
+            ),
+        ];
+        for (name, src) in PAGES {
+            for arm in src.split("|_days|").skip(1) {
+                let head = &arm[..arm.len().min(120)];
+                assert!(
+                    !head.contains("no_data_chart("),
+                    "{name} renders a bare no-data frame for a chart with no \
+                     daily builder: {head:?}. Use no_daily_builder_chart, \
+                     which names the range to pick. A reader told only that \
+                     there is no data has to guess which range would have it."
+                );
+            }
+        }
+        // And the frame really carries the actionable half, so the check above
+        // is not passing on the strength of a renamed function.
+        let frame = super::super::no_daily_builder_chart("Anything");
+        let subtext = frame["title"]["subtext"].as_str().unwrap_or_default();
+        assert!(
+            subtext.contains("Pick 1M or shorter"),
+            "the no-daily-builder frame no longer names a range: {subtext:?}"
+        );
+    }
+
     #[test]
     fn a_declared_daily_builder_actually_builds_something() {
         let days = synthetic_days(900);
@@ -2991,6 +3047,54 @@ mod tests {
                 "{label}: the ordinary ten-minute gaps were lost too"
             );
         }
+
+        // Which buckets is only half the question. The first version of this
+        // test asserted the buckets and not the denominator, so it passed
+        // while the percentage arm still divided by every pair including the
+        // backward one, and the bars summed to 80%. Found by review on
+        // 2026-09-21. A share is of the intervals that were measured.
+        let pct = super::super::block_time_distribution_pct_chart(&blocks);
+        let shares = pct["series"][0]["data"]
+            .as_array()
+            .expect("bucket shares")
+            .iter()
+            .filter_map(|v| v.as_f64())
+            .collect::<Vec<f64>>();
+        let sum: f64 = shares.iter().sum();
+        assert!(
+            (sum - 100.0).abs() < 0.01,
+            "the shares sum to {sum}, not 100: the excluded backward pair is \
+             still in the denominator"
+        );
+        // Four intervals survive: three of ten minutes and one of twenty two,
+        // the latter being the recovery across the backward stamp.
+        assert_eq!(shares[10], 75.0, "three of four intervals are 10-11 min");
+        assert_eq!(shares[22], 25.0, "one of four is the 22-23 min recovery");
+
+        // And the two arms must agree. The SQL arm filters `gap >= 0` in the
+        // query, so it never sees the backward pair at all; handed the same
+        // retained counts it must produce the same shares, or the answer
+        // depends on the range length rather than on the data.
+        let buckets: Vec<crate::stats::types::HistogramBucket> = (0..61)
+            .map(|i| crate::stats::types::HistogramBucket {
+                label: if i == 60 {
+                    "60+".to_string()
+                } else {
+                    format!("{}-{}", i, i + 1)
+                },
+                count: match i {
+                    10 => 3,
+                    22 => 1,
+                    _ => 0,
+                },
+            })
+            .collect();
+        let sql_arm =
+            super::super::block_time_histogram_from_buckets_pct(&buckets);
+        assert_eq!(
+            sql_arm["series"][0]["data"], pct["series"][0]["data"],
+            "the two histogram arms disagree on the same intervals"
+        );
     }
 
     /// A block with no outputs has no share of them, and no residual.

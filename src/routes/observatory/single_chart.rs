@@ -241,8 +241,8 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
     // window on a chart with no daily builder built 281 valid points and then
     // covered them with an "unavailable" overlay.
     let resolved_daily = Signal::derive(move || match dashboard_data.get() {
-        Some(Ok(DashboardData::Daily(_))) => true,
-        Some(Ok(DashboardData::PerBlock(_))) => false,
+        Some((_, Ok(DashboardData::Daily(_)))) => true,
+        Some((_, Ok(DashboardData::PerBlock(_)))) => false,
         // Nothing resolved yet: fall back to what the range implies, so the
         // first paint is not wrong in the common case.
         _ => uses_daily_aggregates(range_to_blocks(&range.get())),
@@ -526,7 +526,7 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                 }
             }
             _ => {
-                let Some(Ok(data)) = dashboard_data.get() else {
+                let Some((_, Ok(data))) = dashboard_data.get() else {
                     return String::new();
                 };
                 // Built from the same rows over the same range as the primary
@@ -799,9 +799,12 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                         <div class="absolute inset-0 flex items-center justify-center bg-[#0d2137] rounded-xl px-6">
                             <div class="text-center max-w-sm">
                                 <p class="text-white/85 text-sm mb-1">"Not available at this range"</p>
+                                // Short, and matching the card's frame word for
+                                // word. "1M" rather than "1m" because that is
+                                // what the range button reads, and the whole
+                                // point of the sentence is to name the button.
                                 <p class="text-white/60 text-xs">
-                                    "This chart is computed per block, so it needs a range short
-                                     enough to load individual blocks. Pick 1m or shorter."
+                                    "This chart is computed per block. Pick 1M or shorter."
                                 </p>
                             </div>
                         </div>
@@ -1733,12 +1736,16 @@ fn OverlayToggles(
             "Comparison series"
         </p>
         <div class="space-y-1.5">
+            // Also disabled when the window is shorter than one price sample,
+            // which is a different refusal from the axis being taken and needs
+            // its own reason: at 1D the overlay was accepted, added its legend
+            // entry, and drew no line at all.
             <Toggle
                 label="Price (USD)"
                 get=s.overlay_price
                 set=s.set_overlay_price
-                disabled=size_holds_axis
-                hint="The daily BTC price in US dollars, drawn on its own axis on the right. Price crosses six orders of magnitude, so it usually wants the logarithmic setting beside it."
+                disabled=Signal::derive(move || size_holds_axis.get() || s.price_sparse.get())
+                hint="The BTC price in US dollars, drawn on its own axis on the right. Sampled every 4 days, which is all the source provides for the full history, so a range shorter than that cannot draw it. Price crosses six orders of magnitude, so it usually wants the logarithmic setting beside it."
             />
             <Toggle
                 label="Chain size"

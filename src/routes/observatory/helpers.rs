@@ -331,4 +331,99 @@ mod window_tests {
              above is passing for the wrong reason"
         );
     }
+
+    /// The price overlay is refused where it could only draw nothing.
+    ///
+    /// The price series is sampled every four days, measured off the live
+    /// endpoint rather than assumed: see `PRICE_SAMPLE_INTERVAL_SECS`. A line
+    /// needs two points, so a window shorter than one interval holds at most
+    /// one, and one point with `symbol: "none"` paints no line. On 2026-09-21 a
+    /// 1D chart offered the overlay, accepted it, added a "Price (USD)" legend
+    /// entry and drew nothing, which reads as a broken chart rather than as
+    /// missing data.
+    ///
+    /// The threshold is in seconds and the toggle derives from it, so this
+    /// pins the arithmetic rather than the wiring.
+    #[test]
+    fn the_price_overlay_needs_a_window_longer_than_its_sampling_interval() {
+        use crate::routes::observatory::shared::{
+            price_window_too_short, PRICE_SAMPLE_INTERVAL_SECS,
+        };
+        assert_eq!(
+            PRICE_SAMPLE_INTERVAL_SECS, 345_600,
+            "the measured spacing was 345,600,000 ms. If the endpoint changed, \
+             re-run the probe in the constant's docs and record the new figure \
+             there rather than editing this number to match a guess."
+        );
+        let day = 86_400;
+        // A one-day window cannot hold two samples four days apart.
+        assert!(price_window_too_short(day), "1D must be refused");
+        // A week can, so it is left alone. This is the half that stops the
+        // guard becoming "disable price on anything short".
+        assert!(
+            !price_window_too_short(7 * day),
+            "1W spans more than one sampling interval and must stay available"
+        );
+        // The boundary itself, both sides.
+        assert!(price_window_too_short(PRICE_SAMPLE_INTERVAL_SECS - 1));
+        assert!(!price_window_too_short(PRICE_SAMPLE_INTERVAL_SECS));
+        // And the copy no longer calls it daily, which it did while the data
+        // was four-day sampled.
+        let chart = include_str!("single_chart.rs");
+        assert!(
+            !chart.contains("The daily BTC price"),
+            "the price overlay's hint calls the series daily again; it is \
+             sampled every 4 days"
+        );
+    }
+
+    /// The window a payload answers travels **inside** the payload.
+    ///
+    /// `data_loading` asks whether the dashboard data on hand belongs to the
+    /// window now selected. Two ways of answering that were tried on
+    /// 2026-09-21 and both flashed the previous range's chart, because a
+    /// `LocalResource` keeps its previous payload while a refetch is in
+    /// flight:
+    ///
+    /// 1. An `Effect` stamping the ambient range whenever the resource held
+    ///    any value. During a refetch that value is the old one, so it stamped
+    ///    a window the data did not answer.
+    /// 2. The fetch stamping its own window on the way out. This reads as
+    ///    obviously correct and is worse: the write happens inside the future,
+    ///    so it lands *before* the future's value reaches the resource, and
+    ///    the flag cleared one step ahead of the data every time. An
+    ///    occasional flash became a certain one.
+    ///
+    /// Carried in the value there is no ordering left to get wrong, which is
+    /// why this guard rejects both shapes by name rather than describing the
+    /// rule in a comment and hoping.
+    #[test]
+    fn the_window_a_payload_answers_travels_inside_it() {
+        let state = include_str!("shared/state.rs");
+        assert!(
+            !state.contains("if dashboard_data.get().is_some() {"),
+            "shape 1 is back: the window is being inferred from the resource \
+             merely holding a value. While a refetch is in flight that value \
+             is the previous window's."
+        );
+        assert!(
+            !state.contains("let done = move ||"),
+            "shape 2 is back: the fetch is stamping the window from inside \
+             its own future, which completes before the value reaches the \
+             resource. This clears the loading flag one step early every time."
+        );
+        // And the replacement is really present, so the two assertions above
+        // cannot pass merely because the mechanism was deleted.
+        assert!(
+            state.contains("pub type DashboardValue = (WindowKey, Result<")
+                && state.contains("LocalResource<DashboardValue>"),
+            "the dashboard payload no longer carries the window it answers, \
+             so nothing establishes when a range change has actually landed"
+        );
+        assert!(
+            state.contains("is_none_or(|(have, _)| have != want)"),
+            "data_loading no longer compares the payload's own window against \
+             the selected one"
+        );
+    }
 }

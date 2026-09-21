@@ -36,19 +36,36 @@ const THIRD_PARTY = ['poeticmetric.com', 'cdn.jsdelivr.net',
   'blockchain.info', 'mempool.space'];
 const DEBUG = process.env.CDP || 'http://127.0.0.1:9222';
 
+// Each page carries what it is **required** to end up showing, because a probe
+// that only reports what it saw cannot fail.
+//
+//   drawn        at least one ECharts instance holding a plotted point
+//   no-data      an instance whose own message explains the empty range
+//   unsupported  the page says the range has no builder for this chart
+//   inconclusive headless cannot decide this one; see the category-page note
+//
+// Without this column the probe computed `populated` and printed it without
+// ever asserting it, so a route whose chart never rendered still exited 0.
+// Astra demonstrated it on 2026-09-21 by disabling the render bridge in a
+// disposable browser: `ok /observatory/chart/interval, charts 0 populated 0`,
+// and the probe exited 0. An acceptance check that passes when the feature is
+// absent is the same defect class as the six that reported a working app as
+// broken, pointed the other way, and worse: those cost a night, this one would
+// have certified a blank page.
 const PAGES = (process.env.ONLY ? [
-  [process.env.ONLY, 'single page under test'],
+  [process.env.ONLY, 'single page under test',
+    process.env.EXPECT || 'drawn'],
 ] : [
-  ['/observatory/charts/network', 'Network category page'],
-  ['/observatory/charts/fees', 'Fees category page'],
-  ['/observatory/charts/mining', 'Mining category page'],
-  ['/observatory/charts/embedded', 'Embedded category page'],
-  ['/observatory/chart/diff-adjustment', 'single chart, retarget-sourced'],
-  ['/observatory/chart/diff-adjustment?range=1d', 'single chart, no retarget in range'],
-  ['/observatory/chart/interval', 'single chart, daily rate'],
-  ['/observatory/chart/diversity', 'single chart, gauge'],
-  ['/observatory/chart/batching', 'single chart, several measurements'],
-  ['/observatory/chart/fee-heatmap?range=1y', 'single chart, no daily builder at a long range'],
+  ['/observatory/charts/network', 'Network category page', 'inconclusive'],
+  ['/observatory/charts/fees', 'Fees category page', 'inconclusive'],
+  ['/observatory/charts/mining', 'Mining category page', 'inconclusive'],
+  ['/observatory/charts/embedded', 'Embedded category page', 'inconclusive'],
+  ['/observatory/chart/diff-adjustment', 'single chart, retarget-sourced', 'drawn'],
+  ['/observatory/chart/diff-adjustment?range=1d', 'single chart, no retarget in range', 'no-data'],
+  ['/observatory/chart/interval', 'single chart, daily rate', 'drawn'],
+  ['/observatory/chart/diversity', 'single chart, gauge', 'drawn'],
+  ['/observatory/chart/batching', 'single chart, several measurements', 'drawn'],
+  ['/observatory/chart/fee-heatmap?range=1y', 'single chart, no daily builder at a long range', 'unsupported'],
 ]);
 
 // Read once per page, inside the page, after the charts have had time to draw.
@@ -101,7 +118,19 @@ const COLLECT = `(() => {
       || charts.some((c) => c.title
         .includes('No difficulty adjustment in this range')),
     saysShorterRange: text.includes('shorter range'),
+    // Two different messages, one word apart, and they are not
+    // interchangeable. The **rail** says "Not available for this range." when
+    // there is nothing to summarize (single_chart.rs:1612). The **chart area**
+    // says "Not available at this range" when the chart has no daily builder
+    // and the range is long (single_chart.rs:801). Asserting the first, or
+    // guessing at "shorter range", certifies neither: the phrase "shorter
+    // range" appears nowhere in the app, so an expectation written against it
+    // failed a page that was explaining itself correctly.
     saysNotAvailable: text.includes('Not available for this range'),
+    // Both halves, because the heading alone does not tell the reader what to
+    // do and the actionable half is the one that was missing from the cards.
+    saysNoDailyBuilder: text.includes('Not available at this range')
+      && text.includes('computed per block. Pick 1M or shorter'),
     saysNoSummary: text.includes('A single average, peak or change is not meaningful'),
     saysSeveralMeasurements: text.includes('several separate measurements'),
     saysLoading: text.includes('Loading chart data'),
@@ -173,7 +202,7 @@ process.stderr.write(`driving ${PAGES.length} pages at ${BASE}, ~9s each\n`);
 let failures = 0;
 const report = [];
 
-for (const [path, label] of PAGES) {
+for (const [path, label, expect] of PAGES) {
   events.length = 0;
   process.stderr.write(`  ${path} ... `);
   await send('Page.navigate', { url: BASE + path });
@@ -279,7 +308,17 @@ for (const [path, label] of PAGES) {
     (c) => !c.series.some((s) => s.points > 0));
 
   const lines = [];
-  const fail = (m) => { lines.push('  FAIL ' + m); failures++; };
+  // Counted separately from `lines`, because an INCONCLUSIVE note is a line
+  // and is not a failure. Keying the row's prefix off `lines.length` printed
+  // "FAIL /observatory/charts/mining" above a run that correctly totalled it
+  // as a pass, which is exactly the ambiguity the category-page row exists to
+  // avoid.
+  let pageFailures = 0;
+  const fail = (m) => {
+    lines.push('  FAIL ' + m);
+    failures++;
+    pageFailures++;
+  };
 
   if (!r.hasEcharts) fail('ECharts never loaded on the page');
   if (consoleErrors.length) fail('console errors: '
@@ -299,11 +338,39 @@ for (const [path, label] of PAGES) {
   // This probe had called it "hydration did not run" across three runs,
   // which was the fifth of six ways it reported a working app as broken. So
   // it says what it saw and leaves the verdict to the reader.
-  if (path.startsWith('/observatory/charts/') && populated.length === 0) {
-    lines.push('  INCONCLUSIVE no canvas on a category page. Confirmed by '
-      + 'hand that these draw in a real browser; ECharts is ERR_ABORTED from '
-      + 'jsdelivr here while succeeding on the single-chart pages. Check a '
-      + 'category page by eye rather than trusting this row.');
+  // The required outcome for this route. This is the assertion the probe
+  // previously lacked: everything below reports, this one decides.
+  const anyInstance = (r.charts || []).length > 0;
+  if (expect === 'inconclusive') {
+    if (populated.length === 0) {
+      lines.push('  INCONCLUSIVE no canvas on a category page. Confirmed by '
+        + 'hand that these draw in a real browser; ECharts is ERR_ABORTED from '
+        + 'jsdelivr here while succeeding on the single-chart pages. Check a '
+        + 'category page by eye rather than trusting this row.');
+    }
+  } else if (expect === 'drawn') {
+    if (!populated.length) {
+      fail('no chart on this page holds a plotted point, so nothing here '
+        + 'shows the chart rendered. '
+        + `${(r.charts || []).length} ECharts instances, `
+        + `${(r.canvases || []).length} canvases.`
+        + (r.saysLoading ? ' The page is still showing its loading state.' : ''));
+    }
+  } else if (expect === 'no-data') {
+    // An empty range must be *explained*, and by the chart rather than by the
+    // page being blank. So the instance has to exist and carry the message.
+    if (!anyInstance) {
+      fail('no ECharts instance at all, so the empty-range message cannot '
+        + 'have been drawn by a chart');
+    }
+  } else if (expect === 'unsupported') {
+    if (!r.saysNoDailyBuilder) {
+      fail('this chart has no daily builder at this range and the page does '
+        + 'not say so; an empty axis is not an explanation');
+    }
+  } else {
+    fail(`the probe has no expectation for this route (${expect}), so it `
+      + 'cannot pass or fail it');
   }
 
   // Page-specific expectations from the acceptance matrix.
@@ -321,7 +388,7 @@ for (const [path, label] of PAGES) {
   if (r.saysMining) fail('the old "Mining blocks" loading label is still shown');
 
   report.push([
-    (lines.length ? 'FAIL ' : 'ok   ') + path,
+    (pageFailures ? 'FAIL ' : lines.length ? 'warn ' : 'ok   ') + path,
     `       ${label}`,
     `       charts ${(r.charts || []).length} populated ${populated.length}`
       + ` empty ${empty.length} canvases ${(r.canvases || []).length}`,

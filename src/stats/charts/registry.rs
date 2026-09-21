@@ -1600,7 +1600,7 @@ pub const CHARTS: &[ChartMeta] = &[
         ],
         about: Some(About {
             definition: Some("Difficulty, smoothed over seven different spans at once. Each line is the same number averaged over a different length of time, so the short ones follow recent changes and the long ones lag. Together they show whether difficulty has been rising or falling for a while or has just turned."),
-            technical: "Seven moving averages of difficulty form the ribbon: 9, 14, 25, 40, 60, 90 and 128 blocks at per-block resolution and the same counts in days at daily resolution, so the spans are not the same lengths of time in the two views. When the ribbon is wide, difficulty is rising steadily. When it compresses or inverts, the recent average has fallen below the longer one, which is what a falling difficulty looks like once smoothed. Why it fell is not in this data: hash rate leaving the network and hash rate simply being unlucky for an epoch produce the same shape.",
+            technical: "Seven moving averages of difficulty form the ribbon. Per-block resolution smooths over 9, 14, 25, 40, 60, 90 and 128 blocks; daily resolution smooths over 7, 14, 25, 40, 60, 90 and 128 days. Only the shortest span differs between them, and a span in blocks is about ten minutes each while a span in days is a day each, so no line covers the same length of time in the two views. When the ribbon is wide, difficulty is rising steadily. When it compresses or inverts, the recent average has fallen below the longer one, which is what a falling difficulty looks like once smoothed. Why it fell is not in this data: hash rate leaving the network and hash rate simply being unlucky for an epoch produce the same shape.",
         }),
     },
     ChartMeta {
@@ -1849,7 +1849,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: Some("How many inputs and outputs a typical transaction has. A payment with one input and two outputs, one of them change, is the ordinary shape. Higher output counts suggest an exchange paying many people in one transaction, which uses less space per payment, though nothing here identifies who sent it. Currently around 2.3 outputs and 1.7 inputs per transaction."),
+            definition: Some("How many inputs and outputs a typical transaction has. A payment with one input and two outputs, one of them change, is the ordinary shape. A higher output count means one transaction created more outputs, which spreads its fixed overhead across more of them. Who sent it, and whether a given output was a payment or change, is not in this data. Currently around 2.3 outputs and 1.7 inputs per transaction."),
             technical: "A higher output count per transaction is consistent with batching, where one transaction pays many recipients, but nothing here identifies the sender or separates a payment from a change output. A typical non-batched transaction has 1-2 inputs and 2 outputs (payment + change).",
         }),
     },
@@ -2012,7 +2012,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: Some("The biggest single transaction in each block, by bytes. A large transaction is usually one consolidating many small outputs into one, which is cheap per output and expensive in total. The largest in the chain is 3,992,821 bytes, which is almost an entire block."),
+            definition: Some("The biggest single transaction in each block, by bytes. Size comes from how many inputs and outputs a transaction carries and how much witness data arrives with them, so a transaction can be large for several unrelated reasons and a size alone does not separate them. The largest in the chain is 3,992,821 bytes, which is almost an entire block."),
             technical: "Serialized size of the largest transaction in the block, read per transaction during ingestion. Size rather than weight, so a witness-heavy transaction reads larger here than it costs against the limit.",
         }),
     },
@@ -2471,7 +2471,7 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Outputs created less detected OP_RETURN outputs less inputs consumed, over non-coinbase transactions. Coinbase outputs are missing because ingestion excludes the coinbase, which leaves the series short by about three per block. Negative means a net reduction; it does not establish consolidation.",
         }],
         about: Some(About {
-            definition: Some("Whether the set of spendable coins is growing or shrinking. Every transaction consumes existing outputs and creates new ones, and the running total of unspent ones is the UTXO set. Positive means more were created than consumed; negative means wallets are consolidating many small coins into fewer large ones."),
+            definition: Some("Whether the set of spendable coins is growing or shrinking. Every transaction consumes existing outputs and creates new ones, and the running total of unspent ones is the UTXO set. Positive means more were created than consumed, and negative means the reverse, which is consistent with wallets consolidating small coins without establishing that any of them did."),
             technical: "Outputs created, minus the ones that can never be spent, minus inputs consumed. OP_RETURN outputs are provably unspendable and never enter the set, so they do not count as growth. The coinbase transaction is absent from these counts, so its own outputs are missing and this runs about three per block short of a node's own figure. Net, not cumulative, which is why it goes negative and why a log axis cannot plot every point. The set matters because every node holds it in memory to validate, making it a running cost to the whole network.",
         }),
     },
@@ -3024,6 +3024,59 @@ mod tests {
     ///
     /// The style to match is the opening of any `definition`: present tense,
     /// direct, about the thing itself.
+    /// The ribbon's copy has to name the spans the builders actually use.
+    ///
+    /// It said daily used "the same counts" as per-block, which is true of six
+    /// of the seven and false of the shortest: the daily builder smooths over 7
+    /// days, not 9. The entry's own `population` field had it right, so one
+    /// `ChartMeta` stated both. Found by review on 2026-09-21. Reading the
+    /// constants rather than restating them is what keeps this honest.
+    #[test]
+    fn the_ribbon_copy_names_the_spans_the_builders_use() {
+        let ribbon = CHARTS
+            .iter()
+            .find(|c| c.slug == "diff-ribbon")
+            .expect("the ribbon is registered");
+        let technical = ribbon.about.expect("ribbon has About").technical;
+        let population = ribbon.measurements[0].population;
+
+        // Both sequences, in order, in both fields. A sequence is searched as
+        // its rendered text so a reordering fails rather than passing on the
+        // strength of every number being present somewhere.
+        let render = |w: &[usize]| {
+            w.iter()
+                .map(|n| n.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        let per_block = render(&crate::stats::charts::RIBBON_WINDOWS_PER_BLOCK);
+        let daily = render(&crate::stats::charts::RIBBON_WINDOWS_DAILY);
+        // Rendered as "9, 14, 25, 40, 60, 90, 128", while the prose ends with
+        // "and 128", so compare on the part before the final separator.
+        let head =
+            |s: &str| s.rsplit_once(", ").expect("seven spans").0.to_string();
+
+        for (field, text) in
+            [("technical", technical), ("population", population)]
+        {
+            assert!(
+                text.contains(&head(&per_block)),
+                "the ribbon's {field} copy does not name the per-block spans \
+                 {per_block}: {text}"
+            );
+            assert!(
+                text.contains(&head(&daily)),
+                "the ribbon's {field} copy does not name the daily spans \
+                 {daily}: {text}"
+            );
+            assert!(
+                !text.to_lowercase().contains("the same counts"),
+                "the ribbon's {field} copy claims the two arms share their \
+                 spans; only six of the seven are shared: {text}"
+            );
+        }
+    }
+
     #[test]
     fn long_copy_describes_the_metric_and_not_its_edit_history() {
         // Crude on purpose, and "used to" is the one that bites: it also
@@ -3221,6 +3274,36 @@ mod tests {
                 "a high output count is consistent with batching and does \
                  not identify the sender, nor separate a payment from a \
                  change output.",
+            ),
+            // The three below are rewordings of claims already retired above,
+            // written into fresh `definition` copy by the same hand that
+            // retired them. That is the limit of a literal-phrase guard worth
+            // stating plainly: it holds the sentence, not the inference, so
+            // the same claim in new words passes. "A large transaction is
+            // usually one consolidating" was in fact *stronger* than the
+            // hedged "may indicate consolidations" it replaced. When adding
+            // copy, the test to apply is whether the measurement could
+            // distinguish the claim from its opposite, not whether the
+            // sentence is new.
+            (
+                "suggest an exchange",
+                "outputs per transaction counts outputs. No column of this \
+                 data carries who signed a transaction, so an exchange \
+                 cannot be told from any other sender of many outputs.",
+            ),
+            (
+                "usually one consolidating",
+                "a size is not a purpose, and \"usually\" is a claim about \
+                 how often, which needs a population this chart does not \
+                 measure. Large comes from input count, output count or \
+                 witness bytes, and the size alone does not say which.",
+            ),
+            (
+                "means wallets are consolidating",
+                "net UTXO change is outputs created less inputs consumed. A \
+                 negative figure is consistent with consolidation and also \
+                 with payments to fewer outputs; this chart's own population \
+                 field already said it does not establish consolidation.",
             ),
             (
                 "non-financial",

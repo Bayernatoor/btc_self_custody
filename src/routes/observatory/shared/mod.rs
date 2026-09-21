@@ -88,7 +88,7 @@ macro_rules! chart_memo {
             let flags = $overlays.get();
             // MUST read data to track it as reactive dependency — otherwise
             // the derive won't re-run when new data arrives after range change.
-            let data_opt = $data.get().and_then(|r| r.ok());
+            let data_opt = $data.get().and_then(|(_, r)| r.ok());
             // Data fingerprint, so a cached chart is never served for a
             // different payload. Row count ALONE is not enough: two windows of
             // the same range have the same length, so switching away from a
@@ -434,13 +434,28 @@ fn OverlaysTabContent() -> impl IntoView {
             <OverlayCheckbox label="Core Releases" color="#a855f7" icon="\u{2026}" checked=state.overlay_core on_toggle=state.set_overlay_core/>
             <OverlayCheckbox label="Events" color="#ef4444" icon="\u{2605}" checked=state.overlay_events on_toggle=state.set_overlay_events/>
             <label class="flex items-center gap-2 cursor-pointer group">
+                // Disabled, with the reason in the title, when the window is
+                // shorter than the price sampling interval. Offering a control
+                // that silently draws nothing is worse than not offering it.
                 <input
                     type="checkbox"
-                    class="accent-[#e6c84e] w-4 h-4 cursor-pointer"
+                    class="accent-[#e6c84e] w-4 h-4 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
                     prop:checked=move || state.overlay_price.get()
+                    prop:disabled=move || state.price_sparse.get()
                     on:change=move |_| state.set_overlay_price.update(|v| *v = !*v)
                 />
-                <span class="text-[0.9rem] text-white/60 group-hover:text-white/80 transition-colors">"Price (USD)"</span>
+                <span
+                    class=move || if state.price_sparse.get() {
+                        "text-[0.9rem] text-white/35"
+                    } else {
+                        "text-[0.9rem] text-white/60 group-hover:text-white/80 transition-colors"
+                    }
+                    title=move || if state.price_sparse.get() {
+                        "Price is sampled every 4 days, so this range is too short to draw it"
+                    } else {
+                        "The BTC price in US dollars, on its own axis"
+                    }
+                >"Price (USD)"</span>
                 {move || if state.price_loading.get() {
                     view! {
                         <svg class="w-4 h-4 ml-auto animate-spin text-[#e6c84e]/60" fill="none" viewBox="0 0 24 24">

@@ -58,7 +58,9 @@ pub struct ObservatoryState {
     pub range: ReadSignal<String>,
     pub set_range: WriteSignal<String>,
     pub overlay_flags: Signal<OverlayFlags>,
-    pub dashboard_data: LocalResource<Result<DashboardData, String>>,
+    /// The dashboard payload **and the window it answers**. See
+    /// `DashboardValue`: pairing them is what makes `data_loading` correct.
+    pub dashboard_data: LocalResource<DashboardValue>,
     pub cached_live: ReadSignal<Option<LiveStats>>,
     // overlay signals (for the panel)
     pub overlay_halvings: ReadSignal<bool>,
@@ -88,6 +90,10 @@ pub struct ObservatoryState {
     pub compare: ReadSignal<String>,
     pub set_compare: WriteSignal<String>,
     pub price_loading: Signal<bool>,
+    /// True while the selected window is shorter than one price sample
+    /// interval, so the price overlay would draw nothing. See
+    /// `PRICE_SAMPLE_INTERVAL_SECS`.
+    pub price_sparse: Signal<bool>,
     // Unified chart-settings panel (one floating button, tabs for Overlays + Range).
     // Replaces the earlier split between OverlayPanel and FloatingRangePicker.
     pub chart_settings_open: ReadSignal<bool>,
@@ -166,58 +172,118 @@ pub fn date_to_ts_end(date: &str) -> Option<u64> {
 /// Create a `LocalResource` that fetches dashboard data for the given range.
 /// Returns `PerBlock` data for short ranges (under ~5000 blocks) or `Daily`
 /// aggregates for longer ranges. Supports custom date ranges via from/to params.
+/// The window a fetch was issued for: the range name and the two custom dates.
+pub type WindowKey = (String, Option<String>, Option<String>);
+
+/// How far apart the price samples are, in seconds.
+///
+/// **Measured, not assumed.** `fetch_price_history_all` asks blockchain.info
+/// for `timespan=all`, and that endpoint reduces resolution for a long span:
+/// on 2026-09-21 it returned 1,618 points spaced exactly 345,600,000 ms apart,
+/// which is four days. It is the only price series the site fetches, and it is
+/// cached for an hour and then filtered client-side, so **every** range gets
+/// four-day sampling rather than the daily figure the overlay's copy used to
+/// claim.
+///
+/// Probe, against a running server:
+///
+/// ```text
+/// curl -s -X POST localhost:8000/api/stats_price_history \
+///   -d 'from_ts=0&to_ts=4000000000' | head -c 300
+/// ```
+///
+/// If a future endpoint change tightens the spacing, this constant is the one
+/// place to correct, and the toggle it gates relaxes on its own.
+pub const PRICE_SAMPLE_INTERVAL_SECS: u64 = 4 * 86_400;
+
+/// Whether a window of `span_secs` is too short for the price series to draw.
+///
+/// A line needs two points. Samples sit one interval apart, so a window
+/// narrower than the interval can contain at most one of them, and one point
+/// with `symbol: "none"` paints nothing.
+pub fn price_window_too_short(span_secs: u64) -> bool {
+    span_secs < PRICE_SAMPLE_INTERVAL_SECS
+}
+
+/// A dashboard payload and **the window it answers**, which travel together.
+///
+/// The window is part of the value rather than recorded beside it, because
+/// every version of "record it beside it" has been wrong, twice in one day:
+///
+/// - An `Effect` stamping the ambient range when the resource held any value.
+///   A `LocalResource` keeps its previous payload while refetching, so that
+///   stamped the new range against the old data.
+/// - The fetch stamping its own window on the way out. That reads correctly
+///   and is worse: the write happens *inside* the future, so it lands before
+///   the future's value reaches the resource. The loading flag then cleared one
+///   step ahead of the data every single time, turning an occasional flash into
+///   a certain one.
+///
+/// Carried in the value, the stamp cannot arrive early or late, because it
+/// arrives as the data. There is no ordering left to get wrong. The result is
+/// inside so a failed fetch still says which window failed, rather than
+/// leaving the flag stuck and the skeleton spinning.
+pub type DashboardValue = (WindowKey, Result<DashboardData, String>);
+
 pub fn create_dashboard_resource(
     range: ReadSignal<String>,
     custom_from: ReadSignal<Option<String>>,
     custom_to: ReadSignal<Option<String>>,
-) -> LocalResource<Result<DashboardData, String>> {
+) -> LocalResource<DashboardValue> {
     LocalResource::new(move || {
         let r = range.get();
         let cf = custom_from.get();
         let ct = custom_to.get();
+        let stamp = (r.clone(), cf.clone(), ct.clone());
         async move {
-            let stats =
-                fetch_stats_summary().await.map_err(|e| e.to_string())?;
+            let out = async move {
+                let stats =
+                    fetch_stats_summary().await.map_err(|e| e.to_string())?;
 
-            // Custom date range — use timestamp-based queries directly
-            if r == "custom" {
-                if let (Some(from_str), Some(to_str)) = (cf, ct) {
-                    let from_ts = date_to_ts(&from_str).unwrap_or(0);
-                    let to_ts = date_to_ts_end(&to_str)
-                        .unwrap_or(stats.latest_timestamp);
-                    let approx_blocks = to_ts.saturating_sub(from_ts) / 600;
-                    if uses_daily_aggregates(approx_blocks) {
-                        let days = fetch_daily_aggregates(from_ts, to_ts)
-                            .await
-                            .map_err(|e| e.to_string())?;
-                        return Ok::<_, String>(DashboardData::Daily(days));
-                    } else {
-                        let blocks = fetch_blocks_by_ts(from_ts, to_ts)
-                            .await
-                            .map_err(|e| e.to_string())?;
-                        return Ok(DashboardData::PerBlock(blocks));
+                // Custom date range: timestamp-based queries directly
+                if r == "custom" {
+                    if let (Some(from_str), Some(to_str)) = (cf, ct) {
+                        let from_ts = date_to_ts(&from_str).unwrap_or(0);
+                        let to_ts = date_to_ts_end(&to_str)
+                            .unwrap_or(stats.latest_timestamp);
+                        let approx_blocks = to_ts.saturating_sub(from_ts) / 600;
+                        if uses_daily_aggregates(approx_blocks) {
+                            let days = fetch_daily_aggregates(from_ts, to_ts)
+                                .await
+                                .map_err(|e| e.to_string())?;
+                            return Ok::<_, String>(DashboardData::Daily(days));
+                        } else {
+                            let blocks = fetch_blocks_by_ts(from_ts, to_ts)
+                                .await
+                                .map_err(|e| e.to_string())?;
+                            return Ok(DashboardData::PerBlock(blocks));
+                        }
                     }
                 }
-            }
 
-            let n = range_to_blocks(&r);
-            let is_daily = uses_daily_aggregates(n);
+                let n = range_to_blocks(&r);
+                let is_daily = uses_daily_aggregates(n);
 
-            if is_daily {
-                let from_ts = stats.latest_timestamp.saturating_sub(n * 600);
-                let days =
-                    fetch_daily_aggregates(from_ts, stats.latest_timestamp)
+                if is_daily {
+                    let from_ts =
+                        stats.latest_timestamp.saturating_sub(n * 600);
+                    let days =
+                        fetch_daily_aggregates(from_ts, stats.latest_timestamp)
+                            .await
+                            .map_err(|e| e.to_string())?;
+                    Ok::<_, String>(DashboardData::Daily(days))
+                } else {
+                    let from = stats
+                        .min_height
+                        .max(stats.max_height.saturating_sub(n));
+                    let blocks = fetch_blocks(from, stats.max_height)
                         .await
                         .map_err(|e| e.to_string())?;
-                Ok::<_, String>(DashboardData::Daily(days))
-            } else {
-                let from =
-                    stats.min_height.max(stats.max_height.saturating_sub(n));
-                let blocks = fetch_blocks(from, stats.max_height)
-                    .await
-                    .map_err(|e| e.to_string())?;
-                Ok(DashboardData::PerBlock(blocks))
+                    Ok(DashboardData::PerBlock(blocks))
+                }
             }
+            .await;
+            (stamp, out)
         }
     })
 }
@@ -424,23 +490,47 @@ pub fn provide_observatory_state() -> ObservatoryState {
     //
     // We track which (range, from, to) the resource last resolved for, and
     // derive `data_loading` as "those don't match the live values yet."
-    // The snapshotting Effect re-runs only when the resource notifies a new
-    // value (i.e. the new fetch landed), capturing the range/from/to in
-    // effect at that moment.
-    let (last_resolved, set_last_resolved) =
-        signal::<Option<(String, Option<String>, Option<String>)>>(None);
-    Effect::new(move |_| {
-        if dashboard_data.get().is_some() {
-            set_last_resolved.set(Some((
-                range.get_untracked(),
-                custom_from.get_untracked(),
-                custom_to.get_untracked(),
-            )));
-        }
-    });
+    //
+    // **The window is read off the payload**, so "has the new data arrived" is
+    // answered by the data and not by a stamp kept beside it. `DashboardValue`
+    // records the two ways keeping it beside the data failed on 2026-09-21,
+    // the second of which made the flash certain rather than occasional.
+    //
+    // An out-of-order completion, where a superseded fetch lands after a newer
+    // one, shows the older window and puts the skeleton back until the newer
+    // one arrives. That is a spurious skeleton rather than a stale chart, which
+    // is the right way round for this to fail.
     let data_loading = Signal::derive(move || {
         let want = (range.get(), custom_from.get(), custom_to.get());
-        last_resolved.get().is_none_or(|have| have != want)
+        dashboard_data.get().is_none_or(|(have, _)| have != want)
+    });
+
+    // Whether the selected window is too short for the price series to draw.
+    //
+    // `PRICE_SAMPLE_INTERVAL_SECS` explains the number. A window shorter than
+    // one sampling interval holds at most one historical sample, and one point
+    // with `symbol: "none"` draws nothing at all: the legend gains a "Price
+    // (USD)" entry and the plot gains no line. Reported on 2026-09-21 from a
+    // 1D chart, where the overlay was offered, accepted, and silently drew
+    // nothing.
+    //
+    // Read off the loaded rows rather than the range name, because a custom
+    // window of two days is just as short and `range_to_blocks` maps "custom"
+    // to 999,999. Daily resolution starts at thousands of blocks, so those
+    // windows are never short enough to matter.
+    let price_sparse = Signal::derive(move || {
+        dashboard_data
+            .get()
+            .and_then(|(_, r)| r.ok())
+            .and_then(|data| match data {
+                DashboardData::PerBlock(blocks) => {
+                    let first = blocks.first()?.timestamp;
+                    let last = blocks.last()?.timestamp;
+                    Some(price_window_too_short(last.saturating_sub(first)))
+                }
+                DashboardData::Daily(_) => Some(false),
+            })
+            .unwrap_or(false)
     });
 
     // Fetch cumulative size offset (total bytes before visible window)
@@ -499,19 +589,21 @@ pub fn provide_observatory_state() -> ObservatoryState {
     // Empty for per-block ranges, which read difficulty off the blocks they
     // already have.
     let retargets = LocalResource::new(move || {
-        let window = dashboard_data.get().and_then(|r| r.ok()).and_then(
-            |data| match data {
-                DashboardData::Daily(ref days) => {
-                    let first = days.first()?;
-                    let last = days.last()?;
-                    Some((
-                        date_to_ts(&first.date)?,
-                        date_to_ts_end(&last.date)?,
-                    ))
-                }
-                DashboardData::PerBlock(_) => None,
-            },
-        );
+        let window =
+            dashboard_data
+                .get()
+                .and_then(|(_, r)| r.ok())
+                .and_then(|data| match data {
+                    DashboardData::Daily(ref days) => {
+                        let first = days.first()?;
+                        let last = days.last()?;
+                        Some((
+                            date_to_ts(&first.date)?,
+                            date_to_ts_end(&last.date)?,
+                        ))
+                    }
+                    DashboardData::PerBlock(_) => None,
+                });
         async move {
             match window {
                 // The error is kept rather than flattened to an empty list.
@@ -537,7 +629,7 @@ pub fn provide_observatory_state() -> ObservatoryState {
             let offset_bytes = chain_size_offset.get().unwrap_or(0);
             let result = dashboard_data
                 .get()
-                .and_then(|r| r.ok())
+                .and_then(|(_, r)| r.ok())
                 .map(|data| {
                     let mut cumulative: f64 =
                         offset_bytes as f64 / 1_000_000_000.0;
@@ -597,7 +689,12 @@ pub fn provide_observatory_state() -> ObservatoryState {
     let (compare, set_compare) = signal(initial_compare);
 
     let overlay_flags = Signal::derive(move || {
-        let price_data = if overlay_price.get() {
+        // `price_sparse` as well as the toggle, so a window too short to draw
+        // the series does not carry it. The toggle is a stored preference and
+        // survives a range change, so without this a reader who turned price
+        // on at 1Y and then moved to 1D kept a "Price (USD)" legend entry
+        // beside no line, and the toggle stayed checked while disabled.
+        let price_data = if overlay_price.get() && !price_sparse.get() {
             cached_price_history.get()
         } else {
             Vec::new()
@@ -652,6 +749,7 @@ pub fn provide_observatory_state() -> ObservatoryState {
         compare,
         set_compare,
         price_loading,
+        price_sparse,
         chart_settings_open,
         set_chart_settings_open,
         chart_settings_tab,

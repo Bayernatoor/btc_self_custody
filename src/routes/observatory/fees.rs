@@ -30,7 +30,7 @@ pub fn FeeChartsPage() -> impl IntoView {
         let flags = overlay_flags.get();
         dashboard_data
             .get()
-            .and_then(|r| r.ok())
+            .and_then(|(_, r)| r.ok())
             .map(|data| {
                 let (mut value, is_daily) = match data {
                     DashboardData::PerBlock(ref blocks) => (
@@ -100,7 +100,7 @@ pub fn FeeChartsPage() -> impl IntoView {
         range,
         overlay_flags,
         |blocks| crate::stats::charts::fee_pressure_chart(blocks),
-        |_days| crate::stats::charts::no_data_chart(
+        |_days| crate::stats::charts::no_daily_builder_chart(
             "Fee Pressure vs Block Space"
         )
     );
@@ -109,7 +109,9 @@ pub fn FeeChartsPage() -> impl IntoView {
         range,
         overlay_flags,
         |blocks| crate::stats::charts::fee_spike_chart(blocks),
-        |_days| crate::stats::charts::no_data_chart("Fee Spike Detector")
+        |_days| crate::stats::charts::no_daily_builder_chart(
+            "Fee Spike Detector"
+        )
     );
     let halving_era_option = chart_memo!(
         dashboard_data,
@@ -123,21 +125,27 @@ pub fn FeeChartsPage() -> impl IntoView {
         range,
         overlay_flags,
         |blocks| crate::stats::charts::fee_rate_heatmap_chart(blocks),
-        |_days| crate::stats::charts::no_data_chart("Fee Rate Bands (Full)")
+        |_days| crate::stats::charts::no_daily_builder_chart(
+            "Fee Rate Bands (Full)"
+        )
     );
     let max_tx_fee_option = chart_memo!(
         dashboard_data,
         range,
         overlay_flags,
         |blocks| crate::stats::charts::max_tx_fee_chart(blocks),
-        |_days| crate::stats::charts::no_data_chart("Max Transaction Fee")
+        |_days| crate::stats::charts::no_daily_builder_chart(
+            "Max Transaction Fee"
+        )
     );
     let protocol_fees_option = chart_memo!(
         dashboard_data,
         range,
         overlay_flags,
         |blocks| crate::stats::charts::protocol_fee_breakdown_chart(blocks),
-        |_days| crate::stats::charts::no_data_chart("Protocol Fee Revenue")
+        |_days| crate::stats::charts::no_daily_builder_chart(
+            "Protocol Fee Revenue"
+        )
     );
 
     view! {
@@ -151,7 +159,7 @@ pub fn FeeChartsPage() -> impl IntoView {
         >
             // Error overlay
             {move || match dashboard_data.get() {
-                Some(Err(_)) => Some(view! {
+                Some((_, Err(_))) => Some(view! {
                     <DataLoadError on_retry=Callback::new(move |_| dashboard_data.refetch())/>
                 }),
                 _ => None,

@@ -861,7 +861,7 @@ pub fn largest_tx_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 
 /// Largest transaction size per block (daily — not available).
 pub fn largest_tx_chart_daily(_days: &[DailyAggregate]) -> serde_json::Value {
-    no_data_chart("Largest Transaction (per-block ranges only)")
+    no_daily_builder_chart("Largest Transaction")
 }
 
 /// Histogram of block weight utilization in 10% buckets.
@@ -1049,12 +1049,19 @@ pub fn block_time_distribution_pct_chart(
         counts[idx] += 1;
     }
 
-    let total = blocks.len().saturating_sub(1) as f64;
+    // The denominator is the intervals that were **counted**, not the pairs
+    // that existed. Excluding a backward pair from the buckets while leaving it
+    // in `blocks.len() - 1` makes the bars sum to less than 100% by exactly the
+    // share that was dropped, and silently disagrees with the SQL-backed arm,
+    // which filters `gap >= 0` in the query and divides by the sum of the
+    // buckets it kept (`block_time_histogram_from_buckets_pct`). Same range,
+    // two different answers, decided only by which arm served it.
+    let total: u64 = counts.iter().sum();
     let data: Vec<f64> = counts
         .iter()
         .map(|&c| {
-            if total > 0.0 {
-                round(c as f64 / total * 100.0, 2)
+            if total > 0 {
+                round(c as f64 / total as f64 * 100.0, 2)
             } else {
                 0.0
             }
@@ -1252,6 +1259,16 @@ pub fn block_time_histogram_from_buckets(
 
 /// Difficulty ribbon chart: 7 moving averages of difficulty at different windows.
 /// When short MAs cross below long MAs, it signals miner capitulation.
+/// The ribbon's smoothing spans, which the About copy states and a
+/// conformance test reads back out of it.
+///
+/// The two arms differ only in the shortest span, which is easy to describe
+/// wrongly and was: the copy claimed daily used "the same counts" as per-block
+/// while the builder used 7 rather than 9. Naming them here means the sentence
+/// and the arithmetic cannot drift apart silently.
+pub const RIBBON_WINDOWS_PER_BLOCK: [usize; 7] = [9, 14, 25, 40, 60, 90, 128];
+pub const RIBBON_WINDOWS_DAILY: [usize; 7] = [7, 14, 25, 40, 60, 90, 128];
+
 pub fn difficulty_ribbon_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Difficulty Ribbon");
@@ -1261,7 +1278,7 @@ pub fn difficulty_ribbon_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart_with_hint("Difficulty Ribbon", "Select a longer range (3M+) to see the ribbon spread across difficulty adjustments");
     }
 
-    let windows = [9, 14, 25, 40, 60, 90, 128];
+    let windows = RIBBON_WINDOWS_PER_BLOCK;
     let colors = [
         "rgba(173,216,255,0.7)", // lightest blue
         "rgba(135,190,255,0.7)",
@@ -1307,7 +1324,7 @@ pub fn difficulty_ribbon_chart_daily(
         return no_data_chart("Difficulty Ribbon");
     }
 
-    let windows = [7, 14, 25, 40, 60, 90, 128];
+    let windows = RIBBON_WINDOWS_DAILY;
     let colors = [
         "rgba(173,216,255,0.7)",
         "rgba(135,190,255,0.7)",
