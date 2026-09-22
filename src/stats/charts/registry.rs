@@ -20,8 +20,8 @@
 //!
 //! # Why `Source` is an enum rather than one function pointer
 //!
-//! The builders are nearly uniform and the exceptions are real. 53 charts take
-//! `&[BlockSummary]` with an optional `&[DailyAggregate]` variant. The other 8
+//! The builders are nearly uniform and the exceptions are real. 54 charts take
+//! `&[BlockSummary]` with an optional `&[DailyAggregate]` variant. The other 9
 //! need something else: `chain-size` needs disk size and a byte offset, `fees`
 //! needs the BTC/sats toggle, `fullness-dist` and `time-dist` each have four
 //! combinations (count or percent, per-block or from histogram buckets), and
@@ -644,7 +644,7 @@ pub const CHARTS: &[ChartMeta] = &[
         ],
         about: Some(About {
             definition: Some("An inscription is content wrapped in a small protocol structure: markers saying what follows, the content type, and a terminator. This splits the two, so the cost of the wrapper is visible next to the thing being stored. Small inscriptions pay proportionally far more wrapper."),
-            technical: "Every Ordinals inscription wraps content in a witness envelope: OP_FALSE OP_IF ... OP_ENDIF with push opcodes and the 'ord' marker. The split is estimated, not parsed: the envelope header, content-type section and terminator are located by pattern and subtracted, and anything not found falls back to 10 bytes. Measured across the 190,252 blocks holding a detection, that overhead is 7.7% of all matching witness bytes, while the median block puts it at 17.9% and individual blocks run from nothing to 94%. The share is high where inscriptions are small, since the envelope cost is close to fixed, which is why BRC-20 JSON operations sit at the top of that range.",
+            technical: "Every Ordinals inscription wraps content in a witness envelope: OP_FALSE OP_IF ... OP_ENDIF with push opcodes and the 'ord' marker. The split is estimated, not parsed: the envelope header, content-type section and terminator are located by pattern and subtracted, and anything not found falls back to 10 bytes. Measured across the more than 190,000 blocks holding a detection, that overhead is 7.7% of all matching witness bytes, while the median block puts it at 17.9% and individual blocks run from nothing to 94%. The share is high where inscriptions are small, since the envelope cost is close to fixed, which is why BRC-20 JSON operations sit at the top of that range.",
         }),
     },
     ChartMeta {
@@ -909,14 +909,14 @@ pub const CHARTS: &[ChartMeta] = &[
         ],
         about: Some(About {
             definition: Some("Which kind of data-carrying transaction was paying more into the fee market at a given time. Two detectors side by side, because a transaction can match both and is then counted by both."),
-            technical: "Fees paid by the transactions each detector matched, drawn as two totals beside the block's whole fee take rather than as parts of it. A transaction carrying both an inscription and a Runes payload is credited to both, so the two cannot be added: 125,180 blocks have both detectors firing and in 1,326 of them the sum exceeds the block's entire fee take. Which detector is larger in a period is a fact about the detectors, not about what drove the fee market.",
+            technical: "Fees paid by the transactions each detector matched, drawn as two totals beside the block's whole fee take rather than as parts of it. A transaction carrying both an inscription and a Runes payload is credited to both, so the two cannot be added: more than 125,000 blocks have both detectors firing and in 1,326 of them the sum exceeds the block's entire fee take. Which detector is larger in a period is a fact about the detectors, not about what drove the fee market.",
         }),
     },
     ChartMeta {
         slug: "runes-pct",
         title: "OP_RETURN Protocol Share",
-        desc_per_block: "Detected OP_RETURN outputs by protocol. Runes were 96.9% of them in 2024, the year they launched, and 97.5% so far in 2026",
-        desc_daily: "Detected OP_RETURN outputs by protocol. Runes were 96.9% of them in 2024, the year they launched, and 97.5% so far in 2026",
+        desc_per_block: "Detected OP_RETURN outputs by protocol. Runes were 97.0% of them in 2024, the year they launched, and over 97% so far in 2026",
+        desc_daily: "Detected OP_RETURN outputs by protocol. Runes were 97.0% of them in 2024, the year they launched, and over 97% so far in 2026",
         category: Category::Embedded,
         unit: Unit::Percent,
         shape: Shape::StackedPercent,
@@ -935,7 +935,7 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Each detector's count over the block's OP_RETURN count. Detectors match a prefix, so the residual band is whatever matched none of them rather than a named protocol.",
         }],
         about: Some(About {
-            definition: Some("Which protocol is using the OP_RETURN space. Runes launched in the halving block, 840,000 on 2024-04-20, and took almost all of it immediately: 96.9% of detected OP_RETURN outputs that year."),
+            definition: Some("Which protocol is using the OP_RETURN space. Runes launched in the halving block, 840,000 on 2024-04-20, and took almost all of it immediately: 97.0% of detected OP_RETURN outputs that year."),
             technical: "Each protocol's detected OP_RETURN outputs as a share of all detected OP_RETURN outputs in the block. Detection is by script prefix, so an unrecognised protocol lands in the residual band rather than being missed entirely.",
         }),
     },
@@ -1085,12 +1085,12 @@ pub const CHARTS: &[ChartMeta] = &[
                 method_daily: Method::HeuristicallyDetected,
                 per_block: Aggregation::PerBlockObservation,
                 daily: Aggregation::MeanOfPerBlockValues,
-                population: "An estimated payload, whereas the OP_RETURN bands are exact script bytes, so the stack mixes two byte bases: 6.27 GB of exact script bytes against 40.93 GB of estimate over the whole chain. BRC-20 content is inside this band because no separate byte column exists for it, unlike the count chart where the two are disjoint.",
+                population: "An estimated payload, whereas the OP_RETURN bands are exact script bytes, so the stack mixes two byte bases: about 6.3 GB of exact script bytes against about 41 GB of estimate over the whole chain. BRC-20 content is inside this band because no separate byte column exists for it, unlike the count chart where the two are disjoint.",
             },
         ],
         about: Some(About {
             definition: Some("Everything the site detects as embedded data, by size rather than by count. 63.1% of blocks carry an OP_RETURN output and 19.7% carry a detected inscription, and the two are measured on different bases, which the bands say."),
-            technical: "OP_RETURN bands are exact script bytes. The inscription band is an estimated payload, and it includes BRC-20 content because no separate byte column exists for it, unlike the count chart where the two are disjoint. Over the whole chain that is 6.27 GB of exact bytes against 40.93 GB of estimate, so the stack is mostly estimate.",
+            technical: "OP_RETURN bands are exact script bytes. The inscription band is an estimated payload, and it includes BRC-20 content because no separate byte column exists for it, unlike the count chart where the two are disjoint. Over the whole chain that is about 6.3 GB of exact bytes against about 41 GB of estimate, so the stack is mostly estimate.",
         }),
     },
     ChartMeta {
@@ -1464,7 +1464,7 @@ pub const CHARTS: &[ChartMeta] = &[
         ],
         about: Some(About {
             definition: Some("How much of a block's fee income came from transactions carrying inscription or Runes data. Two detectors drawn side by side rather than as parts of one total, because a transaction carrying both is counted by both."),
-            technical: "Fees attributed to transactions each detector matched. The two are not a partition: 125,180 blocks have both firing and in 1,326 of them the totals sum to more than the block collected, so they are drawn unstacked and beside the block's own fee take. Which detector is larger in a period is a fact about the detectors.",
+            technical: "Fees attributed to transactions each detector matched. The two are not a partition: more than 125,000 blocks have both firing and in 1,326 of them the totals sum to more than the block collected, so they are drawn unstacked and beside the block's own fee take. Which detector is larger in a period is a fact about the detectors.",
         }),
     },
     ChartMeta {
@@ -1659,8 +1659,8 @@ pub const CHARTS: &[ChartMeta] = &[
     ChartMeta {
         slug: "empty-blocks",
         title: "Empty Blocks",
-        desc_per_block: "Blocks carrying only the coinbase transaction, which is almost always the early chain: 78,800 of the 89,929 are from 2009 and 2010",
-        desc_daily: "Blocks carrying only the coinbase transaction, which is almost always the early chain: 78,800 of the 89,929 are from 2009 and 2010",
+        desc_per_block: "Blocks carrying only the coinbase transaction, which is almost always the early chain: 78,800 of them are from 2009 and 2010",
+        desc_daily: "Blocks carrying only the coinbase transaction, which is almost always the early chain: 78,800 of them are from 2009 and 2010",
         category: Category::Mining,
         unit: Unit::Count,
         shape: Shape::Histogram,
@@ -1676,8 +1676,8 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Counted where tx_count is one, grouped by calendar month. An empty block is a valid block; the count does not establish why it was empty.",
         }],
         about: Some(About {
-            definition: Some("A block carrying nothing but the miner's own payment to itself. Every block has that one transaction, the coinbase, so a block with a count of one collected no fees and moved nobody's coins. They are almost extinct: 89,929 exist in the whole chain and only 408 of them are in the last 167,321 blocks."),
-            technical: "Blocks whose transaction count is one, so the coinbase is all there is. This chart does not establish why a miner produced one: a pool can be building on a tip it is still validating, and the data shows the result rather than the reason. 86,656 of the 89,929 are unattributed, because pool identification depends on coinbase patterns that did not exist in 2009 and 2010, which is also when almost all of them were mined. Modern pools typically include transactions within seconds of receiving a new block.",
+            definition: Some("A block carrying nothing but the miner's own payment to itself. Every block has that one transaction, the coinbase, so a block with a count of one collected no fees and moved nobody's coins. They are almost extinct: close to 90,000 exist in the whole chain, and almost all of them predate 2011."),
+            technical: "Blocks whose transaction count is one, so the coinbase is all there is. This chart does not establish why a miner produced one: a pool can be building on a tip it is still validating, and the data shows the result rather than the reason. 86,656 of them are unattributed, because pool identification depends on coinbase patterns that did not exist in 2009 and 2010, which is also when almost all of them were mined. Modern pools typically include transactions within seconds of receiving a new block.",
         }),
     },
     ChartMeta {
@@ -1700,7 +1700,7 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "As Empty Blocks, grouped by matched coinbase tag instead of by month, so it inherits the attribution gap: unmatched blocks group as Unknown, and the early chain is largely unmatched.",
         }],
         about: Some(About {
-            definition: Some("Which pools mined the coinbase-only blocks. Almost all of them are unattributed, 86,656 of 89,929, because pool identification reads patterns in the coinbase that did not exist in 2009 and 2010, which is when nearly every empty block was mined. So the Unknown bar is a statement about the early chain rather than about anonymity today."),
+            definition: Some("Which pools mined the coinbase-only blocks. Almost all of them are unattributed, because pool identification reads patterns in the coinbase that did not exist in 2009 and 2010, which is when nearly every empty block was mined. So the Unknown bar is a statement about the early chain rather than about anonymity today."),
             technical: "Blocks with a transaction count of one, grouped by the miner string ingestion matched, with unmatched blocks under Unknown. Aggregated in SQL over the height range rather than from the loaded rows, so it answers for the whole window at any resolution.",
         }),
     },
@@ -1980,7 +1980,7 @@ pub const CHARTS: &[ChartMeta] = &[
         ],
         about: Some(About {
             definition: Some("The time between one block and the next. Bitcoin targets ten minutes on average and holds that average by adjusting difficulty, but any single gap is close to random: a two-minute gap and a fifty-minute gap are both ordinary."),
-            technical: "The difference between consecutive block header timestamps. Miners set those timestamps and the protocol only loosely constrains them, so some intervals are negative or implausibly long: 16,020 of the 967,295 consecutive pairs stored here are negative, one in sixty. They are plotted as found rather than cleaned, so this shows what the headers say rather than a corrected series.",
+            technical: "The difference between consecutive block header timestamps. Miners set those timestamps and the protocol only loosely constrains them, so some intervals are negative or implausibly long: about one consecutive pair in 60 stored here is negative. They are plotted as found rather than cleaned, so this shows what the headers say rather than a corrected series.",
         }),
     },
     ChartMeta {
@@ -2097,7 +2097,7 @@ pub const CHARTS: &[ChartMeta] = &[
         ],
         about: Some(About {
             definition: Some("Blocks that arrived very close together. Mining is random, so short gaps are ordinary and this is the tail of that distribution rather than a sign of trouble. It is measured from header timestamps, which miners choose themselves, so it says nothing about how fast blocks moved across the network."),
-            technical: "Consecutive blocks whose header timestamps are less than 60 seconds apart. Not a propagation measurement: no arrival time is recorded anywhere in a block. Backward pairs are excluded rather than clamped, and 16,020 of the chain's 967,295 consecutive pairs run backwards.",
+            technical: "Consecutive blocks whose header timestamps are less than 60 seconds apart. Not a propagation measurement: no arrival time is recorded anywhere in a block. Backward pairs are excluded rather than clamped, and about one of the chain's consecutive pairs in 60 runs backwards.",
         }),
     },
     ChartMeta {
@@ -2272,11 +2272,11 @@ pub const CHARTS: &[ChartMeta] = &[
             method_daily: Method::Calculated,
             per_block: Aggregation::GroupedSummary,
             daily: Aggregation::GroupedSummary,
-            population: "Differences between consecutive block header timestamps, bucketed. Ten minutes is the target mean, not the most common bucket: the distribution is exponential, so the shortest bucket is the largest. Miners choose timestamps, so 16,020 of the chain's pairs run backwards; those are excluded from both arms rather than counted as instant blocks.",
+            population: "Differences between consecutive block header timestamps, bucketed. Ten minutes is the target mean, not the most common bucket: the distribution is exponential, so the shortest bucket is the largest. Miners choose timestamps, so about one of the chain's pairs in 60 runs backwards; those are excluded from both arms rather than counted as instant blocks.",
         }],
         about: Some(About {
             definition: Some("How long blocks wait for each other, as a distribution. Mining is memoryless, so short gaps are the most common and the tail runs long: the median is 6.9 minutes even though the average is ten."),
-            technical: "The shortest bucket is always the largest one, which surprises people who expect a peak at ten minutes. Mining is memoryless: every hash attempt has the same tiny chance of winning whatever has happened already, so the waiting time is exponentially distributed and the most likely gap is a short one. Measured across all 951,275 intervals in the chain: the median is 6.9 minutes, 63.9% of blocks arrive in under ten minutes, 4.5% take more than half an hour and 0.3% take over an hour. An exponential distribution with a ten-minute mean predicts 63.2%, 5.0% and 0.25%, so the chain tracks the theory to within seven tenths of a percentage point. Miners choose their own timestamps, so a block can appear to arrive before its predecessor.",
+            technical: "The shortest bucket is always the largest one, which surprises people who expect a peak at ten minutes. Mining is memoryless: every hash attempt has the same tiny chance of winning whatever has happened already, so the waiting time is exponentially distributed and the most likely gap is a short one. Measured across every interval in the chain: the median is 6.9 minutes, 63.9% of blocks arrive in under ten minutes, 4.5% take more than half an hour and 0.3% take over an hour. An exponential distribution with a ten-minute mean predicts 63.2%, 5.0% and 0.25%, so the chain tracks the theory to within seven tenths of a percentage point. Miners choose their own timestamps, so a block can appear to arrive before its predecessor.",
         }),
     },
     ChartMeta {
@@ -2748,7 +2748,7 @@ pub fn related(meta: &ChartMeta, max: usize) -> Vec<&'static ChartMeta> {
 /// the real builders in both directions, so a drifting list fails rather
 /// than silently costing a working comparison.
 ///
-/// Twenty-one of the 63, and the list dissolves once comparisons name a
+/// Twenty of the 63, and the list dissolves once comparisons name a
 /// measurement rather than a chart: `notes/phase-2-spec.md`.
 //
 // `tx-type-evolution` left this list on 2026-09-16 when it was corrected to
@@ -3077,6 +3077,42 @@ mod tests {
         }
     }
 
+    /// Every chart has a sitemap entry, and the sitemap has no dead ones.
+    ///
+    /// The branch added 63 indexable URLs and did not touch `sitemap.xml`, so
+    /// none of them was discoverable. A hand-maintained list beside a
+    /// generated one is the drift this project has already shipped once, as a
+    /// dangling drawer link, so the list is pinned rather than trusted.
+    #[test]
+    fn every_chart_is_in_the_sitemap_and_the_sitemap_has_no_ghosts() {
+        const SITEMAP: &str = include_str!("../../../assets/sitemap.xml");
+        const PREFIX: &str = "https://www.wehodlbtc.com/observatory/chart/";
+
+        for c in CHARTS {
+            assert!(
+                SITEMAP.contains(&format!("{PREFIX}{}<", c.slug)),
+                "{} is a public chart URL with no sitemap entry, so it is                  not discoverable",
+                c.slug
+            );
+        }
+        // And nothing in the sitemap points at a chart that no longer exists.
+        for line in SITEMAP.lines() {
+            let Some(rest) = line.trim().strip_prefix("<loc>") else {
+                continue;
+            };
+            let Some(url) = rest.strip_suffix("</loc>") else {
+                continue;
+            };
+            let Some(slug) = url.strip_prefix(PREFIX) else {
+                continue;
+            };
+            assert!(
+                CHARTS.iter().any(|c| c.slug == slug),
+                "the sitemap advertises /observatory/chart/{slug}, which is                  not a registered chart"
+            );
+        }
+    }
+
     #[test]
     fn long_copy_describes_the_metric_and_not_its_edit_history() {
         // Crude on purpose, and "used to" is the one that bites: it also
@@ -3139,7 +3175,7 @@ mod tests {
             ),
             (
                 "Most cluster near the 10-minute target",
-                "measured over all 951,275 intervals: the median is 6.9 \
+                "measured over every interval in the chain: the median is 6.9 \
                  minutes, the shortest bucket is the largest, and 63.9% \
                  arrive in under ten minutes. Mining is memoryless, so the \
                  distribution is exponential and has no peak at the mean.",
@@ -3187,7 +3223,7 @@ mod tests {
             ),
             (
                 "a handful",
-                "16,020 of 967,295 consecutive pairs are negative, one in \
+                "about one consecutive pair in 60 is negative, one in \
                  sixty. Measured, not estimated.",
             ),
             (
@@ -3286,6 +3322,24 @@ mod tests {
             // distinguish the claim from its opposite, not whether the
             // sentence is new.
             (
+                "can only be attributed to one protocol",
+                "the fee attribution runs two independent `if`s \
+                 (`rpc.rs:1040-1045`), so a transaction bearing both an \
+                 inscription and a Runes output has its whole fee counted in \
+                 both columns. The methodology page asserted the opposite of \
+                 what the code does and of what the chart copy says.",
+            ),
+            (
+                "first known inscription (block 774,628)",
+                "the first inscription this node holds is block 767,430, on \
+                 2022-12-14, carrying 833 bytes. Block 774,628 is six weeks \
+                 later and holds a single 3,938,161-byte inscription, so it \
+                 is the near-full block rather than the first. 774,628 is \
+                 also the exact number AGENTS.md records as a training-data \
+                 hallucination from an earlier largest-block claim, which is \
+                 the tell worth remembering.",
+            ),
+            (
                 "suggest an exchange",
                 "outputs per transaction counts outputs. No column of this \
                  data carries who signed a transaction, so an exchange \
@@ -3315,7 +3369,7 @@ mod tests {
             (
                 "intentional miner behavior",
                 "the data shows a block carried only its coinbase, not why. \
-                 78,800 of the 89,929 are from 2009 and 2010, before pooled \
+                 78,800 of them are from 2009 and 2010, before pooled \
                  mining, so intent cannot explain the bulk of them.",
             ),
             (
@@ -3333,7 +3387,7 @@ mod tests {
             (
                 "usually mined before the pool",
                 "a cause the same chart's long copy refuses, and one that \
-                 cannot explain the 78,800 of 89,929 from 2009 and 2010.",
+                 cannot explain the 78,800 from 2009 and 2010.",
             ),
             (
                 "12.2% against 11.11%",
@@ -3368,8 +3422,8 @@ mod tests {
             (
                 "Most Taproot Spends",
                 "the stored column counts P2TR outputs created, not inputs \
-                 spending them. The two are byte-identical in all 967,295 \
-                 rows because one of them is misnamed.",
+                 spending them. The two are byte-identical in every \
+                 row because one of them is misnamed.",
             ),
             (
                 "computed as inputs minus outputs",
@@ -3387,8 +3441,8 @@ mod tests {
             (
                 "potential stale block races",
                 "header timestamps are chosen by miners and do not measure \
-                 arrival, so a short interval cannot evidence a race. 16,020 \
-                 of them run backwards.",
+                 arrival, so a short interval cannot evidence a race. about one in 60 \
+                 of them runs backwards.",
             ),
             (
                 "indicating sudden demand surges",
@@ -3495,6 +3549,15 @@ mod tests {
                     .contains(phrase),
                 "retired claim {phrase:?} is back in the protocols article: \
                  {why}"
+            );
+            // The methodology article states how each number is computed, so
+            // a claim retired from the charts surviving here is worse than
+            // elsewhere: it reads as the authoritative account of the method.
+            assert!(
+                !include_str!("../../routes/observatory/learn/methodology.rs")
+                    .contains(phrase),
+                "retired claim {phrase:?} is back in the methodology \
+                 article: {why}"
             );
         }
     }

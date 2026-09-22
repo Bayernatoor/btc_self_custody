@@ -126,7 +126,7 @@ pub fn MiningChartsPage() -> impl IntoView {
                     // First and last height plus the count: the rows are
                     // ordered and at most ~480 of them, so this identifies a
                     // window's retargets without hashing the whole list.
-                    match retargets.get().map(|r| r.ok()) {
+                    match retargets.get().map(|(_, r)| r.ok()) {
                         Some(Some(rows)) => format!(
                             "r{}:{}:{}",
                             rows.len(),
@@ -137,7 +137,7 @@ pub fn MiningChartsPage() -> impl IntoView {
                         None => "r:pending".to_string(),
                     },
                     |blocks| crate::stats::charts::difficulty_adjustment_chart(blocks),
-                    |days| match retargets.get().map(|r| r.ok()) {
+                    |days| match retargets.get().map(|(_, r)| r.ok()) {
                         Some(Some(rows)) => crate::stats::charts::difficulty_adjustment_chart_daily(days, &rows),
                         _ => serde_json::Value::Null,
                     }
@@ -190,7 +190,7 @@ pub fn MiningChartsPage() -> impl IntoView {
                         <SectionHeading id="section-pools" title="Mining Pools"/>
                         <ChartCard title="Mining Pool Share" description="Share of blocks in the range by identified pool, with unattributed blocks kept separate" chart_id="chart-miner-dominance" option=miner_chart_option/>
                         <ChartCard title="Mining Diversity Index" description="Herfindahl-Hirschman Index (HHI) measuring mining concentration. Below 1000 is competitive, above 1800 is concentrated" chart_id="chart-diversity" option=diversity_option/>
-                        <ChartCard title="Empty Blocks" description="Blocks carrying only the coinbase transaction, which is almost always the early chain: 78,800 of the 89,929 are from 2009 and 2010" chart_id="chart-empty-blocks" option=empty_blocks_option/>
+                        <ChartCard title="Empty Blocks" description="Blocks carrying only the coinbase transaction, which is almost always the early chain: 78,800 of them are from 2009 and 2010" chart_id="chart-empty-blocks" option=empty_blocks_option/>
                         <ChartCard title="Empty Blocks by Pool" description="Coinbase-only blocks in the range, grouped by the pool that mined them" chart_id="chart-empty-by-pool" option=empty_by_pool_option/>
                     </div>
                 }

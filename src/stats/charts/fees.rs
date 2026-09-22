@@ -286,13 +286,24 @@ pub fn median_fee_rate_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Median Fee Rate");
     }
 
-    let rate_fn =
-        |b: &BlockSummary| (b.median_fee_rate * 100.0).round() / 100.0;
-    let raw_str = build_data_array_f64(blocks, rate_fn);
+    // A block with no transactions has no median to take.
+    //
+    // 89,930 blocks carry only the coinbase, and ingestion stores 0.0 for
+    // their median fee rate because there is nothing to rank. Plotted, that
+    // reads as "the middle transaction paid nothing", which is a measurement
+    // the block cannot support, and it drags the 144-block moving average
+    // toward zero across the early chain. Same class as the percentile
+    // sentinel on the fee-rate bands: absent is not zero.
+    let rate_fn = |b: &BlockSummary| -> Option<f64> {
+        (b.tx_count > 1).then(|| (b.median_fee_rate * 100.0).round() / 100.0)
+    };
+    let raw_str = build_data_array_opt_f64(blocks, rate_fn);
     let raw = data_array_value(&raw_str);
 
-    let vals: Vec<f64> = blocks.iter().map(rate_fn).collect();
-    let ma = moving_average(&vals, 144);
+    // The moving average skips the gaps rather than averaging zeros into
+    // them, which is what `moving_average_over_gaps` exists for.
+    let vals: Vec<Option<f64>> = blocks.iter().map(rate_fn).collect();
+    let ma = moving_average_over_gaps(&vals, 144);
     let ma_str = build_ma_array(blocks, &ma);
     let ma_data = data_array_value(&ma_str);
 
@@ -1078,20 +1089,52 @@ pub fn fee_rate_heatmap_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Fee Rate Heatmap");
     }
 
-    let p10_str = build_data_array_f64(blocks, |b| round(b.fee_rate_p10, 2));
+    // **A percentile with too small a population is absent, not zero.**
+    //
+    // Ingestion stores 0.0 when the rank is undefined: p10 and p90 need at
+    // least 10 fee-rate observations, p25 and p75 at least 4
+    // (`rpc.rs:1072-1090`, and `docs/DATA_DICTIONARY.md` note 5). Plotted
+    // literally, that sentinel is not merely a low reading, it is an
+    // impossible one: block 963,786 has 9 transactions and stores
+    // p10 = 0, p25 = 1.21, median = 2.00, p75 = 3.08, p90 = 0, so the 90th
+    // percentile draws *below* the 75th. Chain-wide 5,740 blocks put p90
+    // under a positive median.
+    //
+    // The sentinel cannot be told from a genuine zero by value, because a
+    // genuine zero is common: 56,562 pre-2016 blocks have a real p10 of 0
+    // with a positive median, from the free-transaction era. The population
+    // size is what disambiguates, and `tx_count - 1` is the count of
+    // non-coinbase transactions. It is an upper bound on the fee-rate
+    // observations rather than exactly equal, which is the right way round:
+    // below the threshold the sentinel is certain, so nothing genuine is
+    // suppressed. Verified against the database: gating on it nulls all
+    // 5,740 impossible p90 readings and leaves every genuine zero standing.
+    let user_txs = |b: &BlockSummary| b.tx_count.saturating_sub(1);
+    let p10_str = build_data_array_opt_f64(blocks, |b| {
+        (user_txs(b) >= 10).then(|| round(b.fee_rate_p10, 2))
+    });
     let p10_data = data_array_value(&p10_str);
 
-    let p25_str = build_data_array_f64(blocks, |b| round(b.fee_rate_p25, 2));
+    let p25_str = build_data_array_opt_f64(blocks, |b| {
+        (user_txs(b) >= 4).then(|| round(b.fee_rate_p25, 2))
+    });
     let p25_data = data_array_value(&p25_str);
 
-    let median_str =
-        build_data_array_f64(blocks, |b| round(b.median_fee_rate, 2));
+    // The median needs only one observation, and ingestion stores 0.0 for it
+    // only when there are none at all, which is a coinbase-only block.
+    let median_str = build_data_array_opt_f64(blocks, |b| {
+        (user_txs(b) >= 1).then(|| round(b.median_fee_rate, 2))
+    });
     let median_data = data_array_value(&median_str);
 
-    let p75_str = build_data_array_f64(blocks, |b| round(b.fee_rate_p75, 2));
+    let p75_str = build_data_array_opt_f64(blocks, |b| {
+        (user_txs(b) >= 4).then(|| round(b.fee_rate_p75, 2))
+    });
     let p75_data = data_array_value(&p75_str);
 
-    let p90_str = build_data_array_f64(blocks, |b| round(b.fee_rate_p90, 2));
+    let p90_str = build_data_array_opt_f64(blocks, |b| {
+        (user_txs(b) >= 10).then(|| round(b.fee_rate_p90, 2))
+    });
     let p90_data = data_array_value(&p90_str);
 
     // Distinct colors for each percentile band (cool to hot)

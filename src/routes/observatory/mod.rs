@@ -85,11 +85,23 @@ pub fn ObservatoryPage() -> impl IntoView {
 
     view! {
         // Title and meta description are set per sub-page for SEO
+        // **No fade on this shell, deliberately.** Every other page on the
+        // site opens with `opacity-0 animate-fadeinone`, a one second fade.
+        // This is a data page: the reader came for a number and the chart is
+        // already the slow part, so a second of deliberate invisibility on top
+        // of the fetch is cost with no benefit. Content paints as soon as it
+        // exists.
+        //
+        // Removing it also removes the stacking context that a forwards-filled
+        // opacity animation leaves behind for good, which is what confined the
+        // chart drawer and the block modal and forced both into a `Portal`.
+        // Those portals stay: they are correct on their own terms and nothing
+        // about this change requires unpicking them.
         <section
             class=move || if solo_chart.get() {
-                "max-w-none mx-auto px-2 sm:px-3 lg:px-5 pt-3 sm:pt-4 pb-12 opacity-0 animate-fadeinone"
+                "max-w-none mx-auto px-2 sm:px-3 lg:px-5 pt-3 sm:pt-4 pb-12"
             } else {
-                "max-w-[1750px] mx-auto px-3 sm:px-4 lg:px-8 pt-6 sm:pt-10 pb-28 opacity-0 animate-fadeinone"
+                "max-w-[1750px] mx-auto px-3 sm:px-4 lg:px-8 pt-6 sm:pt-10 pb-28"
             }
         >
             // Hero branding — only on dashboard

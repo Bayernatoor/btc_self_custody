@@ -85,6 +85,18 @@ impl TestApp {
         );
         let block_ts_cache =
             cb.cache::<u64, u64>("block_timestamps", Duration::MAX, &[]);
+        let time_histogram_cache = cb
+            .cache::<(u64, u64), Vec<types::HistogramBucket>>(
+                "time_histogram",
+                Duration::from_secs(120),
+                &[CacheTag::OnNewBlock],
+            );
+        let fullness_histogram_cache = cb
+            .cache::<(u64, u64), Vec<types::HistogramBucket>>(
+                "fullness_histogram",
+                Duration::from_secs(120),
+                &[CacheTag::OnNewBlock],
+            );
         let signaling_blocks_cache = cb.cache::<String, (
             Vec<types::SignalingBlock>,
             types::PeriodStats,
@@ -128,6 +140,8 @@ impl TestApp {
             utxo_count,
             stats_summary_cache,
             daily_cache,
+            time_histogram_cache,
+            fullness_histogram_cache,
             block_ts_cache,
             signaling_blocks_cache,
             signaling_periods_cache,

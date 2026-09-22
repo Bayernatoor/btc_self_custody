@@ -270,7 +270,17 @@ pub fn tps_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
         days.iter()
             .map(|d| {
                 let total_tx = d.avg_tx_count * d.block_count as f64;
-                round(total_tx / 86_400.0, 2)
+                // `round_plot`, not `round(_, 2)`. Two decimals quantise every
+                // rate below 0.005 tx/s to exactly 0.0, which is a different
+                // number rather than a small one: 631 of 6,467 days, the whole
+                // of 2009 and 2010, flatlined at zero. 2010-12-10 really ran
+                // 147 blocks averaging 2.537 transactions, so 0.004317 tx/s,
+                // and read as nothing. On a log axis those 631 points were
+                // then counted as non-plottable and the notice blamed the
+                // data for a rounding choice. Same defect `round_plot` was
+                // written for, and this builder was missed when the others
+                // were converted.
+                round_plot(total_tx / 86_400.0)
             })
             .collect(),
     );
@@ -1375,14 +1385,24 @@ pub fn weekday_activity_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Weekday Activity");
     }
 
-    // Accumulate per-day-of-week totals
-    // (timestamp / 86400 + 4) % 7 gives 0=Mon..6=Sun
+    // **+3, not +4.** Unix day 0 is 1970-01-01, a Thursday, so `+4` puts
+    // Thursday at index 4, which is the 0=Sunday convention. Indexed into
+    // `day_names` below, which starts at Monday, that drew every bar one slot
+    // to the right: Sunday's blocks under "Mon", Saturday's under "Sun". The
+    // daily arm uses chrono's `num_days_from_monday`, which really is
+    // Monday-first, so the two arms of one chart disagreed and the answer
+    // changed at the 5,000-block resolution switch. `+3` puts Thursday at 3
+    // and Monday at 0.
+    //
+    // Verified against the database, whose `%w` is 0=Sunday:
+    // `GROUP BY ((timestamp/86400+3)%7), strftime('%w',...)` pairs index 0
+    // with Monday and index 6 with Sunday across all 968,041 rows.
     let mut tx_sums = [0.0f64; 7];
     let mut fee_sums = [0.0f64; 7];
     let mut counts = [0u64; 7];
 
     for b in blocks {
-        let dow = ((b.timestamp / 86400 + 4) % 7) as usize;
+        let dow = ((b.timestamp / 86400 + 3) % 7) as usize;
         tx_sums[dow] += b.tx_count as f64;
         fee_sums[dow] += b.total_fees as f64 / 100_000_000.0;
         counts[dow] += 1;

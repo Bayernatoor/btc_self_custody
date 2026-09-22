@@ -405,7 +405,13 @@ for (const [path, label, expect] of PAGES) {
       + (r.saysShorterRange ? ' | says shorter-range' : ''),
     ...lines,
   ].join('\n'));
-  process.stderr.write(lines.length ? `FAIL\n` : `ok\n`);
+  // Same three-way split as the row prefix below. Keying this off
+  // `lines.length` counted an INCONCLUSIVE note as a failure, so the progress
+  // line printed FAIL for three category pages in a run that correctly
+  // totalled 0 failures and exited 0. A probe that contradicts its own verdict
+  // is the defect this script exists to avoid.
+  process.stderr.write(
+    pageFailures ? `FAIL\n` : lines.length ? `warn\n` : `ok\n`);
 }
 
 close();

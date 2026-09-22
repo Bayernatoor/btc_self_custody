@@ -421,9 +421,74 @@ mod window_tests {
              so nothing establishes when a range change has actually landed"
         );
         assert!(
-            state.contains("is_none_or(|(have, _)| have != want)"),
+            state.contains("is_none_or(|(have, _)| have != &want)"),
             "data_loading no longer compares the payload's own window against \
              the selected one"
         );
+        // And it must BORROW to do it. `get()` on a resource clones its whole
+        // value, so reading the window with `get()` copies up to 5,000 blocks
+        // to look at a three-field key, once per `chart_memo!` call site.
+        assert!(
+            !state.contains("dashboard_data.get().is_none_or"),
+            "data_loading is cloning the whole dashboard payload to read its \
+             window. Use `with` and compare a borrow."
+        );
+        assert!(
+            state.contains("let data_loading_memo = Memo::new("),
+            "data_loading is a plain derive again, so it recomputes on every \
+             one of its many reads instead of once per change"
+        );
+    }
+
+    /// **Every** window-keyed input is gated, not just the rows.
+    ///
+    /// Pairing the window with the dashboard payload made the flash smaller
+    /// and did not remove it, reported on 2026-09-21. A chart option is built
+    /// from more than the rows: `chain_size_offset` and `retargets` are their
+    /// own resources in shared state, `mining_data` and `buckets` are the
+    /// single-chart page's own, and every one of them keeps its previous value
+    /// while refetching. Clearing the gate on the rows alone published a chart
+    /// assembled from new rows and stale everything else.
+    ///
+    /// So the count is the thing to hold. A sixth window-keyed resource added
+    /// without a stamp reintroduces exactly this defect, one chart at a time,
+    /// and it is invisible to every other gate in the project.
+    #[test]
+    fn every_window_keyed_input_is_gated_on_its_own_window() {
+        let state = include_str!("shared/state.rs");
+        for (name, needle) in [
+            ("the dashboard rows", "let rows_stale ="),
+            ("chain_size_offset", "let offset_stale ="),
+            ("retargets", "let retargets_stale ="),
+        ] {
+            assert!(
+                state.contains(needle),
+                "data_loading no longer accounts for {name}, so a chart can \
+                 be published from a mix of new and stale inputs"
+            );
+        }
+        // The page-local pair are gated at their point of use rather than in
+        // the shared flag, because only the charts that read them care.
+        let chart = include_str!("single_chart.rs");
+        assert_eq!(
+            chart.matches("if stamp != want {").count(),
+            3,
+            "the single-chart page has {} stamp checks; it needs one for the \
+             mining arm and one for each of the two bucket arms. A resource \
+             read without comparing its stamp paints the previous window.",
+            chart.matches("if stamp != want {").count()
+        );
+        // And the resources really are stamped, so the checks above cannot
+        // pass against a payload that carries no window.
+        for needle in [
+            "let stamp = (r.clone(), custom_from.clone(), custom_to.clone());",
+            "let stamp = (r.clone(), cf.clone(), ct.clone());",
+        ] {
+            assert!(
+                chart.contains(needle),
+                "a single-chart resource stopped stamping its window: \
+                 {needle}"
+            );
+        }
     }
 }

@@ -543,12 +543,25 @@ pub async fn fetch_signaling(
             }
             .map_err(|e| internal_err("DB query", e))?;
 
+            // **One population for both halves, and it is the whole period.**
+            //
+            // `period_start` is the first block of the 2,016-block signalling
+            // period and belongs to that population: it signals or it does
+            // not, exactly like the other 2,015. The denominator used to drop
+            // it, borrowed from mempool.space's "blocks since adjustment",
+            // which is a different quantity, so the card divided 361
+            // signalling blocks by 360 mined ones and could read over 100%.
+            //
+            // Fixing that by dropping the block from the numerator instead was
+            // the wrong half: it erased a genuinely signalling block, and the
+            // period-history chart on the same page groups by `height / 2016`
+            // and counts the full period, so the card and the chart reported
+            // different numbers for the same epoch (183/464 against 184/465,
+            // measured 2026-09-22). Counting the whole period in both halves
+            // makes the card, the chart and the progress bar agree.
             let signaled_count =
                 period_blocks.iter().filter(|b| b.signaled).count() as u64;
-            let raw_total = period_blocks.len() as u64;
-            // "Blocks since adjustment" excludes the retarget block itself
-            // (matches mempool.space).
-            let mined = if raw_total > 0 { raw_total - 1 } else { 0 };
+            let mined = period_blocks.len() as u64;
             let pct = if mined > 0 {
                 signaled_count as f64 / mined as f64 * 100.0
             } else {
@@ -861,13 +874,24 @@ pub async fn fetch_fullness_histogram(
     if from_ts > to_ts {
         return Err(bad_request("from_ts must not exceed to_ts"));
     }
-    let conn = conn().await?;
-    let buckets = super::db::query_fullness_histogram(&conn, from_ts, to_ts)
-        .map_err(|e| internal_err("DB query", e))?;
-    Ok(buckets
-        .into_iter()
-        .map(|(label, count)| HistogramBucket { label, count })
-        .collect())
+    let state = state().await?;
+    state
+        .fullness_histogram_cache
+        .clone()
+        .get_or_compute((from_ts, to_ts), || async move {
+            let conn =
+                state.db.get().map_err(|e| internal_err("DB pool", e))?;
+            let buckets =
+                super::db::query_fullness_histogram(&conn, from_ts, to_ts)
+                    .map_err(|e| internal_err("DB query", e))?;
+            Ok::<_, ServerFnError>(
+                buckets
+                    .into_iter()
+                    .map(|(label, count)| HistogramBucket { label, count })
+                    .collect(),
+            )
+        })
+        .await
 }
 
 /// Fetch block time distribution histogram (61 buckets) for a timestamp range.
@@ -879,13 +903,24 @@ pub async fn fetch_block_time_histogram(
     if from_ts > to_ts {
         return Err(bad_request("from_ts must not exceed to_ts"));
     }
-    let conn = conn().await?;
-    let buckets = super::db::query_block_time_histogram(&conn, from_ts, to_ts)
-        .map_err(|e| internal_err("DB query", e))?;
-    Ok(buckets
-        .into_iter()
-        .map(|(label, count)| HistogramBucket { label, count })
-        .collect())
+    let state = state().await?;
+    state
+        .time_histogram_cache
+        .clone()
+        .get_or_compute((from_ts, to_ts), || async move {
+            let conn =
+                state.db.get().map_err(|e| internal_err("DB pool", e))?;
+            let buckets =
+                super::db::query_block_time_histogram(&conn, from_ts, to_ts)
+                    .map_err(|e| internal_err("DB query", e))?;
+            Ok::<_, ServerFnError>(
+                buckets
+                    .into_iter()
+                    .map(|(label, count)| HistogramBucket { label, count })
+                    .collect(),
+            )
+        })
+        .await
 }
 
 /// Documented pre-exchange BTC/USD prices, oldest first, used only when the

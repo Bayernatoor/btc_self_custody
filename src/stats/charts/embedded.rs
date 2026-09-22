@@ -175,18 +175,45 @@ pub fn runes_pct_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         }
     };
 
+    // **The denominator is the sum of the bands, not `op_return_count`.**
+    //
+    // This is a 100%-stacked chart, so its bands must partition its
+    // denominator. They do not partition `op_return_count`: that column is
+    // stale in historical rows. Ingestion today classifies every nulldata
+    // output into exactly one of the four band columns and then increments
+    // `op_return_count` (`rpc.rs:964-985`), so the identity holds by
+    // construction, and it does hold for all of the last 1,000 blocks. But
+    // `db::update_block_extras` rewrites the four band columns and **not**
+    // `op_return_count`, so rows re-classified by a later backfill kept an
+    // older total: 291,016 blocks between heights 246,816 and 941,909 have a
+    // larger `op_return_count` than the sum of their bands, 103,398 of them by
+    // exactly one output.
+    //
+    // Dividing by the stale total made the stack stop short of 100% with no
+    // residual band and nothing to explain the gap. Dividing by the sum of the
+    // plotted series makes the chart self-consistent whatever the stored total
+    // says, and uses the columns that are actually maintained together. The
+    // gap is a bookkeeping artifact, not a category of OP_RETURN, so it is not
+    // worth a fifth band. Reconciling the column itself needs a backfill and
+    // is queued rather than done here.
+    let classified = |b: &BlockSummary| {
+        b.runes_count
+            + b.omni_count
+            + b.counterparty_count
+            + b.data_carrier_count
+    };
     let runes_str =
-        build_data_array_f64(blocks, |b| pct(b.runes_count, b.op_return_count));
+        build_data_array_f64(blocks, |b| pct(b.runes_count, classified(b)));
     let runes_data = data_array_value(&runes_str);
     let omni_str =
-        build_data_array_f64(blocks, |b| pct(b.omni_count, b.op_return_count));
+        build_data_array_f64(blocks, |b| pct(b.omni_count, classified(b)));
     let omni_data = data_array_value(&omni_str);
     let xcp_str = build_data_array_f64(blocks, |b| {
-        pct(b.counterparty_count, b.op_return_count)
+        pct(b.counterparty_count, classified(b))
     });
     let xcp_data = data_array_value(&xcp_str);
     let other_str = build_data_array_f64(blocks, |b| {
-        pct(b.data_carrier_count, b.op_return_count)
+        pct(b.data_carrier_count, classified(b))
     });
     let other_data = data_array_value(&other_str);
 
@@ -223,21 +250,31 @@ pub fn runes_pct_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
             0.0
         }
     };
+    // Sum of the plotted bands, for the reason given on the per-block twin:
+    // `total_op_return_count` rolls up a per-block column that historical
+    // backfills left larger than its own parts, so 4,104 of 6,466 days do not
+    // add up to 100%.
+    let classified_daily = |d: &DailyAggregate| {
+        d.total_runes_count
+            + d.total_omni_count
+            + d.total_counterparty_count
+            + d.total_data_carrier_count
+    };
     let runes: Vec<f64> = days
         .iter()
-        .map(|d| pct(d.total_runes_count, d.total_op_return_count))
+        .map(|d| pct(d.total_runes_count, classified_daily(d)))
         .collect();
     let omni: Vec<f64> = days
         .iter()
-        .map(|d| pct(d.total_omni_count, d.total_op_return_count))
+        .map(|d| pct(d.total_omni_count, classified_daily(d)))
         .collect();
     let xcp: Vec<f64> = days
         .iter()
-        .map(|d| pct(d.total_counterparty_count, d.total_op_return_count))
+        .map(|d| pct(d.total_counterparty_count, classified_daily(d)))
         .collect();
     let other: Vec<f64> = days
         .iter()
-        .map(|d| pct(d.total_data_carrier_count, d.total_op_return_count))
+        .map(|d| pct(d.total_data_carrier_count, classified_daily(d)))
         .collect();
 
     build_option(json!({
@@ -563,15 +600,41 @@ pub fn all_embedded_share_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         }
     });
     let op_data = data_array_value(&op_str);
-    // Inscriptions launched ~block 774,000 (Jan 2023). Emit null before that to avoid
-    // ECharts rendering a ghost area fill at the zero baseline across years of no data.
+    // Absent before the data exists, which is a property of the block and not
+    // of a remembered date.
+    //
+    // This gated on `height < 774_000`, described as "inscriptions launched
+    // ~block 774,000 (Jan 2023)". The database disagrees: the first
+    // inscription-bearing block is **767,430, on 2022-12-14**, and 116 blocks
+    // below 774,000 carry 129 inscriptions totalling 5,140,776 payload bytes.
+    // The gate nulled all of them, so the chart hid the opening weeks of
+    // inscriptions, which include some of the largest block shares in the
+    // whole series.
+    //
+    // Reading the block's own `inscription_count` needs no constant and
+    // cannot go stale. The point of the null is only to stop ECharts drawing
+    // a ghost area fill along the zero baseline across the years before
+    // inscriptions existed, and a block with no detections satisfies that
+    // whatever its height.
+    // **The leading run only.** Nulling every block with no inscription was a
+    // second defect wearing the first one's clothes: this is a stacked area
+    // with `connectNulls: false`, so a modern block that simply carried no
+    // inscription punctured the band, and its tooltip read "-" instead of 0%.
+    // A block that carried none has a measured share of zero, which is a
+    // value. Only the stretch before any inscription existed is genuinely
+    // absent, and that is a prefix, so find where it ends and gate on the
+    // index rather than on each block.
+    let first_inscription = blocks
+        .iter()
+        .position(|b| b.inscription_count > 0 || b.inscription_bytes > 0)
+        .unwrap_or(blocks.len());
     let mut insc_buf = String::with_capacity(blocks.len() * 30);
     insc_buf.push('[');
     for (i, b) in blocks.iter().enumerate() {
         if i > 0 {
             insc_buf.push(',');
         }
-        if b.height < 774_000 {
+        if i < first_inscription {
             let _ =
                 write!(insc_buf, "[{},null,{}]", ts_ms(b.timestamp), b.height);
         } else if b.size > 0 {
@@ -633,11 +696,22 @@ pub fn all_embedded_share_chart_daily(
             }
         })
         .collect();
-    // Emit null for inscription values before Jan 2023 to avoid ghost area fill
+    // The leading run before any inscription existed, read off the days
+    // themselves rather than a hardcoded date. The previous gate was
+    // `date < "2023-01-01"`, and this is the arm that matters: any window over
+    // 5,000 blocks resolves to daily, so ALL, the only range from which you
+    // would look at the start of inscriptions, was served entirely by this
+    // code. The first inscription is 2022-12-14, so the hardcoded date hid
+    // two and a half weeks of it at the one resolution where it is visible.
+    let first_insc_day = days
+        .iter()
+        .position(|d| d.avg_inscription_bytes > 0.0)
+        .unwrap_or(days.len());
     let insc_vals: Vec<serde_json::Value> = days
         .iter()
-        .map(|d| {
-            if d.date.as_str() < "2023-01-01" {
+        .enumerate()
+        .map(|(i, d)| {
+            if i < first_insc_day {
                 json!(null)
             } else {
                 let total_size = d.avg_size * d.block_count as f64;

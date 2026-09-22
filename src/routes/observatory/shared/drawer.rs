@@ -317,15 +317,15 @@ fn drawer_pages() -> Vec<DrawerPage> {
                     label: "Overview",
                     charts: vec![
                         DrawerChart {
-                            label: "All Embedded Share",
+                            label: "Detected Embedded, Block Share",
                             card_id: "card-chart-all-embedded-share",
                         },
                         DrawerChart {
-                            label: "All Embedded Count",
+                            label: "Detected Embedded, Count",
                             card_id: "card-chart-unified-count",
                         },
                         DrawerChart {
-                            label: "All Embedded Volume",
+                            label: "Detected Embedded, Volume",
                             card_id: "card-chart-unified-volume",
                         },
                     ],

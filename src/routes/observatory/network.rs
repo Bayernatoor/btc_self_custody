@@ -87,7 +87,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
         let _r = range.get();
         let flags = overlay_flags.get();
         let disk_gb = disk_size_gb.get();
-        let offset = state.chain_size_offset.get().unwrap_or(0);
+        let offset = state.chain_size_offset.get().map(|(_, b)| b).unwrap_or(0);
         let chain_total = state.chain_size_total.get().unwrap_or(0);
         dashboard_data
             .get()

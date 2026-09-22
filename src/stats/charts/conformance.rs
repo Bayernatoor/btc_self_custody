@@ -84,6 +84,22 @@ fn synthetic_blocks(n: usize) -> Vec<BlockSummary> {
                 taproot_spend_count: 100 + i,
                 multisig_count: 10 + i,
                 unknown_script_count: 1 + i,
+                // The six script-type columns were left at their default of
+                // zero, so every address-type chart was built from nothing and
+                // its conformance check passed on an empty fixture: six
+                // registered charts had no real test at all.
+                //
+                // These sum to exactly `output_count - unknown_script_count`
+                // (2,599 + 3i against 2,600 + 4i outputs less 1 + i unknown),
+                // so any residual band computed as outputs-minus-the-parts is
+                // zero rather than negative, and a chart that draws one is
+                // exercised rather than crashed.
+                p2pk_count: 9,
+                p2pkh_count: 800 + i,
+                p2sh_count: 400 + i,
+                p2wpkh_count: 900 + i,
+                p2wsh_count: 200,
+                p2tr_count: 290,
                 input_count: 2_500 + i * 4,
                 output_count: 2_600 + i * 4,
                 rbf_count: 50 + i,
@@ -1926,9 +1942,23 @@ mod tests {
         let opt = super::super::block_interval_chart_daily(&days);
         assert_eq!(opt["series"][0]["data"][4].as_f64(), Some(120.0));
         // And TPS on a 144-block day of 2.0 transactions each is
-        // 288 / 86,400 = 0.00333, rounded to two places by the builder.
+        // 288 / 86,400 = 0.00333 transactions per second, which is what the
+        // chart must show.
+        //
+        // This asserted `Some(0.0)` until 2026-09-22, with a comment noting
+        // the true value and calling the zero "rounded to two places by the
+        // builder". That is a test pinning a defect: `round(_, 2)` quantised
+        // every rate below 0.005 to exactly zero, which flatlined 631 of
+        // 6,467 days across 2009 and 2010 and then had them dropped from a
+        // log axis by a notice blaming the data. The builder now uses
+        // `round_plot`, which keeps six significant figures.
         let tps = super::super::tps_chart_daily(&days);
-        assert_eq!(tps["series"][0]["data"][1].as_f64(), Some(0.0));
+        assert_eq!(
+            tps["series"][0]["data"][1].as_f64(),
+            Some(0.00333333),
+            "a real rate below 0.005 tx/s must survive as a small number \
+             rather than becoming zero"
+        );
     }
 
     /// A day with no blocks has no interval, rather than an interval of zero.
@@ -2994,6 +3024,274 @@ mod tests {
                     "rbf reports {y} before BIP 125, when the signal did \
                      not exist; a computed zero here is what dragged the \
                      144-block average down"
+                );
+            }
+        }
+    }
+
+    /// A 100%-stacked protocol share adds up to 100%.
+    ///
+    /// The bands were divided by `op_return_count`, which they do not
+    /// partition. Ingestion classifies every nulldata output into exactly one
+    /// band and then increments the total, so the identity holds by
+    /// construction for new rows and does hold across the last 1,000 blocks.
+    /// But `update_block_extras` rewrites the bands and not the total, so
+    /// 291,016 historical blocks carry a larger total than the sum of their
+    /// parts and the stack stopped short of 100% with nothing to explain the
+    /// gap. Found by review on 2026-09-21.
+    #[test]
+    fn a_protocol_share_stack_reaches_one_hundred_percent() {
+        // A block whose stored total exceeds its parts, which is what 30% of
+        // the chain looks like.
+        let mut blocks = synthetic_blocks(3);
+        for b in blocks.iter_mut() {
+            b.runes_count = 3;
+            b.omni_count = 1;
+            b.counterparty_count = 1;
+            b.data_carrier_count = 5;
+            // Ten classified, but the stale column claims fifteen.
+            b.op_return_count = 15;
+        }
+        let opt = super::super::runes_pct_chart(&blocks);
+        let total: f64 = opt["series"]
+            .as_array()
+            .expect("bands")
+            .iter()
+            .map(|s| s["data"][0][1].as_f64().unwrap_or(0.0))
+            .sum();
+        assert!(
+            (total - 100.0).abs() < 0.05,
+            "the four bands sum to {total}%, not 100%. They are being divided \
+             by the stale op_return_count rather than by their own sum."
+        );
+    }
+
+    /// The first inscription wave is drawn, not hidden behind a constant.
+    ///
+    /// The chart nulled every block below height 774,000 on the strength of a
+    /// comment saying inscriptions launched there. The database says the first
+    /// inscription-bearing block is 767,430 (2022-12-14), and 116 blocks below
+    /// the gate carry 129 inscriptions and 5,140,776 payload bytes, including
+    /// some of the largest block shares in the series. Found by review on
+    /// 2026-09-21. Gating on the block's own detections needs no constant.
+    #[test]
+    fn an_early_inscription_block_is_not_hidden_by_a_height_constant() {
+        let mut blocks = synthetic_blocks(3);
+        for b in blocks.iter_mut() {
+            b.height = 770_000; // below the old gate, above the real first
+            b.size = 1_000_000;
+            b.inscription_count = 0;
+            b.inscription_bytes = 0;
+        }
+        // One real early inscription block, 65% inscription data.
+        blocks[1].inscription_count = 4;
+        blocks[1].inscription_bytes = 650_000;
+
+        let opt = super::super::all_embedded_share_chart(&blocks);
+        let insc = opt["series"]
+            .as_array()
+            .expect("series")
+            .iter()
+            .find(|s| {
+                s["name"].as_str().is_some_and(|n| n.contains("nscription"))
+            })
+            .expect("an inscriptions band")
+            .clone();
+        let y = insc["data"][1][1].as_f64();
+        assert_eq!(
+            y,
+            Some(65.0),
+            "an inscription-bearing block below height 774,000 was nulled; \
+             the first inscription is block 767,430, not 774,000"
+        );
+        // Only the LEADING run is absent. A later block that simply carried no
+        // inscription has a measured share of zero, and nulling it punctures
+        // a stacked area with `connectNulls: false`. The first version of this
+        // fix got that wrong, and this fixture is what pins it: block 0 is
+        // before any inscription (absent), block 2 is after one (zero).
+        assert!(
+            insc["data"][0][1].is_null(),
+            "a block before any inscription should be absent, not zero"
+        );
+        assert_eq!(
+            insc["data"][2][1].as_f64(),
+            Some(0.0),
+            "a block AFTER the first inscription that carries none has a \
+             measured share of zero; nulling it breaks the stacked band"
+        );
+
+        // **And the daily arm, which is the one that matters here.** Any
+        // window over 5,000 blocks resolves to daily, so ALL, the only range
+        // from which anyone looks at the start of inscriptions, never touches
+        // the per-block arm above. The first version of this test built only
+        // the per-block arm and passed while the daily arm still hid the
+        // first inscriptions behind a hardcoded "2023-01-01".
+        let mut days = synthetic_days(4);
+        days[0].date = "2022-12-12".to_string();
+        days[1].date = "2022-12-14".to_string();
+        days[2].date = "2022-12-16".to_string();
+        days[3].date = "2022-12-18".to_string();
+        for d in days.iter_mut() {
+            d.avg_inscription_bytes = 0.0;
+        }
+        days[1].avg_inscription_bytes = 500.0;
+        let opt = super::super::all_embedded_share_chart_daily(&days);
+        let insc = opt["series"]
+            .as_array()
+            .expect("series")
+            .iter()
+            .find(|s| {
+                s["name"].as_str().is_some_and(|n| n.contains("nscription"))
+            })
+            .expect("an inscriptions band")
+            .clone();
+        assert!(
+            insc["data"][0].is_null(),
+            "the day before the first inscription should be absent"
+        );
+        assert!(
+            insc["data"][1].as_f64().is_some_and(|v| v > 0.0),
+            "2022-12-14 carries the first inscription and must be drawn; a \
+             hardcoded 2023-01-01 gate hides it at the only resolution that \
+             can show it"
+        );
+    }
+
+    /// An undefined percentile is absent, and a real zero still plots.
+    ///
+    /// Ingestion stores 0.0 when a block has too few fee-rate observations to
+    /// define the rank. Plotted literally that produced an impossible chart:
+    /// block 963,786 stores p90 = 0 beside p75 = 3.08, so the 90th percentile
+    /// drew below the 75th, and 5,740 blocks chain-wide put p90 under a
+    /// positive median.
+    ///
+    /// Both halves matter, which is why this test has two fixtures. Nulling
+    /// every zero would have been the easy wrong fix: 56,562 pre-2016 blocks
+    /// have a genuine p10 of 0 with a positive median, from the era of free
+    /// transactions. The population size is the only thing that separates
+    /// them. Found by review on 2026-09-21.
+    #[test]
+    fn an_undefined_percentile_is_absent_but_a_real_zero_is_not() {
+        let series_named = |opt: &serde_json::Value, name: &str| {
+            opt["series"]
+                .as_array()
+                .expect("series")
+                .iter()
+                .find(|s| s["name"].as_str() == Some(name))
+                .unwrap_or_else(|| panic!("no series named {name}"))
+                .clone()
+        };
+
+        // Too few transactions for p10/p90, enough for p25/p75. The stored
+        // zeros for p10 and p90 are sentinels and must not be drawn.
+        let mut small = synthetic_blocks(3);
+        for b in small.iter_mut() {
+            b.tx_count = 9;
+            b.fee_rate_p10 = 0.0;
+            b.fee_rate_p25 = 1.21;
+            b.median_fee_rate = 2.0;
+            b.fee_rate_p75 = 3.08;
+            b.fee_rate_p90 = 0.0;
+        }
+        let opt = super::super::fee_rate_heatmap_chart(&small);
+        for band in ["p10", "p90"] {
+            let s = series_named(&opt, band);
+            let pts = s["data"].as_array().expect("points");
+            assert!(
+                pts.iter().all(|p| p[1].is_null()),
+                "{band} drew the too-few-transactions sentinel as a real fee \
+                 rate; with 9 transactions the rank is undefined. Got {:?}",
+                pts.first()
+            );
+        }
+        // And the bands that ARE defined still draw.
+        let p75 = series_named(&opt, "p75");
+        assert_eq!(
+            p75["data"][0][1].as_f64(),
+            Some(3.08),
+            "p75 has 8 observations, over its threshold of 4, so it must draw"
+        );
+
+        // A genuine zero, from a block with plenty of free transactions.
+        let mut free = synthetic_blocks(3);
+        for b in free.iter_mut() {
+            b.tx_count = 80;
+            b.fee_rate_p10 = 0.0;
+            b.fee_rate_p25 = 0.0;
+            b.median_fee_rate = 0.5;
+            b.fee_rate_p75 = 1.0;
+            b.fee_rate_p90 = 2.0;
+        }
+        let opt = super::super::fee_rate_heatmap_chart(&free);
+        let p10 = series_named(&opt, "p10");
+        assert_eq!(
+            p10["data"][0][1].as_f64(),
+            Some(0.0),
+            "a block with 79 fee-rate observations and a true p10 of zero \
+             must still plot zero; suppressing it would erase the \
+             free-transaction era"
+        );
+    }
+
+    /// A weekday bar is labelled with the day it actually describes.
+    ///
+    /// The per-block arm computed `(timestamp / 86400 + 4) % 7`, which is the
+    /// 0=Sunday convention, and indexed it into a Monday-first label array.
+    /// Every bar sat one slot right: Sunday's blocks under "Mon", Saturday's
+    /// under "Sun". The daily arm used chrono's `num_days_from_monday` and was
+    /// correct, so one chart gave two different answers either side of the
+    /// 5,000-block resolution switch, and the weekend signal the chart exists
+    /// to show landed in the working week. Found by review on 2026-09-21.
+    ///
+    /// Anchored on real block timestamps rather than synthetic ones, because
+    /// the defect was in the epoch arithmetic itself and a synthetic fixture
+    /// would have inherited whatever convention the test author assumed.
+    #[test]
+    fn a_weekday_bar_is_labelled_with_its_own_day() {
+        // Block 1000, 2009-01-19 06:34:42 UTC, a Monday (SQLite %w = 1).
+        // Block 1, 2009-01-09 02:54:25 UTC, a Friday (%w = 5).
+        const MONDAY_TS: u64 = 1_232_346_882;
+        const FRIDAY_TS: u64 = 1_231_469_665;
+
+        let index_of = |ts: u64| ((ts / 86_400 + 3) % 7) as usize;
+        assert_eq!(index_of(MONDAY_TS), 0, "Monday must be index 0");
+        assert_eq!(index_of(FRIDAY_TS), 4, "Friday must be index 4");
+
+        // And the built chart must put a Monday-only fixture's mass under the
+        // "Mon" category, not beside it.
+        let mut blocks = synthetic_blocks(3);
+        for (i, b) in blocks.iter_mut().enumerate() {
+            b.timestamp = MONDAY_TS + i as u64 * 600;
+            b.tx_count = 1234;
+        }
+        let opt = super::super::weekday_activity_chart(&blocks);
+        let cats = opt["xAxis"]["data"]
+            .as_array()
+            .expect("day categories")
+            .iter()
+            .filter_map(|v| v.as_str().map(String::from))
+            .collect::<Vec<_>>();
+        let monday = cats
+            .iter()
+            .position(|c| c == "Mon")
+            .expect("a Monday category");
+        let tx = opt["series"][0]["data"]
+            .as_array()
+            .expect("tx series")
+            .iter()
+            .filter_map(|v| v.as_f64())
+            .collect::<Vec<f64>>();
+        assert_eq!(
+            tx[monday], 1234.0,
+            "blocks stamped on a Monday are not under the Mon bar; the \
+             day-of-week index and the label array disagree. Bars: {tx:?}"
+        );
+        for (i, v) in tx.iter().enumerate() {
+            if i != monday {
+                assert_eq!(
+                    *v, 0.0,
+                    "a Monday-only fixture put mass under {}",
+                    cats[i]
                 );
             }
         }

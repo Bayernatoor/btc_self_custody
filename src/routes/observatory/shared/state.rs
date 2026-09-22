@@ -107,7 +107,10 @@ pub struct ObservatoryState {
     /// values. Exposed here because the network page needs the same number:
     /// it previously ran an identical LocalResource of its own, so every range
     /// change fired two identical requests for it.
-    pub chain_size_offset: LocalResource<u64>,
+    /// Bytes before the window, paired with the `(range, custom_from)` it
+    /// answers. Those are the only inputs its fetch reads, so that pair and
+    /// not the full window key is what `data_loading` compares.
+    pub chain_size_offset: LocalResource<ChainSizeOffsetValue>,
     /// Block data for the whole chain today, in bytes.
     ///
     /// Calibrates the chain-size chart's disk estimate. Range-independent by
@@ -130,7 +133,9 @@ pub struct ObservatoryState {
     /// every observatory page, including the ones with no difficulty chart,
     /// which is the same trade `chain_size_offset` already makes. It is a
     /// 2.1ms query returning at most ~480 rows for the whole chain.
-    pub retargets: LocalResource<Result<Vec<Retarget>, String>>,
+    /// Paired with the daily window it answers, in the same shape and for
+    /// the same reason as `DashboardValue`.
+    pub retargets: LocalResource<RetargetsValue>,
     // true while the dashboard data resource hasn't yet resolved a value
     // for the *currently selected* range/custom-window.
     pub data_loading: Signal<bool>,
@@ -225,6 +230,18 @@ pub fn price_window_too_short(span_secs: u64) -> bool {
 /// leaving the flag stuck and the skeleton spinning.
 pub type DashboardValue = (WindowKey, Result<DashboardData, String>);
 
+/// The daily window a retarget list answers, as `(from_ts, to_ts)`, or `None`
+/// at per-block ranges where difficulty is read off the blocks themselves.
+pub type DailyWindow = Option<(u64, u64)>;
+
+/// Retargets paired with the daily window they answer.
+pub type RetargetsValue = (DailyWindow, Result<Vec<Retarget>, String>);
+
+/// Bytes of chain before the window, paired with the `(range, custom_from)`
+/// that fetch read. Deliberately narrower than `WindowKey`: the fetch does not
+/// read `custom_to`, so comparing against the full key would never match.
+pub type ChainSizeOffsetValue = ((String, Option<String>), u64);
+
 pub fn create_dashboard_resource(
     range: ReadSignal<String>,
     custom_from: ReadSignal<Option<String>>,
@@ -246,17 +263,56 @@ pub fn create_dashboard_resource(
                         let from_ts = date_to_ts(&from_str).unwrap_or(0);
                         let to_ts = date_to_ts_end(&to_str)
                             .unwrap_or(stats.latest_timestamp);
-                        let approx_blocks = to_ts.saturating_sub(from_ts) / 600;
-                        if uses_daily_aggregates(approx_blocks) {
+                        // **Ask the chain how many blocks are in the window,
+                        // do not divide the span by 600.**
+                        //
+                        // Blocks are not ten minutes apart. A 30-day custom
+                        // range over the late-2017 congestion holds 5,055
+                        // blocks while span/600 estimates 4,320, so the
+                        // per-block arm was taken and `fetch_blocks_by_ts`
+                        // rejected it against its 5,000-row cap. There was no
+                        // fallback, so the resource returned Err and **every
+                        // chart on the page showed "Failed to load data"** for
+                        // a range that is perfectly serviceable as daily.
+                        // Verified against the database: 2017-11-19 to
+                        // 2017-12-19 is one such window, and 34-day windows
+                        // reach 5,662 blocks against an estimate of 4,896.
+                        //
+                        // The server already knew this: its cap comment says
+                        // the estimate under-counts and enforces the limit
+                        // rather than trusting the caller. Only the client
+                        // half was missing.
+                        let real_blocks =
+                            match fetch_height_range(from_ts, to_ts).await {
+                                Ok(Some((lo, hi))) => hi.saturating_sub(lo) + 1,
+                                // No blocks in the window, or the lookup
+                                // failed. Fall back to the old estimate
+                                // rather than failing outright.
+                                _ => to_ts.saturating_sub(from_ts) / 600,
+                            };
+                        if uses_daily_aggregates(real_blocks) {
                             let days = fetch_daily_aggregates(from_ts, to_ts)
                                 .await
                                 .map_err(|e| e.to_string())?;
                             return Ok::<_, String>(DashboardData::Daily(days));
-                        } else {
-                            let blocks = fetch_blocks_by_ts(from_ts, to_ts)
-                                .await
-                                .map_err(|e| e.to_string())?;
-                            return Ok(DashboardData::PerBlock(blocks));
+                        }
+                        // A height span is within a few blocks of the row
+                        // count the server caps on, because an out-of-order
+                        // timestamp can put a block either side of the
+                        // boundary. So a window that measures just under the
+                        // cap can still be refused, and the honest answer to
+                        // that is the daily arm rather than an error page.
+                        match fetch_blocks_by_ts(from_ts, to_ts).await {
+                            Ok(blocks) => {
+                                return Ok(DashboardData::PerBlock(blocks))
+                            }
+                            Err(_) => {
+                                let days =
+                                    fetch_daily_aggregates(from_ts, to_ts)
+                                        .await
+                                        .map_err(|e| e.to_string())?;
+                                return Ok(DashboardData::Daily(days));
+                            }
                         }
                     }
                 }
@@ -500,10 +556,6 @@ pub fn provide_observatory_state() -> ObservatoryState {
     // one, shows the older window and puts the skeleton back until the newer
     // one arrives. That is a spurious skeleton rather than a stale chart, which
     // is the right way round for this to fail.
-    let data_loading = Signal::derive(move || {
-        let want = (range.get(), custom_from.get(), custom_to.get());
-        dashboard_data.get().is_none_or(|(have, _)| have != want)
-    });
 
     // Whether the selected window is too short for the price series to draw.
     //
@@ -518,52 +570,64 @@ pub fn provide_observatory_state() -> ObservatoryState {
     // window of two days is just as short and `range_to_blocks` maps "custom"
     // to 999,999. Daily resolution starts at thousands of blocks, so those
     // windows are never short enough to matter.
-    let price_sparse = Signal::derive(move || {
+    // Borrowed and memoized, for the same reason as `data_loading`: this needs
+    // two timestamps, not a copy of every block in the window.
+    let price_sparse_memo = Memo::new(move |_| {
         dashboard_data
-            .get()
-            .and_then(|(_, r)| r.ok())
-            .and_then(|data| match data {
-                DashboardData::PerBlock(blocks) => {
-                    let first = blocks.first()?.timestamp;
-                    let last = blocks.last()?.timestamp;
-                    Some(price_window_too_short(last.saturating_sub(first)))
+            .with(|v| {
+                let (_, res) = v.as_ref()?;
+                match res.as_ref().ok()? {
+                    DashboardData::PerBlock(blocks) => {
+                        let first = blocks.first()?.timestamp;
+                        let last = blocks.last()?.timestamp;
+                        Some(price_window_too_short(last.saturating_sub(first)))
+                    }
+                    DashboardData::Daily(_) => Some(false),
                 }
-                DashboardData::Daily(_) => Some(false),
             })
             .unwrap_or(false)
     });
+    let price_sparse: Signal<bool> = price_sparse_memo.into();
 
     // Fetch cumulative size offset (total bytes before visible window)
     let chain_size_offset = LocalResource::new(move || {
         let r = range.get();
         let cf = custom_from.get();
+        // Stamped with `(range, custom_from)` and **not** the full window key,
+        // because those are the only two inputs this body reads. Stamping it
+        // with `custom_to` as well would compare against a key this resource
+        // never refetches for, and `data_loading` would latch true forever the
+        // first time only the end date moved.
+        let stamp = (r.clone(), cf.clone());
         async move {
             if r == "custom" {
                 // Custom range: use timestamp-based cumulative size query
                 if let Some(from_str) = cf {
                     let from_ts = date_to_ts(&from_str).unwrap_or(0);
                     if from_ts == 0 {
-                        return 0u64;
+                        return (stamp, 0u64);
                     }
-                    return fetch_cumulative_size_before_ts(from_ts)
+                    let bytes = fetch_cumulative_size_before_ts(from_ts)
                         .await
                         .unwrap_or(0);
+                    return (stamp, bytes);
                 }
-                return 0u64;
+                return (stamp, 0u64);
             }
             let n = range_to_blocks(&r);
             if n >= 999_999 {
-                return 0u64; // ALL range starts from genesis
+                return (stamp, 0u64); // ALL range starts from genesis
             }
             let stats = fetch_stats_summary().await.ok();
             let from_height = stats
                 .map(|s| s.min_height.max(s.max_height.saturating_sub(n)))
                 .unwrap_or(0);
-            if from_height > 0 {
+            let bytes = if from_height > 0 {
                 fetch_cumulative_size(from_height).await.unwrap_or(0)
             } else {
                 0u64
-            }
+            };
+            (stamp, bytes)
         }
     });
 
@@ -588,24 +652,45 @@ pub fn provide_observatory_state() -> ObservatoryState {
     //
     // Empty for per-block ranges, which read difficulty off the blocks they
     // already have.
+    // The window the loaded days describe, which is exactly what `retargets`
+    // has to answer. Shared with `data_loading` so the gate and the fetch
+    // cannot disagree about which window is current.
+    // **`with`, not `get`, and a `Memo`, not a derive.**
+    //
+    // `LocalResource::get()` clones its value. Now that the window travels
+    // inside the payload, reading the window with `get()` clones up to 5,000
+    // `BlockSummary` rows, each carrying two heap strings, just to look at a
+    // three-field key. `data_loading` is read at the head of every
+    // `chart_memo!` before the cache check, so a 30-card category page paid
+    // that clone on the order of a hundred times per reactive pass. Borrowing
+    // through `with` and cloning only the projection costs nothing, and the
+    // `Memo` collapses those reads into one computation.
+    let daily_window: Memo<DailyWindow> = Memo::new(move |_| {
+        dashboard_data.with(|v| {
+            let (_, res) = v.as_ref()?;
+            let data = res.as_ref().ok()?;
+            match data {
+                DashboardData::Daily(days) => {
+                    let first = days.first()?;
+                    let last = days.last()?;
+                    Some((
+                        date_to_ts(&first.date)?,
+                        date_to_ts_end(&last.date)?,
+                    ))
+                }
+                DashboardData::PerBlock(_) => None,
+            }
+        })
+    });
     let retargets = LocalResource::new(move || {
-        let window =
-            dashboard_data
-                .get()
-                .and_then(|(_, r)| r.ok())
-                .and_then(|data| match data {
-                    DashboardData::Daily(ref days) => {
-                        let first = days.first()?;
-                        let last = days.last()?;
-                        Some((
-                            date_to_ts(&first.date)?,
-                            date_to_ts_end(&last.date)?,
-                        ))
-                    }
-                    DashboardData::PerBlock(_) => None,
-                });
+        let window = daily_window.get();
         async move {
-            match window {
+            // Stamped with the derived window, for the same reason
+            // `DashboardValue` is: this resource keeps its previous list while
+            // refetching, so a range change left the difficulty chart holding
+            // the *previous* window's retargets for a frame after the days
+            // themselves had arrived.
+            let out = match window {
                 // The error is kept rather than flattened to an empty list.
                 // An empty list is a real answer here ("no retarget in this
                 // window"), so a failed fetch that became one would draw a
@@ -618,15 +703,55 @@ pub fn provide_observatory_state() -> ObservatoryState {
                     })
                 }
                 None => Ok(Vec::new()),
-            }
+            };
+            (window, out)
         }
     });
+
+    // **Every window-keyed input, not just the rows.**
+    //
+    // Gating on `dashboard_data` alone left the flash smaller and still there,
+    // reported on 2026-09-21 after the payload fix. The reason is that a chart
+    // option is built from more than the rows: `chain_size_offset` and
+    // `retargets` are their own resources, each keeps its previous value while
+    // refetching, and each therefore answers the *previous* window for a while
+    // after the rows for the new one have landed. Clearing the flag on the
+    // rows alone published a chart assembled from new rows and stale
+    // everything-else.
+    //
+    // Each comparison is against exactly the inputs that resource reads.
+    // `chain_size_offset` never reads `custom_to`, so comparing its stamp to
+    // the full window key would latch this true forever the first time only
+    // the end date moved; `retargets` is keyed on the window the days
+    // describe, so it is compared against that.
+    //
+    // `chain_size_total` and the price history are deliberately absent: both
+    // are range-independent, fetched once, and filtered client-side.
+    // A `Memo`, and every read borrows rather than clones. `get()` on a
+    // resource clones its whole value, and this is read at the head of every
+    // `chart_memo!` before the cache check, so in the derive form a 30-card
+    // page cloned the payload on the order of a hundred times per reactive
+    // pass. Nothing here needs more than the keys.
+    let data_loading_memo = Memo::new(move |_| {
+        let want = (range.get(), custom_from.get(), custom_to.get());
+        let rows_stale = dashboard_data
+            .with(|v| v.as_ref().is_none_or(|(have, _)| have != &want));
+        let offset_want = (want.0.clone(), want.1.clone());
+        let offset_stale = chain_size_offset
+            .with(|v| v.as_ref().is_none_or(|(have, _)| have != &offset_want));
+        let wanted_daily = daily_window.get();
+        let retargets_stale = retargets
+            .with(|v| v.as_ref().is_none_or(|(have, _)| have != &wanted_daily));
+        rows_stale || offset_stale || retargets_stale
+    });
+    let data_loading: Signal<bool> = data_loading_memo.into();
 
     // Pre-compute chain size cumulative data (with offset for absolute values)
     let cached_chain_size_data = {
         let (cached, set_cached) = signal::<Vec<(u64, f64)>>(Vec::new());
         Effect::new(move |_| {
-            let offset_bytes = chain_size_offset.get().unwrap_or(0);
+            let offset_bytes =
+                chain_size_offset.get().map(|(_, b)| b).unwrap_or(0);
             let result = dashboard_data
                 .get()
                 .and_then(|(_, r)| r.ok())

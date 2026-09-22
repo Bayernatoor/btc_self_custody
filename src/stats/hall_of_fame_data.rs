@@ -365,7 +365,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         // which the block disproves: it has 327 inputs in total, so it cannot
         // hold 22,367 of them. The figure came from taproot_spend_count,
         // which despite its name counts *created* P2TR outputs and is
-        // byte-identical to p2tr_count in all 967,187 rows.
+        // byte-identical to p2tr_count in every row.
         //
         // DB: height 840655, p2tr_count 22,367, output_count 22,679,
         // input_count 327, 186 txs, miner F2Pool, 2024-04-24.
@@ -924,8 +924,8 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         // DB-verified 2026-09-10: block 961,632 timestamp 2026-08-08 19:35:55
         // UTC, miner AntPool, version bit 4 NOT set. Peak support 2.53% in
         // retarget period 476 (from block 959,616, 2026-07-25), 51 of 2,016
-        // blocks, every signalling block an OCEAN template. Zero of the 4,711
-        // blocks since the window opened have set bit 4.
+        // blocks, every signalling block an OCEAN template. No block
+        // since the window opened has set bit 4.
         description: "BIP-110 proposed capping transaction outputs at 34 bytes through a modified BIP9 soft fork on version bit 4. It had no failure state, only mandatory signalling: from block 961,632 every block had to set bit 4 or enforcing nodes would reject it. AntPool mined 961,632 without the bit, mainnet accepted it, and the enforcing nodes forked onto a minority chain that inherited mainnet's difficulty at a fraction of its hashrate. Support had peaked at 2.53%, supplied almost entirely by OCEAN templates.",
         short_context: Some("Mandatory bit-4 signalling opened at block 961,632. AntPool mined it without the bit and enforcing nodes forked onto a minority chain"),
         almanac: true,

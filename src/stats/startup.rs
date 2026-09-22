@@ -154,6 +154,20 @@ pub async fn init() -> Option<(
         Duration::from_secs(60),
         &[CacheTag::OnNewBlock],
     );
+    // Same shape as the other range-keyed caches. `OnNewBlock` because a new
+    // block adds an interval to the newest bucket.
+    let time_histogram_cache = cb
+        .cache::<(u64, u64), Vec<types::HistogramBucket>>(
+            "time_histogram",
+            Duration::from_secs(120),
+            &[CacheTag::OnNewBlock],
+        );
+    let fullness_histogram_cache = cb
+        .cache::<(u64, u64), Vec<types::HistogramBucket>>(
+            "fullness_histogram",
+            Duration::from_secs(120),
+            &[CacheTag::OnNewBlock],
+        );
     let extremes_cache = cb.cache::<(u64, u64), types::ExtremesData>(
         "extremes",
         Duration::from_secs(60),
@@ -181,6 +195,8 @@ pub async fn init() -> Option<(
         price_history_cache,
         range_summary_cache,
         extremes_cache,
+        time_histogram_cache,
+        fullness_histogram_cache,
         heartbeat_tx,
         sse_connections: std::sync::atomic::AtomicUsize::new(0),
         heartbeat_history_cache,

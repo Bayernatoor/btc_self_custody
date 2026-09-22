@@ -11,10 +11,10 @@
 //! `stats::charts::registry`, not here. This file knows how to lay one out.
 
 use leptos::prelude::*;
-use leptos_meta::{Meta, Title};
+use leptos_meta::{Link, Meta, Title};
 use leptos_router::hooks::use_params_map;
 
-use super::components::Chart;
+use super::components::{Chart, DataLoadError};
 use super::helpers::range_to_blocks;
 use super::shared::{DashboardData, ObservatoryState};
 use crate::stats::charts::kpi::{self, Kpis};
@@ -313,63 +313,77 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
         let r = range.get();
         let custom_from = state.custom_from.get();
         let custom_to = state.custom_to.get();
+        // Stamped, for the same reason `DashboardValue` is: this resource
+        // keeps the previous window's payload while refetching, so gating the
+        // option on the shared rows alone still let a mining chart paint the
+        // previous range for a frame.
+        let stamp = (r.clone(), custom_from.clone(), custom_to.clone());
         async move {
-            if !needs_mining {
-                return Err(String::new());
-            }
-            let stats =
-                fetch_stats_summary().await.map_err(|e| e.to_string())?;
-            // The mining queries take heights and the picker gives dates, and
-            // the window has to be anchored at **both** ends.
-            //
-            // Converting the window's duration to a block count and counting
-            // back from the tip gives a length, not a position: a request for
-            // April 2024 came back holding the most recent 61 days, correctly
-            // sized and entirely the wrong period. Silently answering a
-            // historical question with recent data is the worst failure this
-            // page can have, because nothing about the result looks wrong.
-            //
-            // So a custom window asks the chain where it sits. The named
-            // ranges keep counting back from the tip, which is exactly what
-            // they mean.
-            let (from, to, from_ts, to_ts) = super::helpers::resolve_window(
-                &r,
-                custom_from.clone(),
-                custom_to.clone(),
-                &stats,
-            )
-            .await?;
-            // An empty window, so nothing is fetched at all. The endpoints
-            // reject a reversed range, and a 500 would read as a server fault
-            // rather than as a range holding no blocks.
-            if from > to {
-                return Ok::<MiningPayload, String>((
-                    Vec::new(),
-                    Vec::new(),
-                    Vec::new(),
-                ));
-            }
-            let empty_monthly = fetch_empty_blocks_monthly(from, to)
-                .await
-                .map_err(|e| e.to_string())?;
-            let empty_by_pool = fetch_empty_blocks_by_pool(from, to)
-                .await
-                .map_err(|e| e.to_string())?;
-            // Which resolution, from the window that is actually being
-            // fetched rather than from the range name. `range_to_blocks` maps
-            // "custom" to 999,999, so this always read as daily even for a
-            // two-day window.
-            let span = to.saturating_sub(from) + 1;
-            let miners = if uses_daily_aggregates(span) {
-                fetch_miner_dominance_daily(from_ts, to_ts)
+            let out = async move {
+                if !needs_mining {
+                    return Err(String::new());
+                }
+                let stats =
+                    fetch_stats_summary().await.map_err(|e| e.to_string())?;
+                // The mining queries take heights and the picker gives dates, and
+                // the window has to be anchored at **both** ends.
+                //
+                // Converting the window's duration to a block count and counting
+                // back from the tip gives a length, not a position: a request for
+                // April 2024 came back holding the most recent 61 days, correctly
+                // sized and entirely the wrong period. Silently answering a
+                // historical question with recent data is the worst failure this
+                // page can have, because nothing about the result looks wrong.
+                //
+                // So a custom window asks the chain where it sits. The named
+                // ranges keep counting back from the tip, which is exactly what
+                // they mean.
+                let (from, to, from_ts, to_ts) =
+                    super::helpers::resolve_window(
+                        &r,
+                        custom_from.clone(),
+                        custom_to.clone(),
+                        &stats,
+                    )
+                    .await?;
+                // An empty window, so nothing is fetched at all. The endpoints
+                // reject a reversed range, and a 500 would read as a server fault
+                // rather than as a range holding no blocks.
+                if from > to {
+                    return Ok::<MiningPayload, String>((
+                        Vec::new(),
+                        Vec::new(),
+                        Vec::new(),
+                    ));
+                }
+                let empty_monthly = fetch_empty_blocks_monthly(from, to)
                     .await
-                    .map_err(|e| e.to_string())?
-            } else {
-                fetch_miner_dominance(from, to)
+                    .map_err(|e| e.to_string())?;
+                let empty_by_pool = fetch_empty_blocks_by_pool(from, to)
                     .await
-                    .map_err(|e| e.to_string())?
-            };
-            Ok::<MiningPayload, String>((miners, empty_monthly, empty_by_pool))
+                    .map_err(|e| e.to_string())?;
+                // Which resolution, from the window that is actually being
+                // fetched rather than from the range name. `range_to_blocks` maps
+                // "custom" to 999,999, so this always read as daily even for a
+                // two-day window.
+                let span = to.saturating_sub(from) + 1;
+                let miners = if uses_daily_aggregates(span) {
+                    fetch_miner_dominance_daily(from_ts, to_ts)
+                        .await
+                        .map_err(|e| e.to_string())?
+                } else {
+                    fetch_miner_dominance(from, to)
+                        .await
+                        .map_err(|e| e.to_string())?
+                };
+                Ok::<MiningPayload, String>((
+                    miners,
+                    empty_monthly,
+                    empty_by_pool,
+                ))
+            }
+            .await;
+            (stamp, out)
         }
     });
 
@@ -384,35 +398,42 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
         // were edited because `range` stayed "custom".
         let cf = state.custom_from.get();
         let ct = state.custom_to.get();
+        let stamp = (r.clone(), cf.clone(), ct.clone());
         async move {
-            let n = range_to_blocks(&r);
-            if !needs_buckets || !uses_daily_aggregates(n) {
-                return None;
+            let out = async move {
+                let n = range_to_blocks(&r);
+                if !needs_buckets || !uses_daily_aggregates(n) {
+                    return None;
+                }
+                let stats = fetch_stats_summary().await.ok()?;
+                let (_, _, from_ts, to_ts) = super::helpers::resolve_window(
+                    &r,
+                    cf.clone(),
+                    ct.clone(),
+                    &stats,
+                )
+                .await
+                .ok()?;
+                // Which histogram depends on the chart. Fetching only the
+                // fullness one left time-dist with nothing to read, so its daily
+                // arm returned empty and the page showed a loading state that
+                // never resolved.
+                match which_buckets {
+                    Buckets::Fullness => {
+                        fetch_fullness_histogram(from_ts, to_ts)
+                            .await
+                            .ok()
+                            .map(Histogram::Fullness)
+                    }
+                    Buckets::Time => fetch_block_time_histogram(from_ts, to_ts)
+                        .await
+                        .ok()
+                        .map(Histogram::Time),
+                    Buckets::None => None,
+                }
             }
-            let stats = fetch_stats_summary().await.ok()?;
-            let (_, _, from_ts, to_ts) = super::helpers::resolve_window(
-                &r,
-                cf.clone(),
-                ct.clone(),
-                &stats,
-            )
-            .await
-            .ok()?;
-            // Which histogram depends on the chart. Fetching only the
-            // fullness one left time-dist with nothing to read, so its daily
-            // arm returned empty and the page showed a loading state that
-            // never resolved.
-            match which_buckets {
-                Buckets::Fullness => fetch_fullness_histogram(from_ts, to_ts)
-                    .await
-                    .ok()
-                    .map(Histogram::Fullness),
-                Buckets::Time => fetch_block_time_histogram(from_ts, to_ts)
-                    .await
-                    .ok()
-                    .map(Histogram::Time),
-                Buckets::None => None,
-            }
+            .await;
+            (stamp, out)
         }
     });
 
@@ -498,10 +519,24 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
 
         match meta.source {
             Source::Mining(which) => {
-                let Some(Ok((miners, monthly, by_pool))) = mining_data.get()
+                // The stamp has to match the window now selected, not just
+                // be present: this resource holds the previous window's
+                // payload while refetching, which is what kept a mining chart
+                // painting the old range for a frame after the shared rows
+                // had landed.
+                let want = (
+                    range.get(),
+                    state.custom_from.get(),
+                    state.custom_to.get(),
+                );
+                let Some((stamp, Ok((miners, monthly, by_pool)))) =
+                    mining_data.get()
                 else {
                     return String::new();
                 };
+                if stamp != want {
+                    return String::new();
+                }
                 let v = match which {
                     MiningChart::Dominance => {
                         crate::stats::charts::miner_dominance_chart(&miners)
@@ -539,7 +574,8 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                     decorate(v, is_daily, cmp_option.clone())
                 };
                 let disk_gb = disk_size_gb.get();
-                let offset = state.chain_size_offset.get().unwrap_or(0);
+                let offset =
+                    state.chain_size_offset.get().map(|(_, b)| b).unwrap_or(0);
                 let chain_total = state.chain_size_total.get().unwrap_or(0);
                 let unit = if sats { "sats" } else { "btc" };
 
@@ -590,7 +626,7 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                     // than a chart with no bars, which would read as a window
                     // holding no retargets.
                     (DashboardData::Daily(days), Source::DiffAdjustment) => {
-                        let Some(Ok(rows)) = state.retargets.get() else {
+                        let Some((_, Ok(rows))) = state.retargets.get() else {
                             return String::new();
                         };
                         finish(
@@ -629,10 +665,21 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                     // Long ranges: the distributions come from server-side
                     // buckets rather than from the daily aggregates.
                     (DashboardData::Daily(_), Source::FullnessDist) => {
-                        let Some(Some(Histogram::Fullness(b))) = buckets.get()
+                        // Stamp must match the selected window, same as
+                        // the mining arm above.
+                        let want = (
+                            range.get(),
+                            state.custom_from.get(),
+                            state.custom_to.get(),
+                        );
+                        let Some((stamp, Some(Histogram::Fullness(b)))) =
+                            buckets.get()
                         else {
                             return String::new();
                         };
+                        if stamp != want {
+                            return String::new();
+                        }
                         let v = if pct {
                             crate::stats::charts::block_fullness_histogram_from_buckets_pct(&b)
                         } else {
@@ -641,10 +688,21 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                         serde_json::to_string(&v).unwrap_or_default()
                     }
                     (DashboardData::Daily(_), Source::TimeDist) => {
-                        let Some(Some(Histogram::Time(b))) = buckets.get()
+                        // Stamp must match the selected window, same as
+                        // the mining arm above.
+                        let want = (
+                            range.get(),
+                            state.custom_from.get(),
+                            state.custom_to.get(),
+                        );
+                        let Some((stamp, Some(Histogram::Time(b)))) =
+                            buckets.get()
                         else {
                             return String::new();
                         };
+                        if stamp != want {
+                            return String::new();
+                        }
                         let v = if pct {
                             crate::stats::charts::block_time_histogram_from_buckets_pct(&b)
                         } else {
@@ -676,13 +734,29 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
     let daily_gap =
         Signal::derive(move || !meta.has_daily() && resolved_daily.get());
 
+    // True when the dashboard fetch for the selected window came back an
+    // error. Borrowed rather than cloned, for the reason `data_loading` is.
+    let load_failed = Memo::new(move |_| {
+        dashboard_data.with(|v| v.as_ref().is_some_and(|(_, r)| r.is_err()))
+    });
+
     let cid = canvas_id(meta.slug);
     let title_tag = format!("{} | Bitcoin Chart | We Hodl BTC", meta.title);
     let desc_tag = meta_description(meta);
 
+    // Self-referential canonical, absolute, and deliberately WITHOUT the query
+    // string. Every category page already carries one; these 63 new indexable
+    // URLs did not, and each of them accepts `?range=`, `?overlays=`,
+    // `?compare=` and two custom-date parameters. Without this, every
+    // combination a reader shares is a separate indexable URL of the same
+    // page, which is the classic way a site dilutes 63 pages into thousands.
+    let canonical =
+        format!("https://www.wehodlbtc.com/observatory/chart/{}", meta.slug);
+
     view! {
         <Title text=title_tag/>
         <Meta name="description" content=desc_tag/>
+        <Link rel="canonical" href=canonical/>
 
         <div class="mb-4 flex items-center gap-2 text-sm">
             <a
@@ -809,7 +883,23 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                             </div>
                         </div>
                     </Show>
-                    <Show when=move || !daily_gap.get() && (option.get().is_empty() || data_loading.get())>
+                    // A failed fetch is an error, not a slow one.
+                    //
+                    // This page had no error branch at all: the skeleton is
+                    // shown whenever the option is empty, and a failed
+                    // resource leaves it empty forever, so a 500 read as
+                    // "Loading chart data..." until the reader gave up. The
+                    // category pages have shown `DataLoadError` with a retry
+                    // since before this page existed; it just was not carried
+                    // over. Checked first so it wins over the skeleton.
+                    <Show when=move || load_failed.get()>
+                        <div class="absolute inset-0 flex items-center justify-center bg-[#0d2137] rounded-xl">
+                            <DataLoadError on_retry=Callback::new(move |_| {
+                                state.dashboard_data.refetch()
+                            })/>
+                        </div>
+                    </Show>
+                    <Show when=move || !load_failed.get() && !daily_gap.get() && (option.get().is_empty() || data_loading.get())>
                         <div class="absolute inset-0 flex items-center justify-center bg-[#0d2137] rounded-xl">
                             <span class="text-xs text-white/50">"Loading chart data..."</span>
                         </div>
@@ -1497,7 +1587,12 @@ fn InfoTip(text: &'static str) -> impl IntoView {
 /// something. Extracted from the component so it can be asserted: a phrase
 /// search cannot guard a sentence that exists only in the output.
 fn meta_description(meta: &ChartMeta) -> String {
-    if meta.unit == registry::Unit::Count {
+    // `Mixed` and `Count` are not units a sentence can name. Weekday Activity
+    // is the one `Mixed` chart, and it shipped the meta description
+    // "... measured in mixed, from my own node", which is what a search
+    // result showed.
+    if meta.unit == registry::Unit::Count || meta.unit == registry::Unit::Mixed
+    {
         format!(
             "{} for the Bitcoin network, from my own node. Downloadable as \
              CSV.",
@@ -1892,10 +1987,22 @@ fn Toggle(
                     "w-3.5 h-3.5 rounded border border-white/20 group-hover:border-white/40 shrink-0"
                 }
             ></span>
+            // `aria-label`, because nothing else names this control. The
+            // visible word sits in a `DefinedTerm` sibling outside the
+            // `<label>` (so that explaining the term does not toggle the
+            // overlay), and the span that is inside the label renders only
+            // when `hint` is empty, which no call site leaves empty. The
+            // result was six checkboxes with an accessible name of "",
+            // announced as six indistinguishable "checkbox, not checked".
+            // Measured over CDP on 2026-09-21. `prop:disabled` as well, so a
+            // refused overlay is refused to the keyboard and not only to the
+            // pointer.
             <input
                 type="checkbox"
                 class="sr-only"
+                aria-label=label
                 prop:checked=move || get.get()
+                prop:disabled=move || disabled.get()
                 on:change=move |_| {
                     if !disabled.get() {
                         set.update(|v| *v = !*v);
@@ -1933,11 +2040,18 @@ mod tests {
         for meta in super::registry::CHARTS {
             let d = super::meta_description(meta);
             assert!(!d.contains("measured in count"), "{}: {d}", meta.slug);
+            // `Mixed` is as generic as `Count` and was not exempt, so
+            // Weekday Activity shipped "measured in mixed" as its search
+            // result. It is the only `Mixed` chart, and the word names no
+            // unit, so it takes the same fallback.
+            assert!(!d.contains("measured in mixed"), "{}: {d}", meta.slug);
             assert!(d.starts_with(meta.title), "{}: {d}", meta.slug);
             // And the clause is present wherever the unit names something,
             // or dropping it would be hiding the unit rather than the
             // fallback.
-            if meta.unit != super::registry::Unit::Count {
+            if meta.unit != super::registry::Unit::Count
+                && meta.unit != super::registry::Unit::Mixed
+            {
                 assert!(
                     d.contains("measured in "),
                     "{} declares {:?} but its description does not say so: \

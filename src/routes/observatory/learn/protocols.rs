@@ -80,7 +80,7 @@ const PROTOCOLS: &[Protocol] = &[
 
         description: "Created by Casey Rodarmor. Introduces \"ordinal theory,\" a convention for assigning serial numbers to individual satoshis, and enables inscribing arbitrary data (images, text, HTML) into the witness field of transactions. Inscription data benefits from the SegWit witness discount: witness bytes count at one quarter the weight of non-witness bytes.",
         how_it_works: "The inscription is placed inside a Taproot script-path spend. The witness contains an envelope with OP_FALSE OP_IF to create a no-op branch that carries the data. Since it's in the witness, it benefits from the 75% weight discount introduced by SegWit.",
-        fun_fact: "The first known inscription (block 774,628) was a pixel art image. Inscription activity grew rapidly, with over a million inscriptions created within the first few months.",
+        fun_fact: "The first inscription this node has detected is in block 767,430, mined on 14 December 2022, and carries 833 bytes. Inscription activity grew quickly from there: block 774,628, seven weeks later, holds a single inscription of 3,938,161 bytes, which is almost an entire block.",
         status: "Active",
         prunable: true,
         fungible: false,

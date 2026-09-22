@@ -124,6 +124,20 @@ pub struct StatsState {
     /// Range summary cache, keyed by (from_ts, to_ts). 60s TTL.
     /// Invalidated on new block.
     pub range_summary_cache: Arc<Cache<(u64, u64), super::types::RangeSummary>>,
+    /// The two histogram endpoints, keyed by (from_ts, to_ts).
+    ///
+    /// These were the only range-keyed endpoints without a cache, and the
+    /// time histogram is the most expensive query the site runs: a `LAG`
+    /// window function over every block in the window, which cannot use an
+    /// index for its ordering. Measured against the 968,041-row table it
+    /// takes **1.53 s at the ALL range** and 0.42 s over five years, on a
+    /// desktop; the droplet has 2 vCPU. The answer is identical for every
+    /// visitor until the next block, so it was being recomputed per request
+    /// for nothing.
+    pub time_histogram_cache:
+        Arc<Cache<(u64, u64), Vec<super::types::HistogramBucket>>>,
+    pub fullness_histogram_cache:
+        Arc<Cache<(u64, u64), Vec<super::types::HistogramBucket>>>,
     /// Extremes cache, keyed by (from_ts, to_ts). 60s TTL.
     /// Invalidated on new block.
     pub extremes_cache: Arc<Cache<(u64, u64), super::types::ExtremesData>>,
@@ -731,11 +745,12 @@ pub async fn get_signaling(
     } else {
         db::query_signaling_bit(&conn, bit, period_start, period_end)?
     };
+    // The whole 2,016-block period is the population for both halves. See the
+    // twin of this block in `server_fns.rs` for why dropping the retarget
+    // block from either half is wrong.
     let signaled_count =
         period_blocks.iter().filter(|b| b.signaled).count() as u64;
-    let raw_total = period_blocks.len() as u64;
-    // "Blocks since adjustment" excludes the retarget block itself (matches mempool.space)
-    let mined = if raw_total > 0 { raw_total - 1 } else { 0 };
+    let mined = period_blocks.len() as u64;
     let pct = if mined > 0 {
         signaled_count as f64 / mined as f64 * 100.0
     } else {

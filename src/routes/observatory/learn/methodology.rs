@@ -201,7 +201,7 @@ pub fn MethodologyPage() -> impl IntoView {
                     <MetricRow name="Median Fee Rate" unit="sat/vB" desc="Median of all per-transaction fee rates in the block. Fee rate = fee / virtual_size. Virtual size = weight / 4."/>
                     <MetricRow name="Fee Percentiles" unit="sat/vB" desc="p10, p25, p75, p90 fee rates computed from the sorted list of per-transaction fee rates. Used for the Fee Rate Bands chart."/>
                     <MetricRow name="Max TX Fee" unit="satoshis" desc="Largest individual transaction fee in the block. Highlights fat-finger fees and high-priority transactions."/>
-                    <MetricRow name="Protocol Fees" unit="satoshis" desc="If a transaction contains an inscription or Runes output, its entire fee is attributed to that protocol. A transaction can only be attributed to one protocol."/>
+                    <MetricRow name="Protocol Fees" unit="satoshis" desc="If a transaction contains an inscription or Runes output, its entire fee is attributed to that protocol. The detectors can match the same transaction, so one bearing both has its whole fee counted under both, and the two figures are not parts of one total."/>
                 </div>
             </Section>
 
