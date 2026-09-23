@@ -1066,7 +1066,7 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
             "mt-3 lg:mt-4 space-y-3 lg:space-y-4"
         }>
             <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-4">
-                <h2 class="text-[0.7rem] uppercase tracking-widest text-white/75 mb-3">
+                <h2 class="text-[0.7rem] uppercase tracking-widest text-white font-semibold mb-3">
                     "Get this data"
                 </h2>
                 <div class="flex flex-wrap items-center gap-2">
@@ -1111,21 +1111,56 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
             // they did not come for. Charts without the long copy fall back
             // to the one-liner rather than an empty heading.
             <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-4 lg:p-5">
-                <h2 class="text-[0.7rem] uppercase tracking-widest text-white/75 mb-3">
+                <h2 class="text-[0.7rem] uppercase tracking-widest text-white font-semibold mb-3">
                     "About this metric"
                 </h2>
                 {match meta.about {
                     Some(copy) => view! {
-                        <div class="max-w-3xl space-y-3">
+                        // **Two columns on a wide screen, and each narrower than the
+                        // one column it replaces.**
+                        //
+                        // At `max-w-3xl` these lines ran about 110 characters
+                        // at `text-sm`, which is past the point where a
+                        // reader starts losing the return sweep; comfortable
+                        // is 45 to 75. So the empty right half of the card
+                        // was not width going spare, it was the cost of a
+                        // readable measure, and flowing the text into it
+                        // would have made a long line longer.
+                        //
+                        // Splitting instead gives each half roughly 34rem,
+                        // which is a better measure than the single column
+                        // had and halves the scroll. The two halves are
+                        // independent blocks with their own headings, so
+                        // reading down one and then the other is the natural
+                        // order. They are rarely the same length, and
+                        // `items-start` lets them keep their own heights
+                        // rather than stretching to match.
+                        //
+                        // **The pair is capped, not only each column.** With
+                        // the grid spanning the whole card, each column sat at
+                        // the left edge of its own half while its text stopped
+                        // at 34rem, so on a wide monitor the two blocks drifted
+                        // apart with a growing void between them, and hiding
+                        // the rail made it worse. Capping the grid keeps them
+                        // adjacent and puts the leftover space after the
+                        // second column, where a reading block should end.
+                        <div class="space-y-3 max-w-3xl lg:max-w-[72rem] lg:grid lg:grid-cols-2 lg:gap-x-10 lg:gap-y-0 lg:space-y-0 lg:items-start">
                             // Not every chart has the definition half yet, so
                             // the subtitle above carries the short answer and
                             // this shows what exists rather than an empty
                             // heading.
+                            // A label on its own line rather than a dimmer
+                            // run-in. At `text-white/70` inside a paragraph
+                            // of `text-white/85` these read as slightly faded
+                            // prose, and the method's label sat on the first
+                            // of three paragraphs while appearing to
+                            // introduce one. Same treatment as the card
+                            // headings above, one step down in the accent.
                             {copy.definition.map(|d| view! {
-                                <p class="text-sm text-white/85 leading-relaxed">
-                                    <span class="text-white/70">"Definition. "</span>
-                                    {d}
-                                </p>
+                                <div class="max-w-[34rem]">
+                                    <h3 class=ABOUT_LABEL>"Definition"</h3>
+                                    <p class="text-sm text-white/85 leading-relaxed">{d}</p>
+                                </div>
                             })}
                             // Split on a blank line, so a method that covers
                             // several things reads as several paragraphs.
@@ -1140,19 +1175,23 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                             // three subjects a reader has to separate for
                             // themselves. Copy that does not ask for breaks
                             // still renders as exactly one paragraph.
+                            <div class="space-y-3 max-w-[34rem]">
                             {copy.technical.split("\n\n")
                                 .enumerate()
                                 .map(|(i, para)| view! {
-                                    <p class="text-sm text-white/85 leading-relaxed">
+                                    <div>
                                         {(i == 0).then(|| view! {
-                                            <span class="text-white/70">
-                                                "How it is measured. "
-                                            </span>
+                                            <h3 class=ABOUT_LABEL>
+                                                "How it is measured"
+                                            </h3>
                                         })}
-                                        {para.to_string()}
-                                    </p>
+                                        <p class="text-sm text-white/85 leading-relaxed">
+                                            {para.to_string()}
+                                        </p>
+                                    </div>
                                 })
                                 .collect_view()}
+                            </div>
                         </div>
                         <p class="text-xs text-white/55 mt-3">
                             "Measured from my own Bitcoin node. "
@@ -1243,6 +1282,27 @@ fn ScaleSwitch(
 /// twelve small buttons in a row, and with only a gap between them "Log" and
 /// "1D" looked like neighbours in the same group. The tray is what says where
 /// one control ends.
+/// The label above each half of the About block.
+///
+/// One step down from a card heading, and smaller as well as differently
+/// coloured.
+///
+/// A run-in `text-white/70` span inside a `text-white/85` paragraph read as
+/// slightly faded prose rather than as a label, and on the method it
+/// introduced the first of three paragraphs while appearing to introduce all
+/// of them. So these are their own line.
+///
+/// **The size matters, not just the colour.** At `0.7rem` these matched the
+/// card heading above them exactly in size, weight, case and tracking, which
+/// left colour carrying the whole hierarchy: three headings that read as one
+/// level to anyone who does not separate orange from white, which is what
+/// WCAG 1.4.1 is about. `0.65rem` restores a difference that does not depend
+/// on seeing the accent. The card headings stay at `0.7rem` because all five
+/// of them share it.
+const ABOUT_LABEL: &str =
+    "text-[0.65rem] uppercase tracking-widest text-[#f7931a]/85 \
+     font-semibold mb-1.5";
+
 const SEGMENTED_GROUP: &str =
     "flex flex-wrap items-center gap-0.5 p-0.5 rounded-lg \
      bg-black/25 border border-white/10";

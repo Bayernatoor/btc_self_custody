@@ -128,7 +128,7 @@ fn drawer_pages() -> Vec<DrawerPage> {
                             card_id: "card-chart-taproot",
                         },
                         DrawerChart {
-                            label: "Address Type Evolution",
+                            label: "Address Type Count",
                             card_id: "card-chart-address-types",
                         },
                         DrawerChart {
@@ -140,7 +140,7 @@ fn drawer_pages() -> Vec<DrawerPage> {
                             card_id: "card-chart-witness-tx-pct",
                         },
                         DrawerChart {
-                            label: "Witness Version Comparison",
+                            label: "Witness Version Count",
                             card_id: "card-chart-witness-versions",
                         },
                         DrawerChart {
@@ -197,7 +197,7 @@ fn drawer_pages() -> Vec<DrawerPage> {
                             card_id: "card-chart-utxo-growth",
                         },
                         DrawerChart {
-                            label: "Transaction Type Evolution",
+                            label: "Transaction Type Share",
                             card_id: "card-chart-tx-type-evolution",
                         },
                     ],
