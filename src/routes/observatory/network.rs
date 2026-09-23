@@ -517,7 +517,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
         overlay_flags,
         |blocks| crate::stats::charts::tx_type_evolution_chart(blocks),
         |_days| crate::stats::charts::no_daily_builder_chart(
-            "Transaction Type Evolution"
+            "Transaction Type Share"
         )
     );
 
@@ -571,10 +571,10 @@ pub fn NetworkChartsPage() -> impl IntoView {
                 <SectionHeading id="section-adoption" title="Adoption"/>
                 <ChartCard title="SegWit Adoption" description=chart_desc(range, "Percentage of transactions using Segregated Witness", "Daily average SegWit adoption percentage") chart_id="chart-segwit" option=segwit_option/>
                 <ChartCard title="Taproot Outputs" description=chart_desc(range, "New Taproot (P2TR) outputs created per block", "Average Taproot (P2TR) outputs created per block each day") chart_id="chart-taproot" option=taproot_option/>
-                <ChartCard title="Address Type Evolution" description=chart_desc(range, "Counts of outputs by script type in each block, one band per type", "Daily totals of outputs by script type, one band per type") chart_id="chart-address-types" option=address_type_option/>
+                <ChartCard title="Address Type Count" description=chart_desc(range, "Counts of outputs by script type in each block, one band per type", "Daily totals of outputs by script type, one band per type") chart_id="chart-address-types" option=address_type_option/>
                 <ChartCard title="Address Type Share" description="Each output type as a percentage of total, showing the shift from legacy to SegWit to Taproot" chart_id="chart-address-types-pct" option=address_type_pct_option/>
                 <ChartCard title="Output Type Breakdown" description="Legacy vs SegWit vs Taproot as a percentage of all outputs" chart_id="chart-witness-tx-pct" option=witness_tx_pct_option/>
-                <ChartCard title="Witness Version Comparison" description=chart_desc(range, "SegWit v0 (P2WPKH + P2WSH) vs Taproot (P2TR) output counts per block", "Daily average SegWit v0 vs Taproot output counts") chart_id="chart-witness-versions" option=witness_version_option/>
+                <ChartCard title="Witness Version Count" description=chart_desc(range, "SegWit v0 (P2WPKH + P2WSH) vs Taproot (P2TR) output counts per block", "Daily average SegWit v0 vs Taproot output counts") chart_id="chart-witness-versions" option=witness_version_option/>
                 <ChartCard title="Witness Version Share" description="SegWit v0 vs Taproot as a percentage of all witness outputs" chart_id="chart-witness-pct" option=witness_pct_option/>
                 <ChartCard title="Taproot Spend Types" description=chart_desc(range, "Key-path against script-path spends per block. Which spends revealed a script and which revealed nothing", "Daily average key-path against script-path spends. Which spends revealed a script and which revealed nothing") chart_id="chart-taproot-spend-types" option=taproot_spend_type_option/>
                 <ChartCard title="Witness Data Share" description="Witness data as percentage of block size. Higher means more SegWit discount savings" chart_id="chart-witness-share" option=witness_share_option/>
@@ -590,7 +590,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
                 <ChartCard title="Largest Transaction" description=chart_desc(range, "Size of the largest transaction in each block, in bytes", "Largest transaction (per-block ranges only)") chart_id="chart-largest-tx" option=largest_tx_option/>
                 <ChartCard title="Transaction Density" description=chart_desc(range, "Transactions per 1,000 serialized bytes of block space", "Daily average transaction density (transactions per KB)") chart_id="chart-tx-density" option=tx_density_option/>
                 <ChartCard title="UTXO Growth Rate" description=chart_desc(range, "Estimated net change in the output set per block, from non-coinbase transactions and excluding detected OP_RETURN. Positive means more outputs were created than consumed", "Estimated net change in the output set per day, from non-coinbase transactions and excluding detected OP_RETURN") chart_id="chart-utxo-growth" option=utxo_growth_option/>
-                <ChartCard title="Transaction Type Evolution" description="Breakdown of transactions by input type: Legacy (non-witness), SegWit v0, and Taproot" chart_id="chart-tx-type-evolution" option=tx_type_evolution_option/>
+                <ChartCard title="Transaction Type Share" description="Breakdown of transactions by input type: Legacy (non-witness), SegWit v0, and Taproot" chart_id="chart-tx-type-evolution" option=tx_type_evolution_option/>
             </div>
         </ChartPageLayout>
     }

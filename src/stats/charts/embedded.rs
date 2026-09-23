@@ -449,7 +449,7 @@ pub fn inscription_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
     let vals: Vec<f64> = days
         .iter()
-        .map(|d| round(d.avg_inscription_count, 1))
+        .map(|d| round_plot(d.avg_inscription_count))
         .collect();
     let ma = moving_average(&vals, 7);
     let ma_vals: Vec<serde_json::Value> = ma

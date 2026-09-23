@@ -2135,7 +2135,7 @@ mod tests {
         );
     }
 
-    /// Address Type Evolution's daily point is a total, which is the finding
+    /// Address Type Count's daily point is a total, which is the finding
     /// behind its declaration: the subtitle said "Daily average output types"
     /// and the builder multiplies the stored mean back up by the block count.
     ///
@@ -3233,6 +3233,73 @@ mod tests {
         );
     }
 
+    /// Event markers survive a reader hiding a band.
+    ///
+    /// An ECharts `markLine` belongs to a series, so mark lines attached to
+    /// `series[0]` disappear when that series is deselected in the legend. On
+    /// Address Type Count that meant isolating P2SH removed the BIP-16
+    /// activation line, which is the marker that explains where the band
+    /// starts. Found by the owner on 2026-09-23.
+    ///
+    /// The carrier must also stay out of the legend, or a reader gets a
+    /// control for a series that draws nothing.
+    #[test]
+    fn event_markers_do_not_belong_to_a_chart_band() {
+        let blocks = synthetic_blocks(400);
+        let flags = super::super::OverlayFlags {
+            bip_activations: true,
+            halvings: true,
+            ..Default::default()
+        };
+        let mut opt = super::super::address_type_chart(&blocks);
+        super::super::apply_overlays(&mut opt, &flags, false);
+
+        let series = opt["series"].as_array().expect("series");
+        let carrier = super::super::MARKER_SERIES;
+
+        // No real band owns the mark lines.
+        for s in series {
+            let name = s["name"].as_str().unwrap_or_default();
+            if name == carrier {
+                continue;
+            }
+            assert!(
+                s.get("markLine").is_none(),
+                "{name} carries the event mark lines, so hiding that band \
+                 would hide the markers with it"
+            );
+        }
+
+        // The carrier exists and holds them.
+        let marker = series
+            .iter()
+            .find(|s| s["name"].as_str() == Some(carrier))
+            .expect("a dedicated marker series");
+        assert!(
+            marker["markLine"]["data"]
+                .as_array()
+                .is_some_and(|d| !d.is_empty()),
+            "the marker series carries no mark lines"
+        );
+
+        // And it is not offered in the legend, where it would be a control
+        // for a series with no data.
+        let legend: Vec<&str> = opt["legend"]["data"]
+            .as_array()
+            .expect("an explicit legend list")
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect();
+        assert!(
+            !legend.contains(&carrier),
+            "the marker carrier is in the legend: {legend:?}"
+        );
+        assert!(
+            legend.contains(&"P2PKH") && legend.contains(&"P2SH"),
+            "the real bands were dropped from the legend: {legend:?}"
+        );
+    }
+
     /// A chart does not overlay itself.
     ///
     /// The chain-size overlay applied to Chain Size Growth drew that chart's
@@ -3299,6 +3366,50 @@ mod tests {
             "the overlay stopped working on charts that do want it: {:?}",
             series_names(&other)
         );
+    }
+
+    /// A small daily average survives being plotted.
+    ///
+    /// The daily arms rounded to one decimal, so any average below 0.05 per
+    /// block became exactly 0.0: a different number, not a small one. Taproot
+    /// Outputs showed a flat zero across 2019 to 2021 while the database held
+    /// six real outputs, and the same rounding erased 167 days of outputs per
+    /// transaction, 80 of script-path spends, 47 of inputs, 14 of Taproot and
+    /// 13 of inscriptions. Found by the owner on 2026-09-23, by picking a
+    /// custom range around the first Taproot output and seeing nothing.
+    ///
+    /// Same defect `round_plot` was written for, and the same one that
+    /// flatlined daily TPS across 2009 and 2010. `avg_tx_count` is
+    /// deliberately not converted: a block always carries at least its
+    /// coinbase, so that average cannot reach the quantising range.
+    #[test]
+    fn a_small_daily_average_is_not_rounded_to_zero() {
+        let mut days = synthetic_days(4);
+        for d in days.iter_mut() {
+            d.block_count = 141;
+            // One output across 141 blocks: 0.00709 per block, which is what
+            // 2019-12-17 actually holds.
+            d.avg_p2tr_count = 1.0 / 141.0;
+            d.avg_inscription_count = 1.0 / 141.0;
+            d.avg_taproot_scriptpath_count = 1.0 / 141.0;
+        }
+
+        let first_point = |opt: &serde_json::Value, series: usize| {
+            opt["series"][series]["data"][0].as_f64()
+        };
+
+        for (name, opt) in [
+            ("taproot", super::super::taproot_chart_daily(&days)),
+            ("inscriptions", super::super::inscription_chart_daily(&days)),
+        ] {
+            let v = first_point(&opt, 0).unwrap_or(0.0);
+            assert!(
+                v > 0.0,
+                "{name}: a real average of 0.0071 per block plotted as {v}. \
+                 One decimal quantises every small reading to zero, which is \
+                 a different number rather than a small one."
+            );
+        }
     }
 
     /// A weekday bar is labelled with the day it actually describes.

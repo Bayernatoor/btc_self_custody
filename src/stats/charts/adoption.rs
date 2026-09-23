@@ -175,7 +175,7 @@ pub fn taproot_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
     let vals: Vec<f64> =
-        days.iter().map(|d| round(d.avg_p2tr_count, 1)).collect();
+        days.iter().map(|d| round_plot(d.avg_p2tr_count)).collect();
     let ma = moving_average(&vals, 7);
     let ma_vals: Vec<serde_json::Value> = ma
         .iter()
@@ -253,10 +253,10 @@ pub fn witness_version_chart_daily(
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
     let v0_vals: Vec<f64> = days
         .iter()
-        .map(|d| round(d.avg_p2wpkh_count + d.avg_p2wsh_count, 1))
+        .map(|d| round_plot(d.avg_p2wpkh_count + d.avg_p2wsh_count))
         .collect();
     let v1_vals: Vec<f64> =
-        days.iter().map(|d| round(d.avg_p2tr_count, 1)).collect();
+        days.iter().map(|d| round_plot(d.avg_p2tr_count)).collect();
 
     build_option(json!({
         "xAxis": x_axis_for(true, &cats),
@@ -599,11 +599,11 @@ pub fn taproot_spend_type_chart_daily(
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
     let keypath: Vec<f64> = days
         .iter()
-        .map(|d| round(d.avg_taproot_keypath_count, 1))
+        .map(|d| round_plot(d.avg_taproot_keypath_count))
         .collect();
     let scriptpath: Vec<f64> = days
         .iter()
-        .map(|d| round(d.avg_taproot_scriptpath_count, 1))
+        .map(|d| round_plot(d.avg_taproot_scriptpath_count))
         .collect();
 
     build_option(json!({

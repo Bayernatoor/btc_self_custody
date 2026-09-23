@@ -485,7 +485,15 @@ impl ChartMeta {
     /// Derived rather than stored, so a new chart gets the right answer from
     /// its shape and unit without another 61 values to maintain. Refused for:
     ///
-    /// - **percentages**, which are already bounded and gain nothing
+    /// - **percentages**, which is the blunt half of this rule. Being
+    ///   bounded at 100 is not the reason: that is about the top of the
+    ///   range, and a log axis is about the bottom. Inscription Block Share
+    ///   runs from 0.0001% to 65%, five orders of magnitude, and would read
+    ///   far better logarithmic. The reason that actually holds is zeros:
+    ///   `witness-share` is exactly zero for 3,150 of its 6,468 days,
+    ///   everything before SegWit, and a log axis would drop half the chart.
+    ///   Allowing it per chart needs a decision this method cannot make from
+    ///   the unit alone; see `tasks/todo.md`
     /// - **stacked** charts, where the bands are read against each other and a
     ///   log axis makes the stack's heights lie
     /// - **donuts and histograms**, which have no value axis to rescale
@@ -1761,7 +1769,7 @@ pub const CHARTS: &[ChartMeta] = &[
     },
     ChartMeta {
         slug: "address-types",
-        title: "Address Type Evolution",
+        title: "Address Type Count",
         desc_per_block: "Counts of outputs by script type in each block, one band per type",
         desc_daily: "Daily totals of outputs by script type, one band per type",
         category: Category::Network,
@@ -1784,8 +1792,8 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Outputs of non-coinbase transactions. Six script types are plotted; OP_RETURN, bare multisig and unrecognised scripts are not among them, so the bands do not sum to every output.",
         }],
         about: Some(About {
-            definition: Some("What kind of address each new output pays to. Every output commits to a script, and the shape of that script says which address format the receiver gave out: a legacy '1', a '3', a SegWit 'bc1q' or a Taproot 'bc1p'. Counting them is how the chain shows a format being adopted."),
-            technical: "Counts of outputs created per script type, from the classification stored per block. Daily values are totals for the day, not per-block averages: 3.0 per block over 10 blocks is 30. Coinbase outputs are excluded, because ingestion skips that transaction.",
+            definition: Some("The type of address each new output pays to. Every output commits to a script, and the shape of that script says which format the receiver gave out: a legacy '1', a '3' that commits to a hash of the spending conditions rather than to a single key, a SegWit 'bc1q' or a Taproot 'bc1p'. Modern wallets often put a SegWit program behind a '3', which is why that band did not empty when 'bc1q' arrived. One band is not an address at all: P2PK paid a public key directly, before address formats existed. It has not stopped entirely, but it arrives in bursts rather than a trickle: roughly one block in seven hundred carries one, and most days have none at all. Counting them is how the chain shows a format being adopted."),
+            technical: "Counts of outputs created per script type, from the classification stored per block. Daily values are totals for the day, not per-block averages: 3.0 per block over 10 blocks is 30. Coinbase outputs are excluded, because ingestion skips that transaction.\n\nThe P2SH band is the one that hides things. A '3' output is only a commitment to a hash, so a nested SegWit program, a multi-signature arrangement and a timelock are the same shape on creation, and the script behind it is revealed only when the output is spent. This chart counts outputs as they are created, so it cannot separate them, and no column here does.\n\nA band can also start before the rule that gave it meaning, because a script shape is valid to create before the network agrees what it means. Six P2SH outputs sit in five blocks from 2012-03-07, and the BIP-16 marker is at block 173,805 on 2012-04-01, nearly four thousand blocks later. Taproot does the same, with outputs from 2019 against a 2021 activation. Turn on the BIP activations overlay to see it: the marker lands well to the right of where the band begins.",
         }),
     },
     ChartMeta {
@@ -1812,7 +1820,7 @@ pub const CHARTS: &[ChartMeta] = &[
         }],
         about: Some(About {
             definition: Some("The same output types as a share of the total rather than as counts. Counts rise and fall with how busy the chain is, which hides a format gaining ground during a quiet week; a share strips that out and shows the types competing with each other. The bands total 100% by construction, so one type can only grow at another's expense."),
-            technical: "Six payment types normalised to 100%, so the bands total the whole. OP_RETURN outputs, bare multisig and unrecognised scripts are outside that denominator, which is why this chart and P2PKH Sunset give different percentages for the same type. This one divides by the six normalised types; P2PKH Sunset divides by every output, so its denominator is larger and its figure for the same type is always the smaller of the two.",
+            technical: "Six payment types normalised to 100%, so the bands total the whole. OP_RETURN outputs, bare multisig and unrecognised scripts are outside that denominator, which is why this chart and P2PKH Sunset give different percentages for the same type. This one divides by those six; P2PKH Sunset divides by eight, adding bare multisig and unrecognised scripts, so its denominator is the larger and its figure for the same type is always the smaller of the two. Neither counts OP_RETURN outputs, which are not payments to anyone.",
         }),
     },
     ChartMeta {
@@ -2094,7 +2102,7 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "P2PKH outputs over eight classified output types: the six payment types plus bare multisig and unrecognised scripts. OP_RETURN outputs are outside it, and so are coinbase outputs, which ingestion excludes. Note this is a wider denominator than Address Type Share uses, so P2PKH reads lower here than there. The 90-day smoothing exists only at daily resolution. A falling share does not establish that those users moved to another type.",
         }],
         about: Some(About {
-            definition: Some("The decline of the original Bitcoin address format. P2PKH is the '1...' address every wallet used before SegWit, and its share of outputs has been falling for years: currently 6.37%, against 7.42% for Taproot. The reference lines at 10% and 5% are markers for reading the trend, not protocol thresholds."),
+            definition: Some("The decline of the original Bitcoin address format. P2PKH is the '1...' address every wallet used before SegWit, and its share of outputs has been falling for years, and Taproot has now passed it: both sit near 7% of outputs, moving in opposite directions. The reference lines at 10% and 5% are markers for reading the trend, not protocol thresholds."),
             technical: "P2PKH outputs as a share of the eight classified output types, with a 90-day moving average at daily resolution only. The horizontal lines at 10% and 5% are reference marks chosen for this chart, not protocol thresholds. A falling share means other output types grew faster; it does not follow that any particular wallet or user moved.",
         }),
     },
@@ -2182,7 +2190,7 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Numerator: **transactions** containing at least one witness input, which is what ingestion counts, one per transaction rather than one per input. Denominator: non-coinbase transactions, obtained by subtracting one coinbase per block. A transaction spending ten witness inputs counts once, so this is the share of transactions using witness data and not a share of inputs.",
         }],
         about: Some(About {
-            definition: Some("The share of transactions using Segregated Witness. SegWit, activated in 2017, moves signatures into a part of the block that counts less toward the size limit, which makes those transactions cheaper to send. Adoption took years rather than months."),
+            definition: Some("The share of transactions using Segregated Witness. SegWit, activated in 2017, moved the signatures and other unlocking data out of a transaction's main body and into a separate section called the witness. Witness bytes count a quarter of what other bytes do against the block limit, so the same transaction takes up less of a block and costs less to send. Adoption took years rather than months."),
             technical: "A transaction counts as SegWit when at least one of its inputs carries witness data, which is what determines the fee saving. How many outputs are SegWit is a different question, answered by the address-type charts, and it moved on a different schedule.",
         }),
     },
@@ -2279,8 +2287,8 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: Some("Two ways to spend a Taproot output, and which one people use. A key-path spend shows a single signature and nothing else. A script-path spend reveals one branch of the script behind the output. Currently 90.4% are key-path, which is what a working contract looks like when everyone cooperates rather than evidence of simple payments."),
-            technical: "Key-path spends reveal a single signature and nothing else. That is the point of Taproot: a single signer, an aggregated multisignature and the cooperative close of a contract are **indistinguishable on chain**, because BIP 341 makes them the same shape. So a high key-path share does not mean simple payments. It means most Taproot spenders took the path that reveals nothing, which is what a well-designed contract does when everyone cooperates. Script-path spends reveal one branch of the script tree, which is usually the case where cooperation broke down or was never possible. Both counts come from classifying witness shape, so they are detector counts rather than verified totals.",
+            definition: Some("Two ways to spend a Taproot output, and which one people use. A key-path spend shows a single signature and nothing else. A script-path spend reveals one branch of the script behind the output. Around nine in ten are key-path, which is what a working contract looks like when everyone cooperates rather than evidence of simple payments."),
+            technical: "Key-path spends reveal a single signature and nothing else. That is the point of Taproot: a single signer, an aggregated multisignature and the cooperative close of a contract are indistinguishable on chain, because BIP 341 makes them the same shape. \n\nSo a high key-path share does not mean simple payments. It means most Taproot spenders took the path that reveals nothing, which is what a well-designed contract does when everyone cooperates. \n\nScript-path spends reveal one branch of the script tree. That is not mainly a sign of cooperation breaking down: an inscription is revealed by a script-path spend, and inscriptions account for most of this band. A contract closing uncooperatively produces the same witness shape, and this chart classifies by shape alone, so it counts both in one band. The difference is on chain and is readable: a script-path spend reveals the script it used, and the inscription detector reads exactly that from the same witnesses. This chart simply does not subdivide the band. Ordinals Inscriptions, linked under Related, counts the inscription half over the same blocks. \n\nBoth counts come from classifying witness shape, so they are detector counts rather than verified totals.",
         }),
     },
     ChartMeta {
@@ -2371,7 +2379,7 @@ pub const CHARTS: &[ChartMeta] = &[
     },
     ChartMeta {
         slug: "tx-type-evolution",
-        title: "Transaction Type Evolution",
+        title: "Transaction Type Share",
         desc_per_block: "Breakdown of transactions by input type: Legacy (non-witness), SegWit v0, and Taproot",
         desc_daily: "Breakdown of transactions by input type: Legacy (non-witness), SegWit v0, and Taproot",
         category: Category::Network,
@@ -2404,7 +2412,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: Some("Which transaction format senders are using, over time. A transaction is legacy if it has no witness at all, SegWit if it has one, and Taproot if it spends a Taproot output. Currently 88.2% of transactions carry a witness."),
+            definition: Some("Which transaction format senders are using, over time. A transaction is legacy if it has no witness at all, SegWit if it has one, and Taproot if it spends a Taproot output. Close to nine in ten transactions now carry a witness."),
             technical: "Counted per transaction rather than per output, which is the distinction this chart keeps and several others do not: an output's type is chosen by whoever receives it, while a transaction's type is chosen by whoever spends. Detected from witness shape, so these are detector counts.",
         }),
     },
@@ -2594,7 +2602,7 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Native v0 against Taproot, and **only** those two: the denominator is their sum, not all outputs, so this is the split within witness outputs rather than witness adoption. Unrecognised or future witness versions are in neither band. Use Output Type Breakdown for a share of every output.",
         }],
         about: Some(About {
-            definition: Some("Native SegWit against Taproot, as shares of the witness outputs alone. This is the split within modern output types, which is a different question from what share of all outputs they hold."),
+            definition: Some("Native SegWit against Taproot, as shares of the witness outputs alone. Legacy and P2SH-wrapped outputs are not in the denominator, so this answers which of the two modern formats is ahead, not how much of the chain either one holds."),
             technical: "P2WPKH and P2WSH against P2TR, normalised to those three, so legacy and P2SH-wrapped outputs are outside the denominator entirely. A rising Taproot share here can coexist with a falling Taproot share of all outputs.",
         }),
     },
@@ -2656,7 +2664,7 @@ pub const CHARTS: &[ChartMeta] = &[
     },
     ChartMeta {
         slug: "witness-versions",
-        title: "Witness Version Comparison",
+        title: "Witness Version Count",
         desc_per_block: "SegWit v0 (P2WPKH + P2WSH) vs Taproot (P2TR) output counts per block",
         desc_daily: "Daily average SegWit v0 vs Taproot output counts",
         category: Category::Network,
@@ -2706,25 +2714,72 @@ pub fn find(slug: &str) -> Option<&'static ChartMeta> {
 /// neighbours' lists without anyone maintaining a list of lists. Same unit in
 /// the same category first, since those are the directly comparable ones, then
 /// the rest of the category.
-pub fn related(meta: &ChartMeta, max: usize) -> Vec<&'static ChartMeta> {
-    let mut out: Vec<&'static ChartMeta> = CHARTS
+/// Charts whose strongest neighbour is in another category, named explicitly.
+///
+/// `related` derives its answer from category and unit, which are structural
+/// facts standing in for "about the same thing". That works for most charts
+/// and fails for the ones that matter most: the closest chart to Taproot
+/// Spend Types is Ordinals Inscriptions, because inscription reveals are
+/// about four fifths of its script-path band, and the derivation excludes it
+/// for being filed under Embedded rather than Network.
+///
+/// A short curated list rather than a rule, because these are exceptions and
+/// a rule that caught them would pull in far more than it should. Each entry
+/// is checked against the registry by
+/// `curated_related_names_charts_that_exist`, so a rename cannot leave a
+/// dangling slug the way the drawer once did.
+const RELATED_ACROSS_CATEGORIES: &[(&str, &[&str])] = &[
+    // Most script-path spends are inscription reveals, and that chart counts
+    // them over the same blocks. See the fourth paragraph of this chart's
+    // method, which has to explain in prose what these two show together.
+    (
+        "taproot-spend-types",
+        &["inscriptions", "inscription-share"],
+    ),
+    ("inscriptions", &["taproot-spend-types"]),
+    // The witness discount is why inscriptions are affordable at all, so the
+    // adoption charts explain the volume ones and the reverse.
+    ("inscription-envelope", &["taproot"]),
+];
+
+/// The curated neighbours for a chart, resolved to registry entries.
+fn curated_related(slug: &str) -> Vec<&'static ChartMeta> {
+    RELATED_ACROSS_CATEGORIES
         .iter()
-        .filter(|c| {
-            c.slug != meta.slug
-                && c.category == meta.category
-                && c.unit == meta.unit
+        .find(|(from, _)| *from == slug)
+        .map(|(_, to)| {
+            to.iter()
+                .filter_map(|s| CHARTS.iter().find(|c| c.slug == *s))
+                .collect()
         })
-        .collect();
+        .unwrap_or_default()
+}
+
+pub fn related(meta: &ChartMeta, max: usize) -> Vec<&'static ChartMeta> {
+    // Curated first: these are named because the derivation below gets them
+    // wrong, so burying them under it would defeat the point.
+    let mut out: Vec<&'static ChartMeta> = curated_related(meta.slug);
+    // Snapshot the curated slugs so the filters below can exclude them
+    // without borrowing `out` while it is being extended.
+    let curated: Vec<&'static str> = out.iter().map(|c| c.slug).collect();
+    let fresh = |c: &&'static ChartMeta| {
+        c.slug != meta.slug && !curated.contains(&c.slug)
+    };
+
+    out.extend(CHARTS.iter().filter(|c| {
+        fresh(c) && c.category == meta.category && c.unit == meta.unit
+    }));
     if out.len() < max {
+        let want = max - out.len();
         out.extend(
             CHARTS
                 .iter()
                 .filter(|c| {
-                    c.slug != meta.slug
+                    fresh(c)
                         && c.category == meta.category
                         && c.unit != meta.unit
                 })
-                .take(max - out.len()),
+                .take(want),
         );
     }
     out.truncate(max);
@@ -3274,6 +3329,16 @@ mod tests {
     /// is not worth adding for four phrases.
     fn regex_lite_window(sentence: &str) -> bool {
         let l = sentence.to_lowercase();
+        // "currently" and "now" are trailing windows too, and they are the
+        // commonest phrasing: the first version of this guard listed only
+        // "last/past/recent" and missed four sentences, all of which had
+        // drifted. They need no unit word, because the window is implicit.
+        if ["currently", " now ", "today"]
+            .iter()
+            .any(|p| l.contains(p))
+        {
+            return true;
+        }
         ["last ", "past ", "recent"].iter().any(|p| l.contains(p))
             && ["month", "week", "day", "year", "block"]
                 .iter()
@@ -3312,6 +3377,282 @@ mod tests {
             "deploy.yml no longer anchors its cache bump on {ANCHOR}; if the \
              rewrite moved, this guard has to move with it"
         );
+    }
+
+    /// Every figure in the copy, re-measured against the real chain.
+    ///
+    /// **This is the check the normal suite cannot do.** Copy is
+    /// `&'static str`, so a number in it is a snapshot of the day it was
+    /// written. The other guards here hold the *shape* that rots fastest, a
+    /// decimal percentage over a trailing window, but a hedged figure is not
+    /// self-correcting: "around 97%" reads fine at 85%. Nine figures had
+    /// drifted by the time anyone looked, and four of those were found by a
+    /// reader asking "why four months?" rather than by anything automated.
+    ///
+    /// Ignored because it needs `bitcoin_stats.db`, which is 588 MB and
+    /// gitignored, so CI has no data and every other test here builds from
+    /// synthetic fixtures. Run it when the copy is edited, and periodically:
+    ///
+    /// ```text
+    /// cargo test --features ssr the_copy_still_matches -- --ignored --nocapture
+    /// ```
+    ///
+    /// Bounds are deliberately wider than the claim, because the point is to
+    /// catch a sentence that has become *wrong*, not one that has moved in
+    /// the last decimal. A failure means the copy needs rewriting; it does
+    /// not mean the chart is broken.
+    ///
+    /// # DELETE THIS WHEN PHASE 2 LANDS
+    ///
+    /// This is a stopgap and should not outlive the prepared-metric contract.
+    /// It has the same defect it exists to catch, one level up: it only knows
+    /// the twelve claims typed into the table below, so a thirteenth
+    /// hardcoded figure is invisible to it, and the table itself is a
+    /// hand-maintained list of facts that can go stale.
+    ///
+    /// The actual fix is for copy to reference a value the data already
+    /// computes rather than restate it, which is what a prepared metric makes
+    /// possible: `notes/phase-2-spec.md`, Part 1. When a chart's current
+    /// figure can be interpolated into its own description, every row here
+    /// becomes unnecessary and this test should be removed rather than
+    /// extended. Reconciliation and sequencing:
+    /// `notes/chart-quality-2026-09-15/runs/phase-2-reconciliation.md`.
+    #[test]
+    #[ignore]
+    fn the_copy_still_matches_the_chain() {
+        let conn = rusqlite::Connection::open_with_flags(
+            "bitcoin_stats.db",
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )
+        .expect("bitcoin_stats.db in the working directory");
+
+        // (which chart, what the copy says, the query, the range it must
+        // still fall in). The claim text is quoted so a failure names the
+        // sentence to edit rather than only a number.
+        let checks: &[(&str, &str, &str, f64, f64)] = &[
+            (
+                "weight-util",
+                "around 98% on average over the last month",
+                "SELECT AVG(weight)*100.0/4000000 FROM blocks \
+                 WHERE timestamp >= strftime('%s','now','-30 days')",
+                95.0,
+                100.0,
+            ),
+            (
+                "weight-util",
+                "about 93% over the last year",
+                "SELECT AVG(weight)*100.0/4000000 FROM blocks \
+                 WHERE timestamp >= strftime('%s','now','-365 days')",
+                88.0,
+                98.0,
+            ),
+            (
+                "fullness-dist",
+                "around 97% of the last month's blocks are above 99%",
+                "SELECT 100.0*SUM(CASE WHEN weight > 0.99*4000000 THEN 1 \
+                 ELSE 0 END)/COUNT(*) FROM blocks \
+                 WHERE timestamp >= strftime('%s','now','-30 days')",
+                92.0,
+                100.0,
+            ),
+            (
+                "p2pkh-sunset",
+                "both sit near 7% of outputs",
+                "SELECT 100.0*SUM(p2pkh_count)/SUM(p2pk_count+p2pkh_count \
+                 +p2sh_count+p2wpkh_count+p2wsh_count+p2tr_count \
+                 +multisig_count+unknown_script_count) FROM blocks \
+                 WHERE height >= (SELECT MAX(height)-9999 FROM blocks)",
+                4.5,
+                9.5,
+            ),
+            (
+                "taproot-spend-types",
+                "around nine in ten are key-path",
+                "SELECT 100.0*SUM(taproot_keypath_count)/ \
+                 NULLIF(SUM(taproot_keypath_count+taproot_scriptpath_count),0) \
+                 FROM blocks WHERE height >= \
+                 (SELECT MAX(height)-9999 FROM blocks)",
+                85.0,
+                95.0,
+            ),
+            (
+                "tx-type-evolution",
+                "close to nine in ten transactions now carry a witness",
+                "SELECT 100.0*SUM(segwit_tx_count+taproot_tx_count)/ \
+                 NULLIF(SUM(tx_count-1),0) FROM blocks WHERE height >= \
+                 (SELECT MAX(height)-9999 FROM blocks)",
+                84.0,
+                95.0,
+            ),
+            (
+                "batching",
+                "around 2.3 outputs per transaction",
+                "SELECT SUM(output_count)*1.0/SUM(tx_count-1) FROM blocks \
+                 WHERE timestamp >= strftime('%s','now','-90 days') \
+                 AND tx_count > 1",
+                2.0,
+                2.7,
+            ),
+            (
+                "witness-share",
+                "about 51% over the last 10,000 blocks",
+                "SELECT 100.0*SUM(witness_bytes)/NULLIF(SUM(size),0) \
+                 FROM blocks WHERE height >= \
+                 (SELECT MAX(height)-9999 FROM blocks)",
+                45.0,
+                58.0,
+            ),
+            (
+                "fee-revenue-share",
+                "more than half of all blocks are under 1%",
+                "SELECT 100.0*SUM(CASE WHEN total_fees*1.0/(total_fees+ \
+                 CASE WHEN height<210000 THEN 5000000000 \
+                 WHEN height<420000 THEN 2500000000 \
+                 WHEN height<630000 THEN 1250000000 \
+                 WHEN height<840000 THEN 625000000 \
+                 ELSE 312500000 END) < 0.01 THEN 1 ELSE 0 END)/COUNT(*) \
+                 FROM blocks",
+                50.0,
+                70.0,
+            ),
+            (
+                "largest-tx",
+                "the largest in the chain is 3,992,821 bytes",
+                "SELECT MAX(largest_tx_size) FROM blocks",
+                3_992_821.0,
+                4_000_000.0,
+            ),
+            (
+                "empty-blocks",
+                "78,800 of them are from 2009 and 2010",
+                "SELECT COUNT(*) FROM blocks WHERE tx_count=1 \
+                 AND timestamp < strftime('%s','2011-01-01')",
+                78_800.0,
+                78_800.0,
+            ),
+            (
+                "address-types",
+                // Blocks that carry one, not outputs per block: the copy
+                // describes how often it happens, and an average reads as a
+                // steady trickle when 94% of days have none at all.
+                "roughly one block in seven hundred carries a P2PK output",
+                "SELECT 1.0*COUNT(*)/(SELECT COUNT(*) FROM blocks \
+                 WHERE height >= (SELECT MAX(height)-9999 FROM blocks)) \
+                 FROM blocks WHERE height >= \
+                 (SELECT MAX(height)-9999 FROM blocks) AND p2pk_count > 0",
+                0.0005,
+                0.004,
+            ),
+            (
+                "address-types",
+                "six P2SH outputs in five blocks before BIP-16 activated",
+                "SELECT SUM(p2sh_count) FROM blocks WHERE p2sh_count > 0 \
+                 AND height < 173805",
+                6.0,
+                6.0,
+            ),
+            (
+                "address-types-pct vs p2pkh-sunset",
+                "the six-type share is the larger of the two",
+                "SELECT (100.0*SUM(p2pkh_count)/SUM(p2pkh_count+p2sh_count \
+                 +p2wpkh_count+p2wsh_count+p2tr_count+p2pk_count)) \
+                 - (100.0*SUM(p2pkh_count)/SUM(p2pkh_count+p2sh_count \
+                 +p2wpkh_count+p2wsh_count+p2tr_count+p2pk_count \
+                 +multisig_count+unknown_script_count)) FROM blocks \
+                 WHERE height >= (SELECT MAX(height)-9999 FROM blocks)",
+                0.0001,
+                5.0,
+            ),
+            (
+                "witness-pct",
+                "a share of witness outputs reads higher than a share of all \
+                 outputs",
+                "SELECT (100.0*SUM(p2tr_count)/SUM(p2wpkh_count \
+                 +p2wsh_count+p2tr_count)) \
+                 - (100.0*SUM(p2tr_count)/SUM(output_count)) FROM blocks \
+                 WHERE height >= (SELECT MAX(height)-9999 FROM blocks)",
+                0.5,
+                20.0,
+            ),
+            (
+                "taproot-spend-types",
+                "inscriptions account for most of the script-path band",
+                "SELECT 1.0*SUM(inscription_count)/ \
+                 NULLIF(SUM(taproot_scriptpath_count),0) FROM blocks \
+                 WHERE height >= (SELECT MAX(height)-9999 FROM blocks)",
+                0.5,
+                1.2,
+            ),
+            (
+                "inscriptions / protocols article",
+                "the first inscription is block 767,430",
+                "SELECT MIN(height) FROM blocks WHERE inscription_count > 0",
+                767_430.0,
+                767_430.0,
+            ),
+        ];
+
+        let mut failures = Vec::new();
+        for (slug, claim, sql, lo, hi) in checks {
+            let got: f64 = conn
+                .query_row(sql, [], |r| r.get(0))
+                .unwrap_or_else(|e| panic!("{slug}: query failed: {e}"));
+            // Six significant figures, not two decimal places. Printing
+            // `{:.2}` showed a real 0.0015 as "0.00", which is the same
+            // quantisation this suite exists to catch, in its own output.
+            println!("{slug:22} {got:>16.6}   [{lo} .. {hi}]  {claim}");
+            if got < *lo || got > *hi {
+                failures.push(format!(
+                    "{slug}: copy says \"{claim}\" but the chain now reads \
+                     {got:.2}, outside [{lo}, {hi}]"
+                ));
+            }
+        }
+        assert!(
+            failures.is_empty(),
+            "copy has drifted from the data:\n  {}",
+            failures.join("\n  ")
+        );
+    }
+
+    /// Copy carries no markup, because nothing renders it.
+    ///
+    /// The About block prints each string as text, so `**bold**` reaches the
+    /// page as literal asterisks. One sentence on `taproot-spend-types` did
+    /// exactly that, and read as a typo in the middle of the most careful
+    /// paragraph on the site. Found by the owner on 2026-09-23.
+    ///
+    /// The one piece of structure the renderer does honour is a blank line,
+    /// which splits paragraphs, so that is deliberately not caught here.
+    #[test]
+    fn copy_carries_no_markup_the_page_cannot_render() {
+        const MARKUP: &[(&str, &str)] = &[
+            ("**", "bold"),
+            ("__", "underline or bold"),
+            ("`", "code"),
+            ("<em", "raw html"),
+            ("<strong", "raw html"),
+            ("](", "a markdown link"),
+        ];
+        for c in CHARTS.iter() {
+            let fields = [
+                Some(c.desc_per_block),
+                Some(c.desc_daily),
+                c.about.and_then(|a| a.definition),
+                c.about.map(|a| a.technical),
+            ];
+            for text in fields.into_iter().flatten() {
+                for (mark, what) in MARKUP {
+                    assert!(
+                        !text.contains(mark),
+                        "{}: copy contains {mark:?} ({what}), which the \
+                         About block prints literally because it renders \
+                         text rather than markup",
+                        c.slug
+                    );
+                }
+            }
+        }
     }
 
     #[test]
@@ -4105,6 +4446,46 @@ mod tests {
             .map(|c| c.slug)
             .collect();
         assert!(bad.is_empty(), "emdash or endash in titles: {bad:?}");
+    }
+
+    /// Every curated neighbour names a chart that exists, and appears.
+    ///
+    /// `RELATED_ACROSS_CATEGORIES` is a hand-maintained list, which is the
+    /// shape that has gone stale twice on this project: the drawer kept a
+    /// dangling label after a rename, and the sitemap listed charts that had
+    /// been deleted. A slug here that no longer exists would silently drop
+    /// the neighbour rather than fail.
+    #[test]
+    fn curated_related_names_charts_that_exist() {
+        for (from, to) in RELATED_ACROSS_CATEGORIES {
+            let origin = CHARTS.iter().find(|c| c.slug == *from);
+            assert!(
+                origin.is_some(),
+                "{from} is not a registered chart, so its curated \
+                 neighbours are unreachable"
+            );
+            for slug in *to {
+                assert!(
+                    CHARTS.iter().any(|c| c.slug == *slug),
+                    "{from} points at {slug}, which is not a registered chart"
+                );
+                assert_ne!(
+                    slug, from,
+                    "{from} lists itself as a related chart"
+                );
+            }
+            // And the curation actually reaches the reader: these exist
+            // because the derived answer omitted them.
+            let shown: Vec<&str> =
+                related(origin.unwrap(), 4).iter().map(|c| c.slug).collect();
+            for slug in *to {
+                assert!(
+                    shown.contains(slug),
+                    "{from} curates {slug} but related() returned {shown:?}; \
+                     the curated entries must survive the max"
+                );
+            }
+        }
     }
 
     #[test]

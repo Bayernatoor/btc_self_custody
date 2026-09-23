@@ -2464,6 +2464,16 @@ fn push_right_axis(
 
 /// Merge overlay markLines and series into an already-parsed chart option Value.
 /// Works for both time-axis (per-block) and category-axis (daily) charts.
+/// The series that carries event mark lines, so they do not belong to a
+/// chart's first band.
+///
+/// An ECharts `markLine` is a property of a series, and hiding that series
+/// from the legend hides its mark lines too. Giving the markers their own
+/// empty series means a reader can isolate any band without losing the
+/// halving, BIP, release and event lines. It is kept out of the legend by
+/// `legend.data`, which lists the real series explicitly.
+pub(crate) const MARKER_SERIES: &str = "Event markers";
+
 pub fn apply_overlays(
     opt: &mut serde_json::Value,
     overlays: &OverlayFlags,
@@ -2586,21 +2596,8 @@ pub fn apply_overlays(
         ));
     }
 
-    // Attach markLines to the first series
-    if !mark_lines.is_empty() {
-        if let Some(series) = obj.get_mut("series") {
-            if let Some(arr) = series.as_array_mut() {
-                if let Some(first) = arr.first_mut() {
-                    if let Some(s) = first.as_object_mut() {
-                        s.insert(
-                            "markLine".into(),
-                            json!({ "silent": true, "symbol": "none", "data": mark_lines }),
-                        );
-                    }
-                }
-            }
-        }
-    }
+    // Mark lines are attached at the end of this function, on a series of
+    // their own. See `MARKER_SERIES`.
 
     // --- Series overlays (price, chain size) ---
     //
@@ -2654,6 +2651,54 @@ pub fn apply_overlays(
             "GB",
             "#10b981",
         );
+    }
+
+    // **Event markers get a series of their own, not the first one.**
+    //
+    // An ECharts `markLine` belongs to a series, and a series hidden from the
+    // legend takes its mark lines with it. These were attached to `series[0]`,
+    // so on Address Type Count deselecting P2PKH also removed the BIP-16
+    // activation line: the marker vanished exactly when a reader isolated the
+    // band whose start it explains. Found by the owner on 2026-09-23.
+    //
+    // A dedicated empty series carries them instead, and the legend is given
+    // an explicit `data` list of the real series so the carrier does not
+    // appear in it. Built after the price and chain-size overlays so those
+    // are included in that list.
+    if !mark_lines.is_empty() {
+        let names: Vec<String> = obj
+            .get("series")
+            .and_then(|s| s.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|s| s.get("name")?.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        if let Some(arr) = obj.get_mut("series").and_then(|s| s.as_array_mut())
+        {
+            arr.push(json!({
+                "name": MARKER_SERIES,
+                "type": "line",
+                "data": [],
+                "silent": true,
+                "symbol": "none",
+                "tooltip": { "show": false },
+                "markLine": {
+                    "silent": true,
+                    "symbol": "none",
+                    "data": mark_lines,
+                },
+            }));
+        }
+        // Without an explicit list ECharts puts every series in the legend,
+        // including the carrier.
+        if let Some(l) = obj.get_mut("legend").and_then(|l| l.as_object_mut()) {
+            if !names.is_empty() {
+                l.insert("data".into(), json!(names));
+            }
+        }
     }
 
     // Reposition toolbox clear of any right-side axes
