@@ -1127,10 +1127,32 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                                     {d}
                                 </p>
                             })}
-                            <p class="text-sm text-white/85 leading-relaxed">
-                                <span class="text-white/70">"How it is measured. "</span>
-                                {copy.technical}
-                            </p>
+                            // Split on a blank line, so a method that covers
+                            // several things reads as several paragraphs.
+                            //
+                            // These run long by design: the whole point of
+                            // this section is to say exactly what was
+                            // measured and what it excludes. Rendered as one
+                            // blob, the interval chart's method ran to ten
+                            // unbroken lines covering the per-block
+                            // difference, the consensus timestamp rules and
+                            // the daily arm's different quantity, which is
+                            // three subjects a reader has to separate for
+                            // themselves. Copy that does not ask for breaks
+                            // still renders as exactly one paragraph.
+                            {copy.technical.split("\n\n")
+                                .enumerate()
+                                .map(|(i, para)| view! {
+                                    <p class="text-sm text-white/85 leading-relaxed">
+                                        {(i == 0).then(|| view! {
+                                            <span class="text-white/70">
+                                                "How it is measured. "
+                                            </span>
+                                        })}
+                                        {para.to_string()}
+                                    </p>
+                                })
+                                .collect_view()}
                         </div>
                         <p class="text-xs text-white/55 mt-3">
                             "Measured from my own Bitcoin node. "
@@ -1344,7 +1366,55 @@ fn RailRange() -> impl IntoView {
         // the info icon inline claimed the entire row and wrapped "Custom"
         // onto a line of its own.
         <div class="flex flex-col items-start lg:items-end min-w-0">
-        <div class=format!("{SEGMENTED_GROUP} justify-start lg:justify-end")>
+        // **A select below `sm`, the tray above it.**
+        //
+        // Twelve buttons wrap to two rows on a phone, which costs more
+        // vertical space than the chart can spare and reads as a control
+        // panel rather than a range picker. The shared `RangeSelector` has
+        // shipped exactly this split since it was written (`range.rs:119`);
+        // this rail was built for the 20rem desktop column and never got the
+        // mobile half, so the single-chart page was the one place on the site
+        // still showing the full tray on a phone.
+        //
+        // `selected` as well as `prop:value`: the prop is applied after
+        // hydration, so an SSR page would paint the control empty and read
+        // 1D while the chart showed 1Y. AGENTS.md records the trap.
+        <select
+            aria-label="Time range"
+            class="sm:hidden w-full bg-[#0a1a2e] text-white/85 text-sm border \
+                   border-white/10 rounded-lg px-2.5 py-2 cursor-pointer \
+                   focus:outline-none focus:border-[#f7931a]/40 \
+                   [color-scheme:dark]"
+            prop:value=move || range.get()
+            on:change=move |ev| {
+                let v = event_target_value(&ev);
+                if v == "custom" {
+                    set_picker_open.set(true);
+                } else {
+                    set_custom_from.set(None);
+                    set_custom_to.set(None);
+                    set_picker_open.set(false);
+                    set_problem.set(None);
+                    set_range.set(v);
+                }
+            }
+        >
+            {PRESETS.iter().map(|r| {
+                let val = r.to_string();
+                let label = r.to_uppercase();
+                let mine = val.clone();
+                view! {
+                    <option value=val selected=move || range.get() == mine>
+                        {label}
+                    </option>
+                }
+            }).collect_view()}
+            <option
+                value="custom"
+                selected=move || range.get() == "custom"
+            >"Custom"</option>
+        </select>
+        <div class=format!("hidden sm:flex {SEGMENTED_GROUP} justify-start lg:justify-end")>
             {PRESETS.iter().map(|r| {
                 let val = r.to_string();
                 let label = r.to_uppercase();
@@ -1663,8 +1733,18 @@ fn KeyFacts(
                     // stacked under the chart at full width and a column of
                     // label-value rows leaves most of the line empty. Back to
                     // rows in the 15rem rail, where two columns would not fit.
-                    <div class="grid grid-cols-2 gap-x-4 gap-y-2 lg:grid-cols-1 lg:gap-0 lg:space-y-2">
-                        <Fact label="average" value=fmt_num(average) note=(unit.get() != registry::Unit::Count).then(|| unit.get().label().to_string())/>
+                    // One column on a phone, two on a tablet, one again in
+                    // the desktop rail.
+                    //
+                    // Two columns at 390px gave each pair about 170px, and
+                    // half these rows carry a date under the value, so the
+                    // rows came out ragged with an orphan on the last line.
+                    // A label-value row across the full width reads in one
+                    // pass. The two-column form still earns its place from
+                    // `sm` to `lg`, where the width is there and a single
+                    // column would leave most of the line empty.
+                    <div class="grid grid-cols-1 gap-y-2 sm:grid-cols-2 sm:gap-x-4 lg:grid-cols-1 lg:gap-0 lg:space-y-2">
+                        <Fact label="average" value=unit.get().qualify(&fmt_num(average)) note=None/>
                         <Fact label="peak" value=fmt_num(peak.y) note=point_label(&peak, &axis_labels)/>
                         <Fact label="low" value=fmt_num(low.y) note=point_label(&low, &axis_labels)/>
                         {reports_change.then(|| view! {
@@ -1684,7 +1764,8 @@ fn KeyFacts(
                     // stacked under the chart at full width and a column of
                     // label-value rows leaves most of the line empty. Back to
                     // rows in the 15rem rail, where two columns would not fit.
-                    <div class="grid grid-cols-2 gap-x-4 gap-y-2 lg:grid-cols-1 lg:gap-0 lg:space-y-2">
+                    // Same responsive split as the time-series rail above.
+                    <div class="grid grid-cols-1 gap-y-2 sm:grid-cols-2 sm:gap-x-4 lg:grid-cols-1 lg:gap-0 lg:space-y-2">
                         <Fact label="latest total" value=fmt_num(total_latest) note=None/>
                         <Fact label="largest band" value=dominant note=Some(format!("{dominant_share_pct:.1}% of total"))/>
                         <Fact label="bands" value=band_count.to_string() note=None/>
@@ -1698,7 +1779,8 @@ fn KeyFacts(
                     // stacked under the chart at full width and a column of
                     // label-value rows leaves most of the line empty. Back to
                     // rows in the 15rem rail, where two columns would not fit.
-                    <div class="grid grid-cols-2 gap-x-4 gap-y-2 lg:grid-cols-1 lg:gap-0 lg:space-y-2">
+                    // Same responsive split as the two rails above.
+                    <div class="grid grid-cols-1 gap-y-2 sm:grid-cols-2 sm:gap-x-4 lg:grid-cols-1 lg:gap-0 lg:space-y-2">
                         <Fact label="largest" value=top_name note=Some(format!("{top_share_pct:.1}% of total"))/>
                         <Fact label="its value" value=fmt_num(top_value) note=None/>
                         <Fact label="entries" value=entries.to_string() note=None/>
@@ -1846,7 +1928,20 @@ fn OverlayToggles(
                 label="Chain size"
                 get=s.overlay_chain_size
                 set=s.set_overlay_chain_size
-                disabled=price_holds_axis
+                // Also refused on a chart that already plots chain size:
+                // laying it over itself drew the same values twice on two
+                // axes, which fit their own bounds, so identical numbers
+                // landed at different heights. `apply_overlays` refuses to
+                // draw it; this stops the control claiming otherwise.
+                disabled=Signal::derive(move || {
+                    price_holds_axis.get()
+                        || meta.unit == registry::Unit::Gigabytes
+                })
+                disabled_reason=if meta.unit == registry::Unit::Gigabytes {
+                    "This chart already plots chain size"
+                } else {
+                    "The right axis is taken by the other series"
+                }
                 hint="The total size of the block chain on disk, growing as blocks are added. An archival node keeps every byte of it; a pruned one verifies the same blocks and then discards the old ones."
             />
         </div>
@@ -1965,6 +2060,13 @@ fn Toggle(
     /// Greyed and inert when the other occupant already holds the right axis.
     /// Showing why beats silently dropping one of two selected series.
     disabled: Signal<bool>,
+    /// Why it is refused, shown on hover. A prop rather than a constant
+    /// because one toggle can be refused for two different reasons: the right
+    /// axis being taken, or the chart already plotting that series itself.
+    /// The old hardcoded sentence would have been simply untrue for the
+    /// second, and a wrong explanation is worse than none.
+    #[prop(default = "The right axis is taken by the other series")]
+    disabled_reason: &'static str,
     /// What this overlay marks, for a reader who has not met the term. Half
     /// of these are Bitcoin vocabulary that the chart otherwise assumes.
     #[prop(default = "")]
@@ -1978,7 +2080,7 @@ fn Toggle(
             } else {
                 "flex items-center gap-2 cursor-pointer group min-w-0"
             }
-            title=move || if disabled.get() { "The right axis is taken by the other series" } else { "" }
+            title=move || if disabled.get() { disabled_reason } else { "" }
         >
             <span
                 class=move || if get.get() {

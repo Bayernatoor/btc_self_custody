@@ -3233,6 +3233,74 @@ mod tests {
         );
     }
 
+    /// A chart does not overlay itself.
+    ///
+    /// The chain-size overlay applied to Chain Size Growth drew that chart's
+    /// own quantity again on a second axis. Each axis fits its own bounds, so
+    /// identical values landed at different heights: the tooltip read
+    /// "Block Data 770.67, Chain Size (GB) 770.67" with the lines far apart.
+    /// The comparison picker has refused this since it was written; the
+    /// overlay path had no equivalent. Found by the owner on 2026-09-23.
+    #[test]
+    fn an_overlay_does_not_duplicate_the_chart_it_is_laid_over() {
+        let blocks = synthetic_blocks(40);
+        let series_names = |opt: &serde_json::Value| -> Vec<String> {
+            opt["series"]
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|s| s["name"].as_str().map(str::to_string))
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+
+        let overlay: Vec<(u64, f64)> =
+            blocks.iter().map(|b| (b.timestamp * 1000, 770.0)).collect();
+        let flags = super::super::OverlayFlags {
+            chain_size_data: overlay.clone(),
+            ..Default::default()
+        };
+
+        // The chain-size chart plots gigabytes on its own axis, so the
+        // gigabyte overlay must be refused.
+        let mut own = super::super::chain_size_chart(&blocks, 800.0, 0, 0);
+        super::super::apply_overlays(&mut own, &flags, false);
+        assert!(
+            !series_names(&own).iter().any(|n| n == "Chain Size (GB)"),
+            "the chain-size chart was laid over itself: {:?}",
+            series_names(&own)
+        );
+
+        // The two halves of this refusal must name the same charts. The
+        // overlay refuses on the built axis unit ("GB"); the rail's toggle
+        // refuses on the registry unit (`Unit::Gigabytes`), because a
+        // component cannot read a built option. If those ever disagree, one
+        // of them is wrong: the control would claim a refusal the chart does
+        // not make, or offer one it does.
+        let gigabyte_charts: Vec<&str> = registry::CHARTS
+            .iter()
+            .filter(|c| c.unit == registry::Unit::Gigabytes)
+            .map(|c| c.slug)
+            .collect();
+        assert_eq!(
+            gigabyte_charts,
+            vec!["chain-size"],
+            "the set of charts the toggle refuses no longer matches the one \
+             the overlay refuses; both guards have to name the same charts"
+        );
+
+        // And the guard is not "never draw it": a chart in other units still
+        // gets the overlay, which is what makes the check above meaningful.
+        let mut other = super::super::tx_count_chart(&blocks);
+        super::super::apply_overlays(&mut other, &flags, false);
+        assert!(
+            series_names(&other).iter().any(|n| n == "Chain Size (GB)"),
+            "the overlay stopped working on charts that do want it: {:?}",
+            series_names(&other)
+        );
+    }
+
     /// A weekday bar is labelled with the day it actually describes.
     ///
     /// The per-block arm computed `(timestamp / 86400 + 4) % 7`, which is the

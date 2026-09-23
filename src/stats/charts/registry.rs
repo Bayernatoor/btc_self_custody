@@ -291,6 +291,34 @@ impl Unit {
         }
     }
 
+    /// A formatted value with its unit attached, for a single line of text.
+    ///
+    /// The key-figures rail used to pass the unit as a Fact's `note`, which
+    /// renders `class="block"` because that slot carries the date under peak
+    /// and low. A percentage chart therefore showed
+    ///
+    /// ```text
+    /// average    68.04
+    ///                %
+    /// ```
+    ///
+    /// with the symbol stranded on its own line, reading as a stray
+    /// character rather than as the unit of the number above it.
+    ///
+    /// `count`, `difficulty`, `ratio` and `mixed` are not units a reader
+    /// wants appended to a number: "3,791 count" is worse than "3,791". They
+    /// are names for "this has no unit", so they qualify nothing. `%` closes
+    /// up against the number by convention; everything else takes a space.
+    pub fn qualify(self, value: &str) -> String {
+        match self {
+            Self::Count | Self::Difficulty | Self::Ratio | Self::Mixed => {
+                value.to_string()
+            }
+            Self::Percent => format!("{value}%"),
+            _ => format!("{value} {}", self.label()),
+        }
+    }
+
     /// True when the chart already uses both y axes, leaving no room for a
     /// second series or the price overlay.
     pub fn occupies_both_axes(self) -> bool {
@@ -1275,7 +1303,7 @@ pub const CHARTS: &[ChartMeta] = &[
         }],
         about: Some(About {
             definition: Some("How much of a miner's income comes from fees rather than from new coins. The subsidy halves on a schedule and fees do not, so this is the ratio people watch when they ask what pays for mining once the subsidy is small. It has been volatile rather than trending: 6.5% across both 2023 and 2024, 1.03% in 2025, 0.63% so far in 2026."),
-            technical: "Fees over subsidy plus fees, per block. The subsidy schedule is fixed and the fee side is not, so this does not rise with each halving: it was 6.5% across both 2023 and 2024, then fell to 1.03% in 2025 and 0.63% in 2026. Nor is the usual level a few per cent: 55.1% of all blocks are under 1% and the recent median is near 0.6%. The record is 93.2%, in a block that collected far more in fees than it was paid to produce.",
+            technical: "Fees over subsidy plus fees, per block. The subsidy schedule is fixed and the fee side is not, so this does not rise with each halving: it was 6.5% across both 2023 and 2024, then fell to 1.03% in 2025 and 0.63% in 2026. Nor is the usual level a few per cent: more than half of all blocks are under 1%, and the median block in recent months is around a half of one per cent. The record is 93.2%, in a block that collected far more in fees than it was paid to produce.",
         }),
     },
     ChartMeta {
@@ -1784,7 +1812,7 @@ pub const CHARTS: &[ChartMeta] = &[
         }],
         about: Some(About {
             definition: Some("The same output types as a share of the total rather than as counts. Counts rise and fall with how busy the chain is, which hides a format gaining ground during a quiet week; a share strips that out and shows the types competing with each other. The bands total 100% by construction, so one type can only grow at another's expense."),
-            technical: "Six payment types normalised to 100%, so the bands total the whole. OP_RETURN outputs, bare multisig and unrecognised scripts are outside that denominator, which is why this chart and P2PKH Sunset give different percentages for the same type: 6.20% against 5.88% for P2PKH over the last 1,000 blocks.",
+            technical: "Six payment types normalised to 100%, so the bands total the whole. OP_RETURN outputs, bare multisig and unrecognised scripts are outside that denominator, which is why this chart and P2PKH Sunset give different percentages for the same type. This one divides by the six normalised types; P2PKH Sunset divides by every output, so its denominator is larger and its figure for the same type is always the smaller of the two.",
         }),
     },
     ChartMeta {
@@ -1888,7 +1916,7 @@ pub const CHARTS: &[ChartMeta] = &[
         ],
         about: Some(About {
             definition: Some("The total size of the blockchain on disk, back to 2009. What makes a node trustless is that it checked every one of those blocks itself, not that it still has them: an archival node keeps them all, while a pruned node verifies each block as it arrives and then discards the old ones, keeping a few gigabytes. So this is the floor for archiving the chain, not the price of running a node."),
-            technical: "Blocks summed across the range and anchored to the size my node reports on disk now, so the present-day figure is measured rather than estimated. Block data only: it excludes the chainstate and index databases a node also keeps, so a full data directory is larger. A pruned node stores a fraction of this and still verifies everything.",
+            technical: "Two lines, measuring two different things. Block Data is the blocks themselves, summed across the range and added to the stored total for everything before it. That is block bytes alone: it excludes the chainstate and index databases a node also keeps, so a full data directory is larger than this line.\n\nDisk Size is that same series scaled by one ratio, what my node reports on disk today divided by its block data today, which is how the chainstate, the indexes and the undo files enter the chart. Only today's point of it is measured; every earlier point assumes those extras have always been the same fraction of block data, and they have not, because the unspent-output set grows on its own terms. So read the gap between the two lines as roughly what a node keeps beyond the blocks, not as a reconstruction of any past day's disk usage.\n\nA pruned node stores a fraction of either line and still verifies everything.",
         }),
     },
     ChartMeta {
@@ -1950,7 +1978,7 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Weight divided by the four-million-unit limit, bucketed. Buckets are computed server-side for long ranges and from the blocks themselves for short ones; the count/percentage toggle changes the active unit.",
         }],
         about: Some(About {
-            definition: Some("How full blocks have been, as a distribution rather than a line. Each bar counts the blocks that landed in a 10% band of the weight limit. Recently almost everything is in the top band: 97.2% of the last four months' blocks are above 99% of the limit."),
+            definition: Some("How full blocks have been, as a distribution rather than a line. Each bar counts the blocks that landed in a 10% band of the weight limit. Recently almost everything is in the top band: around 97% of the last month's blocks are above 99% of the limit."),
             technical: "A histogram of block fullness. Most modern blocks cluster near 100% because miners maximize fee revenue. Near-empty blocks do occur, and this chart does not establish why: a miner can be working from a coinbase-only template while validating a new tip, and the data shows only the result. On longer ranges that include early Bitcoin history, more blocks appear at lower percentages since demand was much lower.",
         }),
     },
@@ -1958,7 +1986,7 @@ pub const CHARTS: &[ChartMeta] = &[
         slug: "interval",
         title: "Block Interval",
         desc_per_block: "Minutes between consecutive blocks. Target is 10 minutes",
-        desc_daily: "Minutes per block implied by each day's block count. Target is 10 minutes",
+        desc_daily: "Each day's 1,440 minutes divided by the blocks it produced. Target is 10 minutes",
         category: Category::Network,
         unit: Unit::Minutes,
         shape: Shape::LineWithScatter,
@@ -1980,7 +2008,7 @@ pub const CHARTS: &[ChartMeta] = &[
         ],
         about: Some(About {
             definition: Some("The time between one block and the next. Bitcoin targets ten minutes on average and holds that average by adjusting difficulty, but any single gap is close to random: a two-minute gap and a fifty-minute gap are both ordinary."),
-            technical: "The difference between consecutive block header timestamps. Miners set those timestamps and the protocol only loosely constrains them, so some intervals are negative or implausibly long: about one consecutive pair in 60 stored here is negative. They are plotted as found rather than cleaned, so this shows what the headers say rather than a corrected series.",
+            technical: "The difference between consecutive block header timestamps.\n\nA timestamp is not a clock reading: consensus asks only two things of it, that it be later than the median of the previous eleven blocks, and no more than two hours ahead of network time. Nothing requires it to be later than the block immediately before it, which is why about one consecutive pair in 60 stored here runs backwards. That same two-hour allowance is what bounds how far back a pair can run, since the most negative a gap can be is roughly how far ahead the earlier block was permitted to be stamped: the largest backward step in this chain is just under two hours. They are plotted as found rather than cleaned, so this shows what the headers say rather than a corrected series.\n\nThe daily arm measures nothing of the sort: it divides each day's 1,440 minutes by the number of blocks that day produced, so a day of 144 blocks reads exactly 10 minutes. That is a different quantity from the average of a day's gaps, and it cannot show the spread within a day.",
         }),
     },
     ChartMeta {
@@ -2539,7 +2567,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: Some("How full each block is against the limit that actually binds. The cap is 4,000,000 weight units rather than a byte count, and witness bytes count a quarter of what other bytes do, so this is the measure of a block being full. Blocks have been running close to the limit: 98.2% on average over the last four months, and 92.4% over the last 67,000 blocks."),
+            definition: Some("How full each block is against the limit that actually binds. The cap is 4,000,000 weight units rather than a byte count, and witness bytes count a quarter of what other bytes do, so this is the measure of a block being full. Blocks have been running close to the limit: around 98% on average over the last month, and about 93% over the last year."),
             technical: "The consensus limit is 4,000,000 weight units (4 MWU) per block. Witness data gets a 75% discount, so a block full of SegWit transactions can fit more data than one full of legacy transactions. Consistently high utilization (>90%) means demand for block space is near capacity.",
         }),
     },
@@ -2596,7 +2624,7 @@ pub const CHARTS: &[ChartMeta] = &[
         ],
         about: Some(About {
             definition: Some("How much of a block is witness data: signatures and scripts moved out of the transaction body by SegWit, where each byte counts a quarter against the weight limit. Currently about half of every block by raw bytes."),
-            technical: "Witness data receives a 75% weight discount under SegWit rules. A higher witness share means more of the block is discounted data, effectively increasing the block's capacity beyond the old 1 MB limit. Recent blocks run near half: 51.0% over the last 10,000, with only 5.8% of them anywhere in a 60 to 70 per cent band.",
+            technical: "Witness data receives a 75% weight discount under SegWit rules. A higher witness share means more of the block is discounted data, effectively increasing the block's capacity beyond the old 1 MB limit. Recent blocks run near half: about 51% over the last 10,000, with well under a tenth of them anywhere in a 60 to 70 per cent band.",
         }),
     },
     ChartMeta {
@@ -3113,6 +3141,145 @@ mod tests {
         }
     }
 
+    /// A number carries its unit on the same line, and a non-unit carries none.
+    ///
+    /// The rail passed the unit as a Fact's `note`, which renders on its own
+    /// line because that slot holds the date under peak and low, so a
+    /// percentage chart stranded a bare "%" beneath its average. Found by the
+    /// owner during the acceptance pass on 2026-09-22.
+    #[test]
+    fn a_unit_qualifies_its_value_on_one_line() {
+        assert_eq!(Unit::Percent.qualify("68.04"), "68.04%");
+        assert_eq!(Unit::Btc.qualify("1.25"), "1.25 BTC");
+        assert_eq!(Unit::SatVb.qualify("3.08"), "3.08 sat/vB");
+        assert_eq!(Unit::PercentagePoints.qualify("+3.67"), "+3.67 pp");
+
+        // The four that name the absence of a unit must not be appended:
+        // "3,791 count" is worse than "3,791", and "mixed" is the same
+        // generic that shipped in a meta description as "measured in mixed".
+        for u in [Unit::Count, Unit::Difficulty, Unit::Ratio, Unit::Mixed] {
+            assert_eq!(
+                u.qualify("3,791"),
+                "3,791",
+                "{u:?} is a name for having no unit and must qualify nothing"
+            );
+        }
+
+        // Every variant produces something a reader can read: no empty
+        // suffix, no doubled space.
+        for u in [
+            Unit::Count,
+            Unit::Btc,
+            Unit::Sats,
+            Unit::SatVb,
+            Unit::Bytes,
+            Unit::Kilobytes,
+            Unit::Megabytes,
+            Unit::Gigabytes,
+            Unit::Percent,
+            Unit::PercentagePoints,
+            Unit::TxPerSec,
+            Unit::HashesPerSecond,
+            Unit::Minutes,
+            Unit::Seconds,
+            Unit::Difficulty,
+            Unit::Ratio,
+            Unit::Mixed,
+        ] {
+            let q = u.qualify("1");
+            assert!(q.starts_with('1'), "{u:?} lost its value: {q}");
+            assert!(!q.contains("  "), "{u:?} doubled a space: {q}");
+            assert!(!q.ends_with(' '), "{u:?} left a trailing space: {q}");
+        }
+    }
+
+    /// A method that runs long is broken into paragraphs.
+    ///
+    /// The single-chart view splits `technical` on a blank line, so copy that
+    /// asks for no break still renders as one paragraph. What this holds is
+    /// the other end: the interval chart's method covers the per-block
+    /// difference, the consensus timestamp rules and the daily arm's
+    /// different quantity, and as one blob that was ten unbroken lines across
+    /// three subjects. Found by the owner on 2026-09-23.
+    ///
+    /// The threshold is deliberately generous. This is not a style rule about
+    /// sentence length; it is a floor under the one case where a reader has
+    /// to separate several subjects unaided.
+    #[test]
+    fn a_long_method_is_broken_into_paragraphs() {
+        const TOO_LONG_UNBROKEN: usize = 900;
+        for c in CHARTS.iter().filter(|c| c.about.is_some()) {
+            let t = c.about.unwrap().technical;
+            let longest = t.split("\n\n").map(str::len).max().unwrap_or(0);
+            assert!(
+                longest <= TOO_LONG_UNBROKEN,
+                "{}'s method has an unbroken run of {longest} characters. \
+                 Split it on a blank line at a subject boundary; the view \
+                 renders each as its own paragraph.",
+                c.slug
+            );
+        }
+    }
+
+    /// A figure measured over a recent window is hedged, not exact.
+    ///
+    /// Five sentences quoted a figure to two decimals over a window the chart
+    /// does not offer: "97.2% of the last four months' blocks", "92.4% over
+    /// the last 67,000 blocks", "6.20% against 5.88% over the last 1,000
+    /// blocks". Three of the five were already wrong when checked on
+    /// 2026-09-23, and the 1,000-block one had moved by more than a point,
+    /// because a thousand blocks is a week.
+    ///
+    /// A number that describes a trailing window ages the moment it is
+    /// written, so either round it ("around 97%") or tie it to something
+    /// closed. An exact decimal is fine for a fact that does not move: a
+    /// consensus limit, a named block, an all-time total.
+    #[test]
+    fn a_recent_window_figure_is_not_quoted_to_two_decimals() {
+        let window = regex_lite_window;
+        for c in CHARTS.iter() {
+            let fields = [
+                Some(c.desc_per_block),
+                Some(c.desc_daily),
+                c.about.and_then(|a| a.definition),
+                c.about.map(|a| a.technical),
+            ];
+            for text in fields.into_iter().flatten() {
+                for sentence in text.split(". ") {
+                    if !window(sentence) {
+                        continue;
+                    }
+                    // A decimal percentage in the same sentence as a trailing
+                    // window is the shape that rots.
+                    let decimal_pct = sentence.split_whitespace().any(|w| {
+                        let w = w.trim_end_matches(&[',', '.', ';'][..]);
+                        w.ends_with('%')
+                            && w.trim_end_matches('%').contains('.')
+                    });
+                    assert!(
+                        !decimal_pct,
+                        "{}: \"{}\" quotes a decimal percentage over a \
+                         trailing window. Round it, or tie it to a window \
+                         that has closed.",
+                        c.slug,
+                        sentence.trim()
+                    );
+                }
+            }
+        }
+    }
+
+    /// True when a sentence describes a trailing window rather than a fixed
+    /// point in time. Deliberately small: `regex` is not a dependency here and
+    /// is not worth adding for four phrases.
+    fn regex_lite_window(sentence: &str) -> bool {
+        let l = sentence.to_lowercase();
+        ["last ", "past ", "recent"].iter().any(|p| l.contains(p))
+            && ["month", "week", "day", "year", "block"]
+                .iter()
+                .any(|u| l.contains(u))
+    }
+
     #[test]
     fn long_copy_describes_the_metric_and_not_its_edit_history() {
         // Crude on purpose, and "used to" is the one that bites: it also
@@ -3322,6 +3489,14 @@ mod tests {
             // distinguish the claim from its opposite, not whether the
             // sentence is new.
             (
+                "Block data only: it excludes",
+                "the chart draws two lines and that sentence described only \
+                 one of them. `Disk Size (est.)` scales block bytes by \
+                 today's disk-to-blocks ratio, which is precisely how the \
+                 chainstate and the indexes enter the chart, so saying the \
+                 chart excludes them contradicted its own second series.",
+            ),
+            (
                 "can only be attributed to one protocol",
                 "the fee attribution runs two independent `if`s \
                  (`rpc.rs:1040-1045`), so a transaction bearing both an \
@@ -3374,8 +3549,8 @@ mod tests {
             ),
             (
                 "60-70% witness data",
-                "measured at 51.0% over the last 10,000 blocks, with 5.8% \
-                 of them anywhere in that band. The same chart's definition \
+                "measured at about 51% over the last 10,000 blocks, with under \
+                 6% of them anywhere in that band. The same chart's definition \
                  already said about half.",
             ),
             (

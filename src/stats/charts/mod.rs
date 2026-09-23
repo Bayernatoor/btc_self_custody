@@ -2603,7 +2603,39 @@ pub fn apply_overlays(
     }
 
     // --- Series overlays (price, chain size) ---
-    if !overlays.price_data.is_empty() {
+    //
+    // **A chart does not overlay itself.** The chain-size overlay applied to
+    // Chain Size Growth drew that chart's own quantity a second time on a
+    // second axis, and because the two axes fit their own bounds the
+    // identical values landed at different heights: the tooltip read
+    // "Block Data 770.67, Chain Size (GB) 770.67" while the lines sat far
+    // apart, which reads as a rendering fault. Found by the owner during the
+    // acceptance pass on 2026-09-23.
+    //
+    // The comparison picker already refuses this (`candidate.slug !=
+    // primary.slug` in `comparable_with`, whose comment calls it "two
+    // identical lines on two axes"); the overlay path had no equivalent.
+    // Matching on the series NAME would not catch it, because this chart's
+    // series are "Block Data" and "Disk Size (est.)". What identifies it is
+    // the axis unit: a chart whose own y axis is already GB is already
+    // plotting gigabytes of chain, so a GB overlay adds nothing but a
+    // contradiction. Both `y_axis("GB")` call sites in the codebase are that
+    // one chart.
+    // Read once, before anything borrows `obj` mutably.
+    let primary_axis_unit = {
+        let axis = obj.get("yAxis");
+        let first = match axis {
+            Some(serde_json::Value::Array(a)) => a.first(),
+            other => other,
+        };
+        first
+            .and_then(|y| y.get("name"))
+            .and_then(|n| n.as_str())
+            .unwrap_or_default()
+            .to_string()
+    };
+
+    if !overlays.price_data.is_empty() && primary_axis_unit != "USD" {
         add_series_overlay(
             obj,
             &overlays.price_data,
@@ -2613,7 +2645,7 @@ pub fn apply_overlays(
             "#e6c84e",
         );
     }
-    if !overlays.chain_size_data.is_empty() {
+    if !overlays.chain_size_data.is_empty() && primary_axis_unit != "GB" {
         add_series_overlay(
             obj,
             &overlays.chain_size_data,

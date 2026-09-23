@@ -428,8 +428,19 @@ pub fn provide_observatory_state() -> ObservatoryState {
             }
             let mut data: Vec<(u64, f64)> =
                 match fetch_price_history(0, 4_000_000_000).await {
+                    // A price of zero is not a price. blockchain.info's
+                    // series runs from the genesis block, and the 148 points
+                    // from 2009-01-03 to 2010-08-14 report 0.00 because
+                    // Bitcoin had no USD market before mid-2010, not because
+                    // it was worth nothing. Plotted, they drew the overlay
+                    // along the axis floor for eighteen months and were then
+                    // counted as non-plottable on a log axis, where the
+                    // notice reported them as points the data could not show.
+                    // Absent is not zero, which is the same correction made
+                    // to the fee percentiles and the daily rates.
                     Ok(pts) => pts
                         .into_iter()
+                        .filter(|p| p.price_usd > 0.0)
                         .map(|p| (p.timestamp_ms, p.price_usd))
                         .collect(),
                     Err(e) => {

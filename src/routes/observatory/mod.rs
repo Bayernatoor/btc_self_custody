@@ -99,9 +99,16 @@ pub fn ObservatoryPage() -> impl IntoView {
         // about this change requires unpicking them.
         <section
             class=move || if solo_chart.get() {
-                "max-w-none mx-auto px-2 sm:px-3 lg:px-5 pt-3 sm:pt-4 pb-12"
+                // `pl-7` and `pb-24` below `sm` reserve the space two fixed
+                // elements occupy: the drawer handle, a `w-5` sliver there, and
+                // the settings button (`fixed right-4 bottom-4`). Neither is
+                // in the flow, so on a phone they sat on top of the cards,
+                // clipping "observations" and "OVERLAYS" on the left and
+                // covering the export row at the bottom. Desktop never showed
+                // it because the margins are wide enough to absorb both.
+                "max-w-none mx-auto pl-7 pr-2 sm:px-3 lg:px-5 pt-3 sm:pt-4 pb-24 sm:pb-12"
             } else {
-                "max-w-[1750px] mx-auto px-3 sm:px-4 lg:px-8 pt-6 sm:pt-10 pb-28"
+                "max-w-[1750px] mx-auto pl-7 pr-3 sm:px-4 lg:px-8 pt-6 sm:pt-10 pb-28"
             }
         >
             // Hero branding — only on dashboard

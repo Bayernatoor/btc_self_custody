@@ -413,18 +413,30 @@ pub fn ChartDrawer() -> impl IntoView {
             // Border weight and colours match the settings button on the
             // opposite edge, so the two floating affordances read as a pair
             // rather than as one control and one decoration.
-            class="fixed left-0 top-1/3 -translate-y-1/4 h-[20vh] min-h-[7rem] w-7 sm:w-8 flex flex-col items-center justify-center gap-2 bg-[#0d2137] border-[3px] border-l-0 border-[#f7931a]/70 hover:border-[#ffa534] rounded-r-lg cursor-pointer hover:bg-[#143050] hover:w-8 sm:hover:w-9 transition-all group shadow-lg shadow-black/30"
+            // A 5-unit sliver on a phone, the full tab from `sm` up.
+            //
+            // This is `fixed`, so the page has to reserve whatever width it
+            // occupies or it sits on the content. At 28px that reservation
+            // cost more than the handle was worth: every card on every
+            // observatory page lost it, to avoid a control that is itself too
+            // wide for the viewport. A sliver costs 20px, keeps the whole
+            // 20vh height as the tap target, and opens the same drawer.
+            //
+            // The label goes with it: "CHARTS" set vertically needs width
+            // this does not have, and a clipped word is worse than none. The
+            // icon and the `aria-label` still say what it is.
+            class="fixed left-0 top-1/3 -translate-y-1/4 h-[20vh] min-h-[7rem] w-5 sm:w-8 flex flex-col items-center justify-center gap-2 bg-[#0d2137] border-[3px] border-l-0 border-[#f7931a]/70 hover:border-[#ffa534] rounded-r-lg cursor-pointer hover:bg-[#143050] hover:w-7 sm:hover:w-9 transition-all group shadow-lg shadow-black/30"
             on:click=move |_| set_open.set(true)
             title="Chart index"
         >
-            <svg class="w-4 h-4 text-[#f7931a]/80 group-hover:text-[#ffa534] transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-3 h-3 sm:w-4 sm:h-4 text-[#f7931a]/80 group-hover:text-[#ffa534] transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 6h16M4 12h16M4 18h16"/>
             </svg>
             // Vertical, because a handle this narrow has room for the word
             // only if it runs with the tab rather than across it. Says what
             // opens, which an icon alone never did.
             <span
-                class="text-[10px] font-bold tracking-[0.18em] uppercase text-[#f7931a]/80 group-hover:text-[#ffa534] transition-colors whitespace-nowrap"
+                class="hidden sm:block text-[10px] font-bold tracking-[0.18em] uppercase text-[#f7931a]/80 group-hover:text-[#ffa534] transition-colors whitespace-nowrap"
                 style="writing-mode: vertical-rl"
             >
                 "Charts"
