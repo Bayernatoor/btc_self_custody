@@ -3280,6 +3280,40 @@ mod tests {
                 .any(|u| l.contains(u))
     }
 
+    /// The deploy's cache bump still matches the file it rewrites.
+    ///
+    /// `deploy.yml` bumps the service worker with a `sed` anchored on
+    /// `var CACHE_NAME = 'wehodlbtc-...'`. Changing `sw.js` bytes is the only
+    /// thing that makes a browser treat the worker as updated, which is what
+    /// fires the Refresh banner and purges the old cache. A `sed` that
+    /// matches nothing exits 0, so if that line is ever reformatted the bump
+    /// silently stops happening and every later deploy leaves returning
+    /// visitors on stale assets: old CSS against new markup, which collapses
+    /// the layout and leaves charts in a zero-height parent.
+    ///
+    /// Seen locally on 2026-09-23 from the browser's own HTTP cache, which is
+    /// what prompted this. That instance was harmless; the silent version of
+    /// it would not be, and nothing else would catch it.
+    #[test]
+    fn the_deploy_can_still_bump_the_service_worker() {
+        const SW: &str = include_str!("../../../assets/sw.js");
+        const DEPLOY: &str =
+            include_str!("../../../.github/workflows/deploy.yml");
+        const ANCHOR: &str = "var CACHE_NAME = 'wehodlbtc-";
+
+        assert!(
+            SW.contains(ANCHOR),
+            "assets/sw.js no longer declares the cache name in the form \
+             deploy.yml rewrites ({ANCHOR}...), so the bump will silently \
+             match nothing and returning visitors will keep stale assets"
+        );
+        assert!(
+            DEPLOY.contains(ANCHOR),
+            "deploy.yml no longer anchors its cache bump on {ANCHOR}; if the \
+             rewrite moved, this guard has to move with it"
+        );
+    }
+
     #[test]
     fn long_copy_describes_the_metric_and_not_its_edit_history() {
         // Crude on purpose, and "used to" is the one that bites: it also
