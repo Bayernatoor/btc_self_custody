@@ -3674,6 +3674,57 @@ mod tests {
                 1.2,
             ),
             (
+                "witness-versions",
+                "twenty P2TR outputs in nineteen blocks before 709,632",
+                "SELECT SUM(p2tr_count) FROM blocks WHERE height < 709632",
+                20.0,
+                20.0,
+            ),
+            (
+                "witness-versions",
+                "no v0 output exists anywhere before block 481,824",
+                "SELECT COALESCE(SUM(p2wpkh_count+p2wsh_count),0) \
+                 FROM blocks WHERE height < 481824",
+                0.0,
+                0.0,
+            ),
+            // Both ends of the range the sentence claims, measured as the
+            // sentence measures it. The first version of this row read one
+            // current 10,000-block window against a claim about every month
+            // since 2023, so a month at 85% would have falsified the copy and
+            // passed the guard. Measure the statistic the sentence quotes.
+            (
+                "rbf",
+                "has run between roughly a half and four fifths (the low)",
+                "SELECT MIN(p) FROM (SELECT 100.0*SUM(rbf_count)/ \
+                 NULLIF(SUM(tx_count-1),0) p FROM blocks \
+                 WHERE timestamp >= strftime('%s','2023-05-01') \
+                 GROUP BY strftime('%Y-%m', datetime(timestamp,'unixepoch')))",
+                40.0,
+                55.0,
+            ),
+            (
+                "rbf",
+                "has run between roughly a half and four fifths (the high)",
+                "SELECT MAX(p) FROM (SELECT 100.0*SUM(rbf_count)/ \
+                 NULLIF(SUM(tx_count-1),0) p FROM blocks \
+                 WHERE timestamp >= strftime('%s','2023-05-01') \
+                 GROUP BY strftime('%Y-%m', datetime(timestamp,'unixepoch')))",
+                60.0,
+                80.0,
+            ),
+            (
+                "rbf",
+                "it passed half of all transactions in 2023",
+                "SELECT CAST(strftime('%Y', datetime(timestamp,'unixepoch')) \
+                 AS REAL) FROM blocks GROUP BY \
+                 strftime('%Y-%m', datetime(timestamp,'unixepoch')) \
+                 HAVING 100.0*SUM(rbf_count)/NULLIF(SUM(tx_count-1),0) > 50 \
+                 ORDER BY MIN(height) LIMIT 1",
+                2023.0,
+                2023.0,
+            ),
+            (
                 "inscriptions / protocols article",
                 "the first inscription is block 767,430",
                 "SELECT MIN(height) FROM blocks WHERE inscription_count > 0",
