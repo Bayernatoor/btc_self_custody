@@ -17,7 +17,7 @@
 //! does not compute one. Each shape gets the figures that are true for it, and
 //! `Unavailable` is a real answer rather than a zero.
 
-use super::registry::Shape;
+use super::registry::{Shape, Unit};
 
 /// One plotted point: `x` is the millisecond timestamp where the series has
 /// one, `y` the plotted value.
@@ -50,10 +50,35 @@ pub enum Kpis {
         /// carries the timestamp instead.
         axis_labels: Vec<String>,
     },
-    /// Stacked bands, where the total and the leading band are the facts and
+    /// Stacked bands, where the totals and the leading band are the facts and
     /// an average is not.
     Bands {
+        /// Every band summed across every point, or `None` when the unit does
+        /// not total: see [`Unit::totals_over_a_range`].
+        ///
+        /// This is the figure the rail's own "over selected range" heading
+        /// promises, and for a long time the rail did not have it. Over
+        /// December 2019 Witness Version Count reported a total of 367, which
+        /// is one arbitrary block, against the 3,165,546 witness outputs the chart counts in that window.
+        total_range: Option<f64>,
+        /// The stacked total averaged over the points in the range, or `None`
+        /// on a chart whose bands sum to 100 by construction.
+        ///
+        /// **This tests differently from `total_range`, and the difference is
+        /// one real chart.** Totalling needs an extensive unit, so it is
+        /// refused for every `Percent` chart. Averaging needs only that the
+        /// stacked total mean something, which it does for
+        /// `all-embedded-share`: a `StackedAbsolute` chart of two shares that
+        /// sum to about 7%, not to 100. Reusing either test for the other
+        /// would either sum a percentage chart or drop a real average from that
+        /// same one.
+        average_total: Option<f64>,
+        /// Every band summed at the last point, which is what the right edge
+        /// of the chart shows.
         total_latest: f64,
+        /// The largest band over the range where the unit totals, and at the
+        /// last point where it does not, so this always agrees with whichever
+        /// total is the meaningful one.
         dominant: String,
         dominant_share_pct: f64,
         band_count: usize,
@@ -199,8 +224,13 @@ fn is_companion(s: &serde_json::Value) -> bool {
 }
 
 /// Key figures for the metric's own axis, which is the usual case.
-pub fn compute(option_json: &str, shape: Shape) -> Kpis {
-    compute_axis(option_json, shape, 0)
+pub fn compute(
+    option_json: &str,
+    shape: Shape,
+    unit: Unit,
+    points_are_interval_totals: bool,
+) -> Kpis {
+    compute_axis(option_json, shape, unit, points_are_interval_totals, 0)
 }
 
 /// Key figures for one axis of a chart.
@@ -212,7 +242,13 @@ pub fn compute(option_json: &str, shape: Shape) -> Kpis {
 /// `shape` is the *compared* chart's shape when reading axis 1, not the host
 /// chart's, since it decides whether these read as a series, as bands or as
 /// categories.
-pub fn compute_axis(option_json: &str, shape: Shape, axis: u64) -> Kpis {
+pub fn compute_axis(
+    option_json: &str,
+    shape: Shape,
+    unit: Unit,
+    points_are_interval_totals: bool,
+    axis: u64,
+) -> Kpis {
     // An empty option is what every caller passes while its data is in
     // flight, so it means "not yet" rather than "nothing to show".
     if option_json.is_empty() {
@@ -253,9 +289,13 @@ pub fn compute_axis(option_json: &str, shape: Shape, axis: u64) -> Kpis {
         // one-slice donut produced "largest: Moderate, 100.0% of total, 1
         // entries": all three figures describe the widget.
         Shape::Gauge => Kpis::NotSummarizable,
-        Shape::StackedAbsolute | Shape::StackedPercent => {
-            bands(&series, x_axis_is_time(&opt))
-        }
+        Shape::StackedAbsolute | Shape::StackedPercent => bands(
+            &series,
+            x_axis_is_time(&opt),
+            unit,
+            shape,
+            points_are_interval_totals,
+        ),
         _ => single_series(&opt, &series),
     }
 }
@@ -368,33 +408,73 @@ fn single_series(
     }
 }
 
-fn bands(series: &[serde_json::Value], x_is_time: bool) -> Kpis {
-    // The latest point of each band, which is what a stacked chart's right
-    // edge shows. Bands with no data are skipped rather than counted as zero.
+fn bands(
+    series: &[serde_json::Value],
+    x_is_time: bool,
+    unit: Unit,
+    shape: Shape,
+    points_are_interval_totals: bool,
+) -> Kpis {
+    // Two readings per band: its value at the last point, which is what the
+    // chart's right edge shows, and its sum across the window, which is what
+    // the rail's heading promises. Bands with no data are skipped rather than
+    // counted as zero.
     let mut latest: Vec<(String, f64)> = Vec::new();
+    let mut summed: Vec<(String, f64)> = Vec::new();
     let mut observations = 0usize;
+    // Which x positions any band actually reached, so the average divides by
+    // the points that exist rather than by the longest band's length.
+    // `series_points` enumerates before it filters, so a null leaves a gap in
+    // `idx` rather than shifting every later point one place left, and a band
+    // that is absent at one x does not make the stack absent there.
+    let mut filled: std::collections::BTreeSet<usize> =
+        std::collections::BTreeSet::new();
     for s in series {
         let pts = series_points(s, x_is_time);
         if pts.is_empty() {
             continue;
         }
         observations = observations.max(pts.len());
-        latest.push((series_name(s), pts[pts.len() - 1].y));
+        filled.extend(pts.iter().map(|p| p.idx));
+        let name = series_name(s);
+        latest.push((name.clone(), pts[pts.len() - 1].y));
+        summed.push((name, pts.iter().map(|p| p.y).sum()));
     }
     if latest.is_empty() {
         return Kpis::Unavailable;
     }
-    let total: f64 = latest.iter().map(|(_, v)| *v).sum();
-    let (dominant, top) = latest
+    let total_latest: f64 = latest.iter().map(|(_, v)| *v).sum();
+    // Rank the bands on whichever total is meaningful, so "largest band" and
+    // the share beside it never describe a different window from each other.
+    let totals = if unit.totals_over_a_range() {
+        &summed
+    } else {
+        &latest
+    };
+    let (dominant, top) = totals
         .iter()
-        .fold(&latest[0], |a, b| if b.1 > a.1 { b } else { a })
+        .fold(&totals[0], |a, b| if b.1 > a.1 { b } else { a })
         .clone();
+    let denominator: f64 = totals.iter().map(|(_, v)| *v).sum();
+
+    let grand_sum: f64 = summed.iter().map(|(_, v)| *v).sum();
 
     Kpis::Bands {
-        total_latest: total,
+        // Two conditions, because two different things can make a total
+        // meaningless: a unit that does not add up (a share), and points that
+        // are not extensive for their own interval (a daily per-block mean).
+        // Either alone lets one through.
+        total_range: (unit.totals_over_a_range() && points_are_interval_totals)
+            .then_some(grand_sum),
+        // Refused only where the bands sum to 100 at every point by
+        // construction, which would report "100%" as though it were a
+        // measurement of this range rather than of the chart's own shape.
+        average_total: (shape != Shape::StackedPercent && !filled.is_empty())
+            .then(|| grand_sum / filled.len() as f64),
+        total_latest,
         dominant,
-        dominant_share_pct: if total > 0.0 {
-            top / total * 100.0
+        dominant_share_pct: if denominator > 0.0 {
+            top / denominator * 100.0
         } else {
             0.0
         },
@@ -471,7 +551,7 @@ mod tests {
         let json = r#"{"xAxis": {"type": "time"}, "series":[
             {"name":"Harder","data":[[2000,20.0],[4000,20.0]]},
             {"name":"Easier","data":[[1000,-10.0],[3000,-10.0]]}]}"#;
-        match compute(json, Shape::Bar) {
+        match compute(json, Shape::Bar, Unit::Count, true) {
             Kpis::Series {
                 average,
                 peak,
@@ -506,7 +586,10 @@ mod tests {
         let json = r#"{"xAxis": {"type": "time"}, "series":[
             {"name":"Outputs/Tx","data":[[1000,2.0],[2000,2.2]]},
             {"name":"Inputs/Tx","data":[[1000,1.4],[2000,1.5]]}]}"#;
-        assert!(matches!(compute(json, Shape::Line), Kpis::NotSummarizable));
+        assert!(matches!(
+            compute(json, Shape::Line, Unit::Count, true),
+            Kpis::NotSummarizable
+        ));
     }
 
     /// The same distinction on a category axis, where points carry no x and
@@ -518,7 +601,7 @@ mod tests {
             "series":[
             {"name":"Harder","data":[null,20.0,null,20.0]},
             {"name":"Easier","data":[-10.0,null,-10.0,null]}]}"#;
-        match compute(json, Shape::Bar) {
+        match compute(json, Shape::Bar, Unit::Count, true) {
             Kpis::Series { observations, .. } => assert_eq!(observations, 4),
             other => panic!("expected Series, got {other:?}"),
         }
@@ -526,14 +609,17 @@ mod tests {
             "series":[
             {"name":"Outputs/Tx","data":[2.0,2.2]},
             {"name":"Inputs/Tx","data":[1.4,1.5]}]}"#;
-        assert!(matches!(compute(both, Shape::Line), Kpis::NotSummarizable));
+        assert!(matches!(
+            compute(both, Shape::Line, Unit::Count, true),
+            Kpis::NotSummarizable
+        ));
     }
 
     #[test]
     fn series_figures_come_from_the_plotted_points() {
         let json = r#"{"xAxis": {"type": "time"}, "series":[{"name":"TPS","data":[
             [1000,3.0,900],[2000,7.0,901],[3000,5.0,902]]}]}"#;
-        match compute(json, Shape::Line) {
+        match compute(json, Shape::Line, Unit::Count, true) {
             Kpis::Series {
                 average,
                 peak,
@@ -575,7 +661,7 @@ mod tests {
         let json = r#"{"xAxis": {"type": "time"}, "series":[
             {"name":"144-block MA","data":[[1000,100.0],[2000,100.0]]},
             {"name":"Fees","data":[[1000,1.0],[2000,3.0]]}]}"#;
-        match compute(json, Shape::Line) {
+        match compute(json, Shape::Line, Unit::Count, true) {
             Kpis::Series { average, .. } => {
                 assert!((average - 2.0).abs() < 1e-9)
             }
@@ -588,7 +674,7 @@ mod tests {
     fn a_chart_made_only_of_averages_still_reports() {
         let json = r#"{"xAxis": {"type": "time"}, "series":[{"name":"7d MA","data":[[1,2.0],[2,4.0]]}]}"#;
         assert!(matches!(
-            compute(json, Shape::Line),
+            compute(json, Shape::Line, Unit::Count, true),
             Kpis::Series {
                 observations: 2,
                 ..
@@ -596,13 +682,16 @@ mod tests {
         ));
     }
 
-    #[test]
-    fn stacked_reports_total_and_leading_band_not_an_average() {
-        let json = r#"{"xAxis": {"type": "time"}, "series":[
+    const TWO_BANDS: &str = r#"{"xAxis": {"type": "time"}, "series":[
             {"name":"P2PKH","data":[[1,10.0],[2,20.0]],"stack":"t"},
             {"name":"P2TR","data":[[1,50.0],[2,60.0]],"stack":"t"}]}"#;
-        match compute(json, Shape::StackedAbsolute) {
+
+    #[test]
+    fn stacked_reports_both_totals_and_a_leading_band_not_an_average() {
+        match compute(TWO_BANDS, Shape::StackedAbsolute, Unit::Count, true) {
             Kpis::Bands {
+                total_range,
+                average_total,
                 total_latest,
                 dominant,
                 dominant_share_pct,
@@ -611,8 +700,102 @@ mod tests {
             } => {
                 assert_eq!(band_count, 2);
                 assert_eq!(observations, 2);
+                // 10+20+50+60 across the window, against 20+60 at the last
+                // point. The rail reports both because they answer different
+                // questions and it used to offer only the second.
+                assert_eq!(total_range, Some(140.0));
+                // 140 over the two x positions the bands reach, not over the
+                // four points they plot between them: the stacked total at
+                // one x is one observation however many bands compose it.
+                assert_eq!(average_total, Some(70.0));
                 assert!((total_latest - 80.0).abs() < 1e-9);
                 assert_eq!(dominant, "P2TR");
+                // 110/140 over the range, NOT 60/80 at the last point: the
+                // share has to describe the same window as the total it is
+                // quoted against.
+                assert!((dominant_share_pct - 78.571_428).abs() < 1e-5);
+            }
+            other => panic!("expected Bands, got {other:?}"),
+        }
+    }
+
+    /// A total is refused when the points are means, however countable they are.
+    ///
+    /// The unit gate cannot see this. `witness-versions` is `Unit::Count`, and
+    /// counts add up, but above 5,000 blocks the daily builder plots a
+    /// per-block *mean* per day under an axis labelled "Avg Outputs". Summing
+    /// a year of those gave **2,267,947** against a true **323,439,450**
+    /// witness outputs, 143 times too small, under a heading promising the
+    /// range. Eight of the nine totalling stacked charts declare
+    /// `MeanOfPerBlockValues`; only `address-types` declares `DailyTotal`.
+    ///
+    /// The average is deliberately still reported: a mean of daily per-block
+    /// means is still a per-block mean, 6,179.7 against a true 6,176.8 over
+    /// the same window.
+    #[test]
+    fn a_total_is_refused_when_the_points_are_means_not_interval_totals() {
+        match compute(TWO_BANDS, Shape::StackedAbsolute, Unit::Count, false) {
+            Kpis::Bands {
+                total_range,
+                average_total,
+                ..
+            } => {
+                assert_eq!(total_range, None);
+                assert_eq!(average_total, Some(70.0));
+            }
+            other => panic!("expected Bands, got {other:?}"),
+        }
+    }
+
+    /// The one chart the two rules disagree about, which is why there are two.
+    ///
+    /// `all-embedded-share` is `StackedAbsolute` declaring `Percent`: two
+    /// shares of block bytes that sum to about 7%, not to 100. Its total must
+    /// be refused, because a sum of shares is not a share. Its average must
+    /// not be, because the mean combined share over a window is exactly what
+    /// the chart is for.
+    ///
+    /// Collapsing the two tests into one breaks a real chart either way:
+    /// gating the average on the unit drops this average, and gating the
+    /// total on the shape sums six percentage charts.
+    #[test]
+    fn a_stacked_absolute_chart_of_shares_averages_but_does_not_total() {
+        match compute(TWO_BANDS, Shape::StackedAbsolute, Unit::Percent, true) {
+            Kpis::Bands {
+                total_range,
+                average_total,
+                ..
+            } => {
+                assert_eq!(total_range, None);
+                assert_eq!(average_total, Some(70.0));
+            }
+            other => panic!("expected Bands, got {other:?}"),
+        }
+    }
+
+    /// A total of shares is not a share, so a percentage chart reports none.
+    ///
+    /// Mutation-verified by declaring `Unit::Count` here: the range total
+    /// becomes `Some(140.0)`, which on a 100%-stacked chart claims the bands
+    /// sum to 140% of something.
+    #[test]
+    fn a_percentage_chart_reports_no_range_total_and_ranks_at_the_last_point() {
+        match compute(TWO_BANDS, Shape::StackedPercent, Unit::Percent, true) {
+            Kpis::Bands {
+                total_range,
+                average_total,
+                total_latest,
+                dominant_share_pct,
+                ..
+            } => {
+                assert_eq!(total_range, None);
+                // Nor an average: a 100%-stacked chart's total is 100 at
+                // every point by construction, so averaging it reports the
+                // chart's shape rather than anything about this range.
+                assert_eq!(average_total, None);
+                assert!((total_latest - 80.0).abs() < 1e-9);
+                // Ranked at the last point, 60/80, because there is no
+                // meaningful range denominator to rank against.
                 assert!((dominant_share_pct - 75.0).abs() < 1e-9);
             }
             other => panic!("expected Bands, got {other:?}"),
@@ -623,7 +806,7 @@ mod tests {
     fn donut_reports_concentration_from_named_slices() {
         let json = r#"{"xAxis": {"type": "time"}, "series":[{"name":"Pools","data":[
             {"name":"Foundry","value":30.0},{"name":"AntPool","value":70.0}]}]}"#;
-        match compute(json, Shape::Donut) {
+        match compute(json, Shape::Donut, Unit::Count, true) {
             Kpis::Categorical {
                 top_name,
                 top_value,
@@ -644,7 +827,7 @@ mod tests {
     fn histogram_takes_its_label_from_the_category_axis() {
         let json = r#"{"xAxis":{"data":["0-1","1-2","2-3"]},
                        "series":[{"name":"Blocks","data":[5.0,40.0,2.0]}]}"#;
-        match compute(json, Shape::Histogram) {
+        match compute(json, Shape::Histogram, Unit::Count, true) {
             Kpis::Categorical {
                 top_name, entries, ..
             } => {
@@ -666,7 +849,7 @@ mod tests {
             r#"{"xAxis": {"type": "time"}, "series":[{"data":[]}]}"#,
         ] {
             assert_eq!(
-                compute(json, Shape::Line),
+                compute(json, Shape::Line, Unit::Count, true),
                 Kpis::Unavailable,
                 "expected Unavailable for {json:?}"
             );
@@ -683,10 +866,13 @@ mod tests {
     /// option stays `Unavailable`, because those are answers.
     #[test]
     fn an_option_that_has_not_arrived_is_loading_not_unavailable() {
-        assert_eq!(compute("", Shape::Line), Kpis::Loading);
-        assert_eq!(compute("", Shape::Donut), Kpis::Loading);
+        assert_eq!(compute("", Shape::Line, Unit::Count, true), Kpis::Loading);
+        assert_eq!(compute("", Shape::Donut, Unit::Count, true), Kpis::Loading);
         // Still an assertion where the option exists and holds nothing.
-        assert_eq!(compute("{}", Shape::Line), Kpis::Unavailable);
+        assert_eq!(
+            compute("{}", Shape::Line, Unit::Count, true),
+            Kpis::Unavailable
+        );
     }
 
     /// Daily builders emit bare numbers and keep their dates on the category
@@ -697,7 +883,7 @@ mod tests {
     fn daily_charts_expose_the_axis_label_for_their_extremes() {
         let json = r#"{"xAxis":{"data":["2026-01-01","2026-01-02","2026-01-03"]},
                        "series":[{"name":"Avg Tx Count","data":[10.0,99.0,20.0]}]}"#;
-        match compute(json, Shape::Line) {
+        match compute(json, Shape::Line, Unit::Count, true) {
             Kpis::Series {
                 peak,
                 low,
@@ -718,7 +904,7 @@ mod tests {
     #[test]
     fn equal_extremes_resolve_deterministically() {
         let json = r#"{"xAxis": {"type": "time"}, "series":[{"name":"x","data":[[1,5.0],[2,5.0],[3,5.0]]}]}"#;
-        match compute(json, Shape::Line) {
+        match compute(json, Shape::Line, Unit::Count, true) {
             Kpis::Series { peak, low, .. } => {
                 assert_eq!(peak.x, Some(1.0));
                 assert_eq!(low.x, Some(1.0));
@@ -743,13 +929,16 @@ mod tests {
                 ]}}"#
             )
         };
-        let alone = compute(&stacked(""), Shape::StackedAbsolute);
+        let alone =
+            compute(&stacked(""), Shape::StackedAbsolute, Unit::Count, true);
         let with_price = compute(
             &stacked(
                 r#", {"name": "Price (USD)", "yAxisIndex": 1,
                       "data": [90000.0, 95000.0]}"#,
             ),
             Shape::StackedAbsolute,
+            Unit::Count,
+            true,
         );
         match (alone, with_price) {
             (
@@ -786,7 +975,7 @@ mod tests {
             {"name": "Price (USD)", "yAxisIndex": 1,
              "data": [[1, 90000.0], [2, 95000.0]]}
         ]}"#;
-        match compute(json, Shape::Line) {
+        match compute(json, Shape::Line, Unit::Count, true) {
             Kpis::Series { peak, .. } => {
                 assert_eq!(peak.y, 200.0, "read the overlay instead");
             }
@@ -805,7 +994,10 @@ mod tests {
         // `Unavailable`, not `NotSummarizable`: there is nothing here to
         // summarise rather than too many things, and the two now render
         // different sentences.
-        assert!(matches!(compute(json, Shape::Line), Kpis::Unavailable));
+        assert!(matches!(
+            compute(json, Shape::Line, Unit::Count, true),
+            Kpis::Unavailable
+        ));
     }
 
     /// A scatter against a value axis puts its x in the same slot a time
@@ -818,7 +1010,7 @@ mod tests {
             {"name": "Fee pressure", "data": [[95.2, 12.0, 800000],
                                               [40.1, 3.0, 800001]]}
         ]}"#;
-        match compute(json, Shape::Scatter) {
+        match compute(json, Shape::Scatter, Unit::Count, true) {
             Kpis::Series { peak, low, .. } => {
                 assert_eq!(peak.y, 12.0);
                 assert!(peak.x.is_none(), "95.2 was read as a timestamp");
@@ -830,7 +1022,7 @@ mod tests {
         let timed = r#"{"xAxis": {"type": "time"}, "series": [
             {"name": "Difficulty", "data": [[1700000000000.0, 5.0]]}
         ]}"#;
-        match compute(timed, Shape::Line) {
+        match compute(timed, Shape::Line, Unit::Count, true) {
             Kpis::Series { peak, .. } => {
                 assert_eq!(peak.x, Some(1700000000000.0))
             }
@@ -849,7 +1041,7 @@ mod tests {
             {"name": "Harder", "data": [[1, 5.0], [3, 11.0]]},
             {"name": "Easier", "data": [[2, -27.9], [4, -3.0]]}
         ]}"#;
-        match compute(json, Shape::Bar) {
+        match compute(json, Shape::Bar, Unit::Count, true) {
             Kpis::Series {
                 peak,
                 low,
@@ -878,7 +1070,7 @@ mod tests {
             {"name": "Harder", "data": [[2, 20.0], [4, 20.0]]},
             {"name": "Easier", "data": [[1, -10.0], [3, -10.0]]}
         ]}"#;
-        match compute(json, Shape::Bar) {
+        match compute(json, Shape::Bar, Unit::Count, true) {
             Kpis::Series {
                 first,
                 last,
@@ -902,7 +1094,7 @@ mod tests {
             {"name": "Fee Rate", "data": [[1, 10.0], [2, 20.0]]},
             {"name": "144-block MA", "data": [[1, 1000.0], [2, 2000.0]]}
         ]}"#;
-        match compute(json, Shape::Line) {
+        match compute(json, Shape::Line, Unit::Count, true) {
             Kpis::Series {
                 peak, observations, ..
             } => {
@@ -925,8 +1117,8 @@ mod tests {
              "data": [[1, 4000.0], [2, 5000.0]]}
         ]}"#;
         match (
-            compute_axis(json, Shape::Line, 0),
-            compute_axis(json, Shape::Line, 1),
+            compute_axis(json, Shape::Line, Unit::Count, true, 0),
+            compute_axis(json, Shape::Line, Unit::Count, true, 1),
         ) {
             (Kpis::Series { peak: a, .. }, Kpis::Series { peak: b, .. }) => {
                 assert_eq!(a.y, 300.0, "axis 0 should read the metric");
@@ -944,7 +1136,7 @@ mod tests {
             {"name": "Difficulty", "yAxisIndex": 0, "data": [[1, 100.0]]}
         ]}"#;
         assert!(matches!(
-            compute_axis(json, Shape::Line, 1),
+            compute_axis(json, Shape::Line, Unit::Count, true, 1),
             Kpis::Unavailable
         ));
     }

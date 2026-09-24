@@ -2971,6 +2971,8 @@ mod tests {
             crate::stats::charts::kpi::compute(
                 &serde_json::to_string(v).unwrap(),
                 crate::stats::charts::registry::Shape::Line,
+                crate::stats::charts::registry::Unit::Count,
+                true,
             )
         };
         let before = kpis(&plain);

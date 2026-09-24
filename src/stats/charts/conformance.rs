@@ -2890,7 +2890,15 @@ mod tests {
                 meta.slug,
                 if daily { "daily" } else { "per block" }
             );
-            match (meta.shape, kpi::compute(&json, meta.shape)) {
+            match (
+                meta.shape,
+                kpi::compute(
+                    &json,
+                    meta.shape,
+                    meta.unit,
+                    meta.plots_interval_totals(daily),
+                ),
+            ) {
                 (Shape::Gauge, Kpis::NotSummarizable)
                 | (Shape::Donut | Shape::Histogram, Kpis::Categorical { .. })
                 | (
@@ -3695,7 +3703,12 @@ mod tests {
         );
         assert!(
             matches!(
-                kpi::compute(&json, registry::Shape::Gauge),
+                kpi::compute(
+                    &json,
+                    registry::Shape::Gauge,
+                    registry::Unit::Count,
+                    true
+                ),
                 Kpis::NotSummarizable
             ),
             "a populated gauge is not missing data"
@@ -3706,7 +3719,12 @@ mod tests {
             serde_json::to_string(&super::super::mining_diversity_chart(&[]))
                 .expect("serialisable");
         assert!(matches!(
-            kpi::compute(&empty, registry::Shape::Gauge),
+            kpi::compute(
+                &empty,
+                registry::Shape::Gauge,
+                registry::Unit::Count,
+                true,
+            ),
             Kpis::Unavailable
         ));
     }
@@ -3777,7 +3795,12 @@ mod tests {
                 }
                 let json = serde_json::to_string(&opt).expect("serialisable");
                 let at = if daily { "daily" } else { "per block" };
-                match kpi::compute(&json, m.shape) {
+                match kpi::compute(
+                    &json,
+                    m.shape,
+                    m.unit,
+                    m.plots_interval_totals(daily),
+                ) {
                     Kpis::Series { .. } => load_bearing += 1,
                     Kpis::NotSummarizable
                         if registry::MULTI_METRIC.contains(&m.slug) => {}
@@ -3817,9 +3840,12 @@ mod tests {
         let opt =
             super::super::difficulty_adjustment_chart_daily(&days, &retargets);
         let json = serde_json::to_string(&opt).expect("serialisable");
-        let Kpis::Series { first, last, .. } =
-            kpi::compute(&json, registry::Shape::Bar)
-        else {
+        let Kpis::Series { first, last, .. } = kpi::compute(
+            &json,
+            registry::Shape::Bar,
+            registry::Unit::Count,
+            true,
+        ) else {
             panic!("the fixture should reach the series rail");
         };
         assert!(

@@ -146,6 +146,34 @@ fn build_from_dashboard(
 /// When a peak or low happened, however the chart encodes it. Per-block charts
 /// carry a millisecond timestamp on the point; daily charts emit bare numbers
 /// and keep their dates on the category axis, so those are matched by position.
+/// A band's share, worded so it never rounds a near-total into a total.
+///
+/// `{:.1}%` turns 99.999968 into "100.0%", and on Witness Version Count over
+/// December 2019 that is the whole defect: SegWit v0 holds 3,165,545 of
+/// 3,165,546 outputs, the one remaining output is the first pre-activation
+/// P2TR in the chain, and a reader told the band is 100% of the total
+/// concludes the month had none. The same rounding at the other end turns a
+/// real 0.02% into "0.0%", which is the absent-versus-measured-zero
+/// distinction this codebase keeps having to defend.
+///
+/// So the two decimal places nearest each boundary are reported as bounds
+/// rather than as figures. Exactly 100 and exactly 0 still print plainly,
+/// because those are claims the data does support.
+fn share_note(pct: f64, over_range: bool) -> String {
+    let scope = if over_range { "total" } else { "latest total" };
+    if pct >= 100.0 {
+        format!("100% of {scope}")
+    } else if pct > 99.9 {
+        format!("over 99.9% of {scope}")
+    } else if pct <= 0.0 {
+        format!("0% of {scope}")
+    } else if pct < 0.1 {
+        format!("under 0.1% of {scope}")
+    } else {
+        format!("{pct:.1}% of {scope}")
+    }
+}
+
 fn point_label(p: &kpi::Point, axis_labels: &[String]) -> Option<String> {
     fmt_ms(p.x).or_else(|| axis_labels.get(p.idx).cloned())
 }
@@ -717,16 +745,32 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
         }
     });
 
-    let kpis = Signal::derive(move || kpi::compute(&option.get(), meta.shape));
+    let kpis = Signal::derive(move || {
+        kpi::compute(
+            &option.get(),
+            meta.shape,
+            meta.unit,
+            meta.plots_interval_totals(resolved_daily.get()),
+        )
+    });
     // The same five numbers for the comparison. Seeing the shape of a second
     // series but not being able to read its peak is half a comparison, and
     // the reader would otherwise have to open the other chart to get them.
     // Read off axis 1, with the compared chart's own shape, since that
     // decides whether they are a series, bands or categories.
     let compare_kpis = Signal::derive(move || {
-        compare_meta
-            .get()
-            .map(|c| (c, kpi::compute_axis(&option.get(), c.shape, 1)))
+        compare_meta.get().map(|c| {
+            (
+                c,
+                kpi::compute_axis(
+                    &option.get(),
+                    c.shape,
+                    c.unit,
+                    c.plots_interval_totals(resolved_daily.get()),
+                    1,
+                ),
+            )
+        })
     });
 
     // A chart with no daily builder draws nothing at long ranges. Saying which
@@ -1752,8 +1796,10 @@ fn fact_hint(label: &str) -> &'static str {
         "low" => "The lowest single value in the range, and when it happened.",
         "change" => "Last value minus first value over the range. The percentage is shown only when the starting value is large enough for it to mean something.",
         "observations" => "How many data points are plotted. One per block on short ranges, one per day once the range is long enough to use daily aggregates.",
+        "range total" => "Every band summed across every point in the range. Absent on a percentage chart, where a total of shares is not a share.",
+        "average total" => "The stacked total averaged across the points in the range: per block on short ranges, per day once the range is long enough to use daily aggregates. Absent on a 100%-stacked chart, where it would report the chart's shape rather than this range.",
         "latest total" => "The sum of every band at the most recent point in the range.",
-        "largest band" => "The band holding the biggest share at the most recent point.",
+        "largest band" => "The band holding the biggest share of the range total, or of the latest total on a percentage chart, so it always matches whichever total is meaningful.",
         "bands" => "How many stacked categories the chart is divided into.",
         "largest" => "The category with the biggest share over the whole range.",
         "its value" => "The value behind that share, in the chart's own unit.",
@@ -1818,7 +1864,23 @@ fn KeyFacts(
                     </div>
                 }.into_any()
             }
-            Kpis::Bands { total_latest, dominant, dominant_share_pct, band_count, observations } => {
+            Kpis::Bands { total_range, average_total, total_latest, dominant, dominant_share_pct, band_count, observations } => {
+                // **Deliberately not qualified with the unit**, unlike the
+                // time-series rail's average just above.
+                //
+                // `ChartMeta` declares one `Unit` per chart while the actual
+                // unit is per resolution. `opreturn-bytes` and
+                // `unified-volume` declare `Kilobytes`, and their daily
+                // builders divide by 1,000 and label the axis "KB/Block", but
+                // their per-block builders plot raw bytes and label the axis
+                // "Bytes". Appending " kB" here therefore overstated those two
+                // charts by a thousandfold on any range under 5,000 blocks.
+                //
+                // A bare number leaves the reader to take the unit off the y
+                // axis, which is worse writing and correct. Fixing it properly
+                // means a per-resolution unit, the way `Measurement` already
+                // carries per-resolution `Method` and `Aggregation`; filed in
+                // tasks/todo.md.
                 view! {
                     // Two columns of tiles below `lg`, where the rail is
                     // stacked under the chart at full width and a column of
@@ -1826,8 +1888,19 @@ fn KeyFacts(
                     // rows in the 15rem rail, where two columns would not fit.
                     // Same responsive split as the time-series rail above.
                     <div class="grid grid-cols-1 gap-y-2 sm:grid-cols-2 sm:gap-x-4 lg:grid-cols-1 lg:gap-0 lg:space-y-2">
+                        // Both totals, because they answer different
+                        // questions and the rail used to show only the
+                        // second: "how much over this window" against "where
+                        // does it stand now". Absent for a percentage chart,
+                        // where a total of shares is not a share.
+                        {total_range.map(|t| view! {
+                            <Fact label="range total" value=fmt_num(t) note=None/>
+                        })}
+                        {average_total.map(|a| view! {
+                            <Fact label="average total" value=fmt_num(a) note=None/>
+                        })}
                         <Fact label="latest total" value=fmt_num(total_latest) note=None/>
-                        <Fact label="largest band" value=dominant note=Some(format!("{dominant_share_pct:.1}% of total"))/>
+                        <Fact label="largest band" value=dominant note=Some(share_note(dominant_share_pct, total_range.is_some()))/>
                         <Fact label="bands" value=band_count.to_string() note=None/>
                         <Fact label="observations" value=observations.to_string() note=None/>
                     </div>
@@ -2299,6 +2372,8 @@ mod tests {
             "low",
             "change",
             "observations",
+            "range total",
+            "average total",
             "latest total",
             "largest band",
             "bands",
@@ -2351,5 +2426,34 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(right_axis_label(&both, None), "overlay");
+    }
+
+    /// A share that is not a total is never worded as one.
+    ///
+    /// The case that prompted this is real and exact: Witness Version Count
+    /// over December 2019 has SegWit v0 at 3,165,545 of the 3,165,546 witness outputs it counts,
+    /// or 99.999968%. Printed `{:.1}%` that is "100.0% of total", and the one
+    /// output it rounds away is the first pre-activation P2TR in the chain,
+    /// so the tile denied exactly the thing the chart's own copy sends the
+    /// reader there to see.
+    ///
+    /// Both boundaries, because the same rounding at the bottom turns a
+    /// measured 0.02% into "0.0%", which is the absent-versus-zero
+    /// distinction the rest of this work exists to hold.
+    #[test]
+    fn a_near_total_share_is_worded_as_a_bound_not_rounded_to_a_total() {
+        // The measured December 2019 figure, and its neighbour at the far end.
+        assert_eq!(share_note(99.999_968, true), "over 99.9% of total");
+        assert_eq!(share_note(0.02, true), "under 0.1% of total");
+        // Exactly 100 and exactly 0 are claims the data supports, so they
+        // print plainly rather than as bounds.
+        assert_eq!(share_note(100.0, true), "100% of total");
+        assert_eq!(share_note(0.0, true), "0% of total");
+        // Anything away from the boundaries is unchanged.
+        assert_eq!(share_note(78.571_4, true), "78.6% of total");
+        // A percentage chart ranks at the last point, and says so, because
+        // its tile sits under a heading that promises the range.
+        assert_eq!(share_note(75.0, false), "75.0% of latest total");
+        assert_eq!(share_note(99.999_968, false), "over 99.9% of latest total");
     }
 }

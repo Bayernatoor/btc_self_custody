@@ -291,6 +291,47 @@ impl Unit {
         }
     }
 
+    /// Whether adding this unit up across a window yields the same unit.
+    ///
+    /// The distinction is extensive against intensive. Counts, byte sizes and
+    /// currency amounts accumulate: a month's outputs is the sum of its
+    /// blocks' outputs, in outputs. Shares, rates, ratios and levels do not:
+    /// summing 4,603 percentages gives 460,300%, which is not a percentage of
+    /// anything, and the right figure for a share over a window is a ratio of
+    /// totals rather than a total of ratios.
+    ///
+    /// **Shape cannot stand in for this.** `all-embedded-share` is a
+    /// `StackedAbsolute` chart declaring `Percent`, so reading "is this
+    /// stacked" as "can I total it" would sum shares on exactly one of the
+    /// fifteen stacked charts and look right on the other fourteen.
+    ///
+    /// A ratio of totals is not recoverable from a percentage chart's built
+    /// option anyway, which is why the key-figures rail reports no range
+    /// total for these rather than a mean of shares wearing the same label:
+    /// `Aggregation::RatioOfTotals` exists in this file because the two are
+    /// different quantities.
+    pub fn totals_over_a_range(self) -> bool {
+        match self {
+            Self::Count
+            | Self::Btc
+            | Self::Sats
+            | Self::Bytes
+            | Self::Kilobytes
+            | Self::Megabytes
+            | Self::Gigabytes => true,
+            Self::SatVb
+            | Self::Percent
+            | Self::PercentagePoints
+            | Self::TxPerSec
+            | Self::HashesPerSecond
+            | Self::Minutes
+            | Self::Seconds
+            | Self::Difficulty
+            | Self::Ratio
+            | Self::Mixed => false,
+        }
+    }
+
     /// A formatted value with its unit attached, for a single line of text.
     ///
     /// The key-figures rail used to pass the unit as a Fact's `note`, which
@@ -557,6 +598,39 @@ impl ChartMeta {
     /// first from the last says nothing. See [`POINTS_ARE_CHANGES`].
     pub fn reports_change(&self) -> bool {
         !POINTS_ARE_CHANGES.contains(&self.slug)
+    }
+
+    /// Whether each plotted point is an extensive reading for its own x
+    /// interval, so that adding the points up yields a real total.
+    ///
+    /// **This is what makes a "range total" mean anything, and the unit alone
+    /// cannot answer it.** `witness-versions` is declared `Unit::Count`, and a
+    /// count does add up, but above `MAX_PER_BLOCK_RANGE` the daily builder
+    /// plots `avg_p2wpkh_count + avg_p2wsh_count`: a per-block *mean* for each
+    /// day, which the axis labels "Avg Outputs". Summing 367 of those gave
+    /// 2,267,947 over the last year against a true 323,439,450 witness
+    /// outputs, a figure 143 times too small sitting under a heading that
+    /// promises the range. Found on 2026-09-24 by three independent reviews
+    /// and confirmed against the node.
+    ///
+    /// Eight of the nine totalling stacked charts declare
+    /// `MeanOfPerBlockValues` at daily resolution. `address-types` is the only
+    /// one declaring `DailyTotal`, which it reaches by multiplying the stored
+    /// mean back up by the block count, and it is the only one whose daily
+    /// points may be added.
+    ///
+    /// Per-block resolution is always safe: one point is one block.
+    ///
+    /// Note this says nothing about an *average*, which survives either way.
+    /// A mean of daily per-block means is still a per-block mean: over the
+    /// same window it read 6,179.7 against a true 6,176.8, so the two
+    /// questions need two predicates.
+    pub fn plots_interval_totals(&self, is_daily: bool) -> bool {
+        !is_daily
+            || self
+                .measurements
+                .iter()
+                .all(|m| matches!(m.daily, Aggregation::DailyTotal))
     }
 
     pub fn can_compare(&self) -> bool {
@@ -3753,6 +3827,57 @@ mod tests {
             failures.is_empty(),
             "copy has drifted from the data:\n  {}",
             failures.join("\n  ")
+        );
+    }
+
+    /// The real catalog splits on `plots_interval_totals`, not just a fixture.
+    ///
+    /// Asserted over `CHARTS` rather than over a synthetic chart, because the
+    /// fact being defended is a property of the declarations: eight of the
+    /// nine totalling stacked charts plot a per-block mean per day, and
+    /// exactly one multiplies back up to a daily total. A test that built its
+    /// own `ChartMeta` would pass while every real chart drifted.
+    ///
+    /// Per-block resolution must be true for every chart without exception,
+    /// since one point is one block there whatever the daily arm does.
+    #[test]
+    fn only_the_charts_declaring_a_daily_total_may_be_summed_daily() {
+        let stacked: Vec<&ChartMeta> = CHARTS
+            .iter()
+            .filter(|c| {
+                matches!(
+                    c.shape,
+                    Shape::StackedAbsolute | Shape::StackedPercent
+                ) && c.unit.totals_over_a_range()
+            })
+            .collect();
+        assert_eq!(
+            stacked.len(),
+            9,
+            "the set of totalling stacked charts changed; re-check which of \
+             them may be summed at daily resolution"
+        );
+
+        for c in CHARTS.iter() {
+            assert!(
+                c.plots_interval_totals(false),
+                "{}: one point is one block at per-block resolution, so it \
+                 is always summable there",
+                c.slug
+            );
+        }
+
+        let summable: Vec<&str> = stacked
+            .iter()
+            .filter(|c| c.plots_interval_totals(true))
+            .map(|c| c.slug)
+            .collect();
+        assert_eq!(
+            summable,
+            vec!["address-types"],
+            "only a chart declaring Aggregation::DailyTotal may have its \
+             daily points added; everything else plots a per-block mean per \
+             day, and summing those understated the last year by 143x"
         );
     }
 
