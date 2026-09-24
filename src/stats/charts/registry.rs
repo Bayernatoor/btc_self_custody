@@ -3333,16 +3333,106 @@ mod tests {
         // commonest phrasing: the first version of this guard listed only
         // "last/past/recent" and missed four sentences, all of which had
         // drifted. They need no unit word, because the window is implicit.
-        if ["currently", " now ", "today"]
-            .iter()
-            .any(|p| l.contains(p))
+        //
+        // "recent" is in that group rather than the one below it, which is
+        // the second hole this guard has had. Requiring a unit word beside it
+        // let "67.7% of recent transactions" through, because the thing being
+        // counted is not a unit of time: the window is in the adjective, and
+        // whatever it modifies is irrelevant. That figure then drifted to
+        // 67.9%, on a line whose monthly share has run from 49% to 78% since it
+        // first passed half in 2023.
+        //
+        // `now` is matched on word boundaries rather than as `" now "`, which
+        // could never fire on a sentence that *starts* with it. The guard
+        // splits on ". ", so "Now 67.7% of transactions carry it" is the
+        // commonest phrasing of all and was structurally unreachable.
+        let word_now = l
+            .split(|c: char| !c.is_ascii_alphanumeric())
+            .any(|w| w == "now");
+        if word_now
+            || ["currently", "today", "recent"]
+                .iter()
+                .any(|p| l.contains(p))
         {
             return true;
         }
-        ["last ", "past ", "recent"].iter().any(|p| l.contains(p))
+        // "last" and "past" do still need one, because both have meanings
+        // that are not windows at all: the last band of a stack, a past
+        // activation.
+        ["last ", "past "].iter().any(|p| l.contains(p))
             && ["month", "week", "day", "year", "block"]
                 .iter()
                 .any(|u| l.contains(u))
+    }
+
+    /// A decimal percentage is not pinned to the year that is still running.
+    ///
+    /// The third hole in the trailing-window guards, and it is invisible to
+    /// both of the others because nothing in the sentence says "recent" or
+    /// "now": the window is named by the year itself. `fee-revenue-share`
+    /// carried "0.63% so far in 2026" and "fell to ... 0.63% in 2026", which
+    /// read as closed facts and are not, since the year has months left to
+    /// run. Found by an independent audit on 2026-09-24.
+    ///
+    /// **Proximity, not co-occurrence, and the difference decides a real
+    /// sentence.** `runes-pct` says "97.0% of them in 2024, the year they
+    /// launched, and over 97% so far in 2026": the decimal belongs to a
+    /// closed year and the open year is deliberately hedged, which is the
+    /// correct way to write this. A guard that flagged any sentence mentioning
+    /// both would have condemned the one sentence here already doing it right.
+    #[test]
+    fn a_decimal_percentage_is_not_pinned_to_the_year_still_running() {
+        // How many words may sit between the figure and the year before they
+        // are no longer talking about each other. Four spans "0.63% so far in
+        // 2026" and stops short of runes-pct's nine.
+        const REACH: usize = 4;
+        let year = chrono::Utc::now().format("%Y").to_string();
+
+        // A decimal figure needs its inner dot kept, and a sentence-final
+        // year needs its outer one dropped. Trimming once cannot do both:
+        // the first version of this kept `.` everywhere, so the last word of
+        // a paragraph was "2026." and never matched the year. It passed the
+        // suite and caught nothing, which a mutation showed and a green run
+        // would not have.
+        let trim = |w: &str| {
+            w.trim_matches(|c: char| {
+                !c.is_ascii_alphanumeric() && c != '%' && c != '.'
+            })
+            .trim_end_matches('.')
+            .to_string()
+        };
+        for c in CHARTS.iter() {
+            let fields = [
+                Some(c.desc_per_block),
+                Some(c.desc_daily),
+                c.about.and_then(|a| a.definition),
+                c.about.map(|a| a.technical),
+            ];
+            for text in fields.into_iter().flatten() {
+                for sentence in text.split(". ") {
+                    let words: Vec<String> =
+                        sentence.split_whitespace().map(&trim).collect();
+                    for (i, w) in words.iter().enumerate() {
+                        if *w != year {
+                            continue;
+                        }
+                        let from = i.saturating_sub(REACH);
+                        let near = words[from..i].iter().any(|v| {
+                            v.ends_with('%')
+                                && v.trim_end_matches('%').contains('.')
+                        });
+                        assert!(
+                            !near,
+                            "{}: \"{}\" pins a decimal percentage to {year}, \
+                             which is still running, so the figure moves every \
+                             month. Hedge it, or quote a year that has closed.",
+                            c.slug,
+                            sentence.trim()
+                        );
+                    }
+                }
+            }
+        }
     }
 
     /// The deploy's cache bump still matches the file it rewrites.
