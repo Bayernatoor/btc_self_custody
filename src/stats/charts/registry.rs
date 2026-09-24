@@ -1310,8 +1310,8 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Fees over subsidy plus fees. The subsidy comes from the block height schedule and the fees are coinbase-derived, so the share inherits that estimate. A falling share can mean falling fees rather than a growing subsidy.",
         }],
         about: Some(About {
-            definition: Some("How much of a miner's income comes from fees rather than from new coins. The subsidy halves on a schedule and fees do not, so this is the ratio people watch when they ask what pays for mining once the subsidy is small. It has been volatile rather than trending: 6.5% across both 2023 and 2024, 1.03% in 2025, 0.63% so far in 2026."),
-            technical: "Fees over subsidy plus fees, per block. The subsidy schedule is fixed and the fee side is not, so this does not rise with each halving: it was 6.5% across both 2023 and 2024, then fell to 1.03% in 2025 and 0.63% in 2026. Nor is the usual level a few per cent: more than half of all blocks are under 1%, and the median block in recent months is around a half of one per cent. The record is 93.2%, in a block that collected far more in fees than it was paid to produce.",
+            definition: Some("How much of a miner's income comes from fees rather than from new coins. The subsidy halves on a schedule and fees do not, so this is the ratio people watch when they ask what pays for mining once the subsidy is small. It has been volatile rather than trending: 6.5% across both 2023 and 2024, 1.03% in 2025, and well under one per cent so far in 2026."),
+            technical: "Fees over subsidy plus fees, per block. The subsidy schedule is fixed and the fee side is not, so this does not rise with each halving: it was 6.5% across both 2023 and 2024, then fell to 1.03% in 2025 and to well under one per cent in 2026. Nor is the usual level a few per cent: more than half of all blocks are under 1%, and the median block in recent months is around a half of one per cent. The record is 93.2%, in a block that collected far more in fees than it was paid to produce.",
         }),
     },
     ChartMeta {
@@ -2159,7 +2159,7 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Confirmed non-coinbase transactions whose input sequence numbers signal under BIP 125, over all confirmed non-coinbase transactions. Not the share actually replaced, and not wallet adoption: full-RBF policy means absence of the signal does not prevent replacement.",
         }],
         about: Some(About {
-            definition: Some("How many transactions said, when they were sent, that they might be replaced by a higher-fee version. It is a signal in the transaction rather than a thing that happened: 67.7% of recent transactions carry it, and Bitcoin Core has allowed replacement regardless since version 28."),
+            definition: Some("How many transactions said, when they were sent, that they might be replaced by a higher-fee version. It is a signal in the transaction rather than a thing that happened: it passed half of all transactions in 2023 and has run between roughly a half and four fifths of them month by month since. Bitcoin Core has allowed replacement regardless since version 28."),
             technical: "Replace-By-Fee (BIP 125) lets senders bump fees on unconfirmed transactions. A transaction signals RBF by setting at least one input's sequence number below 0xfffffffe. Higher adoption means more wallets support fee bumping, which can help users during congestion.",
         }),
     },
@@ -2698,7 +2698,7 @@ pub const CHARTS: &[ChartMeta] = &[
         ],
         about: Some(About {
             definition: Some("Which version of the witness programme an output uses. SegWit v0 arrived at block 481,824 in 2017 and Taproot, which is v1, at 709,632 in 2021. An output commits to one of them, so counting versions shows the upgrade spreading through the output set."),
-            technical: "Counts of outputs by witness version, from the stored script classification. Only versions this site recognises are counted, so a future witness version would not appear until ingestion learns it.",
+            technical: "Counts of outputs by witness version, from the stored script classification. Only versions this site recognises are counted, so a future witness version would not appear until ingestion learns it.\n\nThe two bands behave differently before their own activations. No v0 output exists anywhere before block 481,824. Twenty P2TR outputs do exist before 709,632, in nineteen blocks, the first on 2019-12-17 and so nearly two years early, though fourteen of those blocks fall in 2021 and thirteen in the last two months before activation. A witness program is a valid output to create before the network agrees what spending it requires, so under consensus rules those twenty were anyone-can-spend until Taproot activated, while relay policy treated such a spend as non-standard and would not have carried it without a cooperating miner. Turn on the BIP activations overlay to see where each marker falls against the band it belongs to.",
         }),
     },
 ];
