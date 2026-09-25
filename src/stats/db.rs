@@ -3228,6 +3228,16 @@ pub fn query_extremes_with_heights(
     ) = row;
 
     // Pass 2: look up the block that holds each maximum (index-assisted)
+    // `ORDER BY height` so a tied extreme names the same block every time.
+    //
+    // These fetch the block behind a MAX, and `LIMIT 1` with no ordering
+    // returns whatever the query plan yields first. Measured 2026-09-25: over
+    // a 1Y window `largest_tx_size` has **20 blocks tied** at 3,990,463 bytes,
+    // so the Logbook showed "Largest Transaction" beside one of twenty as
+    // though it were the block. The value was right; the height, date and
+    // miner were arbitrary. It happened to be stable, because scan order is,
+    // but nothing pinned that across an index change or a reindex. Earliest
+    // occurrence is the useful answer and now the guaranteed one.
     fn lookup_u64(
         conn: &Connection,
         col: &str,
@@ -3238,6 +3248,7 @@ pub fn query_extremes_with_heights(
         let sql = format!(
             "SELECT {col}, height, timestamp, miner FROM blocks
              WHERE {col} = ?1 AND timestamp >= ?2 AND timestamp <= ?3
+             ORDER BY height
              LIMIT 1",
             col = col
         );
@@ -3267,6 +3278,7 @@ pub fn query_extremes_with_heights(
         let sql = format!(
             "SELECT {col}, height, timestamp, miner FROM blocks
              WHERE {col} = ?1 AND timestamp >= ?2 AND timestamp <= ?3
+             ORDER BY height
              LIMIT 1",
             col = col
         );
