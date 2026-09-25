@@ -2527,8 +2527,8 @@ The reference lines at 10% and 5% are markers for reading the trend. They are no
     ChartMeta {
         slug: "utxo-flow",
         title: "UTXO Flow",
-        desc_per_block: "Inputs spent vs outputs created per block. When outputs exceed inputs, the UTXO set grows",
-        desc_daily: "Daily average inputs spent vs outputs created. When outputs exceed inputs, the UTXO set grows",
+        desc_per_block: "Inputs spent vs outputs created per block. The gap between them is not the change in the UTXO set",
+        desc_daily: "Daily average inputs spent vs outputs created. The gap between them is not the change in the UTXO set",
         category: Category::Network,
         unit: Unit::Count,
         shape: Shape::Line,
@@ -2559,8 +2559,8 @@ The reference lines at 10% and 5% are markers for reading the trend. They are no
             },
         ],
         about: Some(About {
-            definition: Some("The two sides of every block: outputs consumed and outputs created. Bitcoin has no accounts, only discrete outputs, so spending means destroying some and making others. When creation outruns consumption the set of unspent outputs grows, and every node holds that set to validate."),
-            technical: "Every transaction consumes UTXOs (inputs) and creates new ones (outputs). When outputs exceed inputs, the UTXO set grows, increasing the memory requirements for full nodes. Consolidation transactions (many inputs, few outputs) shrink the set.",
+            definition: Some("The two sides of every block: outputs consumed and outputs created. Bitcoin has no accounts, only discrete outputs, so spending means destroying some and making others, and every node keeps the set of unspent ones in order to validate new blocks.\n\nThe gap between the two lines is not the change in that set. Many of the outputs created can never be spent, so they never enter it. In 2025 the outputs created outran the inputs consumed by more than twenty million, while the number of unspent outputs on the network fell by about twenty million. UTXO Growth Rate is the chart that makes the correction."),
+            technical: "Neither line counts the coinbase transaction, which ingestion skips, so a block carrying nothing else reads zero on both. That happens about ninety thousand times across the chain.\n\nConsolidating many inputs into few outputs genuinely shrinks the set, and paying many recipients out of one input genuinely grows it. What breaks the arithmetic is the third case, an output created that can never be spent. OP_RETURN outputs were under one percent of those created in 2023 and about one in six in 2024, and the share moves year to year rather than climbing steadily, so the gap here is wrong by a different amount in each era.",
         }),
     },
     ChartMeta {
@@ -3849,6 +3849,60 @@ mod tests {
                  ORDER BY MIN(height) LIMIT 1",
                 2023.0,
                 2023.0,
+            ),
+            // The whole point of the UTXO Flow copy is that the two lines
+            // disagree with reality in SIGN, not just in size, so both halves
+            // of 2025 are pinned. A closed year, so only a backfill moves it.
+            //
+            // Cross-checked against the node on 2026-09-25 rather than only
+            // against ourselves: gettxoutsetinfo at height 877,258 gives
+            // 186,401,126 unspent outputs and at 930,340 gives 165,717,088,
+            // a fall of 20,684,038. The corrected figure below lands within
+            // 238,617 of that over 53,082 blocks, which is the documented
+            // missing-coinbase-output residual of a few per block.
+            (
+                "utxo-flow",
+                "outputs outran inputs by more than twenty million in 2025",
+                "SELECT SUM(output_count)-SUM(input_count) FROM blocks \
+                 WHERE strftime('%Y', datetime(timestamp,'unixepoch'))='2025'",
+                20_000_000.0,
+                30_000_000.0,
+            ),
+            (
+                "utxo-flow",
+                "while unspent outputs fell by about twenty million in 2025",
+                "SELECT SUM(output_count)-SUM(op_return_count)\
+                 -SUM(input_count) FROM blocks \
+                 WHERE strftime('%Y', datetime(timestamp,'unixepoch'))='2025'",
+                -25_000_000.0,
+                -15_000_000.0,
+            ),
+            (
+                "utxo-flow",
+                "OP_RETURN was under one percent of outputs created in 2023",
+                "SELECT 100.0*SUM(op_return_count)/SUM(output_count) \
+                 FROM blocks \
+                 WHERE strftime('%Y', datetime(timestamp,'unixepoch'))='2023'",
+                0.0,
+                1.0,
+            ),
+            (
+                "utxo-flow",
+                "and about one in six in 2024",
+                "SELECT 100.0*SUM(op_return_count)/SUM(output_count) \
+                 FROM blocks \
+                 WHERE strftime('%Y', datetime(timestamp,'unixepoch'))='2024'",
+                14.0,
+                19.0,
+            ),
+            (
+                "utxo-flow",
+                "a block with only a coinbase reads zero on both lines, about \
+                 ninety thousand times",
+                "SELECT COUNT(*) FROM blocks \
+                 WHERE input_count=0 AND output_count=0",
+                85_000.0,
+                95_000.0,
             ),
             // Closed history, so this can only move if a backfill rewrites
             // it. Both halves are asserted because the copy's point is the
