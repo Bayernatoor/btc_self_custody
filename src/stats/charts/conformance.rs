@@ -3475,6 +3475,73 @@ mod tests {
         }
     }
 
+    /// The no-change list holds exactly the category charts without dates.
+    ///
+    /// `X_IS_NOT_A_PROGRESSION` is hand-maintained, so this derives the truth
+    /// from the built options instead of trusting it. A chart drawn on a
+    /// category axis whose labels are dates is a progression and `last -
+    /// first` means something; one whose labels are not, like weekday's seven
+    /// buckets, has no first or last and the rail must not report a change.
+    ///
+    /// Checked at both resolutions, because a chart can be a time axis per
+    /// block and a category axis daily, and only the second case qualifies.
+    #[test]
+    fn a_category_chart_without_dates_reports_no_change() {
+        let is_date = |s: &str| {
+            let b = s.as_bytes();
+            s.len() == 10
+                && b[4] == b'-'
+                && b[7] == b'-'
+                && s.chars().filter(|c| c.is_ascii_digit()).count() == 8
+        };
+        let mut found: std::collections::BTreeSet<&str> =
+            std::collections::BTreeSet::new();
+        for (meta, _daily, opt) in built_charts() {
+            let axis = match &opt["xAxis"] {
+                serde_json::Value::Array(a) => a.first().cloned(),
+                other => Some(other.clone()),
+            };
+            let Some(axis) = axis else { continue };
+            if axis["type"].as_str() != Some("category") {
+                continue;
+            }
+            let Some(cats) = axis["data"].as_array() else {
+                continue;
+            };
+            let labels: Vec<&str> =
+                cats.iter().filter_map(|c| c.as_str()).collect();
+            if labels.is_empty() {
+                continue;
+            }
+            // Donuts and histograms never route through the series rail, so
+            // their non-date labels are irrelevant here.
+            if matches!(
+                meta.shape,
+                registry::Shape::Donut | registry::Shape::Histogram
+            ) {
+                continue;
+            }
+            if !labels.iter().all(|l| is_date(l)) {
+                found.insert(meta.slug);
+            }
+        }
+        let declared: std::collections::BTreeSet<&str> =
+            registry::X_IS_NOT_A_PROGRESSION.iter().copied().collect();
+        assert_eq!(
+            found, declared,
+            "charts drawn on non-date categories must be exactly the ones \
+             declaring that their x is not a progression, or the rail reports \
+             a change between two arbitrary buckets"
+        );
+        for slug in registry::X_IS_NOT_A_PROGRESSION {
+            let meta = registry::find(slug).expect("declared slug exists");
+            assert!(
+                !meta.reports_change(),
+                "{slug} is listed but the rail would still show a change"
+            );
+        }
+    }
+
     /// Adoption Velocity's lines account for each other, at both resolutions.
     ///
     /// The eight series are shares of one denominator, so their moving

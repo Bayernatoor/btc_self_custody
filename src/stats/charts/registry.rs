@@ -598,6 +598,7 @@ impl ChartMeta {
     /// first from the last says nothing. See [`POINTS_ARE_CHANGES`].
     pub fn reports_change(&self) -> bool {
         !POINTS_ARE_CHANGES.contains(&self.slug)
+            && !X_IS_NOT_A_PROGRESSION.contains(&self.slug)
     }
 
     /// Whether each plotted point is an extensive reading for its own x
@@ -3000,6 +3001,37 @@ pub const NON_TIME_X_AXIS: &[&str] = &["fee-pressure", "halving-era"];
 ///   that if it ever routes through the series rail it arrives correct.
 pub const POINTS_ARE_CHANGES: &[&str] =
     &["diff-adjustment", "multi-velocity", "utxo-growth"];
+
+/// Charts whose x axis is a set of categories rather than a progression, so
+/// `last - first` is the difference between two arbitrary ones.
+///
+/// Distinct from [`POINTS_ARE_CHANGES`], and the distinction is why adding
+/// `weekday` there failed: these points are plain readings, not differences.
+/// What is wrong is the *order*. Weekday draws seven fixed buckets, so the
+/// rail reported "change -80.90, -5.4%", which is Sunday's average minus
+/// Monday's. Both numbers are right and neither is a change in anything:
+/// Monday is not a start, Sunday is not an end, and because the buckets are
+/// fixed the figure does not move with the selected range either, reading the
+/// same on 1Y as on ALL.
+///
+/// **Only the change tile is suppressed.** The mean, the busiest bucket and
+/// the quietest one are real facts about seven categories and are the point
+/// of the chart.
+///
+/// Not derivable from `Shape`, because a daily chart is also drawn on a
+/// category axis and its categories *are* a progression. The difference is
+/// whether the labels are dates, which is a property of the built option, so
+/// `a_category_chart_without_dates_reports_no_change` pins this list against
+/// what the builders actually emit.
+///
+/// - **`weekday`** is the one this was written for: seven fixed buckets.
+/// - **`halving-era`** draws one bar per era. Its rail is already
+///   `NotSummarizable` because it is in [`MULTI_METRIC`], so listing it
+///   changes nothing today and is here so that if it ever routes through the
+///   series rail it arrives correct. Same reasoning as `multi-velocity` in
+///   [`POINTS_ARE_CHANGES`]. The guard found it; it was not on the list when
+///   this was written.
+pub const X_IS_NOT_A_PROGRESSION: &[&str] = &["halving-era", "weekday"];
 
 pub fn is_valid_comparison(
     primary: &ChartMeta,
