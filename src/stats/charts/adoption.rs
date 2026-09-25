@@ -293,7 +293,9 @@ pub fn witness_version_pct_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         if total > 0 {
             (v0 as f64 / total as f64 * 100.0 * 100.0).round() / 100.0
         } else {
-            0.0
+            // 489,600 blocks have no witness output at all, which is every
+            // block before SegWit. A zero claimed v0 held none of them.
+            f64::NAN
         }
     });
     let v0_data = data_array_value(&v0_str);
@@ -303,7 +305,7 @@ pub fn witness_version_pct_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         if total > 0 {
             (b.p2tr_count as f64 / total as f64 * 100.0 * 100.0).round() / 100.0
         } else {
-            0.0
+            f64::NAN
         }
     });
     let v1_data = data_array_value(&v1_str);
@@ -345,28 +347,25 @@ pub fn witness_version_pct_chart_daily(
     }
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let v0_pct: Vec<f64> = days
+    // `None` serialises as JSON null. 3,150 days have no witness output at
+    // all, which is every day before SegWit, and a zero there claimed v0 held
+    // none of them rather than that there were none to hold.
+    let v0_pct: Vec<Option<f64>> = days
         .iter()
         .map(|d| {
             let v0 = d.avg_p2wpkh_count + d.avg_p2wsh_count;
             let total = v0 + d.avg_p2tr_count;
-            if total > 0.0 {
-                (v0 / total * 100.0 * 100.0).round() / 100.0
-            } else {
-                0.0
-            }
+            (total > 0.0).then(|| (v0 / total * 100.0 * 100.0).round() / 100.0)
         })
         .collect();
-    let v1_pct: Vec<f64> = days
+    let v1_pct: Vec<Option<f64>> = days
         .iter()
         .map(|d| {
             let v0 = d.avg_p2wpkh_count + d.avg_p2wsh_count;
             let total = v0 + d.avg_p2tr_count;
-            if total > 0.0 {
+            (total > 0.0).then(|| {
                 (d.avg_p2tr_count / total * 100.0 * 100.0).round() / 100.0
-            } else {
-                0.0
-            }
+            })
         })
         .collect();
 
@@ -744,7 +743,23 @@ pub fn address_sunset_chart_daily(
     }
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let vals: Vec<f64> = days
+    // `None`, not `0.0`, where the day classified no outputs at all.
+    //
+    // A zero here claims P2PKH was absent from the outputs; the truth is that
+    // there were no outputs to take a share of. 255 days qualify, all in the
+    // early chain, the first being 2009-01-03: one block, the genesis
+    // coinbase, which ingestion excludes.
+    //
+    // **This does not make the rail's `change` tile read as a decline, and it
+    // was not meant to.** After the fix the first plotted point is 2009-01-12,
+    // where 12 outputs were classified and every one was P2PK, so P2PKH really
+    // was 0% that day. `last - first` over ALL is therefore a genuine +6.9 on
+    // a chart whose story is 0 to 100 to 6. That is a property of summarising
+    // a non-monotonic series by its endpoints, not of this data, and it was
+    // left alone deliberately: the same tile reads a correct -3.08 on 1Y.
+    // Reviewed and accepted 2026-09-24; see the rail audit in the phase 2
+    // reconciliation.
+    let vals: Vec<Option<f64>> = days
         .iter()
         .map(|d| {
             let total = d.avg_p2pkh_count
@@ -755,15 +770,21 @@ pub fn address_sunset_chart_daily(
                 + d.avg_p2pk_count
                 + d.avg_multisig_count
                 + d.avg_unknown_script_count;
-            if total > 0.0 {
-                round(d.avg_p2pkh_count / total * 100.0, 2)
-            } else {
-                0.0
-            }
+            (total > 0.0).then(|| round(d.avg_p2pkh_count / total * 100.0, 2))
+        })
+        .collect();
+    let plotted: Vec<serde_json::Value> = vals
+        .iter()
+        .map(|v| match v {
+            Some(x) => json!(x),
+            None => json!(null),
         })
         .collect();
 
-    let ma = moving_average(&vals, 90);
+    // Gap-aware, so the average is over the days that exist rather than over
+    // the zeros that did not. Feeding it the fabricated zeros dragged the
+    // early line down for the same reason.
+    let ma = moving_average_over_gaps(&vals, 90);
     let ma_vals: Vec<serde_json::Value> = ma
         .iter()
         .map(|v| match v {
@@ -780,7 +801,7 @@ pub fn address_sunset_chart_daily(
         "legend": { "show": true },
         "series": [
             {
-                "name": "P2PKH %", "type": "line", "data": vals,
+                "name": "P2PKH %", "type": "line", "data": plotted,
                 "lineStyle": { "width": 0.5, "color": P2PKH_COLOR },
                 "itemStyle": { "color": P2PKH_COLOR }, "symbol": "none",
                 "opacity": 0.15
@@ -845,10 +866,19 @@ pub fn multi_velocity_chart_daily(
             .collect()
     };
 
+    // All eight classified types, not four. The denominator has always been
+    // eight, so drawing four left the lines unable to account for each other:
+    // a reader could not reconcile P2WPKH at +13.29 against the three visible
+    // falls, because the missing 0.60 had no line. Drawn in full, the eight
+    // velocities sum to zero at every point by construction.
     let p2pkh_pct = compute_pct(days, |d| d.avg_p2pkh_count);
     let p2sh_pct = compute_pct(days, |d| d.avg_p2sh_count);
     let p2wpkh_pct = compute_pct(days, |d| d.avg_p2wpkh_count);
     let p2tr_pct = compute_pct(days, |d| d.avg_p2tr_count);
+    let p2wsh_pct = compute_pct(days, |d| d.avg_p2wsh_count);
+    let p2pk_pct = compute_pct(days, |d| d.avg_p2pk_count);
+    let multisig_pct = compute_pct(days, |d| d.avg_multisig_count);
+    let unclassified_pct = compute_pct(days, |d| d.avg_unknown_script_count);
 
     // 30-day MA then velocity (diff from 30 days ago)
     let make_velocity = |pct: &[f64]| -> Vec<serde_json::Value> {
@@ -871,6 +901,10 @@ pub fn multi_velocity_chart_daily(
     let v_p2sh = make_velocity(&p2sh_pct);
     let v_p2wpkh = make_velocity(&p2wpkh_pct);
     let v_p2tr = make_velocity(&p2tr_pct);
+    let v_p2wsh = make_velocity(&p2wsh_pct);
+    let v_p2pk = make_velocity(&p2pk_pct);
+    let v_multisig = make_velocity(&multisig_pct);
+    let v_unclassified = make_velocity(&unclassified_pct);
 
     build_option(json!({
         "xAxis": x_axis_for(true, &cats),
@@ -898,6 +932,26 @@ pub fn multi_velocity_chart_daily(
                 "name": "P2TR", "type": "line", "data": v_p2tr,
                 "lineStyle": { "width": 1.5, "color": P2TR_COLOR },
                 "itemStyle": { "color": P2TR_COLOR }, "symbol": "none"
+            },
+            {
+                "name": "P2WSH", "type": "line", "data": v_p2wsh,
+                "lineStyle": { "width": 1.5, "color": P2WSH_COLOR },
+                "itemStyle": { "color": P2WSH_COLOR }, "symbol": "none"
+            },
+            {
+                "name": "P2PK", "type": "line", "data": v_p2pk,
+                "lineStyle": { "width": 1.5, "color": P2PK_COLOR },
+                "itemStyle": { "color": P2PK_COLOR }, "symbol": "none"
+            },
+            {
+                "name": "Bare multisig", "type": "line", "data": v_multisig,
+                "lineStyle": { "width": 1.5, "color": MULTISIG_COLOR },
+                "itemStyle": { "color": MULTISIG_COLOR }, "symbol": "none"
+            },
+            {
+                "name": "Unclassified", "type": "line", "data": v_unclassified,
+                "lineStyle": { "width": 1.5, "color": UNCLASSIFIED_COLOR },
+                "itemStyle": { "color": UNCLASSIFIED_COLOR }, "symbol": "none"
             }
         ]
     }))
@@ -928,7 +982,11 @@ pub fn address_sunset_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         if total > 0 {
             round(b.p2pkh_count as f64 / total as f64 * 100.0, 2)
         } else {
-            0.0
+            // `build_data_array_f64` writes a non-finite value as JSON null,
+            // which is the documented way to say "no reading" here. 89,939
+            // blocks classify no outputs, nearly all of them the empty blocks
+            // of 2009 and 2010, and a share of nothing is not zero.
+            f64::NAN
         }
     });
 
@@ -998,6 +1056,12 @@ pub fn multi_velocity_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let p2sh_pct = compute_pct(blocks, |b| b.p2sh_count);
     let p2wpkh_pct = compute_pct(blocks, |b| b.p2wpkh_count);
     let p2tr_pct = compute_pct(blocks, |b| b.p2tr_count);
+    // The other four of the eight in the denominator, so the lines account
+    // for each other. See the daily twin for why.
+    let p2wsh_pct = compute_pct(blocks, |b| b.p2wsh_count);
+    let p2pk_pct = compute_pct(blocks, |b| b.p2pk_count);
+    let multisig_pct = compute_pct(blocks, |b| b.multisig_count);
+    let unclassified_pct = compute_pct(blocks, |b| b.unknown_script_count);
 
     // 144-block MA (~1 day) then velocity (diff from 144 blocks ago)
     let make_velocity = |pct: &[f64], blocks: &[BlockSummary]| -> String {
@@ -1033,6 +1097,10 @@ pub fn multi_velocity_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let v_p2sh = make_velocity(&p2sh_pct, blocks);
     let v_p2wpkh = make_velocity(&p2wpkh_pct, blocks);
     let v_p2tr = make_velocity(&p2tr_pct, blocks);
+    let v_p2wsh = make_velocity(&p2wsh_pct, blocks);
+    let v_p2pk = make_velocity(&p2pk_pct, blocks);
+    let v_multisig = make_velocity(&multisig_pct, blocks);
+    let v_unclassified = make_velocity(&unclassified_pct, blocks);
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
@@ -1060,6 +1128,26 @@ pub fn multi_velocity_chart(blocks: &[BlockSummary]) -> serde_json::Value {
                 "name": "P2TR", "type": "line", "data": data_array_value(&v_p2tr),
                 "lineStyle": { "width": 1.5, "color": P2TR_COLOR },
                 "itemStyle": { "color": P2TR_COLOR }, "symbol": "none"
+            },
+            {
+                "name": "P2WSH", "type": "line", "data": data_array_value(&v_p2wsh),
+                "lineStyle": { "width": 1.5, "color": P2WSH_COLOR },
+                "itemStyle": { "color": P2WSH_COLOR }, "symbol": "none"
+            },
+            {
+                "name": "P2PK", "type": "line", "data": data_array_value(&v_p2pk),
+                "lineStyle": { "width": 1.5, "color": P2PK_COLOR },
+                "itemStyle": { "color": P2PK_COLOR }, "symbol": "none"
+            },
+            {
+                "name": "Bare multisig", "type": "line", "data": data_array_value(&v_multisig),
+                "lineStyle": { "width": 1.5, "color": MULTISIG_COLOR },
+                "itemStyle": { "color": MULTISIG_COLOR }, "symbol": "none"
+            },
+            {
+                "name": "Unclassified", "type": "line", "data": data_array_value(&v_unclassified),
+                "lineStyle": { "width": 1.5, "color": UNCLASSIFIED_COLOR },
+                "itemStyle": { "color": UNCLASSIFIED_COLOR }, "symbol": "none"
             }
         ]
     }))

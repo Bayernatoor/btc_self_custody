@@ -72,6 +72,19 @@ pub(crate) const P2SH_COLOR: &str = "#f59e0b"; // Amber (multisig era)
 pub(crate) const P2WPKH_COLOR: &str = "#3b82f6"; // Blue (SegWit v0)
 pub(crate) const P2WSH_COLOR: &str = "#8b5cf6"; // Purple (SegWit v0 multisig)
 pub(crate) const P2TR_COLOR: &str = "#22c55e"; // Green (Taproot)
+
+// The two output classes that have no address form. Both are drawn on
+// Adoption Velocity: bare multisig carried the Stamps era, and unclassified
+// scripts moved nearly four points in 2026 with no line to show it.
+//
+// **Distinct hues, not quieter shades of the ones above.** The first attempt
+// picked a darker amber and a darker slate, reasoning that a residual should
+// recede. That put bare multisig 48 units from P2SH in RGB and P2PK 81 from
+// unclassified, so the chart drew two pairs that each read as one colour.
+// Nothing else there is pink or near-white, and the worst remaining pair is
+// the pre-existing P2WPKH against P2WSH at 89.
+pub(crate) const MULTISIG_COLOR: &str = "#f472b6"; // Pink (bare multisig)
+pub(crate) const UNCLASSIFIED_COLOR: &str = "#e2e8f0"; // Near-white (residual)
 pub(crate) const RBF_COLOR: &str = "#06b6d4"; // Cyan
 
 pub(crate) const SUBSIDY_COLOR: &str = "#9b59b6";
