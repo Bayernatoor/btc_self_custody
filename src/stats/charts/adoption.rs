@@ -919,7 +919,7 @@ pub fn multi_velocity_chart_daily(
         "xAxis": x_axis_for(true, &cats),
         "yAxis": y_axis("pp change (30-day)"),
         "dataZoom": data_zoom(),
-        "tooltip": tooltip_axis(),
+        "tooltip": tooltip_axis_fixed3(),
         "legend": { "show": true },
         "series": [
             {
@@ -1113,7 +1113,7 @@ pub fn multi_velocity_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         "xAxis": x_axis_for(false, &[]),
         "yAxis": y_axis("pp change (144-block)"),
         "dataZoom": data_zoom(),
-        "tooltip": tooltip_axis(),
+        "tooltip": tooltip_axis_fixed3(),
         "legend": { "show": true },
         "series": [
             {

@@ -3427,6 +3427,54 @@ mod tests {
         }
     }
 
+    /// Both halves of the fixed-decimal tooltip sentinel still exist.
+    ///
+    /// A JS function cannot be serialised from Rust, so the option carries a
+    /// marker string and `stats.js` swaps in the real formatter. The two are
+    /// in different languages and different files, so nothing but this ties
+    /// them together: rename either side and the tooltip silently renders the
+    /// literal string `__fixed3__` beside every value.
+    ///
+    /// Asserted against the shipped file rather than a copy of the constant,
+    /// which is the only version that can catch a rename in `stats.js`.
+    #[test]
+    fn the_fixed_decimal_tooltip_sentinel_matches_the_javascript() {
+        use crate::stats::charts::TOOLTIP_FIXED3_SENTINEL;
+        let js = include_str!("../../../assets/js/stats.js");
+        assert!(
+            js.contains(TOOLTIP_FIXED3_SENTINEL),
+            "stats.js no longer mentions {TOOLTIP_FIXED3_SENTINEL:?}, so the \
+             tooltip would print the sentinel instead of a number"
+        );
+        assert!(
+            js.contains("applyTooltipSentinel"),
+            "stats.js declares the sentinel but no longer applies it"
+        );
+        // And the charts that ask for it really do.
+        for (label, opt) in [
+            (
+                "daily",
+                crate::stats::charts::multi_velocity_chart_daily(
+                    &synthetic_days(180),
+                ),
+            ),
+            (
+                "per block",
+                crate::stats::charts::multi_velocity_chart(&synthetic_blocks(
+                    600,
+                )),
+            ),
+        ] {
+            assert_eq!(
+                opt["tooltip"]["valueFormatter"].as_str(),
+                Some(TOOLTIP_FIXED3_SENTINEL),
+                "{label}: Adoption Velocity lost its fixed-decimal tooltip, \
+                 so its eight lines print at four different precisions and \
+                 stop looking like they cancel"
+            );
+        }
+    }
+
     /// Adoption Velocity's lines account for each other, at both resolutions.
     ///
     /// The eight series are shares of one denominator, so their moving

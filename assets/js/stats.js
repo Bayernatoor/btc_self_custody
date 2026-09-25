@@ -111,6 +111,12 @@
     // swap in the real formatter here.
     var SI_AXIS_SENTINEL = '__si_suffix__';
 
+    // Must match TOOLTIP_FIXED3_SENTINEL in src/stats/charts/mod.rs. ECharts
+    // trims trailing zeros, so a tooltip listing 0.74, 0, 0 and -0.001 showed
+    // four precisions in one column and made eight lines that do cancel look
+    // like they did not. Three places is the builders' full stored precision.
+    var TOOLTIP_FIXED3_SENTINEL = '__fixed3__';
+
     // 1 -> "1", 1500 -> "1.5K", 1.6e14 -> "160T".
     //
     // Exists for quantities with no natural scaled unit that span many orders
@@ -224,6 +230,23 @@
                 }
                 applyCalendarTicks(axis.axisLabel);
             });
+        });
+    }
+
+    // Idempotent for the same reason applyAxisSentinels is: the resize path
+    // re-decorates an option it has already decorated, and by then the
+    // sentinel is a function.
+    function applyTooltipSentinel(opts) {
+        var tips = opts.tooltip;
+        if (!tips) return;
+        if (!Array.isArray(tips)) tips = [tips];
+        tips.forEach(function(t) {
+            if (t && t.valueFormatter === TOOLTIP_FIXED3_SENTINEL) {
+                t.valueFormatter = function(v) {
+                    return (v === null || v === undefined || isNaN(v))
+                        ? '' : Number(v).toFixed(3);
+                };
+            }
         });
     }
 
@@ -614,6 +637,7 @@
                 opts.graphic[0].style.font = 'bold ' + watermarkPx + 'px Inter, system-ui, sans-serif';
             }
             applyAxisSentinels(opts);
+            applyTooltipSentinel(opts);
             applyMobileAdjustments(opts);
             el._chart.setOption(opts, { notMerge: true, lazyUpdate: true });
             // Activate the toolbox dataZoom brush by default on desktop so a

@@ -207,6 +207,27 @@ pub(crate) fn data_zoom() -> serde_json::Value {
 }
 
 /// Standard axis-trigger tooltip with dark theme styling.
+/// Marks a tooltip whose values should print to a fixed three decimals.
+///
+/// `stats.js` swaps it for a real function; a JS function cannot be
+/// serialised from Rust. Same mechanism as [`SI_AXIS_SENTINEL`].
+///
+/// ECharts trims trailing zeros, so a velocity tooltip listing 0.74, 0, 0 and
+/// -0.001 gave four different precisions in one column and the eight lines
+/// looked like they did not cancel. They do: the builders round to three
+/// places, so three is the full stored precision and nothing is hidden by
+/// showing it.
+pub(crate) const TOOLTIP_FIXED3_SENTINEL: &str = "__fixed3__";
+
+/// `tooltip_axis`, with every value printed to three decimals.
+pub(crate) fn tooltip_axis_fixed3() -> serde_json::Value {
+    let mut t = tooltip_axis();
+    t.as_object_mut()
+        .expect("tooltip_axis builds an object")
+        .insert("valueFormatter".into(), json!(TOOLTIP_FIXED3_SENTINEL));
+    t
+}
+
 pub(crate) fn tooltip_axis() -> serde_json::Value {
     json!({
         "trigger": "axis",
