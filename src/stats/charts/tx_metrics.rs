@@ -308,7 +308,10 @@ pub fn address_type_pct_chart(blocks: &[BlockSummary]) -> serde_json::Value {
             if total > 0 {
                 round(f(b) as f64 / total as f64 * 100.0, 2)
             } else {
-                0.0
+                // 89,944 blocks classify no output of these six types, nearly
+                // all of them the empty blocks of 2009 and 2010. A share of
+                // nothing is not zero.
+                f64::NAN
             }
         });
         data_array_value(&s)
@@ -339,12 +342,11 @@ pub fn address_type_pct_chart_daily(
         return no_data_chart("Address Type Share");
     }
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let pct = |count: f64, total: f64| -> f64 {
-        if total > 0.0 {
-            round(count / total * 100.0, 2)
-        } else {
-            0.0
-        }
+    // `None` serialises as JSON null, for the days that classified no output
+    // of these six types at all. A zero there is a claim about the mix; the
+    // truth is that there was no mix.
+    let pct = |count: f64, total: f64| -> Option<f64> {
+        (total > 0.0).then(|| round(count / total * 100.0, 2))
     };
     let total_per_day: Vec<f64> = days
         .iter()
@@ -365,12 +367,12 @@ pub fn address_type_pct_chart_daily(
         "tooltip": tooltip_axis(),
         "legend": { "show": true },
         "series": [
-            { "name": "P2PKH", "type": "line", "data": days.iter().zip(total_per_day.iter()).map(|(d, t)| pct(d.avg_p2pkh_count, *t)).collect::<Vec<f64>>(), "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2PKH_COLOR }, "itemStyle": { "color": P2PKH_COLOR }, "symbol": "none" },
-            { "name": "P2SH", "type": "line", "data": days.iter().zip(total_per_day.iter()).map(|(d, t)| pct(d.avg_p2sh_count, *t)).collect::<Vec<f64>>(), "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2SH_COLOR }, "itemStyle": { "color": P2SH_COLOR }, "symbol": "none" },
-            { "name": "P2WPKH", "type": "line", "data": days.iter().zip(total_per_day.iter()).map(|(d, t)| pct(d.avg_p2wpkh_count, *t)).collect::<Vec<f64>>(), "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2WPKH_COLOR }, "itemStyle": { "color": P2WPKH_COLOR }, "symbol": "none" },
-            { "name": "P2WSH", "type": "line", "data": days.iter().zip(total_per_day.iter()).map(|(d, t)| pct(d.avg_p2wsh_count, *t)).collect::<Vec<f64>>(), "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2WSH_COLOR }, "itemStyle": { "color": P2WSH_COLOR }, "symbol": "none" },
-            { "name": "P2TR", "type": "line", "data": days.iter().zip(total_per_day.iter()).map(|(d, t)| pct(d.avg_p2tr_count, *t)).collect::<Vec<f64>>(), "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2TR_COLOR }, "itemStyle": { "color": P2TR_COLOR }, "symbol": "none" },
-            { "name": "P2PK", "type": "line", "data": days.iter().zip(total_per_day.iter()).map(|(d, t)| pct(d.avg_p2pk_count, *t)).collect::<Vec<f64>>(), "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2PK_COLOR }, "itemStyle": { "color": P2PK_COLOR }, "symbol": "none" }
+            { "name": "P2PKH", "type": "line", "data": days.iter().zip(total_per_day.iter()).map(|(d, t)| pct(d.avg_p2pkh_count, *t)).collect::<Vec<Option<f64>>>(), "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2PKH_COLOR }, "itemStyle": { "color": P2PKH_COLOR }, "symbol": "none" },
+            { "name": "P2SH", "type": "line", "data": days.iter().zip(total_per_day.iter()).map(|(d, t)| pct(d.avg_p2sh_count, *t)).collect::<Vec<Option<f64>>>(), "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2SH_COLOR }, "itemStyle": { "color": P2SH_COLOR }, "symbol": "none" },
+            { "name": "P2WPKH", "type": "line", "data": days.iter().zip(total_per_day.iter()).map(|(d, t)| pct(d.avg_p2wpkh_count, *t)).collect::<Vec<Option<f64>>>(), "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2WPKH_COLOR }, "itemStyle": { "color": P2WPKH_COLOR }, "symbol": "none" },
+            { "name": "P2WSH", "type": "line", "data": days.iter().zip(total_per_day.iter()).map(|(d, t)| pct(d.avg_p2wsh_count, *t)).collect::<Vec<Option<f64>>>(), "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2WSH_COLOR }, "itemStyle": { "color": P2WSH_COLOR }, "symbol": "none" },
+            { "name": "P2TR", "type": "line", "data": days.iter().zip(total_per_day.iter()).map(|(d, t)| pct(d.avg_p2tr_count, *t)).collect::<Vec<Option<f64>>>(), "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2TR_COLOR }, "itemStyle": { "color": P2TR_COLOR }, "symbol": "none" },
+            { "name": "P2PK", "type": "line", "data": days.iter().zip(total_per_day.iter()).map(|(d, t)| pct(d.avg_p2pk_count, *t)).collect::<Vec<Option<f64>>>(), "stack": "pct", "areaStyle": { "opacity": 0.6 }, "lineStyle": { "width": 0, "color": P2PK_COLOR }, "itemStyle": { "color": P2PK_COLOR }, "symbol": "none" }
         ]
     }))
 }
