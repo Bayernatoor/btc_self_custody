@@ -1787,6 +1787,10 @@ const CORE_RELEASES: &[(u64, &str)] = &[
     (1727827200, "v28"),
     (1744588800, "v29"),
     (1760054400, "v30"),
+    // v31.0, announced 2026-04-19. Displayed `published` date, which agrees
+    // with the permalink here; v31.1 (2026-07-08) is a patch release and this
+    // list tracks majors only.
+    (1776556800, "v31"),
 ];
 
 /// Notable Bitcoin events (timestamp unix seconds, label).
@@ -1800,6 +1804,28 @@ const EVENTS: &[(u64, &str)] = &[
     (1674259200, "Ordinals Launch"),
     (1678838400, "BRC-20 Launch"),
     (1713571767, "Runes Launch"),
+    // The BIP-110 chain split, at block 961,632 on 2026-08-08 19:35:55 UTC.
+    //
+    // BIP-110, "Reduced Data Temporary Softfork", is a consensus soft fork
+    // capping data field sizes. It had no FAILED state, only mandatory
+    // signalling as a fallback: blocks from 961,632 had to set version bit 4
+    // or enforcing nodes would reject them. AntPool mined 961,632 itself
+    // without the bit, this chain accepted it, and the enforcing nodes forked
+    // away onto a minority chain.
+    //
+    // Support peaked at 51 blocks in retarget period 476, about 2.53%, and
+    // **no block at or after 961,632 has set bit 4**. All three figures read
+    // from this node on 2026-09-25.
+    //
+    // **The marker is the split, not the fork's later flag day.** The minority
+    // chain went on to a BLAKE2b proof-of-work hard fork at *its* block
+    // 961,640 on 2026-08-30, which is a different block from this chain's
+    // 961,640 at 2026-08-08 21:59 because the two diverged eight blocks
+    // earlier and the minority chain mines at a fraction of a percent of the
+    // hashrate. Do not plot that height against this timeline: the two chains
+    // share a numbering and nothing else after 961,632. This overlay draws
+    // against the chain this node follows.
+    (1786217755, "BIP-110 chain split"),
 ];
 /// Overlay flags — which overlays to merge into a chart option.
 #[derive(Clone, Debug, Default)]
@@ -5121,10 +5147,29 @@ mod tests {
         )
         .expect("bitcoin_stats.db in the working directory");
         let mut wrong: Vec<String> = Vec::new();
+        // Block-anchored events belong here too. `EVENTS` carries no height,
+        // because most of its entries are date-only real-world happenings
+        // with no block to point at, but the ones that *are* a specific block
+        // must match it. Both were got wrong by hand on 2026-09-25, once by
+        // twelve hours and once by four days, and nothing failed.
+        const BLOCK_ANCHORED_EVENTS: &[(u64, &str)] =
+            &[(840_000, "Runes Launch"), (961_632, "BIP-110 chain split")];
+        let anchored: Vec<(u64, u64, &str)> = BLOCK_ANCHORED_EVENTS
+            .iter()
+            .map(|&(h, label)| {
+                let ts = EVENTS
+                    .iter()
+                    .find(|&&(_, l)| l == label)
+                    .unwrap_or_else(|| panic!("{label} is no longer in EVENTS"))
+                    .0;
+                (h, ts, label)
+            })
+            .collect();
         let named: Vec<(u64, u64, &str)> = HALVINGS
             .iter()
             .chain(BIP_ACTIVATIONS.iter())
             .copied()
+            .chain(anchored)
             .collect();
         for (height, ts, label) in named {
             let actual: u64 = conn
