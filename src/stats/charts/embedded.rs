@@ -1146,14 +1146,25 @@ pub fn inscription_fee_share_chart(
     let share_fn = |b: &BlockSummary| {
         if b.total_fees > 0 {
             round(b.inscription_fees as f64 / b.total_fees as f64 * 100.0, 2)
+            // `NAN`, which `build_data_array_f64` writes as JSON null. A
+            // block that collected no fees at all gives 0/0 here, since
+            // inscription fees are a subset of total fees. 126,395 blocks
+            // qualify and, unlike the rest of this family, they are not
+            // confined to the early chain: 9,721 are after 2012.
         } else {
-            0.0
+            f64::NAN
         }
     };
     let raw_str = build_data_array_f64(blocks, share_fn);
     let raw = data_array_value(&raw_str);
-    let vals: Vec<f64> = blocks.iter().map(share_fn).collect();
-    let ma = moving_average(&vals, 144);
+    let vals: Vec<Option<f64>> = blocks
+        .iter()
+        .map(|b| {
+            let v = share_fn(b);
+            v.is_finite().then_some(v)
+        })
+        .collect();
+    let ma = moving_average_over_gaps(&vals, 144);
     let ma_str = build_ma_array(blocks, &ma);
     let ma_data = data_array_value(&ma_str);
     let has_ma = show_ma(blocks.len());
@@ -1196,21 +1207,21 @@ pub fn inscription_fee_share_chart_daily(
     }
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    let vals: Vec<f64> = days
+    // 617 days collected no fees at all, every one before
+    // 2010-11-29, so a share of them is 0/0 rather than zero.
+    let vals: Vec<Option<f64>> = days
         .iter()
         .map(|d| {
-            if d.total_fees > 0 {
+            (d.total_fees > 0).then(|| {
                 round(
                     d.total_inscription_fees as f64 / d.total_fees as f64
                         * 100.0,
                     2,
                 )
-            } else {
-                0.0
-            }
+            })
         })
         .collect();
-    let ma = moving_average(&vals, 7);
+    let ma = moving_average_over_gaps(&vals, 7);
     let ma_vals: Vec<serde_json::Value> = ma
         .iter()
         .map(|v| match v {
