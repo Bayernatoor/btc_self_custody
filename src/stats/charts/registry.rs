@@ -2129,8 +2129,8 @@ pub const CHARTS: &[ChartMeta] = &[
     ChartMeta {
         slug: "multi-velocity",
         title: "Adoption Velocity",
-        desc_per_block: "Change in each output type's share of outputs, in percentage points over a trailing window: 144 blocks per block, 30 days daily",
-        desc_daily: "Change in each output type's share of outputs, in percentage points over a trailing window: 144 blocks per block, 30 days daily",
+        desc_per_block: "Change in each output type's share of outputs, in percentage points: a 144-block average against the same average 144 blocks earlier",
+        desc_daily: "Change in each output type's share of outputs, in percentage points: a 30-day average against the same average 30 days earlier",
         category: Category::Network,
         unit: Unit::PercentagePoints,
         shape: Shape::Line,
@@ -2146,18 +2146,18 @@ pub const CHARTS: &[ChartMeta] = &[
             method_daily: Method::Calculated,
             per_block: Aggregation::WindowedDerived,
             daily: Aggregation::WindowedDerived,
-            population: "The difference between a smoothed share now and the same share one window earlier: 144 blocks per block, 30 days daily. The result is in percentage points, so a share moving from 10 to 15 is 5 points and not 5 percent. Divergent lines do not establish that users migrated between types.",
+            population: "Each type's outputs over all outputs of the eight classified types, averaged across the window, minus the same average one window earlier: 144 blocks per block, 30 days daily. The result is in percentage points, so a share moving from 10 to 15 is 5 points and not 5 percent. All eight are drawn, so the lines sum to zero at every point. Divergent lines do not establish that users migrated between types.",
         }],
         about: Some(About {
-            definition: Some("Whether an output type is gaining or losing ground, rather than how much it holds. Each line is the change in that type's share over a trailing window, so a line above zero means the share grew. Three lines moving in three directions does not establish that anyone switched between them."),
-            technical: "Shows the 30-day rate of change for each address type's share. Positive values mean the type is gaining share, negative means declining. When P2TR velocity is positive and P2PKH is negative, Taproot is actively replacing legacy usage.",
+            definition: Some("Whether an output type is gaining or losing ground, rather than how much it holds. A line above zero means that type's share of outputs grew over the window; below zero means it shrank.\n\nThe figure is in percentage points, not percent. Taproot going from 22% of outputs to 11% fell by 11 points and by 50%. Both describe the same move, and this chart plots the first.\n\nThe share is smoothed before it is differenced, so a point compares the trailing average now against the same average one window earlier. The two windows do not overlap, which means a single point reaches back about twice the window: roughly two months on the daily view, two days at per-block resolution.\n\nA share can rise because the rest fell, and because every type is drawn the lines always add up to zero: one type's gain is exactly what the others gave up. Through April 2026 the P2WPKH line rose more than thirteen points while Taproot fell more than eleven, and the two moves have separate causes: inscriptions dropped by about two thirds, which roughly halved Taproot output creation, while P2WPKH's own output count rose by more than a quarter. Divergence is consistent with users moving between types, but it does not establish it, because the same picture appears when one type simply stops being used."),
+            technical: "Each type's outputs as a share of the eight classified output types, averaged across the window, minus that same average one window earlier.\n\nThe window follows the resolution. Per block it is 144 blocks, a day at the ten-minute target, though a real day has held between 98 and 197 blocks over the last year. At daily resolution it is 30 days.\n\nAll eight classified output types are drawn: P2PKH, P2SH, P2WPKH, P2WSH, P2TR, P2PK, bare multisig and unclassified scripts. Because they are the whole denominator, the lines sum to zero at every point, so whatever one type gains the others gave up.\n\nEach of the quiet ones has its own era rather than being permanently flat. P2PK held more than four fifths of outputs in January 2009 and a twentieth of a per cent by late 2010. That handover is the largest move on the chart, and it is why P2PK and P2PKH are mirror images through 2009 and 2010: almost nothing else existed yet, so one type's loss was exactly the other's gain, by as much as 57 points. Bare multisig peaks during the Stamps period in 2023, P2WSH during the Ordinals ramp, and unclassified scripts shifted almost four points across the last year. On a short range most of them sit on zero; use the legend to hide any line that crowds the one you are reading.",
         }),
     },
     ChartMeta {
         slug: "p2pkh-sunset",
         title: "P2PKH Sunset Tracker",
-        desc_per_block: "Decline of legacy P2PKH address usage over time. Horizontal lines mark 10% and 5% thresholds",
-        desc_daily: "Decline of legacy P2PKH address usage over time. Horizontal lines mark 10% and 5% thresholds",
+        desc_per_block: "Share of outputs paying the legacy '1...' address type, with reference lines at 10% and 5%",
+        desc_daily: "Share of outputs paying the legacy '1...' address type, with a 90-day average and reference lines at 10% and 5%",
         category: Category::Network,
         unit: Unit::Percent,
         shape: Shape::Line,
@@ -2176,7 +2176,11 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "P2PKH outputs over eight classified output types: the six payment types plus bare multisig and unrecognised scripts. OP_RETURN outputs are outside it, and so are coinbase outputs, which ingestion excludes. Note this is a wider denominator than Address Type Share uses, so P2PKH reads lower here than there. The 90-day smoothing exists only at daily resolution. A falling share does not establish that those users moved to another type.",
         }],
         about: Some(About {
-            definition: Some("The decline of the original Bitcoin address format. P2PKH is the '1...' address every wallet used before SegWit, and its share of outputs has been falling for years, and Taproot has now passed it: both sit near 7% of outputs, moving in opposite directions. The reference lines at 10% and 5% are markers for reading the trend, not protocol thresholds."),
+            definition: Some("The decline of the original Bitcoin address format. P2PKH is the '1...' address, and it carried nearly nine in ten outputs through the years between P2SH arriving and SegWit activating, with most of the rest going to '3...'.
+
+Its share has fallen steadily since. Taproot overtook it in 2023 and is still ahead, but the two are not a seesaw: through 2026 both fell, and Taproot fell faster, because the share they both lost went to P2WPKH.
+
+The reference lines at 10% and 5% are markers for reading the trend. They are not protocol thresholds and nothing happens when the line crosses one."),
             technical: "P2PKH outputs as a share of the eight classified output types, with a 90-day moving average at daily resolution only. The horizontal lines at 10% and 5% are reference marks chosen for this chart, not protocol thresholds. A falling share means other output types grew faster; it does not follow that any particular wallet or user moved.",
         }),
     },
@@ -3619,15 +3623,38 @@ mod tests {
                 92.0,
                 100.0,
             ),
+            // The "both sit near 7%" wording this replaces went when the
+            // copy stopped claiming the two lines were a seesaw. What is
+            // still load-bearing is that Taproot leads, and the margin is
+            // only about a point, so this is the likeliest row here to fail.
             (
                 "p2pkh-sunset",
-                "both sit near 7% of outputs",
-                "SELECT 100.0*SUM(p2pkh_count)/SUM(p2pk_count+p2pkh_count \
-                 +p2sh_count+p2wpkh_count+p2wsh_count+p2tr_count \
-                 +multisig_count+unknown_script_count) FROM blocks \
-                 WHERE height >= (SELECT MAX(height)-9999 FROM blocks)",
-                4.5,
-                9.5,
+                "Taproot overtook it in 2023 and is still ahead",
+                "SELECT (100.0*SUM(p2tr_count) - 100.0*SUM(p2pkh_count)) \
+                 /SUM(p2pkh_count+p2sh_count+p2wpkh_count+p2wsh_count+p2tr_count+p2pk_count+multisig_count+unknown_script_count) \
+                 FROM blocks WHERE height >= \
+                 (SELECT MAX(height)-9999 FROM blocks)",
+                0.1,
+                20.0,
+            ),
+            (
+                "p2pkh-sunset",
+                "Taproot first passed P2PKH in 2023",
+                "SELECT CAST(strftime('%Y', datetime(timestamp,'unixepoch')) \
+                 AS REAL) FROM blocks GROUP BY \
+                 strftime('%Y-%m', datetime(timestamp,'unixepoch')) \
+                 HAVING SUM(p2tr_count) > SUM(p2pkh_count) \
+                 ORDER BY MIN(height) LIMIT 1",
+                2023.0,
+                2023.0,
+            ),
+            (
+                "p2pkh-sunset",
+                "nearly nine in ten outputs between P2SH and SegWit",
+                "SELECT 100.0*SUM(p2pkh_count)/SUM(p2pkh_count+p2sh_count+p2wpkh_count+p2wsh_count+p2tr_count+p2pk_count+multisig_count+unknown_script_count) \
+                 FROM blocks WHERE height >= 173805 AND height < 481824",
+                85.0,
+                92.0,
             ),
             (
                 "taproot-spend-types",
@@ -3797,6 +3824,52 @@ mod tests {
                  ORDER BY MIN(height) LIMIT 1",
                 2023.0,
                 2023.0,
+            ),
+            // Closed history, so this can only move if a backfill rewrites
+            // it. Both halves are asserted because the copy's point is the
+            // pair: the rise and the fall happened together and neither
+            // caused the other.
+            (
+                "multi-velocity",
+                "P2WPKH rose more than thirteen points through April 2026",
+                "SELECT (SELECT 100.0*SUM(p2wpkh_count)/SUM(p2pkh_count \
+                 +p2sh_count+p2wpkh_count+p2wsh_count+p2tr_count \
+                 +p2pk_count+multisig_count+unknown_script_count) \
+                 FROM blocks WHERE timestamp >= strftime('%s','2026-03-27') \
+                 AND timestamp < strftime('%s','2026-04-26')) \
+                 - (SELECT 100.0*SUM(p2wpkh_count)/SUM(p2pkh_count \
+                 +p2sh_count+p2wpkh_count+p2wsh_count+p2tr_count \
+                 +p2pk_count+multisig_count+unknown_script_count) \
+                 FROM blocks WHERE timestamp >= strftime('%s','2026-02-25') \
+                 AND timestamp < strftime('%s','2026-03-27'))",
+                13.0,
+                14.5,
+            ),
+            (
+                "multi-velocity",
+                "Taproot fell more than eleven points over the same window",
+                "SELECT (SELECT 100.0*SUM(p2tr_count)/SUM(p2pkh_count \
+                 +p2sh_count+p2wpkh_count+p2wsh_count+p2tr_count \
+                 +p2pk_count+multisig_count+unknown_script_count) \
+                 FROM blocks WHERE timestamp >= strftime('%s','2026-03-27') \
+                 AND timestamp < strftime('%s','2026-04-26')) \
+                 - (SELECT 100.0*SUM(p2tr_count)/SUM(p2pkh_count \
+                 +p2sh_count+p2wpkh_count+p2wsh_count+p2tr_count \
+                 +p2pk_count+multisig_count+unknown_script_count) \
+                 FROM blocks WHERE timestamp >= strftime('%s','2026-02-25') \
+                 AND timestamp < strftime('%s','2026-03-27'))",
+                -13.0,
+                -11.0,
+            ),
+            (
+                "multi-velocity",
+                "P2PK held more than four fifths of outputs in January 2009",
+                "SELECT 100.0*SUM(p2pk_count)/SUM(p2pkh_count+p2sh_count \
+                 +p2wpkh_count+p2wsh_count+p2tr_count+p2pk_count \
+                 +multisig_count+unknown_script_count) FROM blocks \
+                 WHERE timestamp < strftime('%s','2009-02-01')",
+                80.0,
+                90.0,
             ),
             (
                 "inscriptions / protocols article",
