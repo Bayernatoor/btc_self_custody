@@ -383,6 +383,12 @@ pub fn address_type_pct_chart_daily(
 /// (original Satoshi replacement, nLockTime), so the chart is gated to post-BIP-125.
 const BIP125_TIMESTAMP: u64 = 1456185600; // 2016-02-23 00:00 UTC
 
+/// The same boundary for the daily twin, which compares date strings rather
+/// than timestamps. Two spellings of one fact, so a test pins them together:
+/// the chart's copy tells the reader the line starts in February 2016, and it
+/// has to start there at both resolutions.
+const BIP125_DAY: &str = "2016-02-23";
+
 pub fn rbf_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Explicit RBF Signaling");
@@ -466,7 +472,7 @@ pub fn rbf_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
         .iter()
         .map(|d| {
             // Gate to post-BIP-125 (Feb 2016)
-            if d.date.as_str() < "2016-02-23" {
+            if d.date.as_str() < BIP125_DAY {
                 return json!(null);
             }
             if d.avg_tx_count > 1.0 {
@@ -485,7 +491,7 @@ pub fn rbf_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
         .iter()
         .zip(ma.iter())
         .map(|(d, v)| {
-            if d.date.as_str() < "2016-02-23" {
+            if d.date.as_str() < BIP125_DAY {
                 json!(null)
             } else {
                 match v {
@@ -796,6 +802,54 @@ pub fn tx_type_evolution_chart(blocks: &[BlockSummary]) -> serde_json::Value {
             }
         ]
     }))
+}
+
+#[cfg(test)]
+mod rbf_tests {
+    use super::*;
+
+    /// The per-block chart gates on a unix timestamp and the daily chart on a
+    /// date string, so the boundary is written twice. The About copy tells the
+    /// reader the line starts in February 2016 and does not qualify that by
+    /// resolution, so the two spellings have to agree.
+    ///
+    /// The date itself is the ship date of Bitcoin Core 0.12.0, which is the
+    /// release that gave a low sequence number this meaning. Read off
+    /// bitcoincore.org/en/releases/0.12.0/ on 2026-09-25.
+    #[test]
+    fn both_resolutions_start_the_line_on_the_same_day() {
+        let secs = BIP125_TIMESTAMP as i64;
+        let days = secs / 86_400;
+        assert_eq!(secs % 86_400, 0, "the gate is not midnight UTC");
+
+        // Civil date from a day count, so the assertion does not depend on a
+        // date crate and cannot be satisfied by restating the constant.
+        let (mut y, mut m, mut d) = (1970i64, 1i64, days + 1);
+        loop {
+            let leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+            let len = match m {
+                1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+                4 | 6 | 9 | 11 => 30,
+                _ if leap => 29,
+                _ => 28,
+            };
+            if d <= len {
+                break;
+            }
+            d -= len;
+            m += 1;
+            if m > 12 {
+                m = 1;
+                y += 1;
+            }
+        }
+        assert_eq!(
+            format!("{y:04}-{m:02}-{d:02}"),
+            BIP125_DAY,
+            "BIP125_TIMESTAMP and BIP125_DAY name different days, so one \
+             resolution starts the line before the other"
+        );
+    }
 }
 
 #[cfg(test)]
