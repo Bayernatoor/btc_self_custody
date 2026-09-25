@@ -216,7 +216,14 @@ fn synthetic_days(n: usize) -> Vec<DailyAggregate> {
                 avg_fee_rate_p10: 2.0 + f * 0.02,
                 avg_fee_rate_p90: 14.0 + f * 0.12,
                 avg_multisig_count: 15.0 + f * 0.1,
-                avg_unknown_script_count: 2.0 + f * 0.01,
+                // Large enough, and moving fast enough, to discriminate.
+                // At `2.0 + f * 0.01` this was a 0.09% band whose share
+                // barely moved, so Adoption Velocity's sum-to-zero check
+                // passed with the series deleted AND with the term dropped
+                // from the denominator: the error sat far below any sane
+                // tolerance. A fixture value can be present and still make an
+                // assertion vacuous if it is too small to move the result.
+                avg_unknown_script_count: 40.0 + f * 1.5,
                 avg_input_count: 5_000.0 + f * 2.0,
                 avg_output_count: 5_200.0 + f * 2.0,
                 avg_rbf_count: 90.0 + f * 0.2,
@@ -3416,6 +3423,82 @@ mod tests {
                 "{name}: a real average of 0.0071 per block plotted as {v}. \
                  One decimal quantises every small reading to zero, which is \
                  a different number rather than a small one."
+            );
+        }
+    }
+
+    /// Adoption Velocity's lines account for each other, at both resolutions.
+    ///
+    /// The eight series are shares of one denominator, so their moving
+    /// averages sum to 100 and the differences of those averages sum to zero.
+    /// **That is only true because all eight are drawn.** Until 2026-09-24
+    /// four were, and a reader could not reconcile P2WPKH at +13.29 against
+    /// the three visible falls because the missing 0.60 sat in bands with no
+    /// line. Restoring one of the four to the denominator alone, or dropping
+    /// a series, breaks this.
+    ///
+    /// The tolerance is for the builders' own `round(_, 3)` on each point,
+    /// not for slack in the invariant.
+    #[test]
+    fn every_velocity_line_is_accounted_for_by_the_others() {
+        for (label, opt) in [
+            (
+                "daily",
+                crate::stats::charts::multi_velocity_chart_daily(
+                    &synthetic_days(180),
+                ),
+            ),
+            (
+                "per block",
+                crate::stats::charts::multi_velocity_chart(&synthetic_blocks(
+                    600,
+                )),
+            ),
+        ] {
+            let series = opt["series"].as_array().expect("series");
+            assert_eq!(
+                series.len(),
+                8,
+                "{label}: all eight classified types must be drawn, or the \
+                 lines cannot sum to zero"
+            );
+            let len = series[0]["data"].as_array().expect("data").len();
+            let mut checked = 0usize;
+            for i in 0..len {
+                let mut total = 0.0f64;
+                let mut present = 0usize;
+                for s in series {
+                    let p = &s["data"].as_array().expect("data")[i];
+                    // Daily emits bare numbers, per block emits [ts, value].
+                    let v = match p {
+                        serde_json::Value::Array(a) => a[1].as_f64(),
+                        other => other.as_f64(),
+                    };
+                    if let Some(v) = v {
+                        total += v;
+                        present += 1;
+                    }
+                }
+                if present == 0 {
+                    continue;
+                }
+                assert_eq!(
+                    present, 8,
+                    "{label}: point {i} has {present} of 8 lines defined, so \
+                     the residual is invisible at that x"
+                );
+                assert!(
+                    total.abs() < 0.05,
+                    "{label}: the eight velocities at point {i} sum to \
+                     {total}, not zero, so one type's gain is not the \
+                     others' loss"
+                );
+                checked += 1;
+            }
+            assert!(
+                checked > 10,
+                "{label}: only {checked} points had data, so this asserted \
+                 almost nothing"
             );
         }
     }
