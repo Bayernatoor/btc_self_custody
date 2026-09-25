@@ -1200,10 +1200,31 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                             // of three paragraphs while appearing to
                             // introduce one. Same treatment as the card
                             // headings above, one step down in the accent.
+                            //
+                            // Split on a blank line, exactly as the method
+                            // below is. Only the method side had this, so a
+                            // definition that asked for breaks got none and
+                            // ran as one block: Adoption Velocity's covers
+                            // what the line is, percentage points against
+                            // percent, the smoothing, and why divergence is
+                            // not migration, which is four subjects a reader
+                            // had to separate unaided. Copy with no blank
+                            // line still renders as exactly one paragraph.
                             {copy.definition.map(|d| view! {
-                                <div class="max-w-[34rem]">
-                                    <h3 class=ABOUT_LABEL>"Definition"</h3>
-                                    <p class="text-sm text-white/85 leading-relaxed">{d}</p>
+                                <div class="space-y-3 max-w-[34rem]">
+                                {d.split("\n\n")
+                                    .enumerate()
+                                    .map(|(i, para)| view! {
+                                        <div>
+                                            {(i == 0).then(|| view! {
+                                                <h3 class=ABOUT_LABEL>"Definition"</h3>
+                                            })}
+                                            <p class="text-sm text-white/85 leading-relaxed">
+                                                {para.to_string()}
+                                            </p>
+                                        </div>
+                                    })
+                                    .collect_view()}
                                 </div>
                             })}
                             // Split on a blank line, so a method that covers
