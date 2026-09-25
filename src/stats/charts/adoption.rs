@@ -843,10 +843,23 @@ pub fn multi_velocity_chart_daily(
 
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
 
-    // Compute percentage for each type
+    // `None` where the day classified nothing, not `0.0`.
+    //
+    // **This is what makes the lines sum to zero.** The eight shares add to
+    // 100 on a day with outputs and to 0 on a day without, so a plain mean
+    // over the window averages to 100 times the fraction of days that had
+    // data. The velocity is then that fraction now minus that fraction a
+    // window ago, which is not zero whenever an empty day enters or leaves
+    // the window. Found on the live chart at 2010-03-19, where the tooltip
+    // summed to 6.67: the current window held no empty days and the one 30
+    // days earlier held two, and 100 * 2 / 30 is 6.67 exactly.
+    //
+    // With gaps the average is taken over present days only. All eight series
+    // share one denominator, so they are present and absent together, and
+    // their averages therefore still add to 100 at every point.
     let compute_pct = |days: &[DailyAggregate],
                        extract: fn(&DailyAggregate) -> f64|
-     -> Vec<f64> {
+     -> Vec<Option<f64>> {
         days.iter()
             .map(|d| {
                 let total = d.avg_p2pkh_count
@@ -857,11 +870,7 @@ pub fn multi_velocity_chart_daily(
                     + d.avg_p2pk_count
                     + d.avg_multisig_count
                     + d.avg_unknown_script_count;
-                if total > 0.0 {
-                    extract(d) / total * 100.0
-                } else {
-                    0.0
-                }
+                (total > 0.0).then(|| extract(d) / total * 100.0)
             })
             .collect()
     };
@@ -881,8 +890,8 @@ pub fn multi_velocity_chart_daily(
     let unclassified_pct = compute_pct(days, |d| d.avg_unknown_script_count);
 
     // 30-day MA then velocity (diff from 30 days ago)
-    let make_velocity = |pct: &[f64]| -> Vec<serde_json::Value> {
-        let ma = moving_average(pct, 30);
+    let make_velocity = |pct: &[Option<f64>]| -> Vec<serde_json::Value> {
+        let ma = moving_average_over_gaps(pct, 30);
         (0..ma.len())
             .map(|i| {
                 if i >= 30 {
@@ -1027,9 +1036,10 @@ pub fn multi_velocity_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         );
     }
 
+    // `None`, not `0.0`, for the same reason as the daily twin above.
     let compute_pct = |blocks: &[BlockSummary],
                        extract: fn(&BlockSummary) -> u64|
-     -> Vec<f64> {
+     -> Vec<Option<f64>> {
         blocks
             .iter()
             .map(|b| {
@@ -1043,11 +1053,7 @@ pub fn multi_velocity_chart(blocks: &[BlockSummary]) -> serde_json::Value {
                     + b.p2pk_count
                     + b.multisig_count
                     + b.unknown_script_count;
-                if total > 0 {
-                    extract(b) as f64 / total as f64 * 100.0
-                } else {
-                    0.0
-                }
+                (total > 0).then(|| extract(b) as f64 / total as f64 * 100.0)
             })
             .collect()
     };
@@ -1064,34 +1070,35 @@ pub fn multi_velocity_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let unclassified_pct = compute_pct(blocks, |b| b.unknown_script_count);
 
     // 144-block MA (~1 day) then velocity (diff from 144 blocks ago)
-    let make_velocity = |pct: &[f64], blocks: &[BlockSummary]| -> String {
-        let ma = moving_average(pct, 144);
-        let mut buf = String::with_capacity(blocks.len() * 20);
-        buf.push('[');
-        for (i, b) in blocks.iter().enumerate() {
-            if i > 0 {
-                buf.push(',');
-            }
-            if i >= 144 {
-                if let (Some(cur), Some(prev)) =
-                    (ma[i], ma[i.saturating_sub(144)])
-                {
-                    let _ = write!(
-                        buf,
-                        "[{},{}]",
-                        ts_ms(b.timestamp),
-                        round(cur - prev, 3)
-                    );
+    let make_velocity =
+        |pct: &[Option<f64>], blocks: &[BlockSummary]| -> String {
+            let ma = moving_average_over_gaps(pct, 144);
+            let mut buf = String::with_capacity(blocks.len() * 20);
+            buf.push('[');
+            for (i, b) in blocks.iter().enumerate() {
+                if i > 0 {
+                    buf.push(',');
+                }
+                if i >= 144 {
+                    if let (Some(cur), Some(prev)) =
+                        (ma[i], ma[i.saturating_sub(144)])
+                    {
+                        let _ = write!(
+                            buf,
+                            "[{},{}]",
+                            ts_ms(b.timestamp),
+                            round(cur - prev, 3)
+                        );
+                    } else {
+                        let _ = write!(buf, "[{},null]", ts_ms(b.timestamp));
+                    }
                 } else {
                     let _ = write!(buf, "[{},null]", ts_ms(b.timestamp));
                 }
-            } else {
-                let _ = write!(buf, "[{},null]", ts_ms(b.timestamp));
             }
-        }
-        buf.push(']');
-        buf
-    };
+            buf.push(']');
+            buf
+        };
 
     let v_p2pkh = make_velocity(&p2pkh_pct, blocks);
     let v_p2sh = make_velocity(&p2sh_pct, blocks);

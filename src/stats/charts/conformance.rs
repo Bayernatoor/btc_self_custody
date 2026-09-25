@@ -3441,12 +3441,33 @@ mod tests {
     /// not for slack in the invariant.
     #[test]
     fn every_velocity_line_is_accounted_for_by_the_others() {
+        // A window containing a day that classified nothing is the case the
+        // first version of this test could not see, because `synthetic_days`
+        // never produces one. On the live chart at 2010-03-19 the eight lines
+        // summed to 6.67, because the shares add to 100 on a populated day
+        // and to 0 on an empty one, so a plain mean tracked the fraction of
+        // populated days and the velocity differenced two such fractions.
+        let mut gapped = synthetic_days(180);
+        for i in [40usize, 41, 95] {
+            gapped[i].avg_p2pkh_count = 0.0;
+            gapped[i].avg_p2sh_count = 0.0;
+            gapped[i].avg_p2wpkh_count = 0.0;
+            gapped[i].avg_p2wsh_count = 0.0;
+            gapped[i].avg_p2tr_count = 0.0;
+            gapped[i].avg_p2pk_count = 0.0;
+            gapped[i].avg_multisig_count = 0.0;
+            gapped[i].avg_unknown_script_count = 0.0;
+        }
         for (label, opt) in [
             (
                 "daily",
                 crate::stats::charts::multi_velocity_chart_daily(
                     &synthetic_days(180),
                 ),
+            ),
+            (
+                "daily with empty days",
+                crate::stats::charts::multi_velocity_chart_daily(&gapped),
             ),
             (
                 "per block",
