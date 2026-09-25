@@ -2123,7 +2123,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: Some("The biggest single transaction in each block, by bytes. Size comes from how many inputs and outputs a transaction carries and how much witness data arrives with them, so a transaction can be large for several unrelated reasons and a size alone does not separate them. The largest in the chain is 3,992,821 bytes, which is almost an entire block."),
+            definition: Some("The biggest single transaction in each block, by bytes. Size comes from how many inputs and outputs a transaction carries and how much witness data arrives with them, so two transactions of the same size can be large for entirely different reasons, and the size alone does not tell you which.\n\nNothing caps a transaction at four megabytes directly. What consensus limits is weight: a block may carry 4,000,000 weight units, where an ordinary byte costs four units and a witness byte costs one. The same cap therefore allows about a megabyte of ordinary data or about four megabytes of witness data. A typical block is around half witness and lands near 1.6 MB; a transaction that is almost entirely witness can approach four megabytes and still fit.\n\nMore than ninety blocks have gone above 3.9 MB, and they are not spread across the network: MARA mined more than nine in ten of them. Almost all carry an inscription, and at the extreme the single transaction is over 99.9% of the block: the median such block carries twelve transactions in total, and forty-five carry fewer than ten. The largest in the chain, 3,992,821 bytes in block 839,842 on 2024-04-18, is one of these. They began in February 2023 and are still happening."),
             technical: "Serialized size of the largest transaction in the block, read per transaction during ingestion. Size rather than weight, so a witness-heavy transaction reads larger here than it costs against the limit.",
         }),
     },
@@ -3739,13 +3739,6 @@ mod tests {
                 70.0,
             ),
             (
-                "largest-tx",
-                "the largest in the chain is 3,992,821 bytes",
-                "SELECT MAX(largest_tx_size) FROM blocks",
-                3_992_821.0,
-                4_000_000.0,
-            ),
-            (
                 "empty-blocks",
                 "78,800 of them are from 2009 and 2010",
                 "SELECT COUNT(*) FROM blocks WHERE tx_count=1 \
@@ -3902,6 +3895,28 @@ mod tests {
                  WHERE timestamp < strftime('%s','2009-02-01')",
                 80.0,
                 90.0,
+            ),
+            (
+                "largest-tx",
+                "more than ninety blocks have gone above 3.9 MB",
+                "SELECT COUNT(*) FROM blocks WHERE largest_tx_size > 3900000",
+                90.0,
+                400.0,
+            ),
+            (
+                "largest-tx",
+                "MARA mined more than nine in ten of them",
+                "SELECT 1.0*SUM(miner = 'MARA')/COUNT(*) FROM blocks \
+                 WHERE largest_tx_size > 3900000",
+                0.85,
+                1.0,
+            ),
+            (
+                "largest-tx",
+                "the largest in the chain is 3,992,821 bytes in block 839,842",
+                "SELECT largest_tx_size FROM blocks WHERE height = 839842",
+                3_992_821.0,
+                3_992_821.0,
             ),
             (
                 "inscriptions / protocols article",
