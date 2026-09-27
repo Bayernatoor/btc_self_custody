@@ -281,7 +281,7 @@ pub fn witness_version_chart_daily(
     }))
 }
 
-/// Witness version percentage share — v0% vs v1% of total witness spends (per-block).
+/// Witness version percentage share: v0% vs v1% of total witness spends (per-block).
 pub fn witness_version_pct_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Witness Version Share");

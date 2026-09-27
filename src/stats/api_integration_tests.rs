@@ -259,7 +259,7 @@ fn seed_block(app: &TestApp, height: u64, hash: &str, time: u64) {
 }
 
 // ---------------------------------------------------------------------------
-// /stats — database summary
+// /stats: database summary
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -287,7 +287,7 @@ async fn stats_after_seeding_reflects_inserted_block() {
 }
 
 // ---------------------------------------------------------------------------
-// /blocks — range query
+// /blocks: range query
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -317,7 +317,7 @@ async fn blocks_range_empty_when_no_matches() {
 }
 
 // ---------------------------------------------------------------------------
-// /blocks/:height — single block detail
+// /blocks/:height: single block detail
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -344,7 +344,7 @@ async fn block_detail_missing_height_returns_404() {
 }
 
 // ---------------------------------------------------------------------------
-// /cache-stats — RPC cache observability
+// /cache-stats: RPC cache observability
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -417,7 +417,7 @@ async fn cache_stats_cold_start_reports_zero_counters() {
 }
 
 // ---------------------------------------------------------------------------
-// /live — real-time stats (RPC path, should error against closed port)
+// /live: real-time stats (RPC path, should error against closed port)
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -435,7 +435,7 @@ async fn live_without_rpc_surfaces_error() {
 }
 
 // ---------------------------------------------------------------------------
-// /signaling/periods — BIP signaling aggregates
+// /signaling/periods: BIP signaling aggregates
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -485,7 +485,7 @@ async fn highest_valid_version_bit_is_accepted() {
 }
 
 // ---------------------------------------------------------------------------
-// /aggregates/daily — timestamp range
+// /aggregates/daily: timestamp range
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -514,7 +514,7 @@ async fn daily_aggregates_empty_range_is_ok() {
     let app = TestApp::new();
     let (status, body) = app.get("/aggregates/daily?from=0&to=1").await;
     assert_eq!(status, StatusCode::OK);
-    // Locks in that zero-block ranges don't error — historically a
+    // Locks in that zero-block ranges don't error, historically a
     // regression site when new aggregation columns were added.
     assert!(body.is_object() || body.is_array());
 }

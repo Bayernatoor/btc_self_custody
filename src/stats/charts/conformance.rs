@@ -507,32 +507,20 @@ mod tests {
         }
     }
 
-    /// `has_daily` has to mean it. Two charts declared a daily builder that
-    /// could only ever return `no_data_chart`, because daily aggregates carry
-    /// neither coinbase text nor per-transaction sizes.
-    ///
-    /// The cost of that lie is quiet: `has_daily` answering true offers the
-    /// chart as a comparison over long ranges where it draws nothing, and
-    /// suppresses the "this chart needs a shorter range" notice in favour of
-    /// an empty frame. `Daily::Unavailable` is the honest declaration and
-    /// every derived rule then gets it right.
     /// A card for a chart with no daily builder says which range to pick.
     ///
     /// `a_declared_daily_builder_actually_builds_something` cannot catch this,
-    /// because the registry was honest: all nine of these declare
-    /// `Daily::Unavailable`. It was the **pages** that diverged. The single
-    /// chart view drew the notice naming the range, while the category card
-    /// fell through to a bare "No data in the selected range", so the same
-    /// chart explained itself on its own page and left the reader guessing in
-    /// its card. Two of the nine reached it through a function named
-    /// `*_chart_daily` that only ever returned the generic frame, and one of
-    /// those put its reason inside the chart title. Found on the H-03
-    /// acceptance row on 2026-09-21.
+    /// because the registry is honest: all nine of these declare
+    /// `Daily::Unavailable`. It is the **pages** that diverge. The single
+    /// chart view draws the notice naming the range while a category card can
+    /// fall through to a bare "No data in the selected range", so the same
+    /// chart explains itself on its own page and leaves the reader guessing
+    /// in its card.
     ///
-    /// The hint is specific to this cause on purpose. `no_data_chart`'s own
-    /// documentation records that a blanket "select a shorter range" was
-    /// removed for being shown when resolution was not the reason at all;
-    /// here it is the reason, and it is known from the registry.
+    /// The hint names this cause on purpose. `no_data_chart` records that a
+    /// blanket "select a shorter range" was removed for appearing when
+    /// resolution was not the reason; here it is the reason, and the registry
+    /// knows it.
     #[test]
     fn a_chart_with_no_daily_builder_says_which_range_to_pick() {
         const PAGES: &[(&str, &str)] = &[
@@ -572,6 +560,14 @@ mod tests {
         );
     }
 
+    /// `has_daily` has to mean it. A chart can declare a daily builder that
+    /// only ever returns `no_data_chart`, because daily aggregates carry
+    /// neither coinbase text nor per-transaction sizes.
+    ///
+    /// The cost is quiet: `has_daily` answering true offers the chart as a
+    /// comparison over long ranges where it draws nothing, and suppresses the
+    /// "this chart needs a shorter range" notice in favour of an empty frame.
+    /// `Daily::Unavailable` is the honest declaration.
     #[test]
     fn a_declared_daily_builder_actually_builds_something() {
         let days = synthetic_days(900);
@@ -693,29 +689,24 @@ mod tests {
     /// Every data array a builder produces survives being serialised and
     /// parsed back.
     ///
-    /// The batching defect is now unreachable rather than merely tested:
-    /// `build_data_array_f64` writes `null` for anything non-finite, so an
-    /// unrepresentable value becomes a gap instead of an unparseable array.
-    /// This guards the assembled `Value` for the same class arriving by
-    /// another route, `json!` with a computed float among them.
-    ///
-    /// It deliberately does **not** flag empty series. A filtered scatter
-    /// with no matches is legitimately empty, and from outside that is
-    /// indistinguishable from an array that failed to parse. Trying to tell
-    /// them apart produced a false positive on `fee-spikes` immediately,
-    /// which is why the fix moved to the point of construction.
-    ///
     /// The data arrays are assembled as **text**, by `write!` into a String,
-    /// and then parsed. `write!` will happily emit `NaN` or `inf` for an f64,
-    /// neither of which is JSON, so one such value makes the whole array
-    /// unparseable and `data_array_value` returns an empty one. The chart
-    /// then renders blank, silently, and the chart-specific test passed
-    /// because indexing a missing element yields null exactly as a real gap
-    /// does.
+    /// then parsed. `write!` emits `NaN` or `inf` for an f64, neither of which
+    /// is JSON, so one such value makes the whole array unparseable and
+    /// `data_array_value` returns an empty one. The chart renders blank,
+    /// silently, and a chart-specific test still passes because indexing a
+    /// missing element yields null exactly as a real gap does.
     ///
-    /// One assertion across every chart in both resolutions beats a null
-    /// check per builder, because it does not depend on anyone remembering
-    /// that `write!` and `serde_json` disagree about what a float is.
+    /// `build_data_array_f64` now writes `null` for anything non-finite, so
+    /// that route is closed at construction. This guards the assembled
+    /// `Value` against the same class arriving another way, `json!` with a
+    /// computed float among them.
+    ///
+    /// It deliberately does **not** flag empty series: a filtered scatter with
+    /// no matches is legitimately empty and indistinguishable from outside.
+    ///
+    /// One assertion across every chart in both resolutions beats a null check
+    /// per builder, because it does not depend on anyone remembering that
+    /// `write!` and `serde_json` disagree about what a float is.
     #[test]
     fn no_built_chart_contains_a_value_json_cannot_represent() {
         fn walk(v: &serde_json::Value, path: &str, bad: &mut Vec<String>) {
@@ -1421,12 +1412,10 @@ mod tests {
 
     /// A declared aggregation must survive contact with its own builder.
     ///
-    /// The gap this closes: nothing tied a classification to the arithmetic it
-    /// claims to describe. A bulk survey that paired one chart's slug with
-    /// another chart's builder produced exactly that error during this work,
-    /// and every existing check passed, because series names still existed and
-    /// the daily flag still matched. The mistake was caught by memory, which
-    /// is not a mechanism.
+    /// Nothing else ties a classification to the arithmetic it claims to
+    /// describe: pairing one chart's slug with another chart's builder leaves
+    /// every other check passing, because the series names still exist and the
+    /// daily flag still matches.
     ///
     /// The probe needs no knowledge of which column a chart reads. Build each
     /// chart twice from days that are identical except that `block_count` is
@@ -1802,10 +1791,9 @@ mod tests {
     /// transactions, 100 of them coinbase, and 1,000 witness spends:
     /// **100%**.
     ///
-    /// The populations are deliberately unequal, which is what the earlier
-    /// version of this test was missing. Both of its days came out at 50%, so
-    /// a builder pooling across the whole window rather than within each day
-    /// produced the same two numbers and passed. Here every wrong reading
+    /// The populations are deliberately unequal. With both days at 50%, a
+    /// builder pooling across the whole window rather than within each day
+    /// produces the same two numbers and passes. Here every wrong reading
     /// lands somewhere different:
     ///
     /// - forgetting the coinbase gives 25% and 90.9%

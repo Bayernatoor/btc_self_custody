@@ -195,7 +195,7 @@ const NO_DEVICE: Device = Device {
 };
 
 // =============================================================================
-// COVE (Basic) — the simplest mobile path, and the first card in the picker.
+// COVE (Basic): the simplest mobile path, and the first card in the picker.
 // Screenshots live in assets/guide-images/cove/ (served at /guide-images/cove/).
 // All Cove screenshots are 1080 x 2424.
 // =============================================================================
@@ -907,7 +907,7 @@ pub static SPARROW_GUIDE: GuideV2 = GuideV2 {
 };
 
 // =============================================================================
-// INTERMEDIATE (level guide) — Coldcard + Sparrow + your own node. Desktop path,
+// INTERMEDIATE (level guide): Coldcard + Sparrow + your own node. Desktop path,
 // one guide for all OSes. Content from the v1 hardware_wallet_setup and node_setup
 // markdown, reviewed 2026-07-24 to restore what the first condensation dropped
 // (encrypted microSD backups, the backup checklist, tamper-bag checks, the node
@@ -1144,7 +1144,7 @@ pub static INTERMEDIATE_HARDWARE_GUIDE: GuideV2 = GuideV2 {
 };
 
 // =============================================================================
-// INTERMEDIATE PART 2 — run your own node. Content from the v1 node_setup markdown
+// INTERMEDIATE PART 2: run your own node. Content from the v1 node_setup markdown
 // (node_faq1..5). Deliberately points at each project's own docs rather than
 // re-documenting three separate builds.
 // =============================================================================
@@ -1258,7 +1258,7 @@ pub static INTERMEDIATE_NODE_GUIDE: GuideV2 = GuideV2 {
 };
 
 // =============================================================================
-// ADVANCED (level guide) — 2-of-3 multisig with three Coldcards, coordinated in
+// ADVANCED (level guide): 2-of-3 multisig with three Coldcards, coordinated in
 // Sparrow. Content from the v1 advanced_desktop_setup markdown (advanced_faq1..5),
 // split into three parts: build it, use it, then optional hardening. Screenshots in
 // assets/guide-images/multisig/ and coldcard/ are landscape => Frame::Desktop.
@@ -1513,7 +1513,7 @@ pub static ADVANCED_MULTISIG_GUIDE: GuideV2 = GuideV2 {
 };
 
 // =============================================================================
-// ADVANCED PART 2 — receiving and spending from the multisig (the PSBT round trip).
+// ADVANCED PART 2: receiving and spending from the multisig (the PSBT round trip).
 // =============================================================================
 
 pub static ADVANCED_SPENDING_GUIDE: GuideV2 = GuideV2 {
@@ -1695,7 +1695,7 @@ pub static ADVANCED_SPENDING_GUIDE: GuideV2 = GuideV2 {
 };
 
 // =============================================================================
-// ADVANCED PART 3 — optional hardening (duress wallets, SeedXOR, HSM). Reference
+// ADVANCED PART 3: optional hardening (duress wallets, SeedXOR, HSM). Reference
 // material from advanced_faq5, deliberately gated behind an "optional" framing
 // because every item here adds a way to lose funds.
 // =============================================================================
@@ -1773,7 +1773,7 @@ pub static ADVANCED_HARDENING_GUIDE: GuideV2 = GuideV2 {
 };
 
 // =============================================================================
-// BULL BITCOIN (Basic, mobile) — the spending wallet. Two wallets from one seed:
+// BULL BITCOIN (Basic, mobile), the spending wallet. Two wallets from one seed:
 // Secure Bitcoin (on-chain) and Instant payments (Liquid + Lightning). Facts about
 // the app's architecture come from the project README
 // (github.com/SatoshiPortal/bullbitcoin-mobile). Screenshots in
@@ -2144,7 +2144,7 @@ pub static BULL_GUIDE: GuideV2 = GuideV2 {
 };
 
 // =============================================================================
-// NUNCHUK (Basic, mobile) — the wallet you grow into. Deliberately kept to a
+// NUNCHUK (Basic, mobile), the wallet you grow into. Deliberately kept to a
 // SINGLE-SIG hot wallet at this tier: Nunchuk's multisig and collaborative custody
 // belong to the Advanced tier, and this guide only points forward to them.
 // Facts verified against github.com/nunchuk-io/nunchuk-android.

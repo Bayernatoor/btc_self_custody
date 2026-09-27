@@ -399,7 +399,7 @@ pub fn ChartDrawer() -> impl IntoView {
     view! {
         // Toggle tab fixed on the left edge
         // Section-nav drawer trigger. Deliberately quieter than the primary
-        // Chart Settings FAB on the right — outline-on-dark so it reads as
+        // Chart Settings FAB on the right: outline-on-dark so it reads as
         // a secondary aid rather than a primary action. Icon and border both
         // bumped to full orange (from /70 and /30 opacity) so it's still
         // clearly clickable without competing with the solid-fill FAB.

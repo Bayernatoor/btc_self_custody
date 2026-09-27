@@ -15,24 +15,22 @@ pub(super) fn get_query_param(search: &str, key: &str) -> Option<String> {
 
 /// Percent-encode the characters that would otherwise break a query string.
 ///
-/// Deliberately minimal. A general encoder would escape the comma that
-/// `overlays` joins on, and [`get_query_param`] does not decode, so the read
-/// side would then split `halvings%2Cbips` as one name and every overlay in a
-/// shared link would come back off. Comma is a legal sub-delimiter in a query
-/// value, so leaving it is correct as well as convenient.
+/// Deliberately minimal. A general encoder would escape the comma `overlays`
+/// joins on, and [`get_query_param`] does not decode, so the read side would
+/// split `halvings%2Cbips` as one name and every overlay in a shared link
+/// would come back off. Comma is a legal sub-delimiter in a query value.
 ///
 /// What is escaped is what has structural meaning here: the pair separator,
 /// the key separator, the fragment marker, the escape character itself, and
 /// the space and plus that a careless reader would decode as each other.
 ///
-/// Every value written today is already safe: slugs are `[a-z0-9-]`, ranges
-/// are presets, dates are ISO. This exists so the next parameter added by
-/// someone who has not read this file cannot silently corrupt the others.
+/// Every value written today is already safe (slugs are `[a-z0-9-]`, ranges
+/// are presets, dates are ISO). This exists so the next parameter added
+/// cannot silently corrupt the others.
 ///
 /// Ungated, unlike the rest of this module, so it can be tested: everything
-/// else here reaches for `window()` and only exists in the WASM build, while
-/// the tests run under `ssr`. A pure string function is the one piece that
-/// can be checked without a browser, so it is worth the attribute.
+/// else reaches for `window()` and exists only in the WASM build, while the
+/// tests run under `ssr`.
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 fn encode_value(v: &str) -> String {
     v.chars()

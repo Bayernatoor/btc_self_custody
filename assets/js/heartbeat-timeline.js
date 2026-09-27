@@ -1,4 +1,4 @@
-// heartbeat-timeline.js — PQRST waveform generation, color computation, grid drawing,
+// heartbeat-timeline.js: PQRST waveform generation, color computation, grid drawing,
 // and timeline segment construction for the Block Heartbeat engine.
 
 import { getState, COLORS, GRID_COLOR, POINT_WIDTH, MAX_FLATLINE_WIDTH } from './heartbeat-state.js';
@@ -203,7 +203,7 @@ export function createFlatlineSegment(xStart, xEnd) {
 
 // ── Shared formatting helpers ──────────────────────────────
 
-// Format BTC preserving precision — avoids 99.99998 showing as "100.0000"
+// Format BTC preserving precision: avoids 99.99998 showing as "100.0000"
 // (a misleading round number). Shared by the canvas tooltips and the feed.
 export function fmtBtc(btc) {
     if (btc >= 100) {

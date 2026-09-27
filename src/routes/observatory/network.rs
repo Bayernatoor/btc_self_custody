@@ -12,7 +12,7 @@ use super::shared::*;
 use crate::chart_memo;
 use crate::stats::types::uses_daily_aggregates;
 
-/// Network charts page — blocks, adoption, and transaction metrics in one scrollable list.
+/// Network charts page: blocks, adoption, and transaction metrics in one scrollable list.
 #[component]
 pub fn NetworkChartsPage() -> impl IntoView {
     let state = expect_context::<ObservatoryState>();
@@ -23,7 +23,7 @@ pub fn NetworkChartsPage() -> impl IntoView {
     let dashboard_data = state.dashboard_data;
 
     // All chart signals created at component level so they persist across data refetches.
-    // chart_memo! returns empty string when data is None (loading) — individual charts
+    // chart_memo! returns empty string when data is None (loading), individual charts
     // show their own skeleton. This prevents unmounting during range changes, preserving
     // fullscreen and toggle state.
 

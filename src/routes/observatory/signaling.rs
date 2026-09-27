@@ -31,7 +31,7 @@ use crate::stats::server_fns::*;
 fn SignalingSkeleton() -> impl IntoView {
     view! {
         <div class="space-y-6">
-            // Status card skeleton (~280px — pct number, progress bars, BIP description)
+            // Status card skeleton (~280px: pct number, progress bars, BIP description)
             <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6">
                 <div class="flex flex-col lg:flex-row lg:items-start lg:gap-8">
                     <div class="flex-1 space-y-3 mb-4 lg:mb-0">
@@ -51,7 +51,7 @@ fn SignalingSkeleton() -> impl IntoView {
                     </div>
                 </div>
             </div>
-            // Miner breakdown skeleton (~260px — list of 6 pool rows)
+            // Miner breakdown skeleton (~260px: list of 6 pool rows)
             <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6">
                 <div class="h-4 w-40 bg-white/5 rounded mb-4"></div>
                 <div class="space-y-2.5">
@@ -63,7 +63,7 @@ fn SignalingSkeleton() -> impl IntoView {
                     <div class="h-4 bg-white/5 rounded"></div>
                 </div>
             </div>
-            // Block grid skeleton (~260px — the 2016-cell grid)
+            // Block grid skeleton (~260px: the 2016-cell grid)
             <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6">
                 <div class="h-4 w-32 bg-white/5 rounded mb-4"></div>
                 <div class="h-[200px] bg-white/5 rounded"></div>

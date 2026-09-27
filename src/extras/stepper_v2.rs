@@ -1,4 +1,4 @@
-//! StepperV2 — the "Refined" guide wizard.
+//! StepperV2: the "Refined" guide wizard.
 //!
 //! Renders a typed `GuideV2` (see src/guides_v2.rs): an intro panel, one panel
 //! per step (two-pane: short actions + a framed screenshot with numbered pins),
@@ -407,7 +407,7 @@ fn step_panel(
     };
     view! {
         <div class="g2-step">
-            // rail — each circle jumps to that step (URL step index = k + 1)
+            // rail: each circle jumps to that step (URL step index = k + 1)
             <div class="g2-rail" role="list" aria-label="Guide progress">
                 {(0..n_steps).map(|k| {
                     let cls = if k < si { "g2-node g2-node-done" }

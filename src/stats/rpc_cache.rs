@@ -88,7 +88,7 @@ impl<T: Clone + Send + 'static> CachedSlot<T> {
     ///   expired, producing miss-every-time behavior that defeats the cache
     ///   (no error, just wasted work).
     /// - `fetch` should be idempotent: if the 250ms wait-timeout fires
-    ///   (defense-in-depth only — the Notified::enable() contract normally
+    ///   (defense-in-depth only: the Notified::enable() contract normally
     ///   guarantees wake-up), the loop retries and may call `fetch` again
     ///   on a subsequent iteration.
     /// - `is_stale: true` only appears when `fetch` errors AND a previous
@@ -111,7 +111,7 @@ impl<T: Clone + Send + 'static> CachedSlot<T> {
             // notify_waiters() call even if the `.await` hasn't been reached yet.
             // Without this, a waiter that drops the lock can miss the
             // fetcher's signal if the fetcher finishes in that narrow window,
-            // causing the waiter to park forever — which in testing produced
+            // causing the waiter to park forever: which in testing produced
             // +1 miss / +0 hits from a burst of 20 concurrent callers instead
             // of +1 miss / +19 hits.
             let notified = self.notify.notified();
@@ -122,7 +122,7 @@ impl<T: Clone + Send + 'static> CachedSlot<T> {
             // never held across an await below.
             let action = {
                 let mut state = self.inner.lock().unwrap_or_else(|e| {
-                    // Poisoned mutex — recover rather than crashing the whole
+                    // Poisoned mutex: recover rather than crashing the whole
                     // service. A panic in a previous holder doesn't prevent us
                     // from continuing to serve reads and writes.
                     e.into_inner()
@@ -158,7 +158,7 @@ impl<T: Clone + Send + 'static> CachedSlot<T> {
                 }
                 Action::Fetch => {
                     // RAII guard ensures in_flight is cleared and waiters are
-                    // notified on every exit path — including panic, error,
+                    // notified on every exit path: including panic, error,
                     // and future-drop (handler cancellation). See
                     // `InFlightGuard` for the repro that motivated this.
                     let _guard = InFlightGuard {
@@ -180,7 +180,7 @@ impl<T: Clone + Send + 'static> CachedSlot<T> {
                             self.errors.fetch_add(1, Ordering::Relaxed);
                             // Stale-on-error: if there's a previous value,
                             // hand it back with is_stale=true. The TTL is
-                            // NOT extended — next caller will try upstream
+                            // NOT extended: next caller will try upstream
                             // again, giving Core a chance to recover.
                             let stale =
                                 state.last.as_ref().map(|(v, _)| v.clone());
@@ -266,7 +266,7 @@ impl<'a, T: Clone + Send + 'static> Drop for InFlightGuard<'a, T> {
 // LRU cache for immutable RPC responses (historical blocks, block hashes).
 // ---------------------------------------------------------------------------
 
-/// Bounded LRU cache keyed by `K`, values of type `V`. No TTL — entries stay
+/// Bounded LRU cache keyed by `K`, values of type `V`. No TTL, entries stay
 /// until evicted by capacity pressure. Used for RPC responses that never
 /// change after confirmation (e.g. `getblockhash(height)`, `getblock(hash)`
 /// for confirmed blocks). On reorg, affected entries must be explicitly
@@ -361,7 +361,7 @@ where
         state.entries.insert(key, (value, counter));
     }
 
-    /// Explicit invalidation — used on reorg to drop stale entries for the
+    /// Explicit invalidation: used on reorg to drop stale entries for the
     /// affected heights/hashes.
     pub fn remove(&self, key: &K) {
         let mut state = self.inner.lock().unwrap_or_else(|e| e.into_inner());
@@ -491,7 +491,7 @@ mod tests {
                 }));
             }
 
-            // All 50 callers must complete — none hang.
+            // All 50 callers must complete: none hang.
             let results = futures::future::join_all(handles).await;
             assert_eq!(results.len(), 50);
             for r in results {
@@ -570,7 +570,7 @@ mod tests {
         let hanging = tokio::spawn(async move {
             slot_clone
                 .get_or_fetch(Duration::from_secs(60), || async move {
-                    // Longer than the test could ever wait — aborted before
+                    // Longer than the test could ever wait: aborted before
                     // this resolves.
                     tokio::time::sleep(Duration::from_secs(3600)).await;
                     Ok::<i32, StatsError>(42)
@@ -586,7 +586,7 @@ mod tests {
         hanging.abort();
         let _ = hanging.await; // drain the JoinError
 
-        // The slot must now be usable again. Bound with timeout — if the
+        // The slot must now be usable again. Bound with timeout, if the
         // guard regressed and in_flight leaked, this would loop on the 250ms
         // Notify backstop and exceed our 2s budget.
         let result = tokio::time::timeout(
@@ -654,12 +654,12 @@ mod tests {
         lru.put(3, "c".into());
         assert_eq!(lru.stats().size, 3);
 
-        // Access 1 — makes it most recent
+        // Access 1: makes it most recent
         assert_eq!(lru.get(&1), Some("a".into()));
-        // Access 3 — now 2 is the LRU
+        // Access 3: now 2 is the LRU
         assert_eq!(lru.get(&3), Some("c".into()));
 
-        // Insert 4 — must evict 2 (least recently used)
+        // Insert 4: must evict 2 (least recently used)
         lru.put(4, "d".into());
         assert!(lru.get(&2).is_none(), "key 2 should have been evicted");
         assert_eq!(lru.get(&1), Some("a".into()));

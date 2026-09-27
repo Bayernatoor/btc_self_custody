@@ -1,4 +1,4 @@
-// heartbeat-sse.js — SSE connection, tx batching, and mempool fallback
+// heartbeat-sse.js: SSE connection, tx batching, and mempool fallback
 import { getState, FLATLINE_PX_PER_SEC, HEAD_POSITION_FRAC, POINT_WIDTH } from './heartbeat-state.js';
 import { feeRateColor, fmtBtc } from './heartbeat-timeline.js';
 import { playBlockCue } from './heartbeat-audio.js';
@@ -15,7 +15,7 @@ var REVEAL_MAX_ENTRY_ZOOM = 9.0;
 // Mempool-removal sweep (ZMQ `sequence` R events → bricks for txs that left the
 // mempool via RBF/eviction). The sweep is an O(n) pass over the live segment, so
 // throttle it: run when at least this many removals are pending, or when this many
-// seconds have passed since the last sweep (whichever comes first) — never every
+// seconds have passed since the last sweep (whichever comes first), never every
 // frame. The txid-filter on incoming adds runs every flush (cheap) so an add for an
 // already-removed tx is skipped even before the next sweep (RBF R-before-A race).
 var REMOVAL_SWEEP_MIN = 50;
@@ -115,7 +115,7 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
 
     // Tell the renderer the eventual size of this segment up front, so the LOD
     // decision (density-columns vs individual bricks) is made from the KNOWN
-    // mempool count — not the running blips.length as it fills. Without this a
+    // mempool count: not the running blips.length as it fills. Without this a
     // >60k-tx first load renders bricks until the fill crosses LOD_MIN_BLIPS, then
     // pops to columns mid-fill (a jarring switch). Cleared in finishHistory.
     liveSeg._loadFillCount = txs.length;
@@ -134,7 +134,7 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
         }
         console.log('[heartbeat] auto-fit zoom to ' + _hb.zoom.toFixed(3) + 'x');
         // First-load intro: if there's a zoom-IN worth doing (fit is well below the
-        // resting ~1.5x — i.e. a sizeable mempool), arm the "load reveal" — hold on
+        // resting ~1.5x: i.e. a sizeable mempool), arm the "load reveal", hold on
         // the whole mempool, then slow-zoom to the head (runIntro in drawFrame).
         if (_hb.autoFollow && _hb.zoom < 1.5) {
             _hb._intro = { phase: 'hold', start: Date.now() / 1000, fromZoom: _hb.zoom };
@@ -149,7 +149,7 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
     // Fill in CHUNKS across RAF frames rather than one synchronous pass: at 20k
     // (soon ~55k) a single loop stalls the main thread for tens of ms on load.
     // Bricks stream in over a few frames; the flatline width + fit are already
-    // set so the framing is correct — it just fills. Cancel any in-flight job.
+    // set so the framing is correct: it just fills. Cancel any in-flight job.
     if (_hb._historyRaf) { cancelAnimationFrame(_hb._historyRaf); _hb._historyRaf = null; }
     var HISTORY_CHUNK = 2000;
     var i = 0;
@@ -170,7 +170,7 @@ export function placeHistoryTxs(txs, lastBlockTs, instant) {
     var placeHistoryChunk = function() {
         var s = getState();
         // Abort if torn down, or the live flatline closed/changed (a block
-        // arrived mid-fill) — remaining history would be stale.
+        // arrived mid-fill): remaining history would be stale.
         if (!s || s.timeline[s.timeline.length - 1] !== liveSeg || liveSeg.x_end !== null) {
             _hb._historyRaf = null;
             finishHistory();
@@ -277,7 +277,7 @@ export function processLiveBlock(block) {
     _hb._backlogSpreadStart = 0;
 
     // Reveal-eligible unless the timeline is PAUSED. autoFollow/LIVE is NOT required:
-    // "not anchored to the head" (play mode — the canvas still moves with time) is
+    // "not anchored to the head" (play mode: the canvas still moves with time) is
     // still a live, watchable view, so the reveal should play. Only pause (or mid-
     // drag/pinch, or the toggle off, or >5x inspection) suppresses it.
     var revealEligible = _hb._revealEnabled !== false
@@ -288,7 +288,7 @@ export function processLiveBlock(block) {
     // Collapse the dead processing gap: the backend suppresses txs while
     // building block data (~2-5s, longer on a node stall), so virtualX has
     // advanced past the last brick with nothing placed. Find the rightmost blip
-    // and snap virtualX to just past it. This is exact — no time-based
+    // and snap virtualX to just past it. This is exact, no time-based
     // estimation that can overshoot. `collapsedPx` = the width of that no-brick
     // window; we re-add it after the spike below so the backlog can spread.
     var collapsedPx = 0;
@@ -312,7 +312,7 @@ export function processLiveBlock(block) {
             ', no blips on flatline, virtualX=' + Math.round(_hb.virtualX));
     }
 
-    // Build block data — SSE includes real block stats from RPC + mempool fees.
+    // Build block data, SSE includes real block stats from RPC + mempool fees.
     // Compute inter-block time from the timeline's last block segment (authoritative)
     // rather than the mutable lastBlockTime which can be overwritten by LiveStats.
     var blockTs = block.timestamp || Math.floor(Date.now() / 1000);
@@ -351,7 +351,7 @@ export function processLiveBlock(block) {
     if (revealEligible && pending) {
         // Sequenced reveal: the spike now sits at the current head; the leftovers
         // are still visible in the old segment. Hand off to the sequencer (drawFrame
-        // runs it) — form → harvest → relay. Skip the collapsed-gap re-add: the
+        // runs it): form → harvest → relay. Skip the collapsed-gap re-add: the
         // reveal owns the post-block flow.
         setupBlockReveal(_hb, pending);
     } else if (collapsedPx > 40) {
@@ -392,8 +392,8 @@ export function processLiveBlock(block) {
 // DEV: fire a fake block on demand so the reveal can be tested without waiting for a
 // real block. Runs the full live path (harvest + reveal) against the CURRENT real
 // mempool. Localhost-only so it can't pollute a deployed timeline. Console:
-//   window._hbFakeBlock()        — a ~3000-tx block
-//   window._hbFakeBlock(20000)   — a big block (harvests more, carries less)
+//   window._hbFakeBlock(): a ~3000-tx block
+//   window._hbFakeBlock(20000): a big block (harvests more, carries less)
 window._hbFakeBlock = function(txCount) {
     if (location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
         console.warn('[heartbeat] _hbFakeBlock is dev-only (localhost)');
@@ -423,9 +423,9 @@ window._hbFakeBlock = function(txCount) {
 // bricks in and fades the leftovers; the relay beat re-lays the leftovers and
 // follows the placement to the new head.
 // P5 exact harvest: re-partition an armed (pre-shatter) reveal's active bricks by
-// the block's ACTUAL txids — bricks in the block shatter into the spike, the rest
+// the block's ACTUAL txids: bricks in the block shatter into the spike, the rest
 // carry forward. Replaces the top-fee approximation from pushHeartbeatBlocks. No-op
-// once the shatter has started (r.harvested) — too late to change what's flying.
+// once the shatter has started (r.harvested): too late to change what's flying.
 // All the active bricks are still in the old segment during the form beat, so this
 // only re-labels which shatter vs carry; the harvest beat then acts on the new sets.
 function applyExactHarvest(r, blockSet) {
@@ -568,7 +568,7 @@ export function connectOwnFeed() {
                 }
 
                 // Only place history on an empty flatline (fresh start or SSE error
-                // reconnect). If the flatline already has live bricks, skip —
+                // reconnect). If the flatline already has live bricks, skip,
                 // we don't want to overwrite the real live layout with random
                 // history placement.
                 var curSeg = _hb.timeline[_hb.timeline.length - 1];
@@ -683,7 +683,7 @@ export function connectOwnFeed() {
                 }
             } catch (err) {}
         });
-        // TODO: block_mining overlay disabled — triggers at wrong times, needs review.
+        // TODO: block_mining overlay disabled: triggers at wrong times, needs review.
         // See tasks/todo.md "Heartbeat > Review block_mining overlay trigger logic".
         // es.addEventListener('block_mining', function(e) {
         //     if (!_hb) return;
@@ -708,7 +708,7 @@ export function connectOwnFeed() {
         // });
         es.addEventListener('lag', function(e) {
             // A lag event proves the byte stream is live (client just fell behind
-            // the broadcast channel), so refresh the stall clock — otherwise a
+            // the broadcast channel), so refresh the stall clock, otherwise a
             // perpetually-lagging client would falsely read as 'stale'.
             if (_hb) _hb._lastSseEventTs = Date.now() / 1000;
             console.log('SSE lag:', e.data);
@@ -738,7 +738,7 @@ export function connectOwnFeed() {
             _hb._sseRetries = (_hb._sseRetries || 0) + 1;
             // Reconnect the primary feed INDEFINITELY with capped backoff
             // (2s → 15s), so a deploy or node blip reconnects within one interval
-            // of the server returning — no giving up, no fallback stranding.
+            // of the server returning: no giving up, no fallback stranding.
             var delay = Math.min(2000 * Math.pow(1.5, Math.min(_hb._sseRetries - 1, 8)), 15000);
             console.log('[heartbeat] SSE error, retry', _hb._sseRetries, 'in', Math.round(delay / 1000) + 's');
             // Track the handle so destroyHeartbeat can cancel it, and re-check
@@ -750,7 +750,7 @@ export function connectOwnFeed() {
         };
         _hb._sse = es;
     } catch (err) {
-        // EventSource construction failed — retry shortly.
+        // EventSource construction failed: retry shortly.
         _hb._sseRetryTimer = setTimeout(function() { if (getState()) connectOwnFeed(); }, 3000);
     }
 }
@@ -760,7 +760,7 @@ export function connectOwnFeed() {
 // (catchUpBlocks), where real wall-clock time genuinely elapsed while the tab
 // was hidden, so the resumed live tx flow needs a flatline that wide to spread
 // across instead of piling at the head. The live path (processLiveBlock) does
-// NOT use this — it re-adds the exact collapsed gap instead (block age is ~0 for
+// NOT use this: it re-adds the exact collapsed gap instead (block age is ~0 for
 // a fresh block, so it would never widen there). Only ever moves virtualX
 // forward; clamped for miner-clock skew. (Camera easing in drawFrame turns the
 // resulting virtualX jump into a smooth slide.)
@@ -777,7 +777,7 @@ export function fastForwardLiveFlatline(blockTs) {
 // Remove bricks for txs that left the mempool (ZMQ `sequence` R events). One O(n)
 // pass over the LIVE segment only (closed segments are frozen history), rebuilding
 // the column map like the memory cull. Throttled: runs when enough removals are
-// pending or REMOVAL_SWEEP_SECS elapsed. Only drops ACTIVE (non-fading) bricks —
+// pending or REMOVAL_SWEEP_SECS elapsed. Only drops ACTIVE (non-fading) bricks,
 // a brick mid-harvest/fade is left alone. Clears the set when it runs.
 function applyRemovals(_hb, liveSeg) {
     var removed = _hb._removedTxids;
@@ -820,13 +820,13 @@ export function flushTxBatch() {
     var liveSeg = _hb.timeline[_hb.timeline.length - 1];
     if (!liveSeg || liveSeg.type !== 'flatline') return;
 
-    // Sweep mempool removals first (independent of the add queue — R events arrive
+    // Sweep mempool removals first (independent of the add queue, R events arrive
     // on their own cadence). Throttled internally so it's not an O(n) pass/frame.
     applyRemovals(_hb, liveSeg);
 
     if (!_hb._txBatchQueue || _hb._txBatchQueue.length === 0) return;
 
-    // virtualX is advanced ONLY by the RAF loop (drawFrame) now — this used to
+    // virtualX is advanced ONLY by the RAF loop (drawFrame) now, this used to
     // advance it too, a second out-of-phase clock that nudged virtualX between
     // frames and drifted it ahead. Single clock = smoother scroll.
 
@@ -842,7 +842,7 @@ export function flushTxBatch() {
     // Place ALL txs as individual bricks so every tx is searchable/inspectable.
     // Spread them behind the head so a burst doesn't wall up in one column.
     // The head sits at HEAD_POSITION_FRAC (0.85) of the viewport, so most of the
-    // visible width is to the LEFT of the head and free to fill — hence the 0.7
+    // visible width is to the LEFT of the head and free to fill, hence the 0.7
     // viewport cap (the old 0.15 crammed everything into ~16 columns at zoom).
     // Spread also scales with burst size: calm flushes stay tight (live feel);
     // truly heavy sustained volume still stacks past the cap (intentional busy signal).
@@ -916,7 +916,7 @@ export function flushTxBatch() {
                 }
             }
             // Normal bricks: skip when all nearby columns full.
-            // Notable bricks: never skip — force-place at shortest nearby column.
+            // Notable bricks: never skip: force-place at shortest nearby column.
             if (!found) {
                 if (isNotable) {
                     // Find shortest column in a wider search to force placement
@@ -980,16 +980,16 @@ export function flushTxBatch() {
         }
     }
 
-    // Memory backstop only — NOT a visual density limiter (the draw loop already
+    // Memory backstop only: NOT a visual density limiter (the draw loop already
     // viewport-culls). Runs inside the RAF flush, so it must be cheap and must
     // NOT reorder by fee: this segment is "the mempool", and the old fee-score
     // sort (a) hitched the frame with an O(n log n) sort of tens of thousands and
-    // (b) evicted the low-fee tail — the exact thing the visualization exists to
+    // (b) evicted the low-fee tail: the exact thing the visualization exists to
     // show. Instead evict the OLDEST (leftmost / furthest behind the head) bricks
     // in a single O(n) partition: no sort, fee-neutral, and when following the
     // head those are already off-screen. Threshold sits ABOVE the history limit
     // (HEARTBEAT_HISTORY_LIMIT=150k) + inter-block live accumulation, so a full
-    // mempool we intentionally show is never evicted — this only fires as a true
+    // mempool we intentionally show is never evicted, this only fires as a true
     // memory guard. TARGET matches the history ceiling so a culled session still
     // shows the full mempool it loaded.
     var CULL_THRESHOLD = 170000;

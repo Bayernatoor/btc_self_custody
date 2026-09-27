@@ -20,7 +20,7 @@ pub mod helpers;
 pub mod routes;
 pub mod stats;
 
-/// WASM entry point — hydrates the server-rendered HTML.
+/// WASM entry point: hydrates the server-rendered HTML.
 #[cfg(feature = "hydrate")]
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn hydrate() {

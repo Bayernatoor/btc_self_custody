@@ -58,7 +58,7 @@ use leptos_router::{
     path,
 };
 
-/// Outer HTML shell — rendered once on the server, wraps the hydrated App.
+/// Outer HTML shell: rendered once on the server, wraps the hydrated App.
 pub fn shell(options: LeptosOptions) -> impl IntoView {
     view! {
         <!DOCTYPE html>
@@ -257,7 +257,7 @@ pub fn App() -> impl IntoView {
 /// status to 301 and the Location header so browsers and crawlers treat
 /// the rename as permanent (preserves SEO equity and search-index
 /// canonical tracking). On client-side SPA navigation it additionally
-/// pushes the new path through the router — normally unreachable since
+/// pushes the new path through the router: normally unreachable since
 /// every internal link was updated, but cheap belt-and-suspenders.
 fn redirect_permanent(target: &'static str) -> impl IntoView {
     #[cfg(feature = "ssr")]

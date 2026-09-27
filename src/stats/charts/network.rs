@@ -361,7 +361,7 @@ pub fn difficulty_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
 }
 
 /// Block interval dot plot (per-block only, not daily).
-/// Data format: [timestamp_ms, interval_minutes, block_height] — third value enables click-to-detail.
+/// Data format: [timestamp_ms, interval_minutes, block_height], third value enables click-to-detail.
 pub fn block_interval_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.len() < 2 {
         return no_data_chart("Block Interval");
@@ -869,7 +869,7 @@ pub fn largest_tx_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     }))
 }
 
-/// Largest transaction size per block (daily — not available).
+/// Largest transaction size per block (daily: not available).
 pub fn largest_tx_chart_daily(_days: &[DailyAggregate]) -> serde_json::Value {
     no_daily_builder_chart("Largest Transaction")
 }

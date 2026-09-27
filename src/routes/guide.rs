@@ -363,7 +363,7 @@ fn render_level_page(
             <div class="g2-flow">
             <div class="g2-flow-inner">
             {if has_picker {
-                // Refined "choose a wallet" header — matches the selector + guide intro
+                // Refined "choose a wallet" header: matches the selector + guide intro
                 // (eyebrow + white Oswald title + muted lede). No orange title / underline
                 // / quote / boxed definition; the OS is carried by the eyebrow.
                 view! {

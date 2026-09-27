@@ -111,7 +111,7 @@ pub enum HeartbeatEvent {
         /// Block weight in weight units.
         weight: u64,
         /// Number of tracked mempool txs confirmed in this block. Always 0 in
-        /// the broadcast — DB confirmation is deferred off the spike's critical
+        /// the broadcast: DB confirmation is deferred off the spike's critical
         /// path, and the frontend uses `tx_count` first anyway.
         confirmed_count: u64,
     },
@@ -122,13 +122,13 @@ pub enum HeartbeatEvent {
     /// Sent as its own event so it doesn't delay the fast spike broadcast.
     #[serde(rename = "block_txids")]
     BlockTxids { height: u64, txids: Vec<String> },
-    /// A new block arrived — fired on the `hashblock` notification, before the
+    /// A new block arrived: fired on the `hashblock` notification, before the
     /// (fast) metadata fetch. Frontend shows a mining overlay until the `Block`
     /// event lands.
     #[serde(rename = "block_mining")]
     BlockMining,
     /// Txids that left the mempool for a NON-block reason (RBF replacement,
-    /// eviction, expiry) — the `R` events from the ZMQ `sequence` topic. Batched.
+    /// eviction, expiry), the `R` events from the ZMQ `sequence` topic. Batched.
     /// Block-confirmed txs are NOT included (Core excludes them from `R`), so this
     /// never overlaps the block harvest. The frontend removes the matching live
     /// bricks so the timeline tracks the real mempool instead of drifting upward.
@@ -157,7 +157,7 @@ pub fn spawn(
 ) {
     // rawtx subscriber (port 28333). Re-broadcast/duplicate txs are
     // de-duplicated inside the task via a local seen-txid set (see SeenTxids)
-    // — no cross-task state needed.
+    //: no cross-task state needed.
     {
         let state = Arc::clone(&state);
         let sender = tx_sender.clone();
@@ -204,7 +204,7 @@ pub fn spawn(
     }
 
     // Sequence subscriber (mempool add/remove; only the `R` removals are used).
-    // Optional — enabled only when configured AND the node runs -zmqpubsequence.
+    // Optional: enabled only when configured AND the node runs -zmqpubsequence.
     if let Some(seq_url) = zmq_sequence_url.clone() {
         let sender = tx_sender_seq;
         tokio::spawn(async move {
@@ -245,7 +245,7 @@ const SEQ_RECV_TIMEOUT_SECS: u64 = 120;
 ///   [0..32]  txid, little-endian internal byte order
 ///   [32]     event type: 'A' add | 'R' remove | 'C' block connect | 'D' disconnect
 ///   [33..41] mempool sequence (u64 LE) for A/R only
-/// We act only on `R` — Core excludes block-confirmed txs from `R`, so this never
+/// We act only on `R`: Core excludes block-confirmed txs from `R`, so this never
 /// overlaps the block harvest. Adds keep coming via `rawtx` (with fee/size data),
 /// so `A`/`C`/`D` are ignored here. Removals are batched (SEQ_FLUSH_MS) into one
 /// `TxRemoved` event. `sender`-only: no DB writes (the 60s reconcile owns the DB).
@@ -286,7 +286,7 @@ async fn subscribe_sequence(
                 // One-time proof the node is actually publishing `sequence` here
                 // (A adds fire on every mempool arrival, so this lands immediately
                 // if the topic is wired up). If this never logs, the endpoint isn't
-                // publishing sequence — check the node's -zmqpubsequence port.
+                // publishing sequence: check the node's -zmqpubsequence port.
                 msg_total += 1;
                 if msg_total == 1 {
                     tracing::info!(
@@ -355,7 +355,7 @@ async fn subscribe_txs(
         tokio::time::sleep(Duration::from_millis(200)).await;
     }
 
-    // Each incoming rawtx needs one `getmempoolentry` RPC (for the fee — the
+    // Each incoming rawtx needs one `getmempoolentry` RPC (for the fee, the
     // only field not derivable from the raw bytes). Over the WireGuard tunnel
     // that round-trip dominates, so doing it inline in the recv loop caps
     // throughput at ~1/latency and drops txs under load. Instead the recv loop
@@ -369,7 +369,7 @@ async fn subscribe_txs(
     let mut parse_fail = 0u64;
     // De-dup recently broadcast txids. Bitcoin Core re-emits a block's txs on
     // rawtx after confirmation, and ZMQ can deliver duplicates; skipping repeats
-    // here means no worker/RPC is spent on them. Bounded, task-local — replaces
+    // here means no worker/RPC is spent on them. Bounded, task-local, replaces
     // the old cross-task block_txids mutex.
     let mut seen = SeenTxids::new(SEEN_TXID_CAP);
 
@@ -464,20 +464,20 @@ const RAWTX_CONCURRENCY: usize = 16;
 /// Inactivity watchdog for the rawtx recv loop. Txs flow constantly even in a
 /// quiet mempool, so this much silence means a half-dead TCP connection (the
 /// socket stays "connected" but delivers nothing); returning an error triggers
-/// the outer reconnect. NOT applied to hashblock — blocks are ~10min apart, so a
+/// the outer reconnect. NOT applied to hashblock: blocks are ~10min apart, so a
 /// short timeout there would reconnect constantly; a missed block is instead
 /// covered by the 15s poller re-broadcasting it (see ingest::poll_new_blocks).
 const RAWTX_RECV_TIMEOUT_SECS: u64 = 90;
 
 /// How many recently-seen txids to remember for de-duplication. A block holds
-/// ~3-4k txs, so this covers ~10+ blocks of history — far more than the window
+/// ~3-4k txs, so this covers ~10+ blocks of history, far more than the window
 /// in which Core re-broadcasts or ZMQ redelivers a tx. Evicting an older txid
 /// only risks a rare duplicate brick, never a correctness problem.
 const SEEN_TXID_CAP: usize = 50_000;
 
 /// Bounded FIFO set of recently-broadcast txids. `insert` returns whether the
 /// txid is new (should be processed) or a repeat (should be skipped). When over
-/// capacity the oldest txid is evicted. Task-local — no locking — because it is
+/// capacity the oldest txid is evicted. Task-local, no locking, because it is
 /// only touched by the single-threaded rawtx recv loop.
 struct SeenTxids {
     set: HashSet<String>,
@@ -620,7 +620,7 @@ async fn process_rawtx(
         );
     }
 
-    // Broadcast first — the SSE visual path shouldn't wait on the DB.
+    // Broadcast first: the SSE visual path shouldn't wait on the DB.
     let _ = sender.send(enriched.event);
 
     let n = tx_count.fetch_add(1, Ordering::Relaxed) + 1;
@@ -692,7 +692,7 @@ async fn process_rawtx(
 /// spike ASAP from two small RPCs (getblockheader + getblockstats), then defer
 /// the full txid list + mempool-tx confirmation to a background task. The txid
 /// list from `getblock(hash, 1)` is 200-400KB and takes tens of seconds over
-/// WireGuard for a busy block — waiting on it before broadcasting was the whole
+/// WireGuard for a busy block: waiting on it before broadcasting was the whole
 /// reason the spike lagged 20-90s behind the block.
 async fn subscribe_blocks(
     state: &Arc<StatsState>,
@@ -726,7 +726,7 @@ async fn subscribe_blocks(
         let _ = sender.send(HeartbeatEvent::BlockMining);
 
         // Fast path: header (height/timestamp/tx_count) + getblockstats
-        // (size/weight/total_fees). Both small — the spike appears in ~1-2s.
+        // (size/weight/total_fees). Both small: the spike appears in ~1-2s.
         let (header, size, weight, total_fees) =
             match get_block_fast(state, &block_hash).await {
                 Some(v) => v,
@@ -783,7 +783,7 @@ async fn subscribe_blocks(
 
 /// Fetch the minimal metadata needed to draw a block spike, with retry
 /// (hashblock fires right as validation completes, so RPC may be briefly busy).
-/// The header is essential; getblockstats is best-effort — if it never returns,
+/// The header is essential; getblockstats is best-effort, if it never returns,
 /// the block still broadcasts with zero size/weight/fees rather than vanishing.
 /// Returns `(header, size, weight, total_fees)` or `None` if the header failed.
 async fn get_block_fast(
@@ -825,7 +825,7 @@ async fn get_block_fast(
             }
         }
     }
-    // Stats never came back — broadcast the block anyway from the header.
+    // Stats never came back: broadcast the block anyway from the header.
     if header_only.is_some() {
         tracing::warn!(
             "ZMQ: getblockstats unavailable for {hash}; broadcasting with zero size/weight/fees"

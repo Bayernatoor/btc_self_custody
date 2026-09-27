@@ -407,8 +407,8 @@ pub fn difficulty_adjustment_chart(
 /// The retargets a daily window can draw, as (day index, percent).
 ///
 /// Read off the retarget blocks themselves rather than reconstructed from the
-/// daily difficulty column, which is what this chart did until 2026-09-16.
-/// Two facts defeat reconstruction, and the second one has no workaround:
+/// daily difficulty column. Two facts defeat reconstruction, and the second
+/// has no workaround:
 ///
 /// - **A retarget lands mid-day**, so the day it happens on averages blocks
 ///   from both epochs and its mean is no protocol difficulty. February 2026

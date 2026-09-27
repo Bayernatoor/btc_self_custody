@@ -35,7 +35,7 @@ pub mod zmq_subscriber;
 
 // Integration tests covering the full Axum router + DB path. Lives in the
 // lib (not under tests/) so it compiles into the existing unit-test binary
-// instead of forcing a separate link step — linking the full lib dependency
+// instead of forcing a separate link step: linking the full lib dependency
 // closure a second time was hitting OOM during cargo test on this machine.
 // Access to pub(crate) items also avoids leaking test-only surface to the
 // public API.

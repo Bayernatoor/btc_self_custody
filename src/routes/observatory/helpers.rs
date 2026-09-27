@@ -240,15 +240,12 @@ mod tests {
 /// The height and timestamp window a range actually asks for, resolving a
 /// custom date range against the chain.
 ///
-/// **Genuinely shared, which the previous version of this claim was not.**
-/// `single_chart.rs` carried a private `resolved_window` whose doc said it
-/// was "shared here so the three cannot disagree"; it was never callable
-/// from anywhere else, and the mining page and the four histogram resources
-/// went on reading `range` alone. `range_to_blocks("custom")` is 999,999, so
-/// a custom window silently became the whole chain: the pool charts
-/// described all of history while the difficulty charts above them described
-/// the selected dates, and editing the dates never refetched because
-/// `range` stayed "custom".
+/// **Every caller needing a window must come through here.**
+/// `range_to_blocks("custom")` is 999,999, so a caller reading `range` alone
+/// silently widens a custom window to the whole chain: the pool charts then
+/// describe all of history while the difficulty charts above them describe
+/// the selected dates, and editing the dates never refetches because `range`
+/// stays "custom".
 ///
 /// Returns `(from_height, to_height, from_ts, to_ts)`. A custom window with
 /// no blocks in it returns a **reversed height range**, `(1, 0)`, so a
@@ -380,23 +377,18 @@ mod window_tests {
     /// The window a payload answers travels **inside** the payload.
     ///
     /// `data_loading` asks whether the dashboard data on hand belongs to the
-    /// window now selected. Two ways of answering that were tried on
-    /// 2026-09-21 and both flashed the previous range's chart, because a
-    /// `LocalResource` keeps its previous payload while a refetch is in
-    /// flight:
+    /// window now selected. A `LocalResource` keeps its previous payload while
+    /// a refetch is in flight, so both ways of stamping it *beside* the data
+    /// flash the previous range's chart:
     ///
-    /// 1. An `Effect` stamping the ambient range whenever the resource held
-    ///    any value. During a refetch that value is the old one, so it stamped
-    ///    a window the data did not answer.
-    /// 2. The fetch stamping its own window on the way out. This reads as
-    ///    obviously correct and is worse: the write happens inside the future,
-    ///    so it lands *before* the future's value reaches the resource, and
-    ///    the flag cleared one step ahead of the data every time. An
-    ///    occasional flash became a certain one.
+    /// 1. An `Effect` stamping the ambient range whenever the resource holds
+    ///    any value stamps a window the data does not answer.
+    /// 2. The fetch stamping its own window writes inside the future, so it
+    ///    lands *before* the value reaches the resource and the flag clears
+    ///    one step ahead of the data every time.
     ///
-    /// Carried in the value there is no ordering left to get wrong, which is
-    /// why this guard rejects both shapes by name rather than describing the
-    /// rule in a comment and hoping.
+    /// Carried in the value there is no ordering left to get wrong, so this
+    /// guard rejects both shapes by name.
     #[test]
     fn the_window_a_payload_answers_travels_inside_it() {
         let state = include_str!("shared/state.rs");

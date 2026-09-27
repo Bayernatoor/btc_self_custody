@@ -22,7 +22,7 @@ use leptos::prelude::*;
 use leptos_router::hooks::use_location;
 
 // ---------------------------------------------------------------------------
-// Chart memo macro — pure derivation, no timing issues
+// Chart memo macro: pure derivation, no timing issues
 // ---------------------------------------------------------------------------
 
 /// Build a chart option as a derived Signal with parent-level caching.
@@ -86,7 +86,7 @@ macro_rules! chart_memo {
             }
             let r = $range.get();
             let flags = $overlays.get();
-            // MUST read data to track it as reactive dependency — otherwise
+            // MUST read data to track it as reactive dependency, otherwise
             // the derive won't re-run when new data arrives after range change.
             let data_opt = $data.get().and_then(|(_, r)| r.ok());
             // Data fingerprint, so a cached chart is never served for a
@@ -220,7 +220,7 @@ macro_rules! chart_memo {
 /// a single ⚙ button opens a panel with two tabs (Overlays / Range),
 /// matching how users actually reach for these controls together.
 ///
-/// Only visible on chart pages — on dashboard/Heartbeat/Lookout/etc. there
+/// Only visible on chart pages: on dashboard/Heartbeat/Lookout/etc. there
 /// are no per-chart settings to adjust, so the button would be noise.
 /// `class:hidden` keeps the div in the DOM to avoid the SSR/hydrate
 /// mismatch that conditional rendering via `<Show>` triggers when
@@ -250,7 +250,7 @@ pub fn ChartSettingsPanel() -> impl IntoView {
                 fallback=move || view! {
                     // Floating settings button styled to match Basecamp's
                     // help FAB: dark background circle with a full-opacity
-                    // orange border and a full-opacity orange icon — the
+                    // orange border and a full-opacity orange icon: the
                     // fill is the site's own surface color, not a bright
                     // pop. Same treatment as the left-side drawer so the
                     // two floating affordances read as a matched pair.
@@ -575,7 +575,7 @@ pub fn ObservatoryNav() -> impl IntoView {
                 }).collect::<Vec<_>>()}
             </div>
             // Row 2: Chart explorer sub-nav. Only shown when the user is
-            // actually on a /observatory/charts/* page — elsewhere it's
+            // actually on a /observatory/charts/* page: elsewhere it's
             // dead pixels. `class:hidden` keeps the div in the DOM to avoid
             // the SSR/hydrate mismatch that conditional rendering via
             // <Show> triggers when use_location() is involved.
@@ -733,7 +733,7 @@ pub fn ChartPageLayout(
             </div>
         </div>
         {children()}
-        // Note: no FloatingRangePicker here — the floating Range access
+        // Note: no FloatingRangePicker here: the floating Range access
         // lives in `ChartSettingsPanel` (rendered at the ObservatoryPage
         // parent level) as a tab alongside Overlays.
         <ChartDrawer/>

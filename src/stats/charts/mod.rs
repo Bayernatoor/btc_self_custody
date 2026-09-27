@@ -186,7 +186,7 @@ pub(crate) fn chart_defaults() -> serde_json::Value {
 ///
 /// Rationale: ECharts' `inside` dataZoom intercepts wheel events for the
 /// entire chart area, even when `zoomOnMouseWheel` is disabled or gated
-/// behind a modifier key — it still calls `preventDefault()` to keep the
+/// behind a modifier key: it still calls `preventDefault()` to keep the
 /// option available, which traps page scrolling when the cursor passes
 /// over a chart. Removing the `inside` component lets wheel events pass
 /// through to the page untouched. Users can still zoom via the bottom
@@ -297,19 +297,16 @@ pub(crate) fn x_axis_for(
 /// Which category indices sit on a calendar boundary worth labelling, or
 /// `None` to leave ECharts' own index-based thinning in place.
 ///
-/// `hideOverlap` thins labels by *index*, and the categories are days. An
-/// even index step across 6,456 daily categories does not land on even
-/// calendar months, so the months walk forward: `Jan '10, Aug '10, Feb '11,
-/// Aug '11, Mar '12`. Worse, the step comes from the available width, so
-/// enabling an overlay, collapsing the rail or resizing the window moved the
-/// labels. They were never calendar-aligned; one step size happened to look
-/// like it was.
+/// `hideOverlap` thins labels by *index*, and the categories are days. An even
+/// index step across 6,456 daily categories does not land on even calendar
+/// months, so the months walk forward (`Jan '10, Aug '10, Feb '11, Aug '11`),
+/// and since the step comes from available width, an overlay or a resize moves
+/// them.
 ///
-/// So hand ECharts a candidate set that is calendar-aligned by construction.
-/// `hideOverlap` stays on and still drops what will not fit, but every
-/// candidate is the first plotted day of a month on a fixed stride, so
-/// whatever subset survives still reads as clean boundaries, and zooming in
-/// reveals more of them rather than shifting the ones already there.
+/// So hand ECharts a candidate set that is calendar-aligned by construction:
+/// every candidate is the first plotted day of a month on a fixed stride.
+/// `hideOverlap` still drops what will not fit, but whatever survives reads as
+/// clean boundaries, and zooming reveals more rather than shifting them.
 ///
 /// Returns indices rather than installing a predicate because
 /// `axisLabel.interval` only takes one as a JS function, which cannot be
@@ -516,27 +513,19 @@ fn apply_axis_log(option: &mut serde_json::Value, axis_idx: u64, on: bool) {
 /// scale independently of the metric's own axis.
 ///
 /// Separate from [`apply_log_scale`] because the two axes carry unrelated
-/// quantities and a reader wants them scaled independently: price over ALL is
-/// unreadable on a linear axis whatever the metric beside it is doing, and
-/// forcing both to log to get that is how the metric ends up on a scale
-/// nobody asked for. Glassnode calls the combination "Mixed"; here it is just
-/// two switches, which says which axis each one moves.
+/// quantities: price over ALL is unreadable on a linear axis whatever the
+/// metric beside it is doing, and forcing both to log to get that puts the
+/// metric on a scale nobody asked for.
 ///
 /// No shape refusals, unlike the left axis: the right axis holds one line,
 /// never a stack or a percentage band. A chart with no right axis is a no-op,
-/// which is what makes this safe to call unconditionally after the overlays.
+/// which makes this safe to call unconditionally after the overlays.
 ///
-/// It **does** need the dropped-point notice, and that is worth spelling out
-/// because this function shipped without one. The reasoning was that price
-/// and chain size are the only two series that ever claim this axis and both
-/// are strictly positive. True when written, and `apply_comparison` broke it
-/// three hours later: any comparable chart can now claim the right axis,
-/// including `utxo-growth`, whose own copy says it goes negative. The notice
-/// is written by [`apply_scales`], which is the only place that knows what
-/// both axes dropped.
-///
-/// The lesson is about the comment rather than the code. An invariant
-/// justified by naming today's callers is a note that expires silently.
+/// It **does** need the dropped-point notice. Price and chain size are
+/// strictly positive, but `apply_comparison` lets any comparable chart claim
+/// this axis, including `utxo-growth`, which goes negative. The notice is
+/// written by [`apply_scales`], the only place that sees what both axes
+/// dropped.
 pub fn apply_right_log_scale(option: &mut serde_json::Value, on: bool) {
     if !has_right_value_axis(option) {
         return;
@@ -706,46 +695,26 @@ fn set_axis_scale(
         // significant figures keeps the fit tight and the label legible.
         o.insert("min".to_string(), json!(round_sig(lo, 3, RoundDir::Down)));
         o.insert("max".to_string(), json!(round_sig(hi, 3, RoundDir::Up)));
-        // No `splitNumber`, because measurement says it does nothing here.
-        //
-        // Rendered in Chrome 153 against ECharts 5.6.0, this axis produces the
-        // same three labels with `splitNumber: 8` and without it, at every
-        // height from 200px to 3200px. An earlier version of this comment
-        // asserted that 8 splits across 7.36 decades placed ticks at
-        // fractional powers of ten which ECharts then declined to label. That
-        // was a plausible mechanism and it is false; removing the hint is
-        // tidying, not a fix.
-        //
-        // What actually governs the label count is whether the **bounds are
-        // exact powers of the base**. Measured, same span either way:
+        // No `splitNumber`: measured in Chrome 153 against ECharts 5.6.0, it
+        // changes nothing at any height. Label count is governed by whether
+        // the **bounds are exact powers of the base**, same span either way:
         //
         //     min 1, max 1e8            -> 9 labels, every decade
         //     min 0.000285, max 2.29e7  -> 3 labels: min, 1, max
         //
-        // So the sparse axis is a direct cost of fitting bounds to the data,
-        // which is deliberate and is the right trade for a narrow range: over
-        // 1Y difficulty spans 140T to 160T, under one decade, and rounding out
-        // to enclosing decades pins every point to the floor. Confirmed by the
-        // same probe, where that range yields two labels whatever is done.
-        //
-        // A span-dependent rule, fitting narrow ranges and aligning wide ones,
-        // would get both and is recorded as chart-quality work rather than
-        // done here. ECharts 5 offers no explicit tick list for a value or log
-        // axis, so that is the only lever.
-        //
-        // Evidence: notes/chart-quality-2026-09-15/runs/axis-label-probe.md
+        // So a sparse axis is the direct cost of fitting bounds to the data,
+        // which is the right trade for a narrow range: 1Y difficulty spans
+        // 140T to 160T, and enclosing decades would pin every point to the
+        // floor. A span-dependent rule would get both; filed, not done here.
+        // ECharts 5 exposes no explicit tick list, so bounds are the only
+        // lever. AGENTS.md carries the full finding.
 
-        // Guarantee a formatter, because ECharts prints an explicit bound
-        // verbatim and its own idea of the bound is not the number we set.
-        //
-        // `round_sig` hands over exactly 22,900,000, and the axis rendered
-        // "22,899,999.9999999739": log extents are held as exponents, so the
-        // value comes back as 10^log10(22900000), which is 22900000.00000002,
-        // and then prints in full. Rust cannot round its way out of that. The
-        // abbreviating formatter reads it as 22.9M and is what `push_right_axis`
-        // has always installed; a log axis needs it just as much, and the
-        // builders that never asked for it are exactly the ones that showed
-        // the raw float.
+        // Guarantee a formatter: ECharts prints an explicit bound verbatim,
+        // and its idea of the bound is not the number we set. A log extent is
+        // held as an exponent, so an exact 22,900,000 comes back as
+        // 10^log10(22900000) and renders "22,899,999.9999999739". No amount of
+        // rounding in Rust avoids that; the abbreviating formatter reads it as
+        // 22.9M.
         //
         // Only where the builder has not chosen its own, since a percentage or
         // unit-suffixed formatter is a deliberate choice.
@@ -804,22 +773,17 @@ fn set_axis_scale(
 /// Replace the points a log axis cannot plot with `null`.
 ///
 /// ECharts does not skip a non-positive point on a log axis so much as fail to
-/// place it, and the damage is not confined to the point: on Chain Size over
-/// ALL, whose first readings are fractions of a gigabyte, the filled area
-/// under the line was drawn as a straight diagonal wedge from the bottom left
-/// corner to the top right. Seven decades of real curve with a triangle
-/// pasted over it, and nothing in the data corresponds to that edge.
+/// place it, and the damage spreads beyond the point: on Chain Size over ALL
+/// the filled area was drawn as a diagonal wedge from bottom left to top
+/// right, a triangle pasted over seven decades of real curve.
 ///
-/// A `null` is a gap, which ECharts does handle, so the series simply starts
-/// where it becomes plottable. The count is taken before this runs and shown
-/// as a notice, so the reader is told how many readings are missing rather
-/// than left to infer it.
+/// A `null` is a gap, which ECharts does handle, so the series starts where it
+/// becomes plottable. The count is taken before this runs and shown as a
+/// notice rather than left for the reader to infer.
 ///
-/// This also settles a disagreement the rail could not win. `kpi` reads its
-/// figures back out of the built option precisely so they describe the series
-/// that was drawn; with the points still present it reported a low of zero for
-/// a chart whose axis could not reach zero. Now both sides see the same
-/// series.
+/// It also keeps `kpi` honest: it reads its figures back out of the built
+/// option so they describe the series actually drawn, and with these points
+/// present it reported a low of zero on an axis that cannot reach zero.
 fn drop_non_positive(option: &mut serde_json::Value, axis_idx: u64) {
     let Some(series) = option.get_mut("series").and_then(|s| s.as_array_mut())
     else {
@@ -1305,7 +1269,7 @@ pub(crate) fn build_data_array_f64(
 /// A share-of-total chart has no meaningful value for a block with no
 /// population to divide: an empty block carries only the coinbase, so it has no
 /// inputs to classify. Writing `0` there is not a smaller value, it is a
-/// different claim — on a stacked percentage chart three zeros collapse the
+/// different claim: on a stacked percentage chart three zeros collapse the
 /// stack to the baseline and read as missing data. `null` leaves a gap, which
 /// is what actually happened.
 pub(crate) fn build_data_array_opt_f64(
@@ -1407,21 +1371,6 @@ pub(crate) fn round(val: f64, decimals: u32) -> f64 {
     (val * factor).round() / factor
 }
 
-/// Moving average over a series that has gaps, keeping the window's meaning.
-///
-/// Take the chronological window first, then average whatever readings are
-/// inside it. The obvious alternative, filtering the gaps out and averaging
-/// the survivors, silently redefines the window: "7-day MA" becomes "the mean
-/// of the last seven days that had data", which can reach arbitrarily far
-/// back. Measured on a series with one reading of 100, then eight gaps, then
-/// six zeroes, that produced **14.2857** at the final position by pulling the
-/// 100 in from fourteen positions away, where the last seven positions hold
-/// nothing but zeroes and the honest answer is **0**.
-///
-/// `None` where the window holds no reading at all, since an average of
-/// nothing is not zero. A window holding some readings averages those, which
-/// is the standard treatment and keeps the line continuous across short gaps
-/// without inventing values for them.
 /// A daily rate series with its final point withheld.
 ///
 /// Both daily rate charts divide a day's count by a **whole day**: block
@@ -1436,24 +1385,14 @@ pub(crate) fn round(val: f64, decimals: u32) -> f64 {
 /// whose denominator is unknown, and it is the rule the rest of this module
 /// follows: absence is not zero and not a guess.
 ///
-/// **The first point is kept, and an earlier version of this withheld it
-/// too.** The reasoning was that a named range starts at `tip - n * 600`,
-/// mid-morning, so its first day is cut. It is not:
+/// **The first point is kept.** A named range starts mid-day, but
 /// `query_daily_aggregates_fast` reads `daily_blocks` by date, so a mid-day
-/// start still returns that day's complete aggregate. The review of
-/// 2026-09-16 caught the claim, and the day it was costing is a real reading.
+/// start still returns that day's complete aggregate.
 ///
-/// **What this still costs.** A custom range ending in the past has a
-/// complete final day and loses it. One point out of a window's hundreds,
-/// against never drawing a rate over the wrong elapsed time. Knowing which
-/// case applies needs the window's end, which neither builder receives.
-///
-/// **What it replaces.** The interval chart dropped every day with fewer than
-/// 50 blocks *from the category axis*, which is worse than a gap three ways
-/// over: the line joined across the missing dates as though they were
-/// consecutive, the 7-day average then meant seven surviving days, and the
-/// 40 days it removed are all in 2009, where the slow interval it hid is the
-/// most interesting reading on the chart.
+/// **What this costs.** A custom range ending in the past has a complete final
+/// day and loses it anyway: one point out of hundreds, against never drawing a
+/// rate over the wrong elapsed time. Telling the two cases apart needs the
+/// window's end, which neither builder receives.
 pub(crate) fn withhold_final_day(vals: Vec<f64>) -> Vec<Option<f64>> {
     let last = vals.len().saturating_sub(1);
     vals.into_iter()
@@ -1462,6 +1401,19 @@ pub(crate) fn withhold_final_day(vals: Vec<f64>) -> Vec<Option<f64>> {
         .collect()
 }
 
+/// Moving average over a series that has gaps, keeping the window's meaning.
+///
+/// Take the chronological window first, then average whatever readings are
+/// inside it. Filtering the gaps out and averaging the survivors silently
+/// redefines the window: "7-day MA" becomes "the mean of the last seven days
+/// that had data", which can reach arbitrarily far back. On one reading of
+/// 100, eight gaps, then six zeroes, that returns 14.2857 at the final
+/// position by pulling the 100 in from fourteen away, where the honest answer
+/// is 0.
+///
+/// `None` where the window holds no reading at all, since an average of
+/// nothing is not zero. A window holding some averages those, which keeps the
+/// line continuous across short gaps without inventing values.
 pub(crate) fn moving_average_over_gaps(
     readings: &[Option<f64>],
     window: usize,
@@ -1487,22 +1439,20 @@ pub(crate) fn moving_average_over_gaps(
 
 /// Round a plotted value, keeping the payload small **without** deleting it.
 ///
-/// Three decimal places is the wrong tool for a unit-converted quantity, and
-/// it was silently destroying data. Block size is plotted in megabytes, so the
-/// genesis block's 285 bytes is 0.000285 and rounded to `0.000`; block fees are
-/// plotted in BTC, so a block carrying 19,818 sats became `0.0`. Across ALL
-/// that turned 564 daily size averages and 1,073 fee readings into zeros, and
-/// on a log axis, which cannot plot zero, they were then dropped with a notice
-/// blaming the data.
+/// Decimal places are the wrong tool for a unit-converted quantity, and they
+/// destroy data silently: size is plotted in megabytes, so the genesis block's
+/// 285 bytes is 0.000285 and rounds to `0.000`, and fees are plotted in BTC,
+/// so 19,818 sats becomes `0.0`. Across ALL that is 564 size averages and
+/// 1,073 fee readings turned to zero, then dropped by the log axis with a
+/// notice blaming the data.
 ///
-/// Significant figures instead. Six of them hold four bytes' worth of size and
-/// a single satoshi, while keeping a serialised point to roughly the same
-/// width as before, which is what the rounding was for: the payload, not the
-/// precision of the underlying measurement.
+/// Six significant figures instead: they hold four bytes of size and a single
+/// satoshi while keeping a serialised point to roughly the same width, which
+/// is what the rounding is for.
 ///
-/// The floor is not a display concern. A chart label showing `0.00 BTC` is a
-/// formatting choice and `stats.js` makes it; a **plotted value** of zero is a
-/// different number from 0.000285 and no formatter downstream can recover it.
+/// Not a display concern. A label reading `0.00 BTC` is `stats.js` making a
+/// formatting choice; a **plotted value** of zero is a different number from
+/// 0.000285 and no formatter downstream can recover it.
 pub(crate) fn round_plot(val: f64) -> f64 {
     const DIGITS: i32 = 6;
     if val == 0.0 || !val.is_finite() {
@@ -1552,19 +1502,17 @@ pub(crate) fn build_option(extra: serde_json::Value) -> serde_json::Value {
 
 /// Let the left value axis fit its data instead of always reaching zero.
 ///
-/// ECharts defaults a value axis to `scale: false`, which forces zero into
-/// range. For a quantity that never goes near zero that throws the detail
-/// away: difficulty over three months sat between 120 T and 142 T on a
-/// 0-to-150 axis, so every adjustment in the quarter read as a flat line.
-/// Fitting the axis is what makes the same chart legible, and it is why the
-/// log view appeared to be such an improvement: log was quietly doing the
-/// fitting the linear axis should have been doing all along.
+/// ECharts defaults a value axis to `scale: false`, forcing zero into range,
+/// which throws away the detail of a quantity that never goes near it:
+/// difficulty over three months sits between 120T and 142T on a 0-to-150 axis,
+/// so every adjustment in the quarter reads as a flat line. It is also why the
+/// log view looked like such an improvement, log having quietly done the
+/// fitting the linear axis should have done.
 ///
-/// Three kinds of chart still need zero, and the reason differs each time:
+/// Three kinds of chart still need zero, for different reasons:
 ///
 /// - **Bars.** Bar length encodes magnitude, so a cut axis misstates ratios.
-///   This is the one where fitting would actually mislead rather than just
-///   look different.
+///   The one case where fitting misleads rather than merely looking different.
 /// - **Stacked.** The stack is a sum measured from zero.
 /// - **Percentages.** 0 to 100 is the frame that gives the number meaning.
 ///
@@ -1735,29 +1683,23 @@ const BIP_ACTIVATIONS: &[(u64, u64, &str)] = &[
 ///   | grep -oE 'published" datetime="[0-9-]{10}'
 /// ```
 ///
-/// **Not the permalink path, which is the second wrong source this list has
-/// had.** A post can override its permalink, and one does: v0.15.0 lives at
-/// `/2017/09/01/release-0.15.0/` and says it was published on September 14.
-/// Its source file is `2017-09-14-release-0.15.0.md`. An HTTP 200 proves the
-/// permalink exists, not that the date in it is the release date, and the
-/// review of 2026-09-16 caught that after the same review had already caught
-/// GitHub's `published_at`.
-///
-/// Every one of the 19 entries from v0.12 on has been read from the displayed
-/// date. v0.15 is the only permalink that disagrees with it.
+/// **Not the permalink path.** A post can override its permalink, and one
+/// does: v0.15.0 lives at `/2017/09/01/release-0.15.0/` while saying it was
+/// published on September 14, from a source file named
+/// `2017-09-14-release-0.15.0.md`. An HTTP 200 proves the permalink exists,
+/// not that the date in it is the release date.
 ///
 /// **Nor GitHub's release-object `published_at`**, which records when the
 /// object was published and drifts by up to sixteen days: v0.18.0 was
 /// announced 2019-05-02 and its GitHub object says 05-18.
 ///
-/// So three candidate fields, and only one of them is the release date. The
-/// permalink path and `published_at` each looked authoritative and each was
-/// wrong for a different reason.
+/// All 19 entries from v0.12 on are read from the displayed date; v0.15 is the
+/// only permalink that disagrees with it.
 ///
-/// **The nine entries before v0.12 are unverified.** No announcement exists
-/// at that path for them, checked across each release month: the site's blog
-/// does not reach back that far. Their dates are plausible and unchecked,
-/// and corroborating them needs the bitcoin-dev announcements.
+/// **The nine entries before v0.12 are unverified.** No announcement exists at
+/// that path for them, checked across each release month, because the blog
+/// does not reach back that far. Corroborating them needs the bitcoin-dev
+/// announcements.
 const CORE_RELEASES: &[(u64, &str)] = &[
     (1231444060, "v0.1"),
     (1316736000, "v0.4"),
@@ -1806,28 +1748,20 @@ const EVENTS: &[(u64, &str)] = &[
     (1713571767, "Runes Launch"),
     // The BIP-110 chain split, at block 961,632 on 2026-08-08 19:35:55 UTC.
     //
-    // BIP-110, "Reduced Data Temporary Softfork", is a consensus soft fork
-    // capping data field sizes. It had no FAILED state, only mandatory
-    // signalling as a fallback: blocks from 961,632 had to set version bit 4
-    // or enforcing nodes would reject them. AntPool mined 961,632 itself
-    // without the bit, this chain accepted it, and the enforcing nodes forked
-    // away onto a minority chain.
-    //
-    // Support peaked at 51 blocks in retarget period 476, about 2.53%, and
-    // **no block at or after 961,632 has set bit 4**. All three figures read
-    // from this node on 2026-09-25.
+    // BIP-110 capped data field sizes with no FAILED state, only mandatory
+    // signalling: blocks from 961,632 had to set version bit 4 or enforcing
+    // nodes would reject them. AntPool mined 961,632 without the bit, this
+    // chain accepted it, and the enforcing nodes forked onto a minority chain.
+    // Support peaked at 51 blocks in period 476 (~2.53%) and no block at or
+    // after 961,632 has set bit 4, read from this node on 2026-09-25.
     //
     // **The marker is the split, not the fork's later flag day.** The minority
-    // chain went on to a BLAKE2b proof-of-work hard fork at *its* block
-    // 961,640 on 2026-08-30, which is a different block from this chain's
-    // 961,640 at 2026-08-08 21:59 because the two diverged eight blocks
-    // earlier and the minority chain mines at a fraction of a percent of the
-    // hashrate. Do not plot that height against this timeline: the two chains
-    // share a numbering and nothing else after 961,632. This overlay draws
-    // against the chain this node follows.
+    // chain's BLAKE2b hard fork is at *its* block 961,640, a different block
+    // from this chain's. After 961,632 the two share a numbering and nothing
+    // else, so do not plot that height against this timeline.
     (1786217755, "BIP-110 chain split"),
 ];
-/// Overlay flags — which overlays to merge into a chart option.
+/// Overlay flags: which overlays to merge into a chart option.
 #[derive(Clone, Debug, Default)]
 pub struct OverlayFlags {
     pub halvings: bool,
@@ -2200,21 +2134,17 @@ fn add_series_overlay(
 
 /// Lay a second chart's series over this one on the right axis.
 ///
-/// The comparison chart is built from the same rows over the same range by
-/// the same family of builders, so the two series already share an x domain
-/// and need no interpolation, unlike the price and chain-size overlays whose
-/// data arrives from elsewhere on its own dates. That is also why this
-/// refuses rather than resamples when the shapes do not line up: a mismatch
-/// means an assumption broke, and silently drawing a misaligned series is the
-/// worst available outcome on a chart whose whole claim is that the numbers
-/// are checkable.
+/// The comparison chart is built from the same rows over the same range by the
+/// same family of builders, so the two series share an x domain and need no
+/// interpolation, unlike the price and chain-size overlays. That is also why
+/// this refuses rather than resamples on a mismatch: a mismatch means an
+/// assumption broke, and silently drawing a misaligned series is the worst
+/// outcome on a chart whose claim is that the numbers are checkable.
 ///
-/// Takes the other chart's one **metric** series, which is not the same thing
-/// as its first. `fee-spikes` draws its 144-block moving average at index 0
-/// and the spikes themselves at index 1, so lifting by position drew the
-/// smoothing companion under the label "Fee Spike Detector" while the rail
-/// beside it reported the spikes. Position is a proxy for meaning and this is
-/// what it costs; `metric_series` answers the question actually being asked.
+/// Takes the other chart's one **metric** series, which is not its first.
+/// `fee-spikes` draws its 144-block moving average at index 0 and the spikes
+/// at index 1, so lifting by position labels the smoothing companion "Fee
+/// Spike Detector" while the rail beside it reports the spikes.
 ///
 /// Returns whether it applied, so the caller can say "not available over this
 /// range" instead of showing a picker that quietly does nothing.
@@ -2227,23 +2157,18 @@ pub fn apply_comparison(
     if !accepts_comparison_series(option) {
         return false;
     }
-    // Refuse a source with more than one real metric, and a source whose x
-    // means something different.
+    // Refuse a multi-metric source, and one whose x means something else.
     //
-    // One series is lifted, so a multi-metric source would arrive as one of
-    // its parts under the whole chart's name: comparing difficulty adjustment
-    // dropped every easing retarget, and comparing transaction batching drew
-    // outputs per transaction while calling itself both.
+    // Only one series is lifted, so a multi-metric source arrives as one of
+    // its parts under the whole chart's name: difficulty adjustment loses
+    // every easing retarget, batching draws outputs per transaction while
+    // claiming both. And sharing dashboard rows does not mean sharing an x
+    // domain: fee pressure plots fullness on a value axis, so on a time axis
+    // its percentages land where milliseconds belong and date to 1970.
     //
-    // And sharing dashboard rows does not mean sharing an x domain. Fee
-    // pressure plots block fullness on a value axis, so overlaying it on a
-    // time axis put percentages where milliseconds belong and dated its
-    // extrema to 1970.
-    //
-    // **Temporary, and narrower than the feature should be.** The right fix
-    // is to offer named measurements rather than charts, so "Transaction
-    // Batching: Outputs per Transaction" is selectable and complete. Until
-    // then refusing is the honest answer; see `notes/phase-2-spec.md`.
+    // **Temporary, and narrower than the feature should be.** The right fix is
+    // to offer named measurements rather than charts; see
+    // `notes/phase-2-spec.md`.
     let metrics = metric_series(other);
     if metrics.len() != 1 || !x_domains_match(option, other) {
         return false;
@@ -2399,27 +2324,23 @@ fn x_domains_match(a: &serde_json::Value, b: &serde_json::Value) -> bool {
 /// Whether this option can hold a second series on a right axis without lying.
 ///
 /// Structural, and decided from the built option rather than from chart
-/// metadata, for the same reason `log_scale_is_meaningful` and
-/// `fit_value_axis` are: it then covers every call site, including ones that
-/// do not exist yet, and a new chart gets the right answer without declaring
-/// anything.
+/// metadata, the same way `log_scale_is_meaningful` and `fit_value_axis` are,
+/// so it covers every call site and a new chart needs no declaration.
 ///
-/// This is deliberately a second line of defence behind
-/// `registry::is_valid_comparison`. That one is editorial and gates what the
-/// picker offers; this one gates what can actually be drawn. Keeping them
-/// separate is what stops "the select never renders on such a chart" from
-/// being the thing holding the invariant up, which is how a comparison
-/// reached a donut the moment the selection outlived the page.
+/// Deliberately a second line of defence behind
+/// `registry::is_valid_comparison`, which is editorial and gates what the
+/// picker offers; this gates what can be drawn. Separating them stops "the
+/// select never renders on such a chart" from holding the invariant up, which
+/// is how a comparison reached a donut once the selection outlived the page.
 ///
 /// Four refusals:
 ///
-/// - **A pie series.** There are no cartesian axes to hang anything from, so
-///   this pushed a value axis onto a donut and drew a line across it.
+/// - **A pie series.** No cartesian axes to hang anything from, so a value
+///   axis lands on the donut and draws a line across it.
 /// - **Two value axes already.** `Unit::Mixed` charts spend the right axis on
-///   themselves, and an overlay that has already claimed it leaves nothing
-///   free. A third axis on one plot is unreadable, so this is also what makes
-///   the price/chain-size/comparison exclusion structural rather than a rule
-///   the UI remembers to grey out.
+///   themselves. A third axis on one plot is unreadable, which is also what
+///   makes the price/chain-size/comparison exclusion structural rather than a
+///   rule the UI remembers to grey out.
 /// - **Stacked percentage bands.** They fill 0 to 100 and are read against
 ///   each other; a second scale cannot be read against them at all.
 /// - **No series.** Nothing to compare against.

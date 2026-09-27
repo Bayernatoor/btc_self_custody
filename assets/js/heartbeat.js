@@ -1,4 +1,4 @@
-// Block Heartbeat v3 — ES Module entry point
+// Block Heartbeat v3: ES Module entry point
 // Imports all sub-modules and wires up the window.* public API
 // that the Leptos component calls via wasm_bindgen.
 
@@ -66,7 +66,7 @@ window.initHeartbeat = function(canvasId) {
         // Level-of-detail: when zoomed way out (<0.3x) with a very full mempool
         // (>60k bricks), draw per-column density bars instead of every brick, to
         // avoid redrawing ~45k+ rects/frame. Toggle at runtime with
-        // window._hbToggleLod() (persisted in localStorage) — off = individual
+        // window._hbToggleLod() (persisted in localStorage), off = individual
         // bricks always (nicer, but can jank at a very full mempool zoomed out).
         _lodEnabled: (function() { try { return localStorage.getItem('hb_lod') !== 'off'; } catch (e) { return true; } })(),
         // Cinematic block reveal (form→harvest→unfurl→hold→return). Off = instant
@@ -215,7 +215,7 @@ window.initHeartbeat = function(canvasId) {
             s.height = r.height;
             // On fullscreen-enter the canvas gets much taller; drop the baseline to
             // ~0.60h so the timeline sits centered (default 0.55h read top-heavy,
-            // 0.66h too low — 0.60 is the midpoint). Tunable knob.
+            // 0.66h too low: 0.60 is the midpoint). Tunable knob.
             if (s._recenterPending && r.height > 0) {
                 s._recenterPending = false;
                 var base = (s.height < 350 ? s.height * 0.78 : s.height * 0.55);
@@ -358,7 +358,7 @@ window.pushHeartbeatBlocks = function(json, replay) {
                     lastSeg.color = _hb._preFlashColor || _hb.currentColor || COLORS.healthy;
                 }
                 // A block confirms some mempool txs and leaves the rest waiting.
-                // HARVEST (live blocks): split the active bricks by fee rate — the
+                // HARVEST (live blocks): split the active bricks by fee rate, the
                 // top `tx_count` (≈ what the block took) shatter into the spike;
                 // the lower-fee remainder is carried forward onto the new flatline
                 // (still unconfirmed = still in the mempool). Replay/history blocks
@@ -382,8 +382,8 @@ window.pushHeartbeatBlocks = function(json, replay) {
 
                     // Which active bricks did the block confirm? The top `tx_count`
                     // by fee rate. Rather than sort the (up to ~45k) brick OBJECTS
-                    // and build a Set — a multi-ms stall right as the reveal camera
-                    // starts moving — sort just their fee rates (numbers, cheap) to
+                    // and build a Set: a multi-ms stall right as the reveal camera
+                    // starts moving: sort just their fee rates (numbers, cheap) to
                     // find the cutoff, then partition by comparing each brick's rate
                     // to it. feeThreshold = -Infinity confirms everything (block took
                     // >= what we show), matching prior behavior.
@@ -403,7 +403,7 @@ window.pushHeartbeatBlocks = function(json, replay) {
                             // The harvestCount-th highest rate is the cutoff. Bricks
                             // strictly above it all confirm; bricks exactly at it fill
                             // the remaining budget (feeRate is stored rounded to 1dp,
-                            // so equality is exact — no float epsilon). Capping at
+                            // so equality is exact: no float epsilon). Capping at
                             // harvestCount stops a mass of equal low-fee bricks (a
                             // quiet 1 sat/vB mempool) from all confirming at once.
                             feeThreshold = rates[activeCount - harvestCount];
@@ -415,7 +415,7 @@ window.pushHeartbeatBlocks = function(json, replay) {
 
                     // Single partition pass: confirmed bricks shatter into the spike;
                     // the rest carry forward. Rebuild lastSeg.blips in place = kept
-                    // (already-fading + confirmed), dropping the carried — no separate
+                    // (already-fading + confirmed), dropping the carried, no separate
                     // filter pass or Sets.
                     var kept = [];
                     var revealConfirmed = revealPending ? [] : null;
@@ -470,7 +470,7 @@ window.pushHeartbeatBlocks = function(json, replay) {
             var blockSeg = createBlockSegment(b, _hb.virtualX);
             // Spike strike ("BAM"). Live INSTANT blocks strike immediately. For a
             // cinematic reveal we instead mark the spike _strikePending (drawn FLAT)
-            // and let the reveal fire the strike — right away if the view is already
+            // and let the reveal fire the strike: right away if the view is already
             // at the head, or on ARRIVAL if the camera has to travel there, so the
             // pop lands when you're looking at it, not mid-scroll. Replay/history
             // appear settled (neither flag).
@@ -598,7 +598,7 @@ function pruneTimeline() {
 
 // Re-drop carried-forward (unconfirmed) leftover bricks onto the current live
 // flatline right after a block, widening it to fit them. Reuses each brick's own
-// object (color/size/txid/fee preserved) — same mempool txs, moved to the new
+// object (color/size/txid/fee preserved): same mempool txs, moved to the new
 // mempool segment with a staggered drop-in. Density mirrors live/history: ~10
 // bricks per 5px column, skip a column once it hits the 35%-height cap.
 function placeCarriedLeftovers(leftovers, staggerSecs) {
@@ -615,7 +615,7 @@ function placeCarriedLeftovers(leftovers, staggerSecs) {
     var maxStack = (_hb.height || 400) * 0.35;
     var width = Math.max(30, Math.ceil(n / 10) * 5); // ~10 bricks/column
     // Set the geometry UP FRONT (before placing), so the flatline width, virtualX,
-    // and the reveal-camera gate that reads them are all correct immediately — the
+    // and the reveal-camera gate that reads them are all correct immediately, the
     // bricks then stream in over the frames below.
     _hb.virtualX = seg.x_start + width;
     if (!seg._colHeights) seg._colHeights = {};
@@ -624,7 +624,7 @@ function placeCarriedLeftovers(leftovers, staggerSecs) {
 
     // Place in CHUNKS across RAF frames instead of one synchronous pass. A
     // full-mempool carry (~40k bricks) in a single loop stalls the frame the block
-    // lands on — which is exactly when the reveal camera starts moving, so the
+    // lands on: which is exactly when the reveal camera starts moving, so the
     // stall reads as jank at the start of the animation. Chunking also spreads the
     // drop-in over the reveal so the camera visibly "follows" the placement. Each
     // brick's drop timing stays keyed to its x (now + xFrac), so the left→right
@@ -636,7 +636,7 @@ function placeCarriedLeftovers(leftovers, staggerSecs) {
     var placeChunk = function() {
         var s = getState();
         // Abort if torn down, or the flatline closed/changed (a new block arrived
-        // mid-carry) — the remaining leftovers would land on a stale segment.
+        // mid-carry): the remaining leftovers would land on a stale segment.
         if (!s || s.timeline[s.timeline.length - 1] !== seg || seg.x_end !== null) {
             _hb._carryRaf = null;
             return;
@@ -759,7 +759,7 @@ window.updateHeartbeatLive = function(json) {
         var data = JSON.parse(json);
         if (data.next_block_fee !== undefined) _hb.nextBlockFee = data.next_block_fee;
         if (data.mempool_mb !== undefined) _hb.mempoolMB = data.mempool_mb;
-        // Don't update lastBlockTime from LiveStats — it resets the "Last block"
+        // Don't update lastBlockTime from LiveStats: it resets the "Last block"
         // timer before the spike appears. lastBlockTime is set exclusively by
         // pushHeartbeatBlocks when the SSE block event arrives with complete data.
         if (data.hashrate_eh !== undefined) _hb.hashrateEH = data.hashrate_eh;
@@ -818,10 +818,10 @@ window.addEventListener('beforeunload', _hbBeforeUnload);
 // stale timeline state (blocks bunched up, flatline position wrong).
 // Replay a single block (from _blockQueue or a catch-up fetch) as a live block.
 // Harvest ON so the mempool is carried forward (top-fee shatters into the spike,
-// the rest re-lays on the new flatline) — same as a live block, but INSTANT (this
+// the rest re-lays on the new flatline): same as a live block, but INSTANT (this
 // isn't processLiveBlock, so no cinematic reveal is armed). Without harvest the fee
 // threshold is -Infinity and the WHOLE mempool shatters into the spike, leaving the
-// new flatline empty — a block you were away for would wipe the mempool.
+// new flatline empty: a block you were away for would wipe the mempool.
 function replayQueuedBlock(qb) {
     var _hb = getState();
     if (_hb) _hb._harvestLive = true;
@@ -909,13 +909,13 @@ function catchUpBlocks(queued, tipHeight) {
 
 // Safety net for blocks queued while the tab was hidden (see the SSE 'block'
 // handler). Normally _hbVisibilityChange drains the queue on return, but if that
-// event doesn't fire — a brief/edge-case hide, a focus race, or the block event
-// landing with document.hidden===true just before the tab is shown — the queued
+// event doesn't fire: a brief/edge-case hide, a focus race, or the block event
+// landing with document.hidden===true just before the tab is shown, the queued
 // block would strand: the canvas stays on the old block while the header (fed by
 // LiveStats, which updates regardless of visibility) shows the new height.
 // drawFrame calls this every frame, and RAF only runs at full rate when the tab
 // is genuinely visible, so a stranded block is replayed within a frame of the
-// tab being shown — no dependence on visibilitychange. Cheap: no-ops instantly
+// tab being shown: no dependence on visibilitychange. Cheap: no-ops instantly
 // when the queue is empty (the normal case).
 window._hbDrainBlockQueue = function() {
     var _hb = getState();
@@ -930,8 +930,8 @@ window._hbDrainBlockQueue = function() {
 
 // Recover the timeline after a gap where the draw loop wasn't advancing virtualX
 // while SSE kept flowing. Two triggers share this: a hidden tab (visibilitychange,
-// below) and a throttled/paused rAF with the tab still "visible" — window occluded,
-// on another monitor, or the machine slept — which fires NO visibilitychange and is
+// below) and a throttled/paused rAF with the tab still "visible", window occluded,
+// on another monitor, or the machine slept, which fires NO visibilitychange and is
 // caught by the gap detector in drawFrame. Without recovery the backlog grinds into
 // a few columns at a frozen virtualX (tall stacks + clustered block spikes).
 // `gapSecs` = how long the loop was effectively stalled.
@@ -1079,7 +1079,7 @@ function recoverTimeline(gapSecs) {
     _hb.lastFrameTime = now;
 }
 // Exposed so drawFrame (render.js) can invoke the same recovery when it detects a
-// throttled/paused rAF gap (occluded window / other monitor / sleep) — no
+// throttled/paused rAF gap (occluded window / other monitor / sleep), no
 // visibilitychange fires for those.
 window._hbRecoverTimeline = function(gapSecs) { recoverTimeline(gapSecs); };
 
@@ -1122,7 +1122,7 @@ window.getHeartbeatLatestBlock = function() {
 // Live mempool stats from the SSE-driven timeline: the count of active (non-
 // fading) bricks on the current flatline + their total vsize as vMB. With the
 // ZMQ `sequence` removals (C) the brick set tracks the node's real mempool, so
-// this reads real-time AND accurate — the Rust bottom bar polls it on the 1s tick
+// this reads real-time AND accurate: the Rust bottom bar polls it on the 1s tick
 // to replace the ~15s RPC getmempoolinfo value. One O(n) pass over the live
 // segment (~tens of k) once/sec is negligible. Returns {tx, vmb}; tx=0 signals
 // "not ready" so the caller falls back to the RPC value.

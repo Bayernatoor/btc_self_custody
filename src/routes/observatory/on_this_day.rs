@@ -139,7 +139,7 @@ fn YearCard(year: OnThisDayYear) -> impl IntoView {
                     view! { <div></div> }.into_any()
                 }}
 
-                // Stats grid — top 4 always visible, last 2 hidden on mobile
+                // Stats grid: top 4 always visible, last 2 hidden on mobile
                 <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 text-sm">
                     <div data-tip="Blocks mined on this day (00:00-23:59 UTC)" tabindex="0">
                         <p class="text-[10px] sm:text-[11px] text-white/50 uppercase tracking-wider">"Blocks"</p>
@@ -175,7 +175,7 @@ fn YearCard(year: OnThisDayYear) -> impl IntoView {
                     </div>
                 </div>
 
-                // Extra metrics row — hidden on mobile
+                // Extra metrics row: hidden on mobile
                 <div class="hidden sm:flex flex-wrap gap-x-4 gap-y-1 mt-2 pt-2 border-t border-white/5 text-xs text-white/50">
                     <span data-tip="Block reward per block in this era (halves every 210,000 blocks)" tabindex="0">{
                         let era = year.last_block / 210_000;
@@ -408,7 +408,7 @@ pub fn OnThisDayPage() -> impl IntoView {
                 let is_today = selected_date.get() == today;
                 let year = now.year();
                 if is_today {
-                    // Already on today — show month + day dropdowns to jump to any day
+                    // Already on today: show month + day dropdowns to jump to any day
                     // of the current year. Native <input type="date"> was confusing because
                     // browsers let users navigate to other years and grey out the days,
                     // without blocking the navigation itself.
@@ -489,7 +489,7 @@ pub fn OnThisDayPage() -> impl IntoView {
                         </div>
                     }.into_any()
                 } else {
-                    // Not on today — show Today button
+                    // Not on today: show Today button
                     view! {
                         <button
                             class="text-xs text-white/50 hover:text-white/70 px-3 py-1.5 rounded-lg border border-white/10 hover:border-white/20 cursor-pointer transition-colors"
@@ -511,7 +511,7 @@ pub fn OnThisDayPage() -> impl IntoView {
                             if let Ok(s) = t.dyn_into::<leptos::web_sys::HtmlSelectElement>() {
                                 let val = s.value();
                                 if !val.is_empty() {
-                                    // Format: "MM-DD:YYYY" — date + target year for scrolling
+                                    // Format: "MM-DD:YYYY": date + target year for scrolling
                                     let parts: Vec<&str> = val.split(':').collect();
                                     let date = parts[0].to_string();
                                     #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]

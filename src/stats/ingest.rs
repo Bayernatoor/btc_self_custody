@@ -23,7 +23,7 @@ use super::{db, error::StatsError};
 
 /// Max newly-ingested blocks the poller will re-broadcast as heartbeat spikes in
 /// one tick. A ZMQ-only hiccup misses 1-2 blocks; a larger batch is a startup /
-/// post-outage catch-up, which the frontend picks up from history instead — we
+/// post-outage catch-up, which the frontend picks up from history instead, we
 /// don't want to fire dozens of spikes at connected clients at once.
 const MAX_POLLER_BROADCAST: usize = 3;
 
@@ -188,7 +188,7 @@ pub async fn poll_new_blocks(
     // Re-broadcast newly-ingested blocks as heartbeat spikes so a ZMQ-missed
     // block still appears (late). Only for small batches: a large catch-up
     // (startup / post-outage) is not a live ZMQ hiccup, and the frontend gets
-    // those from history — firing dozens of spikes at once would look broken.
+    // those from history: firing dozens of spikes at once would look broken.
     if !blocks.is_empty() && blocks.len() <= MAX_POLLER_BROADCAST {
         for b in &blocks {
             let _ = heartbeat_tx.send(HeartbeatEvent::Block {

@@ -6,10 +6,9 @@
 //! drew, or the two disagree in front of the reader. Recomputing from the
 //! `&[BlockSummary]` slice looks equivalent and is not: builders drop leading
 //! points, apply moving averages, round, and in a few cases derive the plotted
-//! value from two fields. Reading the option back means the figures are the
-//! plotted values by construction. The click-to-detail bug fixed in
-//! `fix/chart-correctness` was this same class of error, a tooltip and a modal
-//! answering one click from two sources.
+//! value from two fields. Reading the option back makes the figures the
+//! plotted values by construction. Click-to-detail was the same class of
+//! error: a tooltip and a modal answering one click from two sources.
 //!
 //! # Why the figures differ by shape
 //!
@@ -108,17 +107,14 @@ pub enum Kpis {
     ///
     /// Two causes, which is why the variant and its message are **neutral
     /// about the reason**. Transaction Batching plots several measurements at
-    /// the same x, so any one figure would describe neither. Mining Diversity
-    /// plots a single gauge value, where an average over one point and a
-    /// peak equal to it are three restatements of the same number.
-    ///
-    /// Saying "several separate measurements" covered the first and was
-    /// simply false for the gauge, which the review of 2026-09-16 caught.
+    /// the same x, so any one figure describes neither. Mining Diversity plots
+    /// a single gauge value, where the average, peak and low are three
+    /// restatements of one number. Naming either cause is false for the other.
     ///
     /// Distinct from [`Kpis::Unavailable`] because the reader's next move
-    /// differs: a shorter range fixes an empty range and cannot fix either of
-    /// these. The rail said "Not available for this range" for all three,
-    /// which told someone looking at Batching to go and change the range.
+    /// differs: a shorter range fixes an empty range and fixes neither of
+    /// these, so sharing "Not available for this range" told someone looking
+    /// at Batching to go and change the range.
     NotSummarizable,
 }
 
@@ -322,10 +318,8 @@ fn single_series(
     if metric.is_empty() {
         return Kpis::Unavailable;
     }
-    // Several series on one axis are one of two different things, and the
-    // claim that "where there are genuinely several metrics the chart is
-    // stacked or categorical" was simply false. `batching` is a plain line
-    // chart plotting two measurements, so it routed straight through here.
+    // Several series on one axis are one of two different things, and a plain
+    // line chart can be either: `batching` plots two measurements.
     //
     // - **One measurement split for rendering.** `diff-adjustment` draws
     //   "Harder" and "Easier" as separate series so the bars can be coloured

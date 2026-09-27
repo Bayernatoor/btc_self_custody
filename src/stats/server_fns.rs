@@ -137,7 +137,7 @@ pub async fn fetch_stats_summary() -> Result<StatsSummary, ServerFnError> {
 }
 
 /// Fetch the most recent `count` blocks straight from the DB (droplet-local),
-/// deriving the tip from `db::max_height` — NO node RPC. The heartbeat's initial
+/// deriving the tip from `db::max_height`: NO node RPC. The heartbeat's initial
 /// timeline uses this so the page renders the historical EKG immediately even
 /// when the home node is unreachable, instead of blocking on live stats.
 #[server(prefix = "/api", endpoint = "stats_recent_blocks")]
@@ -277,7 +277,7 @@ pub async fn fetch_cumulative_size_before_ts(
 pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
     let state = state().await?;
 
-    // No handler-level cache here — the underlying RPCs are cached in
+    // No handler-level cache here: the underlying RPCs are cached in
     // BitcoinRpc per method (see rpc_cache.rs) with singleflight dedup
     // and stale-on-error fallback. The price fetch below has its own
     // 60s cache since it hits an external HTTP API, not Core RPC.
@@ -293,7 +293,7 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
     let db_timestamp =
         db_stats.as_ref().map(|s| s.latest_timestamp).unwrap_or(0);
 
-    // Parallelize RPC calls — all are non-fatal (fall back to defaults).
+    // Parallelize RPC calls: all are non-fatal (fall back to defaults).
     // Each returns `(value, is_stale)`; OR the staleness flags together
     // so the response surfaces a single `stale: true` if any RPC fell back
     // to its cached-on-error value.
@@ -327,7 +327,7 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
             }
         }
     };
-    // Always use DB height — it's the source of truth (updated by poll)
+    // Always use DB height: it's the source of truth (updated by poll)
     let block_height = db_height.max(blockchain.blocks);
 
     let mempool = match mempool_res {
@@ -753,7 +753,7 @@ pub async fn fetch_price_history(
     from_ts: u64,
     to_ts: u64,
 ) -> Result<Vec<PricePoint>, ServerFnError> {
-    // Silence unused warnings — range filtering now happens client-side
+    // Silence unused warnings: range filtering now happens client-side
     let _ = (from_ts, to_ts);
 
     let state = state().await?;
@@ -826,7 +826,7 @@ pub async fn fetch_mining_price_summary(
     };
     let pool_count = miners.len() as u64;
 
-    // Price context — use cached price history
+    // Price context: use cached price history
     let prices = fetch_price_history(0, 4_000_000_000)
         .await
         .unwrap_or_default();

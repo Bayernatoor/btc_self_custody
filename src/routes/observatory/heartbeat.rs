@@ -23,7 +23,7 @@ use leptos_meta::*;
 use wasm_bindgen::prelude::*;
 
 // ---------------------------------------------------------------------------
-// JS interop — heartbeat.js functions
+// JS interop: heartbeat.js functions
 // ---------------------------------------------------------------------------
 
 #[cfg(feature = "hydrate")]
@@ -144,7 +144,7 @@ pub fn HeartbeatPage() -> impl IntoView {
     let (loading, set_loading) = signal(true);
 
     // First-visit hint overlay. Starts visible so it renders in the SSR HTML
-    // and hydrates with its dismiss handler attached — starting false and
+    // and hydrates with its dismiss handler attached, starting false and
     // toggling after init breaks hydration (the <Show> body never gets its
     // click handler, leaving an undismissable overlay). For returning visitors
     // we hide it immediately on hydration via a localStorage flag (below), and
@@ -205,7 +205,7 @@ pub fn HeartbeatPage() -> impl IntoView {
 
     // Fetch blocks for the initial timeline (current retarget period = 2016).
     // DB-only (fetch_recent_blocks derives the tip from db::max_height, no node
-    // RPC), and NOT gated on cached_live — so the historical EKG renders
+    // RPC), and NOT gated on cached_live, so the historical EKG renders
     // immediately on load even when the home node is unreachable. The live parts
     // (SSE txs, vitals, STALE indicator) fill in separately once/if the node is up.
     let initial_blocks = LocalResource::new(move || async move {
@@ -271,7 +271,7 @@ pub fn HeartbeatPage() -> impl IntoView {
             let json = blocks_to_json(&blocks);
             push_heartbeat_blocks(&json, true);
 
-            // Store last height — use the latest from LiveStats (not the last replayed block)
+            // Store last height: use the latest from LiveStats (not the last replayed block)
             // to avoid missing blocks that arrived between fetch and now
             let replay_height = blocks.last().map(|b| b.height).unwrap_or(0);
             last_height.set(std::cmp::max(live_height, replay_height));
@@ -435,7 +435,7 @@ pub fn HeartbeatPage() -> impl IntoView {
 
     // Freshest block seen on the SSE/ZMQ-driven timeline (JS), polled each tick
     // below. ZMQ is faster and more reliable than the LiveStats RPC poll, so the
-    // header reflects whichever source is ahead — otherwise it lags the timeline
+    // header reflects whichever source is ahead: otherwise it lags the timeline
     // during a node RPC hiccup.
     #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
     let (sse_height, set_sse_height) = signal(0u64);
@@ -651,7 +651,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                     </div>
                     <div class="flex items-center gap-2 sm:gap-3 text-xs sm:text-base text-[#00e676] font-mono">
                         <span class="truncate">"Last block: " {time_since}</span>
-                        // Fullscreen toggle — hidden on iOS where the API isn't supported
+                        // Fullscreen toggle: hidden on iOS where the API isn't supported
                         <button
                             id="heartbeat-fullscreen-btn"
                             class="text-white/30 hover:text-[#00e676] transition-colors cursor-pointer hidden"
@@ -677,7 +677,7 @@ pub fn HeartbeatPage() -> impl IntoView {
 
                 // Canvas with overlays
                 // The canvas flexes to fill all card space left over after the
-                // status/control/info bars — on both mobile and desktop the card
+                // status/control/info bars: on both mobile and desktop the card
                 // is now viewport-height, so flex-1 absorbs the remainder. (Also
                 // how it fills during fullscreen when JS sets the card to 100vh.)
                 <div id="heartbeat-canvas-wrap" class="relative flex-1 min-h-0 sm:min-h-[250px]">
@@ -739,7 +739,7 @@ pub fn HeartbeatPage() -> impl IntoView {
 
                 </div>
 
-                // Control bar (HTML, outside canvas): one centered cluster — zoom,
+                // Control bar (HTML, outside canvas): one centered cluster, zoom,
                 // then playback, then the LIVE follow-pill + Fit at the right end.
                 <div class="flex items-center justify-center px-3 py-2 border-t border-white/5">
                     <div class="flex items-center gap-1 rounded-lg bg-[#0a1929]/70 border border-white/10 px-1.5 py-1 backdrop-blur-sm">
@@ -821,7 +821,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                 <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 px-3 sm:px-4 py-1.5 sm:py-2 border-t border-white/5 text-xs sm:text-base text-[#00e676] font-mono">
                     // Mobile: this wrapper is a flex-col so the two stats stack left-
                     // aligned. Desktop: `sm:contents` dissolves the wrapper so mempool and
-                    // next-block become direct children of the bar again — mempool at the
+                    // next-block become direct children of the bar again, mempool at the
                     // left, next-block pushed to the right (sm:order-last), search between
                     // them via justify-between (unchanged desktop layout).
                     <div class="flex flex-col sm:contents gap-y-0.5 min-w-0">
@@ -863,7 +863,7 @@ pub fn HeartbeatPage() -> impl IntoView {
                             }
                         />
                     </div>
-                    // Search toggle — mobile only (the input is inline on sm+).
+                    // Search toggle: mobile only (the input is inline on sm+).
                     <button
                         aria-label="Search transactions"
                         on:click=move |_| set_search_open.update(|v| *v = !*v)
@@ -1094,7 +1094,7 @@ fn VitalTile(
 // ---------------------------------------------------------------------------
 
 /// Whether the visitor has already dismissed the intro hint (localStorage flag).
-/// Hydrate-only — the server never reads browser storage.
+/// Hydrate-only: the server never reads browser storage.
 #[cfg(feature = "hydrate")]
 fn hint_already_seen() -> bool {
     leptos::prelude::window()

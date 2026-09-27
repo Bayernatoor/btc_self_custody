@@ -12,7 +12,7 @@ use super::shared::*;
 use crate::chart_memo;
 use crate::extras::schema::{static_docs, StaticJsonLd};
 
-/// Embedded data charts page — overview, protocols, and inscriptions in one scrollable list.
+/// Embedded data charts page: overview, protocols, and inscriptions in one scrollable list.
 #[component]
 pub fn EmbeddedChartsPage() -> impl IntoView {
     let state = expect_context::<ObservatoryState>();

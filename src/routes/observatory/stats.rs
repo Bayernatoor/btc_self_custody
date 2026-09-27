@@ -67,7 +67,7 @@ fn SectionHeader(
 }
 
 // ---------------------------------------------------------------------------
-// Extreme card — clickable, links to mempool.space block
+// Extreme card: clickable, links to mempool.space block
 // ---------------------------------------------------------------------------
 
 /// Format bytes as human-readable size.
@@ -287,7 +287,7 @@ fn ExtremesHero(data: ExtremesData) -> impl IntoView {
                 }
             }).collect::<Vec<_>>()}
 
-            // Empty blocks — not a link, just a stat
+            // Empty blocks: not a link, just a stat
             {if d.empty_block_count > 0 {
                 let pct = format!(
                     "{:.2}% of {} blocks",
@@ -385,7 +385,7 @@ pub fn StatsSummaryPage() -> impl IntoView {
         async move { fetch_extremes(from, to).await.ok() }
     });
 
-    // Format helper — creates a Signal<String> from a RangeSummary field
+    // Format helper: creates a Signal<String> from a RangeSummary field
     let stat = move |f: fn(&RangeSummary) -> String| -> Signal<String> {
         let d = data;
         Signal::derive(move || {
@@ -740,7 +740,7 @@ pub fn StatsSummaryPage() -> impl IntoView {
         }}
 
         // ===================================================================
-        // EXTREMES — Hero section at top, clickable cards with block links
+        // EXTREMES: Hero section at top, clickable cards with block links
         // ===================================================================
         <div class="bg-[#0d2137] border border-[#f7931a]/25 rounded-2xl p-4 sm:p-6 mb-6">
             <h2 class="text-sm font-bold text-[#f7931a] uppercase tracking-widest">"Records"</h2>
@@ -762,7 +762,7 @@ pub fn StatsSummaryPage() -> impl IntoView {
         </div>
 
         // ===================================================================
-        // REST OF THE STATS — Network, Fees, Adoption, Embedded, Mining, Price
+        // REST OF THE STATS: Network, Fees, Adoption, Embedded, Mining, Price
         // ===================================================================
         <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
             <SectionHeader title="Network" subtitle="Block production, size, throughput, and chain growth"/>

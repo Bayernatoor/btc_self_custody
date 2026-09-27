@@ -54,7 +54,7 @@ fn back_button_view(
     }
 }
 
-/// Route handler for `/guides/:level` — pre-selects the level.
+/// Route handler for `/guides/:level`: pre-selects the level.
 #[component]
 pub fn GuideLevelSelector() -> impl IntoView {
     use leptos_router::hooks::use_params_map;

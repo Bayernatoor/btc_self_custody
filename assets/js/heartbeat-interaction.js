@@ -1,4 +1,4 @@
-// heartbeat-interaction.js — User input handling, momentum scrolling, control buttons
+// heartbeat-interaction.js: User input handling, momentum scrolling, control buttons
 import { getState, HEAD_POSITION_FRAC, FLATLINE_PX_PER_SEC } from './heartbeat-state.js';
 import { canvasToVirtual, virtualToCanvas, blockAtVirtualX, flatlineAtVirtualX, blipAtCanvasXY, blipAtVirtualX } from './heartbeat-blips.js';
 import { isSoundEnabled, toggleSound } from './heartbeat-audio.js';
@@ -6,7 +6,7 @@ import { isSoundEnabled, toggleSound } from './heartbeat-audio.js';
 // Clamp vertical pan (viewOffsetY shifts the baseline DOWN when positive). Two
 // regimes: when the tallest brick stack FITS above the baseline (low zoom, and
 // always in tall fullscreen) the timeline can be freely repositioned up/down within
-// the canvas — bounded so the tallest brick top stays visible (>= topMargin) and the
+// the canvas: bounded so the tallest brick top stays visible (>= topMargin) and the
 // baseline stays on-screen (>= bottomMargin from the bottom). When a stack is TALLER
 // than the canvas (high zoom) you can only pan DOWN from the default to reveal the
 // tops. 0 is the resting position; center/live/fit reset to it.
@@ -20,7 +20,7 @@ export function clampViewOffsetY(_hb) {
     var topMargin = 8;
     var bottomMargin = 40;
     // lo: baseline pushed UP until the tallest stack's top reaches topMargin
-    //     (negative when the stack fits with room above — the fullscreen case).
+    //     (negative when the stack fits with room above: the fullscreen case).
     // hi: baseline pushed DOWN to bottomMargin off the bottom.
     var lo = topMargin + maxContentTop - base;
     var hi = h - bottomMargin - base;           // baseline never past the bottom margin
@@ -123,7 +123,7 @@ function handleCanvasTap(mx, my) {
     var vx = canvasToVirtual(mx);
     var baseline = (_hb.height < 350 ? _hb.height * 0.78 : _hb.height * 0.55) + (_hb.viewOffsetY || 0);
 
-    // Brick (blip) hit-test above the baseline — mirror the hover zoom thresholds:
+    // Brick (blip) hit-test above the baseline: mirror the hover zoom thresholds:
     // 2D at high zoom, x-only at moderate zoom, none when too dense/zoomed out.
     var blip = null;
     if (my < baseline) {
@@ -176,7 +176,7 @@ export function setupInputHandlers(canvas) {
     // Mouse wheel: zoom (centered on cursor). Shift+wheel: pan.
     listen(canvas, 'wheel', function(e) {
         if (!_hb) return;
-        // End an in-progress block reveal — a wheel-zoom doesn't flip
+        // End an in-progress block reveal: a wheel-zoom doesn't flip
         // isDragging/paused/pinching, so runBlockReveal wouldn't catch it otherwise.
         if (_hb._reveal && window._hbEndReveal) window._hbEndReveal();
         e.preventDefault();
@@ -353,7 +353,7 @@ export function setupInputHandlers(canvas) {
             _hb._pinchVx = canvasToVirtual(_hb._pinchMid.x);
             _hb._pinchLastMidY = _hb._pinchMid.y; // track finger travel for vertical pan
         } else if (e.touches.length === 1) {
-            // Pan start — don't commit to horizontal drag yet
+            // Pan start: don't commit to horizontal drag yet
             _hb._pinching = false;
             _hb._gestureWasPinch = false; // a fresh single-finger touch can be a tap
             _hb.isDragging = false;
@@ -443,7 +443,7 @@ export function setupInputHandlers(canvas) {
         }
 
         // Tap detection: a single-finger touch that barely moved. Runs regardless of
-        // whether it locked into a drag — a real finger tap always has micro-jitter,
+        // whether it locked into a drag: a real finger tap always has micro-jitter,
         // which used to lock 'h'/'v' and skip tap handling entirely (so a tap either
         // did nothing or fell through to the synthetic click against stale state).
         // Skip if this gesture was ever a pinch: lifting the last finger of a pinch
@@ -552,7 +552,7 @@ export function handleControlClick(id) {
             break;
         case 'live':
             // Re-engage head-follow at the CURRENT zoom (Fit is the separate
-            // "frame the whole mempool" action — Live shouldn't fight it by
+            // "frame the whole mempool" action: Live shouldn't fight it by
             // snapping back to a fixed zoom).
             _hb.autoFollow = true;
             _hb.paused = false;

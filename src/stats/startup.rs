@@ -15,12 +15,12 @@
 //! - **Extras backfill**: re-fetches blocks with outdated backfill_version
 //! - **Backward backfill**: fills historical blocks from min_height down to genesis
 //! - **Mempool seed**: loads current mempool via `getrawmempool` on startup
-//! - **Mempool reconcile**: every 60s, syncs mempool_txs to the node's mempool in
-//!   both directions — prunes rows for txs no longer in it (RBF/eviction/missed-
-//!   confirm ghosts) via the cheap txid list, AND, only when the table has drifted
-//!   below the node, backfills txs the ZMQ `rawtx` feed missed (HWM drops /
-//!   reconnect gaps) via a drift-gated verbose fetch, so the heartbeat brick count
-//!   tracks the node's real mempool instead of drifting above OR below it
+//! - **Mempool reconcile**: every 60s, syncs mempool_txs to the node in both
+//!   directions, so the heartbeat brick count tracks the real mempool rather
+//!   than drifting above or below it. Prunes rows for txs no longer in the
+//!   mempool from the cheap txid list; backfills txs the ZMQ `rawtx` feed
+//!   missed via a verbose fetch, gated on the table having drifted below the
+//!   node
 //! - **ZMQ subscriber**: real-time tx and block notifications (if configured)
 //! - **Mempool pruner**: deletes old mempool_txs entries daily
 
@@ -174,7 +174,7 @@ pub async fn init() -> Option<(
         &[CacheTag::OnNewBlock],
     );
     // Short TTL: shares one built payload across a burst of connects (singleflight),
-    // rebuilt at most every few seconds. TTL-only — a stale initial fill is fine.
+    // rebuilt at most every few seconds. TTL-only: a stale initial fill is fine.
     let heartbeat_history_cache = cb.cache::<(), std::sync::Arc<str>>(
         "heartbeat_history",
         Duration::from_secs(3),
@@ -299,13 +299,12 @@ pub fn spawn_background_tasks(
     // whales get flagged. This keeps a price there regardless of user
     // activity.
     //
-    // The interval must stay BELOW `PRICE_CACHE_TTL`. It used to be 90s
-    // against a 60s TTL, so the entry was guaranteed expired for 30s of every
-    // 90s cycle. During those windows the ZMQ path read `None`, fell back to
-    // `unwrap_or(0.0)`, and computed `value_usd` as 0, so nothing could clear
-    // the $1M whale threshold and arrivals in that window were silently not
-    // flagged. Production bore this out: 114,557 misses against 681,164 hits
-    // on a cache with one key and a live refresher.
+    // The interval must stay BELOW `PRICE_CACHE_TTL`. Above it, the entry is
+    // guaranteed expired for part of every cycle; the ZMQ path then reads
+    // `None`, falls back to `unwrap_or(0.0)` and computes `value_usd` as 0, so
+    // nothing clears the $1M whale threshold and those arrivals go unflagged.
+    // At 90s against a 60s TTL that was 114,557 misses in production, on a
+    // cache with one key and a live refresher.
     //
     // Refreshing inside the TTL also leaves slack for a failed fetch: at 45s
     // against 60s, one failure still leaves a valid entry.
@@ -357,7 +356,7 @@ pub fn spawn_background_tasks(
                 // Verify the last blocks against the canonical chain (detect reorgs).
                 // Depth must match super::rpc::REORG_DETECTION_DEPTH so the
                 // ZMQ hashblock handler invalidates the same window of
-                // block_hash_cache entries — otherwise a reorg at a depth
+                // block_hash_cache entries: otherwise a reorg at a depth
                 // verified but not invalidated would be silently missed.
                 ingest::verify_recent_blocks(
                     &state.rpc,
@@ -474,23 +473,21 @@ pub fn spawn_background_tasks(
     //   - PRUNE departed txs: txs that left the mempool another way than a block
     //     (RBF-replaced, fee-evicted, or confirmed in a block our ZMQ missed) keep
     //     confirmed_height NULL and would pile up as "ghost" rows.
-    //   - INSERT missing txs: ZMQ `rawtx` does NOT capture every tx — the send
+    //   - INSERT missing txs: ZMQ `rawtx` does NOT capture every tx, the send
     //     high-water mark drops messages under burst, a subscriber reconnect loses
     //     whatever arrived during the gap, and a failed getmempoolentry drops the
     //     tx outright. Nothing else re-adds those, so the table drifts BELOW the
     //     node's real mempool (observed ~24k rows vs a ~43k node mempool) and the
     //     heartbeat brick count under-reports.
     // The prune runs every cycle off the cheap `getrawmempool` txid list. The
-    // backfill needs fee/vsize (only in the far heavier `getrawmempool verbose`,
-    // which the node serializes under cs_main and which is tens of MB to parse on
-    // a memory-tight box), so it is DRIFT-GATED: verbose is fetched only when the
-    // table has fallen at least BACKFILL_DRIFT_THRESHOLD below the node. In steady
-    // state (ZMQ keeping up) that never fires, so the ongoing cost is just the
-    // txid-list prune — the same as before this feature. After pruning, every DB
-    // unconfirmed row is guaranteed present in the node set, so
-    // `node_count - db_count` is exactly the count of txs ZMQ missed. Both
-    // directions are capped per cycle so a large first-time backlog can't hold a
-    // long write lock / exhaust the pool; the remainder clears over later cycles.
+    // backfill needs fee/vsize, which only `getrawmempool verbose` carries, and
+    // the node serializes that under cs_main at tens of MB to parse. So it is
+    // DRIFT-GATED: verbose is fetched only once the table has fallen at least
+    // BACKFILL_DRIFT_THRESHOLD below the node, which never fires while ZMQ
+    // keeps up. After pruning, every unconfirmed DB row is present in the node
+    // set, so `node_count - db_count` is exactly what ZMQ missed. Both
+    // directions are capped per cycle so a large first-time backlog cannot
+    // hold a long write lock or exhaust the pool.
     {
         let state = Arc::clone(&state);
         tokio::spawn(async move {

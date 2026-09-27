@@ -499,24 +499,22 @@ pub struct HallOfFameEntry {
     /// never user input, so there is nothing to escape. Do not widen this
     /// field's source without revisiting that.
     ///
-    /// `None` means the Almanac shows no event row for the date. Every entry
-    /// now has copy, and a guard test keeps it that way, so this stays an
-    /// `Option` only because the field is read before that is known.
+    /// `None` means the Almanac shows no event row for the date. A guard test
+    /// asserts every entry has copy, so this stays an `Option` only because
+    /// the field is read before that is known.
     pub short_context: Option<&'static str>,
     /// Whether this entry earns a row in the Almanac. The Archives shows all
     /// 64 cards regardless.
     ///
     /// False for three entries whose row would restate a sibling on the same
-    /// calendar date rather than add to it: both genesis entries describe
-    /// block 0, and the inscription and Runes records each sit beside a
-    /// milestone that already covers the same event. The Almanac lists a day's
-    /// events in one column, so two rows on one subject read as a mistake
-    /// there while two cards in different categories do not.
+    /// date: both genesis entries describe block 0, and the inscription and
+    /// Runes records each sit beside a milestone covering the same event. The
+    /// Almanac lists a day's events in one column, where two rows on one
+    /// subject read as a mistake; two cards in different categories do not.
     ///
-    /// This is per-consumer curation of one shared list, not a second list.
-    /// The chart Events overlay will want the same treatment for the same
-    /// reason: 64 markers on one axis is unreadable, so something has to
-    /// choose, and it should choose from here.
+    /// Per-consumer curation of one shared list, not a second list. The chart
+    /// Events overlay will want the same treatment, since 64 markers on one
+    /// axis is unreadable.
     pub almanac: bool,
     pub category: HofCategory,
     /// UTC date of **the event**, `YYYY-MM-DD`, for display and sorting.
@@ -757,13 +755,12 @@ pub struct MinerShare {
 /// no reconstruction: the percentage comes from the pair of difficulties and
 /// the date comes from the later block's own timestamp.
 ///
-/// Exists because the daily aggregates cannot supply either half reliably. A
+/// Exists because daily aggregates cannot supply either half reliably. A
 /// retarget lands at an arbitrary moment in a UTC day, so the day's mean
-/// difficulty is a blend of two epochs, and when it lands near midnight there
-/// is no blend day at all: block 899,136 is stamped 2025-05-31 00:01:30, so
-/// all 161 blocks that day carry the new difficulty. A single settled day and
-/// a blend day are then indistinguishable from daily means alone, which is
-/// why the reconstruction was replaced by these rows.
+/// difficulty blends two epochs, and near midnight there is no blend at all:
+/// block 899,136 is stamped 2025-05-31 00:01:30, so all 161 blocks that day
+/// carry the new difficulty. A settled day and a blend day are then
+/// indistinguishable from daily means alone.
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Retarget {
     /// Height of the retarget block, always a multiple of 2,016.
@@ -844,11 +841,10 @@ pub struct NotableStatsInfo {
 ///     resolves to this many blocks or fewer, and
 ///  2. the `fetch_blocks` server-side range guard, which rejects anything larger.
 ///
-/// They were previously written independently as 5,000 and 4,500. Fixed presets
-/// never landed between the two, but YTD is computed as `days * 144`, so on days
-/// 32 to 34 of the year it resolved to 4,608, 4,752 and 4,896: inside the client
-/// gate, over the server cap. Every chart page hard-errored for three days each
-/// February with no fallback. Keep these as one value.
+/// Written independently they diverge silently: at 5,000 and 4,500, YTD's
+/// `days * 144` lands at 4,608, 4,752 and 4,896 on days 32 to 34 of the year,
+/// inside the client gate and over the server cap, hard-erroring every chart
+/// page for three days each February. Keep these as one value.
 pub const MAX_PER_BLOCK_RANGE: u64 = 5_000;
 
 /// Highest version bit BIP9 can signal on.

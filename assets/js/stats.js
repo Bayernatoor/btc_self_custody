@@ -2,7 +2,7 @@
 // Called from WASM via wasm_bindgen extern functions.
 (function() {
     // ECharts reports a missing point differently depending on series and axis
-    // type — null, undefined, or a non-finite number — and each of those
+    // type: null, undefined, or a non-finite number, and each of those
     // stringifies straight into a tooltip as "null", "undefined" or "NaN".
     // Charts emit gaps deliberately: moving-average and velocity warm-up
     // windows, and blocks with nothing to measure (an empty block has no
@@ -79,14 +79,14 @@
     window.setChartOptionLazy = function(elementId, optionJson) {
         var el = document.getElementById(elementId);
         if (!el) {
-            // Element doesn't exist yet — retry next frame
+            // Element doesn't exist yet: retry next frame
             requestAnimationFrame(function() { window.setChartOptionLazy(elementId, optionJson); });
             return;
         }
         // Always store latest JSON for re-init on scroll back
         el._storedOptionJson = optionJson;
         if (el._lazyVisible) {
-            // Already visible — render immediately
+            // Already visible: render immediately
             window.setChartOption(elementId, optionJson);
         } else {
             // Store pending JSON and start observing
@@ -98,7 +98,7 @@
                     if (_exitObserver) _exitObserver.observe(el);
                 }
             } else {
-                // Fallback: no IntersectionObserver support — render immediately
+                // Fallback: no IntersectionObserver support: render immediately
                 window.setChartOption(elementId, optionJson);
             }
         }
@@ -276,7 +276,7 @@
 
     function applyMobileAdjustments(opts) {
         if (window.innerWidth >= 640) return;
-        // Hide toolbox — not usable on touch screens
+        // Hide toolbox: not usable on touch screens
         if (opts.toolbox) opts.toolbox.show = false;
         // Scroll legend on mobile: right-aligned to avoid Y-axis overlap
         if (opts.legend) {
@@ -309,7 +309,7 @@
                 ya.axisLabel.overflow = 'truncate';
                 return;
             }
-            // Hide axis name on mobile — chart title/description provides context
+            // Hide axis name on mobile: chart title/description provides context
             ya.name = '';
             // Remove right-axis offset on mobile (overlays add 60px offset)
             if (ya.offset) ya.offset = 0;
@@ -421,14 +421,14 @@
     window.setChartOption = function(elementId, optionJson, isRetry) {
         var el = document.getElementById(elementId);
         if (!el) {
-            // Element doesn't exist yet — one-frame retry for reactive closure timing
+            // Element doesn't exist yet: one-frame retry for reactive closure timing
             if (!isRetry) {
                 requestAnimationFrame(function() { window.setChartOption(elementId, optionJson, true); });
             }
             return;
         }
         if (typeof echarts === 'undefined') {
-            // ECharts not loaded yet — retry with limit to avoid infinite loop
+            // ECharts not loaded yet: retry with limit to avoid infinite loop
             if (!el._echartsRetry) el._echartsRetry = 0;
             if (el._echartsRetry >= 25) { // ~5 seconds max
                 console.warn('ECharts failed to load for', elementId);
@@ -558,7 +558,7 @@
                             name = p.seriesName || '';
                             marker = p.marker || '';
                         } else if (useCached) {
-                            // Series not in params (zero value) — read from cache
+                            // Series not in params (zero value): read from cache
                             var s = cached[si];
                             if (!s || !s.data || !Array.isArray(s.data) || dataIndex >= s.data.length || !s.data[dataIndex]) continue;
                             var d = s.data[dataIndex];
@@ -641,7 +641,7 @@
             applyMobileAdjustments(opts);
             el._chart.setOption(opts, { notMerge: true, lazyUpdate: true });
             // Activate the toolbox dataZoom brush by default on desktop so a
-            // drag on the chart area immediately box-selects a zoom range —
+            // drag on the chart area immediately box-selects a zoom range,
             // no need to click the toolbox icon first (Glassnode-style UX).
             // Skipped on mobile because drag should pan the page, and the
             // toolbox is hidden there anyway (see applyMobileAdjustments).
@@ -770,7 +770,7 @@
             }
         } catch(e) {
             // Suppress ECharts internal grid/layout errors during init
-            // (harmless race in bar chart rendering — chart recovers)
+            // (harmless race in bar chart rendering: chart recovers)
             if (e && e.message && e.message.indexOf('properties of undefined') !== -1) return;
             console.error('Chart error:', e);
         }
@@ -802,7 +802,7 @@
         });
     };
 
-    // Block detail modal — uses textContent (XSS-safe) instead of innerHTML
+    // Block detail modal: uses textContent (XSS-safe) instead of innerHTML
     function bdRow(label, value, cls) {
         var row = document.createElement('div');
         row.className = 'bd-row';

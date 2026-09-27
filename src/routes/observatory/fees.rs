@@ -20,7 +20,7 @@ pub fn FeeChartsPage() -> impl IntoView {
     let overlay_flags = state.overlay_flags;
     let dashboard_data = state.dashboard_data;
 
-    // Fee unit toggle — created OUTSIDE the reactive closure
+    // Fee unit toggle: created OUTSIDE the reactive closure
     let fee_unit = Signal::derive(|| "btc".to_string());
 
     // All chart signals at component level (persist across refetches).

@@ -1,4 +1,4 @@
-// heartbeat-state.js — Shared constants and state accessor for the Block Heartbeat engine.
+// heartbeat-state.js: Shared constants and state accessor for the Block Heartbeat engine.
 
 // ── Color palette ──────────────────────────────────────────
 export var COLORS = {

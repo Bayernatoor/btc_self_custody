@@ -34,7 +34,7 @@ pub fn address_type_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     }))
 }
 
-/// Address type evolution — stacked area (daily totals).
+/// Address type evolution: stacked area (daily totals).
 pub fn address_type_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Address Types");
@@ -145,7 +145,7 @@ pub fn witness_share_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     }))
 }
 
-/// Transaction batching — avg outputs and inputs per transaction (per-block).
+/// Transaction batching: avg outputs and inputs per transaction (per-block).
 pub fn batching_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Transaction Batching");
@@ -291,7 +291,7 @@ pub fn batching_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     }))
 }
 
-/// Address type as % of total outputs (per-block) — 100% stacked area.
+/// Address type as % of total outputs (per-block), 100% stacked area.
 pub fn address_type_pct_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Address Type Share");
@@ -334,7 +334,7 @@ pub fn address_type_pct_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     }))
 }
 
-/// Address type as % of total outputs (daily) — 100% stacked area.
+/// Address type as % of total outputs (daily): 100% stacked area.
 pub fn address_type_pct_chart_daily(
     days: &[DailyAggregate],
 ) -> serde_json::Value {
@@ -377,7 +377,7 @@ pub fn address_type_pct_chart_daily(
     }))
 }
 
-/// RBF adoption — % of transactions signaling RBF (per-block).
+/// RBF adoption: % of transactions signaling RBF (per-block).
 /// BIP-125 opt-in RBF was merged in Core v0.12.0 (2016-02-23).
 /// Pre-BIP-125 nSequence < 0xFFFFFFFE was used for other purposes
 /// (original Satoshi replacement, nLockTime), so the chart is gated to post-BIP-125.
@@ -508,7 +508,7 @@ pub fn rbf_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     }))
 }
 
-/// UTXO flow — inputs (consumed) vs outputs (created) per block.
+/// UTXO flow: inputs (consumed) vs outputs (created) per block.
 pub fn utxo_flow_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("UTXO Flow");

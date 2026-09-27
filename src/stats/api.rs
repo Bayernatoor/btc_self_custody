@@ -23,7 +23,7 @@
 //! / CDN layer. Bitcoin Core RPC calls are cached inside `BitcoinRpc` per method
 //! (see `rpc_cache.rs`) with TTLs of 1-60s, singleflight dedup against
 //! `cs_main`-stall request floods, and stale-on-error fallback. There is no
-//! separate handler-level cache for `/live` — the RPC cache handles it.
+//! separate handler-level cache for `/live`: the RPC cache handles it.
 //! External HTTP price data (mempool.space) retains its own 60s cache with an
 //! atomic guard against concurrent refreshes.
 //!
@@ -150,7 +150,7 @@ pub struct StatsState {
     /// cache's singleflight + short TTL: a burst of page loads during congestion
     /// builds it ONCE (one DB read + serialize) and hands out `Arc<str>` clones
     /// (shared buffer), instead of each connect re-querying and re-serializing tens
-    /// of MB. TTL-only — the mempool view is intentionally approximate, so a few
+    /// of MB. TTL-only: the mempool view is intentionally approximate, so a few
     /// seconds of staleness on the initial fill is invisible (live txs stream after).
     pub heartbeat_history_cache: Arc<Cache<(), Arc<str>>>,
 }
@@ -249,7 +249,7 @@ const MAX_OP_RETURN_SPAN: u64 = 10_000;
 /// (the initial brick fill on connect/refresh), newest-first from the last 2h.
 /// The client places all of them, bounded only by its per-column density cap, so
 /// this is effectively "how many bricks a fresh load shows". Set as a CEILING for
-/// full-mempool coverage even during congestion — the point of the mempool-as-
+/// full-mempool coverage even during congestion: the point of the mempool-as-
 /// timeline. It must sit ABOVE the client's LOD threshold (LOD_MIN_BLIPS=60k) so a
 /// mempool over 60k actually loads in full and LOD (density columns) engages, instead
 /// of being clipped to exactly 60k (which left LOD unreachable). This is a cap, not
@@ -432,7 +432,7 @@ pub async fn get_cache_stats(
             })
         })
         .collect();
-    // 0s cache on this endpoint — operators need to see current state
+    // 0s cache on this endpoint: operators need to see current state
     Ok(cached_json(
         serde_json::json!({
             "slots": slots,
@@ -988,7 +988,7 @@ pub async fn get_heartbeat_sse(
                             serde_json::to_string(&txs).unwrap_or_default();
                         format!("{{\"txs\":{txs_json},\"last_block_ts\":{block_ts}}}")
                     };
-                    // One line per actual (re)build — gated by the cache's TTL +
+                    // One line per actual (re)build: gated by the cache's TTL +
                     // singleflight, so a burst of connects should log this ONCE, not
                     // once per connect. Also surfaces the payload size (the droplet
                     // memory concern: ~KB scales with the mempool).

@@ -1302,7 +1302,7 @@ pub fn query_cumulative_size_before_ts(
 pub type OnThisDayRow =
     (u32, u64, u64, u64, f64, f64, u64, u64, u64, u64, u64, u64);
 
-/// "On This Day" — aggregate block data grouped by year for a given month+day.
+/// "On This Day": aggregate block data grouped by year for a given month+day.
 pub fn query_on_this_day(
     conn: &Connection,
     month_day: &str, // "04-01" format
@@ -1881,7 +1881,7 @@ pub fn query_range_summary(
 ) -> rusqlite::Result<super::types::RangeSummary> {
     // Median of per-block total_fees over the range.
     // For n rows, the median is the average of rows at ranks (n+1)/2 and (n+2)/2
-    // (1-indexed) — collapses to a single row for odd n, two middle rows for even n.
+    // (1-indexed): collapses to a single row for odd n, two middle rows for even n.
     let median_fee_per_block: u64 = conn
         .query_row(
             "WITH sorted AS (
@@ -2410,7 +2410,7 @@ pub fn insert_mempool_tx(
 /// Mark a list of txids as confirmed in a specific block.
 /// Mark a list of txids as confirmed in a specific block.
 /// Uses batched IN clauses (100 per batch) for ~10x faster execution.
-/// Returns (confirmed_count, total_fees_sats) — fees summed from our mempool data.
+/// Returns (confirmed_count, total_fees_sats), fees summed from our mempool data.
 pub fn confirm_mempool_txs(
     conn: &Connection,
     txids: &[String],
@@ -2477,7 +2477,7 @@ pub fn prune_departed_mempool_txs(
     current: &std::collections::HashSet<String>,
     max_delete: usize,
 ) -> rusqlite::Result<u64> {
-    // SAFETY: never prune against an empty set — an empty getrawmempool means the
+    // SAFETY: never prune against an empty set: an empty getrawmempool means the
     // node is restarting / mempool not loaded, and deleting everything would wipe
     // the table. The caller also guards this, belt-and-suspenders here.
     if current.is_empty() {
@@ -2533,7 +2533,7 @@ pub fn prune_departed_mempool_txs(
 /// heartbeat brick count tracks the node instead of under-reporting.
 ///
 /// Only txid/fee/vsize are known from the verbose mempool, so backfilled rows
-/// carry no notable enrichment (value_usd / notable_type / op_return_text) —
+/// carry no notable enrichment (value_usd / notable_type / op_return_text),
 /// identical to how the startup seed inserts. `first_seen` is stamped by the
 /// caller. Capped at `max_insert` per call so a large first-time backlog can't
 /// hold a long write lock or exhaust the pool; the remainder clears over
@@ -2729,7 +2729,7 @@ pub struct MempoolTxRow {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Notable Transactions (Whale Watch) — persistent, long-lived table
+// Notable Transactions (Whale Watch): persistent, long-lived table
 // ═══════════════════════════════════════════════════════════════════════════
 
 /// A notable transaction record used for the Whale Watch feature.
@@ -3854,7 +3854,7 @@ mod tests {
         // tx1 already in the table (simulates a tx ZMQ did capture).
         insert_test_tx(&conn, "tx1", 100, 150, 500_000, 1700000000);
 
-        // Node's mempool (getrawmempool verbose) has tx1, tx2, tx3 — tx2 and tx3
+        // Node's mempool (getrawmempool verbose) has tx1, tx2, tx3, tx2 and tx3
         // are the ones ZMQ missed.
         let entries = vec![
             ("tx1".to_string(), 100u64, 150u32),
@@ -4624,7 +4624,7 @@ mod tests {
     #[test]
     fn count_and_find_missing_heights_with_gaps() {
         let conn = setup_db();
-        // [100, 101, _, _, 104, _, 106] — 3 missing inside [min, max].
+        // [100, 101, _, _, 104, _, 106], 3 missing inside [min, max].
         // count_missing_heights is anchored on MIN(height), so it
         // reports only the in-range gaps (3), not the 0..=99 pre-min
         // gap.

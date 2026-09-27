@@ -273,7 +273,7 @@ mod tests {
 
     #[test]
     fn classify_runes_prefix_after_launch() {
-        // Runes: OP_RETURN OP_13 (6a5d) + payload — after block 840k
+        // Runes: OP_RETURN OP_13 (6a5d) + payload: after block 840k
         assert_eq!(classify("6a5d0014", 840_000), OpReturnType::Runes);
         assert_eq!(classify("6a5d", 840_001), OpReturnType::Runes);
     }

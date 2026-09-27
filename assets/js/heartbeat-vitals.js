@@ -1,4 +1,4 @@
-// heartbeat-vitals.js — Vital signs, rhythm strip, search, effects, capture
+// heartbeat-vitals.js: Vital signs, rhythm strip, search, effects, capture
 //
 // Block audio lives in heartbeat-audio.js, not here: it is cued from the SSE handler
 // so it also fires for a hidden tab, which this module's effects deliberately do not.
@@ -388,7 +388,7 @@ export function heartbeatSearchTx(txid) {
             var blip = seg.blips[bi];
             if (!blip.txid) continue;
             if (blip.txid.toLowerCase().indexOf(needle) === 0) {
-                // Found it — scroll viewport to center on this blip
+                // Found it: scroll viewport to center on this blip
                 _hb.autoFollow = false;
                 _hb.zoom = Math.max(_hb.zoom, 3.0); // zoom in enough to see it
                 _hb.viewOffset = blip.x - (_hb.width * 0.5) / _hb.zoom;
@@ -435,7 +435,7 @@ export function heartbeatFlash() {
     if (_hb._flashTimer) clearTimeout(_hb._flashTimer);
     _hb._flashTimer = setTimeout(function() {
         if (_hb && _hb._flashColor) {
-            // Skip the lerp — just snap to the correct color.
+            // Skip the lerp: just snap to the correct color.
             // The gradual white-to-color fade looked good in theory but
             // caused the line to stay white when computeColor triggered
             // a target change mid-lerp (prevColor was still '#ffffff').
@@ -505,7 +505,7 @@ export function heartbeatCapture(vitalsJson) {
     octx.lineWidth = 2;
     octx.strokeRect(8, 8, cardW - 16, cardH - 16);
 
-    // Copy current EKG canvas — larger share of the card
+    // Copy current EKG canvas: larger share of the card
     try {
         var ekgH = 350;
         octx.drawImage(_hb.canvas, 20, 20, cardW - 40, ekgH);

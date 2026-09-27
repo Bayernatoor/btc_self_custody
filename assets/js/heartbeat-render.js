@@ -1,4 +1,4 @@
-// heartbeat-render.js — Main draw loop and all drawing helpers for the heartbeat canvas.
+// heartbeat-render.js: Main draw loop and all drawing helpers for the heartbeat canvas.
 
 import { getState, COLORS, BG_COLOR, GRID_COLOR, POINT_WIDTH, FLATLINE_PX_PER_SEC, HEAD_POSITION_FRAC, MAX_BLIPS_PER_SEGMENT } from './heartbeat-state.js';
 import { computeColor, lerpColor, drawGrid, hexToRgb, lerp, feeRateColor, cellRadiusForVsize, fmtBtc, formatDuration } from './heartbeat-timeline.js';
@@ -72,7 +72,7 @@ export function drawTooltipBox(ctx, lines, canvasX, anchorY, borderColor, opts) 
     roundRect(ctx, boxX, boxY, boxW, boxH, 4);
     ctx.stroke();
 
-    // Text — always left-aligned
+    // Text: always left-aligned
     ctx.textAlign = 'left';
     ctx.fillStyle = (opts && opts.textColor) || 'rgba(255, 255, 255, 0.85)';
     ctx.font = fontSize;
@@ -305,22 +305,22 @@ export function drawControlBar(ctx, w, h) {
 // setupBlockReveal (heartbeat-sse.js) on a genuine live block while following an
 // overview. `_hb._reveal` holds the state; runBlockReveal runs it from drawFrame.
 // Five beats:
-//   form    — the spike sits at the CURRENT head (no jump/whip-left). Camera zooms
+//   form: the spike sits at the CURRENT head (no jump/whip-left). Camera zooms
 //             ONTO the head (spike kept AT the head, no leftward jog) so you see the
 //             fresh spike ("block found"). No harvest, no fade yet.
-//   harvest — the confirmed top-fee bricks fly up into the spike; the leftover
+//   harvest: the confirmed top-fee bricks fly up into the spike; the leftover
 //             mempool fades out in place (oldSeg._revealFade).
-//   unfurl  — the leftovers re-lay on the new flatline; the camera follows that
+//   unfurl: the leftovers re-lay on the new flatline; the camera follows that
 //             placement FRONT rightward WHILE zooming OUT to frame the whole timeline
 //             (early = bricks falling up close; end = the whole mempool in view).
-//   hold    — hold on the whole timeline (~2s): "here's the size of the mempool".
-//   return  — zoom back IN to the head at the ORIGINAL entry zoom — back where you were.
+//   hold: hold on the whole timeline (~2s): "here's the size of the mempool".
+//   return: zoom back IN to the head at the ORIGINAL entry zoom, back where you were.
 // Works at any entry zoom (form/harvest keep the spike at the head; the unfurl zoom-out
 // + return restore the entry framing). At fit-all the unfurl/return are near-no-ops
 // (already framing the whole thing). Above REVEAL_MAX_ENTRY_ZOOM (sse.js) the reveal is
 // skipped entirely (instant path), as is the case when the reveal toggle is off.
 // While a reveal is active it OWNS virtualX + the camera (drawFrame suppresses the
-// normal advance/flush/follow). Durations are top-level constants — tune freely. The
+// normal advance/flush/follow). Durations are top-level constants, tune freely. The
 // unfurl is RATE-based (scales with the tx count) so the fill pace stays consistent.
 var REVEAL_FORM_SECS = 2.5;     // zoom onto the head; the spike appears ("block found")
 var REVEAL_HARVEST_SECS = 3.5;  // confirmed bricks fly into the spike; leftovers fade
@@ -334,16 +334,16 @@ var REVEAL_BANNER2_DELAY = 1.5; // how far into the unfurl the "remaining" banne
 var REVEAL_ZOOM = 1.0;          // close-up working zoom (only zooms IN from further out)
 var REVEAL_FIT_MARGIN = 0.82;   // fraction of width the whole timeline fills at unfurl end
 
-// Ease-in-out (smoothstep): 0 at t=0, 1 at t=1, zero slope at both ends — a
+// Ease-in-out (smoothstep): 0 at t=0, 1 at t=1, zero slope at both ends, a
 // deliberate cinematic glide, vs an abrupt fast start.
 function smoothstep(t) { t = t < 0 ? 0 : (t > 1 ? 1 : t); return t * t * (3 - 2 * t); }
 // smootherstep (Ken Perlin's 6t^5-15t^4+10t^3): like smoothstep but with zero
-// FIRST AND SECOND derivative at both ends, so the ease in/out is even gentler —
+// FIRST AND SECOND derivative at both ends, so the ease in/out is even gentler,
 // used for the reveal's big camera moves (pan-out + zoom-back) so they glide
 // rather than ramp.
 function smootherstep(t) { t = t < 0 ? 0 : (t > 1 ? 1 : t); return t * t * t * (t * (t * 6 - 15) + 10); }
 // easeOutBack: 0 -> 1 with an overshoot past 1 near the end, settling exactly to 1.
-// Gives the spike its "BAM" — shoots up, overshoots, snaps to rest.
+// Gives the spike its "BAM": shoots up, overshoots, snaps to rest.
 function easeOutBack(t) {
     if (t <= 0) return 0;
     if (t >= 1) return 1;
@@ -382,7 +382,7 @@ function spikeStrike(t) {
     return BUILD_TO + (1 - BUILD_TO) * easeOutBack(v); // snap + overshoot
 }
 
-// Two expanding, fading rings from the impact point — the shockwave. globalAlpha
+// Two expanding, fading rings from the impact point, the shockwave. globalAlpha
 // (save/restore) so it works with any strokeStyle color format.
 function drawShockwave(ctx, cx, cy, t, color) {
     var eo = 1 - (1 - t) * (1 - t); // easeOut on the radius
@@ -436,13 +436,13 @@ function relayRevealLeftovers(_hb, r, staggerSecs) {
     if (r.oldSeg) { r.oldSeg.blips = r.oldSeg.blips.filter(function(b) { return b.fadeStart > 0; }); r.oldSeg._revealFade = undefined; }
     if (window._hbPlaceCarried) window._hbPlaceCarried(r.leftovers, staggerSecs);
     // placeCarriedLeftovers sets _hb.virtualX = x_start + width SYNCHRONOUSLY (before
-    // its RAF-chunked placement), so virtualX is already the final head here — that
+    // its RAF-chunked placement), so virtualX is already the final head here, that
     // synchronous commit is what makes this width read correct. Don't defer it there.
     r.width = Math.max(1, _hb.virtualX - r.newSeg.x_start);
 }
 
 // End the reveal: make sure the harvest + leftover placement have actually
-// happened (if we abort mid-beat), then clear it. Camera is left where it is — on
+// happened (if we abort mid-beat), then clear it. Camera is left where it is, on
 // a natural finish it's at the head; on a user takeover the user now owns it.
 function endBlockReveal(_hb) {
     var r = _hb._reveal;
@@ -460,7 +460,7 @@ window._hbEndReveal = function() { var s = getState(); if (s) endBlockReveal(s);
 
 function runBlockReveal(_hb, dt, now, w) {
     var r = _hb._reveal;
-    // Abort the moment the user takes over. NOT gated on autoFollow — the reveal is
+    // Abort the moment the user takes over. NOT gated on autoFollow, the reveal is
     // allowed to run when not head-following (play mode). Drag/pinch/pause are caught
     // here; a wheel-zoom doesn't flip any of these, so the wheel handler ends the
     // reveal explicitly (as do the control buttons).
@@ -487,12 +487,12 @@ function runBlockReveal(_hb, dt, now, w) {
                 color: r.blockColor || COLORS.healthy,
                 start: now,
                 // Linger into the unfurl (by REVEAL_BANNER2_DELAY) so it fades out
-                // right as the "remaining" banner appears — no gap, no rush.
+                // right as the "remaining" banner appears: no gap, no rush.
                 end: now + REVEAL_FORM_SECS + REVEAL_HARVEST_SECS + REVEAL_BANNER2_DELAY
             };
         }
-        // Zoom ONTO the head where the spike appeared — keep the spike AT the head
-        // (no leftward jog). In the 0.75–2x range this is ~a no-op zoom.
+        // Zoom ONTO the head where the spike appeared: keep the spike AT the head
+        // (no leftward jog). In the 0.75: 2x range this is ~a no-op zoom.
         var tf = smoothstep(elapsed / REVEAL_FORM_SECS);
         _hb.zoom = r.fromZoom + (working - r.fromZoom) * tf;
         _hb.viewOffset = r.fromOffset + (headOff(r.spikeVX, _hb.zoom) - r.fromOffset) * tf;
@@ -533,7 +533,7 @@ function runBlockReveal(_hb, dt, now, w) {
         var frontVX = r.newSeg.x_start + tu * r.width;
         _hb.viewOffset = r.fromOffset + (headOff(frontVX, _hb.zoom) - r.fromOffset) * su;
         // A bit into the unfurl, cross-fade to the remaining-count banner (same
-        // style) — the mempool after the harvest. r.leftovers is the exact carried
+        // style): the mempool after the harvest. r.leftovers is the exact carried
         // set (P5). Persists through the rest of the unfurl + hold, fades on return.
         if (!r._bannerRemainSet && elapsed >= REVEAL_BANNER2_DELAY) {
             r._bannerRemainSet = true;
@@ -547,12 +547,12 @@ function runBlockReveal(_hb, dt, now, w) {
         }
         if (elapsed >= r.unfurlSecs) { r.phase = 'hold'; r.start = now; r.fromZoom = undefined; }
     } else if (r.phase === 'hold') {
-        // Hold on the whole timeline — "here's the size of the mempool".
+        // Hold on the whole timeline: "here's the size of the mempool".
         _hb.zoom = r.fitZoom;
         _hb.viewOffset = headOff(_hb.virtualX, r.fitZoom);
         if (elapsed >= REVEAL_HOLD_SECS) { r.phase = 'return'; r.start = now; r.fromZoom = undefined; }
     } else { // return
-        // Zoom back IN to the head at the ORIGINAL entry zoom — back where you were.
+        // Zoom back IN to the head at the ORIGINAL entry zoom, back where you were.
         var tr = smootherstep(elapsed / REVEAL_RETURN_SECS); // gentle settle back to the head
         _hb.zoom = r.fitZoom + (r.entryZoom - r.fitZoom) * tr;
         _hb.viewOffset = headOff(_hb.virtualX, _hb.zoom);
@@ -569,7 +569,7 @@ function runBlockReveal(_hb, dt, now, w) {
 // ── First-load intro ──────────────────────────────────────────
 // On first load, after placeHistoryTxs lays the whole mempool at fit-all, this
 // gives a "load reveal": hold on the whole mempool a beat (bricks streaming in),
-// then slow-zoom to a resting zoom on the head — a better first impression than a
+// then slow-zoom to a resting zoom on the head: a better first impression than a
 // static fit-all view. Camera-only (live tx flow keeps running, unlike the block
 // reveal). Armed by placeHistoryTxs (heartbeat-sse.js), runs from drawFrame, aborts
 // on any user takeover (autoFollow drops / drag / pinch / control press).
@@ -605,9 +605,9 @@ function runIntro(_hb, dt, now, w) {
 // ── Main draw loop ─────────────────────────────────────────
 // Seconds without a frame that count as a "stall": the rAF loop was throttled or
 // paused (window occluded, on another monitor, or the machine slept) while SSE kept
-// flowing. Set well above any legitimate frame hitch — the dt clamp below already
+// flowing. Set well above any legitimate frame hitch, the dt clamp below already
 // absorbs sub-second hitches, and nothing on an active tab stalls the loop for
-// seconds — so this only fires on a genuine background/sleep gap.
+// seconds: so this only fires on a genuine background/sleep gap.
 var GAP_RECOVERY_SECS = 5;
 
 export function drawFrame(frameTime) {
@@ -618,7 +618,7 @@ export function drawFrame(frameTime) {
 
     // Gap-aware recovery: if the loop was stalled for GAP_RECOVERY_SECS+ while the
     // tab stayed "visible" (no visibilitychange fired), virtualX froze while SSE kept
-    // delivering — recover the same way a tab return does instead of grinding the
+    // delivering: recover the same way a tab return does instead of grinding the
     // backlog into one column (tall stacks + clustered spikes). The hidden-tab case
     // is owned by visibilitychange (it sets _hiddenSince); exclude it here via
     // !_hb._hiddenSince so the two paths never double-fire.
@@ -641,7 +641,7 @@ export function drawFrame(frameTime) {
     _hb.lastFrameTime = now;
 
     // Safety net: replay any block that arrived while the tab was hidden but
-    // wasn't drained by visibilitychange (would otherwise strand — canvas stuck
+    // wasn't drained by visibilitychange (would otherwise strand, canvas stuck
     // on the old block while the header shows the new one). RAF only runs at full
     // rate when visible, so this catches up within a frame of the tab showing.
     // Cheap guard: the queue is empty in normal operation.
@@ -679,7 +679,7 @@ export function drawFrame(frameTime) {
     // (they'd otherwise pile at the reveal's controlled head).
     if (!_hb._reveal) flushTxBatch();
 
-    // Block-reveal sequencer takes precedence when armed — it drives virtualX,
+    // Block-reveal sequencer takes precedence when armed, it drives virtualX,
     // the leftover placement, zoom AND viewOffset (spike → relay). It returns
     // false when it finishes or the user takes over, falling through to normal
     // handling in the same frame.
@@ -742,7 +742,7 @@ export function drawFrame(frameTime) {
     var viewRight = _hb.viewOffset + w / _hb.zoom;
 
     // ── Draw timeline segments ─────────────────────────────
-    // No vertical tremor on long waits — the flatline color shift (via
+    // No vertical tremor on long waits: the flatline color shift (via
     // computeColor on elapsed) + the "last block" timer already convey the
     // wait, and a heaving baseline added motion without information.
     for (var si = 0; si < _hb.timeline.length; si++) {
@@ -899,11 +899,11 @@ export function drawFrame(frameTime) {
         }
     }
 
-    // First-load / resume fade veil: covers the whole timeline SCENE — grid, spikes,
-    // bricks AND the live head dot — with the bg color, retreating over LOAD_FADE_SECS
+    // First-load / resume fade veil: covers the whole timeline SCENE, grid, spikes,
+    // bricks AND the live head dot: with the bg color, retreating over LOAD_FADE_SECS
     // so it all eases up from black together. Drawn here (after the head dot, before
     // the disconnect overlay) so nothing in the scene is left un-faded. (A blanket
-    // globalAlpha won't work — per-element draws set their own alpha.)
+    // globalAlpha won't work: per-element draws set their own alpha.)
     if (loadFade < 1) {
         ctx.globalAlpha = 1 - loadFade;
         ctx.fillStyle = BG_COLOR;
@@ -911,7 +911,7 @@ export function drawFrame(frameTime) {
         ctx.globalAlpha = 1;
     }
 
-    // SSE disconnection overlay — semi-transparent with mining animation
+    // SSE disconnection overlay: semi-transparent with mining animation
     if (_hb._sseDisconnected) {
         drawDisconnectedOverlay(ctx, w, h, now);
     }
@@ -990,7 +990,7 @@ export function drawBlockSegment(ctx, seg, viewLeft, baseline, fallbackColor, no
     var isHovered = (_hb.hoveredBlock === seg);
 
     // Strike animation: for a live block's spike, scale the whole QRS from the
-    // baseline up — a slow build then a snap with overshoot (spikeStrike). amp=1
+    // baseline up: a slow build then a snap with overshoot (spikeStrike). amp=1
     // (settled) after the window and for any segment without _strikeStart
     // (history/replay draw at full amplitude immediately).
     var amp = 1;
@@ -1000,7 +1000,7 @@ export function drawBlockSegment(ctx, seg, viewLeft, baseline, fallbackColor, no
     } else if (seg._strikePending) {
         // Reveal spike awaiting its strike. Stay flat only while an active reveal
         // still owns it (camera traveling to the head); otherwise it's orphaned
-        // (reveal ended/never armed) — strike it now so it can never stay flat.
+        // (reveal ended/never armed): strike it now so it can never stay flat.
         if (_hb._reveal && _hb._reveal.spikeSeg === seg) {
             amp = 0;
         } else {
@@ -1057,7 +1057,7 @@ var LOD_MIN_BLIPS = 60000;
 // ── P2: Level-of-detail blip rendering ────────────────────────
 // When zoomed out so far that grid columns are sub-pixel, drawing every brick
 // (fillRect + gap math + gradient + outline, per brick, per frame) is the
-// dominant cost — tens of thousands of ops that produced the ~141ms RAF
+// dominant cost: tens of thousands of ops that produced the ~141ms RAF
 // violation at full-mempool zoom-out. Instead aggregate each segment's bricks
 // into per-canvas-column density bars: one bar per pixel column, its height the
 // tallest stack in that column, colored by the column's standout tx (notables
@@ -1070,7 +1070,7 @@ export function drawFlatlineBlipsLOD(ctx, seg, viewLeft, viewRight, baseline, zo
     var blips = seg.blips;
     // Bucket in VIRTUAL space (vx*zoom), not canvas space. Canvas-space buckets
     // shift every frame as the auto-follow view eases, so bricks near a boundary
-    // hop columns frame-to-frame — and since each bar's height is the tallest
+    // hop columns frame-to-frame: and since each bar's height is the tallest
     // brick in its column, that hopping made bars jump up/down = the flicker.
     // Virtual buckets are stable under panning; apply the view offset once, here.
     var offPx = _hb.viewOffset * zoom;
@@ -1161,12 +1161,12 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
             }
         }
 
-        // Vessel tube — centered on baseline, symmetric above/below
+        // Vessel tube: centered on baseline, symmetric above/below
         // Tube scales with zoom so vessel walls match cell spread
         var avgR = 4.0 * Math.max(zoom * 0.4, 0.8);
         var tubeH = Math.max(30, avgR * 2.5);
         // Skip vessel rendering if values are non-finite (canvas resize race)
-        // but don't return — blips still need to render below
+        // but don't return: blips still need to render below
         if (!isFinite(baseline) || !isFinite(tubeH)) tubeH = 30;
         var underglowAlpha = 0.02 + Math.min(cellCount / 500, 0.04);
         if (isLive) {
@@ -1181,7 +1181,7 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
         ctx.fillStyle = grad;
         ctx.fillRect(cx1, baseline - tubeH, cx2 - cx1, tubeH * 2);
 
-        // Vessel walls — symmetric tube boundary
+        // Vessel walls: symmetric tube boundary
         var wallAlpha = 0.04 + Math.min(cellCount / 600, 0.04);
         ctx.globalAlpha = wallAlpha;
         ctx.strokeStyle = 'rgba(255, 180, 180, 0.25)';
@@ -1203,7 +1203,7 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
         // DEFAULT (2026-07-06): individual bricks are preferred; LOD only engages as
         // a performance safety valve above LOD_MIN_BLIPS (~the mempool size) AND when
         // zoomed out (bricks sub-pixel). Below that we always draw individual bricks
-        // — tested smooth to ~55k, and full-fit-at-congestion is rare. The console
+        //: tested smooth to ~55k, and full-fit-at-congestion is rare. The console
         // toggle (_hbToggleLod) forces bricks always (or LOD).
         // Use the load-fill target count (if a first-load fill is in progress) so
         // the choice is stable from the first frame; otherwise the real blips count.
@@ -1214,7 +1214,7 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
         // P3: for closed (immutable) segments, lazily sort blips by x once and
         // binary-search the visible window so a zoomed-in view of a dense
         // historical region only iterates on-screen bricks. The live (open)
-        // segment mutates every flush, so we don't sort it — its per-blip cull
+        // segment mutates every flush, so we don't sort it, its per-blip cull
         // below is already cheap.
         var _wStart = 0;
         var _wSorted = false;
@@ -1388,7 +1388,7 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                     var pOpacity = pt < 0.7 ? blip.opacity : blip.opacity * (1 - (pt - 0.7) / 0.3 * 0.8);
                     pOpacity = Math.max(0, Math.min(1, pOpacity));
 
-                    // Draw particle (no shadowBlur — see brick-rendering note)
+                    // Draw particle (no shadowBlur: see brick-rendering note)
                     ctx.fillStyle = blipColor + pOpacity + ')';
                     ctx.fillRect(px - pSize / 2, py - pSize / 2, pSize, pSize);
                 }
@@ -1413,12 +1413,12 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                 var age = nowSec - blip.timestamp;
                 if (age < 0) continue; // staggered history brick not yet visible
                 var isNotable = !!blip.notableType;
-                // Fall duration — bumped a touch so the higher drop (below) reads as
+                // Fall duration: bumped a touch so the higher drop (below) reads as
                 // a graceful rain rather than a streak.
                 var fadeTime = isNotable ? 1.1 : 0.8;
                 var fadeIn = age >= fadeTime ? 1 : age / fadeTime;
                 // Bouncy drop-in (cubic ease-out + a sin bounce near landing). Only
-                // computed while a brick is still FALLING — the settled majority (the
+                // computed while a brick is still FALLING: the settled majority (the
                 // bulk of the cost at a full zoomed-out mempool) skips the trig/cubic.
                 var dropOffset = 0;
                 if (fadeIn < 1 && _hb.renderMode !== 'bloodstream') {
@@ -1567,7 +1567,7 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
                     }
 
                     // No shadowBlur. The glow was the dominant render cost (an
-                    // offscreen blur pass per brick per frame — the "lag on large
+                    // offscreen blur pass per brick per frame: the "lag on large
                     // flushes") and it bled across the gaps into a blob. Notables
                     // now stand out via size + colour + a crisp bright outline
                     // (below); normal bricks via colour + the inter-brick gap.
@@ -1699,12 +1699,12 @@ export function drawFlatlineSegment(ctx, seg, segEnd, viewLeft, viewRight, basel
         }
         } // end else (non-LOD per-blip draw)
 
-        // Prune blips — never prune the live (open) flatline so txs persist
+        // Prune blips: never prune the live (open) flatline so txs persist
         // until the next block. Only prune closed (historical) segments.
         var isLiveSeg = (seg.type === 'flatline' && seg.x_end === null);
         if (!isLiveSeg && seg.blips.length > MAX_BLIPS_PER_SEGMENT) {
             // This block reassigns/reorders seg.blips (the concat below is not
-            // x-ordered), so invalidate the P3 sort cache — the next draw will
+            // x-ordered), so invalidate the P3 sort cache, the next draw will
             // re-sort lazily before binary-searching.
             seg._sortedByX = false;
             var cutoff = nowSec;

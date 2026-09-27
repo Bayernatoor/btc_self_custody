@@ -111,7 +111,7 @@ pub fn ObservatoryPage() -> impl IntoView {
                 "max-w-[1750px] mx-auto pl-7 pr-3 sm:px-4 lg:px-8 pt-6 sm:pt-10 pb-28"
             }
         >
-            // Hero branding — only on dashboard
+            // Hero branding: only on dashboard
             <Show when=move || on_dashboard.get()>
                 <div class="relative rounded-2xl overflow-hidden mb-6 sm:mb-8">
                     <img

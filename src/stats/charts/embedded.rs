@@ -161,7 +161,7 @@ pub fn op_return_bytes_chart_daily(
     }))
 }
 
-/// Protocol dominance — 100% stacked area showing share of each protocol.
+/// Protocol dominance: 100% stacked area showing share of each protocol.
 pub fn runes_pct_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("Protocol Dominance");
@@ -237,7 +237,7 @@ pub fn runes_pct_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     }))
 }
 
-/// Protocol dominance % from daily aggregates — 100% stacked area.
+/// Protocol dominance % from daily aggregates: 100% stacked area.
 pub fn runes_pct_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     if days.is_empty() {
         return no_data_chart("Protocol Dominance (daily)");
@@ -586,7 +586,7 @@ pub fn inscription_share_chart_daily(
 
 const OPRETURN_COLOR: &str = "#f59e0b"; // Amber for OP_RETURN aggregate
 
-/// All embedded data as % of block size — OP_RETURN + inscriptions stacked (per-block).
+/// All embedded data as % of block size: OP_RETURN + inscriptions stacked (per-block).
 pub fn all_embedded_share_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
         return no_data_chart("All Embedded Data Share");
@@ -676,7 +676,7 @@ pub fn all_embedded_share_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     }))
 }
 
-/// All embedded data as % of block size — stacked (daily).
+/// All embedded data as % of block size: stacked (daily).
 pub fn all_embedded_share_chart_daily(
     days: &[DailyAggregate],
 ) -> serde_json::Value {
@@ -756,7 +756,7 @@ pub fn all_embedded_share_chart_daily(
 const STAMPS_COLOR: &str = "#94a3b8"; // Slate gray for Stamps/multisig
 const BRC20_COLOR: &str = "#e879f9"; // Fuchsia for BRC-20 tokens
 
-/// Unified embedded data count — all protocols + inscriptions + stamps (per-block).
+/// Unified embedded data count: all protocols + inscriptions + stamps (per-block).
 pub fn unified_embedded_count_chart(
     blocks: &[BlockSummary],
 ) -> serde_json::Value {
@@ -780,7 +780,7 @@ pub fn unified_embedded_count_chart(
     let inscriptions = data_array_value(&inscriptions_str);
     let brc20_str = build_data_array_i64(blocks, |b| b.brc20_count as i64);
     let brc20 = data_array_value(&brc20_str);
-    // Stamps removed — detection requires Counterparty protocol decoding (TODO)
+    // Stamps removed: detection requires Counterparty protocol decoding (TODO)
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
@@ -830,7 +830,7 @@ pub fn unified_embedded_count_chart_daily(
         .iter()
         .map(|d| avg(d.total_data_carrier_count, d.block_count))
         .collect();
-    // BRC-20 is a subset of inscriptions — split them to avoid double-counting
+    // BRC-20 is a subset of inscriptions: split them to avoid double-counting
     let inscriptions: Vec<f64> = days
         .iter()
         .map(|d| {
@@ -839,7 +839,7 @@ pub fn unified_embedded_count_chart_daily(
         .collect();
     let brc20: Vec<f64> =
         days.iter().map(|d| round(d.avg_brc20_count, 1)).collect();
-    // Stamps removed — detection requires Counterparty protocol decoding (TODO)
+    // Stamps removed: detection requires Counterparty protocol decoding (TODO)
 
     build_option(json!({
         "xAxis": x_axis_for(true, &cats),
@@ -858,7 +858,7 @@ pub fn unified_embedded_count_chart_daily(
     }))
 }
 
-/// Unified embedded data volume — all protocols by bytes (per-block).
+/// Unified embedded data volume: all protocols by bytes (per-block).
 pub fn unified_embedded_volume_chart(
     blocks: &[BlockSummary],
 ) -> serde_json::Value {

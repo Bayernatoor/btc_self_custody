@@ -13,7 +13,7 @@ use crate::chart_memo;
 use crate::stats::server_fns::*;
 use crate::stats::types::uses_daily_aggregates;
 
-/// Mining charts page — difficulty and pool distribution in one scrollable list.
+/// Mining charts page: difficulty and pool distribution in one scrollable list.
 #[component]
 pub fn MiningChartsPage() -> impl IntoView {
     let state = expect_context::<ObservatoryState>();

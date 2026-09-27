@@ -1,4 +1,4 @@
-// heartbeat-blips.js — Hit testing and coordinate conversion for blips and
+// heartbeat-blips.js: Hit testing and coordinate conversion for blips and
 // timeline segments in the Block Heartbeat engine.
 
 import { getState } from './heartbeat-state.js';
@@ -105,7 +105,7 @@ export function blipAtCanvasXY(cx, cy, baseline) {
             // within ~a brick-width of it. `brickW * zoom` is a safe upper bound on
             // both the brick half-width and the bloodstream cell radius, so this
             // never skips a real hit, but it does skip the per-blip rect/circle
-            // math for the far-away majority — keeping the test cheap even if the
+            // math for the far-away majority: keeping the test cheap even if the
             // live segment ever holds an extreme number of blips.
             if (Math.abs(bx - cx) > (blip.brickW || 8) * zoom) continue;
 

@@ -9,10 +9,10 @@
 //!
 //! ## Inputs / outputs
 //!
-//! - [`ParsedTx`] — the minimal transaction shape the classifier needs
+//! - [`ParsedTx`]: the minimal transaction shape the classifier needs
 //!   (value, input/output counts, witness size, inscription marker, OP_RETURN
 //!   text). Populated by `zmq_subscriber::parse_raw_tx`.
-//! - [`classify_notable`] — returns [`NotableFlags`], a struct where each
+//! - [`classify_notable`]: returns [`NotableFlags`], a struct where each
 //!   category has its own boolean plus a [`NotableFlags::primary_type`]
 //!   helper that picks the highest-priority label for persistence/logging.
 //!   Returning the full struct (rather than just an `Option<&str>`) lets
@@ -69,7 +69,7 @@ pub const INSCRIPTION_ENVELOPE: &[u8] = &[0x00, 0x63, 0x03, 0x6f, 0x72, 0x64];
 
 // === Types ===
 
-/// Minimal parsed info from a raw Bitcoin transaction — just enough to
+/// Minimal parsed info from a raw Bitcoin transaction, just enough to
 /// classify it. Populated by the raw-tx parser, consumed by
 /// [`classify_notable`] and by the SSE broadcast path.
 pub struct ParsedTx {
@@ -142,7 +142,7 @@ impl NotableFlags {
 ///
 /// `fee` and `fee_rate` come from `getmempoolentry`; `price_usd` is the
 /// currently cached BTC/USD price (0.0 disables USD-dependent flags
-/// cleanly — whales and round-numbers simply never fire).
+/// cleanly: whales and round-numbers simply never fire).
 pub fn classify_notable(
     parsed: &ParsedTx,
     fee: u64,
@@ -879,7 +879,7 @@ mod tests {
 
     #[test]
     fn extract_readable_text_rejects_protocol_fragments() {
-        // li.fi-style "=|lifi…" headers — not natural text.
+        // li.fi-style "=|lifi…" headers: not natural text.
         assert_eq!(extract_readable_text(b"=|lifiZ"), None);
         assert_eq!(extract_readable_text(b"=|lifiQ1Oq"), None);
     }
@@ -920,7 +920,7 @@ mod tests {
 
     #[test]
     fn inscription_marker_rejects_plain_witness() {
-        // Normal signature bytes — no envelope.
+        // Normal signature bytes: no envelope.
         let witness = [0x48; 72];
         assert!(!has_inscription_marker(&witness));
     }
