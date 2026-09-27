@@ -2,13 +2,11 @@
 //! not fit on a card.
 //!
 //! Sits inside the `ObservatoryPage` parent route, so `range`, `dashboard_data`
-//! and the overlay flags come from the same context the multi-chart pages use.
-//! That is deliberate and was verified before building: range selection
-//! carries across navigation into this view and back out, which a
-//! self-provided state would have broken.
+//! and the overlay flags come from the shared context rather than from here.
+//! Range selection therefore survives navigation in and out of this view.
 //!
 //! Which charts exist and how each is built lives in
-//! `stats::charts::registry`, not here. This file knows how to lay one out.
+//! `stats::charts::registry`; this file lays one out.
 
 use leptos::prelude::*;
 use leptos_meta::{Link, Meta, Title};
@@ -143,22 +141,12 @@ fn build_from_dashboard(
     }
 }
 
-/// When a peak or low happened, however the chart encodes it. Per-block charts
-/// carry a millisecond timestamp on the point; daily charts emit bare numbers
-/// and keep their dates on the category axis, so those are matched by position.
 /// A band's share, worded so it never rounds a near-total into a total.
 ///
-/// `{:.1}%` turns 99.999968 into "100.0%", and on Witness Version Count over
-/// December 2019 that is the whole defect: SegWit v0 holds 3,165,545 of
-/// 3,165,546 outputs, the one remaining output is the first pre-activation
-/// P2TR in the chain, and a reader told the band is 100% of the total
-/// concludes the month had none. The same rounding at the other end turns a
-/// real 0.02% into "0.0%", which is the absent-versus-measured-zero
-/// distinction this codebase keeps having to defend.
-///
-/// So the two decimal places nearest each boundary are reported as bounds
-/// rather than as figures. Exactly 100 and exactly 0 still print plainly,
-/// because those are claims the data does support.
+/// `{:.1}%` turns 99.999968% into "100.0%", denying the output it rounds away,
+/// and a measured 0.02% into "0.0%". So the two decimal places nearest each
+/// boundary report as bounds instead. Exactly 100 and exactly 0 print plainly,
+/// being claims the data does support. Worked case in the tests below.
 fn share_note(pct: f64, over_range: bool) -> String {
     let scope = if over_range { "total" } else { "latest total" };
     if pct >= 100.0 {
@@ -174,6 +162,9 @@ fn share_note(pct: f64, over_range: bool) -> String {
     }
 }
 
+/// When a peak or low happened, however the chart encodes it. Per-block charts
+/// carry a millisecond timestamp on the point; daily charts emit bare numbers
+/// and keep their dates on the category axis, so those are matched by position.
 fn point_label(p: &kpi::Point, axis_labels: &[String]) -> Option<String> {
     fmt_ms(p.x).or_else(|| axis_labels.get(p.idx).cloned())
 }
@@ -197,11 +188,9 @@ pub fn SingleChartPage() -> impl IntoView {
 
 #[component]
 fn UnknownChart(slug: Signal<String>) -> impl IntoView {
-    // A real 404, not a 200 carrying an apology. Every registered slug is
-    // an indexable path, so a soft 404 on the rest would invite search
-    // engines to index "no such chart" pages for every typo and stale link. Same defect
-    // as /blocks/{height} answering 200 with an error body, fixed in
-    // fix/input-validation.
+    // A real 404, not a 200 carrying an apology. Every registered slug is an
+    // indexable path, so a soft 404 would invite search engines to index a
+    // "no such chart" page for every typo and stale link.
     #[cfg(feature = "ssr")]
     {
         if let Some(response) = use_context::<leptos_axum::ResponseOptions>() {
@@ -245,29 +234,19 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
     // from `lg` up, since below that the rail is stacked underneath and costs
     // the chart no width at all.
     let (rail_open, set_rail_open) = signal(true);
-    // Both scales and the comparison live in the shared state, so a refresh
-    // or a pasted link restores the view rather than resetting it to linear
-    // with nothing laid over it. The single-chart page used to keep its own
-    // metric-scale signal, which meant two toggles for one idea and neither
-    // of them in the URL.
+    // Both scales and the comparison live in shared state, so a refresh or a
+    // pasted link restores the view rather than resetting to linear with
+    // nothing laid over it.
     let log_scale = state.overlay_log_scale;
     let set_log_scale = state.set_overlay_log_scale;
     let right_log_scale = state.overlay_right_log_scale;
     let set_right_log_scale = state.set_overlay_right_log_scale;
     let compare = state.compare;
     let set_compare = state.set_compare;
-    // The stored slug is an intent, not a guarantee: it survives navigation
-    // to another chart, and it can name this chart, a chart that cannot be
-    // compared with this one, or one with nothing to draw at this range.
-    // Resolving it here, on every render, through the registry's single
-    // validator is what makes all of those a no-op instead of a broken chart.
-    // Which resolution is actually in play, from the data rather than from
-    // the range name. `range_to_blocks` maps "custom" to 999,999 so it always
-    // reads as daily, while the data resource correctly fetches per-block
-    // rows for a short custom window. Everything downstream that asked the
-    // range string was therefore wrong for every custom range: a two-day
-    // window on a chart with no daily builder built 281 valid points and then
-    // covered them with an "unavailable" overlay.
+    // Which resolution is actually in play, read off the data rather than the
+    // range name: `range_to_blocks` maps "custom" to 999,999, so the name
+    // always reads as daily even for a short custom window the resource
+    // correctly fetched per block.
     let resolved_daily = Signal::derive(move || match dashboard_data.get() {
         Some((_, Ok(DashboardData::Daily(_)))) => true,
         Some((_, Ok(DashboardData::PerBlock(_)))) => false,
@@ -276,23 +255,20 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
         _ => uses_daily_aggregates(range_to_blocks(&range.get())),
     });
 
+    // The stored slug is an intent, not a guarantee: it survives navigation to
+    // another chart and can name this chart, one that cannot be paired with
+    // it, or one with no daily builder at this range. Re-resolving it every
+    // render through the registry's validator turns all of those into None
+    // rather than a broken chart.
     let compare_meta = Signal::derive(move || {
-        // Price and chain size are applied first and take the right axis, so
-        // a comparison cannot be drawn beside them. `apply_comparison`
-        // already refuses on that ground, structurally; answering None here
-        // as well is what keeps the picker, its description and the URL from
-        // advertising a comparison the chart is not drawing. A link asking
-        // for both used to do exactly that.
+        // Price and chain size take the right axis first, so a comparison
+        // cannot be drawn beside them. `apply_comparison` already refuses on
+        // that ground; refusing here too is what stops the picker, its
+        // description and the URL advertising a comparison that is not drawn.
         //
-        // Overlay wins rather than comparison, matching the precedence
-        // already in force between price and chain size, which is the order
-        // `apply_overlays` applies them in.
-        // The toggles, not the fetched data. `OverlayFlags::has_right_axis`
-        // reads the price and chain-size series, which arrive asynchronously,
-        // so during SSR and the first client render they are empty and this
-        // would resolve a comparison that is about to be displaced the moment
-        // the fetch lands. The toggle is true immediately and is what the
-        // reader actually asked for.
+        // Read off the toggles, not the fetched series. Those arrive
+        // asynchronously, so under SSR and the first client render they are
+        // empty, and this would resolve a comparison about to be displaced.
         if state.overlay_price.get() || state.overlay_chain_size.get() {
             return None;
         }
@@ -304,18 +280,10 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
     // one plot is a chart nobody can read.
     let compare_holds_axis =
         Signal::derive(move || compare_meta.get().is_some());
-    // Reconcile the stored slug with what can actually be drawn here.
-    //
-    // Rendering is already safe without this: `compare_meta` resolves to None
-    // and nothing is laid over the chart. What this fixes is the picker still
-    // showing a name, and the URL still carrying a slug, for a comparison
-    // that is not on screen. Both of those read as the feature being broken
-    // rather than as this chart not supporting that pairing.
-    //
-    // Every stale case at once, because they all arrive the same way, by
-    // navigating or by pasting a link: the chart was renamed out of the
-    // registry, it is this chart, it cannot be compared with this one, or it
-    // has no daily builder and the range just grew past the threshold.
+    // Clear a slug that cannot be drawn. Rendering is already safe without
+    // this, since `compare_meta` is None; what it fixes is the picker still
+    // showing a name and the URL still carrying a slug for a comparison that
+    // is not on screen.
     Effect::new(move |_| {
         let slug = compare.get();
         if !slug.is_empty() && compare_meta.get().is_none() {
@@ -341,10 +309,10 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
         let r = range.get();
         let custom_from = state.custom_from.get();
         let custom_to = state.custom_to.get();
-        // Stamped, for the same reason `DashboardValue` is: this resource
-        // keeps the previous window's payload while refetching, so gating the
-        // option on the shared rows alone still let a mining chart paint the
-        // previous range for a frame.
+        // Stamped, for the same reason `DashboardValue` is: the resource keeps
+        // the previous window's payload while refetching, so every reader has
+        // to check the stamp matches the window now selected rather than that
+        // a payload merely exists.
         let stamp = (r.clone(), custom_from.clone(), custom_to.clone());
         async move {
             let out = async move {
@@ -353,19 +321,14 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                 }
                 let stats =
                     fetch_stats_summary().await.map_err(|e| e.to_string())?;
-                // The mining queries take heights and the picker gives dates, and
-                // the window has to be anchored at **both** ends.
-                //
-                // Converting the window's duration to a block count and counting
-                // back from the tip gives a length, not a position: a request for
-                // April 2024 came back holding the most recent 61 days, correctly
-                // sized and entirely the wrong period. Silently answering a
-                // historical question with recent data is the worst failure this
-                // page can have, because nothing about the result looks wrong.
-                //
-                // So a custom window asks the chain where it sits. The named
-                // ranges keep counting back from the tip, which is exactly what
-                // they mean.
+                // Mining queries take heights, the picker gives dates, and the
+                // window has to be anchored at **both** ends. A duration
+                // converted to a block count and counted back from the tip
+                // gives a length, not a position, which answers a question
+                // about April 2024 with the most recent 61 days and looks
+                // entirely correct. So a custom window asks the chain where it
+                // sits; named ranges do count back from the tip, which is
+                // exactly what they mean.
                 let (from, to, from_ts, to_ts) =
                     super::helpers::resolve_window(
                         &r,
@@ -465,20 +428,12 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
         }
     });
 
-    // A `Memo`, not `get_untracked`, and not a plain `.get()` either.
-    //
-    // Untracked was the bug: the live stats arrive after the first render, so
-    // `chain_size_gb` was 0 when the option was built and the arrival never
-    // triggered a rebuild. Chain Size then drew Block Data alone, and clicking
-    // any unrelated toggle made a second series appear, because that
-    // recomputation finally read the value. A scale control that adds data is
-    // not a scale control.
-    //
-    // A plain `.get()` fixes that and rebuilds every chart on every live tick,
-    // which is several times a minute for a value that changes when a block
-    // arrives. `Memo` compares before notifying, so the rebuild happens when
-    // the number actually moves, which is exactly when the chart should
-    // change.
+    // A `Memo`, not `get_untracked` and not a plain `.get()`. Untracked reads
+    // 0, since live stats arrive after the first render and their arrival
+    // triggers no rebuild, so Chain Size draws one series until an unrelated
+    // toggle forces a recompute. A plain `.get()` rebuilds every chart on
+    // every live tick. `Memo` compares first, so the rebuild follows the
+    // number actually moving.
     let disk_size_gb = Memo::new(move |_| {
         state
             .cached_live
@@ -525,15 +480,11 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                 );
             }
             // After the overlays and the comparison, so both axes exist and
-            // each is judged on the series it actually holds. The metric's
-            // scale is this page's own signal, gated on `supports_log`; the
-            // right axis belongs to whatever is occupying it, which is shared
-            // state.
+            // each is judged on the series it actually holds.
             //
-            // One call rather than two, because the dropped-point notice has
-            // to count both axes before either is sanitised. Calling the two
-            // separately gave a notice that counted only the left, so turning
-            // on the overlay's log axis dropped points silently.
+            // One call rather than two: the dropped-point notice counts both
+            // axes before either is sanitised, and counting them separately
+            // reports only the left, dropping the right's points silently.
             crate::stats::charts::apply_scales_with(
                 &mut v,
                 logv,
@@ -547,11 +498,7 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
 
         match meta.source {
             Source::Mining(which) => {
-                // The stamp has to match the window now selected, not just
-                // be present: this resource holds the previous window's
-                // payload while refetching, which is what kept a mining chart
-                // painting the old range for a frame after the shared rows
-                // had landed.
+                // Stamp must match the selected window, not merely exist.
                 let want = (
                     range.get(),
                     state.custom_from.get(),
@@ -788,12 +735,10 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
     let title_tag = format!("{} | Bitcoin Chart | We Hodl BTC", meta.title);
     let desc_tag = meta_description(meta);
 
-    // Self-referential canonical, absolute, and deliberately WITHOUT the query
-    // string. Every category page already carries one; these 63 new indexable
-    // URLs did not, and each of them accepts `?range=`, `?overlays=`,
-    // `?compare=` and two custom-date parameters. Without this, every
-    // combination a reader shares is a separate indexable URL of the same
-    // page, which is the classic way a site dilutes 63 pages into thousands.
+    // Self-referential, absolute, and deliberately without the query string.
+    // This page accepts `?range=`, `?overlays=`, `?compare=` and two custom
+    // dates, so without a canonical every combination a reader shares is a
+    // separate indexable URL for the same page.
     let canonical =
         format!("https://www.wehodlbtc.com/observatory/chart/{}", meta.slug);
 
@@ -893,24 +838,13 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                     </div>
                 </div>
 
-                // Height comes from the viewport, not a fixed pixel value,
-                // because the point of this view is that the chart dominates.
-                // On a wide monitor a fixed 620px next to a 1600px-wide plot
-                // is a letterbox; `100dvh` minus the page chrome fills the
-                // screen instead and pushes the exports and prose below the
-                // fold, which is where they belong.
-                //
-                // The clamps are what keep one layout across screen types
-                // rather than three: a floor so a short laptop still gets a
-                // readable plot, and a ceiling so a 4K panel does not stretch
-                // one series over 1400px of height. Below `lg` the height is
-                // a share of the viewport instead, since a phone in portrait
-                // wants a squarer chart than a letterbox.
-                //
-                // `dvh` rather than `vh` so mobile browsers' collapsing
-                // toolbars do not leave a gap. The chart re-fits on its own:
-                // stats.js observes each canvas with a ResizeObserver and
-                // calls `chart.resize()`.
+                // Viewport height, not a fixed pixel value: the point of this
+                // view is that the chart dominates, and a fixed 620px beside a
+                // 1600px plot is a letterbox. The clamps keep one layout
+                // across screen types, with a floor for a short laptop and a
+                // ceiling so a 4K panel does not stretch one series over
+                // 1400px. `dvh` rather than `vh` so collapsing mobile toolbars
+                // leave no gap; stats.js re-fits each canvas on resize.
                 <div class="relative w-full h-[58dvh] min-h-[300px] max-h-[520px] sm:h-[62dvh] sm:max-h-[640px] lg:h-[calc(100dvh-20rem)] lg:min-h-[460px] lg:max-h-[920px]">
                     <Chart id=cid.clone() option=option class="w-full h-full".to_string()/>
                     <Show when=move || daily_gap.get()>
@@ -927,15 +861,10 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                             </div>
                         </div>
                     </Show>
-                    // A failed fetch is an error, not a slow one.
-                    //
-                    // This page had no error branch at all: the skeleton is
-                    // shown whenever the option is empty, and a failed
-                    // resource leaves it empty forever, so a 500 read as
-                    // "Loading chart data..." until the reader gave up. The
-                    // category pages have shown `DataLoadError` with a retry
-                    // since before this page existed; it just was not carried
-                    // over. Checked first so it wins over the skeleton.
+                    // A failed fetch is an error, not a slow one. The skeleton
+                    // below shows whenever the option is empty, and a failed
+                    // resource leaves it empty forever, so this is checked
+                    // first and wins over it.
                     <Show when=move || load_failed.get()>
                         <div class="absolute inset-0 flex items-center justify-center bg-[#0d2137] rounded-xl">
                             <DataLoadError on_retry=Callback::new(move |_| {
@@ -1014,25 +943,19 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                     // the two sets are never mistaken for one.
                     {move || compare_kpis.get().map(|(c, k)| {
                         // Read off axis 1 of the built option, so "no figures"
-                        // means the line is genuinely not on the chart rather
-                        // than that the rail failed to find it.
+                        // means the line is genuinely absent rather than that
+                        // the rail failed to find it. The picker only offers
+                        // pairings that can be drawn, but it cannot know the
+                        // reader's range: a spike detector plots nothing over
+                        // a week with no spikes, so a valid choice can still
+                        // arrive empty.
                         //
-                        // The picker only offers pairings that can be drawn,
-                        // which the conformance suite proves for every pair at
-                        // both resolutions. What it cannot know is the
-                        // reader's range: the fee spike detector plots nothing
-                        // over a week with no spikes, so a valid choice still
-                        // arrives empty. Saying so is the difference between a
-                        // chart that explains itself and one that looks
-                        // broken.
-                        // A plain branch rather than `<Show>`: this closure
-                        // already reruns whenever the option does, and `Show`
-                        // wants children it can call repeatedly, which the
-                        // owned `Kpis` here cannot give it.
+                        // A plain branch rather than `<Show>`, which wants
+                        // children it can call repeatedly; the owned `Kpis`
+                        // here cannot give it that.
                         let body = if matches!(k, kpi::Kpis::Loading) {
-                            // Not a range problem yet: the compared chart's
-                            // option is still in flight, and this block
-                            // blamed the range throughout every load.
+                            // Not a range problem: the compared chart's option
+                            // is still in flight.
                             view! {
                                 <p class="text-xs text-white/40">"Loading..."</p>
                             }.into_any()
@@ -1160,56 +1083,20 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                 </h2>
                 {match meta.about {
                     Some(copy) => view! {
-                        // **Two columns on a wide screen, and each narrower than the
-                        // one column it replaces.**
-                        //
-                        // At `max-w-3xl` these lines ran about 110 characters
-                        // at `text-sm`, which is past the point where a
-                        // reader starts losing the return sweep; comfortable
-                        // is 45 to 75. So the empty right half of the card
-                        // was not width going spare, it was the cost of a
-                        // readable measure, and flowing the text into it
-                        // would have made a long line longer.
-                        //
-                        // Splitting instead gives each half roughly 34rem,
-                        // which is a better measure than the single column
-                        // had and halves the scroll. The two halves are
-                        // independent blocks with their own headings, so
-                        // reading down one and then the other is the natural
-                        // order. They are rarely the same length, and
-                        // `items-start` lets them keep their own heights
-                        // rather than stretching to match.
-                        //
-                        // **The pair is capped, not only each column.** With
-                        // the grid spanning the whole card, each column sat at
-                        // the left edge of its own half while its text stopped
-                        // at 34rem, so on a wide monitor the two blocks drifted
-                        // apart with a growing void between them, and hiding
-                        // the rail made it worse. Capping the grid keeps them
-                        // adjacent and puts the leftover space after the
-                        // second column, where a reading block should end.
+                        // Two columns on a wide screen, each capped at 34rem:
+                        // one column at `max-w-3xl` ran about 110 characters,
+                        // past where a reader loses the return sweep. The grid
+                        // is capped as well as each column, or the two blocks
+                        // drift apart with a growing void between them.
+                        // `items-start` lets them keep their own heights.
                         <div class="space-y-3 max-w-3xl lg:max-w-[72rem] lg:grid lg:grid-cols-2 lg:gap-x-10 lg:gap-y-0 lg:space-y-0 lg:items-start">
-                            // Not every chart has the definition half yet, so
-                            // the subtitle above carries the short answer and
-                            // this shows what exists rather than an empty
-                            // heading.
-                            // A label on its own line rather than a dimmer
-                            // run-in. At `text-white/70` inside a paragraph
-                            // of `text-white/85` these read as slightly faded
-                            // prose, and the method's label sat on the first
-                            // of three paragraphs while appearing to
-                            // introduce one. Same treatment as the card
-                            // headings above, one step down in the accent.
-                            //
-                            // Split on a blank line, exactly as the method
-                            // below is. Only the method side had this, so a
-                            // definition that asked for breaks got none and
-                            // ran as one block: Adoption Velocity's covers
-                            // what the line is, percentage points against
-                            // percent, the smoothing, and why divergence is
-                            // not migration, which is four subjects a reader
-                            // had to separate unaided. Copy with no blank
-                            // line still renders as exactly one paragraph.
+                            // Not every chart has a definition; the subtitle
+                            // above carries the short answer, so an absent one
+                            // shows nothing rather than an empty heading.
+                            // Split on a blank line, as the method below is,
+                            // so copy covering several subjects reads as
+                            // several paragraphs. Copy with no blank line
+                            // renders as exactly one.
                             {copy.definition.map(|d| view! {
                                 <div class="space-y-3 max-w-[34rem]">
                                 {d.split("\n\n")
@@ -1227,19 +1114,9 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                                     .collect_view()}
                                 </div>
                             })}
-                            // Split on a blank line, so a method that covers
-                            // several things reads as several paragraphs.
-                            //
-                            // These run long by design: the whole point of
-                            // this section is to say exactly what was
-                            // measured and what it excludes. Rendered as one
-                            // blob, the interval chart's method ran to ten
-                            // unbroken lines covering the per-block
-                            // difference, the consensus timestamp rules and
-                            // the daily arm's different quantity, which is
-                            // three subjects a reader has to separate for
-                            // themselves. Copy that does not ask for breaks
-                            // still renders as exactly one paragraph.
+                            // These run long by design: the section exists to
+                            // say exactly what was measured and what it
+                            // excludes. Same blank-line split as above.
                             <div class="space-y-3 max-w-[34rem]">
                             {copy.technical.split("\n\n")
                                 .enumerate()
@@ -1265,12 +1142,10 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                             </a>
                         </p>
                     }.into_any(),
-                    // No long copy yet, so there is no definition to show.
-                    // This used to print `desc_per_block` again under a
-                    // "Definition" heading, which restated the subtitle two
-                    // lines above it and, in daily mode, restated the wrong
-                    // resolution's subtitle. An absent definition is better
-                    // left absent than filled with the sentence beside it.
+                    // No long copy, so nothing but the methodology link.
+                    // Repeating `desc_per_block` here would restate the
+                    // subtitle above it, and in daily mode restate the wrong
+                    // resolution's.
                     None => view! {
                         <p class="text-xs text-white/55 mt-2">
                             "Measured from my own Bitcoin node. "
@@ -1340,37 +1215,35 @@ fn ScaleSwitch(
     }
 }
 
-/// The tray a related set of buttons sits in, so two sets side by side read as
-/// two controls rather than one long strip.
-///
-/// The chart header carries the axis scale and the range next to each other,
-/// twelve small buttons in a row, and with only a gap between them "Log" and
-/// "1D" looked like neighbours in the same group. The tray is what says where
-/// one control ends.
 /// The label above each half of the About block.
 ///
-/// One step down from a card heading, and smaller as well as differently
-/// coloured.
+/// On its own line rather than a run-in span, which at `text-white/70` inside
+/// a `text-white/85` paragraph read as faded prose rather than as a label.
 ///
-/// A run-in `text-white/70` span inside a `text-white/85` paragraph read as
-/// slightly faded prose rather than as a label, and on the method it
-/// introduced the first of three paragraphs while appearing to introduce all
-/// of them. So these are their own line.
-///
-/// **The size matters, not just the colour.** At `0.7rem` these matched the
-/// card heading above them exactly in size, weight, case and tracking, which
-/// left colour carrying the whole hierarchy: three headings that read as one
-/// level to anyone who does not separate orange from white, which is what
-/// WCAG 1.4.1 is about. `0.65rem` restores a difference that does not depend
-/// on seeing the accent. The card headings stay at `0.7rem` because all five
-/// of them share it.
+/// `0.65rem` rather than the card headings' `0.7rem`. Matching them left
+/// colour carrying the whole hierarchy, so three headings read as one level to
+/// anyone who does not separate orange from white (WCAG 1.4.1).
 const ABOUT_LABEL: &str =
     "text-[0.65rem] uppercase tracking-widest text-[#f7931a]/85 \
      font-semibold mb-1.5";
 
+/// The tray a related set of buttons sits in, so two sets side by side read as
+/// two controls rather than one long strip. The chart header puts the axis
+/// scale and the range next to each other, and with only a gap between them
+/// "Log" and "1D" look like neighbours in one group.
 const SEGMENTED_GROUP: &str =
     "flex flex-wrap items-center gap-0.5 p-0.5 rounded-lg \
      bg-black/25 border border-white/10";
+
+/// The grid every key-facts rail lays its tiles on. One shared constant, since
+/// the three rails differ in their figures and not in their layout.
+///
+/// One column on a phone, two from `sm` to `lg`, one again in the 17rem
+/// desktop rail. Two columns at 390px give each pair about 170px, and half
+/// these rows carry a date under the value, so they come out ragged with an
+/// orphan on the last line.
+const FACT_GRID: &str = "grid grid-cols-1 gap-y-2 sm:grid-cols-2 \
+                         sm:gap-x-4 lg:grid-cols-1 lg:gap-0 lg:space-y-2";
 
 /// One button inside a [`SEGMENTED_GROUP`].
 ///
@@ -1388,11 +1261,10 @@ fn segmented_button(active: bool) -> &'static str {
 /// What the right axis is currently showing, for the scale switch beside it.
 ///
 /// The label is the entire reason two Linear/Log pairs side by side are
-/// readable, so any case that falls through to the generic word defeats the
-/// control. A comparison is checked first because it is the occupant most
-/// likely to sit next to a metric switch showing a similar-looking unit, and
-/// because this function originally could not see one at all: it read only
-/// `OverlayFlags`, which a comparison does not travel in.
+/// readable, so any case falling through to the generic word defeats the
+/// control. A comparison is checked first: it does not travel in
+/// `OverlayFlags`, and it is the occupant most likely to sit beside a metric
+/// switch showing a similar-looking unit.
 ///
 /// Both overlays can be on at once, in which case they get an axis each and
 /// only the first is switchable. "overlay" is honest there, since naming one
@@ -1415,20 +1287,14 @@ fn right_axis_label(
 }
 
 /// The shared `RangeSelector` lays its twelve presets out in one non-wrapping
-/// row with the mode label beside them, sized for the wide settings panel. In
-/// a 20rem rail that overflows the panel entirely, so the rail gets its own
-/// wrapping grid over the same signals rather than the shared component being
-/// reshaped for both.
+/// row sized for the wide settings panel, which overflows a narrow rail. So
+/// this is its own wrapping grid over the same signals rather than the shared
+/// component being reshaped for both.
 ///
-/// **The date inputs belong here, beside the Custom button that asks for
-/// them.** Routing that button to the settings panel instead put the control
-/// in another corner of the screen, on a tab labelled Axes, with its own
-/// picker still collapsed.
-///
-/// Only the two inputs are duplicated, not the preset row: the row is what
-/// overflows a narrow rail. Validation is shared with the panel's picker
-/// through `validate_custom_range`, so two pickers cannot disagree about what
-/// a valid window is.
+/// The date inputs belong here, beside the Custom button that asks for them.
+/// Only those two are duplicated, not the preset row; validation is shared
+/// with the panel's picker through `validate_custom_range`, so the two cannot
+/// disagree about what a valid window is.
 #[component]
 fn RailRange() -> impl IntoView {
     const PRESETS: &[&str] = &[
@@ -1491,15 +1357,9 @@ fn RailRange() -> impl IntoView {
         // the info icon inline claimed the entire row and wrapped "Custom"
         // onto a line of its own.
         <div class="flex flex-col items-start lg:items-end min-w-0">
-        // **A select below `sm`, the tray above it.**
-        //
-        // Twelve buttons wrap to two rows on a phone, which costs more
-        // vertical space than the chart can spare and reads as a control
-        // panel rather than a range picker. The shared `RangeSelector` has
-        // shipped exactly this split since it was written (`range.rs:119`);
-        // this rail was built for the 20rem desktop column and never got the
-        // mobile half, so the single-chart page was the one place on the site
-        // still showing the full tray on a phone.
+        // A select below `sm`, the tray above it: twelve buttons wrap to two
+        // rows on a phone, costing more vertical space than the chart can
+        // spare. Same split the shared `RangeSelector` uses (`range.rs:119`).
         //
         // `selected` as well as `prop:value`: the prop is applied after
         // hydration, so an SSR page would paint the control empty and read
@@ -1656,13 +1516,11 @@ fn RailSection(
     explain: &'static str,
     children: Children,
 ) -> impl IntoView {
-    // A native `<details>`, open by default, rather than a signal and a
-    // click handler. On a phone the rail stacks under the chart, so three
-    // always-open cards mean a long scroll past things the reader may not
-    // want; being able to collapse them is the fix. Open by default keeps the
-    // desktop rail exactly as it was, and native `<details>` brings its own
-    // keyboard handling and renders identically under SSR, where a signal
-    // seeded from a media query would not.
+    // A native `<details>`, open by default, rather than a signal and a click
+    // handler: on a phone the rail stacks under the chart, so three
+    // always-open cards are a long scroll. Native brings its own keyboard
+    // handling and renders identically under SSR, where a signal seeded from
+    // a media query would not.
     view! {
         <details open class="group/sec bg-[#0d2137] border border-white/10 rounded-2xl p-4">
             // `list-none` kills the marker in Firefox and Chrome;
@@ -1693,6 +1551,10 @@ fn RailSection(
 /// left below it, where the rail is full width and the trigger follows a
 /// label near the left.
 ///
+/// `z-40` clears the chart canvas and the rail cards while staying under the
+/// navbar's `z-30` stacking context, which is safe because nothing opens
+/// upward into it.
+///
 /// Resets `whitespace`, `text-transform` and the rest because it is placed
 /// inside arbitrary copy and inherits whatever that copy set. A label with
 /// `truncate` on it once made the bubble refuse to wrap.
@@ -1700,12 +1562,10 @@ const TIP_BUBBLE: &str = "pointer-events-none absolute top-full left-0 lg:left-a
 
 /// A term that explains itself when hovered, focused or tapped.
 ///
-/// The dotted underline is the affordance, and it replaced an "i" icon on
-/// every row. Eleven icons in a 17rem rail competed with the numbers the rail
-/// exists to show, and an icon beside every single item teaches people to
-/// ignore all of them. A dotted underline under the word being explained is
-/// the long-standing convention for "definition available" and puts the
-/// affordance on the term itself.
+/// A dotted underline rather than an "i" icon per row: eleven icons in a
+/// 17rem rail compete with the numbers the rail exists to show, and an icon
+/// beside every item teaches people to ignore all of them. The underline is
+/// the conventional "definition available" and sits on the term itself.
 ///
 /// A `button` rather than a `span`, so it is reachable by keyboard and
 /// tappable on a touch screen where there is no hover.
@@ -1752,23 +1612,6 @@ fn InfoTip(text: &'static str) -> impl IntoView {
             >
                 "i"
             </button>
-            // Opens **downward**. An upward bubble reads better next to a
-            // control at the bottom of a card, and it is wrong everywhere it
-            // matters: the scale switch and the range mode sit in the chart
-            // header near the top of the page, where opening upward put the
-            // text behind the navbar and the advisory banner and then off the
-            // top of the window entirely, which cannot be scrolled to.
-            // Downward overflow is always reachable, because the document
-            // continues below.
-            //
-            // Right-anchored from `lg` up, where these sit near the right
-            // edge of a 15rem rail, and left-anchored below it, where the
-            // rail is full width and the icons follow labels near the left.
-            // The max-width is the backstop for both.
-            //
-            // `z-40` clears the chart canvas and the rail cards. It stays
-            // under the navbar's `z-30` stacking context rather than fighting
-            // it, which is safe now that nothing opens upward into it.
             <span class=TIP_BUBBLE>{text}</span>
         </span>
     }
@@ -1856,21 +1699,7 @@ fn KeyFacts(
                     && (last / first).abs() < PCT_MEANINGFUL_RATIO)
                     .then(|| change / first.abs() * 100.0);
                 view! {
-                    // Two columns of tiles below `lg`, where the rail is
-                    // stacked under the chart at full width and a column of
-                    // label-value rows leaves most of the line empty. Back to
-                    // rows in the 15rem rail, where two columns would not fit.
-                    // One column on a phone, two on a tablet, one again in
-                    // the desktop rail.
-                    //
-                    // Two columns at 390px gave each pair about 170px, and
-                    // half these rows carry a date under the value, so the
-                    // rows came out ragged with an orphan on the last line.
-                    // A label-value row across the full width reads in one
-                    // pass. The two-column form still earns its place from
-                    // `sm` to `lg`, where the width is there and a single
-                    // column would leave most of the line empty.
-                    <div class="grid grid-cols-1 gap-y-2 sm:grid-cols-2 sm:gap-x-4 lg:grid-cols-1 lg:gap-0 lg:space-y-2">
+                    <div class=FACT_GRID>
                         <Fact label="average" value=unit.get().qualify(&fmt_num(average)) note=None/>
                         <Fact label="peak" value=fmt_num(peak.y) note=point_label(&peak, &axis_labels)/>
                         <Fact label="low" value=fmt_num(low.y) note=point_label(&low, &axis_labels)/>
@@ -1887,33 +1716,19 @@ fn KeyFacts(
             }
             Kpis::Bands { total_range, average_total, total_latest, dominant, dominant_share_pct, band_count, observations } => {
                 // **Deliberately not qualified with the unit**, unlike the
-                // time-series rail's average just above.
-                //
-                // `ChartMeta` declares one `Unit` per chart while the actual
-                // unit is per resolution. `opreturn-bytes` and
-                // `unified-volume` declare `Kilobytes`, and their daily
-                // builders divide by 1,000 and label the axis "KB/Block", but
-                // their per-block builders plot raw bytes and label the axis
-                // "Bytes". Appending " kB" here therefore overstated those two
-                // charts by a thousandfold on any range under 5,000 blocks.
-                //
-                // A bare number leaves the reader to take the unit off the y
-                // axis, which is worse writing and correct. Fixing it properly
-                // means a per-resolution unit, the way `Measurement` already
-                // carries per-resolution `Method` and `Aggregation`; filed in
-                // tasks/todo.md.
+                // time-series rail above. `ChartMeta` declares one `Unit` per
+                // chart while the real unit is per resolution: `opreturn-bytes`
+                // and `unified-volume` declare `Kilobytes`, but their per-block
+                // builders plot raw bytes, so appending " kB" here overstated
+                // them a thousandfold under 5,000 blocks. A bare number leaves
+                // the reader to take the unit off the y axis, which is worse
+                // writing and correct. Per-resolution units: tasks/todo.md.
                 view! {
-                    // Two columns of tiles below `lg`, where the rail is
-                    // stacked under the chart at full width and a column of
-                    // label-value rows leaves most of the line empty. Back to
-                    // rows in the 15rem rail, where two columns would not fit.
-                    // Same responsive split as the time-series rail above.
-                    <div class="grid grid-cols-1 gap-y-2 sm:grid-cols-2 sm:gap-x-4 lg:grid-cols-1 lg:gap-0 lg:space-y-2">
+                    <div class=FACT_GRID>
                         // Both totals, because they answer different
-                        // questions and the rail used to show only the
-                        // second: "how much over this window" against "where
-                        // does it stand now". Absent for a percentage chart,
-                        // where a total of shares is not a share.
+                        // questions: "how much over this window" against
+                        // "where does it stand now". Absent for a percentage
+                        // chart, where a total of shares is not a share.
                         {total_range.map(|t| view! {
                             <Fact label="range total" value=fmt_num(t) note=None/>
                         })}
@@ -1929,12 +1744,7 @@ fn KeyFacts(
             }
             Kpis::Categorical { top_name, top_value, top_share_pct, entries } => {
                 view! {
-                    // Two columns of tiles below `lg`, where the rail is
-                    // stacked under the chart at full width and a column of
-                    // label-value rows leaves most of the line empty. Back to
-                    // rows in the 15rem rail, where two columns would not fit.
-                    // Same responsive split as the two rails above.
-                    <div class="grid grid-cols-1 gap-y-2 sm:grid-cols-2 sm:gap-x-4 lg:grid-cols-1 lg:gap-0 lg:space-y-2">
+                    <div class=FACT_GRID>
                         <Fact label="largest" value=top_name note=Some(format!("{top_share_pct:.1}% of total"))/>
                         <Fact label="its value" value=fmt_num(top_value) note=None/>
                         <Fact label="entries" value=entries.to_string() note=None/>
@@ -1997,14 +1807,13 @@ fn Fact(
     }
 }
 
-/// The overlays already exist and were effectively hidden behind a floating
-/// panel. The rail is the fix asked for: they are simply always on screen.
+/// The overlay controls, always on screen rather than behind a panel.
 ///
 /// Split into two groups because they are two different things wearing one
 /// name. Event markers are vertical lines drawn against the chart's own axis.
 /// Comparison series are extra data with their own scale, so they claim the
 /// right axis, and that axis has exactly one occupant: picking one greys the
-/// other, which is the same constraint the compare feature will contend with.
+/// others.
 #[component]
 fn OverlayToggles(
     meta: &'static ChartMeta,
@@ -2178,16 +1987,12 @@ fn OverlayToggles(
                     // words for the same thing.
                     {move || if daily.get() { c.desc_daily } else { c.desc_per_block }}
                     ". "
-                    // Clears the comparison on the way out. You are asking
-                    // to look at the chart you were comparing against, and it
-                    // cannot be compared with itself, so carrying the slug
-                    // across is carrying a value that is invalid on arrival.
-                    //
-                    // Clearing it here rather than letting the reconciling
-                    // effect do it after the fact matters, because the URL
-                    // writer runs on every state change and would otherwise
-                    // stamp `?compare=<this chart>` onto the new page before
-                    // the effect cleared it again.
+                    // Clears the comparison on the way out: the destination
+                    // cannot be compared with itself, so the slug is invalid
+                    // on arrival. Cleared here rather than by the reconciling
+                    // effect, because the URL writer runs on every state
+                    // change and would stamp `?compare=<this chart>` onto the
+                    // new page first.
                     <a
                         href=format!("/observatory/chart/{}", c.slug)
                         class="text-white/80 hover:text-[#f7931a] underline decoration-white/20 underline-offset-2 transition-colors"
@@ -2243,16 +2048,13 @@ fn Toggle(
                     "w-3.5 h-3.5 rounded border border-white/20 group-hover:border-white/40 shrink-0"
                 }
             ></span>
-            // `aria-label`, because nothing else names this control. The
+            // `aria-label`, because nothing else names this control: the
             // visible word sits in a `DefinedTerm` sibling outside the
-            // `<label>` (so that explaining the term does not toggle the
-            // overlay), and the span that is inside the label renders only
-            // when `hint` is empty, which no call site leaves empty. The
-            // result was six checkboxes with an accessible name of "",
-            // announced as six indistinguishable "checkbox, not checked".
-            // Measured over CDP on 2026-09-21. `prop:disabled` as well, so a
-            // refused overlay is refused to the keyboard and not only to the
-            // pointer.
+            // `<label>`, and the span inside the label renders only when
+            // `hint` is empty, which no call site leaves empty. Without it
+            // these announce as indistinguishable "checkbox, not checked".
+            // `prop:disabled` so a refused overlay is refused to the keyboard
+            // and not only to the pointer.
             <input
                 type="checkbox"
                 class="sr-only"
@@ -2284,13 +2086,11 @@ fn Toggle(
 mod tests {
     /// No chart's page description may end up saying "measured in count".
     ///
-    /// The audit's example was Hash Rate, whose unit was generic `Count` and
-    /// which now declares `HashesPerSecond`. The fallback sentence remains
-    /// for the 20-odd charts that really are counts, where naming the unit
-    /// adds nothing, so the clause is dropped rather than filled.
+    /// The clause is dropped, not filled, for the 20-odd charts that really
+    /// are counts, where naming the unit adds nothing.
     ///
-    /// Asserted against the generator rather than searched for in the
-    /// source, because this sentence exists only in the output.
+    /// Asserted against the generator rather than searched for in the source,
+    /// because this sentence exists only in the output.
     #[test]
     fn no_generated_description_names_a_generic_unit() {
         for meta in super::registry::CHARTS {
@@ -2451,16 +2251,13 @@ mod tests {
 
     /// A share that is not a total is never worded as one.
     ///
-    /// The case that prompted this is real and exact: Witness Version Count
-    /// over December 2019 has SegWit v0 at 3,165,545 of the 3,165,546 witness outputs it counts,
-    /// or 99.999968%. Printed `{:.1}%` that is "100.0% of total", and the one
-    /// output it rounds away is the first pre-activation P2TR in the chain,
-    /// so the tile denied exactly the thing the chart's own copy sends the
-    /// reader there to see.
+    /// The case is real and exact: Witness Version Count over December 2019
+    /// has SegWit v0 at 3,165,545 of the 3,165,546 witness outputs it counts,
+    /// or 99.999968%. At `{:.1}%` that prints "100.0% of total", and the one
+    /// output it rounds away is the first pre-activation P2TR in the chain.
     ///
-    /// Both boundaries, because the same rounding at the bottom turns a
-    /// measured 0.02% into "0.0%", which is the absent-versus-zero
-    /// distinction the rest of this work exists to hold.
+    /// Both boundaries, since the same rounding at the bottom turns a measured
+    /// 0.02% into "0.0%".
     #[test]
     fn a_near_total_share_is_worded_as_a_bound_not_rounded_to_a_total() {
         // The measured December 2019 figure, and its neighbour at the far end.

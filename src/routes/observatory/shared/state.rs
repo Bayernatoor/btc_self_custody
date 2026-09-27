@@ -100,16 +100,16 @@ pub struct ObservatoryState {
     pub set_chart_settings_open: WriteSignal<bool>,
     pub chart_settings_tab: ReadSignal<ChartSettingsTab>,
     pub set_chart_settings_tab: WriteSignal<ChartSettingsTab>,
-    // chart JSON cache — persists across Outlet navigations
+    // chart JSON cache, persisting across Outlet navigations
     pub chart_cache: ChartCache,
-    /// Total bytes of chain before the visible window, so the chain-size
-    /// chart and its overlay can show absolute rather than range-relative
-    /// values. Exposed here because the network page needs the same number:
-    /// it previously ran an identical LocalResource of its own, so every range
-    /// change fired two identical requests for it.
-    /// Bytes before the window, paired with the `(range, custom_from)` it
-    /// answers. Those are the only inputs its fetch reads, so that pair and
-    /// not the full window key is what `data_loading` compares.
+    /// Bytes of chain before the visible window, so the chain-size chart and
+    /// its overlay show absolute rather than range-relative values. Held here
+    /// rather than on the network page because both need it, and two resources
+    /// meant two identical requests per range change.
+    ///
+    /// Paired with the `(range, custom_from)` it answers. Those are the only
+    /// inputs its fetch reads, so that pair and not the full window key is
+    /// what `data_loading` compares.
     pub chain_size_offset: LocalResource<ChainSizeOffsetValue>,
     /// Block data for the whole chain today, in bytes.
     ///
@@ -119,22 +119,19 @@ pub struct ObservatoryState {
     /// It has no reactive dependencies, so it is fetched once per page rather
     /// than per range change.
     pub chain_size_total: LocalResource<u64>,
-    /// The difficulty retargets inside the loaded daily window, plus the
-    /// epoch before it.
+    /// The difficulty retargets inside the loaded daily window, plus the epoch
+    /// before it, paired with the window they answer as `DashboardValue` is.
     ///
-    /// Read by Difficulty Adjustment at daily resolution and by nothing else.
-    /// Held here rather than in the mining page because the single-chart view
-    /// needs the same rows, and because it is derived from
-    /// `dashboard_data`: the retargets always describe the window the days
-    /// describe. Empty at per-block ranges, where difficulty is read off the
-    /// blocks themselves.
+    /// Read by Difficulty Adjustment at daily resolution and by nothing else,
+    /// but held here rather than on the mining page because the single-chart
+    /// view needs the same rows and because it is derived from
+    /// `dashboard_data`. Empty at per-block ranges, where difficulty is read
+    /// off the blocks themselves.
     ///
-    /// The cost of holding it here is one request per daily range change on
-    /// every observatory page, including the ones with no difficulty chart,
-    /// which is the same trade `chain_size_offset` already makes. It is a
-    /// 2.1ms query returning at most ~480 rows for the whole chain.
-    /// Paired with the daily window it answers, in the same shape and for
-    /// the same reason as `DashboardValue`.
+    /// Costs one request per daily range change on every observatory page,
+    /// including those with no difficulty chart, which is the trade
+    /// `chain_size_offset` already makes. A 2.1ms query returning at most
+    /// ~480 rows for the whole chain.
     pub retargets: LocalResource<RetargetsValue>,
     // true while the dashboard data resource hasn't yet resolved a value
     // for the *currently selected* range/custom-window.
@@ -162,21 +159,15 @@ pub fn date_to_ts(date: &str) -> Option<u64> {
 /// window therefore has to be closed, and a date picked as "to" has to become
 /// the last instant of that day rather than the first instant of the next one.
 ///
-/// Adding a whole day was the bug. It reads as "include the entire end day"
-/// and is correct against a half-open query, but `query_daily_aggregates_fast`
-/// reads the pre-computed table with `day <= date(to_ts)`, and `date` of the
-/// next midnight is the next day: a request for 1 January to 31 March 2020
-/// returned 92 rows ending on 1 April. The raw twin has
-/// `timestamp <= to_ts`, which instead let a single block landing exactly on
-/// midnight open a one-block partial day. One convention, one helper, so the
-/// two cannot disagree again.
+/// Not a whole day added. `query_daily_aggregates_fast` reads the pre-computed
+/// table with `day <= date(to_ts)`, and `date` of the next midnight is the
+/// next day, so 1 January to 31 March 2020 returns 92 rows ending 1 April. Its
+/// raw twin has `timestamp <= to_ts`, where a block landing exactly on
+/// midnight opens a one-block partial day. One convention, one helper.
 pub fn date_to_ts_end(date: &str) -> Option<u64> {
     date_to_ts(date).map(|t| t + 86_399)
 }
 
-/// Create a `LocalResource` that fetches dashboard data for the given range.
-/// Returns `PerBlock` data for short ranges (under ~5000 blocks) or `Daily`
-/// aggregates for longer ranges. Supports custom date ranges via from/to params.
 /// The window a fetch was issued for: the range name and the two custom dates.
 pub type WindowKey = (String, Option<String>, Option<String>);
 
@@ -213,21 +204,15 @@ pub fn price_window_too_short(span_secs: u64) -> bool {
 /// A dashboard payload and **the window it answers**, which travel together.
 ///
 /// The window is part of the value rather than recorded beside it, because
-/// every version of "record it beside it" has been wrong, twice in one day:
+/// carried in the value the stamp cannot arrive early or late: it arrives as
+/// the data. Both alternatives have an ordering to get wrong. An `Effect`
+/// stamping the ambient range stamps the new range onto the old payload, since
+/// a `LocalResource` keeps its previous one while refetching; the fetch
+/// stamping its own window on the way out writes *inside* the future, landing
+/// before the value reaches the resource.
 ///
-/// - An `Effect` stamping the ambient range when the resource held any value.
-///   A `LocalResource` keeps its previous payload while refetching, so that
-///   stamped the new range against the old data.
-/// - The fetch stamping its own window on the way out. That reads correctly
-///   and is worse: the write happens *inside* the future, so it lands before
-///   the future's value reaches the resource. The loading flag then cleared one
-///   step ahead of the data every single time, turning an occasional flash into
-///   a certain one.
-///
-/// Carried in the value, the stamp cannot arrive early or late, because it
-/// arrives as the data. There is no ordering left to get wrong. The result is
-/// inside so a failed fetch still says which window failed, rather than
-/// leaving the flag stuck and the skeleton spinning.
+/// The `Result` is inside, so a failed fetch still says which window failed
+/// rather than leaving the flag stuck and the skeleton spinning.
 pub type DashboardValue = (WindowKey, Result<DashboardData, String>);
 
 /// The daily window a retarget list answers, as `(from_ts, to_ts)`, or `None`
@@ -242,6 +227,8 @@ pub type RetargetsValue = (DailyWindow, Result<Vec<Retarget>, String>);
 /// read `custom_to`, so comparing against the full key would never match.
 pub type ChainSizeOffsetValue = ((String, Option<String>), u64);
 
+/// Dashboard rows for the selected range: `PerBlock` under ~5,000 blocks,
+/// `Daily` aggregates above it, and either for a custom date window.
 pub fn create_dashboard_resource(
     range: ReadSignal<String>,
     custom_from: ReadSignal<Option<String>>,
@@ -264,24 +251,14 @@ pub fn create_dashboard_resource(
                         let to_ts = date_to_ts_end(&to_str)
                             .unwrap_or(stats.latest_timestamp);
                         // **Ask the chain how many blocks are in the window,
-                        // do not divide the span by 600.**
-                        //
-                        // Blocks are not ten minutes apart. A 30-day custom
-                        // range over the late-2017 congestion holds 5,055
-                        // blocks while span/600 estimates 4,320, so the
-                        // per-block arm was taken and `fetch_blocks_by_ts`
-                        // rejected it against its 5,000-row cap. There was no
-                        // fallback, so the resource returned Err and **every
-                        // chart on the page showed "Failed to load data"** for
-                        // a range that is perfectly serviceable as daily.
-                        // Verified against the database: 2017-11-19 to
-                        // 2017-12-19 is one such window, and 34-day windows
-                        // reach 5,662 blocks against an estimate of 4,896.
-                        //
-                        // The server already knew this: its cap comment says
-                        // the estimate under-counts and enforces the limit
-                        // rather than trusting the caller. Only the client
-                        // half was missing.
+                        // do not divide the span by 600.** Blocks are not ten
+                        // minutes apart: 2017-11-19 to 2017-12-19 holds 5,055
+                        // blocks against an estimate of 4,320, so the
+                        // per-block arm is taken and `fetch_blocks_by_ts`
+                        // rejects it against its 5,000-row cap, failing every
+                        // chart on the page for a window that serves fine as
+                        // daily. The server enforces the same cap rather than
+                        // trusting the estimate.
                         let real_blocks =
                             match fetch_height_range(from_ts, to_ts).await {
                                 Ok(Some((lo, hi))) => hi.saturating_sub(lo) + 1,
@@ -395,7 +372,7 @@ pub fn provide_observatory_state() -> ObservatoryState {
 
     // `data_loading` is wired further down, once `dashboard_data` exists.
 
-    // Overlay toggles — initialized from URL
+    // Overlay toggles, initialized from URL
     let (overlay_halvings, set_overlay_halvings) =
         signal(initial_overlays.iter().any(|s| s == "halvings"));
     let (overlay_bips, set_overlay_bips) =
@@ -409,7 +386,7 @@ pub fn provide_observatory_state() -> ObservatoryState {
     let (overlay_events, set_overlay_events) =
         signal(initial_overlays.iter().any(|s| s == "events"));
     let (chart_settings_open, set_chart_settings_open) = signal(false);
-    // Default tab is Range — users change the time window far more often
+    // Default tab is Range: users change the time window far more often
     // than they toggle overlays, so leading with Range matches their
     // actual reach-for-this-first behavior.
     let (chart_settings_tab, set_chart_settings_tab) =
@@ -538,49 +515,39 @@ pub fn provide_observatory_state() -> ObservatoryState {
         connected,
     });
 
-    // Shared dashboard data resource — lives in the parent (ObservatoryPage),
-    // stays alive across Outlet navigations. Child pages read it from context
-    // so there's no re-fetch or loading flash when switching pages.
+    // Lives in the parent (ObservatoryPage) and stays alive across Outlet
+    // navigations. Child pages read it from context, so switching pages
+    // neither refetches nor flashes a loading state.
     let dashboard_data =
         create_dashboard_resource(range, custom_from, custom_to);
 
-    // Loading signal: true while the live (range, custom_from, custom_to)
-    // hasn't yet been resolved by the dashboard_data resource.
+    // True while the live (range, custom_from, custom_to) has not yet been
+    // resolved by the dashboard_data resource.
     //
-    // Why this matters: LocalResource.get() returns the *previous* resolved
-    // value while a refetch is in flight (the value cell isn't cleared on
-    // input change), so chart_memo never produces an empty string and the
-    // ChartCard skeleton wouldn't otherwise show. The earlier "n >= 2Y"
-    // gate skipped feedback for shorter range switches entirely — fine on
-    // desktop, painful on slower mobile devices where even a 1Y → 1M
-    // recompute (~28 charts × ~4,320 per-block rows) takes several seconds.
-    //
-    // We track which (range, from, to) the resource last resolved for, and
-    // derive `data_loading` as "those don't match the live values yet."
+    // `LocalResource::get` returns the *previous* resolved value while a
+    // refetch is in flight, so `chart_memo` never produces an empty string and
+    // the skeleton would otherwise never show. Even a 1Y to 1M recompute is
+    // ~28 charts over ~4,320 per-block rows, several seconds on mobile.
     //
     // **The window is read off the payload**, so "has the new data arrived" is
-    // answered by the data and not by a stamp kept beside it. `DashboardValue`
-    // records the two ways keeping it beside the data failed on 2026-09-21,
-    // the second of which made the flash certain rather than occasional.
+    // answered by the data rather than by a stamp kept beside it. See
+    // `DashboardValue` for why a stamp cannot be ordered correctly.
     //
-    // An out-of-order completion, where a superseded fetch lands after a newer
-    // one, shows the older window and puts the skeleton back until the newer
-    // one arrives. That is a spurious skeleton rather than a stale chart, which
-    // is the right way round for this to fail.
+    // An out-of-order completion shows the older window and puts the skeleton
+    // back until the newer one lands: a spurious skeleton rather than a stale
+    // chart, which is the right way round for this to fail.
 
     // Whether the selected window is too short for the price series to draw.
     //
-    // `PRICE_SAMPLE_INTERVAL_SECS` explains the number. A window shorter than
-    // one sampling interval holds at most one historical sample, and one point
-    // with `symbol: "none"` draws nothing at all: the legend gains a "Price
-    // (USD)" entry and the plot gains no line. Reported on 2026-09-21 from a
-    // 1D chart, where the overlay was offered, accepted, and silently drew
-    // nothing.
+    // A window shorter than one `PRICE_SAMPLE_INTERVAL_SECS` holds at most one
+    // sample, and one point with `symbol: "none"` draws nothing: the legend
+    // gains a "Price (USD)" entry and the plot gains no line.
     //
     // Read off the loaded rows rather than the range name, because a custom
     // window of two days is just as short and `range_to_blocks` maps "custom"
     // to 999,999. Daily resolution starts at thousands of blocks, so those
     // windows are never short enough to matter.
+    //
     // Borrowed and memoized, for the same reason as `data_loading`: this needs
     // two timestamps, not a copy of every block in the window.
     let price_sparse_memo = Memo::new(move |_| {
@@ -651,31 +618,17 @@ pub fn provide_observatory_state() -> ObservatoryState {
             .unwrap_or(0)
     });
 
-    // The retarget blocks inside the loaded window, for the one chart that
-    // cannot read them off the daily rows.
-    //
-    // Keyed on the resolved days rather than on the range, which is what
-    // keeps this honest: the window asked for here is exactly the window the
-    // days describe, so the two payloads cannot end up covering different
-    // periods. Deriving it from `range` again would be a second
-    // interpretation of the same question, and the two would drift the first
-    // time either changed.
-    //
-    // Empty for per-block ranges, which read difficulty off the blocks they
-    // already have.
     // The window the loaded days describe, which is exactly what `retargets`
     // has to answer. Shared with `data_loading` so the gate and the fetch
-    // cannot disagree about which window is current.
-    // **`with`, not `get`, and a `Memo`, not a derive.**
+    // cannot disagree about which window is current. None at per-block
+    // ranges, which read difficulty off the blocks they already have.
     //
-    // `LocalResource::get()` clones its value. Now that the window travels
-    // inside the payload, reading the window with `get()` clones up to 5,000
-    // `BlockSummary` rows, each carrying two heap strings, just to look at a
-    // three-field key. `data_loading` is read at the head of every
-    // `chart_memo!` before the cache check, so a 30-card category page paid
-    // that clone on the order of a hundred times per reactive pass. Borrowing
-    // through `with` and cloning only the projection costs nothing, and the
-    // `Memo` collapses those reads into one computation.
+    // **`with`, not `get`, and a `Memo`, not a derive.** `LocalResource::get`
+    // clones its value, and the window travels inside the payload, so reading
+    // it with `get` clones up to 5,000 `BlockSummary` rows to look at a
+    // three-field key. `data_loading` reads this at the head of every
+    // `chart_memo!`, so a 30-card page paid that clone on the order of a
+    // hundred times per reactive pass.
     let daily_window: Memo<DailyWindow> = Memo::new(move |_| {
         dashboard_data.with(|v| {
             let (_, res) = v.as_ref()?;
@@ -693,14 +646,17 @@ pub fn provide_observatory_state() -> ObservatoryState {
             }
         })
     });
+    // The retarget blocks inside the loaded window, for the one chart that
+    // cannot read them off the daily rows. Keyed on the resolved days rather
+    // than on the range, so the retargets and the days cannot end up covering
+    // different periods.
     let retargets = LocalResource::new(move || {
         let window = daily_window.get();
         async move {
             // Stamped with the derived window, for the same reason
             // `DashboardValue` is: this resource keeps its previous list while
-            // refetching, so a range change left the difficulty chart holding
-            // the *previous* window's retargets for a frame after the days
-            // themselves had arrived.
+            // refetching, so without the stamp the difficulty chart holds the
+            // previous window's retargets for a frame.
             let out = match window {
                 // The error is kept rather than flattened to an empty list.
                 // An empty list is a real answer here ("no retarget in this
@@ -719,16 +675,11 @@ pub fn provide_observatory_state() -> ObservatoryState {
         }
     });
 
-    // **Every window-keyed input, not just the rows.**
-    //
-    // Gating on `dashboard_data` alone left the flash smaller and still there,
-    // reported on 2026-09-21 after the payload fix. The reason is that a chart
-    // option is built from more than the rows: `chain_size_offset` and
-    // `retargets` are their own resources, each keeps its previous value while
-    // refetching, and each therefore answers the *previous* window for a while
-    // after the rows for the new one have landed. Clearing the flag on the
-    // rows alone published a chart assembled from new rows and stale
-    // everything-else.
+    // **Every window-keyed input, not just the rows.** A chart option is built
+    // from more than the rows: `chain_size_offset` and `retargets` are their
+    // own resources, each keeping its previous value while refetching, so each
+    // answers the *previous* window for a while after the new rows land.
+    // Gating on the rows alone publishes new rows beside stale everything-else.
     //
     // Each comparison is against exactly the inputs that resource reads.
     // `chain_size_offset` never reads `custom_to`, so comparing its stamp to
@@ -854,7 +805,7 @@ pub fn provide_observatory_state() -> ObservatoryState {
         }
     });
 
-    // Chart JSON cache — invalidate when range or overlay flags change
+    // Chart JSON cache, invalidated when range or overlay flags change
     let chart_cache: ChartCache = Arc::new(Mutex::new(HashMap::new()));
 
     let state = ObservatoryState {
