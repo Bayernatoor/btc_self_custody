@@ -3508,6 +3508,265 @@ mod tests {
         conn
     }
 
+    /// This file, read back, so the column-order guard below checks the real
+    /// statements rather than a copy of them that can drift.
+    const SELF_SRC: &str = include_str!("db.rs");
+
+    /// Two struct fields are not named after their column. Listed explicitly
+    /// so the guard cannot be "fixed" by loosening it: anything not in here
+    /// must match exactly.
+    const FIELD_TO_COLUMN: &[(&str, &str)] =
+        &[("time", "timestamp"), ("n_tx", "tx_count")];
+
+    fn column_for(field: &str) -> &str {
+        FIELD_TO_COLUMN
+            .iter()
+            .find(|(f, _)| *f == field)
+            .map(|(_, c)| *c)
+            .unwrap_or(field)
+    }
+
+    /// The source of one function, from its signature to its closing brace.
+    fn fn_body<'a>(src: &'a str, sig: &str) -> &'a str {
+        let start = src
+            .find(sig)
+            .unwrap_or_else(|| panic!("{sig} not found in db.rs"));
+        let rest = &src[start..];
+        &rest[..rest.find("\n}\n").unwrap_or(rest.len())]
+    }
+
+    /// Comma-separated column names between two markers, ignoring layout.
+    fn columns_between(body: &str, from: &str, to: &str) -> Vec<String> {
+        let s = body.find(from).expect("start marker");
+        let e = body[s..].find(to).expect("end marker") + s;
+        let mut seg = &body[s + from.len()..e];
+        // The INSERT wraps its list in parentheses; a SELECT does not.
+        if let Some((_, after)) = seg.split_once('(') {
+            seg = after;
+        }
+        seg.split(',')
+            .map(|c| c.trim().trim_end_matches(')').trim().to_string())
+            .filter(|c| !c.is_empty())
+            .collect()
+    }
+
+    /// `block.<field>` bindings inside a `params!` list, in order.
+    fn params_fields(body: &str) -> Vec<String> {
+        let s = body.find("params![").expect("params! list");
+        body[s..]
+            .lines()
+            .map_while(|l| {
+                let t = l.trim();
+                if t.starts_with("])") || t == "]" {
+                    return None;
+                }
+                Some(t)
+            })
+            .filter_map(|t| t.strip_prefix("block."))
+            .map(|f| f.trim_end_matches(',').to_string())
+            .collect()
+    }
+
+    /// Columns of an `UPDATE ... SET col = ?n` clause, ordered by `n`.
+    ///
+    /// Its own parser because the SET form names each column beside its own
+    /// placeholder rather than listing them all up front.
+    fn update_set_columns(body: &str) -> Vec<String> {
+        let s = body.find("SET ").expect("SET clause");
+        let e = body[s..].find(" WHERE ").expect("WHERE clause") + s;
+        let mut pairs: Vec<(usize, String)> = body[s + 4..e]
+            .split(',')
+            .filter_map(|a| {
+                let (col, ph) = a.split_once('=')?;
+                let idx = ph.trim().trim_start_matches('?').parse().ok()?;
+                Some((idx, col.trim().to_string()))
+            })
+            .collect();
+        pairs.sort_by_key(|(i, _)| *i);
+        pairs.into_iter().map(|(_, c)| c).collect()
+    }
+
+    /// `field: row.get(N)` bindings, as (field, index) pairs.
+    fn row_get_fields(body: &str) -> Vec<(String, usize)> {
+        body.lines()
+            .filter_map(|l| {
+                let (field, rest) = l.trim().split_once(": row.get(")?;
+                let idx = rest.split(')').next()?.parse().ok()?;
+                Some((field.to_string(), idx))
+            })
+            .collect()
+    }
+
+    /// Every wide statement binds columns to fields **by position**, so
+    /// transposing two same-typed entries is silent.
+    ///
+    /// `insert_blocks` binds 60 columns through a flat `params!` tuple, and
+    /// the two widest readers map 55 columns through `row.get(N)`. Nothing
+    /// else in this suite would notice a swap, because the fixtures are almost
+    /// entirely zeros and any two zero fields are interchangeable. On the
+    /// write path that corrupts the database permanently, and no read-side fix
+    /// recovers it: it needs a re-ingest.
+    ///
+    /// **A round-trip test cannot close this.** If the writer puts field A
+    /// into column B and the reader reads column B back into field A, the
+    /// round trip is self-consistent and passes, while every other consumer of
+    /// that column gets the wrong number. So this checks the correspondence in
+    /// the source directly, which also names the offending pair instead of
+    /// reporting that some value came back wrong.
+    ///
+    /// **A parse failure has to fail the test rather than pass it vacuously**,
+    /// which is what the count assertions are for: these parsers are
+    /// line-based, so reflowing a statement leaves them matching nothing.
+    ///
+    /// Mutation-tested when written, because a guard nobody has watched fail
+    /// is a guard nobody should trust. Four planted faults, all caught:
+    /// swapping `inscription_fees` with `runes_fees` in `insert_blocks`, the
+    /// same swap in `update_block_extras`, swapping two `row.get` indices in
+    /// `query_blocks`, and collapsing a `params!` list onto one line, which
+    /// trips the count assertion rather than passing empty.
+    ///
+    /// What this does **not** cover: a wrong cast, a struct/schema type
+    /// mismatch, or a semantically wrong value computed upstream. Position is
+    /// the silent failure; those are not.
+    #[test]
+    fn wide_statements_bind_each_column_to_its_own_field() {
+        let mut problems = Vec::new();
+
+        // ---- write path -------------------------------------------------
+        let body = fn_body(SELF_SRC, "pub fn insert_blocks(");
+        let cols = columns_between(body, "INTO blocks", "VALUES");
+        let fields = params_fields(body);
+
+        assert_eq!(
+            cols.len(),
+            60,
+            "parsed {} columns for the block insert, expected 60. The parser \
+             broke, which must not read as a pass.",
+            cols.len()
+        );
+        assert_eq!(
+            fields.len(),
+            59,
+            "parsed {} block.* params, expected 59 (the 60th column, \
+             backfill_version, is bound to a constant). The parser broke.",
+            fields.len()
+        );
+
+        for (i, (col, field)) in cols.iter().zip(&fields).enumerate() {
+            if column_for(field) != col {
+                problems.push(format!(
+                    "insert_blocks ?{}: column `{col}` is bound to \
+                     `block.{field}`",
+                    i + 1
+                ));
+            }
+        }
+        if cols[fields.len()] != "backfill_version" {
+            problems.push(format!(
+                "insert_blocks: last column is `{}`, expected \
+                 `backfill_version`",
+                cols[fields.len()]
+            ));
+        }
+
+        // ---- the backfill's write path ------------------------------------
+        // Separate from the insert and just as wide. This is what a
+        // BACKFILL_VERSION sweep rewrites ~966k rows through, so a
+        // transposition here is the expensive one.
+        let body = fn_body(SELF_SRC, "pub fn update_block_extras(");
+        let cols = update_set_columns(body);
+        let fields = params_fields(body);
+
+        assert_eq!(
+            cols.len(),
+            51,
+            "parsed {} SET columns for the extras update, expected 51. The \
+             parser broke, which must not read as a pass.",
+            cols.len()
+        );
+        assert_eq!(
+            fields.len(),
+            51,
+            "parsed {} block.* params for the extras update, expected 51: 50 \
+             in the SET plus `block.height` for the WHERE, with \
+             BACKFILL_VERSION bound to the 51st column. The parser broke.",
+            fields.len()
+        );
+
+        // Only the first 50 pair up. The 51st SET column is backfill_version,
+        // bound to a constant, which shifts `block.height` into the 51st param
+        // slot where it serves the WHERE clause instead. Both are asserted
+        // by name below.
+        for (i, (col, field)) in cols.iter().zip(&fields).take(50).enumerate() {
+            if column_for(field) != col {
+                problems.push(format!(
+                    "update_block_extras ?{}: column `{col}` is bound to \
+                     `block.{field}`",
+                    i + 1
+                ));
+            }
+        }
+        if cols.last().map(String::as_str) != Some("backfill_version") {
+            problems.push(format!(
+                "update_block_extras: last SET column is `{:?}`, expected \
+                 `backfill_version`",
+                cols.last()
+            ));
+        }
+        if fields.last().map(String::as_str) != Some("height") {
+            problems.push(format!(
+                "update_block_extras: last param is `block.{:?}`, expected \
+                 `block.height` for the WHERE clause",
+                fields.last()
+            ));
+        }
+
+        // ---- read paths ---------------------------------------------------
+        for (sig, min_cols) in [
+            ("pub fn query_blocks(", 55),
+            ("pub fn query_blocks_by_ts(", 55),
+            ("pub fn query_block_by_height(", 27),
+        ] {
+            let body = fn_body(SELF_SRC, sig);
+            let cols = columns_between(body, "\"SELECT", "FROM blocks");
+            let binds = row_get_fields(body);
+
+            assert!(
+                cols.len() >= min_cols && binds.len() >= min_cols,
+                "{sig}: parsed {} columns and {} row.get bindings, expected at \
+                 least {min_cols} of each. The parser broke, which must not \
+                 read as a pass.",
+                cols.len(),
+                binds.len()
+            );
+
+            for (field, idx) in binds {
+                match cols.get(idx) {
+                    None => problems.push(format!(
+                        "{sig}{field}: row.get({idx}) is past the end of a \
+                         {}-column select",
+                        cols.len()
+                    )),
+                    Some(col) if column_for(&field) != col => {
+                        problems.push(format!(
+                            "{sig}row.get({idx}) reads column `{col}` into \
+                             field `{field}`"
+                        ));
+                    }
+                    Some(_) => {}
+                }
+            }
+        }
+
+        assert!(
+            problems.is_empty(),
+            "a wide statement binds a column to the wrong field. This is the \
+             silent corruption case, so fix the statement rather than the \
+             test:\n  {}",
+            problems.join("\n  ")
+        );
+    }
+
     /// Test helper: insert a minimal mempool tx with the given txid, fee, vsize,
     /// value, and timestamp. All other fields use sensible defaults. Tests that
     /// need to set specific notable_type/value_usd/etc. should call insert_mempool_tx
