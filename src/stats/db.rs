@@ -3597,6 +3597,109 @@ mod tests {
             .collect()
     }
 
+    /// Split on commas that are not inside parentheses.
+    ///
+    /// The rollup's day expression is `date(datetime(timestamp, 'unixepoch'))`,
+    /// which carries a comma of its own, so a plain split would cut it in half
+    /// and shift every column after it.
+    fn split_top_level(s: &str) -> Vec<String> {
+        let (mut out, mut depth, mut cur) = (Vec::new(), 0usize, String::new());
+        for ch in s.chars() {
+            match ch {
+                '(' => {
+                    depth += 1;
+                    cur.push(ch);
+                }
+                ')' => {
+                    depth = depth.saturating_sub(1);
+                    cur.push(ch);
+                }
+                ',' if depth == 0 => {
+                    out.push(cur.trim().to_string());
+                    cur.clear();
+                }
+                _ => cur.push(ch),
+            }
+        }
+        if !cur.trim().is_empty() {
+            out.push(cur.trim().to_string());
+        }
+        out.retain(|c| !c.is_empty());
+        out
+    }
+
+    /// The target columns and the SELECT expressions of one
+    /// `INSERT ... SELECT` into `daily_blocks`, in order.
+    fn daily_rollup_parts(
+        src: &str,
+        marker: &str,
+    ) -> (Vec<String>, Vec<String>) {
+        let at = src
+            .find(marker)
+            .unwrap_or_else(|| panic!("{marker} not found in db.rs"));
+        let seg = &src[at..];
+        let t = seg.find("daily_blocks").expect("daily_blocks target");
+        let sel = seg.find("SELECT").expect("SELECT");
+        let end = seg.find("FROM blocks").expect("FROM blocks");
+
+        let cols = split_top_level(
+            seg[t..sel].split_once('(').expect("column list").1,
+        )
+        .into_iter()
+        .map(|c| c.trim_end_matches(')').trim().to_string())
+        .collect();
+        let exprs = split_top_level(&seg[sel + "SELECT".len()..end])
+            .into_iter()
+            .map(|e| e.split_whitespace().collect::<Vec<_>>().join(" "))
+            .collect();
+        (cols, exprs)
+    }
+
+    /// Why one rollup column cannot be filled by the expression beside it.
+    ///
+    /// The naming carries the aggregation: an `avg_` column must come from
+    /// `AVG` and a `total_` column from `SUM`. The inner name may be the stem
+    /// or the whole column, because three source columns already carry
+    /// `total_` themselves (`total_fees`, `total_output_value`,
+    /// `total_input_value`).
+    fn rollup_problem(col: &str, expr: &str) -> Option<String> {
+        match col {
+            // Computed by the rebuild, bound as `?1` by the per-day refresh.
+            "day" => {
+                return (expr != "?1" && !expr.starts_with("date("))
+                    .then(|| format!("`day` is filled from `{expr}`"))
+            }
+            "block_count" => {
+                return (expr != "COUNT(*)")
+                    .then(|| format!("`block_count` is filled from `{expr}`"))
+            }
+            _ => {}
+        }
+        let (agg, stem) = if let Some(s) = col.strip_prefix("avg_") {
+            ("AVG", s)
+        } else if let Some(s) = col.strip_prefix("total_") {
+            ("SUM", s)
+        } else {
+            return Some(format!(
+                "`{col}` has neither an `avg_` nor a `total_` prefix, so the \
+                 aggregation it wants cannot be read off its name"
+            ));
+        };
+        let inner = expr
+            .strip_prefix(agg)
+            .and_then(|r| r.strip_prefix('('))
+            .and_then(|r| r.strip_suffix(')'));
+        match inner {
+            None => Some(format!(
+                "`{col}` names {agg}, but is filled from `{expr}`"
+            )),
+            Some(x) if x != stem && x != col => Some(format!(
+                "`{col}` is filled from {agg}(`{x}`), expected `{stem}`"
+            )),
+            Some(_) => None,
+        }
+    }
+
     /// Every wide statement binds columns to fields **by position**, so
     /// transposing two same-typed entries is silent.
     ///
@@ -4912,5 +5015,88 @@ mod tests {
         assert_eq!(missing.len(), 3, "limit caps the result");
         // Returned in ascending order
         assert!(missing.windows(2).all(|w| w[0] < w[1]));
+    }
+
+    /// The daily rollup fills each column from its own source, with the
+    /// aggregation its name promises.
+    ///
+    /// `daily_blocks` is 50 columns written by an `INSERT ... SELECT`, so the
+    /// correspondence is a column list against a list of aggregate
+    /// expressions. Nothing else checks it, and everything the site draws
+    /// above `MAX_PER_BLOCK_RANGE` reads this table: a transposition here
+    /// corrupts every long range while per-block ranges stay right, which
+    /// presents as "the chart changes when I change the range" rather than as
+    /// an obvious fault.
+    ///
+    /// Two rules, because the column names encode both halves:
+    ///
+    /// - **Source.** `avg_size` must come from `size`, not from a neighbour.
+    /// - **Aggregation.** An `avg_` column must come from `AVG` and a `total_`
+    ///   column from `SUM`. This is the `MeanOfPerBlockValues` versus
+    ///   `DailyTotal` distinction the registry declares, and summing a column
+    ///   of means is the error that distinction exists to prevent. Nothing
+    ///   else ties the SQL to it.
+    ///
+    /// The two writers are also asserted to agree. `REBUILD_DAILY_SQL` and
+    /// `refresh_daily_day` carry independent copies of the same 50 columns,
+    /// identical today by discipline alone, and a rebuild that disagrees with
+    /// the incremental refresh would make a row's meaning depend on which one
+    /// last touched it.
+    ///
+    /// Mutation-tested when written: swapping two sources, changing an `AVG`
+    /// to a `SUM`, and dropping a column from one copy each fail it.
+    #[test]
+    fn the_daily_rollup_aggregates_each_column_from_its_own_source() {
+        let (rb_cols, rb_exprs) =
+            daily_rollup_parts(SELF_SRC, "const REBUILD_DAILY_SQL");
+        let (rd_cols, rd_exprs) =
+            daily_rollup_parts(SELF_SRC, "pub fn refresh_daily_day");
+
+        for (label, cols, exprs) in [
+            ("REBUILD_DAILY_SQL", &rb_cols, &rb_exprs),
+            ("refresh_daily_day", &rd_cols, &rd_exprs),
+        ] {
+            assert_eq!(
+                cols.len(),
+                50,
+                "{label}: parsed {} target columns, expected 50. The parser \
+                 broke, which must not read as a pass.",
+                cols.len()
+            );
+            assert_eq!(
+                exprs.len(),
+                50,
+                "{label}: parsed {} select expressions, expected 50. The \
+                 parser broke.",
+                exprs.len()
+            );
+        }
+
+        assert_eq!(
+            rb_cols, rd_cols,
+            "the two daily_blocks writers disagree about the column list, so \
+             a row's meaning would depend on whether it was last written by a \
+             full rebuild or an incremental refresh"
+        );
+
+        let mut problems = Vec::new();
+        for (label, cols, exprs) in [
+            ("REBUILD_DAILY_SQL", &rb_cols, &rb_exprs),
+            ("refresh_daily_day", &rd_cols, &rd_exprs),
+        ] {
+            for (col, expr) in cols.iter().zip(exprs.iter()) {
+                if let Some(why) = rollup_problem(col, expr) {
+                    problems.push(format!("{label}: {why}"));
+                }
+            }
+        }
+        assert!(
+            problems.is_empty(),
+            "the daily rollup fills a column from the wrong source or with \
+             the wrong aggregation. Every chart above MAX_PER_BLOCK_RANGE \
+             reads this table, so fix the statement rather than the \
+             test:\n  {}",
+            problems.join("\n  ")
+        );
     }
 }
