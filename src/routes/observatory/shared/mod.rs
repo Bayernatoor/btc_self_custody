@@ -497,10 +497,15 @@ fn OverlayCheckbox(
 
 /// Observatory navigation bar with two-tier layout.
 ///
-/// Row 1 groups the tabs by "what Bitcoin question are you asking":
-///   live state (Readings, Heartbeat, Lookout) → consensus evolution
-///   (Signaling) → historical records (Logbook, Almanac, Archives)
-///   → analytical trends (Charts).
+/// Row 1 is ordered by how much a first-time reader gets from each page, not
+/// by subject. Readings is the section index. Heartbeat and Charts come next
+/// as the two pages worth arriving for, one live and one deep. Then the
+/// curated history, then the utility page. Signaling and The Lookout sit last
+/// because both are still incomplete: Signaling tracks a single BIP, and the
+/// Lookout's `notable_txs` is ZMQ-only with permanent gaps, so neither answers
+/// its own question yet. They are ordered rather than labelled, so the nav
+/// makes no claim about the site's state that would need retracting later.
+///
 /// Row 2 is the chart explorer sub-nav (Network, Fees, Mining, Embedded),
 /// only shown when the user is actually on a /charts/* page. The main
 /// "Charts" tab in Row 1 provides the entry point so charts are
@@ -511,15 +516,15 @@ pub fn ObservatoryNav() -> impl IntoView {
     let pages: Vec<(&'static str, &'static str)> = vec![
         ("/observatory", "Readings"),
         ("/observatory/heartbeat", "Heartbeat"),
-        ("/observatory/lookout", "The Lookout"),
-        ("/observatory/signaling", "Signaling"),
-        ("/observatory/logbook", "Logbook"),
-        ("/observatory/almanac", "Almanac"),
-        ("/observatory/archives", "The Archives"),
         // Charts links to the default sub-page (Network); active-state
         // highlighting uses `/observatory/charts` as the prefix so any
         // chart sub-page keeps the tab lit. See the active check below.
         ("/observatory/charts/network", "Charts"),
+        ("/observatory/archives", "The Archives"),
+        ("/observatory/almanac", "Almanac"),
+        ("/observatory/logbook", "Logbook"),
+        ("/observatory/signaling", "Signaling"),
+        ("/observatory/lookout", "The Lookout"),
     ];
 
     let charts: Vec<(&'static str, &'static str)> = vec![
