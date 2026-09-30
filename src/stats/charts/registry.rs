@@ -1026,8 +1026,8 @@ pub const CHARTS: &[ChartMeta] = &[
     ChartMeta {
         slug: "runes-pct",
         title: "OP_RETURN Protocol Share",
-        desc_per_block: "Detected OP_RETURN outputs by protocol. Runes were 97.0% of them in 2024, the year they launched, and over 97% so far in 2026",
-        desc_daily: "Detected OP_RETURN outputs by protocol. Runes were 97.0% of them in 2024, the year they launched, and over 97% so far in 2026",
+        desc_per_block: "Detected OP_RETURN outputs by protocol. Runes were 96.9% of them in 2024, the year they launched, and over 97% so far in 2026",
+        desc_daily: "Detected OP_RETURN outputs by protocol. Runes were 96.9% of them in 2024, the year they launched, and over 97% so far in 2026",
         category: Category::Embedded,
         unit: Unit::Percent,
         shape: Shape::StackedPercent,
@@ -1046,7 +1046,7 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Each detector's count over the block's OP_RETURN count. Detectors match a prefix, so the residual band is whatever matched none of them rather than a named protocol.",
         }],
         about: Some(About {
-            definition: Some("Which protocol is using the OP_RETURN space. Runes launched in the halving block, 840,000 on 2024-04-20, and took almost all of it immediately: 97.0% of detected OP_RETURN outputs that year."),
+            definition: Some("Which protocol is using the OP_RETURN space. Runes launched in the halving block, 840,000 on 2024-04-20, and took almost all of it immediately: 96.9% of detected OP_RETURN outputs that year."),
             technical: "Each protocol's detected OP_RETURN outputs as a share of all detected OP_RETURN outputs in the block. Detection is by script prefix, so an unrecognised protocol lands in the residual band rather than being missed entirely.",
         }),
     },
@@ -1196,12 +1196,12 @@ pub const CHARTS: &[ChartMeta] = &[
                 method_daily: Method::HeuristicallyDetected,
                 per_block: Aggregation::PerBlockObservation,
                 daily: Aggregation::MeanOfPerBlockValues,
-                population: "An estimated payload, whereas the OP_RETURN bands are exact script bytes, so the stack mixes two byte bases: about 6.3 GB of exact script bytes against about 41 GB of estimate over the whole chain. BRC-20 content is inside this band because no separate byte column exists for it, unlike the count chart where the two are disjoint.",
+                population: "An estimated payload, whereas the OP_RETURN bands are exact script bytes, so the stack mixes two byte bases: about 6.4 GB of exact script bytes against about 44 GB of estimate over the whole chain. BRC-20 content is inside this band because no separate byte column exists for it, unlike the count chart where the two are disjoint.",
             },
         ],
         about: Some(About {
-            definition: Some("Everything the site detects as embedded data, by size rather than by count. 63.1% of blocks carry an OP_RETURN output and 19.7% carry a detected inscription, and the two are measured on different bases, which the bands say."),
-            technical: "OP_RETURN bands are exact script bytes. The inscription band is an estimated payload, and it includes BRC-20 content because no separate byte column exists for it, unlike the count chart where the two are disjoint. Over the whole chain that is about 6.3 GB of exact bytes against about 41 GB of estimate, so the stack is mostly estimate.",
+            definition: Some("Everything the site detects as embedded data, by size rather than by count. 63.1% of blocks carry an OP_RETURN output and 19.8% carry a detected inscription, and the two are measured on different bases, which the bands say."),
+            technical: "OP_RETURN bands are exact script bytes. The inscription band is an estimated payload, and it includes BRC-20 content because no separate byte column exists for it, unlike the count chart where the two are disjoint. Over the whole chain that is about 6.4 GB of exact bytes against about 44 GB of estimate, so the stack is mostly estimate.",
         }),
     },
     ChartMeta {
@@ -3485,7 +3485,7 @@ mod tests {
     /// run. Found by an independent audit on 2026-09-24.
     ///
     /// **Proximity, not co-occurrence, and the difference decides a real
-    /// sentence.** `runes-pct` says "97.0% of them in 2024, the year they
+    /// sentence.** `runes-pct` says "96.9% of them in 2024, the year they
     /// launched, and over 97% so far in 2026": the decimal belongs to a
     /// closed year and the open year is deliberately hedged, which is the
     /// correct way to write this. A guard that flagged any sentence mentioning
@@ -3978,6 +3978,120 @@ mod tests {
                 "SELECT MIN(height) FROM blocks WHERE inscription_count > 0",
                 767_430.0,
                 767_430.0,
+            ),
+            // Added 2026-09-29 after an audit found 35 of the 51 charts that
+            // state a figure had no row here at all. These are the ones whose
+            // claim is a live measurement rather than a protocol constant, so
+            // they are the ones that can rot. Protocol facts (2,016 blocks,
+            // 210,000 blocks, four million weight units) are deliberately not
+            // listed: they cannot drift, and pinning them would only make this
+            // table longer to read.
+            (
+                "runes-pct",
+                "Runes were 96.9% of detected OP_RETURN outputs in 2024",
+                "SELECT 100.0*SUM(runes_count)/NULLIF(SUM(op_return_count),0) \
+                 FROM blocks WHERE strftime('%Y', \
+                 datetime(timestamp,'unixepoch'))='2024'",
+                96.5,
+                97.4,
+            ),
+            (
+                "unified-volume",
+                "63.1% of blocks carry an OP_RETURN output",
+                "SELECT 100.0*SUM(op_return_count>0)/COUNT(*) FROM blocks",
+                62.0,
+                65.0,
+            ),
+            (
+                "unified-volume",
+                "19.8% of blocks carry a detected inscription",
+                "SELECT 100.0*SUM(inscription_count>0)/COUNT(*) FROM blocks",
+                19.0,
+                21.0,
+            ),
+            // Hedged with "about", so the bounds are wide. The point is to
+            // catch the ratio inverting or the estimate running away, not to
+            // track a decimal. It had drifted from 41 GB to 44.4 by the time
+            // anyone re-measured.
+            (
+                "unified-volume",
+                "about 44 GB of estimated inscription payload chain-wide",
+                "SELECT SUM(inscription_envelope_bytes)/1e9 FROM blocks",
+                40.0,
+                52.0,
+            ),
+            // A whole-chain median, so it moves only as the chain grows. Tight
+            // bounds are safe and a move would mean something real.
+            (
+                "time-dist",
+                "the median interval is 6.9 minutes",
+                "SELECT gap/60.0 FROM (SELECT timestamp - LAG(timestamp) \
+                 OVER (ORDER BY height) gap FROM blocks) WHERE gap > 0 \
+                 ORDER BY gap LIMIT 1 OFFSET (SELECT COUNT(*)/2 FROM (SELECT \
+                 timestamp - LAG(timestamp) OVER (ORDER BY height) g \
+                 FROM blocks) WHERE g > 0)",
+                6.0,
+                7.8,
+            ),
+            (
+                "interval / propagation",
+                "about one consecutive pair in 60 runs backwards",
+                "SELECT 1.0*COUNT(*)/NULLIF(SUM(back),0) FROM (SELECT \
+                 (timestamp < LAG(timestamp) OVER (ORDER BY height)) back \
+                 FROM blocks) WHERE back IS NOT NULL",
+                45.0,
+                80.0,
+            ),
+            (
+                "protocol-fees",
+                "1,326 blocks where the two protocol totals exceed the block's",
+                "SELECT COUNT(*) FROM blocks WHERE \
+                 inscription_fees + runes_fees > total_fees AND total_fees > 0",
+                1_326.0,
+                1_326.0,
+            ),
+            (
+                "protocol-fee-competition",
+                "more than 125,000 blocks have both detections firing",
+                "SELECT COUNT(*) FROM blocks \
+                 WHERE inscription_count > 0 AND runes_count > 0",
+                125_000.0,
+                200_000.0,
+            ),
+            (
+                "inscription-envelope",
+                "envelope overhead is 7.7% of matching witness bytes",
+                "SELECT 100.0*SUM(inscription_envelope_bytes-inscription_bytes)/ \
+                 NULLIF(SUM(inscription_envelope_bytes),0) FROM blocks \
+                 WHERE inscription_count > 0",
+                6.5,
+                9.0,
+            ),
+            (
+                "max-tx-fee",
+                "the record is 291.24 BTC in block 409,008",
+                "SELECT max_tx_fee/1e8 FROM blocks WHERE height = 409008",
+                // The stored value is 291.2409, which the copy rounds to two
+                // places. Bounded rather than pinned exactly, or the guard
+                // fails on the rounding the sentence is entitled to do.
+                291.24,
+                291.25,
+            ),
+            (
+                "coinbase-msg-length",
+                "the longest readable coinbase message is 94 characters",
+                "SELECT MAX(LENGTH(coinbase_text)) FROM blocks",
+                94.0,
+                94.0,
+            ),
+            (
+                "diff-adjustment",
+                "the largest fall on record is 27.94% at height 689,472",
+                "SELECT 100.0*(d.difficulty-p.difficulty)/p.difficulty \
+                 FROM blocks d JOIN blocks p ON p.height = d.height-2016 \
+                 WHERE d.height = 689472",
+                -28.0,
+                -27.9,
             ),
         ];
 
