@@ -805,7 +805,7 @@ pub const CHARTS: &[ChartMeta] = &[
             method_daily: Method::HeuristicallyDetected,
             per_block: Aggregation::PerBlockObservation,
             daily: Aggregation::RatioOfTotals,
-            population: "Envelope bytes of matching witness items over serialized block bytes, so a byte fraction and not a count of anything. Falls back to payload bytes for blocks ingested before envelope sizes were stored, which makes the early series slightly lower than the late one on the same activity.",
+            population: "Envelope bytes of matching witness items over serialized block bytes, so a byte fraction and not a count of anything. Falls back to payload bytes for blocks recorded before envelope sizes were stored, which makes the early series slightly lower than the late one on the same activity.",
         }],
         about: Some(About {
             definition: Some("How much of a block is inscription data. Inscriptions go in the witness, which the protocol charges a quarter rate for, so they can fill a block by bytes while leaving room by weight. Two blocks in the chain are 99.99% inscription by bytes: 892,279 and 899,687."),
@@ -1505,7 +1505,7 @@ pub const CHARTS: &[ChartMeta] = &[
         ],
         about: Some(About {
             definition: Some("The most any single transaction paid in each block. Usually a few thousand satoshis, occasionally something extraordinary: the record is 291.24 BTC in block 409,008, which is a mistake rather than a bid, and the kind of thing this chart exists to surface."),
-            technical: "The largest single fee in the block, in BTC. Read per transaction during ingestion, so it is not derived from the block total. One outlier does not move any other series here, which is why this sits beside the median rather than replacing it.",
+            technical: "The largest single fee in the block, in BTC. Read per transaction rather than derived from the block total. One outlier does not move any other series here, which is why this sits beside the median rather than replacing it.",
         }),
     },
     ChartMeta {
@@ -1808,11 +1808,11 @@ pub const CHARTS: &[ChartMeta] = &[
             method_daily: Method::HeuristicallyDetected,
             per_block: Aggregation::GroupedSummary,
             daily: Aggregation::GroupedSummary,
-            population: "As Empty Blocks, grouped by matched coinbase tag instead of by month, so it inherits the attribution gap: unmatched blocks group as Unknown, and the early chain is largely unmatched.",
+            population: "As the Empty Blocks chart, grouped by matched coinbase tag instead of by month, so it inherits the attribution gap: unmatched blocks group as Unknown, and the early chain is largely unmatched.",
         }],
         about: Some(About {
             definition: Some("Which pools mined the coinbase-only blocks. Almost all of them are unattributed, because pool identification reads patterns in the coinbase that did not exist in 2009 and 2010, which is when nearly every empty block was mined. So the Unknown bar is a statement about the early chain rather than about anonymity today."),
-            technical: "Blocks with a transaction count of one, grouped by the miner string ingestion matched, with unmatched blocks under Unknown. Aggregated in SQL over the height range rather than from the loaded rows, so it answers for the whole window at any resolution.",
+            technical: "Blocks with a transaction count of one, grouped by the matched miner string, with unmatched blocks under Unknown. Aggregated in SQL over the height range rather than from the loaded rows, so it answers for the whole window at any resolution.",
         }),
     },
     ChartMeta {
@@ -1868,7 +1868,7 @@ pub const CHARTS: &[ChartMeta] = &[
         }],
         about: Some(About {
             definition: Some("The type of address each new output pays to. Every output commits to a script, and the shape of that script says which format the receiver gave out: a legacy '1', a '3' that commits to a hash of the spending conditions rather than to a single key, a SegWit 'bc1q' or a Taproot 'bc1p'. Modern wallets often put a SegWit program behind a '3', which is why that band did not empty when 'bc1q' arrived. One band is not an address at all: P2PK paid a public key directly, before address formats existed. It has not stopped entirely, but it arrives in bursts rather than a trickle: roughly one block in seven hundred carries one, and most days have none at all. Counting them is how the chain shows a format being adopted."),
-            technical: "Counts of outputs created per script type, from the classification stored per block. Daily values are totals for the day, not per-block averages: 3.0 per block over 10 blocks is 30. Coinbase outputs are excluded, because ingestion skips that transaction.\n\nThe P2SH band is the one that hides things. A '3' output is only a commitment to a hash, so a nested SegWit program, a multi-signature arrangement and a timelock are the same shape on creation, and the script behind it is revealed only when the output is spent. This chart counts outputs as they are created, so it cannot separate them, and no column here does.\n\nA band can also start before the rule that gave it meaning, because a script shape is valid to create before the network agrees what it means. Six P2SH outputs sit in five blocks from 2012-03-07, and the BIP-16 marker is at block 173,805 on 2012-04-01, nearly four thousand blocks later. Taproot does the same, with outputs from 2019 against a 2021 activation. Turn on the BIP activations overlay to see it: the marker lands well to the right of where the band begins.",
+            technical: "Counts of outputs created per script type, from the classification stored per block. Daily values are totals for the day, not per-block averages: 3.0 per block over 10 blocks is 30. Coinbase outputs are excluded.\n\nThe P2SH band is the one that hides things. A '3' output is only a commitment to a hash, so a nested SegWit program, a multi-signature arrangement and a timelock are the same shape on creation, and the script behind it is revealed only when the output is spent. This chart counts outputs as they are created, so it cannot separate them, and no column here does.\n\nA band can also start before the rule that gave it meaning, because a script shape is valid to create before the network agrees what it means. Six P2SH outputs sit in five blocks from 2012-03-07, and the BIP-16 marker is at block 173,805 on 2012-04-01, nearly four thousand blocks later. Taproot does the same, with outputs from 2019 against a 2021 activation. Turn on the BIP activations overlay to see it: the marker lands well to the right of where the band begins.",
         }),
     },
     ChartMeta {
@@ -1891,7 +1891,7 @@ pub const CHARTS: &[ChartMeta] = &[
             method_daily: Method::Measured,
             per_block: Aggregation::PerBlockObservation,
             daily: Aggregation::RatioOfTotals,
-            population: "Six classified output types normalised against their own sum, so the bands always total 100 and describe those six rather than every output. Bare multisig, unrecognised scripts and OP_RETURN are outside the denominator, which makes it narrower than the eight-type denominator P2PKH Sunset uses and narrower still than Output Type Breakdown, which divides by every output. The same script type therefore reads differently across those three charts.",
+            population: "Six classified output types normalised against their own sum, so the bands always total 100 and describe those six rather than every output. Bare multisig, unrecognised scripts and OP_RETURN are outside the denominator, which makes it narrower than the eight-type denominator the P2PKH Sunset chart uses and narrower still than the Output Type Breakdown chart, which divides by every output. The same script type therefore reads differently across those three charts.",
         }],
         about: Some(About {
             definition: Some("The same output types as a share of the total rather than as counts. Counts rise and fall with how busy the chain is, which hides a format gaining ground during a quiet week; a share strips that out and shows the types competing with each other. The bands total 100% by construction, so one type can only grow at another's expense."),
@@ -2124,7 +2124,7 @@ pub const CHARTS: &[ChartMeta] = &[
         ],
         about: Some(About {
             definition: Some("The biggest single transaction in each block, by bytes. Size comes from how many inputs and outputs a transaction carries and how much witness data arrives with them, so two transactions of the same size can be large for entirely different reasons, and the size alone does not tell you which.\n\nNothing caps a transaction at four megabytes directly. What consensus limits is weight: a block may carry 4,000,000 weight units, where an ordinary byte costs four units and a witness byte costs one. The same cap therefore allows about a megabyte of ordinary data or about four megabytes of witness data. A typical block is around half witness and lands near 1.6 MB; a transaction that is almost entirely witness can approach four megabytes and still fit.\n\nMore than ninety blocks have gone above 3.9 MB, and they are not spread across the network: MARA mined more than nine in ten of them. Almost all carry an inscription, and at the extreme the single transaction is over 99.9% of the block: the median such block carries twelve transactions in total, and forty-five carry fewer than ten. The largest in the chain, 3,992,821 bytes in block 839,842 on 2024-04-18, is one of these. They began in February 2023 and are still happening."),
-            technical: "Serialized size of the largest transaction in the block, read per transaction during ingestion. Size rather than weight, so a witness-heavy transaction reads larger here than it costs against the limit.",
+            technical: "Serialized size of the largest transaction in the block, read per transaction. Size rather than weight, so a witness-heavy transaction reads larger here than it costs against the limit.",
         }),
     },
     ChartMeta {
@@ -2174,7 +2174,7 @@ pub const CHARTS: &[ChartMeta] = &[
             method_daily: Method::Measured,
             per_block: Aggregation::PerBlockObservation,
             daily: Aggregation::RatioOfTotals,
-            population: "P2PKH outputs over eight classified output types: the six payment types plus bare multisig and unrecognised scripts. OP_RETURN outputs are outside it, and so are coinbase outputs, which ingestion excludes. Note this is a wider denominator than Address Type Share uses, so P2PKH reads lower here than there. The 90-day smoothing exists only at daily resolution. A falling share does not establish that those users moved to another type.",
+            population: "P2PKH outputs over eight classified output types: the six payment types plus bare multisig and unrecognised scripts. OP_RETURN outputs are outside it, and so are coinbase outputs, which are not counted. Note this is a wider denominator than the Address Type Share chart uses, so P2PKH reads lower here than there. The 90-day smoothing exists only at daily resolution. A falling share does not establish that those users moved to another type.",
         }],
         about: Some(About {
             definition: Some("The decline of the original Bitcoin address format. P2PKH is the '1...' address, and it carried nearly nine in ten outputs through the years between P2SH arriving and SegWit activating, with most of the rest going to '3...'.
@@ -2266,7 +2266,7 @@ The reference lines at 10% and 5% are markers for reading the trend. They are no
             // than the mean of per-block shares: it equals total segwit spends
             // over total non-coinbase transactions.
             daily: Aggregation::RatioOfTotals,
-            population: "Numerator: **transactions** containing at least one witness input, which is what ingestion counts, one per transaction rather than one per input. Denominator: non-coinbase transactions, obtained by subtracting one coinbase per block. A transaction spending ten witness inputs counts once, so this is the share of transactions using witness data and not a share of inputs.",
+            population: "Numerator: **transactions** containing at least one witness input, counted one per transaction rather than one per input. Denominator: non-coinbase transactions, obtained by subtracting one coinbase per block. A transaction spending ten witness inputs counts once, so this is the share of transactions using witness data and not a share of inputs.",
         }],
         about: Some(About {
             definition: Some("The share of transactions using Segregated Witness. SegWit, activated in 2017, moved the signatures and other unlocking data out of a transaction's main body and into a separate section called the witness. Witness bytes count a quarter of what other bytes do against the block limit, so the same transaction takes up less of a block and costs less to send. Adoption took years rather than months."),
@@ -2298,7 +2298,7 @@ The reference lines at 10% and 5% are markers for reading the trend. They are no
             },
         ],
         about: Some(About {
-            definition: Some("How much data each block carries, in serialized bytes. The consensus limit is 4,000,000 weight units rather than a byte count, so Weight Utilization is the measure of how full a block is and this is the raw size beside it. A larger block is not better or worse; it means more, or larger, transactions were included."),
+            definition: Some("How much data each block carries, in serialized bytes. The consensus limit is 4,000,000 weight units rather than a byte count, so the Weight Utilization chart is the measure of how full a block is and this is the raw size beside it. A larger block is not better or worse; it means more, or larger, transactions were included."),
             technical: "The serialised size of the block as my node stores it, witness data included. Consensus limits weight rather than bytes, to 4 million weight units, and witness bytes count a quarter as much toward that. This is why blocks pass the old one-megabyte figure. Weight utilisation has its own chart.",
         }),
     },
@@ -2367,7 +2367,7 @@ The reference lines at 10% and 5% are markers for reading the trend. They are no
         ],
         about: Some(About {
             definition: Some("Two ways to spend a Taproot output, and which one people use. A key-path spend shows a single signature and nothing else. A script-path spend reveals one branch of the script behind the output. Around nine in ten are key-path, which is what a working contract looks like when everyone cooperates rather than evidence of simple payments."),
-            technical: "Key-path spends reveal a single signature and nothing else. That is the point of Taproot: a single signer, an aggregated multisignature and the cooperative close of a contract are indistinguishable on chain, because BIP 341 makes them the same shape. \n\nSo a high key-path share does not mean simple payments. It means most Taproot spenders took the path that reveals nothing, which is what a well-designed contract does when everyone cooperates. \n\nScript-path spends reveal one branch of the script tree. That is not mainly a sign of cooperation breaking down: an inscription is revealed by a script-path spend, and inscriptions account for most of this band. A contract closing uncooperatively produces the same witness shape, and this chart classifies by shape alone, so it counts both in one band. The difference is on chain and is readable: a script-path spend reveals the script it used, and the inscription detector reads exactly that from the same witnesses. This chart simply does not subdivide the band. Ordinals Inscriptions, linked under Related, counts the inscription half over the same blocks. \n\nBoth counts come from classifying witness shape, so they are detector counts rather than verified totals.",
+            technical: "Key-path spends reveal a single signature and nothing else. That is the point of Taproot: a single signer, an aggregated multisignature and the cooperative close of a contract are indistinguishable on chain, because BIP 341 makes them the same shape. \n\nSo a high key-path share does not mean simple payments. It means most Taproot spenders took the path that reveals nothing, which is what a well-designed contract does when everyone cooperates. \n\nScript-path spends reveal one branch of the script tree. That is not mainly a sign of cooperation breaking down: an inscription is revealed by a script-path spend, and inscriptions account for most of this band. A contract closing uncooperatively produces the same witness shape, and this chart classifies by shape alone, so it counts both in one band. The difference is on chain and is readable: a script-path spend reveals the script it used, and the inscription detector reads exactly that from the same witnesses. This chart simply does not subdivide the band. The Ordinals Inscriptions chart, linked under Related, counts the inscription half over the same blocks. \n\nBoth counts come from classifying witness shape, so they are detector counts rather than verified totals.",
         }),
     },
     ChartMeta {
@@ -2527,8 +2527,8 @@ The reference lines at 10% and 5% are markers for reading the trend. They are no
     ChartMeta {
         slug: "utxo-flow",
         title: "UTXO Flow",
-        desc_per_block: "Inputs spent vs outputs created per block. The gap between them is not the change in the UTXO set",
-        desc_daily: "Daily average inputs spent vs outputs created. The gap between them is not the change in the UTXO set",
+        desc_per_block: "Inputs spent vs outputs created per block. The gap between them counts outputs, not unspent ones",
+        desc_daily: "Daily average inputs spent vs outputs created. The gap between them counts outputs, not unspent ones",
         category: Category::Network,
         unit: Unit::Count,
         shape: Shape::Line,
@@ -2545,7 +2545,7 @@ The reference lines at 10% and 5% are markers for reading the trend. They are no
                 method_daily: Method::Measured,
                 per_block: Aggregation::PerBlockObservation,
                 daily: Aggregation::MeanOfPerBlockValues,
-                population: "Includes provably unspendable OP_RETURN outputs, which never enter the spendable set, so outputs exceeding inputs does not by itself mean that set grew. Coinbase transactions are excluded by ingestion, so their outputs are missing.",
+                population: "Includes provably unspendable OP_RETURN outputs, which never enter the spendable set, so outputs exceeding inputs does not by itself mean that set grew. Coinbase outputs are not counted.",
             },
             Measurement {
                 series: "Inputs (consumed)",
@@ -2555,12 +2555,12 @@ The reference lines at 10% and 5% are markers for reading the trend. They are no
                 method_daily: Method::Measured,
                 per_block: Aggregation::PerBlockObservation,
                 daily: Aggregation::MeanOfPerBlockValues,
-                population: "Coinbase transactions are excluded by ingestion, so the coinbase input is not counted.",
+                population: "The coinbase input is not counted.",
             },
         ],
         about: Some(About {
-            definition: Some("The two sides of every block: outputs consumed and outputs created. Bitcoin has no accounts, only discrete outputs, so spending means destroying some and making others, and every node keeps the set of unspent ones in order to validate new blocks.\n\nThe gap between the two lines is not the change in that set. Many of the outputs created can never be spent, so they never enter it. In 2025 the outputs created outran the inputs consumed by more than twenty million, while the number of unspent outputs on the network fell by about twenty million. UTXO Growth Rate is the chart that makes the correction."),
-            technical: "Neither line counts the coinbase transaction, which ingestion skips, so a block carrying nothing else reads zero on both. That happens about ninety thousand times across the chain.\n\nConsolidating many inputs into few outputs genuinely shrinks the set, and paying many recipients out of one input genuinely grows it. What breaks the arithmetic is the third case, an output created that can never be spent. OP_RETURN outputs were under one percent of those created in 2023 and about one in six in 2024, and the share moves year to year rather than climbing steadily, so the gap here is wrong by a different amount in each era.",
+            definition: Some("The two sides of every block: outputs consumed and outputs created. Bitcoin has no accounts, only discrete outputs, so spending means destroying some and making others, and every node keeps the set of unspent ones in order to validate new blocks.\n\nThe gap between the lines is not the change in that set. An OP_RETURN output is created and paid for like any other, but it is provably unspendable, so it never enters the UTXO set: it lifts the green line and never the red one. Over the past year that gap has run about two thousand outputs per block. The UTXO Growth Rate chart subtracts them and follows the set itself."),
+            technical: "Neither line counts the coinbase transaction, so a block carrying nothing else reads zero on both, which happens about ninety thousand times across the chain.\n\nOver a day the chart plots the mean per block rather than the day's total, so the two resolutions share a scale and a busy day does not read as a tall one.",
         }),
     },
     ChartMeta {
@@ -2583,7 +2583,7 @@ The reference lines at 10% and 5% are markers for reading the trend. They are no
             method_daily: Method::Estimated,
             per_block: Aggregation::PerBlockObservation,
             daily: Aggregation::DailyTotal,
-            population: "Outputs created less detected OP_RETURN outputs less inputs consumed, over non-coinbase transactions. Coinbase outputs are missing because ingestion excludes the coinbase, which leaves the series short by about three per block. Negative means a net reduction; it does not establish consolidation.",
+            population: "Outputs created less detected OP_RETURN outputs less inputs consumed, over non-coinbase transactions. Coinbase outputs are missing, which leaves the series short by about three per block. Negative means a net reduction; it does not establish consolidation.",
         }],
         about: Some(About {
             definition: Some("Whether the set of spendable coins is growing or shrinking. Every transaction consumes existing outputs and creates new ones, and the running total of unspent ones is the UTXO set. Positive means more were created than consumed, and negative means the reverse, which is consistent with wallets consolidating small coins without establishing that any of them did."),
@@ -2678,7 +2678,7 @@ The reference lines at 10% and 5% are markers for reading the trend. They are no
             method_daily: Method::Measured,
             per_block: Aggregation::PerBlockObservation,
             daily: Aggregation::RatioOfTotals,
-            population: "Native v0 against Taproot, and **only** those two: the denominator is their sum, not all outputs, so this is the split within witness outputs rather than witness adoption. Unrecognised or future witness versions are in neither band. Use Output Type Breakdown for a share of every output.",
+            population: "Native v0 against Taproot, and **only** those two: the denominator is their sum, not all outputs, so this is the split within witness outputs rather than witness adoption. Unrecognised or future witness versions are in neither band. Use the Output Type Breakdown chart for a share of every output.",
         }],
         about: Some(About {
             definition: Some("Native SegWit against Taproot, as shares of the witness outputs alone. Legacy and P2SH-wrapped outputs are not in the denominator, so this answers which of the two modern formats is ahead, not how much of the chain either one holds."),
@@ -2734,7 +2734,7 @@ The reference lines at 10% and 5% are markers for reading the trend. They are no
             method_daily: Method::Measured,
             per_block: Aggregation::PerBlockObservation,
             daily: Aggregation::RatioOfTotals,
-            population: "Every output in a block's non-coinbase transactions, which is the widest denominator any share chart here uses. The coinbase transaction is outside it, because ingestion skips that transaction entirely, so a block with only a coinbase has no outputs to take a share of and all three bands are absent rather than reading 0, 0 and 100. The third band is the residual after native v0 and Taproot, so it absorbs OP_RETURN, P2SH-wrapped witness outputs, bare multisig and anything unrecognised, and is named Other outputs rather than Legacy for that reason.",
+            population: "Every output in a block's non-coinbase transactions, which is the widest denominator any share chart here uses. The coinbase transaction is outside it, so a block with only a coinbase has no outputs to take a share of and all three bands are absent rather than reading 0, 0 and 100. The third band is the residual after native v0 and Taproot, so it absorbs OP_RETURN, P2SH-wrapped witness outputs, bare multisig and anything unrecognised, and is named Other outputs rather than Legacy for that reason.",
         }],
         about: Some(About {
             definition: Some("Output types as shares of every output in the block, which is the widest denominator any share chart here uses. The coinbase transaction is the one exclusion, and the residual band carries everything else that is not native SegWit or Taproot."),
@@ -2777,7 +2777,7 @@ The reference lines at 10% and 5% are markers for reading the trend. They are no
         ],
         about: Some(About {
             definition: Some("Which version of the witness programme an output uses. SegWit v0 arrived at block 481,824 in 2017 and Taproot, which is v1, at 709,632 in 2021. An output commits to one of them, so counting versions shows the upgrade spreading through the output set."),
-            technical: "Counts of outputs by witness version, from the stored script classification. Only versions this site recognises are counted, so a future witness version would not appear until ingestion learns it.\n\nThe two bands behave differently before their own activations. No v0 output exists anywhere before block 481,824. Twenty P2TR outputs do exist before 709,632, in nineteen blocks, the first on 2019-12-17 and so nearly two years early, though fourteen of those blocks fall in 2021 and thirteen in the last two months before activation. A witness program is a valid output to create before the network agrees what spending it requires, so under consensus rules those twenty were anyone-can-spend until Taproot activated, while relay policy treated such a spend as non-standard and would not have carried it without a cooperating miner. Turn on the BIP activations overlay to see where each marker falls against the band it belongs to.",
+            technical: "Counts of outputs by witness version, from the stored script classification. Only versions this site recognises are counted, so a future witness version would not appear until the site learns to recognise it.\n\nThe two bands behave differently before their own activations. No v0 output exists anywhere before block 481,824. Twenty P2TR outputs do exist before 709,632, in nineteen blocks, the first on 2019-12-17 and so nearly two years early, though fourteen of those blocks fall in 2021 and thirteen in the last two months before activation. A witness program is a valid output to create before the network agrees what spending it requires, so under consensus rules those twenty were anyone-can-spend until Taproot activated, while relay policy treated such a spend as non-standard and would not have carried it without a cooperating miner. Turn on the BIP activations overlay to see where each marker falls against the band it belongs to.",
         }),
     },
 ];
@@ -3850,50 +3850,22 @@ mod tests {
                 2023.0,
                 2023.0,
             ),
-            // The whole point of the UTXO Flow copy is that the two lines
-            // disagree with reality in SIGN, not just in size, so both halves
-            // of 2025 are pinned. A closed year, so only a backfill moves it.
+            // The copy's live claim, measured the way the sentence measures
+            // it: a trailing year rather than the calendar year, because a
+            // year-to-date window is nearly empty every January and the guard
+            // would fail on the date rather than on the fact.
             //
-            // Cross-checked against the node on 2026-09-25 rather than only
-            // against ourselves: gettxoutsetinfo at height 877,258 gives
-            // 186,401,126 unspent outputs and at 930,340 gives 165,717,088,
-            // a fall of 20,684,038. The corrected figure below lands within
-            // 238,617 of that over 53,082 blocks, which is the documented
-            // missing-coinbase-output residual of a few per block.
+            // This is the load-bearing one. "The set did not grow at all"
+            // follows from the inequality alone: if the unspendable outputs
+            // created exceed the whole gap, the corrected change is negative
+            // without needing a second measurement. Ratio is 1.03 today.
             (
                 "utxo-flow",
-                "outputs outran inputs by more than twenty million in 2025",
-                "SELECT SUM(output_count)-SUM(input_count) FROM blocks \
-                 WHERE strftime('%Y', datetime(timestamp,'unixepoch'))='2025'",
-                20_000_000.0,
-                30_000_000.0,
-            ),
-            (
-                "utxo-flow",
-                "while unspent outputs fell by about twenty million in 2025",
-                "SELECT SUM(output_count)-SUM(op_return_count)\
-                 -SUM(input_count) FROM blocks \
-                 WHERE strftime('%Y', datetime(timestamp,'unixepoch'))='2025'",
-                -25_000_000.0,
-                -15_000_000.0,
-            ),
-            (
-                "utxo-flow",
-                "OP_RETURN was under one percent of outputs created in 2023",
-                "SELECT 100.0*SUM(op_return_count)/SUM(output_count) \
-                 FROM blocks \
-                 WHERE strftime('%Y', datetime(timestamp,'unixepoch'))='2023'",
-                0.0,
-                1.0,
-            ),
-            (
-                "utxo-flow",
-                "and about one in six in 2024",
-                "SELECT 100.0*SUM(op_return_count)/SUM(output_count) \
-                 FROM blocks \
-                 WHERE strftime('%Y', datetime(timestamp,'unixepoch'))='2024'",
-                14.0,
-                19.0,
+                "about two thousand outputs per block above the red line",
+                "SELECT AVG(output_count)-AVG(input_count) FROM blocks \
+                 WHERE timestamp >= strftime('%s','now','-12 months')",
+                1_000.0,
+                4_000.0,
             ),
             (
                 "utxo-flow",
