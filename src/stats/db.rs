@@ -743,7 +743,7 @@ pub fn update_block_extras(
     let tx = conn.unchecked_transaction()?;
     {
         let mut stmt = tx.prepare_cached(
-            "UPDATE blocks SET version = ?1, total_fees = ?2, miner = ?3, median_fee = ?4, median_fee_rate = ?5, coinbase_locktime = ?6, coinbase_sequence = ?7, segwit_spend_count = ?8, taproot_spend_count = ?9, omni_count = ?10, omni_bytes = ?11, counterparty_count = ?12, counterparty_bytes = ?13, runes_count = ?14, runes_bytes = ?15, data_carrier_count = ?16, data_carrier_bytes = ?17, p2pk_count = ?18, p2pkh_count = ?19, p2sh_count = ?20, p2wpkh_count = ?21, p2wsh_count = ?22, p2tr_count = ?23, multisig_count = ?24, unknown_script_count = ?25, input_count = ?26, output_count = ?27, rbf_count = ?28, witness_bytes = ?29, inscription_count = ?30, inscription_bytes = ?31, inscription_envelope_bytes = ?32, brc20_count = ?33, taproot_keypath_count = ?34, taproot_scriptpath_count = ?35, total_output_value = ?36, total_input_value = ?37, fee_rate_p10 = ?38, fee_rate_p90 = ?39, stamps_count = ?40, largest_tx_size = ?41, max_tx_fee = ?42, inscription_fees = ?43, runes_fees = ?44, legacy_tx_count = ?45, segwit_tx_count = ?46, taproot_tx_count = ?47, coinbase_text = ?48, fee_rate_p25 = ?49, fee_rate_p75 = ?50, backfill_version = ?51 WHERE height = ?52",
+            "UPDATE blocks SET version = ?1, total_fees = ?2, miner = ?3, median_fee = ?4, median_fee_rate = ?5, coinbase_locktime = ?6, coinbase_sequence = ?7, segwit_spend_count = ?8, taproot_spend_count = ?9, omni_count = ?10, omni_bytes = ?11, counterparty_count = ?12, counterparty_bytes = ?13, runes_count = ?14, runes_bytes = ?15, data_carrier_count = ?16, data_carrier_bytes = ?17, p2pk_count = ?18, p2pkh_count = ?19, p2sh_count = ?20, p2wpkh_count = ?21, p2wsh_count = ?22, p2tr_count = ?23, multisig_count = ?24, unknown_script_count = ?25, input_count = ?26, output_count = ?27, rbf_count = ?28, witness_bytes = ?29, inscription_count = ?30, inscription_bytes = ?31, inscription_envelope_bytes = ?32, brc20_count = ?33, taproot_keypath_count = ?34, taproot_scriptpath_count = ?35, total_output_value = ?36, total_input_value = ?37, fee_rate_p10 = ?38, fee_rate_p90 = ?39, stamps_count = ?40, largest_tx_size = ?41, max_tx_fee = ?42, inscription_fees = ?43, runes_fees = ?44, legacy_tx_count = ?45, segwit_tx_count = ?46, taproot_tx_count = ?47, coinbase_text = ?48, fee_rate_p25 = ?49, fee_rate_p75 = ?50, op_return_count = ?51, op_return_bytes = ?52, backfill_version = ?53 WHERE height = ?54",
         )?;
         for block in blocks {
             stmt.execute(params![
@@ -797,6 +797,8 @@ pub fn update_block_extras(
                 block.coinbase_text,
                 block.fee_rate_p25,
                 block.fee_rate_p75,
+                block.op_return_count,
+                block.op_return_bytes,
                 BACKFILL_VERSION,
                 block.height
             ])?;
@@ -3782,25 +3784,25 @@ mod tests {
 
         assert_eq!(
             cols.len(),
-            51,
-            "parsed {} SET columns for the extras update, expected 51. The \
+            53,
+            "parsed {} SET columns for the extras update, expected 53. The \
              parser broke, which must not read as a pass.",
             cols.len()
         );
         assert_eq!(
             fields.len(),
-            51,
-            "parsed {} block.* params for the extras update, expected 51: 50 \
+            53,
+            "parsed {} block.* params for the extras update, expected 53: 52 \
              in the SET plus `block.height` for the WHERE, with \
-             BACKFILL_VERSION bound to the 51st column. The parser broke.",
+             BACKFILL_VERSION bound to the 53rd column. The parser broke.",
             fields.len()
         );
 
-        // Only the first 50 pair up. The 51st SET column is backfill_version,
-        // bound to a constant, which shifts `block.height` into the 51st param
+        // Only the first 52 pair up. The last SET column is backfill_version,
+        // bound to a constant, which shifts `block.height` into the final param
         // slot where it serves the WHERE clause instead. Both are asserted
         // by name below.
-        for (i, (col, field)) in cols.iter().zip(&fields).take(50).enumerate() {
+        for (i, (col, field)) in cols.iter().zip(&fields).take(52).enumerate() {
             if column_for(field) != col {
                 problems.push(format!(
                     "update_block_extras ?{}: column `{col}` is bound to \
@@ -5097,6 +5099,75 @@ mod tests {
              reads this table, so fix the statement rather than the \
              test:\n  {}",
             problems.join("\n  ")
+        );
+    }
+
+    /// Columns a sweep may leave alone, because their value is a property of
+    /// the block rather than of how we parse it. A block's timestamp cannot be
+    /// re-derived differently next year. Everything else can.
+    ///
+    /// The five beyond the primary key were verified exact against an
+    /// independent node on 2026-09-30, across 22 blocks from 2009 to 2026.
+    const BLOCK_FACTS: &[&str] = &[
+        "height",
+        "hash",
+        "timestamp",
+        "tx_count",
+        "size",
+        "weight",
+        "difficulty",
+    ];
+
+    /// A column whose value depends on our parser must be reachable by a
+    /// `BACKFILL_VERSION` sweep.
+    ///
+    /// `insert_blocks` writes a column once, when the block first arrives.
+    /// `update_block_extras` is the only statement a sweep writes through, so
+    /// a column missing from it is frozen at whatever the parser said on the
+    /// day that block was ingested, and **no version bump can ever repair
+    /// it**.
+    ///
+    /// This is not hypothetical. `655e222` on 2026-03-23 consolidated three
+    /// per-transaction loops into one; two skipped the coinbase and the
+    /// OP_RETURN loop did not, so the consolidated loop silently stopped
+    /// counting coinbase OP_RETURN outputs. `op_return_count` and
+    /// `op_return_bytes` were not in the update statement, so the two later
+    /// version bumps re-derived every neighbouring column and left those two
+    /// holding March-era values. The result was one database carrying two
+    /// different definitions, split at block ~942,000, with every row stamped
+    /// `backfill_version = 11` and therefore looking uniform.
+    ///
+    /// Found by re-deriving from the node and comparing, six months later.
+    /// This guard is what makes that a build failure instead.
+    #[test]
+    fn a_column_derived_by_the_parser_is_reachable_by_a_sweep() {
+        let ins_body = fn_body(SELF_SRC, "pub fn insert_blocks(");
+        let inserted = columns_between(ins_body, "INTO blocks", "VALUES");
+        let upd_body = fn_body(SELF_SRC, "pub fn update_block_extras(");
+        let swept = update_set_columns(upd_body);
+
+        assert!(
+            inserted.len() >= 55 && swept.len() >= 50,
+            "parsed {} inserted and {} swept columns. The parser broke, which \
+             must not read as a pass.",
+            inserted.len(),
+            swept.len()
+        );
+
+        let stranded: Vec<&String> = inserted
+            .iter()
+            .filter(|c| {
+                !swept.contains(c) && !BLOCK_FACTS.contains(&c.as_str())
+            })
+            .collect();
+
+        assert!(
+            stranded.is_empty(),
+            "these columns are written once at insert and can never be \
+             corrected by a BACKFILL_VERSION sweep, because \
+             `update_block_extras` does not write them. Either add them to \
+             that statement, or add them to BLOCK_FACTS with a reason: \
+             {stranded:?}"
         );
     }
 }

@@ -53,7 +53,7 @@ struct RpcResponse<T> {
     error: Option<Value>,
 }
 
-/// Minimal subset of a `getrawmempool true` entry — only the two fields the
+/// Minimal subset of a `getrawmempool true` entry, only the two fields the
 /// heartbeat backfill needs. serde skips the ~dozen other fields (wtxid, weight,
 /// time, ancestor/descendant accounting, depends, spentby, flags) without
 /// allocating them, so deserializing into this via [`BitcoinRpc::call_typed`]
@@ -88,7 +88,7 @@ pub struct BitcoinRpc {
     // held per observed target. Lazily created on first call per target.
     smart_fee_caches: Arc<Mutex<HashMap<u64, Arc<CachedSlot<f64>>>>>,
     // LRU caches for immutable block data. Blocks at confirmed heights never
-    // change their content, so they can stay cached indefinitely — only
+    // change their content, so they can stay cached indefinitely, only
     // capacity pressure evicts. On reorg detection, specific entries are invalidated
     // explicitly by the reorg handler.
     block_hash_cache: Arc<LruSlot<u64, String>>,
@@ -99,7 +99,7 @@ pub struct BitcoinRpc {
 // See src/stats/rpc_cache.rs for the rationale on why "short" TTLs still
 // produce high hit rates under real request volume.
 
-// 13s — spans two full 6-second poll intervals, producing a cached
+// 13s: spans two full 6-second poll intervals, producing a cached
 // miss-hit-hit pattern (67% hit rate single-tab, higher under load).
 // Mempool tx count isn't critical data like the chain tip; users who
 // want up-to-the-second values can click the manual Refresh. The
@@ -107,11 +107,11 @@ pub struct BitcoinRpc {
 // no delay regardless of this TTL.
 const MEMPOOL_INFO_TTL: Duration = Duration::from_secs(13);
 
-// 30s — `getblockchaininfo` returns data that only changes when a new
+// 30s: `getblockchaininfo` returns data that only changes when a new
 // block arrives. The ZMQ `hashblock` handler in zmq_subscriber::subscribe_blocks
 // calls `BitcoinRpc::invalidate_tip_caches()` on every new block so the next
 // poll picks up the fresh tip. 30s is a safety backstop for the rare case
-// where a ZMQ message is dropped (network blip, subscriber restart) — worst
+// where a ZMQ message is dropped (network blip, subscriber restart), worst
 // case the user sees tip height stale for 30s until the backstop kicks in.
 const BLOCKCHAIN_INFO_TTL: Duration = Duration::from_secs(30);
 
@@ -122,19 +122,19 @@ const SMART_FEE_TTL: Duration = Duration::from_secs(10);
 // compares stored hashes against canonical. Kept in sync with the `depth`
 // argument passed from startup.rs. invalidate_tip_caches below uses this to
 // clear block_hash_cache entries in the same window on every hashblock event,
-// so the next reorg sweep sees fresh canonical data — without this, a reorg
+// so the next reorg sweep sees fresh canonical data, without this, a reorg
 // against a still-cached stale (height → hash) pair would be silently missed.
 pub const REORG_DETECTION_DEPTH: u64 = 6;
 
 // Bounded LRU capacities for immutable block data. Block hashes are tiny
 // (~80 bytes each: HashMap overhead + u64 key + heap-allocated hex string),
-// so 10k fits in well under 1 MB. Parsed Block structs are heavier —
+// so 10k fits in well under 1 MB. Parsed Block structs are heavier,
 // ~40 scalar fields plus a few heap strings (hash, miner, coinbase_text),
 // typically 500 bytes to 2 KB depending on coinbase_text length. 500 entries
 // caps worst-case at ~1 MB. These serve the block detail modal, Lookout tx
 // lookups, and any Observatory path that navigates to a specific confirmed
 // block. If a new feature causes heavy block-browsing traffic, bump the
-// data capacity before the hash capacity — each Block use touches both but
+// data capacity before the hash capacity: each Block use touches both but
 // block_data is the more expensive one to miss.
 const BLOCK_HASH_CACHE_CAPACITY: usize = 10_000;
 const BLOCK_DATA_CACHE_CAPACITY: usize = 500;
@@ -308,7 +308,7 @@ impl BitcoinRpc {
     /// - `pool_idle_timeout(30s)`: drop keep-alive sockets after 30s idle. Without
     ///   this, if Bitcoin Core's container restarts and its internal IP shifts,
     ///   the NAT on the intermediate router quietly blackholes our pooled
-    ///   connections — subsequent reuses hit a dead socket and the per-request
+    ///   connections: subsequent reuses hit a dead socket and the per-request
     ///   30s timeout kicks in on EVERY new request. With a 30s pool idle cap,
     ///   worst-case dead-pool lifetime is bounded.
     /// - `tcp_keepalive(30s)`: kernel-level probe interval. If the path
@@ -365,15 +365,15 @@ impl BitcoinRpc {
     ///   `[height - REORG_DETECTION_DEPTH ..= height]`. The reorg detector
     ///   compares DB's stored hashes against canonical via `get_block_hash`.
     ///   If a reorged height's cached entry is stale, the comparison silently
-    ///   returns "no reorg" — a correctness bug. Invalidating here forces
+    ///   returns "no reorg": a correctness bug. Invalidating here forces
     ///   the next sweep to fetch fresh canonical data.
     ///
     /// Not invalidated (and why):
-    /// - `smart_fee` — smoothed across many blocks, one-block staleness invisible.
-    /// - `network_hashps` — long moving average, same reasoning.
-    /// - `mempool_info` — drops confirmed txs naturally; TTL short enough that
+    /// - `smart_fee`: smoothed across many blocks, one-block staleness invisible.
+    /// - `network_hashps`: long moving average, same reasoning.
+    /// - `mempool_info`: drops confirmed txs naturally; TTL short enough that
     ///   one block of staleness isn't worth the invalidation bookkeeping.
-    /// - `block_data_cache` — keyed by hash, not height. Historical block data
+    /// - `block_data_cache`: keyed by hash, not height. Historical block data
     ///   for hashes that still exist is still valid. Reorged hashes are
     ///   explicitly invalidated via `invalidate_block_caches` when the reorg
     ///   detector catches them in `ingest::verify_recent_blocks`.
@@ -487,7 +487,7 @@ impl BitcoinRpc {
     /// known-shape response this avoids materializing a Value node per field:
     /// serde only allocates what `T` declares and silently skips the rest. Used
     /// for `getrawmempool verbose`, which is tens of MB of mostly-discarded
-    /// fields — a full Value tree of that is a ~50-90MB transient spike on the
+    /// fields: a full Value tree of that is a ~50-90MB transient spike on the
     /// memory-tight droplet. `call` stays for the small / dynamically-shaped
     /// responses where a Value is fine.
     async fn call_typed<T: serde::de::DeserializeOwned>(
@@ -517,7 +517,7 @@ impl BitcoinRpc {
             )));
         }
 
-        // reqwest buffers the body then `from_slice`s straight into T — no
+        // reqwest buffers the body then `from_slice`s straight into T, no
         // intermediate Value tree.
         let parsed: RpcResponse<T> = resp.json().await?;
         if let Some(error) = parsed.error {
@@ -602,7 +602,7 @@ impl BitcoinRpc {
     /// Call `getblockhash` - returns the block hash at a given height.
     ///
     /// Cached via [`LruSlot`] since the hash at a given height is immutable
-    /// (absent a reorg, which is handled by explicit invalidation — see
+    /// (absent a reorg, which is handled by explicit invalidation, see
     /// [`Self::invalidate_block_caches`]). Capacity is 10k entries, enough
     /// to hold hashes for the last ~70 days of blocks.
     pub async fn get_block_hash(
@@ -643,7 +643,7 @@ impl BitcoinRpc {
     }
 
     /// Force-refresh a block, bypassing the cache. The core data extraction
-    /// function — parses the full verbosity=2 JSON response to compute fees,
+    /// function: parses the full verbosity=2 JSON response to compute fees,
     /// median stats, OP_RETURN classification, and miner ID in a single pass.
     pub async fn get_block_fresh(
         &self,
@@ -951,7 +951,7 @@ impl BitcoinRpc {
                 if let Some(vouts) = tx["vout"].as_array() {
                     output_count += vouts.len() as u64;
                     for vout in vouts {
-                        // Sum output values (excludes coinbase — measures actual transfers)
+                        // Sum output values (excludes coinbase: measures actual transfers)
                         if let Some(val) = vout["value"].as_f64() {
                             total_output_value +=
                                 (val * 100_000_000.0).round() as u64;
@@ -1275,7 +1275,7 @@ impl BitcoinRpc {
     }
 
     /// Get the current mempool as a plain txid list (`getrawmempool false`).
-    /// Much lighter than the verbose form — used to reconcile the mempool_txs
+    /// Much lighter than the verbose form: used to reconcile the mempool_txs
     /// table against the node's real mempool (prune txs that left via RBF /
     /// eviction / confirmation).
     pub async fn get_raw_mempool(&self) -> Result<Vec<String>, StatsError> {
@@ -1294,7 +1294,7 @@ impl BitcoinRpc {
 
     /// Get (size, weight, total_fees) for a block via a single getblockstats
     /// call by hash. The response is small (a few scalars), so this is fast
-    /// even over WireGuard — used together with `get_block_header` to broadcast
+    /// even over WireGuard: used together with `get_block_header` to broadcast
     /// the heartbeat block spike immediately, without waiting on the full txid
     /// list from `getblock(hash, 1)`.
     pub async fn get_block_stats_brief(
