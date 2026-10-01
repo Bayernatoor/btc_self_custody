@@ -2583,11 +2583,11 @@ The reference lines at 10% and 5% are markers for reading the trend. They are no
             method_daily: Method::Estimated,
             per_block: Aggregation::PerBlockObservation,
             daily: Aggregation::DailyTotal,
-            population: "Outputs created less detected OP_RETURN outputs less inputs consumed, over non-coinbase transactions. Coinbase outputs are missing, which leaves the series short by about three per block. Negative means a net reduction; it does not establish consolidation.",
+            population: "Outputs created less detected OP_RETURN outputs less inputs consumed, over non-coinbase transactions. Coinbase outputs are missing, which leaves the series short by two or three per block. Negative means a net reduction; it does not establish consolidation.",
         }],
         about: Some(About {
             definition: Some("Whether the set of spendable coins is growing or shrinking. Every transaction consumes existing outputs and creates new ones, and the running total of unspent ones is the UTXO set. Positive means more were created than consumed, and negative means the reverse, which is consistent with wallets consolidating small coins without establishing that any of them did."),
-            technical: "Outputs created, minus the ones that can never be spent, minus inputs consumed. OP_RETURN outputs are provably unspendable and never enter the set, so they do not count as growth. The coinbase transaction is absent from these counts, so its own outputs are missing and this runs about three per block short of a node's own figure. Net, not cumulative, which is why it goes negative and why a log axis cannot plot every point. The set matters because every node holds it in memory to validate, making it a running cost to the whole network.",
+            technical: "Outputs created, minus the ones that can never be spent, minus inputs consumed. OP_RETURN outputs are provably unspendable and never enter the set, so they do not count as growth. The coinbase transaction is absent from these counts, so its own outputs are missing and this runs two or three per block short of a node's own figure. Net, not cumulative, which is why it goes negative and why a log axis cannot plot every point. The set matters because every node holds it in memory to validate, making it a running cost to the whole network.",
         }),
     },
     ChartMeta {
@@ -4511,7 +4511,7 @@ mod tests {
             (
                 "only outputs that can be spent",
                 "it subtracts detected OP_RETURN and omits coinbase outputs \
-                 entirely, running about three per block short of the node's \
+                 entirely, running two or three per block short of the node's \
                  own figure. Declared Estimated.",
             ),
             (
