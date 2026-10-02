@@ -2,6 +2,102 @@ use crate::extras::schema::{static_docs, StaticJsonLd};
 use leptos::prelude::*;
 use leptos_meta::*;
 
+#[cfg(test)]
+mod hero_tests {
+    /// This file, read back, so the guard checks the markup that actually
+    /// renders rather than a second copy of it.
+    const SELF: &str = include_str!("homepage.rs");
+
+    /// The hero's layout is held together by four classes that must all switch
+    /// at the same breakpoint, and nothing in the markup says so.
+    ///
+    /// | class | what it does |
+    /// |---|---|
+    /// | `grid-cols-2` | splits the section into text and logo |
+    /// | `text-left` | stops centring the text once it has its own column |
+    /// | `hidden` | hides the inline logo, which only suits one column |
+    /// | `flex` | reveals the side logo, which only suits two |
+    ///
+    /// **There are two Bitcoin logos in the hero.** One sits inside the text
+    /// column for the stacked layout, one is the second grid column. Exactly
+    /// one may be visible at any width. Move the grid's breakpoint without
+    /// moving the other three and you get both at once, or neither, or text
+    /// aligned against an empty column.
+    ///
+    /// That coupling is why the hero was stuck at `lg`: the breakpoint was too
+    /// high for the content, but changing it alone did nothing visible,
+    /// because the logos went on switching at `lg` by themselves.
+    #[test]
+    fn the_hero_switches_layout_at_one_breakpoint() {
+        let start = SELF
+            .find("aria-label=\"Hero\"")
+            .expect("hero section not found; the parser, not the markup");
+        let end = SELF[start..]
+            .find("</section>")
+            .expect("hero section never closes")
+            + start;
+        let hero = &SELF[start..end];
+
+        let prefix_of = |suffix: &str| -> Vec<String> {
+            let needle = format!(":{suffix}");
+            let mut out: Vec<String> = hero
+                .match_indices(&needle)
+                .filter_map(|(i, _)| {
+                    // the class ends here, so take the word before the colon
+                    let before = &hero[..i];
+                    let p = before.rsplit([' ', '"']).next()?;
+                    // and reject a longer suffix, e.g. `:hidden` inside
+                    // `:hidden-foo`, by checking what follows
+                    let after = hero[i + needle.len()..].chars().next();
+                    match after {
+                        Some(c) if c.is_alphanumeric() || c == '-' => None,
+                        _ => Some(p.to_string()),
+                    }
+                })
+                .collect();
+            out.sort();
+            out.dedup();
+            out
+        };
+
+        let coupled = [
+            ("grid-cols-2", "splits the section into two columns"),
+            ("text-left", "stops centring the text"),
+            ("hidden", "hides the inline logo"),
+            ("flex", "reveals the side logo"),
+        ];
+
+        let mut seen = Vec::new();
+        for (suffix, role) in coupled {
+            let prefixes = prefix_of(suffix);
+            assert_eq!(
+                prefixes.len(),
+                1,
+                "expected exactly one breakpoint for `{suffix}` ({role}), \
+                 found {prefixes:?}. Either the markup changed shape or the \
+                 parser broke, and a broken parser must not read as a pass."
+            );
+            seen.push((suffix, prefixes.into_iter().next().unwrap()));
+        }
+
+        let first = &seen[0].1;
+        let disagree: Vec<String> = seen
+            .iter()
+            .filter(|(_, p)| p != first)
+            .map(|(s, p)| format!("{p}:{s}"))
+            .collect();
+        assert!(
+            disagree.is_empty(),
+            "the hero's layout classes switch at different breakpoints, so \
+             there is a width where it is half-stacked: `{}:{}` against {:?}. \
+             All four have to move together.",
+            first,
+            seen[0].0,
+            disagree
+        );
+    }
+}
+
 /// Renders the home page of the application.
 #[component]
 pub fn HomePage() -> impl IntoView {
@@ -12,12 +108,28 @@ pub fn HomePage() -> impl IntoView {
         <StaticJsonLd doc=static_docs::SITE/>
 
         // Hero
-        <section aria-label="Hero" class="grid gap-2 mx-auto justify-items-center max-w-5xl mt-14 px-6 opacity-0 animate-fadeinone md:grid-cols-1 lg:grid-cols-2 lg:max-w-6xl md:my-24 lg:pb-28 lg:px-8">
-            <div class="flex flex-col text-center text-white leading-normal md:text-center lg:text-left md:pt-8 lg:pt-0">
+        // Two columns from `md`, not `lg`. The left column is a headline that
+        // wraps to two lines anyway, a two-line subhead and a button; the right
+        // is one logo. That fits well under 1024px, and switching there put the
+        // hero and the navbar on the same breakpoint, so a reader at ~1030px
+        // lost both to a 110% browser zoom at once.
+        //
+        // Padding grows with the breakpoint because `max-w-6xl` (1152px) cannot
+        // be reached below ~1216px. Between `md` and there the section is
+        // viewport-bound, so this padding is the whole gutter between a 5rem
+        // headline and the window edge.
+        //
+        // `mb-20` is for the stacked case specifically. `md:my-24` starts at
+        // 768px, so below that the hero had no bottom margin and the only
+        // separation from the next section was its own `pt-8`. Stacked, that
+        // put the button 32px from the next heading and the two sections read
+        // as one block.
+        <section aria-label="Hero" class="grid gap-2 mx-auto justify-items-center max-w-5xl mt-14 mb-20 px-6 opacity-0 animate-fadeinone md:grid-cols-2 lg:max-w-6xl md:my-24 md:px-10 lg:px-12">
+            <div class="flex flex-col text-center text-white leading-normal md:text-left md:pt-0">
                 <h1 class="text-4xl font-title font-normal tracking-tight sm:text-5xl md:text-6xl lg:text-[5rem]">
                     "Be your" <br/> "own bank"
                 </h1>
-                <div class="lg:hidden flex flex-col justify-center pb-8 pt-5">
+                <div class="md:hidden flex flex-col justify-center pb-8 pt-5">
                     <div class="h-auto w-24 md:w-28 mx-auto">
                         <img src="/img/bitcoin_logo.png" alt="Bitcoin logo" width="112" height="112"/>
                     </div>
@@ -34,7 +146,7 @@ pub fn HomePage() -> impl IntoView {
                     </button>
                 </a>
             </div>
-            <div class="invisible flex flex-col justify-center lg:visible">
+            <div class="hidden md:flex flex-col justify-center">
                 <div class="h-auto w-28 md:w-40 lg:w-60 mx-auto">
                     <img src="/img/bitcoin_logo.png" alt="Bitcoin logo" width="208" height="208"/>
                 </div>

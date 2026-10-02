@@ -723,4 +723,10 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   .g2-panel.g2-active { animation: none; }
   .g2-prog-fill { transition: none; }
   .g2-shell { animation: none; opacity: 1; }
+  /* Page and hero entrances. These start from `opacity-0`, so switching the
+     animation off without restoring opacity would leave the content invisible
+     rather than merely still. */
+  .animate-fadein,
+  .animate-fadeinone,
+  .animate-slideup { animation: none; opacity: 1; }
 }
