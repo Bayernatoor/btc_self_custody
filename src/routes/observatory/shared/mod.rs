@@ -499,8 +499,11 @@ fn OverlayCheckbox(
 ///
 /// Row 1 is ordered by how much a first-time reader gets from each page, not
 /// by subject. Readings is the section index. Heartbeat and Charts come next
-/// as the two pages worth arriving for, one live and one deep. Then the
-/// curated history, then the utility page. Signaling and The Lookout sit last
+/// as the two pages worth arriving for, one live and one deep. Logbook
+/// follows, because it answers the same "what did the network do" question
+/// as Charts over a chosen window. Then the curated history, Almanac before
+/// Archives, since a date is a smaller ask than a catalogue. Signaling and
+/// The Lookout sit last
 /// because both are still incomplete: Signaling tracks a single BIP, and the
 /// Lookout's `notable_txs` is ZMQ-only with permanent gaps, so neither answers
 /// its own question yet. They are ordered rather than labelled, so the nav
@@ -520,9 +523,9 @@ pub fn ObservatoryNav() -> impl IntoView {
         // highlighting uses `/observatory/charts` as the prefix so any
         // chart sub-page keeps the tab lit. See the active check below.
         ("/observatory/charts/network", "Charts"),
-        ("/observatory/archives", "The Archives"),
-        ("/observatory/almanac", "Almanac"),
         ("/observatory/logbook", "Logbook"),
+        ("/observatory/almanac", "Almanac"),
+        ("/observatory/archives", "The Archives"),
         ("/observatory/signaling", "Signaling"),
         ("/observatory/lookout", "The Lookout"),
     ];
