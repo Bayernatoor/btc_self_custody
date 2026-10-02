@@ -17,6 +17,10 @@
 //!
 //! To retire this: delete this file, its `pub mod advisory;` line in extras/mod.rs,
 //! and the `<AdvisoryBanner/>` in app.rs.
+//!
+//! Scoped to the guide pages on 2026-10-02. It was site-wide for two months,
+//! which was right while the disclosure was fresh. The hazard has not expired,
+//! so the banner stays where someone is choosing or setting up a wallet.
 
 use leptos::prelude::*;
 
@@ -38,10 +42,34 @@ pub const BLOCK_REPORT_URL: &str =
 pub const ROB_THREAD_URL: &str =
     "https://x.com/Rob1Ham/status/2083936334511538368";
 
-/// Full-width warning bar rendered above the navbar on every page.
+/// Full-width warning bar above the navbar, on the guide pages only.
+///
+/// Site-wide until 2026-10-02. It is a warning about one vendor's hardware,
+/// so it belongs where someone is choosing or setting up a wallet, and the
+/// guides are the only pages that ask that question. Everywhere else it was
+/// the first thing a new reader saw: on a phone it took about 110px of an
+/// 844px viewport, on every page, with no way to dismiss it.
+///
+/// Scoped rather than deleted because the hazard has not expired. Updating
+/// firmware does not repair a seed that was already generated, so anyone
+/// arriving at a Coldcard guide still needs to see this first.
+///
+/// `/coldcard-migration` is included because it is the advisory's own page
+/// and the banner's links point into it.
 #[component]
 pub fn AdvisoryBanner() -> impl IntoView {
+    let location = leptos_router::hooks::use_location();
+    let show = Signal::derive(move || {
+        let path = location.pathname.get();
+        path.starts_with("/guides") || path == "/coldcard-migration"
+    });
+    // `.then(...)`, not `<Show>`. A `<Show>` here rendered nothing at all
+    // under SSR even with its condition true, so the banner was absent
+    // from the served HTML on the very pages it exists for. The plain
+    // conditional is what the rest of this codebase uses and it renders
+    // server-side.
     view! {
+        {move || show.get().then(|| view! {
         <aside
             aria-label="Security advisory"
             class="w-full bg-[#ffce6b]/10 border-b border-[#ffce6b]/25 px-4 py-2.5 sm:px-6"
@@ -91,5 +119,6 @@ pub fn AdvisoryBanner() -> impl IntoView {
                 </p>
             </div>
         </aside>
+        })}
     }
 }
