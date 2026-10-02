@@ -200,8 +200,11 @@ pub fn ChartCard(
     view! {
         // Normal inline card
         <div id=format!("card-{}", chart_id) class="bg-[#0d2137] border border-white/10 rounded-2xl p-5 lg:p-6">
-            <div class="flex items-start justify-between mb-4">
-                <div>
+            <div class="flex items-start justify-between gap-3 mb-4">
+                // `min-w-0 flex-1` or the icon row squeezes this column: a flex
+                // item will not shrink past its content width without it, so
+                // the title wrapped to one word per line on a phone.
+                <div class="min-w-0 flex-1">
                     // A link to the chart's own page, not click-to-copy. The
                     // copy-link button sits a few pixels to the right and does
                     // that already, so the title was spending the most obvious
@@ -230,33 +233,17 @@ pub fn ChartCard(
                             </button>
                         })}
                     </div>
-                    // Read from the registry, not passed in, so the card and
-                    // the chart's own page cannot explain one chart in two
-                    // voices.
-                    {about.map(|copy| view! {
-                        <Show when=move || info_open.get()>
-                            <div class="mt-2 p-3 bg-white/[0.03] border border-white/5 rounded-lg text-sm text-white/60 leading-relaxed space-y-2 max-w-3xl">
-                                {copy.definition.map(|d| view! { <p>{d}</p> })}
-                                <p>
-                                    <span class="text-white/40">"How it is measured. "</span>
-                                    {copy.technical}
-                                </p>
-                                <p class="text-xs text-white/30">
-                                    <a
-                                        href=format!("/observatory/chart/{about_slug}")
-                                        class="hover:text-[#f7931a] transition-colors"
-                                    >
-                                        "Full page, key figures and downloads"
-                                    </a>
-                                </p>
-                            </div>
-                        </Show>
-                    })}
                 </div>
+                // CSV, PNG and copy-link are hidden on a phone. Three icons
+                // cost about 90px of a ~295px card, which is what squeezed the
+                // title to one word per line, and none of them is much use on
+                // a touch screen: the same precedent already hides the ECharts
+                // toolbox there. Expand stays, because it reaches the chart's
+                // own page where all three live under "Get this data".
                 <div class="flex items-center gap-1 shrink-0">
                     {children.map(|c| c())}
                     <button
-                        class="text-white/50 hover:text-[#f7931a] transition-colors cursor-pointer p-1.5 rounded-lg hover:bg-white/5"
+                        class="hidden sm:inline-flex text-white/50 hover:text-[#f7931a] transition-colors cursor-pointer p-1.5 rounded-lg hover:bg-white/5"
                         title="Download CSV"
                         on:click={
                             let id = download_id.clone();
@@ -271,7 +258,7 @@ pub fn ChartCard(
                         </svg>
                     </button>
                     <button
-                        class="text-white/50 hover:text-[#f7931a] transition-colors cursor-pointer p-1.5 rounded-lg hover:bg-white/5"
+                        class="hidden sm:inline-flex text-white/50 hover:text-[#f7931a] transition-colors cursor-pointer p-1.5 rounded-lg hover:bg-white/5"
                         title="Download PNG"
                         on:click={
                             let id = png_id.clone();
@@ -288,7 +275,7 @@ pub fn ChartCard(
                         </svg>
                     </button>
                     <button
-                        class="text-white/50 hover:text-[#f7931a] transition-colors cursor-pointer p-1.5 rounded-lg hover:bg-white/5"
+                        class="hidden sm:inline-flex text-white/50 hover:text-[#f7931a] transition-colors cursor-pointer p-1.5 rounded-lg hover:bg-white/5"
                         title="Copy a link to this chart"
                         on:click={
                             let _slug = share_slug.clone();
@@ -338,6 +325,31 @@ pub fn ChartCard(
                     </a>
                 </div>
             </div>
+            // Outside the header row, not inside the title column. In there it
+            // shared a flex row with four action icons, so on a phone the
+            // expanded copy got under half the card and ran at about twenty
+            // characters a line. Read from the registry, not passed in, so the
+            // card and the chart's own page cannot explain one chart in two
+            // voices.
+            {about.map(|copy| view! {
+                <Show when=move || info_open.get()>
+                    <div class="mb-4 p-3 bg-white/[0.03] border border-white/5 rounded-lg text-sm text-white/60 leading-relaxed space-y-2 max-w-3xl">
+                        {copy.definition.map(|d| view! { <p>{d}</p> })}
+                        <p>
+                            <span class="text-white/40">"How it is measured. "</span>
+                            {copy.technical}
+                        </p>
+                        <p class="text-xs text-white/30">
+                            <a
+                                href=format!("/observatory/chart/{about_slug}")
+                                class="hover:text-[#f7931a] transition-colors"
+                            >
+                                "Full page, key figures and downloads"
+                            </a>
+                        </p>
+                    </div>
+                </Show>
+            })}
             <div class="h-[350px] lg:h-[600px] relative">
                 <Chart id=chart_id.clone() option=option class="w-full h-full".to_string()/>
                 // Show loading skeleton when chart data is empty or range is transitioning

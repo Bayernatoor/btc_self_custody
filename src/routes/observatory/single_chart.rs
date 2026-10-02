@@ -764,7 +764,7 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
             "grid grid-cols-1 gap-3 lg:gap-4 items-start"
         }>
             // ── chart column ──────────────────────────────────────────
-            <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-4 sm:p-5 lg:p-6 min-w-0">
+            <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-4 sm:p-5 lg:p-6 min-w-0 lg:col-start-1 lg:row-start-1">
                 // Stacked below `lg`. Side by side, the range row will not
                 // shrink below its twelve buttons, so it starved the title of
                 // width and wrapped it to one word per line on a phone.
@@ -843,9 +843,17 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                 // 1600px plot is a letterbox. The clamps keep one layout
                 // across screen types, with a floor for a short laptop and a
                 // ceiling so a 4K panel does not stretch one series over
-                // 1400px. `dvh` rather than `vh` so collapsing mobile toolbars
-                // leave no gap; stats.js re-fits each canvas on resize.
-                <div class="relative w-full h-[58dvh] min-h-[300px] max-h-[520px] sm:h-[62dvh] sm:max-h-[640px] lg:h-[calc(100dvh-20rem)] lg:min-h-[460px] lg:max-h-[920px]">
+                // 1400px.
+                //
+                // `svh`, not `dvh`. `dvh` tracks the viewport as mobile
+                // toolbars collapse, so every scroll changed this height, and
+                // the ResizeObserver in stats.js turned that into a real
+                // ECharts re-layout mid-scroll: the plot jumped and the axis
+                // visibly redrew. `svh` is measured with the toolbars shown,
+                // so it is a fixed number that still leaves no gap at rest.
+                // `vh` would be stable too but is the large viewport, which
+                // overflows while the toolbars are visible.
+                <div class="relative w-full h-[58svh] min-h-[300px] max-h-[520px] sm:h-[62svh] sm:max-h-[640px] lg:h-[calc(100svh-20rem)] lg:min-h-[460px] lg:max-h-[920px]">
                     <Chart id=cid.clone() option=option class="w-full h-full".to_string()/>
                     <Show when=move || daily_gap.get()>
                         <div class="absolute inset-0 flex items-center justify-center bg-[#0d2137] rounded-xl px-6">
@@ -909,8 +917,96 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
             </div>
 
             // ── right rail ────────────────────────────────────────────
+            // number. A reader wants one or the other, rarely both, so
+            // running them together would make each group read past the one
+            // they did not come for. Charts without the long copy fall back
+            // to the one-liner rather than an empty heading.
+            <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-4 lg:p-5 lg:col-start-1 lg:row-start-2">
+                <h2 class="text-[0.7rem] uppercase tracking-widest text-white font-semibold mb-3">
+                    "About this metric"
+                </h2>
+                {match meta.about {
+                    Some(copy) => view! {
+                        // Two columns on a wide screen, each capped at 34rem:
+                        // one column at `max-w-3xl` ran about 110 characters,
+                        // past where a reader loses the return sweep. The grid
+                        // is capped as well as each column, or the two blocks
+                        // drift apart with a growing void between them.
+                        // `items-start` lets them keep their own heights.
+                        <div class="space-y-3 max-w-3xl lg:max-w-[72rem] lg:grid lg:grid-cols-2 lg:gap-x-10 lg:gap-y-0 lg:space-y-0 lg:items-start">
+                            // Not every chart has a definition; the subtitle
+                            // above carries the short answer, so an absent one
+                            // shows nothing rather than an empty heading.
+                            // Split on a blank line, as the method below is,
+                            // so copy covering several subjects reads as
+                            // several paragraphs. Copy with no blank line
+                            // renders as exactly one.
+                            {copy.definition.map(|d| view! {
+                                <div class="space-y-3 max-w-[34rem]">
+                                {d.split("\n\n")
+                                    .enumerate()
+                                    .map(|(i, para)| view! {
+                                        <div>
+                                            {(i == 0).then(|| view! {
+                                                <h3 class=ABOUT_LABEL>"Definition"</h3>
+                                            })}
+                                            <p class="text-sm text-white/85 leading-relaxed">
+                                                {para.to_string()}
+                                            </p>
+                                        </div>
+                                    })
+                                    .collect_view()}
+                                </div>
+                            })}
+                            // These run long by design: the section exists to
+                            // say exactly what was measured and what it
+                            // excludes. Same blank-line split as above.
+                            <div class="space-y-3 max-w-[34rem]">
+                            {copy.technical.split("\n\n")
+                                .enumerate()
+                                .map(|(i, para)| view! {
+                                    <div>
+                                        {(i == 0).then(|| view! {
+                                            <h3 class=ABOUT_LABEL>
+                                                "How it is measured"
+                                            </h3>
+                                        })}
+                                        <p class="text-sm text-white/85 leading-relaxed">
+                                            {para.to_string()}
+                                        </p>
+                                    </div>
+                                })
+                                .collect_view()}
+                            </div>
+                        </div>
+                        <p class="text-xs text-white/55 mt-3">
+                            "Measured from my own Bitcoin node. "
+                            <a href="/observatory/learn/methodology" class="hover:text-[#f7931a] transition-colors">
+                                "Methodology"
+                            </a>
+                        </p>
+                    }.into_any(),
+                    // No long copy, so nothing but the methodology link.
+                    // Repeating `desc_per_block` here would restate the
+                    // subtitle above it, and in daily mode restate the wrong
+                    // resolution's.
+                    None => view! {
+                        <p class="text-xs text-white/55 mt-2">
+                            "Measured from my own Bitcoin node. "
+                            <a href="/observatory/learn/methodology" class="hover:text-[#f7931a] transition-colors">
+                                "Methodology"
+                            </a>
+                        </p>
+                    }.into_any(),
+                }}
+            </div>
+            // Placed explicitly. The grid is `1fr 17rem`, and these children
+            // are in reading order for a phone (chart, then the explanation,
+            // then the rail), which is not the order the two desktop columns
+            // want. Without the placement the About block would land in the
+            // 17rem rail column.
             <aside class=move || if rail_open.get() {
-                "space-y-4 lg:sticky lg:top-20"
+                "space-y-4 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:sticky lg:top-20"
             } else {
                 "space-y-4 lg:hidden"
             }>
@@ -995,32 +1091,6 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                         daily=resolved_daily
                     />
                 </RailSection>
-
-                {
-                    let rel = registry::related(meta, 4);
-                    (!rel.is_empty()).then(|| view! {
-                        <RailSection
-                            title="Related"
-                            explain="Charts measuring the same thing or covering the same part of the network, for reading this one in context."
-                        >
-                            // Chips below `lg`, where four full-width links
-                            // are four rows of mostly empty line and each is
-                            // a small tap target in a tall list. Back to a
-                            // stacked list in the 15rem rail, where a title
-                            // rarely fits on one chip.
-                            <div class="flex flex-wrap gap-1.5 lg:block lg:space-y-1.5">
-                                {rel.into_iter().map(|r| view! {
-                                    <a
-                                        href=format!("/observatory/chart/{}", r.slug)
-                                        class="inline-block px-2.5 py-1.5 rounded-lg bg-white/5 text-sm text-white/85 hover:text-[#f7931a] hover:bg-white/10 transition-colors lg:block lg:px-0 lg:py-0 lg:bg-transparent lg:hover:bg-transparent"
-                                    >
-                                        {r.title}
-                                    </a>
-                                }).collect_view()}
-                            </div>
-                        </RailSection>
-                    })
-                }
             </aside>
         </div>
 
@@ -1073,89 +1143,32 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
 
             // Definition then Technical, and both headed, because they answer
             // two different questions: what is this, and can I trust the
-            // number. A reader wants one or the other, rarely both, so
-            // running them together would make each group read past the one
-            // they did not come for. Charts without the long copy fall back
-            // to the one-liner rather than an empty heading.
-            <div class="bg-[#0d2137] border border-white/10 rounded-2xl p-4 lg:p-5">
-                <h2 class="text-[0.7rem] uppercase tracking-widest text-white font-semibold mb-3">
-                    "About this metric"
-                </h2>
-                {match meta.about {
-                    Some(copy) => view! {
-                        // Two columns on a wide screen, each capped at 34rem:
-                        // one column at `max-w-3xl` ran about 110 characters,
-                        // past where a reader loses the return sweep. The grid
-                        // is capped as well as each column, or the two blocks
-                        // drift apart with a growing void between them.
-                        // `items-start` lets them keep their own heights.
-                        <div class="space-y-3 max-w-3xl lg:max-w-[72rem] lg:grid lg:grid-cols-2 lg:gap-x-10 lg:gap-y-0 lg:space-y-0 lg:items-start">
-                            // Not every chart has a definition; the subtitle
-                            // above carries the short answer, so an absent one
-                            // shows nothing rather than an empty heading.
-                            // Split on a blank line, as the method below is,
-                            // so copy covering several subjects reads as
-                            // several paragraphs. Copy with no blank line
-                            // renders as exactly one.
-                            {copy.definition.map(|d| view! {
-                                <div class="space-y-3 max-w-[34rem]">
-                                {d.split("\n\n")
-                                    .enumerate()
-                                    .map(|(i, para)| view! {
-                                        <div>
-                                            {(i == 0).then(|| view! {
-                                                <h3 class=ABOUT_LABEL>"Definition"</h3>
-                                            })}
-                                            <p class="text-sm text-white/85 leading-relaxed">
-                                                {para.to_string()}
-                                            </p>
-                                        </div>
-                                    })
-                                    .collect_view()}
-                                </div>
-                            })}
-                            // These run long by design: the section exists to
-                            // say exactly what was measured and what it
-                            // excludes. Same blank-line split as above.
-                            <div class="space-y-3 max-w-[34rem]">
-                            {copy.technical.split("\n\n")
-                                .enumerate()
-                                .map(|(i, para)| view! {
-                                    <div>
-                                        {(i == 0).then(|| view! {
-                                            <h3 class=ABOUT_LABEL>
-                                                "How it is measured"
-                                            </h3>
-                                        })}
-                                        <p class="text-sm text-white/85 leading-relaxed">
-                                            {para.to_string()}
-                                        </p>
-                                    </div>
-                                })
-                                .collect_view()}
+
+                {
+                    let rel = registry::related(meta, 4);
+                    (!rel.is_empty()).then(|| view! {
+                        <RailSection
+                            title="Related"
+                            explain="Charts measuring the same thing or covering the same part of the network, for reading this one in context."
+                        >
+                            // Chips below `lg`, where four full-width links
+                            // are four rows of mostly empty line and each is
+                            // a small tap target in a tall list. Back to a
+                            // stacked list in the 15rem rail, where a title
+                            // rarely fits on one chip.
+                            <div class="flex flex-wrap gap-1.5 lg:block lg:space-y-1.5">
+                                {rel.into_iter().map(|r| view! {
+                                    <a
+                                        href=format!("/observatory/chart/{}", r.slug)
+                                        class="inline-block px-2.5 py-1.5 rounded-lg bg-white/5 text-sm text-white/85 hover:text-[#f7931a] hover:bg-white/10 transition-colors lg:block lg:px-0 lg:py-0 lg:bg-transparent lg:hover:bg-transparent"
+                                    >
+                                        {r.title}
+                                    </a>
+                                }).collect_view()}
                             </div>
-                        </div>
-                        <p class="text-xs text-white/55 mt-3">
-                            "Measured from my own Bitcoin node. "
-                            <a href="/observatory/learn/methodology" class="hover:text-[#f7931a] transition-colors">
-                                "Methodology"
-                            </a>
-                        </p>
-                    }.into_any(),
-                    // No long copy, so nothing but the methodology link.
-                    // Repeating `desc_per_block` here would restate the
-                    // subtitle above it, and in daily mode restate the wrong
-                    // resolution's.
-                    None => view! {
-                        <p class="text-xs text-white/55 mt-2">
-                            "Measured from my own Bitcoin node. "
-                            <a href="/observatory/learn/methodology" class="hover:text-[#f7931a] transition-colors">
-                                "Methodology"
-                            </a>
-                        </p>
-                    }.into_any(),
-                }}
-            </div>
+                        </RailSection>
+                    })
+                }
         </div>
         // Without this the view is a dead end: four related charts and the
         // browser back button. The drawer indexes every registered chart.

@@ -636,6 +636,41 @@
                 var watermarkPx = Math.max(20, Math.min(56, Math.floor(chartW * 0.08)));
                 opts.graphic[0].style.font = 'bold ' + watermarkPx + 'px Inter, system-ui, sans-serif';
             }
+            // Same reason, different element: the dropped-point notice is a
+            // single unwrapped line, about 350px at 11px, against a ~340px
+            // phone chart, so it ran off both edges. ECharts text wraps only
+            // when given an explicit width, and `overflow: break` is what
+            // makes it wrap rather than clip.
+            //
+            // Wrapping costs vertical space the legend already occupies, so
+            // the legend and the plot move down by the extra lines. Measured
+            // rather than assumed: the width is the real client width, and the
+            // line count comes from it.
+            var notice = (opts.graphic || []).filter(function (g) {
+                return g && g.id === 'log-scale-notice';
+            })[0];
+            if (notice && notice.style) {
+                var availW = (el.clientWidth || window.innerWidth) - 16;
+                notice.style.width = Math.max(140, availW);
+                notice.style.overflow = 'break';
+                notice.style.lineHeight = 14;
+                // ~5.4px per character at 11px Inter. Only an estimate, so it
+                // is used to decide how far to push, never to clip.
+                var lines = Math.max(
+                    1,
+                    Math.ceil((notice.style.text || '').length * 5.4 / notice.style.width)
+                );
+                if (lines > 1) {
+                    var push = (lines - 1) * 14;
+                    if (opts.legend && !Array.isArray(opts.legend)) {
+                        opts.legend.top = (opts.legend.top || 24) + push;
+                    }
+                    var grids = Array.isArray(opts.grid) ? opts.grid : (opts.grid ? [opts.grid] : []);
+                    grids.forEach(function (g) {
+                        if (typeof g.top === 'number') { g.top += push; }
+                    });
+                }
+            }
             applyAxisSentinels(opts);
             applyTooltipSentinel(opts);
             applyMobileAdjustments(opts);
