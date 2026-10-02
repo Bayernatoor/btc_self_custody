@@ -2123,7 +2123,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: Some("The biggest single transaction in each block, by bytes. Size comes from how many inputs and outputs a transaction carries and how much witness data arrives with them, so two transactions of the same size can be large for entirely different reasons, and the size alone does not tell you which.\n\nNothing caps a transaction at four megabytes directly. What consensus limits is weight: a block may carry 4,000,000 weight units, where an ordinary byte costs four units and a witness byte costs one. The same cap therefore allows about a megabyte of ordinary data or about four megabytes of witness data. A typical block is around half witness and lands near 1.6 MB; a transaction that is almost entirely witness can approach four megabytes and still fit.\n\nMore than ninety blocks have gone above 3.9 MB, and they are not spread across the network: MARA mined more than nine in ten of them. Almost all carry an inscription, and at the extreme the single transaction is over 99.9% of the block: the median such block carries twelve transactions in total, and forty-five carry fewer than ten. The largest in the chain, 3,992,821 bytes in block 839,842 on 2024-04-18, is one of these. They began in February 2023 and are still happening."),
+            definition: Some("The biggest single transaction in each block, by bytes.\n\nNothing caps a transaction at four megabytes directly. What consensus limits is weight: a block may carry 4,000,000 weight units, where an ordinary byte costs four units and a witness byte costs one. The same cap therefore allows about a megabyte of ordinary data or about four megabytes of witness data. A typical block is around half witness and lands near 1.6 MB, so a transaction that is almost entirely witness can approach four megabytes and still fit.\n\nMore than ninety blocks have gone above 3.9 MB, and they are not spread across the network: MARA mined more than nine in ten of them. Almost all carry an inscription, and forty-five left room for fewer than ten other transactions. The largest in the chain is 3,992,821 bytes, in block 839,842 on 2024-04-18. They began in February 2023 and are still happening."),
             technical: "Serialized size of the largest transaction in the block, read per transaction. Size rather than weight, so a witness-heavy transaction reads larger here than it costs against the limit.",
         }),
     },
@@ -2150,8 +2150,8 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Each type's outputs over all outputs of the eight classified types, averaged across the window, minus the same average one window earlier: 144 blocks per block, 30 days daily. The result is in percentage points, so a share moving from 10 to 15 is 5 points and not 5 percent. All eight are drawn, so the lines sum to zero at every point. Divergent lines do not establish that users migrated between types.",
         }],
         about: Some(About {
-            definition: Some("Whether an output type is gaining or losing ground, rather than how much it holds. A line above zero means that type's share of outputs grew over the window; below zero means it shrank.\n\nThe figure is in percentage points, not percent. Taproot going from 22% of outputs to 11% fell by 11 points and by 50%. Both describe the same move, and this chart plots the first.\n\nThe share is smoothed before it is differenced, so a point compares the trailing average now against the same average one window earlier. The two windows do not overlap, which means a single point reaches back about twice the window: roughly two months on the daily view, two days at per-block resolution.\n\nA share can rise because the rest fell, and because every type is drawn the lines always add up to zero: one type's gain is exactly what the others gave up. Through April 2026 the P2WPKH line rose more than thirteen points while Taproot fell more than eleven, and the two moves have separate causes: inscriptions dropped by about two thirds, which roughly halved Taproot output creation, while P2WPKH's own output count rose by more than a quarter. Divergence is consistent with users moving between types, but it does not establish it, because the same picture appears when one type simply stops being used."),
-            technical: "Each type's outputs as a share of the eight classified output types, averaged across the window, minus that same average one window earlier.\n\nThe window follows the resolution. Per block it is 144 blocks, a day at the ten-minute target, though a real day has held between 98 and 197 blocks over the last year. At daily resolution it is 30 days.\n\nAll eight classified output types are drawn: P2PKH, P2SH, P2WPKH, P2WSH, P2TR, P2PK, bare multisig and unclassified scripts. Because they are the whole denominator, the lines sum to zero at every point, so whatever one type gains the others gave up.\n\nEach of the quiet ones has its own era rather than being permanently flat. P2PK held more than four fifths of outputs in January 2009 and a twentieth of a per cent by late 2010. That handover is the largest move on the chart, and it is why P2PK and P2PKH are mirror images through 2009 and 2010: almost nothing else existed yet, so one type's loss was exactly the other's gain, by as much as 57 points. Bare multisig peaks during the Stamps period in 2023, P2WSH during the Ordinals ramp, and unclassified scripts shifted almost four points across the last year. On a short range most of them sit on zero; use the legend to hide any line that crowds the one you are reading.",
+            definition: Some("Whether an output type is gaining or losing ground, rather than how much it holds. A line above zero means that type's share of outputs grew over the window; below zero means it shrank.\n\nThe figure is in percentage points, not percent. Taproot going from 22% of outputs to 11% fell by 11 points and by 50%. Both describe the same move, and this chart plots the first.\n\nThe share is smoothed before it is differenced, so a point compares the trailing average now against the same average one window earlier, reaching back about twice the window: roughly two months daily, two days per block.\n\nEvery type is drawn, so the lines always add up to zero, which does not mean users moved between them. Through April 2026 P2WPKH rose more than thirteen points while Taproot fell more than eleven, for separate reasons: inscriptions dropped by about two thirds, roughly halving Taproot output creation, while P2WPKH's own output count rose by more than a quarter."),
+            technical: "Each type's outputs as a share of the eight classified output types, averaged across the window, minus that same average one window earlier.\n\nThe window follows the resolution. Per block it is 144 blocks, a day at the ten-minute target, though a real day has held between 98 and 197 blocks over the last year. At daily resolution it is 30 days.\n\nAll eight classified output types are drawn: P2PKH, P2SH, P2WPKH, P2WSH, P2TR, P2PK, bare multisig and unclassified scripts. Because they are the whole denominator, the lines sum to zero at every point, so whatever one type gains the others gave up.\n\nEach of the quiet ones has its own era rather than being permanently flat. P2PK held more than four fifths of outputs in January 2009 and a twentieth of a per cent by late 2010. That handover is the largest move on the chart, and it is why P2PK and P2PKH are mirror images through 2009 and 2010: almost nothing else existed yet, so one type's loss was exactly the other's gain, by more than 56 points. Bare multisig peaks during the Stamps period in 2023, P2WSH during the Ordinals ramp, and unclassified scripts shifted almost four points across the last year. On a short range most of them sit on zero; use the legend to hide any line that crowds the one you are reading.",
         }),
     },
     ChartMeta {
@@ -2423,8 +2423,8 @@ The reference lines at 10% and 5% are markers for reading the trend. They are no
             population: "Per block this is the block's transaction count over the gap to its predecessor. A non-positive gap has no rate rather than a rate of zero, and the first block in the window has no predecessor, so both are gaps. Daily it is the day's transaction count over 86,400 seconds, coinbase included, so the final day is a gap: a named range ends on a day still in progress, which is not a whole 86,400 seconds."
         }],
         about: Some(About {
-            definition: Some("How many transactions per second the chain confirmed. This counts base-chain transactions only, so it excludes Lightning payments and transfers inside an exchange, both of which move value without a block recording each one."),
-            technical: "Transactions in the block divided by the seconds since the previous one, so a short interval reads high and a long one reads low even at a steady rate. Base-chain settlement only. Nothing carried over Lightning or netted inside an exchange appears here, which makes this a floor on activity rather than a measure of it.",
+            definition: Some("How many transactions per second the chain confirmed. Over the past year that has averaged about six, and a single day has run between three and ten.\n\nOnly base-chain transactions are counted, so Lightning payments and transfers inside an exchange are absent: both move value without a block recording each one. The line is a floor on activity rather than a measure of it."),
+            technical: "The two arms use different divisors, and that is most of what distinguishes them.\n\nPer block the divisor is the actual gap to the previous block, so a short interval reads high and a long one reads low at an identical underlying rate. The spread this produces is enormous: over the past year the median block reads about 7 per second and the 95th percentile over 100, with the highest at 7,009, where block 949,397 carried 7,009 transactions and was stamped one second after its predecessor. A header timestamp is not a clock reading, as the Block Interval chart sets out, so the extremes here come as much from stamping as from mining.\n\nDaily the divisor is a constant 86,400 seconds, so nothing depends on when blocks arrived within the day: the line is the day's transaction count rescaled.",
         }),
     },
     ChartMeta {
@@ -3923,6 +3923,171 @@ mod tests {
                 90.0,
             ),
             (
+                "multi-velocity",
+                "P2PK was a twentieth of a per cent by late 2010",
+                "SELECT 100.0*SUM(p2pk_count)/SUM(p2pkh_count+p2sh_count \
+                 +p2wpkh_count+p2wsh_count+p2tr_count+p2pk_count \
+                 +multisig_count+unknown_script_count) FROM blocks \
+                 WHERE timestamp >= strftime('%s','2010-11-01') \
+                 AND timestamp < strftime('%s','2011-01-01')",
+                0.04,
+                0.06,
+            ),
+            // This one is deliberately the long form, while every row around
+            // it is a plain ratio of totals. The claim describes the plotted
+            // line, and the chart averages each day's share before
+            // differencing, so the two methods answer different questions:
+            // 56.6 points smoothed against 23.5 for the same handover read as
+            // a ratio of totals. Guarding the cheaper form would pin a number
+            // the reader never sees.
+            (
+                "multi-velocity",
+                "one type's loss was the other's gain, by more than 56 points",
+                "WITH sh AS (SELECT day, avg_p2pkh_count*100.0 \
+                 /(avg_p2pk_count+avg_p2pkh_count+avg_p2sh_count \
+                 +avg_p2wpkh_count+avg_p2wsh_count+avg_p2tr_count \
+                 +avg_multisig_count+avg_unknown_script_count) AS h \
+                 FROM daily_blocks \
+                 WHERE (avg_p2pk_count+avg_p2pkh_count+avg_p2sh_count \
+                 +avg_p2wpkh_count+avg_p2wsh_count+avg_p2tr_count \
+                 +avg_multisig_count+avg_unknown_script_count) > 0), \
+                 a AS (SELECT day, AVG(h) OVER (ORDER BY day \
+                 ROWS BETWEEN 29 PRECEDING AND CURRENT ROW) AS h30 FROM sh), \
+                 v AS (SELECT h30 - LAG(h30,30) OVER (ORDER BY day) AS d \
+                 FROM a) SELECT MAX(d) FROM v",
+                56.0,
+                60.0,
+            ),
+            (
+                "multi-velocity",
+                "Taproot going from 22% of outputs to 11%: the 22",
+                "SELECT 100.0*SUM(p2tr_count)/SUM(p2pkh_count+p2sh_count \
+                 +p2wpkh_count+p2wsh_count+p2tr_count+p2pk_count \
+                 +multisig_count+unknown_script_count) FROM blocks \
+                 WHERE timestamp >= strftime('%s','2026-02-25') \
+                 AND timestamp < strftime('%s','2026-03-27')",
+                21.0,
+                24.0,
+            ),
+            (
+                "multi-velocity",
+                "Taproot going from 22% of outputs to 11%: the 11",
+                "SELECT 100.0*SUM(p2tr_count)/SUM(p2pkh_count+p2sh_count \
+                 +p2wpkh_count+p2wsh_count+p2tr_count+p2pk_count \
+                 +multisig_count+unknown_script_count) FROM blocks \
+                 WHERE timestamp >= strftime('%s','2026-03-27') \
+                 AND timestamp < strftime('%s','2026-04-26')",
+                10.0,
+                12.0,
+            ),
+            // The three causes the copy gives for that move. Each is a ratio
+            // of one window's raw count to the previous window's, so they
+            // stand independently of the share arithmetic above: the point of
+            // the sentence is that Taproot fell for a reason of its own and
+            // P2WPKH rose for a different one.
+            (
+                "multi-velocity",
+                "inscriptions dropped by about two thirds",
+                "SELECT 1.0*(SELECT SUM(inscription_count) FROM blocks \
+                 WHERE timestamp >= strftime('%s','2026-03-27') \
+                 AND timestamp < strftime('%s','2026-04-26')) \
+                 /(SELECT SUM(inscription_count) FROM blocks \
+                 WHERE timestamp >= strftime('%s','2026-02-25') \
+                 AND timestamp < strftime('%s','2026-03-27'))",
+                0.28,
+                0.42,
+            ),
+            (
+                "multi-velocity",
+                "which roughly halved Taproot output creation",
+                "SELECT 1.0*(SELECT SUM(p2tr_count) FROM blocks \
+                 WHERE timestamp >= strftime('%s','2026-03-27') \
+                 AND timestamp < strftime('%s','2026-04-26')) \
+                 /(SELECT SUM(p2tr_count) FROM blocks \
+                 WHERE timestamp >= strftime('%s','2026-02-25') \
+                 AND timestamp < strftime('%s','2026-03-27'))",
+                0.42,
+                0.58,
+            ),
+            (
+                "multi-velocity",
+                "P2WPKH's own output count rose by more than a quarter",
+                "SELECT 1.0*(SELECT SUM(p2wpkh_count) FROM blocks \
+                 WHERE timestamp >= strftime('%s','2026-03-27') \
+                 AND timestamp < strftime('%s','2026-04-26')) \
+                 /(SELECT SUM(p2wpkh_count) FROM blocks \
+                 WHERE timestamp >= strftime('%s','2026-02-25') \
+                 AND timestamp < strftime('%s','2026-03-27'))",
+                1.25,
+                1.40,
+            ),
+            // The per-block arm's dispersion is the point the technical text
+            // makes, so the median and the 95th percentile are guarded as a
+            // pair. One without the other would let the gap between them
+            // close without the copy noticing, and the gap is the claim.
+            (
+                "tps",
+                "over the past year that has averaged about six",
+                "SELECT 1.0*SUM(tx_count)/(COUNT(DISTINCT \
+                 date(timestamp,'unixepoch'))*86400.0) FROM blocks \
+                 WHERE timestamp >= strftime('%s','now','-365 days')",
+                5.0,
+                7.5,
+            ),
+            (
+                "tps",
+                "a single day has run between three and ten",
+                "SELECT MAX(t) FROM (SELECT SUM(tx_count)/86400.0 AS t \
+                 FROM blocks WHERE timestamp >= strftime('%s','now','-365 days') \
+                 GROUP BY date(timestamp,'unixepoch') \
+                 HAVING COUNT(*) > 100)",
+                8.0,
+                12.0,
+            ),
+            (
+                "tps",
+                "the median block reads about 7 per second",
+                "SELECT r FROM (SELECT b.tx_count*1.0/(b.timestamp-p.timestamp) \
+                 AS r FROM blocks b JOIN blocks p ON p.height = b.height-1 \
+                 WHERE b.timestamp >= strftime('%s','now','-365 days') \
+                 AND b.timestamp > p.timestamp ORDER BY r) \
+                 LIMIT 1 OFFSET (SELECT COUNT(*)/2 FROM blocks b \
+                 JOIN blocks p ON p.height = b.height-1 \
+                 WHERE b.timestamp >= strftime('%s','now','-365 days') \
+                 AND b.timestamp > p.timestamp)",
+                6.0,
+                8.5,
+            ),
+            (
+                "tps",
+                "the 95th percentile over 100",
+                "SELECT r FROM (SELECT b.tx_count*1.0/(b.timestamp-p.timestamp) \
+                 AS r FROM blocks b JOIN blocks p ON p.height = b.height-1 \
+                 WHERE b.timestamp >= strftime('%s','now','-365 days') \
+                 AND b.timestamp > p.timestamp ORDER BY r) \
+                 LIMIT 1 OFFSET (SELECT COUNT(*)*95/100 FROM blocks b \
+                 JOIN blocks p ON p.height = b.height-1 \
+                 WHERE b.timestamp >= strftime('%s','now','-365 days') \
+                 AND b.timestamp > p.timestamp)",
+                100.0,
+                400.0,
+            ),
+            (
+                "tps",
+                "block 949,397 carried 7,009 transactions",
+                "SELECT tx_count FROM blocks WHERE height = 949397",
+                7_009.0,
+                7_009.0,
+            ),
+            (
+                "tps",
+                "and was stamped one second after its predecessor",
+                "SELECT b.timestamp - p.timestamp FROM blocks b \
+                 JOIN blocks p ON p.height = b.height-1 WHERE b.height = 949397",
+                1.0,
+                1.0,
+            ),
+            (
                 "largest-tx",
                 "more than ninety blocks have gone above 3.9 MB",
                 "SELECT COUNT(*) FROM blocks WHERE largest_tx_size > 3900000",
@@ -3943,6 +4108,50 @@ mod tests {
                 "SELECT largest_tx_size FROM blocks WHERE height = 839842",
                 3_992_821.0,
                 3_992_821.0,
+            ),
+            (
+                "largest-tx",
+                "they began in February 2023",
+                "SELECT MIN(height) FROM blocks WHERE largest_tx_size > 3900000",
+                774_628.0,
+                774_628.0,
+            ),
+            (
+                "largest-tx",
+                "almost all carry an inscription",
+                "SELECT 1.0*SUM(inscription_count > 0)/COUNT(*) FROM blocks \
+                 WHERE largest_tx_size > 3900000",
+                0.90,
+                1.0,
+            ),
+            (
+                "largest-tx",
+                "forty-five left room for fewer than ten other transactions",
+                "SELECT COUNT(*) FROM blocks \
+                 WHERE largest_tx_size > 3900000 AND tx_count < 10",
+                40.0,
+                60.0,
+            ),
+            // The pair that makes the four-megabyte sentence work: a cap of
+            // 4,000,000 weight units only permits a near-4 MB transaction
+            // because an ordinary block is about half witness. Both halves
+            // are guarded, since either drifting alone breaks the arithmetic
+            // the reader is being walked through.
+            (
+                "largest-tx",
+                "a typical block is around half witness",
+                "SELECT 100.0*SUM(witness_bytes)/SUM(size) FROM blocks \
+                 WHERE timestamp >= strftime('%s','now','-365 days')",
+                45.0,
+                60.0,
+            ),
+            (
+                "largest-tx",
+                "a typical block lands near 1.6 MB",
+                "SELECT AVG(size) FROM blocks \
+                 WHERE timestamp >= strftime('%s','now','-365 days')",
+                1_450_000.0,
+                1_750_000.0,
             ),
             (
                 "inscriptions / protocols article",
