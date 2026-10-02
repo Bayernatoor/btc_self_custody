@@ -1091,6 +1091,35 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                         daily=resolved_daily
                     />
                 </RailSection>
+
+                // Rendered here and again at the foot of the page, one of the
+                // two always `display: none`, which keeps it out of the
+                // accessibility tree rather than merely out of sight. A
+                // single node cannot do this job: the rail is a different
+                // grid cell, so there is no stacking order that puts Related
+                // under Overlays on desktop and last on a phone.
+                {
+                    let rel = registry::related(meta, 4);
+                    (!rel.is_empty()).then(|| view! {
+                        <div class="hidden lg:block">
+                            <RailSection
+                                title="Related"
+                                explain="Charts measuring the same thing or covering the same part of the network, for reading this one in context."
+                            >
+                                <div class="space-y-1.5">
+                                    {rel.into_iter().map(|r| view! {
+                                        <a
+                                            href=format!("/observatory/chart/{}", r.slug)
+                                            class="block text-sm text-white/85 hover:text-[#f7931a] transition-colors"
+                                        >
+                                            {r.title}
+                                        </a>
+                                    }).collect_view()}
+                                </div>
+                            </RailSection>
+                        </div>
+                    })
+                }
             </aside>
         </div>
 
@@ -1141,32 +1170,29 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                 </div>
             </div>
 
-            // Definition then Technical, and both headed, because they answer
-            // two different questions: what is this, and can I trust the
-
+                // The phone copy. Chips rather than a stacked list, because
+                // four full-width links are four rows of mostly empty line
+                // and each is a small tap target in a tall one.
                 {
                     let rel = registry::related(meta, 4);
                     (!rel.is_empty()).then(|| view! {
-                        <RailSection
-                            title="Related"
-                            explain="Charts measuring the same thing or covering the same part of the network, for reading this one in context."
-                        >
-                            // Chips below `lg`, where four full-width links
-                            // are four rows of mostly empty line and each is
-                            // a small tap target in a tall list. Back to a
-                            // stacked list in the 15rem rail, where a title
-                            // rarely fits on one chip.
-                            <div class="flex flex-wrap gap-1.5 lg:block lg:space-y-1.5">
-                                {rel.into_iter().map(|r| view! {
-                                    <a
-                                        href=format!("/observatory/chart/{}", r.slug)
-                                        class="inline-block px-2.5 py-1.5 rounded-lg bg-white/5 text-sm text-white/85 hover:text-[#f7931a] hover:bg-white/10 transition-colors lg:block lg:px-0 lg:py-0 lg:bg-transparent lg:hover:bg-transparent"
-                                    >
-                                        {r.title}
-                                    </a>
-                                }).collect_view()}
-                            </div>
-                        </RailSection>
+                        <div class="lg:hidden">
+                            <RailSection
+                                title="Related"
+                                explain="Charts measuring the same thing or covering the same part of the network, for reading this one in context."
+                            >
+                                <div class="flex flex-wrap gap-1.5">
+                                    {rel.into_iter().map(|r| view! {
+                                        <a
+                                            href=format!("/observatory/chart/{}", r.slug)
+                                            class="inline-block px-2.5 py-1.5 rounded-lg bg-white/5 text-sm text-white/85 hover:text-[#f7931a] hover:bg-white/10 transition-colors"
+                                        >
+                                            {r.title}
+                                        </a>
+                                    }).collect_view()}
+                                </div>
+                            </RailSection>
+                        </div>
                     })
                 }
         </div>
