@@ -3105,6 +3105,13 @@ pub fn comparable_with(
 mod tests {
     use super::*;
 
+    /// This file, read as text so a test can inspect a table that lives
+    /// inside another test's body. `the_copy_still_matches_the_chain` holds
+    /// its rows as a local binding, and hoisting 650 lines out of it to make
+    /// them importable would be a far larger change than parsing the two
+    /// strings that matter.
+    const SELF_SRC: &str = include_str!("registry.rs");
+
     /// The four page sources, parsed rather than trusted, so the registry
     /// cannot drift from what is actually rendered.
     const PAGES: &[&str] = &[
@@ -3605,10 +3612,11 @@ mod tests {
     /// # DELETE THIS WHEN PHASE 2 LANDS
     ///
     /// This is a stopgap and should not outlive the prepared-metric contract.
-    /// It has the same defect it exists to catch, one level up: it only knows
-    /// the twelve claims typed into the table below, so a thirteenth
-    /// hardcoded figure is invisible to it, and the table itself is a
-    /// hand-maintained list of facts that can go stale.
+    /// It had the same defect it exists to catch, one level up: it knew only
+    /// the claims typed into the table below, so an untyped figure was
+    /// invisible to it. `you_cannot_ship_an_unguarded_number` closes that for
+    /// figures written in digits, and the table is still a hand-maintained
+    /// list of facts that can go stale.
     ///
     /// The actual fix is for copy to reference a value the data already
     /// computes rather than restate it, which is what a prepared metric makes
@@ -3628,7 +3636,9 @@ mod tests {
 
         // (which chart, what the copy says, the query, the range it must
         // still fall in). The claim text is quoted so a failure names the
-        // sentence to edit rather than only a number.
+        // sentence to edit rather than only a number, and
+        // `you_cannot_ship_an_unguarded_number` reads these same strings out
+        // of the source to decide which figures are covered.
         let checks: &[(&str, &str, &str, f64, f64)] = &[
             (
                 "weight-util",
@@ -4296,6 +4306,323 @@ mod tests {
             failures.is_empty(),
             "copy has drifted from the data:\n  {}",
             failures.join("\n  ")
+        );
+    }
+
+    /// Every (slug, claim) pair in the drift table, read out of this file.
+    ///
+    /// Each row opens with a bare `(` on its own line followed by two string
+    /// literals, which `cargo fmt` guarantees for a tuple this wide, so the
+    /// shape is stable rather than merely current.
+    fn guarded_claims() -> Vec<(String, String)> {
+        let table = SELF_SRC
+            .split_once("let checks: &[(&str, &str, &str, f64, f64)] = &[")
+            .expect("the drift table")
+            .1
+            .split_once("\n        let mut failures")
+            .expect("the end of the drift table")
+            .0;
+        let mut out = Vec::new();
+        let lines: Vec<&str> = table.lines().collect();
+        for (i, line) in lines.iter().enumerate() {
+            if line.trim() != "(" {
+                continue;
+            }
+            let quoted = |n: usize| -> Option<String> {
+                let l = lines.get(n)?.trim();
+                let inner = l.strip_prefix('"')?.rsplit_once("\",")?.0;
+                Some(inner.to_string())
+            };
+            if let (Some(slug), Some(claim)) = (quoted(i + 1), quoted(i + 2)) {
+                out.push((slug, claim));
+            }
+        }
+        out
+    }
+
+    /// Figures in a sentence that assert a measurement, as normalised digit
+    /// strings (`"63.1%"`, `"190,000"`).
+    ///
+    /// **Digits only, and that is a deliberate hole.** Our copy also claims in
+    /// words: "more than ninety blocks", "about two thirds", "four fifths".
+    /// Admitting those means admitting "one transaction" and "at least one
+    /// input", which are grammar rather than measurement, and a guard that
+    /// cries wolf on 112 occurrences of the word "one" is a guard someone
+    /// silences. Digits are where the risk concentrates, because a number
+    /// typed to three significant figures is one nobody will re-derive by eye.
+    /// Spelled-out claims stay the copy pass's job, and the inventory in
+    /// `notes/unguarded-numbers.md` lists them so they are at least visible.
+    ///
+    /// A figure counts as a measurement when a hedge introduces it or a unit
+    /// follows it. Bare integers in prose ("split into 2 groups") assert
+    /// nothing about the chain and are skipped.
+    fn measurement_figures(text: &str) -> Vec<String> {
+        const HEDGES: &[&str] = &[
+            "about", "around", "roughly", "nearly", "almost", "than", "over",
+            "least", "fewer", "under", "to", "averages", "averaged", "reads",
+            "runs", "ran", "held", "holds", "close",
+        ];
+        const UNITS: &[&str] = &[
+            "bytes",
+            "byte",
+            "mb",
+            "gb",
+            "kb",
+            "blocks",
+            "block",
+            "transactions",
+            "transaction",
+            "outputs",
+            "inputs",
+            "seconds",
+            "second",
+            "minutes",
+            "minute",
+            "hours",
+            "hour",
+            "days",
+            "day",
+            "years",
+            "year",
+            "times",
+            "points",
+            "point",
+            "btc",
+            "sats",
+            "cent",
+            "per",
+        ];
+        let words: Vec<&str> = text.split_whitespace().collect();
+        let mut out = Vec::new();
+        for (i, raw) in words.iter().enumerate() {
+            let w = raw.trim_matches(|c: char| {
+                !c.is_ascii_alphanumeric() && c != '%' && c != '.' && c != ','
+            });
+            let core = w.trim_end_matches(['.', ',']);
+            if core.is_empty()
+                || !core.starts_with(|c: char| c.is_ascii_digit())
+            {
+                continue;
+            }
+            if !core
+                .chars()
+                .all(|c| c.is_ascii_digit() || c == ',' || c == '.' || c == '%')
+            {
+                continue;
+            }
+            let lower = |n: usize| -> String {
+                words
+                    .get(n)
+                    .map(|s| {
+                        s.trim_matches(|c: char| !c.is_ascii_alphanumeric())
+                            .to_lowercase()
+                    })
+                    .unwrap_or_default()
+            };
+            let hedged = (1..=2)
+                .any(|b| i >= b && HEDGES.contains(&lower(i - b).as_str()));
+            let united =
+                (1..=2).any(|a| UNITS.contains(&lower(i + a).as_str()));
+            if core.ends_with('%') || hedged || united {
+                out.push(core.to_string());
+            }
+        }
+        out
+    }
+
+    /// Protocol and configuration values, which assert nothing about the
+    /// chain and so can have no drift row.
+    ///
+    /// Each is fixed by consensus or by our own code, and the ones set by our
+    /// code are already guarded where they are set: the ribbon spans by
+    /// `the_ribbon_copy_names_the_spans_the_builders_use`, the per-block
+    /// window by `MAX_PER_BLOCK_RANGE`. A value only belongs here if changing
+    /// the chain could not change it.
+    const PROTOCOL_CONSTANTS: &[&str] = &[
+        "4,000,000", // the block weight limit
+        "2,016",     // the retarget interval
+        "210,000",   // the halving interval
+        "3.125",     // the subsidy of the current era
+        "86,400",    // seconds in a day
+        "1,440",     // minutes in a day
+        "600",       // the block target, in seconds
+        "144",       // blocks in a day at that target
+        "10",        // that target again, in minutes
+        "1,000",     // the kB this site denominates every byte unit in
+        "75%",       // the SegWit witness discount
+        "2009",      // the year of the genesis block
+    ];
+
+    /// Figures fixed by our own code or used as worked examples, per chart.
+    ///
+    /// **Per chart rather than global, which is the whole point.** A flat list
+    /// holding "10%" would exempt `p2pkh-sunset`'s reference line and, at the
+    /// same stroke, a real 10% reading on any of the other 62 charts. The
+    /// exemption has to be no wider than the reason for it.
+    ///
+    /// Two kinds live here. Values our code sets, which a drift row could only
+    /// re-measure against the same constant it came from, and which are
+    /// guarded where they are set: the ribbon spans by
+    /// `the_ribbon_copy_names_the_spans_the_builders_use`. And arithmetic
+    /// worked through for the reader, where the numbers are chosen to be easy
+    /// rather than true: nobody needs to know whether two pools really hold
+    /// 50% each.
+    const CONFIGURED_FIGURES: &[(&str, &str)] = &[
+        ("address-types", "3.0"), // "3.0 per block over 10 blocks is 30"
+        ("address-types", "30"),  // the other half of that same sentence
+        ("address-types-pct", "100%"), // the bands are normalised to it
+        ("diff-ribbon", "128"),   // the longest span
+        ("fullness-dist", "100%"), // the weight limit, which is the axis
+        ("halving-era", "100"),   // each era is indexed against its own peak
+        ("multi-velocity", "30"), // the daily window
+        ("size", "4"),            // "4 million weight units"
+        ("subsidy-fees", "4"),    // "~4 years", the halving period
+        ("weight-util", "4"),     // "4 million weight units" again
+        ("diff-ribbon", "7"),     // span, per-block arm
+        ("diff-ribbon", "9"),     // span, daily arm
+        ("diff-ribbon", "14"),    // span, both arms
+        ("diversity", "1%"),      // the HHI worked example
+        ("diversity", "50%"),     // the same example
+        ("fee-heatmap", "80%"),   // p10 to p90 spans it by definition
+        ("fee-spikes", "300"),    // the minimum range the builder needs
+        ("fullness-dist", "10%"), // the histogram's bucket width
+        ("multi-velocity", "15"), // the points-against-percent example
+        ("multi-velocity", "50%"), // arithmetic on 22 and 11, both guarded
+        ("p2pkh-sunset", "10%"),  // a drawn reference line
+        ("p2pkh-sunset", "5%"),   // the other one
+        ("propagation", "60"),    // the chart's own definition of close
+        ("rbf", "125"),           // BIP 125, a number but not a quantity
+        ("time-dist", "63.2%"),   // what an exponential predicts, not the
+        ("time-dist", "5.0%"),    // chain. These three are mathematics and
+        ("time-dist", "0.25%"),   // move only if the distribution does.
+        ("weight-util", "90%"),   // the threshold the prose interprets at
+        ("witness-tx-pct", "0"),  // "reading 0, 0 and 100", a worked case
+    ];
+
+    /// Figures in live copy that nothing re-measures, as this stood on
+    /// 2026-10-03. Shrink-only: see `you_cannot_ship_an_unguarded_number`.
+    ///
+    /// Every one of these was classified by reading the sentence it sits in,
+    /// not by its shape. They are real readings of the chain, so each wants a
+    /// row in the drift table rather than an exemption.
+    ///
+    /// `op-block-share`'s 63.1% is the one to take first: it is computed from
+    /// `op_return_count`, which carries two different counting rules either
+    /// side of block 942,000, so it is not merely unguarded but known to be
+    /// inflated until the backfill sweep lands.
+    const KNOWN_UNGUARDED: &[(&str, &str)] = &[
+        ("batching", "1.7"),
+        ("empty-blocks", "90,000"),
+        ("fee-revenue-share", "1.03%"),
+        ("fee-revenue-share", "6.5%"),
+        ("fee-revenue-share", "93.2%"),
+        ("inscription-envelope", "17.9%"),
+        ("inscription-envelope", "190,000"),
+        ("inscription-envelope", "94%"),
+        ("inscription-share", "99.99%"),
+        ("interval", "40"),
+        ("multi-velocity", "197"),
+        ("multi-velocity", "98"),
+        ("op-block-share", "63.1%"),
+        ("protocol-fees", "125,000"),
+        ("runes-pct", "97%"),
+        ("time-dist", "0.3%"),
+        ("time-dist", "4.5%"),
+        ("time-dist", "63.9%"),
+        ("unified-volume", "6.4"),
+        ("witness-share", "70"),
+    ];
+
+    /// You cannot ship a number the drift test has never heard of.
+    ///
+    /// `the_copy_still_matches_the_chain` re-measures every figure listed in
+    /// its own table, which makes it exactly as good as that table is
+    /// complete, and nothing told us when it was not. Its own doc comment
+    /// admitted the hole: "a thirteenth hardcoded figure is invisible to it".
+    /// This closes that half. It does not check whether a figure is *right*,
+    /// only whether anything is watching it.
+    ///
+    /// **A ratchet, not a cliff.** Landing this as a hard failure over every
+    /// chart at once would have meant 40-odd failures on master on day one,
+    /// and a test that fails on arrival gets `#[ignore]`d rather than fixed.
+    /// `KNOWN_UNGUARDED` is the debt as it stood when this was written. New
+    /// figures fail immediately; the listed ones fail only once someone has
+    /// guarded them and left the entry behind, which keeps the list honest in
+    /// both directions and makes it shrink-only.
+    #[test]
+    fn you_cannot_ship_an_unguarded_number() {
+        let guarded = guarded_claims();
+        assert!(
+            guarded.len() > 50,
+            "only parsed {} drift rows, so the parser has broken and this \
+             test would pass by seeing nothing",
+            guarded.len()
+        );
+
+        let mut found: Vec<(String, String)> = Vec::new();
+        for c in CHARTS.iter() {
+            let mut fields = vec![c.desc_per_block, c.desc_daily];
+            if let Some(a) = c.about {
+                fields.push(a.technical);
+                if let Some(d) = a.definition {
+                    fields.push(d);
+                }
+            }
+            for m in c.measurements {
+                fields.push(m.quantity);
+                fields.push(m.population);
+            }
+            for text in fields {
+                for fig in measurement_figures(text) {
+                    if PROTOCOL_CONSTANTS.contains(&fig.as_str())
+                        || CONFIGURED_FIGURES.contains(&(c.slug, fig.as_str()))
+                    {
+                        continue;
+                    }
+                    let bare = fig.trim_end_matches('%');
+                    let covered = guarded
+                        .iter()
+                        .any(|(s, claim)| s == c.slug && claim.contains(bare));
+                    if !covered {
+                        found.push((c.slug.to_string(), fig));
+                    }
+                }
+            }
+        }
+        found.sort();
+        found.dedup();
+
+        let known: Vec<(String, String)> = KNOWN_UNGUARDED
+            .iter()
+            .map(|(s, f)| (s.to_string(), f.to_string()))
+            .collect();
+
+        let fresh: Vec<&(String, String)> =
+            found.iter().filter(|p| !known.contains(p)).collect();
+        let fixed: Vec<&(String, String)> =
+            known.iter().filter(|p| !found.contains(p)).collect();
+
+        assert!(
+            fresh.is_empty(),
+            "these figures are in the copy with nothing watching them. Add a \
+             row to the drift table in `the_copy_still_matches_the_chain`, or \
+             if the value cannot change with the chain, to \
+             `PROTOCOL_CONSTANTS`:\n  {}",
+            fresh
+                .iter()
+                .map(|(s, f)| format!("{s}: {f}"))
+                .collect::<Vec<_>>()
+                .join("\n  ")
+        );
+        assert!(
+            fixed.is_empty(),
+            "these are guarded now, so delete them from KNOWN_UNGUARDED. The \
+             list only shrinks:\n  {}",
+            fixed
+                .iter()
+                .map(|(s, f)| format!("{s}: {f}"))
+                .collect::<Vec<_>>()
+                .join("\n  ")
         );
     }
 
