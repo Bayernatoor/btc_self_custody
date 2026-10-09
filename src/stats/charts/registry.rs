@@ -4031,6 +4031,69 @@ mod tests {
                 1.25,
                 1.40,
             ),
+            // The open year, so this is the row here most likely to move: the
+            // claim is a floor, and Runes' share of detected OP_RETURN
+            // outputs only has to slip below it once for the sentence to be
+            // wrong.
+            (
+                "runes-pct",
+                "over 97% so far in 2026",
+                "SELECT 100.0*SUM(runes_count)/NULLIF(SUM(op_return_count),0) \
+                 FROM blocks WHERE timestamp >= strftime('%s','2026-01-01')",
+                97.0,
+                99.5,
+            ),
+            (
+                "witness-share",
+                "well under a tenth of them in a 60 to 70 per cent band",
+                "SELECT 100.0*SUM(CASE WHEN witness_bytes*1.0/size \
+                 BETWEEN 0.60 AND 0.70 THEN 1 ELSE 0 END)/COUNT(*) \
+                 FROM (SELECT witness_bytes, size FROM blocks \
+                 ORDER BY height DESC LIMIT 10000) WHERE size > 0",
+                0.0,
+                8.0,
+            ),
+            // "6.5% across both 2023 and 2024" is one sentence making two
+            // claims, and they are guarded separately because the point of it
+            // is that the two years agreed. A single row averaging them would
+            // still read 6.5 if one rose and the other fell.
+            (
+                "fee-revenue-share",
+                "6.5% across both 2023 and 2024: the 2023 half",
+                "SELECT 100.0*SUM(total_fees)/SUM(total_fees + 625000000) \
+                 FROM blocks WHERE timestamp >= strftime('%s','2023-01-01') \
+                 AND timestamp < strftime('%s','2024-01-01')",
+                6.2,
+                6.8,
+            ),
+            (
+                "fee-revenue-share",
+                "6.5% across both 2023 and 2024: the 2024 half",
+                "SELECT 100.0*SUM(total_fees)/SUM(total_fees + \
+                 CASE WHEN height < 840000 THEN 625000000 \
+                 ELSE 312500000 END) FROM blocks \
+                 WHERE timestamp >= strftime('%s','2024-01-01') \
+                 AND timestamp < strftime('%s','2025-01-01')",
+                6.2,
+                6.8,
+            ),
+            (
+                "fee-revenue-share",
+                "1.03% in 2025",
+                "SELECT 100.0*SUM(total_fees)/SUM(total_fees + 312500000) \
+                 FROM blocks WHERE timestamp >= strftime('%s','2025-01-01') \
+                 AND timestamp < strftime('%s','2026-01-01')",
+                1.0,
+                1.06,
+            ),
+            (
+                "fee-revenue-share",
+                "the record is 93.2%",
+                "SELECT 100.0*total_fees/(total_fees + 625000000) \
+                 FROM blocks WHERE height = 818087",
+                93.15,
+                93.25,
+            ),
             // The per-block arm's dispersion is the point the technical text
             // makes, so the median and the 95th percentile are guarded as a
             // pair. One without the other would let the gap between them
@@ -4513,9 +4576,6 @@ mod tests {
     const KNOWN_UNGUARDED: &[(&str, &str)] = &[
         ("batching", "1.7"),
         ("empty-blocks", "90,000"),
-        ("fee-revenue-share", "1.03%"),
-        ("fee-revenue-share", "6.5%"),
-        ("fee-revenue-share", "93.2%"),
         ("inscription-envelope", "17.9%"),
         ("inscription-envelope", "190,000"),
         ("inscription-envelope", "94%"),
@@ -4525,12 +4585,10 @@ mod tests {
         ("multi-velocity", "98"),
         ("op-block-share", "63.1%"),
         ("protocol-fees", "125,000"),
-        ("runes-pct", "97%"),
         ("time-dist", "0.3%"),
         ("time-dist", "4.5%"),
         ("time-dist", "63.9%"),
         ("unified-volume", "6.4"),
-        ("witness-share", "70"),
     ];
 
     /// You cannot ship a number the drift test has never heard of.
