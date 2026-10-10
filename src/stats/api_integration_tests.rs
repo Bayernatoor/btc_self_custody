@@ -254,6 +254,9 @@ fn seed_block(app: &TestApp, height: u64, hash: &str, time: u64) {
         coinbase_text: String::new(),
         fee_rate_p25: 0.0,
         fee_rate_p75: 0.0,
+        // The fields under test are named above; the rest default to zero,
+        // which is meaningful here because every one is a counter or a value.
+        ..Default::default()
     };
     db::insert_blocks(&conn, &[block]).expect("insert block");
 }

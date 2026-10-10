@@ -91,6 +91,17 @@ fn is_bare_multisig(s: &bitcoin::Script) -> bool {
     )
 }
 
+/// Core's `TxoutType::ANCHOR`: witness v1 with the exact two-byte program
+/// `0x4e73`, standardised in Core 28 as the ephemeral anchor and used by
+/// Lightning for CPFP fee bumping.
+///
+/// `rust-bitcoin`'s `is_p2tr` requires a 32-byte program, so this does not
+/// collide with Taproot; matched on the whole script because the pattern is
+/// four bytes and exact.
+fn is_p2a(s: &bitcoin::Script) -> bool {
+    s.as_bytes() == [0x51, 0x02, 0x4e, 0x73]
+}
+
 /// The string Core would put in `scriptPubKey.type`.
 ///
 /// Only the labels `parse_block_value` actually branches on need to be exact.
@@ -101,6 +112,8 @@ fn is_bare_multisig(s: &bitcoin::Script) -> bool {
 fn script_type(s: &bitcoin::Script) -> &'static str {
     if is_bare_multisig(s) {
         "multisig"
+    } else if is_p2a(s) {
+        "anchor"
     } else if s.is_op_return() {
         "nulldata"
     } else if s.is_p2pk() {
@@ -258,6 +271,7 @@ fn synthesize_block_value(block: &bitcoin::Block, height: u64) -> Value {
                 .collect();
 
             json!({
+                "version": tx.version.0,
                 "size": tx.total_size(),
                 "vsize": tx.vsize(),
                 "locktime": tx.lock_time.to_consensus_u32(),
@@ -482,6 +496,32 @@ pub struct Block {
     pub segwit_spend_count: u64,
     /// Taproot v1 witness outputs created (not spends). Named _spend_ for historical reasons.
     pub taproot_spend_count: u64,
+    /// Pay-to-anchor outputs (`OP_1 PUSH2 0x4e73`), the ephemeral anchor
+    /// standardised in Core 28 and used by Lightning for CPFP fee bumping.
+    /// Core labels these `anchor`; before this existed they fell into
+    /// `unknown_script_count`, where they had grown to ~7% of all outputs.
+    pub p2a_count: u64,
+    /// Largest single OP_RETURN script in the block, in bytes.
+    ///
+    /// `op_return_bytes` is a total and so cannot separate "more OP_RETURNs"
+    /// from "bigger OP_RETURNs". This is what shows whether v30's relaxed
+    /// datacarrier policy was actually used: the ceiling was an absolute 83
+    /// bytes before it and payloads of 397 have been seen since.
+    pub op_return_max_bytes: u64,
+    /// OP_RETURN outputs above the old 80-byte datacarrier limit.
+    pub op_return_over_80_count: u64,
+    /// Non-coinbase transactions by version. v3 is TRUC.
+    pub tx_v1_count: u64,
+    pub tx_v2_count: u64,
+    pub tx_v3_count: u64,
+    /// Satoshis created into output types whose public key is exposed by
+    /// construction, for the post-quantum section. Creation, not holdings:
+    /// current exposed supply needs a UTXO snapshot.
+    pub p2pk_value: u64,
+    pub p2tr_value: u64,
+    pub multisig_value: u64,
+    /// Witness bytes of transactions carrying a BRC-20 payload.
+    pub brc20_bytes: u64,
     // Output script type counts
     pub p2pk_count: u64,
     pub p2pkh_count: u64,
@@ -1073,6 +1113,16 @@ impl BitcoinRpc {
         let mut data_carrier_bytes = 0u64;
         let mut segwit_spend_count = 0u64;
         let mut taproot_spend_count = 0u64;
+        let mut p2a_count = 0u64;
+        let mut op_return_max_bytes = 0u64;
+        let mut op_return_over_80_count = 0u64;
+        let mut tx_v1_count = 0u64;
+        let mut tx_v2_count = 0u64;
+        let mut tx_v3_count = 0u64;
+        let mut p2pk_value = 0u64;
+        let mut p2tr_value = 0u64;
+        let mut multisig_value = 0u64;
+        let mut brc20_bytes = 0u64;
         let mut p2pk_count = 0u64;
         let mut p2pkh_count = 0u64;
         let mut p2sh_count = 0u64;
@@ -1099,6 +1149,17 @@ impl BitcoinRpc {
 
         if let Some(txs) = result["tx"].as_array() {
             for tx in txs.iter().skip(1) {
+                // Transaction version. v3 is TRUC, which Lightning's next
+                // generation is built on and which is only just appearing.
+                // Counted rather than stored per transaction, since the
+                // blocks table is one row per block.
+                match tx["version"].as_u64() {
+                    Some(1) => tx_v1_count += 1,
+                    Some(2) => tx_v2_count += 1,
+                    Some(3) => tx_v3_count += 1,
+                    _ => {}
+                }
+
                 // --- Fees ---
                 let mut this_fee_sats = 0u64;
                 if let Some(fee_btc) = tx["fee"].as_f64() {
@@ -1183,6 +1244,11 @@ impl BitcoinRpc {
                                             "7b2270223a226272632d3230",
                                         ) {
                                             brc20_count += 1;
+                                            // The envelope bytes of the item
+                                            // that matched, so the pair reads
+                                            // like inscription_count and
+                                            // inscription_envelope_bytes do.
+                                            brc20_bytes += item_bytes;
                                         }
                                     }
                                 }
@@ -1260,18 +1326,28 @@ impl BitcoinRpc {
                     output_count += vouts.len() as u64;
                     for vout in vouts {
                         // Sum output values (excludes coinbase: measures actual transfers)
-                        if let Some(val) = vout["value"].as_f64() {
-                            total_output_value +=
-                                (val * 100_000_000.0).round() as u64;
-                        }
+                        let sats = vout["value"]
+                            .as_f64()
+                            .map(|v| (v * 100_000_000.0).round() as u64)
+                            .unwrap_or(0);
+                        total_output_value += sats;
                         match vout["scriptPubKey"]["type"].as_str() {
-                            Some("pubkey") => p2pk_count += 1,
+                            Some("pubkey") => {
+                                p2pk_count += 1;
+                                p2pk_value += sats;
+                            }
                             Some("pubkeyhash") => p2pkh_count += 1,
                             Some("scripthash") => p2sh_count += 1,
                             Some("witness_v0_keyhash") => p2wpkh_count += 1,
                             Some("witness_v0_scripthash") => p2wsh_count += 1,
+                            // Core 28's pay-to-anchor. Counted on its own
+                            // rather than left in the unknown bucket, where
+                            // it had reached ~7% of outputs and was being
+                            // described in copy as "unclassified scripts".
+                            Some("anchor") => p2a_count += 1,
                             Some("witness_v1_taproot") => {
                                 p2tr_count += 1;
+                                p2tr_value += sats;
                                 taproot_spend_count += 1;
                             }
                             Some("nulldata") => {
@@ -1280,6 +1356,20 @@ impl BitcoinRpc {
                                     vout["scriptPubKey"]["hex"].as_str()
                                 {
                                     let bytes = (hex.len() as u64) / 2;
+                                    // Tracked before classification, so the
+                                    // witness commitment and every protocol
+                                    // are measured alike: the question these
+                                    // answer is how big a payload policy
+                                    // allowed, not whose it was.
+                                    if bytes > op_return_max_bytes {
+                                        op_return_max_bytes = bytes;
+                                    }
+                                    // 83 = OP_RETURN + pushdata + 80 payload,
+                                    // the old datacarrier ceiling as it
+                                    // appears on chain.
+                                    if bytes > 83 {
+                                        op_return_over_80_count += 1;
+                                    }
                                     let classification =
                                         classifier::classify(hex, height);
                                     match classification {
@@ -1308,6 +1398,7 @@ impl BitcoinRpc {
                             }
                             Some("multisig") => {
                                 multisig_count += 1;
+                                multisig_value += sats;
                                 // Stamps: bare multisig with fake pubkeys (data encoding).
                                 // Real compressed pubkeys start with 02 or 03. If the hex
                                 // contains keys that don't, it's likely a Stamps output.
@@ -1438,6 +1529,16 @@ impl BitcoinRpc {
             miner,
             segwit_spend_count,
             taproot_spend_count,
+            p2a_count,
+            op_return_max_bytes,
+            op_return_over_80_count,
+            tx_v1_count,
+            tx_v2_count,
+            tx_v3_count,
+            p2pk_value,
+            p2tr_value,
+            multisig_value,
+            brc20_bytes,
             taproot_keypath_count,
             taproot_scriptpath_count,
             p2pk_count,
@@ -1793,6 +1894,12 @@ mod raw_parity {
         481823, 481824, 481825, 709631, 709632, 709633, 767430, 775000, 836964,
         839842, 840000, 892279, 900000, 930000, 941999, 942000, 942001, 960000,
         968000,
+        // Recent blocks, and not for coverage. Without these the sample held
+        // no pay-to-anchor outputs and no OP_RETURN above 83 bytes, so
+        // `p2a_count`, `op_return_max_bytes` and `op_return_over_80_count`
+        // compared zero against zero and asserted nothing. Both phenomena
+        // post-date 968,000.
+        969000, 970000, 970500, 970800,
     ];
 
     fn rpc_from_env() -> Option<BitcoinRpc> {
