@@ -930,13 +930,13 @@
                 body.appendChild(bdRow('Difficulty', b.difficulty != null ? (b.difficulty / 1e12).toFixed(2) + ' T' : '\u2014'));
 
                 // -- Adoption --
-                var hasAdoption = (b.segwit_spend_count || 0) > 0 || (b.taproot_spend_count || 0) > 0;
+                var hasAdoption = (b.segwit_spend_count || 0) > 0 || (b.p2tr_count || 0) > 0;
                 if (hasAdoption) {
                     body.appendChild(bdDivider());
                     body.appendChild(bdSection('Adoption'));
                     if (b.segwit_spend_count > 0)
                         body.appendChild(bdRow('SegWit Txs', b.segwit_spend_count.toLocaleString()));
-                    if (b.taproot_spend_count > 0)
+                    if (b.p2tr_count > 0)
                         body.appendChild(bdRow('Taproot outputs created', b.p2tr_count.toLocaleString()));
                 }
 
