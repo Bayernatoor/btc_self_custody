@@ -1467,3 +1467,143 @@ impl BitcoinRpc {
         Ok(result)
     }
 }
+
+/// Spike, 2026-10-10: does `rust-bitcoin` classify output scripts the same
+/// way Bitcoin Core does?
+///
+/// This is the highest-risk unknown in `notes/raw-block-sweep-scope.md`. Today
+/// every address-type chart is built from Core's `scriptPubKey.type` string,
+/// which a raw block does not carry, so a raw parser has to reproduce Core's
+/// `Solver()` semantics or those charts all shift under us.
+///
+/// Fixture is (hex, Core's label) pairs pulled from the node across nine
+/// blocks spanning 2010 to 2026. Run:
+///
+/// ```text
+/// cargo test --features ssr spike_script_types -- --ignored --nocapture
+/// ```
+#[cfg(test)]
+mod spike {
+    use bitcoin::hex::FromHex;
+    use bitcoin::ScriptBuf;
+    use std::collections::BTreeMap;
+
+    /// Core's `TxoutType::MULTISIG`: `OP_m <pubkey>..<pubkey> OP_n
+    /// OP_CHECKMULTISIG`, with `n` matching the pubkey count and `m <= n`.
+    ///
+    /// `rust-bitcoin` has no predicate for this, which is the one gap the
+    /// spike found: every other type it answers identically to Core. Bare
+    /// multisig is also what the Stamps protocol abuses to store data, so
+    /// `multisig_count` is load-bearing for the embedded-data charts rather
+    /// than a curiosity.
+    fn is_bare_multisig(s: &ScriptBuf) -> bool {
+        use bitcoin::opcodes::all::OP_CHECKMULTISIG;
+        use bitcoin::script::Instruction;
+
+        let ins: Vec<Instruction> = match s.instructions().collect() {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        if ins.len() < 4 {
+            return false;
+        }
+        let small_int = |i: &Instruction| -> Option<u8> {
+            match i {
+                Instruction::Op(op) => {
+                    let n = op.to_u8();
+                    // OP_1 (0x51) through OP_16 (0x60).
+                    (0x51..=0x60).contains(&n).then_some(n - 0x50)
+                }
+                _ => None,
+            }
+        };
+        if !matches!(ins.last(), Some(Instruction::Op(op)) if *op == OP_CHECKMULTISIG)
+        {
+            return false;
+        }
+        let m = match small_int(&ins[0]) {
+            Some(m) => m,
+            None => return false,
+        };
+        let n = match small_int(&ins[ins.len() - 2]) {
+            Some(n) => n,
+            None => return false,
+        };
+        let keys = &ins[1..ins.len() - 2];
+        if keys.len() != n as usize || m == 0 || m > n {
+            return false;
+        }
+        keys.iter().all(|i| {
+            matches!(i, Instruction::PushBytes(b)
+                if b.len() == 33 || b.len() == 65)
+        })
+    }
+
+    /// What our registry buckets outputs into, mirroring the match arms in
+    /// `get_block_fresh`.
+    fn ours(s: &ScriptBuf) -> &'static str {
+        if is_bare_multisig(s) {
+            return "multisig";
+        }
+        if s.is_op_return() {
+            "nulldata"
+        } else if s.is_p2pk() {
+            "pubkey"
+        } else if s.is_p2pkh() {
+            "pubkeyhash"
+        } else if s.is_p2sh() {
+            "scripthash"
+        } else if s.is_p2wpkh() {
+            "witness_v0_keyhash"
+        } else if s.is_p2wsh() {
+            "witness_v0_scripthash"
+        } else if s.is_p2tr() {
+            "witness_v1_taproot"
+        } else {
+            "other"
+        }
+    }
+
+    #[test]
+    #[ignore]
+    fn spike_script_types() {
+        let path = std::env::var("SPK_FIXTURE")
+            .unwrap_or_else(|_| "/tmp/claude-1000/spk_fixture.json".into());
+        let raw = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("fixture {path}: {e}"));
+        let rows: Vec<serde_json::Value> =
+            serde_json::from_str(&raw).expect("fixture json");
+
+        let mut agree: BTreeMap<String, u64> = BTreeMap::new();
+        let mut disagree: BTreeMap<(String, String), u64> = BTreeMap::new();
+        for r in &rows {
+            let core = r["type"].as_str().unwrap_or("?").to_string();
+            let hex = r["hex"].as_str().unwrap_or("");
+            let bytes = match Vec::<u8>::from_hex(hex) {
+                Ok(b) => b,
+                Err(e) => panic!("hex {hex}: {e}"),
+            };
+            let script = ScriptBuf::from_bytes(bytes);
+            let mine = ours(&script).to_string();
+            if mine == core {
+                *agree.entry(core).or_default() += 1;
+            } else {
+                *disagree.entry((core, mine)).or_default() += 1;
+            }
+        }
+        println!("\n--- agree ---");
+        for (t, n) in &agree {
+            println!("  {n:6}  {t}");
+        }
+        println!("--- DISAGREE (core -> rust-bitcoin) ---");
+        if disagree.is_empty() {
+            println!("  none");
+        }
+        for ((c, m), n) in &disagree {
+            println!("  {n:6}  {c:24} -> {m}");
+        }
+        let bad: u64 = disagree.values().sum();
+        let tot: u64 = agree.values().sum::<u64>() + bad;
+        println!("\n{bad} of {tot} disagree\n");
+    }
+}

@@ -54,6 +54,12 @@ r2d2 = { version = "0.8", optional = true }
 r2d2_sqlite = { version = "0.25", optional = true }
 reqwest = { version = "0.12", features = ["json"], optional = true }
 futures = { version = "0.3", optional = true }
+# Consensus block deserialization, for parsing raw blocks fetched at
+# `getblock` verbosity 0 instead of making the node build 10 MB of JSON per
+# block. Pinned exactly and ssr-only: it must never reach the WASM bundle.
+# `default-features = false` drops secp-recovery, which is signature
+# recovery we have no use for; this is a parsing dependency only.
+bitcoin = { version = "=0.32.102", default-features = false, features = ["std"], optional = true }
 thiserror = { version = "2", optional = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
 zeromq = { version = "0.4", optional = true }
@@ -72,7 +78,7 @@ tempfile = "3"
 [features]
 default = ["ssr"]
 hydrate = ["leptos/hydrate"]
-ssr = ["dep:axum", "dep:leptos_axum", "dep:tokio", "leptos/ssr", "leptos-use/ssr", "dep:rusqlite", "dep:r2d2", "dep:r2d2_sqlite", "dep:reqwest", "dep:futures", "dep:thiserror", "dep:tracing-subscriber", "dep:zeromq", "dep:sha2", "dep:tower-http"]
+ssr = ["dep:axum", "dep:leptos_axum", "dep:tokio", "leptos/ssr", "leptos-use/ssr", "dep:rusqlite", "dep:r2d2", "dep:r2d2_sqlite", "dep:reqwest", "dep:futures", "dep:bitcoin", "dep:thiserror", "dep:tracing-subscriber", "dep:zeromq", "dep:sha2", "dep:tower-http"]
 
 [package.metadata.leptos]
 # Required once a second [[bin]] target exists in this crate, so
