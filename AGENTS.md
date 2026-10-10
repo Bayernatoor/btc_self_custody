@@ -319,6 +319,11 @@ gitignored, so nothing in it reaches a fresh clone or another machine.
   fails in sandboxed runs.
 - Comments explain why the current code is as it is, never how it got there.
 - Prefer writing under 50 lines to adding a dependency. Lock exact versions.
+- **That rule does not cover implementing a standard someone else has already vetted.** The point
+  of this site is that the data comes from our own node; it is not that we hand-roll consensus
+  parsing, cryptography or encodings to avoid a crate. Where a vetted implementation of a
+  specification exists, use it and pin it. The rule exists to stop casual dependency growth for
+  things we could write correctly in an afternoon, not to make us reimplement the block format.
 - Never drop a table. `ALTER TABLE` plus a backfill.
 - Compute in Rust, not JS. JS is for rendering only.
 - `tasks/lessons.md` gets updated right after a correction, not at session end.
