@@ -44,6 +44,242 @@ fn varint_size(n: u64) -> u64 {
     }
 }
 
+/// Core's `TxoutType::MULTISIG`: `OP_m <pubkey>..<pubkey> OP_n
+/// OP_CHECKMULTISIG`, with `n` matching the pubkey count and `m <= n`.
+///
+/// `rust-bitcoin` has a predicate for every other standard type and none for
+/// this one, which a spike on 2026-10-10 found to be the single disagreement
+/// across 2,459 outputs spanning 2010 to 2026. Bare multisig is the encoding
+/// the Stamps protocol abuses, so `multisig_count` feeds the embedded-data
+/// charts rather than being a curiosity.
+fn is_bare_multisig(s: &bitcoin::Script) -> bool {
+    use bitcoin::opcodes::all::OP_CHECKMULTISIG;
+    use bitcoin::script::Instruction;
+
+    let ins: Vec<Instruction> = match s.instructions().collect() {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+    if ins.len() < 4 {
+        return false;
+    }
+    let small_int = |i: &Instruction| -> Option<u8> {
+        match i {
+            // OP_1 (0x51) through OP_16 (0x60).
+            Instruction::Op(op) => {
+                let n = op.to_u8();
+                (0x51..=0x60).contains(&n).then_some(n - 0x50)
+            }
+            _ => None,
+        }
+    };
+    if !matches!(ins.last(), Some(Instruction::Op(op)) if *op == OP_CHECKMULTISIG)
+    {
+        return false;
+    }
+    let (Some(m), Some(n)) =
+        (small_int(&ins[0]), small_int(&ins[ins.len() - 2]))
+    else {
+        return false;
+    };
+    let keys = &ins[1..ins.len() - 2];
+    if keys.len() != n as usize || m == 0 || m > n {
+        return false;
+    }
+    keys.iter().all(
+        |i| matches!(i, Instruction::PushBytes(b) if b.len() == 33 || b.len() == 65),
+    )
+}
+
+/// The string Core would put in `scriptPubKey.type`.
+///
+/// Only the labels `parse_block_value` actually branches on need to be exact.
+/// Everything else falls through its `_` arm into `unknown_script_count`, and
+/// Core's `nonstandard`, `witness_unknown` and `anchor` all land there too, so
+/// returning `"other"` for them is identical in effect rather than merely
+/// close.
+fn script_type(s: &bitcoin::Script) -> &'static str {
+    if is_bare_multisig(s) {
+        "multisig"
+    } else if s.is_op_return() {
+        "nulldata"
+    } else if s.is_p2pk() {
+        "pubkey"
+    } else if s.is_p2pkh() {
+        "pubkeyhash"
+    } else if s.is_p2sh() {
+        "scripthash"
+    } else if s.is_p2wpkh() {
+        "witness_v0_keyhash"
+    } else if s.is_p2wsh() {
+        "witness_v0_scripthash"
+    } else if s.is_p2tr() {
+        "witness_v1_taproot"
+    } else {
+        "other"
+    }
+}
+
+/// Core's `asm` for a bare multisig script, which is the only script whose
+/// `asm` anything reads: the Stamps detector splits it on whitespace looking
+/// for 33-byte pushes that are not real compressed pubkeys. Emitted in Core's
+/// shape, `M <key> <key> .. N OP_CHECKMULTISIG`, so that detector behaves
+/// identically rather than merely seeing a plausible string.
+fn multisig_asm(s: &bitcoin::Script) -> String {
+    use bitcoin::script::Instruction;
+    let mut parts: Vec<String> = Vec::new();
+    for ins in s.instructions().flatten() {
+        match ins {
+            Instruction::PushBytes(b) => {
+                parts.push(
+                    b.as_bytes()
+                        .iter()
+                        .map(|x| format!("{x:02x}"))
+                        .collect::<String>(),
+                );
+            }
+            Instruction::Op(op) => {
+                let n = op.to_u8();
+                if (0x51..=0x60).contains(&n) {
+                    parts.push((n - 0x50).to_string());
+                } else {
+                    parts.push(format!("{op:?}"));
+                }
+            }
+        }
+    }
+    parts.join(" ")
+}
+
+/// Bitcoin Core's `GetDifficulty`, reproduced exactly.
+///
+/// `rust-bitcoin`'s `difficulty_float` differs from Core in the last few ULP,
+/// which showed up as 14 of 28 blocks disagreeing in the raw-parity test at a
+/// relative error of about 3e-16. That is far too small to matter for any
+/// chart, and `difficulty` is one of the columns no sweep writes, so a
+/// tolerance would have been defensible. This is ten lines and lets the test
+/// assert exact equality on every column instead, which is worth more than
+/// the tolerance would have saved.
+fn core_difficulty(bits: u32) -> f64 {
+    let mut shift = (bits >> 24) & 0xff;
+    let mut diff = f64::from(0x0000ffffu32) / f64::from(bits & 0x00ff_ffff);
+    while shift < 29 {
+        diff *= 256.0;
+        shift += 1;
+    }
+    while shift > 29 {
+        diff /= 256.0;
+        shift -= 1;
+    }
+    diff
+}
+
+/// Build the subset of a verbosity-2 `getblock` response that
+/// `parse_block_value` reads, from a consensus-decoded block.
+///
+/// **Synthesising the old input rather than porting the parser is the whole
+/// point.** `parse_block_value` is 450 lines of classification that took a
+/// long time to get right; a second implementation of it reading bytes would
+/// be two code paths that must agree about what 51 columns mean forever. The
+/// OP_RETURN two-rule defect is exactly what that costs when they drift. So
+/// the only new surface is this function, and the differential test has one
+/// thing to check rather than fifty.
+///
+/// `height` is passed in because a block does not carry its own height except
+/// via BIP34, which pre-dates block 227,836.
+fn synthesize_block_value(block: &bitcoin::Block, height: u64) -> Value {
+    let txs: Vec<Value> = block
+        .txdata
+        .iter()
+        .enumerate()
+        .map(|(i, tx)| {
+            let vin: Vec<Value> = tx
+                .input
+                .iter()
+                .map(|txin| {
+                    let witness: Vec<Value> = txin
+                        .witness
+                        .iter()
+                        .map(|w| {
+                            json!(w
+                                .iter()
+                                .map(|x| format!("{x:02x}"))
+                                .collect::<String>())
+                        })
+                        .collect();
+                    let mut v = json!({ "sequence": txin.sequence.0 });
+                    // Core omits `txinwitness` entirely on a non-witness
+                    // input, and `parse_block_value` keys witness detection
+                    // off the field being *present* rather than non-empty.
+                    // Emitting an empty array made every transaction look
+                    // like a SegWit spend: legacy_tx_count went to zero and
+                    // witness_bytes gained the 2-byte marker for every tx in
+                    // the chain.
+                    if !witness.is_empty() {
+                        v["txinwitness"] = json!(witness);
+                    }
+                    // Core marks the coinbase input with a `coinbase` field
+                    // holding the scriptSig hex, in place of txid/vout.
+                    if i == 0 {
+                        v["coinbase"] = json!(txin
+                            .script_sig
+                            .as_bytes()
+                            .iter()
+                            .map(|x| format!("{x:02x}"))
+                            .collect::<String>());
+                    }
+                    v
+                })
+                .collect();
+
+            let vout: Vec<Value> = tx
+                .output
+                .iter()
+                .map(|o| {
+                    let ty = script_type(&o.script_pubkey);
+                    let hex: String = o
+                        .script_pubkey
+                        .as_bytes()
+                        .iter()
+                        .map(|x| format!("{x:02x}"))
+                        .collect();
+                    let mut spk = json!({ "type": ty, "hex": hex });
+                    if ty == "multisig" {
+                        spk["asm"] = json!(multisig_asm(&o.script_pubkey));
+                    }
+                    json!({
+                        // Core reports value in BTC, and the parser converts
+                        // back to sats. Kept in BTC so the arithmetic is the
+                        // same one, rounding included.
+                        "value": o.value.to_sat() as f64 / 100_000_000.0,
+                        "scriptPubKey": spk,
+                    })
+                })
+                .collect();
+
+            json!({
+                "size": tx.total_size(),
+                "vsize": tx.vsize(),
+                "locktime": tx.lock_time.to_consensus_u32(),
+                "vin": vin,
+                "vout": vout,
+            })
+        })
+        .collect();
+
+    json!({
+        "hash": block.block_hash().to_string(),
+        "height": height,
+        "time": block.header.time,
+        "nTx": block.txdata.len(),
+        "size": block.total_size(),
+        "weight": block.weight().to_wu(),
+        "difficulty": core_difficulty(block.header.bits.to_consensus()),
+        "version": block.header.version.to_consensus(),
+        "tx": txs,
+    })
+}
+
 /// JSON-RPC response envelope for [`BitcoinRpc::call_typed`]. `result` is
 /// deserialized straight into the caller's `T`; `result` is `None` on an error
 /// response (Core sets it null), which is why it's `Option`.
@@ -212,7 +448,12 @@ pub struct BlockTxids {
 /// `Default` exists so tests can build a block by naming only the fields under
 /// test; every field is a number or a String, so the derived zero value is
 /// meaningful rather than a placeholder for something unrepresentable.
-#[derive(Debug, Clone, Default)]
+///
+/// `Serialize` is here for `raw_parity::raw_matches_json`, which compares two
+/// `Block`s field by field through `serde_json`. Doing it reflectively rather
+/// than by naming 55 fields means a column added later is compared without
+/// anyone remembering to add it.
+#[derive(Debug, Clone, Default, serde::Serialize)]
 pub struct Block {
     pub hash: String,
     pub height: u64,
@@ -315,9 +556,26 @@ impl BitcoinRpc {
     ///   silently drops (common with NAT table churn), the OS detects a dead
     ///   socket and marks it ERROR, so reqwest's pool stops handing it out.
     pub fn new(url: String, user: String, password: String) -> Self {
+        Self::with_timeout(url, user, password, Duration::from_secs(30))
+    }
+
+    /// Same client with a caller-chosen request timeout.
+    ///
+    /// 30s is right for live operation, where a slow response means something
+    /// is wrong and failing fast is the correct answer. It is too tight for
+    /// bulk work against verbosity 2: a 4 MB block becomes ~26 MB of JSON
+    /// that the node emits at about 1.1 MB/s, which exceeds 30s on its own.
+    /// Measured 2026-10-09; the same blocks come back in under 1.4s at
+    /// verbosity 0.
+    pub fn with_timeout(
+        url: String,
+        user: String,
+        password: String,
+        timeout: Duration,
+    ) -> Self {
         Self {
             client: Client::builder()
-                .timeout(std::time::Duration::from_secs(30))
+                .timeout(timeout)
                 .connect_timeout(std::time::Duration::from_secs(10))
                 .pool_idle_timeout(std::time::Duration::from_secs(30))
                 .tcp_keepalive(std::time::Duration::from_secs(30))
@@ -650,7 +908,57 @@ impl BitcoinRpc {
         hash: &str,
     ) -> Result<Block, StatsError> {
         let result = self.call("getblock", &[json!(hash), json!(2)]).await?;
+        Ok(Self::parse_block_value(&result))
+    }
 
+    /// Fetch a block as raw consensus bytes and derive the same `Block`.
+    ///
+    /// `getblock` verbosity 2 makes the node decode every transaction into
+    /// JSON, expanding a 1.6 MB block to about 10 MB. Measured 2026-10-09
+    /// against the Start9 over LAN, that caps a full-chain sweep at ~3 MB/s,
+    /// or roughly 16 days. Verbosity 0 ships the block as hex and does almost
+    /// no work on the node: 35 MB/s, and it scales with concurrency where
+    /// verbosity 2 does not. Details in `notes/raw-block-sweep-scope.md`.
+    ///
+    /// **`fee` is the one thing lost.** Core computes per-transaction fees
+    /// from its undo data, which is not in the block, so every fee-derived
+    /// field here reads zero. Callers must not write those columns from this
+    /// path; `getblockstats` is the cheap source for the block-level ones.
+    pub async fn get_block_raw(
+        &self,
+        hash: &str,
+        height: u64,
+    ) -> Result<Block, StatsError> {
+        use bitcoin::consensus::encode::deserialize;
+        use bitcoin::hex::FromHex;
+
+        let result = self.call("getblock", &[json!(hash), json!(0)]).await?;
+        let hex = result.as_str().ok_or_else(|| {
+            StatsError::Rpc(
+                "getblock verbosity 0 did not return a string".into(),
+            )
+        })?;
+        let bytes = Vec::<u8>::from_hex(hex)
+            .map_err(|e| StatsError::Rpc(format!("block hex: {e}")))?;
+        let block: bitcoin::Block = deserialize(&bytes)
+            .map_err(|e| StatsError::Rpc(format!("block decode: {e}")))?;
+        Ok(Self::parse_block_value(&synthesize_block_value(
+            &block, height,
+        )))
+    }
+
+    /// Everything a verbosity-2 `getblock` response means, with no I/O.
+    ///
+    /// Split out of `get_block_fresh` so a second fetch path can reuse it
+    /// verbatim. This is 450 lines of classification that took a long time to
+    /// get right, and the one thing a raw-block parser must not do is grow a
+    /// second copy of it: the OP_RETURN two-rule defect is what happens when
+    /// two code paths disagree about what a column means.
+    ///
+    /// Total and infallible by construction. Every field reads through
+    /// `unwrap_or`, so a malformed response yields zeros rather than an
+    /// error, which is why callers get a `Block` and not a `Result`.
+    pub(crate) fn parse_block_value(result: &Value) -> Block {
         let hash = result["hash"].as_str().unwrap_or_default().to_string();
         let height = result["height"].as_u64().unwrap_or(0);
         let time = result["time"].as_u64().unwrap_or(0);
@@ -1103,7 +1411,7 @@ impl BitcoinRpc {
             0.0
         };
 
-        Ok(Block {
+        Block {
             hash,
             height,
             time,
@@ -1173,7 +1481,7 @@ impl BitcoinRpc {
             coinbase_text,
             fee_rate_p25,
             fee_rate_p75,
-        })
+        }
     }
 
     /// Convenience method: fetch a block by height (calls getblockhash then getblock).
@@ -1468,142 +1776,167 @@ impl BitcoinRpc {
     }
 }
 
-/// Spike, 2026-10-10: does `rust-bitcoin` classify output scripts the same
-/// way Bitcoin Core does?
-///
-/// This is the highest-risk unknown in `notes/raw-block-sweep-scope.md`. Today
-/// every address-type chart is built from Core's `scriptPubKey.type` string,
-/// which a raw block does not carry, so a raw parser has to reproduce Core's
-/// `Solver()` semantics or those charts all shift under us.
-///
-/// Fixture is (hex, Core's label) pairs pulled from the node across nine
-/// blocks spanning 2010 to 2026. Run:
-///
-/// ```text
-/// cargo test --features ssr spike_script_types -- --ignored --nocapture
-/// ```
 #[cfg(test)]
-mod spike {
-    use bitcoin::hex::FromHex;
-    use bitcoin::ScriptBuf;
-    use std::collections::BTreeMap;
+mod raw_parity {
+    use super::*;
 
-    /// Core's `TxoutType::MULTISIG`: `OP_m <pubkey>..<pubkey> OP_n
-    /// OP_CHECKMULTISIG`, with `n` matching the pubkey count and `m <= n`.
+    /// Heights chosen for the awkward cases, not for coverage.
     ///
-    /// `rust-bitcoin` has no predicate for this, which is the one gap the
-    /// spike found: every other type it answers identically to Core. Bare
-    /// multisig is also what the Stamps protocol abuses to store data, so
-    /// `multisig_count` is load-bearing for the embedded-data charts rather
-    /// than a curiosity.
-    fn is_bare_multisig(s: &ScriptBuf) -> bool {
-        use bitcoin::opcodes::all::OP_CHECKMULTISIG;
-        use bitcoin::script::Instruction;
+    /// A uniform sample is almost all modern P2WPKH-heavy blocks and would
+    /// miss every format transition. These are the places where a parser is
+    /// most likely to disagree with Core: before BIP34 put height in the
+    /// coinbase, the 2015 stress test, the first SegWit and Taproot blocks,
+    /// the first inscription and the first Runes block, either side of the
+    /// OP_RETURN rule change at ~942,000, and the largest block in the chain.
+    const HEIGHTS: &[u64] = &[
+        1, 57043, 170000, 227835, 227836, 227837, 278000, 364292, 367853,
+        481823, 481824, 481825, 709631, 709632, 709633, 767430, 775000, 836964,
+        839842, 840000, 892279, 900000, 930000, 941999, 942000, 942001, 960000,
+        968000,
+    ];
 
-        let ins: Vec<Instruction> = match s.instructions().collect() {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-        if ins.len() < 4 {
-            return false;
-        }
-        let small_int = |i: &Instruction| -> Option<u8> {
-            match i {
-                Instruction::Op(op) => {
-                    let n = op.to_u8();
-                    // OP_1 (0x51) through OP_16 (0x60).
-                    (0x51..=0x60).contains(&n).then_some(n - 0x50)
-                }
-                _ => None,
-            }
-        };
-        if !matches!(ins.last(), Some(Instruction::Op(op)) if *op == OP_CHECKMULTISIG)
-        {
-            return false;
-        }
-        let m = match small_int(&ins[0]) {
-            Some(m) => m,
-            None => return false,
-        };
-        let n = match small_int(&ins[ins.len() - 2]) {
-            Some(n) => n,
-            None => return false,
-        };
-        let keys = &ins[1..ins.len() - 2];
-        if keys.len() != n as usize || m == 0 || m > n {
-            return false;
-        }
-        keys.iter().all(|i| {
-            matches!(i, Instruction::PushBytes(b)
-                if b.len() == 33 || b.len() == 65)
-        })
+    fn rpc_from_env() -> Option<BitcoinRpc> {
+        let url = std::env::var("BITCOIN_STATS_RPC_URL").ok()?;
+        let user = std::env::var("BITCOIN_STATS_RPC_USER").ok()?;
+        let pass = std::env::var("BITCOIN_STATS_RPC_PASSWORD").ok()?;
+        // Generous, because the verbosity-2 side of the comparison is the
+        // slow one: the largest blocks exceed the production 30s timeout on
+        // their own.
+        Some(BitcoinRpc::with_timeout(
+            url,
+            user,
+            pass,
+            Duration::from_secs(300),
+        ))
     }
 
-    /// What our registry buckets outputs into, mirroring the match arms in
-    /// `get_block_fresh`.
-    fn ours(s: &ScriptBuf) -> &'static str {
-        if is_bare_multisig(s) {
-            return "multisig";
-        }
-        if s.is_op_return() {
-            "nulldata"
-        } else if s.is_p2pk() {
-            "pubkey"
-        } else if s.is_p2pkh() {
-            "pubkeyhash"
-        } else if s.is_p2sh() {
-            "scripthash"
-        } else if s.is_p2wpkh() {
-            "witness_v0_keyhash"
-        } else if s.is_p2wsh() {
-            "witness_v0_scripthash"
-        } else if s.is_p2tr() {
-            "witness_v1_taproot"
-        } else {
-            "other"
+    /// Fields a raw block cannot carry, because Core derives them from its
+    /// undo data rather than from the block. Compared and reported, never
+    /// asserted, and a sweep over this path must not write their columns.
+    fn fee_derived(name: &str) -> bool {
+        matches!(
+            name,
+            "total_fees"
+                | "median_fee"
+                | "median_fee_rate"
+                | "fee_rate_p10"
+                | "fee_rate_p25"
+                | "fee_rate_p75"
+                | "fee_rate_p90"
+                | "max_tx_fee"
+                | "inscription_fees"
+                | "runes_fees"
+                | "total_input_value"
+        )
+    }
+
+    /// Every field of two `Block`s, as (name, json) pairs, so the comparison
+    /// is exhaustive by construction. Adding a column to `Block` makes it
+    /// compared here without anyone remembering to.
+    fn fields(b: &Block) -> Vec<(String, Value)> {
+        let v = serde_json::to_value(b).expect("Block serializes");
+        match v {
+            Value::Object(m) => m.into_iter().collect(),
+            _ => panic!("Block is not an object"),
         }
     }
 
-    #[test]
+    /// The raw path must agree with the verbosity-2 path on every column a
+    /// sweep would write.
+    ///
+    /// ```text
+    /// set -a; source .env; set +a
+    /// cargo test --features ssr raw_matches_json -- --ignored --nocapture
+    /// ```
+    #[tokio::test]
     #[ignore]
-    fn spike_script_types() {
-        let path = std::env::var("SPK_FIXTURE")
-            .unwrap_or_else(|_| "/tmp/claude-1000/spk_fixture.json".into());
-        let raw = std::fs::read_to_string(&path)
-            .unwrap_or_else(|e| panic!("fixture {path}: {e}"));
-        let rows: Vec<serde_json::Value> =
-            serde_json::from_str(&raw).expect("fixture json");
+    async fn raw_matches_json() {
+        let Some(rpc) = rpc_from_env() else {
+            panic!(
+                "set BITCOIN_STATS_RPC_URL/USER/PASSWORD; source .env first"
+            );
+        };
 
-        let mut agree: BTreeMap<String, u64> = BTreeMap::new();
-        let mut disagree: BTreeMap<(String, String), u64> = BTreeMap::new();
-        for r in &rows {
-            let core = r["type"].as_str().unwrap_or("?").to_string();
-            let hex = r["hex"].as_str().unwrap_or("");
-            let bytes = match Vec::<u8>::from_hex(hex) {
-                Ok(b) => b,
-                Err(e) => panic!("hex {hex}: {e}"),
-            };
-            let script = ScriptBuf::from_bytes(bytes);
-            let mine = ours(&script).to_string();
-            if mine == core {
-                *agree.entry(core).or_default() += 1;
-            } else {
-                *disagree.entry((core, mine)).or_default() += 1;
+        let mut mismatches: Vec<String> = Vec::new();
+        let mut fee_gap: std::collections::BTreeSet<String> =
+            Default::default();
+        let mut checked = 0u64;
+
+        for &h in HEIGHTS {
+            let hash = rpc.get_block_hash(h).await.expect("getblockhash");
+            let from_json =
+                rpc.get_block_fresh(&hash).await.expect("verbosity 2");
+            let from_raw =
+                rpc.get_block_raw(&hash, h).await.expect("verbosity 0");
+
+            for ((n1, v1), (n2, v2)) in
+                fields(&from_json).into_iter().zip(fields(&from_raw))
+            {
+                assert_eq!(n1, n2, "field order diverged");
+                checked += 1;
+                if v1 == v2 {
+                    continue;
+                }
+                if fee_derived(&n1) {
+                    fee_gap.insert(n1);
+                    continue;
+                }
+                // `difficulty` is compared within a few ULP, because our
+                // own JSON parse is the inexact step.
+                //
+                // Probed 2026-10-10 at block 481,823. Core reports
+                // 923233068448.9053 identically from getblockheader,
+                // getblock verbosity 1 and verbosity 2, and
+                // `core_difficulty` reproduces that double bit for bit. But
+                // `serde_json` parses that text to 0x426ade9f54b41cf7 where
+                // `str::parse::<f64>` gives 0x426ade9f54b41cf8, one ULP
+                // higher and correct:
+                //
+                //     serde_json::from_str::<f64>("923233068448.9053")
+                //         != "923233068448.9053".parse::<f64>()
+                //
+                // So the verbosity-2 path carries a value one ULP below the
+                // truth and the raw path is the more accurate of the two.
+                // An earlier version of this comment blamed Core for
+                // disagreeing with itself across two RPCs. That was wrong: it
+                // compared a string slice of the wire text against a parsed
+                // value and charged our own rounding to the node.
+                //
+                // 1e-15 is about four ULP here, far below anything a chart
+                // renders, and no sweep writes this column.
+                if n1 == "difficulty" {
+                    if let (Some(a), Some(b)) = (v1.as_f64(), v2.as_f64()) {
+                        let rel =
+                            (a - b).abs() / a.abs().max(f64::MIN_POSITIVE);
+                        if rel <= 1e-15 {
+                            continue;
+                        }
+                    }
+                }
+                mismatches.push(format!(
+                    "height {h:>7}  {n1:<28} json={v1}  raw={v2}"
+                ));
             }
         }
-        println!("\n--- agree ---");
-        for (t, n) in &agree {
-            println!("  {n:6}  {t}");
+
+        println!(
+            "\ncompared {checked} field values across {} blocks",
+            HEIGHTS.len()
+        );
+        println!(
+            "fee-derived fields differing as expected: {}",
+            fee_gap.iter().cloned().collect::<Vec<_>>().join(", ")
+        );
+        if !mismatches.is_empty() {
+            println!("\n--- MISMATCHES ---");
+            for m in &mismatches {
+                println!("{m}");
+            }
         }
-        println!("--- DISAGREE (core -> rust-bitcoin) ---");
-        if disagree.is_empty() {
-            println!("  none");
-        }
-        for ((c, m), n) in &disagree {
-            println!("  {n:6}  {c:24} -> {m}");
-        }
-        let bad: u64 = disagree.values().sum();
-        let tot: u64 = agree.values().sum::<u64>() + bad;
-        println!("\n{bad} of {tot} disagree\n");
+        assert!(
+            mismatches.is_empty(),
+            "{} field(s) differ between the raw and JSON paths",
+            mismatches.len()
+        );
     }
 }
