@@ -4740,6 +4740,8 @@ mod tests {
             unknown_script_count: 0,
             input_count: 0,
             output_count: 0,
+            coinbase_output_count: 0,
+            unspendable_output_count: 0,
             rbf_count: 0,
             witness_bytes: 0,
             inscription_count: 0,
@@ -4947,6 +4949,10 @@ mod tests {
             unknown_script_count: 5,
             input_count: 4000,
             output_count: 5000,
+            // A real block's coinbase contributes outputs to output_count.
+            // Leaving this at zero is what let the batching tests keep
+            // passing while the metric itself changed population.
+            coinbase_output_count: 2,
             rbf_count: 800,
             witness_bytes: 600_000,
             inscription_count: 50,
@@ -4955,6 +4961,10 @@ mod tests {
             brc20_count: 5,
             op_return_count: 100,
             op_return_bytes: 10_000,
+            // 101 unspendable: the 100 user OP_RETURNs plus the coinbase's.
+            // UTXO growth reads this field rather than `op_return_count`,
+            // because Core prunes on IsUnspendable and the two sets differ.
+            unspendable_output_count: 101,
             runes_count: 30,
             runes_bytes: 3_000,
             omni_count: 2,
@@ -5011,9 +5021,15 @@ mod tests {
         let chart = tx_metrics::utxo_growth_chart(&blocks);
         let series = chart.get("series").unwrap().as_array().unwrap();
         let data = series[0].get("data").unwrap().as_array().unwrap();
-        // outputs(5000) - op_return(100) - inputs(4000)
+        // outputs(5000) - unspendable(101) - inputs(4000)
+        //
+        // 899, not 900. `output_count` now counts every output including the
+        // coinbase's, so the coinbase OP_RETURN is created here and has to be
+        // retired here too. The fixture carries one precisely so this test
+        // exercises that; with it at zero the test passed either way, which
+        // is the same blindness its doc comment above describes.
         let val = data[0].as_array().unwrap()[1].as_i64().unwrap();
-        assert_eq!(val, 900);
+        assert_eq!(val, 899);
     }
 
     #[test]

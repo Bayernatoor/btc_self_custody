@@ -335,6 +335,8 @@ pub async fn backfill_extras(rpc: &BitcoinRpc, pool: &DbPool) {
     let started = Instant::now();
     let mut total_done = 0u64;
     let mut total_failed = 0u64;
+    let mut barren_batches = 0u32;
+    const MAX_BARREN_BATCHES: u32 = 3;
 
     loop {
         let heights = {
@@ -353,9 +355,20 @@ pub async fn backfill_extras(rpc: &BitcoinRpc, pool: &DbPool) {
             break;
         }
 
+        // The raw path, not the JSON one.
+        //
+        // `getblock` verbosity 2 makes the node serialize ~10 MB per block,
+        // measured at 3 MB/s against the Start9, which puts a full pass at
+        // about 16 days. Verbosity 0 ships the block and parses it here, at
+        // 35 MB/s: roughly 12 to 14 hours. Measurements are in
+        // `notes/raw-block-sweep-scope.md`.
+        //
+        // A raw block carries no per-transaction fees, which is why this
+        // pairs with `update_block_extras_raw` below and not the full
+        // statement.
         let results: Vec<Result<Block, _>> =
             stream::iter(heights.iter().copied())
-                .map(|h| async move { rpc.fetch_block_by_height(h).await })
+                .map(|h| async move { rpc.fetch_block_raw_by_height(h).await })
                 .buffer_unordered(concurrency())
                 .collect()
                 .await;
@@ -372,6 +385,7 @@ pub async fn backfill_extras(rpc: &BitcoinRpc, pool: &DbPool) {
             }
         }
 
+        let written;
         {
             let conn = match pool.get() {
                 Ok(c) => c,
@@ -380,13 +394,66 @@ pub async fn backfill_extras(rpc: &BitcoinRpc, pool: &DbPool) {
                     return;
                 }
             };
-            if let Err(e) = db::update_block_extras(&conn, &blocks) {
-                tracing::error!("Backfill DB error: {e}");
-                return;
+            // Must stay paired with the raw fetch above: these blocks hold
+            // zero in every fee-derived field, and the full statement would
+            // write those zeros over ~970,000 rows of correct fee data.
+            match db::update_block_extras_raw(&conn, &blocks) {
+                Ok(n) => {
+                    written = n;
+                    if n < blocks.len() {
+                        tracing::warn!(
+                            "Backfill: {} of {} blocks declined on hash \
+                             mismatch, likely a reorg mid-batch; they stay \
+                             eligible for the next pass",
+                            blocks.len() - n,
+                            blocks.len()
+                        );
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Backfill DB error: {e}");
+                    return;
+                }
             }
         }
 
-        total_done += blocks.len() as u64;
+        // Progress is rows written, not blocks fetched.
+        //
+        // A declined write leaves the row eligible, and a failed fetch never
+        // produces one, so counting either as progress lets the loop re-select
+        // the same heights forever. An earlier guard only fired when the batch
+        // was non-empty and wrote nothing, which missed the case where every
+        // fetch failed: `blocks` is then empty, the guard is skipped, and the
+        // loop retries immediately with no backoff. A controlled responder saw
+        // 893 requests in 250ms that way.
+        //
+        // Three consecutive batches with no write means the sweep is not
+        // advancing. Stop and say why rather than hammer the node for hours.
+        if written == 0 {
+            barren_batches += 1;
+            tracing::warn!(
+                "Backfill: batch wrote nothing ({} fetched, {} failed), \
+                 attempt {barren_batches} of {MAX_BARREN_BATCHES}",
+                blocks.len(),
+                heights.len() - blocks.len()
+            );
+            if barren_batches >= MAX_BARREN_BATCHES {
+                tracing::error!(
+                    "Backfill stalled: {MAX_BARREN_BATCHES} consecutive \
+                     batches wrote nothing. Either the node is unreachable or \
+                     these rows hold hashes that are no longer canonical and \
+                     need repair. Stopping rather than looping."
+                );
+                return;
+            }
+            // Back off before retrying, so an unreachable node is not hit
+            // flat out.
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            continue;
+        }
+        barren_batches = 0;
+
+        total_done += written as u64;
         let elapsed = started.elapsed().as_secs_f64();
         let rate = total_done as f64 / elapsed;
         let remaining = needs_backfill.saturating_sub(total_done) as f64 / rate;

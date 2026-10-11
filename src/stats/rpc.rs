@@ -44,51 +44,180 @@ fn varint_size(n: u64) -> u64 {
     }
 }
 
-/// Core's `TxoutType::MULTISIG`: `OP_m <pubkey>..<pubkey> OP_n
-/// OP_CHECKMULTISIG`, with `n` matching the pubkey count and `m <= n`.
+/// Core's `IsUnspendable`: a script starting with `OP_RETURN`, or one larger
+/// than `MAX_SCRIPT_SIZE`. Such an output never enters the UTXO set.
 ///
-/// `rust-bitcoin` has a predicate for every other standard type and none for
-/// this one, which a spike on 2026-10-10 found to be the single disagreement
-/// across 2,459 outputs spanning 2010 to 2026. Bare multisig is the encoding
-/// the Stamps protocol abuses, so `multisig_count` feeds the embedded-data
-/// charts rather than being a curiosity.
+/// Not the same as the `nulldata` Solver label, which additionally requires
+/// the remainder to be push-only. Block 470,000's coinbase holds an
+/// `OP_RETURN "RSKBLOCK:"` that fails that extra test and is `nonstandard`,
+/// yet is still unspendable.
+fn is_unspendable(hex: &str) -> bool {
+    hex.starts_with("6a") || hex.len() > 20_000
+}
+
+/// Core's `CPubKey::ValidSize`: the header byte must agree with the length.
+///
+/// 33 bytes means a compressed key and the header must be 0x02 or 0x03.
+/// 65 bytes means an uncompressed key and the header must be 0x04, 0x06 or
+/// 0x07. Anything else is not a key as far as Core is concerned, however well
+/// it fits the surrounding script.
+///
+/// This is the check `rust-bitcoin`'s `is_p2pk` does not do, and the omission
+/// was not academic: the 2012-era outputs that embedded English text where a
+/// public key belongs match the *shape* of P2PK exactly. Height 181,732 has
+/// three in one transaction, which Core calls `nonstandard` and a shape-only
+/// classifier calls `pubkey`.
+fn valid_pubkey_size(k: &[u8]) -> bool {
+    match k.first() {
+        Some(0x02 | 0x03) => k.len() == 33,
+        Some(0x04 | 0x06 | 0x07) => k.len() == 65,
+        _ => false,
+    }
+}
+
+/// Core's `MatchPayToPubkey`: `<push 33|65> <key> OP_CHECKSIG`, with the key
+/// passing `ValidSize`.
+fn is_core_p2pk(s: &bitcoin::Script) -> bool {
+    use bitcoin::opcodes::all::OP_CHECKSIG;
+    let b = s.as_bytes();
+    for len in [65usize, 33] {
+        if b.len() == len + 2
+            && b[0] as usize == len
+            && b[len + 1] == OP_CHECKSIG.to_u8()
+            && valid_pubkey_size(&b[1..=len])
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// Core's `TxoutType::NULL_DATA`: `OP_RETURN` followed by a **push-only**
+/// remainder.
+///
+/// `rust-bitcoin`'s `is_op_return` tests the first byte alone, so it accepts
+/// scripts Core rejects: `6a76` is `OP_RETURN OP_DUP`, and `6a02ff` is a
+/// truncated push. Core labels both `nonstandard`, which matters because they
+/// would otherwise be counted and classified as embedded data.
+fn is_core_nulldata(s: &bitcoin::Script) -> bool {
+    use bitcoin::opcodes::all::OP_RETURN;
+    use bitcoin::script::Instruction;
+    let b = s.as_bytes();
+    if b.first() != Some(&OP_RETURN.to_u8()) {
+        return false;
+    }
+    let rest = bitcoin::Script::from_bytes(&b[1..]);
+    // `IsPushOnly`: every opcode must parse and be no greater than OP_16. A
+    // parse failure is itself a rejection, which is what makes a truncated
+    // push non-standard.
+    for ins in rest.instructions() {
+        match ins {
+            Ok(Instruction::PushBytes(_)) => {}
+            Ok(Instruction::Op(op)) if op.to_u8() <= 0x60 => {}
+            _ => return false,
+        }
+    }
+    true
+}
+
+/// Core's `GetScriptNumber` plus `CheckMinimalPush`, taking the opcode that
+/// actually encoded the number rather than only its value.
+///
+/// Takes `(offset, instruction)` because `instructions()` alone collapses a
+/// direct push and a `PUSHDATA1` of the same bytes into one `PushBytes`, and
+/// Core rejects the second. A value-only version of this rule still called
+/// `OP_1 <17 keys> PUSHDATA1(0x11) OP_CHECKMULTISIG` a multisig where Core
+/// says `nonstandard`. The script byte at `offset` is the opcode, which
+/// closes that.
+fn script_number_at(
+    script: &bitcoin::Script,
+    offset: usize,
+    ins: &bitcoin::script::Instruction,
+) -> Option<i64> {
+    use bitcoin::script::Instruction;
+    match ins {
+        Instruction::Op(op) => {
+            let n = op.to_u8();
+            match n {
+                0x00 => Some(0),
+                0x51..=0x60 => Some(i64::from(n - 0x50)),
+                _ => None,
+            }
+        }
+        Instruction::PushBytes(b) => {
+            let d = b.as_bytes();
+            let opcode = *script.as_bytes().get(offset)?;
+            if d.is_empty() {
+                return None;
+            }
+            // A value a small-integer opcode could express must use it.
+            if d.len() == 1 && (d[0] <= 16 || d[0] == 0x81) {
+                return None;
+            }
+            // Up to 75 bytes Core requires a direct push, so the opcode is
+            // the length. This is what rejects the PUSHDATA1 forms.
+            if opcode as usize != d.len() || d.len() > 4 {
+                return None;
+            }
+            if d[d.len() - 1] & 0x7f == 0 {
+                return None;
+            }
+            let mut v: i64 = 0;
+            for (i, byte) in d.iter().enumerate() {
+                v |= i64::from(*byte) << (8 * i);
+            }
+            if d[d.len() - 1] & 0x80 != 0 {
+                v &= !(0x80i64 << (8 * (d.len() - 1)));
+                v = -v;
+            }
+            Some(v)
+        }
+    }
+}
+
+/// Core's `MatchMultisig`: `<m> <key>..<key> <n> OP_CHECKMULTISIG`, every key
+/// passing `ValidSize`, `n` matching the key count, `m <= n`, and at most
+/// `MAX_PUBKEYS_PER_MULTISIG` keys.
+///
+/// Bare multisig is the encoding the Stamps protocol abuses, so
+/// `multisig_count` feeds the embedded-data charts rather than being a
+/// curiosity. An independent review found the previous implementation both
+/// too strict, rejecting the 1-of-17 that Core accepts, and too lax, taking
+/// any 33- or 65-byte push as a key.
 fn is_bare_multisig(s: &bitcoin::Script) -> bool {
     use bitcoin::opcodes::all::OP_CHECKMULTISIG;
     use bitcoin::script::Instruction;
 
-    let ins: Vec<Instruction> = match s.instructions().collect() {
-        Ok(v) => v,
-        Err(_) => return false,
-    };
-    if ins.len() < 4 {
+    const MAX_PUBKEYS_PER_MULTISIG: i64 = 20;
+
+    let pairs: Vec<(usize, Instruction)> =
+        match s.instruction_indices().collect() {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+    if pairs.len() < 4 {
         return false;
     }
-    let small_int = |i: &Instruction| -> Option<u8> {
-        match i {
-            // OP_1 (0x51) through OP_16 (0x60).
-            Instruction::Op(op) => {
-                let n = op.to_u8();
-                (0x51..=0x60).contains(&n).then_some(n - 0x50)
-            }
-            _ => None,
-        }
-    };
+    let ins: Vec<Instruction> = pairs.iter().map(|(_, i)| *i).collect();
     if !matches!(ins.last(), Some(Instruction::Op(op)) if *op == OP_CHECKMULTISIG)
     {
         return false;
     }
-    let (Some(m), Some(n)) =
-        (small_int(&ins[0]), small_int(&ins[ins.len() - 2]))
-    else {
+    let last_n = pairs.len() - 2;
+    let (Some(m), Some(n)) = (
+        script_number_at(s, pairs[0].0, &pairs[0].1),
+        script_number_at(s, pairs[last_n].0, &pairs[last_n].1),
+    ) else {
         return false;
     };
     let keys = &ins[1..ins.len() - 2];
-    if keys.len() != n as usize || m == 0 || m > n {
+    if n != keys.len() as i64 || m < 1 || m > n || n > MAX_PUBKEYS_PER_MULTISIG
+    {
         return false;
     }
-    keys.iter().all(
-        |i| matches!(i, Instruction::PushBytes(b) if b.len() == 33 || b.len() == 65),
-    )
+    keys.iter().all(|i| {
+        matches!(i, Instruction::PushBytes(b) if valid_pubkey_size(b.as_bytes()))
+    })
 }
 
 /// Core's `TxoutType::ANCHOR`: witness v1 with the exact two-byte program
@@ -114,9 +243,9 @@ fn script_type(s: &bitcoin::Script) -> &'static str {
         "multisig"
     } else if is_p2a(s) {
         "anchor"
-    } else if s.is_op_return() {
+    } else if is_core_nulldata(s) {
         "nulldata"
-    } else if s.is_p2pk() {
+    } else if is_core_p2pk(s) {
         "pubkey"
     } else if s.is_p2pkh() {
         "pubkeyhash"
@@ -498,17 +627,35 @@ pub struct Block {
     pub taproot_spend_count: u64,
     /// Pay-to-anchor outputs (`OP_1 PUSH2 0x4e73`), the ephemeral anchor
     /// standardised in Core 28 and used by Lightning for CPFP fee bumping.
-    /// Core labels these `anchor`; before this existed they fell into
-    /// `unknown_script_count`, where they had grown to ~7% of all outputs.
+    /// Core labels these `anchor`.
+    ///
+    /// **A subset of `unknown_script_count`, not a sibling.** Anchors are
+    /// still counted there too, so that the eight-type denominator used
+    /// across the chart builders does not shrink by ~7% and inflate every
+    /// other share. Promoting them to a ninth classified type is an open
+    /// decision; see the parser for the full reasoning.
     pub p2a_count: u64,
     /// Largest single OP_RETURN script in the block, in bytes.
     ///
     /// `op_return_bytes` is a total and so cannot separate "more OP_RETURNs"
-    /// from "bigger OP_RETURNs". This is what shows whether v30's relaxed
-    /// datacarrier policy was actually used: the ceiling was an absolute 83
-    /// bytes before it and payloads of 397 have been seen since.
+    /// from "bigger OP_RETURNs". This separates them, which is what makes the
+    /// effect of a datacarrier policy change visible at all.
+    ///
+    /// **It does not prove v30 was used, and an earlier version of this
+    /// comment claimed it did.** 83 bytes was the *standardness* ceiling, not
+    /// a consensus one, so oversized OP_RETURNs predate v30: height 244,591
+    /// carries a 137-byte `nulldata`. What this measures is a threshold being
+    /// crossed, which is a weaker and truer claim.
+    ///
+    /// Non-coinbase only, like every other counter in this loop.
     pub op_return_max_bytes: u64,
-    /// OP_RETURN outputs above the old 80-byte datacarrier limit.
+    /// OP_RETURN outputs whose **script** exceeds 83 bytes.
+    ///
+    /// Script bytes, not payload bytes, and the distinction is not pedantic:
+    /// an 80-byte payload pushed with PUSHDATA2 occupies 84 script bytes and
+    /// trips this counter. 83 is `OP_RETURN` + a one-byte push + 80 payload,
+    /// and `>` rather than `>=` matches Core's `IsStandard`, which compares
+    /// the whole script size against the limit with `>`.
     pub op_return_over_80_count: u64,
     /// Non-coinbase transactions by version. v3 is TRUC.
     pub tx_v1_count: u64,
@@ -520,7 +667,44 @@ pub struct Block {
     pub p2pk_value: u64,
     pub p2tr_value: u64,
     pub multisig_value: u64,
-    /// Witness bytes of transactions carrying a BRC-20 payload.
+    /// Every output the coinbase transaction creates, OP_RETURN included.
+    ///
+    /// `output_count` is now every output in the block, which is
+    /// structurally true but is not what every consumer wants. Batching
+    /// measures outputs per *user* transaction, so it needs
+    /// `output_count - coinbase_output_count`. Without this column that
+    /// subtraction is unrecoverable after a sweep, because nothing else
+    /// stored distinguishes the coinbase's share.
+    pub coinbase_output_count: u64,
+    /// Outputs that can never be spent, by Core's `IsUnspendable`: the
+    /// script begins with `OP_RETURN`, or exceeds `MAX_SCRIPT_SIZE`.
+    ///
+    /// Counted over **every** output, coinbase included, and deliberately
+    /// not derived from the `nulldata` label. Those are different sets, and
+    /// the difference is real chain data: block 470,000's coinbase carries
+    /// `OP_RETURN "RSKBLOCK:"`, which is not push-only, so Core's Solver
+    /// calls it `nonstandard` while `IsUnspendable` still excludes it from
+    /// the UTXO set. Counting by label gave -4,297 there against Core's
+    /// -4,298.
+    ///
+    /// UTXO growth is `output_count - unspendable_output_count -
+    /// input_count`. Keeping this separate from `op_return_count` is what
+    /// lets that stay true: `op_return_count` answers a question about user
+    /// data and carries policy decisions, while this answers a question
+    /// about the UTXO set and carries none.
+    pub unspendable_output_count: u64,
+    /// Bytes of the witness **items** that matched the BRC-20 marker.
+    ///
+    /// Not the witness of the matching transaction, which is what an earlier
+    /// version of this comment said. The unit matters because `brc20_bytes`
+    /// cannot be subtracted from `inscription_bytes`: that field holds an
+    /// estimated payload after envelope overhead, while this holds whole
+    /// matching items, so the residual can go negative. CQ-19's proposed
+    /// volume split needs a consistent basis and does not yet have one.
+    ///
+    /// Two envelopes inside one item count once, and an item mixing BRC-20
+    /// with unrelated data counts in full; a substring test cannot partition
+    /// either case.
     pub brc20_bytes: u64,
     // Output script type counts
     pub p2pk_count: u64,
@@ -915,6 +1099,13 @@ impl BitcoinRpc {
         Ok(hash)
     }
 
+    /// Put a known-wrong hash in the cache, to stand in for a pre-reorg
+    /// response landing after invalidation. Tests only.
+    #[cfg(test)]
+    pub fn poison_block_hash_cache_for_test(&self, height: u64, hash: String) {
+        self.block_hash_cache.put(height, hash);
+    }
+
     /// Force-refresh `getblockhash`, bypassing the cache.
     pub async fn get_block_hash_fresh(
         &self,
@@ -999,6 +1190,30 @@ impl BitcoinRpc {
     /// `unwrap_or`, so a malformed response yields zeros rather than an
     /// error, which is why callers get a `Block` and not a `Result`.
     pub(crate) fn parse_block_value(result: &Value) -> Block {
+        // Hoisted: the coinbase section below is the first to touch it.
+        let mut largest_tx_size = 0u64;
+        // Hoisted above the coinbase section, which is now the first
+        // place these are touched: coinbase outputs are classified by
+        // script type like any other.
+        let mut p2pk_count = 0u64;
+        let mut p2pkh_count = 0u64;
+        let mut p2sh_count = 0u64;
+        let mut p2wpkh_count = 0u64;
+        let mut p2wsh_count = 0u64;
+        let mut p2tr_count = 0u64;
+        let mut multisig_count = 0u64;
+        let mut unknown_script_count = 0u64;
+        let mut p2a_count = 0u64;
+        let mut output_count = 0u64;
+        let mut coinbase_output_count = 0u64;
+        let mut unspendable_output_count = 0u64;
+        let mut taproot_spend_count = 0u64;
+        // Declared up here because the coinbase section below is the first
+        // place they are touched; see the comment there for why the coinbase
+        // counts toward these three and not toward `total_output_value`.
+        let mut p2pk_value = 0u64;
+        let mut p2tr_value = 0u64;
+        let mut multisig_value = 0u64;
         let hash = result["hash"].as_str().unwrap_or_default().to_string();
         let height = result["height"].as_u64().unwrap_or(0);
         let time = result["time"].as_u64().unwrap_or(0);
@@ -1031,12 +1246,124 @@ impl BitcoinRpc {
                 let mut coinbase_value = 0u64;
                 if let Some(vouts) = coinbase_tx["vout"].as_array() {
                     for vout in vouts {
-                        if let Some(val) = vout["value"].as_f64() {
-                            coinbase_value +=
-                                (val * 100_000_000.0).round() as u64;
+                        let sats = vout["value"]
+                            .as_f64()
+                            .map(|v| (v * 100_000_000.0).round() as u64)
+                            .unwrap_or(0);
+                        coinbase_value += sats;
+                        coinbase_output_count += 1;
+                        if is_unspendable(
+                            vout["scriptPubKey"]["hex"].as_str().unwrap_or(""),
+                        ) {
+                            unspendable_output_count += 1;
+                        }
+                        // The exposed-value columns count coinbase outputs,
+                        // unlike `total_output_value` beside them, and the
+                        // difference is deliberate.
+                        //
+                        // `total_output_value` excludes the coinbase because
+                        // it measures transfers, and newly issued coins are
+                        // not a transfer. These three measure value placed
+                        // into script types whose public key is on chain, and
+                        // the 2009-2012 coinbase rewards paid to raw public
+                        // keys are the canonical case of exactly that:
+                        // Satoshi's coins are P2PK coinbase outputs.
+                        //
+                        // Excluding them read 0 where the truth was 50 BTC in
+                        // every early block, which an independent oracle
+                        // caught at heights 1, 57,043 and 170,000. The
+                        // differential test could not: both of its paths run
+                        // this function, so a wrong population is wrong
+                        // identically on both sides.
+                        // Coinbase outputs are classified by script type
+                        // exactly as every other output is, and are counted.
+                        //
+                        // The nine classified types are a partition of
+                        // *spendable* outputs, and a coinbase payout is one.
+                        // Excluding it made block 1 report no outputs at all,
+                        // and the early era, which is almost entirely
+                        // coinbase, read as empty on every address-type
+                        // chart. Modern blocks move by ~0.05%, since a
+                        // coinbase carries a handful of outputs against
+                        // thousands.
+                        //
+                        // `op_return_count` is deliberately *not* included
+                        // here and stays non-coinbase: merged-mining
+                        // commitments are not user data, which is the
+                        // decision the sweep exists to apply. The classified
+                        // denominator excludes OP_RETURN entirely, so the two
+                        // choices do not interact.
+                        match vout["scriptPubKey"]["type"].as_str() {
+                            Some("pubkey") => {
+                                p2pk_count += 1;
+                                p2pk_value += sats;
+                                output_count += 1;
+                            }
+                            Some("pubkeyhash") => {
+                                p2pkh_count += 1;
+                                output_count += 1;
+                            }
+                            Some("scripthash") => {
+                                p2sh_count += 1;
+                                output_count += 1;
+                            }
+                            Some("witness_v0_keyhash") => {
+                                p2wpkh_count += 1;
+                                output_count += 1;
+                            }
+                            Some("witness_v0_scripthash") => {
+                                p2wsh_count += 1;
+                                output_count += 1;
+                            }
+                            Some("witness_v1_taproot") => {
+                                p2tr_count += 1;
+                                p2tr_value += sats;
+                                taproot_spend_count += 1;
+                                output_count += 1;
+                            }
+                            Some("multisig") => {
+                                multisig_count += 1;
+                                multisig_value += sats;
+                                output_count += 1;
+                            }
+                            Some("anchor") => {
+                                p2a_count += 1;
+                                unknown_script_count += 1;
+                                output_count += 1;
+                            }
+                            // `nulldata` is outside the nine classified
+                            // types but inside `output_count`, matching how
+                            // the non-coinbase loop treats it. The
+                            // embedded-data columns still skip coinbase
+                            // OP_RETURNs by decision; only the output tally
+                            // counts them.
+                            //
+                            // This is queue item E, coinbase outputs for UTXO
+                            // growth: `output_count` was short by the whole
+                            // coinbase, measured at 1 to 5 outputs per block
+                            // against mempool.space.
+                            Some("nulldata") => output_count += 1,
+                            _ => {
+                                unknown_script_count += 1;
+                                output_count += 1;
+                            }
                         }
                     }
                 }
+                // The coinbase counts toward the block's largest transaction.
+                //
+                // It is a transaction, and the chart's copy says "the biggest
+                // single transaction in each block". Excluding it made 89,939
+                // coinbase-only blocks store 0, which the chart drew as no
+                // data: 9.3% of the chain, almost all of it the early era.
+                // No modern block changes, since a coinbase is never the
+                // largest there.
+                if let Some(sz) = coinbase_tx["size"].as_u64() {
+                    if sz > largest_tx_size {
+                        largest_tx_size = sz;
+                    }
+                }
+
                 let subsidy = classifier::block_subsidy(height);
                 total_fees = coinbase_value.saturating_sub(subsidy);
 
@@ -1112,34 +1439,19 @@ impl BitcoinRpc {
         let mut data_carrier_count = 0u64;
         let mut data_carrier_bytes = 0u64;
         let mut segwit_spend_count = 0u64;
-        let mut taproot_spend_count = 0u64;
-        let mut p2a_count = 0u64;
         let mut op_return_max_bytes = 0u64;
         let mut op_return_over_80_count = 0u64;
         let mut tx_v1_count = 0u64;
         let mut tx_v2_count = 0u64;
         let mut tx_v3_count = 0u64;
-        let mut p2pk_value = 0u64;
-        let mut p2tr_value = 0u64;
-        let mut multisig_value = 0u64;
         let mut brc20_bytes = 0u64;
-        let mut p2pk_count = 0u64;
-        let mut p2pkh_count = 0u64;
-        let mut p2sh_count = 0u64;
-        let mut p2wpkh_count = 0u64;
-        let mut p2wsh_count = 0u64;
-        let mut p2tr_count = 0u64;
-        let mut multisig_count = 0u64;
-        let mut unknown_script_count = 0u64;
         let mut input_count = 0u64;
-        let mut output_count = 0u64;
         let mut rbf_count = 0u64;
         let mut witness_bytes = 0u64;
         let mut taproot_keypath_count = 0u64;
         let mut taproot_scriptpath_count = 0u64;
         let mut total_output_value = 0u64;
         let mut stamps_count = 0u64;
-        let mut largest_tx_size = 0u64;
         let mut max_tx_fee = 0u64;
         let mut inscription_fees = 0u64;
         let mut runes_fees = 0u64;
@@ -1153,6 +1465,14 @@ impl BitcoinRpc {
                 // generation is built on and which is only just appearing.
                 // Counted rather than stored per transaction, since the
                 // blocks table is one row per block.
+                //
+                // Excludes the coinbase, so these three sum to `nTx - 1`
+                // rather than `nTx`. That matches `legacy_tx_count`,
+                // `segwit_tx_count` and `taproot_tx_count` beside them, all
+                // of which describe user transactions; the coinbase has no
+                // inputs to classify and its version is the miner's choice
+                // rather than a wallet's. Checked against an oracle at ten
+                // heights, where the gap is exactly one every time.
                 match tx["version"].as_u64() {
                     Some(1) => tx_v1_count += 1,
                     Some(2) => tx_v2_count += 1,
@@ -1179,6 +1499,7 @@ impl BitcoinRpc {
                 let mut tx_has_inscription = false;
                 let mut tx_has_runes = false;
                 let mut tx_has_taproot_input = false;
+                let mut inputs_without_witness = 0u64;
 
                 // --- Inputs: counting, SegWit detection, RBF, witness bytes ---
                 // Track largest tx
@@ -1194,6 +1515,9 @@ impl BitcoinRpc {
                     input_count += vins.len() as u64;
                     for vin in vins {
                         // Witness detection + byte counting + inscription detection
+                        if vin["txinwitness"].as_array().is_none() {
+                            inputs_without_witness += 1;
+                        }
                         if let Some(wit) = vin["txinwitness"].as_array() {
                             has_witness = true;
                             // Witness overhead: item count varint per input
@@ -1244,11 +1568,25 @@ impl BitcoinRpc {
                                             "7b2270223a226272632d3230",
                                         ) {
                                             brc20_count += 1;
-                                            // The envelope bytes of the item
-                                            // that matched, so the pair reads
-                                            // like inscription_count and
-                                            // inscription_envelope_bytes do.
-                                            brc20_bytes += item_bytes;
+                                            // Estimated payload bytes, the
+                                            // same basis as
+                                            // `inscription_bytes`, so the
+                                            // CQ-19 volume split can subtract
+                                            // one from the other.
+                                            //
+                                            // It held whole witness items
+                                            // until 2026-10-11, which could
+                                            // not be subtracted from an
+                                            // envelope-adjusted payload
+                                            // without going negative. Two
+                                            // envelopes inside one item still
+                                            // count once, and a mixed item
+                                            // still counts in full; a
+                                            // substring test cannot partition
+                                            // either, and the chart copy has
+                                            // to say so.
+                                            brc20_bytes += item_bytes
+                                                .saturating_sub(overhead);
                                         }
                                     }
                                 }
@@ -1316,6 +1654,17 @@ impl BitcoinRpc {
                     segwit_spend_count += 1;
                     // BIP 141 witness marker (0x00) + flag (0x01) = 2 bytes per witness tx
                     witness_bytes += 2;
+                    // Every input of a witness transaction serializes a
+                    // witness stack, and a non-witness input serializes an
+                    // empty one: a single 0x00 count byte. Core omits those
+                    // from `txinwitness` entirely, so counting only the
+                    // present arrays lost one byte per such input.
+                    //
+                    // Small and real: 128 bytes missing from 935,472 at
+                    // height 970,800, where 128 mixed-input transactions each
+                    // carried one. Independently established by checking
+                    // `tx.size - (tx.weight - tx.size) / 3` against the sum.
+                    witness_bytes += inputs_without_witness;
                 }
                 if is_rbf {
                     rbf_count += 1;
@@ -1325,6 +1674,11 @@ impl BitcoinRpc {
                 if let Some(vouts) = tx["vout"].as_array() {
                     output_count += vouts.len() as u64;
                     for vout in vouts {
+                        if is_unspendable(
+                            vout["scriptPubKey"]["hex"].as_str().unwrap_or(""),
+                        ) {
+                            unspendable_output_count += 1;
+                        }
                         // Sum output values (excludes coinbase: measures actual transfers)
                         let sats = vout["value"]
                             .as_f64()
@@ -1340,11 +1694,47 @@ impl BitcoinRpc {
                             Some("scripthash") => p2sh_count += 1,
                             Some("witness_v0_keyhash") => p2wpkh_count += 1,
                             Some("witness_v0_scripthash") => p2wsh_count += 1,
-                            // Core 28's pay-to-anchor. Counted on its own
-                            // rather than left in the unknown bucket, where
-                            // it had reached ~7% of outputs and was being
-                            // described in copy as "unclassified scripts".
-                            Some("anchor") => p2a_count += 1,
+                            // Core 28's pay-to-anchor, counted on its own
+                            // **and** left in the unknown bucket.
+                            //
+                            // The overlap is deliberate and temporary. These
+                            // had reached ~7% of outputs while sitting in
+                            // `unknown_script_count`, which is where the
+                            // eight-type denominator picks them up. Moving
+                            // them out without also adding `p2a_count` to
+                            // that denominator would shrink it by ~7% and
+                            // silently inflate every other type's share, on
+                            // 28 call sites across the chart builders whose
+                            // copy says "eight classified types".
+                            //
+                            // So the column is additive for now: new data,
+                            // zero change to any existing chart. Whether
+                            // anchors become a ninth classified type is a
+                            // semantics decision about live charts, recorded
+                            // as open in `backfill-scope-2026-09-30.md`.
+                            // Until it is taken, `p2a_count` is a subset of
+                            // `unknown_script_count`, not a sibling of it.
+                            // Counted here **and** left in the unknown
+                            // bucket, deliberately and temporarily.
+                            //
+                            // Promoting anchors to a ninth classified type
+                            // needs them added to four denominators in
+                            // `adoption.rs`, threaded through `BlockSummary`
+                            // for the per-block arm, and drawn as a ninth
+                            // line in `multi-velocity`, whose copy says the
+                            // lines sum to zero. Without all of that the
+                            // denominator loses ~7% and every other share
+                            // inflates.
+                            //
+                            // The parser and database layers for the
+                            // promotion are done; the chart layer is not. So
+                            // this stays a subset of `unknown_script_count`
+                            // until that lands. See
+                            // `notes/overnight-2026-10-11.md`.
+                            Some("anchor") => {
+                                p2a_count += 1;
+                                unknown_script_count += 1;
+                            }
                             Some("witness_v1_taproot") => {
                                 p2tr_count += 1;
                                 p2tr_value += sats;
@@ -1539,6 +1929,8 @@ impl BitcoinRpc {
             p2tr_value,
             multisig_value,
             brc20_bytes,
+            coinbase_output_count,
+            unspendable_output_count,
             taproot_keypath_count,
             taproot_scriptpath_count,
             p2pk_count,
@@ -1583,6 +1975,33 @@ impl BitcoinRpc {
             fee_rate_p25,
             fee_rate_p75,
         }
+    }
+
+    /// Fetch a block by height over the raw path.
+    ///
+    /// The sweep's fetch. Costs one `getblockhash` plus one `getblock`
+    /// verbosity 0, against the ~10 MB of JSON verbosity 2 makes the node
+    /// build. Forward ingestion deliberately keeps the JSON path, because it
+    /// needs per-transaction fees and runs once per block rather than a
+    /// million times.
+    pub async fn fetch_block_raw_by_height(
+        &self,
+        height: u64,
+    ) -> Result<Block, StatsError> {
+        // The hash is fetched fresh, deliberately, not through the cache.
+        //
+        // `invalidate_block_caches` clears a height on reorg, but a
+        // `getblockhash` issued before that can land after it and reinstall
+        // the orphan. The sweep would then fetch the orphan block, match the
+        // not-yet-repaired stored row, and stamp it as swept; the verifier
+        // reads the same poisoned cache and agrees. At the edge of the
+        // six-block verification window the row is never revisited.
+        //
+        // A hash response is tens of bytes against a block of megabytes, so
+        // skipping the cache costs essentially nothing here, and the sweep is
+        // the one caller that reads every height exactly once anyway.
+        let hash = self.get_block_hash_fresh(height).await?;
+        self.get_block_raw(&hash, height).await
     }
 
     /// Convenience method: fetch a block by height (calls getblockhash then getblock).
@@ -1880,6 +2299,7 @@ impl BitcoinRpc {
 #[cfg(test)]
 mod raw_parity {
     use super::*;
+    use bitcoin::ScriptBuf;
 
     /// Heights chosen for the awkward cases, not for coverage.
     ///
@@ -1900,6 +2320,17 @@ mod raw_parity {
         // compared zero against zero and asserted nothing. Both phenomena
         // post-date 968,000.
         969000, 970000, 970500, 970800,
+        // Added 2026-10-11 after an independent review found a classifier
+        // disagreement the 28-block sample could not see. 181,732 carries
+        // three outputs that embed text where a public key belongs, which
+        // Core calls `nonstandard` and a shape-only check called `pubkey`.
+        // 244,591 carries a 137-byte OP_RETURN, which disproves the claim
+        // that 83 bytes was an absolute ceiling before v30.
+        181732, 244591,
+        // Broader era coverage, since the sample was thin between 2012 and
+        // 2015 and held almost no P2PK or bare multisig.
+        1000, 120000, 200000, 230000, 300000, 350000, 400000, 500000, 600000,
+        650000, 800000, 850000, 880000,
     ];
 
     fn rpc_from_env() -> Option<BitcoinRpc> {
@@ -1945,6 +2376,869 @@ mod raw_parity {
         match v {
             Value::Object(m) => m.into_iter().collect(),
             _ => panic!("Block is not an object"),
+        }
+    }
+
+    /// Independent oracle: the new columns computed from the node by a
+    /// second implementation, compared against what the parser produces.
+    ///
+    /// `raw_matches_json` cannot do this job. For nine of the ten new columns
+    /// both of its paths run the same `parse_block_value`, so a wrong
+    /// threshold or a wrong population is wrong identically on both sides and
+    /// passes green. The fixture is built by a Python implementation written
+    /// from each column's definition rather than from this code, and carries
+    /// both population variants so the coinbase question is visible rather
+    /// than assumed.
+    ///
+    /// ```text
+    /// cargo test --features ssr oracle_new_columns -- --ignored --nocapture
+    /// ```
+    #[tokio::test]
+    #[ignore]
+    async fn oracle_new_columns() {
+        let rpc = rpc_from_env().expect("env");
+        let path = std::env::var("ORACLE_FIXTURE")
+            .unwrap_or_else(|_| "/tmp/claude-1000/oracle.json".into());
+        let raw = std::fs::read_to_string(&path).expect("oracle fixture");
+        let fx: Value = serde_json::from_str(&raw).expect("fixture json");
+
+        // This gate passed on a fixture of `{}` until 2026-10-11, checking
+        // zero heights and zero values, and it accepted *either* population
+        // for every field, which is the exact regression it exists to catch.
+        // An independent review demonstrated both. The floor and the required
+        // heights below are what stop it being vacuous again.
+        let n = fx.as_object().map(|o| o.len()).unwrap_or(0);
+        assert!(
+            n >= 10,
+            "oracle fixture holds {n} heights; too few to assert anything"
+        );
+        for required in ["1", "57043", "970800"] {
+            assert!(
+                fx.get(required).is_some(),
+                "oracle fixture is missing height {required}, which is the \
+                 case that gives this gate its meaning"
+            );
+        }
+
+        println!(
+            "{:>8} {:>22} {:>12} {:>12} {:>12}",
+            "height", "column", "ours", "oracle_nocb", "oracle_all"
+        );
+        // Fields whose population is every output, coinbase included. The
+        // rest are non-coinbase by design; see the parser for each decision.
+        const ALL_OUTPUT_FIELDS: &[&str] =
+            &["p2a_count", "p2pk_value", "p2tr_value", "multisig_value"];
+
+        let mut disagree_both = Vec::new();
+        for (h, v) in fx.as_object().expect("obj") {
+            let height: u64 = h.parse().unwrap();
+            let hash = rpc.get_block_hash(height).await.unwrap();
+            let b = rpc.get_block_fresh(&hash).await.unwrap();
+            let pairs: &[(&str, u64, &str)] = &[
+                ("p2a_count", b.p2a_count, "p2a"),
+                ("op_return_max_bytes", b.op_return_max_bytes, "or_max"),
+                (
+                    "op_return_over_80_count",
+                    b.op_return_over_80_count,
+                    "or_gt83",
+                ),
+                ("tx_v1_count", b.tx_v1_count, "v1"),
+                ("tx_v2_count", b.tx_v2_count, "v2"),
+                ("tx_v3_count", b.tx_v3_count, "v3"),
+                ("p2pk_value", b.p2pk_value, "p2pk_val"),
+                ("p2tr_value", b.p2tr_value, "p2tr_val"),
+                ("multisig_value", b.multisig_value, "ms_val"),
+                ("brc20_bytes", b.brc20_bytes, "brc20_bytes"),
+            ];
+            for (name, ours, key) in pairs {
+                // Missing keys must not read as zero, or a fixture that
+                // simply lacks a field silently agrees with everything.
+                let nocb = v["nocb"][key].as_u64().unwrap_or_else(|| {
+                    panic!("fixture height {height} has no nocb.{key}")
+                });
+                let all = v["all"][key].as_u64().unwrap_or_else(|| {
+                    panic!("fixture height {height} has no all.{key}")
+                });
+                if *ours != nocb || nocb != all {
+                    println!("{height:>8} {name:>22} {ours:>12} {nocb:>12} {all:>12}");
+                }
+                // One population per field, named here, rather than "either
+                // will do". `p2pk_value` matching `nocb` is precisely the bug
+                // that shipped: 0 where the answer was 50 BTC.
+                let want = if ALL_OUTPUT_FIELDS.contains(name) {
+                    all
+                } else {
+                    nocb
+                };
+                if *ours != want {
+                    disagree_both.push(format!(
+                        "height {height} {name}: ours={ours} expected={want} \
+                         (nocb={nocb} all={all})"
+                    ));
+                }
+            }
+        }
+        println!("\nrows above are where ours != nocb, or the two populations differ");
+        assert!(
+            disagree_both.is_empty(),
+            "parser disagrees with the population each field is supposed \
+             to measure:\n  {}",
+            disagree_both.join("\n  ")
+        );
+    }
+
+    /// Our script classifier must agree with Core's, script for script.
+    ///
+    /// The spike this replaces sampled 2,459 outputs and **printed** its
+    /// disagreement count rather than asserting it, so it could not fail. Its
+    /// fixture also held only three `pubkey` scripts, which is why it missed
+    /// that `rust-bitcoin`'s `is_p2pk` checks shape without validating the
+    /// key header: the 2012-era outputs embedding text where a key belongs
+    /// match the shape exactly and Core calls them `nonstandard`.
+    ///
+    /// The fixture is (script hex, Core's label) from real blocks spanning
+    /// 2009 to 2026, weighted toward the rare types rather than uniformly,
+    /// plus adversarial scripts labelled by Core's own `decodescript`.
+    ///
+    /// ```text
+    /// cargo test --features ssr the_classifier_agrees_with_core -- --ignored --nocapture
+    /// ```
+    #[test]
+    #[ignore]
+    fn the_classifier_agrees_with_core() {
+        use bitcoin::hex::FromHex;
+        use std::collections::BTreeMap;
+
+        let path = std::env::var("SCRIPT_ORACLE")
+            .unwrap_or_else(|_| "/tmp/claude-1000/script_oracle.json".into());
+        let raw = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("fixture {path}: {e}"));
+        let rows: Vec<Value> =
+            serde_json::from_str(&raw).expect("fixture json");
+        assert!(
+            rows.len() > 500,
+            "fixture holds only {} scripts; too small to mean anything",
+            rows.len()
+        );
+
+        // Core labels we do not model, every one of which our `_` arm sends
+        // to `unknown_script_count` exactly as Core's would. Agreeing on the
+        // bucket is what matters, not on the string.
+        let unmodelled = |t: &str| {
+            matches!(t, "nonstandard" | "witness_unknown" | "witness_v1_anchor")
+        };
+
+        let mut agree: BTreeMap<String, u64> = BTreeMap::new();
+        let mut bad: Vec<String> = Vec::new();
+        for r in &rows {
+            let core = r["type"].as_str().unwrap_or("?");
+            let hex = r["hex"].as_str().unwrap_or("");
+            let bytes = Vec::<u8>::from_hex(hex).expect("fixture hex");
+            let script = ScriptBuf::from_bytes(bytes);
+            let mine = script_type(&script);
+            let ok = mine == core || (unmodelled(core) && mine == "other");
+            if ok {
+                *agree.entry(core.to_string()).or_default() += 1;
+            } else {
+                bad.push(format!("core={core:<18} ours={mine:<18} {hex}"));
+            }
+        }
+        println!("\nagreed:");
+        for (t, n) in &agree {
+            println!("  {n:6}  {t}");
+        }
+        assert!(
+            bad.is_empty(),
+            "{} of {} scripts classified differently from Core:\n  {}",
+            bad.len(),
+            rows.len(),
+            bad.join("\n  ")
+        );
+        println!("\n{} scripts, zero disagreements", rows.len());
+    }
+
+    /// Coinbase outputs are classified, and the classified types plus
+    /// OP_RETURN account for every output in a block.
+    ///
+    /// Two properties, checked against the node rather than against
+    /// ourselves. The early chain is the case that matters: block 1 is a
+    /// single P2PK coinbase output and used to report nothing at all.
+    #[tokio::test]
+    #[ignore]
+    async fn the_classified_types_account_for_every_output() {
+        let rpc = rpc_from_env().expect("env");
+        for h in [1u64, 57043, 170000, 481824, 900000, 970800] {
+            let hash = rpc.get_block_hash(h).await.unwrap();
+            let b = rpc.get_block_fresh(&hash).await.unwrap();
+            // Core's own count of OP_RETURN outputs, which sit inside
+            // `output_count` but outside the nine classified types.
+            let blk = rpc
+                .call("getblock", &[json!(hash), json!(2)])
+                .await
+                .unwrap();
+            let nulldata: u64 = blk["tx"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .flat_map(|t| t["vout"].as_array().unwrap())
+                .filter(|v| {
+                    v["scriptPubKey"]["type"].as_str() == Some("nulldata")
+                })
+                .count() as u64;
+            let classified = b.p2pk_count
+                + b.p2pkh_count
+                + b.p2sh_count
+                + b.p2wpkh_count
+                + b.p2wsh_count
+                + b.p2tr_count
+                + b.multisig_count
+                // `p2a_count` is deliberately absent: it is a subset of
+                // `unknown_script_count` until the chart denominators carry
+                // it, so adding it here would double-count anchors.
+                + b.unknown_script_count;
+            println!(
+                "h={h:>7} output_count={:>6} classified={classified:>6}                  p2pk={:>5} p2a={:>5} unknown={:>5}",
+                b.output_count, b.p2pk_count, b.p2a_count, b.unknown_script_count
+            );
+            assert_eq!(
+                classified + nulldata,
+                b.output_count,
+                "height {h}: the nine classified types plus OP_RETURN outputs must account for every output in the block"
+            );
+        }
+        // Anchors are a subset of the unknown bucket, not a sibling of it.
+        // This is the invariant that makes the sum above correct, and it is
+        // what must be removed when anchors become a ninth classified type.
+        for h in [970800u64, 969000] {
+            let hash = rpc.get_block_hash(h).await.unwrap();
+            let b = rpc.get_block_fresh(&hash).await.unwrap();
+            assert!(
+                b.p2a_count > 0,
+                "height {h} should carry anchors, or this asserts nothing"
+            );
+            assert!(
+                b.p2a_count <= b.unknown_script_count,
+                "height {h}: p2a_count {} exceeds unknown_script_count {}, \
+                 so anchors are no longer a subset",
+                b.p2a_count,
+                b.unknown_script_count
+            );
+        }
+
+        // Block 1 is one P2PK coinbase output and nothing else. Before
+        // coinbase outputs were classified this reported zero.
+        let hash = rpc.get_block_hash(1).await.unwrap();
+        let b = rpc.get_block_fresh(&hash).await.unwrap();
+        assert_eq!(b.p2pk_count, 1, "block 1 is a single P2PK coinbase output");
+        assert_eq!(b.output_count, 1, "and it is the block's only output");
+        assert_eq!(b.p2pk_value, 5_000_000_000, "worth the 50 BTC subsidy");
+    }
+
+    /// What the sweep will write, checked against the node before 970,000
+    /// rows are rewritten.
+    ///
+    /// **This is the gate the sweep's purpose demanded and did not have.**
+    /// `raw_matches_json` compares a fresh JSON parse against a fresh raw
+    /// parse; both run `parse_block_value`, so both apply the *current* rule
+    /// and agree. Nothing was checking that the current rule is the right one
+    /// against the chain, nor what the sweep would do to the stored values.
+    ///
+    /// For every column whose meaning this change moves, the expectation is
+    /// computed here from Core's own classification rather than from our
+    /// parser, and asserted. The stored value is read alongside and reported,
+    /// so the size and shape of the rewrite is visible in advance.
+    ///
+    /// ```text
+    /// set -a; source .env; set +a
+    /// cargo test --features ssr what_the_sweep_will_write -- --ignored --nocapture
+    /// ```
+    #[tokio::test]
+    #[ignore]
+    async fn what_the_sweep_will_write() {
+        let rpc = rpc_from_env().expect("env");
+        let conn = rusqlite::Connection::open_with_flags(
+            "bitcoin_stats.db",
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )
+        .expect("bitcoin_stats.db");
+
+        // Dense either side of the OP_RETURN rule boundary, measured between
+        // 941,875 and 942,171, plus every era and the awkward blocks.
+        let mut heights: Vec<u64> = vec![
+            1, 1000, 57043, 120000, 170000, 181732, 200000, 244591, 278000,
+            350000, 400000, 481824, 500000, 600000, 709632, 767430, 800000,
+            840000, 900000, 930000, 960000, 968000, 970800,
+        ];
+        heights.extend((941_800..=942_300).step_by(50));
+        // Named by the third independent review: 470,000 carries a coinbase
+        // OP_RETURN that is `nonstandard` yet unspendable, and the other
+        // three are the consensus exceptions where a coinbase adds no UTXO.
+        heights.extend([0u64, 91_842, 91_880, 470_000]);
+        heights.sort_unstable();
+
+        // The witness commitment is an OP_RETURN the parser deliberately
+        // never counts, in either rule.
+        const COMMIT: &str = "6a24aa21a9ed";
+
+        let mut mismatches: Vec<String> = Vec::new();
+        let mut op_return_delta = 0i64;
+        let mut output_delta = 0i64;
+        let mut rows = 0u64;
+
+        for h in heights {
+            let hash = rpc.get_block_hash(h).await.unwrap();
+            let blk = rpc
+                .call("getblock", &[json!(hash), json!(2)])
+                .await
+                .unwrap();
+            let got = rpc.get_block_raw(&hash, h).await.unwrap();
+
+            // ---- expectation, from Core's labels only ----
+            let txs = blk["tx"].as_array().unwrap();
+            let mut want: std::collections::BTreeMap<&str, u64> =
+                Default::default();
+            let mut want_or_count = 0u64;
+            let mut want_or_bytes = 0u64;
+            for (i, tx) in txs.iter().enumerate() {
+                for vo in tx["vout"].as_array().unwrap() {
+                    let spk = &vo["scriptPubKey"];
+                    let ty = spk["type"].as_str().unwrap_or("?");
+                    let hex = spk["hex"].as_str().unwrap_or("");
+                    *want.entry("output_count").or_default() += 1;
+                    match ty {
+                        "pubkey" => *want.entry("p2pk").or_default() += 1,
+                        "pubkeyhash" => *want.entry("p2pkh").or_default() += 1,
+                        "scripthash" => *want.entry("p2sh").or_default() += 1,
+                        "witness_v0_keyhash" => {
+                            *want.entry("p2wpkh").or_default() += 1
+                        }
+                        "witness_v0_scripthash" => {
+                            *want.entry("p2wsh").or_default() += 1
+                        }
+                        "witness_v1_taproot" => {
+                            *want.entry("p2tr").or_default() += 1
+                        }
+                        "multisig" => *want.entry("multisig").or_default() += 1,
+                        // Anchors are still a subset of the unknown bucket.
+                        "anchor" => {
+                            *want.entry("p2a").or_default() += 1;
+                            *want.entry("unknown").or_default() += 1;
+                        }
+                        "nulldata" => {
+                            // Non-coinbase only, commitment excluded: the
+                            // rule the sweep exists to apply everywhere.
+                            if i > 0 && !hex.starts_with(COMMIT) {
+                                want_or_count += 1;
+                                want_or_bytes += (hex.len() / 2) as u64;
+                            }
+                        }
+                        _ => *want.entry("unknown").or_default() += 1,
+                    }
+                }
+            }
+            let g = |k: &str| want.get(k).copied().unwrap_or(0);
+
+            // UTXO growth, compared against Core's own answer.
+            //
+            // This previously recomputed `outputs - nulldata - inputs` from
+            // Core's labels, which is the same wrong spendability assumption
+            // the code had, so the gate agreed with the bug. An independent
+            // review passed height 470,000 through it unchanged despite a
+            // proven disagreement, and made all five gates pass an erroneous
+            // parser by doubling one column and subtracting it from another,
+            // because only the combination was asserted.
+            //
+            // So: ask `getblockstats`, and assert the inputs to the formula
+            // independently as well as its result.
+            let stats = rpc.call("getblockstats", &[json!(h)]).await.unwrap();
+            let core_utxo = stats["utxo_increase_actual"].as_i64().unwrap();
+
+            let want_unspendable: u64 = txs
+                .iter()
+                .flat_map(|t| t["vout"].as_array().unwrap())
+                .filter(|v| {
+                    v["scriptPubKey"]["hex"]
+                        .as_str()
+                        .map(is_unspendable)
+                        .unwrap_or(false)
+                })
+                .count() as u64;
+            let want_spent: u64 = txs
+                .iter()
+                .skip(1)
+                .map(|t| t["vin"].as_array().unwrap().len() as u64)
+                .sum();
+
+            // Each component on its own, so two errors cannot cancel.
+            for (name, ours, expected) in [
+                (
+                    "unspendable_output_count",
+                    got.unspendable_output_count,
+                    want_unspendable,
+                ),
+                ("input_count", got.input_count, want_spent),
+            ] {
+                if ours != expected {
+                    mismatches.push(format!(
+                        "height {h:>7} {name:<22} parser={ours} node={expected}"
+                    ));
+                }
+            }
+
+            const NO_UTXO_FROM_COINBASE: &[u64] = &[0, 91_842, 91_880];
+            let adjust = i64::from(NO_UTXO_FROM_COINBASE.contains(&h))
+                * got.coinbase_output_count as i64;
+            let ours_utxo = got.output_count as i64
+                - got.unspendable_output_count as i64
+                - got.input_count as i64
+                - adjust;
+            if ours_utxo != core_utxo {
+                mismatches.push(format!(
+                    "height {h:>7} utxo_increase_actual   formula={ours_utxo} core={core_utxo}"
+                ));
+            }
+
+            let checks: &[(&str, u64, u64)] = &[
+                ("output_count", got.output_count, g("output_count")),
+                ("p2pk_count", got.p2pk_count, g("p2pk")),
+                ("p2pkh_count", got.p2pkh_count, g("p2pkh")),
+                ("p2sh_count", got.p2sh_count, g("p2sh")),
+                ("p2wpkh_count", got.p2wpkh_count, g("p2wpkh")),
+                ("p2wsh_count", got.p2wsh_count, g("p2wsh")),
+                ("p2tr_count", got.p2tr_count, g("p2tr")),
+                ("multisig_count", got.multisig_count, g("multisig")),
+                (
+                    "unknown_script_count",
+                    got.unknown_script_count,
+                    g("unknown"),
+                ),
+                ("p2a_count", got.p2a_count, g("p2a")),
+                ("op_return_count", got.op_return_count, want_or_count),
+                ("op_return_bytes", got.op_return_bytes, want_or_bytes),
+                // Serialized witness bytes, derived from Core's own size and
+                // weight rather than from the witness arrays it reports.
+                // `size - (weight - size) / 3` is the witness portion by
+                // definition, and it counts the empty stacks Core omits from
+                // `txinwitness`.
+                (
+                    "witness_bytes",
+                    got.witness_bytes,
+                    txs.iter()
+                        .skip(1)
+                        .map(|t| {
+                            let sz = t["size"].as_u64().unwrap_or(0);
+                            let wt = t["weight"].as_u64().unwrap_or(0);
+                            sz.saturating_sub(wt.saturating_sub(sz) / 3)
+                        })
+                        .sum::<u64>(),
+                ),
+                // A coinbase is a transaction, so it counts toward the
+                // block's largest.
+                (
+                    "largest_tx_size",
+                    got.largest_tx_size,
+                    txs.iter()
+                        .map(|t| t["size"].as_u64().unwrap_or(0))
+                        .max()
+                        .unwrap_or(0),
+                ),
+                (
+                    "coinbase_output_count",
+                    got.coinbase_output_count,
+                    txs[0]["vout"].as_array().unwrap().len() as u64,
+                ),
+            ];
+            for (name, ours, expected) in checks {
+                if ours != expected {
+                    mismatches.push(format!(
+                        "height {h:>7} {name:<22} parser={ours} node={expected}"
+                    ));
+                }
+            }
+
+            // ---- what the rewrite does to the stored row ----
+            let stored: (i64, i64, i64) = conn
+                .query_row(
+                    "SELECT op_return_count, output_count, backfill_version \
+                     FROM blocks WHERE height = ?1",
+                    [h],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                )
+                .unwrap_or((-1, -1, -1));
+            if stored.0 >= 0 {
+                rows += 1;
+                op_return_delta += got.op_return_count as i64 - stored.0;
+                output_delta += got.output_count as i64 - stored.1;
+            }
+        }
+
+        println!(
+            "\nsampled {rows} stored rows\n  op_return_count total change: \
+             {op_return_delta:+}\n  output_count total change:    {output_delta:+}"
+        );
+        assert!(
+            mismatches.is_empty(),
+            "the parser disagrees with the node on {} value(s); the sweep \
+             would write these:\n  {}",
+            mismatches.len(),
+            mismatches.join("\n  ")
+        );
+    }
+
+    /// A bounded dry run of the sweep, against a copy of the real database.
+    ///
+    /// Everything else proves the raw writer's SQL *cannot* reach the fee
+    /// columns. This proves the writer *does not*, by running it and reading
+    /// the rows back. It also exercises `init_schema` against the schema
+    /// actually on disk, which is the only way the dead daily migration was
+    /// visible: a freshly created database takes the CREATE TABLE path and
+    /// looks fine.
+    ///
+    /// Copy the database first; this writes.
+    ///
+    /// ```text
+    /// cp bitcoin_stats.db "$TMPDIR/dry.db"
+    /// set -a; source .env; set +a
+    /// SWEEP_DRY_DB="$TMPDIR/dry.db" \
+    ///   cargo test --features ssr the_sweep_dry_run -- --ignored --nocapture
+    /// ```
+    #[tokio::test]
+    #[ignore]
+    async fn the_sweep_dry_run() {
+        let path = match std::env::var("SWEEP_DRY_DB") {
+            Ok(p) => p,
+            Err(_) => panic!("set SWEEP_DRY_DB to a COPY of the database"),
+        };
+        assert!(
+            !path.ends_with("bitcoin_stats.db"),
+            "refusing to run against what looks like the live database"
+        );
+        let rpc = rpc_from_env().expect("env");
+
+        // `open_pool` runs `init_schema`, so the migrations are under test
+        // here too, against a real schema rather than an empty one.
+        let pool = crate::stats::db::open_pool(std::path::Path::new(&path), 2)
+            .expect("open the copy");
+        let conn = pool.get().expect("conn");
+
+        // Rows the sweep will actually change, not whichever come first.
+        //
+        // `heights_needing_backfill` returns newest-first, and the newest
+        // rows here already carried post-sweep values: written at v13
+        // semantics by a server start, then reset to v12. Sweeping them was a
+        // no-op, so "fees preserved" and "rollup refreshed" were both
+        // satisfied by nothing happening. Picking rows still on the old
+        // semantics is what makes this test mean anything.
+        let heights: Vec<u64> = {
+            let mut st = conn
+                .prepare(
+                    "SELECT height FROM blocks WHERE backfill_version <= 11 \
+                     ORDER BY height DESC LIMIT 40",
+                )
+                .unwrap();
+            st.query_map([], |r| r.get::<_, u64>(0))
+                .unwrap()
+                .filter_map(Result::ok)
+                .collect()
+        };
+        let outputs_before: Vec<(u64, u64)> = heights
+            .iter()
+            .map(|h| {
+                let v: u64 = conn
+                    .query_row(
+                        "SELECT output_count FROM blocks WHERE height = ?1",
+                        [*h],
+                        |r| r.get(0),
+                    )
+                    .unwrap();
+                (*h, v)
+            })
+            .collect();
+        assert!(
+            heights.len() >= 20,
+            "expected work to do, got {}",
+            heights.len()
+        );
+
+        // Fee columns before, for exactly the rows about to be rewritten.
+        let fee_cols = "median_fee, median_fee_rate, fee_rate_p10, fee_rate_p25, \
+                        fee_rate_p75, fee_rate_p90, max_tx_fee, inscription_fees, \
+                        runes_fees";
+        let snapshot = |c: &rusqlite::Connection, h: u64| -> Vec<f64> {
+            c.query_row(
+                &format!("SELECT {fee_cols} FROM blocks WHERE height = ?1"),
+                [h],
+                |r| {
+                    Ok((0..9)
+                        .map(|i| r.get::<_, f64>(i).unwrap_or(-1.0))
+                        .collect::<Vec<f64>>())
+                },
+            )
+            .unwrap_or_default()
+        };
+        let before: Vec<(u64, Vec<f64>)> =
+            heights.iter().map(|h| (*h, snapshot(&conn, *h))).collect();
+        let nonzero_fees = before
+            .iter()
+            .filter(|(_, v)| v.iter().any(|x| *x > 0.0))
+            .count();
+        assert!(
+            nonzero_fees >= 5,
+            "only {nonzero_fees} sampled rows carry fee data, so preserving \
+             it would prove nothing"
+        );
+
+        // Fetch and write exactly as the sweep does.
+        let mut blocks = Vec::new();
+        for h in &heights {
+            blocks.push(
+                rpc.fetch_block_raw_by_height(*h).await.expect("raw fetch"),
+            );
+        }
+        for b in &blocks {
+            assert_eq!(
+                b.median_fee, 0,
+                "raw blocks carry no fees by definition"
+            );
+        }
+        crate::stats::db::update_block_extras_raw(&conn, &blocks)
+            .expect("the raw writer");
+
+        // Fees survived, version moved, structure was rewritten.
+        let mut preserved = 0;
+        for (h, was) in &before {
+            let now = snapshot(&conn, *h);
+            assert_eq!(
+                *was, now,
+                "height {h}: the sweep changed fee data it must not touch"
+            );
+            preserved += 1;
+        }
+        for h in &heights {
+            let v: u64 = conn
+                .query_row(
+                    "SELECT backfill_version FROM blocks WHERE height = ?1",
+                    [*h],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(
+                v,
+                crate::stats::db::BACKFILL_VERSION,
+                "height {h} was not stamped as swept"
+            );
+        }
+        let written: u64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM blocks WHERE height IN \
+                 (SELECT height FROM blocks WHERE backfill_version = ?1)",
+                [crate::stats::db::BACKFILL_VERSION],
+                |r| r.get(0),
+            )
+            .unwrap();
+        // The sweep must have actually changed something, or everything
+        // below is satisfied by a no-op.
+        let changed = outputs_before
+            .iter()
+            .filter(|(h, was)| {
+                let now: u64 = conn
+                    .query_row(
+                        "SELECT output_count FROM blocks WHERE height = ?1",
+                        [*h],
+                        |r| r.get(0),
+                    )
+                    .unwrap();
+                now != *was
+            })
+            .count();
+        assert!(
+            changed >= heights.len() / 2,
+            "only {changed} of {} rows changed output_count; the sample is \
+             already swept and this test asserts nothing",
+            heights.len()
+        );
+
+        // The daily rollup must have been refreshed inside the writer's
+        // transaction. Removing that call passed every gate until a review
+        // demonstrated it, because nothing read daily_blocks back.
+        let days: Vec<String> = {
+            let mut st = conn
+                .prepare(
+                    "SELECT DISTINCT date(timestamp,'unixepoch') FROM blocks \
+                     WHERE height IN (SELECT value FROM json_each(?1))",
+                )
+                .unwrap();
+            let ids = serde_json::to_string(&heights).unwrap();
+            let rows = st
+                .query_map([ids], |r| r.get::<_, String>(0))
+                .unwrap()
+                .filter_map(Result::ok)
+                .collect();
+            rows
+        };
+        assert!(!days.is_empty(), "swept blocks resolved to no days");
+        for day in &days {
+            let (blocks_in_day, rolled): (u64, f64) = conn
+                .query_row(
+                    "SELECT (SELECT COUNT(*) FROM blocks WHERE \
+                     date(timestamp,'unixepoch') = ?1), \
+                     (SELECT avg_output_count FROM daily_blocks WHERE day = ?1)",
+                    [day],
+                    |r| Ok((r.get(0)?, r.get::<_, Option<f64>>(1)?.unwrap_or(-1.0))),
+                )
+                .unwrap_or((0, -1.0));
+            let direct: f64 = conn
+                .query_row(
+                    "SELECT AVG(output_count) FROM blocks WHERE \
+                     date(timestamp,'unixepoch') = ?1",
+                    [day],
+                    |r| r.get::<_, Option<f64>>(0).map(|v| v.unwrap_or(-1.0)),
+                )
+                .unwrap_or(-1.0);
+            assert!(
+                (rolled - direct).abs() < 0.001,
+                "day {day}: daily_blocks holds avg_output_count {rolled} \
+                 against {direct} aggregated directly from {blocks_in_day} \
+                 blocks, so the rollup did not refresh"
+            );
+        }
+
+        println!(
+            "\ndry run: {} blocks swept, fee data preserved on {preserved} rows \
+             ({nonzero_fees} of them carrying real fees), {written} rows now at \
+             version {}, {} daily rollups verified against direct aggregation",
+            heights.len(),
+            crate::stats::db::BACKFILL_VERSION,
+            days.len()
+        );
+    }
+
+    /// A reorg cannot graft stale-fork data onto a canonical row.
+    ///
+    /// The sweep fetches by height and writes minutes later. If that height
+    /// reorgs in between, `verify_recent_blocks` replaces the row, and a
+    /// height-only WHERE would paste the stale fork's metrics onto it:
+    /// canonical hash, canonical fees, wrong structure, stamped as swept, and
+    /// invisible to the hash check because the hash was never wrong.
+    ///
+    /// Simulated rather than argued: take a real block, change the stored
+    /// hash to stand for a reorged replacement, run the writer, and assert it
+    /// touched nothing.
+    #[tokio::test]
+    #[ignore]
+    async fn a_reorg_cannot_corrupt_a_swept_row() {
+        let path = std::env::var("SWEEP_DRY_DB")
+            .expect("set SWEEP_DRY_DB to a COPY of the database");
+        assert!(
+            !path.ends_with("bitcoin_stats.db"),
+            "refusing the live database"
+        );
+        let rpc = rpc_from_env().expect("env");
+        let pool = crate::stats::db::open_pool(std::path::Path::new(&path), 2)
+            .expect("open the copy");
+        let conn = pool.get().expect("conn");
+
+        let h: u64 = conn
+            .query_row("SELECT MAX(height) FROM blocks", [], |r| r.get(0))
+            .unwrap();
+        let block = rpc.fetch_block_raw_by_height(h).await.expect("fetch");
+
+        // Stand in for a reorg: the row at this height now holds a different
+        // block, exactly as it would after verify_recent_blocks replaced it.
+        conn.execute(
+            "UPDATE blocks SET hash = ?1, backfill_version = 0, output_count = \
+             999999 WHERE height = ?2",
+            rusqlite::params!["0000reorged", h],
+        )
+        .unwrap();
+
+        crate::stats::db::update_block_extras_raw(&conn, &[block])
+            .expect("writer must not error, only decline to match");
+
+        let (ver, outs): (u64, u64) = conn
+            .query_row(
+                "SELECT backfill_version, output_count FROM blocks WHERE height = ?1",
+                [h],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            outs, 999_999,
+            "the writer overwrote a row whose hash had changed under it"
+        );
+        assert_eq!(
+            ver, 0,
+            "the row was stamped as swept despite not being written, so no \
+             later pass would ever revisit it"
+        );
+        println!("\nreorged row at {h} left untouched and still eligible");
+    }
+
+    /// The three fixes made on 2026-10-11 after the fifth review, each
+    /// pinned so reverting it fails here.
+    ///
+    /// Two of that review's four findings were defects in fixes from the
+    /// review before it. Fixes need tests as much as features do.
+    mod fifth_review_fixes {
+        use super::*;
+
+        /// The sweep resolves hashes fresh, not through the cache.
+        ///
+        /// A `getblockhash` issued before a reorg can land after
+        /// `invalidate_block_caches` and reinstall the orphan. The sweep
+        /// would then fetch the orphan, match the not-yet-repaired row, and
+        /// stamp it swept. Poisoning the cache here stands in for that.
+        #[tokio::test]
+        #[ignore]
+        async fn the_sweep_does_not_trust_the_hash_cache() {
+            let rpc = rpc_from_env().expect("env");
+            let h: u64 = 800_000;
+            let canonical = rpc.get_block_hash_fresh(h).await.unwrap();
+
+            // Warm the cache, then poison it the way a late response would.
+            let _ = rpc.get_block_hash(h).await.unwrap();
+            rpc.poison_block_hash_cache_for_test(h, "deadbeef".repeat(8));
+
+            let got = rpc.fetch_block_raw_by_height(h).await.expect("fetch");
+            assert_eq!(
+                got.hash, canonical,
+                "the sweep read a poisoned cache entry instead of asking the \
+                 node, so a reorg could hand it an orphan block"
+            );
+        }
+
+        /// A sweep against an unreachable node stops instead of spinning.
+        ///
+        /// The earlier guard only fired when a batch fetched blocks and wrote
+        /// none. With every fetch failing, `blocks` is empty, the guard was
+        /// skipped, and the loop retried with no backoff: a controlled
+        /// responder saw 893 requests in 250ms.
+        #[tokio::test]
+        #[ignore]
+        async fn a_dead_node_stops_the_sweep_rather_than_spinning() {
+            let path = std::env::var("SWEEP_DRY_DB")
+                .expect("set SWEEP_DRY_DB to a COPY of the database");
+            assert!(!path.ends_with("bitcoin_stats.db"), "refusing live db");
+            let pool =
+                crate::stats::db::open_pool(std::path::Path::new(&path), 2)
+                    .expect("open copy");
+            // Port 1 refuses instantly, so every fetch fails.
+            let dead = BitcoinRpc::new(
+                "http://127.0.0.1:1/".into(),
+                "x".into(),
+                "x".into(),
+            );
+            let start = std::time::Instant::now();
+            tokio::time::timeout(
+                std::time::Duration::from_secs(120),
+                crate::stats::ingest::backfill_extras(&dead, &pool),
+            )
+            .await
+            .expect("the sweep must return, not spin until killed");
+            println!(
+                "\nsweep against a dead node returned in {:.1}s",
+                start.elapsed().as_secs_f64()
+            );
         }
     }
 

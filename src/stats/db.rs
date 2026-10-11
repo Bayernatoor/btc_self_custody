@@ -36,8 +36,30 @@ use super::rpc::Block;
 
 /// Bump this when adding new columns that require re-fetching existing blocks.
 /// The backfill loop processes all blocks with backfill_version < BACKFILL_VERSION.
+///
 /// v11: recompute max_tx_fee, inscription_fees, runes_fees, inscription_envelope_bytes
-pub const BACKFILL_VERSION: u64 = 11;
+/// v12: ten raw-parser columns, plus op_return_count reachable by a sweep at last
+/// v13: coinbase outputs classified, so output_count and every script-type count
+///      include them
+///
+/// **v13 exists because v12 leaked.** On 2026-10-11 the binary was started while
+/// the constant already read 12, and `backfill_extras` runs at startup with no
+/// pacing, so it swept 17,220 blocks (953,677 to 970,899) before being stopped.
+/// Those rows were written by the parser as it stood mid-change, before coinbase
+/// outputs were classified: `output_count` matched the non-coinbase total exactly
+/// at 960,000, 969,000 and 970,800. They were stamped 12 regardless, and
+/// `count_needs_backfill` selects `backfill_version < BACKFILL_VERSION`, so a
+/// full v12 sweep would have skipped every one and left them looking current.
+///
+/// That is the shape of the defect this whole sweep exists to repair, so the
+/// answer is a new version rather than a repair of the old one: at 13 all
+/// ~970,000 rows are eligible again and nothing stale can survive.
+///
+/// **The lesson is procedural.** Bumping this makes *any* start of the app begin
+/// a full sweep, including a local `cargo leptos watch` or a debug binary run for
+/// an unrelated reason. Between a bump and a deliberate sweep, do not start the
+/// app.
+pub const BACKFILL_VERSION: u64 = 13;
 
 /// Type alias for the connection pool used throughout the stats module.
 pub type DbPool = r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>;
@@ -351,6 +373,9 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
             avg_p2tr_count             REAL NOT NULL DEFAULT 0,
             avg_multisig_count         REAL NOT NULL DEFAULT 0,
             avg_unknown_script_count   REAL NOT NULL DEFAULT 0,
+            avg_p2a_count              REAL NOT NULL DEFAULT 0,
+            avg_coinbase_output_count  REAL NOT NULL DEFAULT 0,
+            avg_unspendable_output_count REAL NOT NULL DEFAULT 0,
             avg_input_count            REAL NOT NULL DEFAULT 0,
             avg_output_count           REAL NOT NULL DEFAULT 0,
             avg_rbf_count              REAL NOT NULL DEFAULT 0,
@@ -386,6 +411,34 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
                  ALTER TABLE daily_blocks ADD COLUMN total_input_value INTEGER NOT NULL DEFAULT 0;",
             )?;
         }
+        // The daily arm of the address-type charts needs anchors in its
+        // denominator too, or promoting them out of `unknown_script_count`
+        // shrinks it and inflates every other share.
+        if !daily_cols.contains("avg_p2a_count") {
+            tracing::info!("Migrating daily_blocks: adding avg_p2a_count");
+            conn.execute_batch(
+                "ALTER TABLE daily_blocks ADD COLUMN avg_p2a_count REAL NOT NULL DEFAULT 0;",
+            )?;
+        }
+        // Tested independently of `avg_p2a_count`, not nested under it.
+        //
+        // These were added inside that block, and any database that had
+        // already taken the P2A migration therefore skipped them forever:
+        // the reader then failed with "no such column" and ingestion failed
+        // on the daily refresh. Found by an independent review against the
+        // schema actually on disk, which is the only way to see it, since a
+        // freshly created database takes the CREATE TABLE path instead.
+        if !daily_cols.contains("avg_coinbase_output_count")
+            || !daily_cols.contains("avg_unspendable_output_count")
+        {
+            tracing::info!(
+                "Migrating daily_blocks: adding coinbase/unspendable columns"
+            );
+            conn.execute_batch(
+                "ALTER TABLE daily_blocks ADD COLUMN avg_coinbase_output_count REAL NOT NULL DEFAULT 0;
+                 ALTER TABLE daily_blocks ADD COLUMN avg_unspendable_output_count REAL NOT NULL DEFAULT 0;",
+            )?;
+        }
         if !daily_cols.contains("avg_inscription_envelope_bytes") {
             tracing::info!("Migrating daily_blocks: adding v11 columns");
             conn.execute_batch(
@@ -419,6 +472,41 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
         tracing::info!("Migrating: adding inscription_envelope_bytes column");
         conn.execute_batch(
             "ALTER TABLE blocks ADD COLUMN inscription_envelope_bytes INTEGER NOT NULL DEFAULT 0;",
+        )?;
+    }
+    // v12. Ten columns derived by the raw-block parser, justified by node
+    // measurements in `notes/backfill-scope-2026-09-30.md` section 9. Every
+    // one defaults to 0, so existing rows read as "not yet swept" rather than
+    // as a measurement of zero, which is the same convention every column
+    // above uses and the reason `backfill_version` exists.
+    if !has("p2a_count") || !has("brc20_bytes") {
+        tracing::info!(
+            "Migrating: adding v12 columns (p2a, OP_RETURN sizes, tx versions, exposed values, brc20_bytes)"
+        );
+        conn.execute_batch(
+            "ALTER TABLE blocks ADD COLUMN p2a_count INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE blocks ADD COLUMN op_return_max_bytes INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE blocks ADD COLUMN op_return_over_80_count INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE blocks ADD COLUMN tx_v1_count INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE blocks ADD COLUMN tx_v2_count INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE blocks ADD COLUMN tx_v3_count INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE blocks ADD COLUMN p2pk_value INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE blocks ADD COLUMN p2tr_value INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE blocks ADD COLUMN multisig_value INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE blocks ADD COLUMN brc20_bytes INTEGER NOT NULL DEFAULT 0;",
+        )?;
+    }
+    // v13. The coinbase's share of the output tally, which `output_count`
+    // no longer separates. Both are unrecoverable after a sweep: nothing
+    // else stored distinguishes coinbase outputs from the rest.
+    // Tests both columns, not just the first. `execute_batch` is not atomic
+    // across ALTERs, so an interruption between them leaves the second column
+    // missing and a first-column-only check would never repair it.
+    if !has("coinbase_output_count") || !has("unspendable_output_count") {
+        tracing::info!("Migrating: adding v13 coinbase output columns");
+        conn.execute_batch(
+            "ALTER TABLE blocks ADD COLUMN coinbase_output_count INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE blocks ADD COLUMN unspendable_output_count INTEGER NOT NULL DEFAULT 0;",
         )?;
     }
 
@@ -594,8 +682,12 @@ pub fn insert_blocks(
               max_tx_fee, inscription_fees, runes_fees,
               legacy_tx_count, segwit_tx_count, taproot_tx_count,
               coinbase_text, fee_rate_p25, fee_rate_p75,
+              p2a_count, op_return_max_bytes, op_return_over_80_count,
+              tx_v1_count, tx_v2_count, tx_v3_count,
+              p2pk_value, p2tr_value, multisig_value, brc20_bytes,
+              coinbase_output_count, unspendable_output_count,
               backfill_version)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36,?37,?38,?39,?40,?41,?42,?43,?44,?45,?46,?47,?48,?49,?50,?51,?52,?53,?54,?55,?56,?57,?58,?59,?60)",
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36,?37,?38,?39,?40,?41,?42,?43,?44,?45,?46,?47,?48,?49,?50,?51,?52,?53,?54,?55,?56,?57,?58,?59,?60,?61,?62,?63,?64,?65,?66,?67,?68,?69,?70,?71,?72)",
         )?;
         for block in blocks {
             stmt.execute(params![
@@ -658,6 +750,18 @@ pub fn insert_blocks(
                 block.coinbase_text,
                 block.fee_rate_p25,
                 block.fee_rate_p75,
+                block.p2a_count,
+                block.op_return_max_bytes,
+                block.op_return_over_80_count,
+                block.tx_v1_count,
+                block.tx_v2_count,
+                block.tx_v3_count,
+                block.p2pk_value,
+                block.p2tr_value,
+                block.multisig_value,
+                block.brc20_bytes,
+                block.coinbase_output_count,
+                block.unspendable_output_count,
                 BACKFILL_VERSION,
             ])?;
         }
@@ -734,6 +838,114 @@ pub fn find_missing_heights(
     rows.collect()
 }
 
+/// The sweep's writer: every column a raw block can produce, and no others.
+///
+/// **Matched on height *and* hash, which is what makes it safe to run beside
+/// live ingestion.** The sweep fetches a block by height and writes it back
+/// minutes later. If that height reorgs in between, `verify_recent_blocks`
+/// deletes the row and re-inserts the canonical block, and a height-only
+/// WHERE would then paste stale-fork metrics onto a canonical row: correct
+/// hash, correct fees, wrong everything else, stamped as swept so no later
+/// pass revisits it, and invisible to the hash check because the hash was
+/// never wrong.
+///
+/// Adding the hash makes the write a no-op instead. `backfill_version` is not
+/// bumped either, so the block stays eligible and the next pass picks it up
+/// with the canonical data. The failure mode becomes "retried once" rather
+/// than "silently corrupt forever".
+///
+/// **The nine fee-derived columns are absent on purpose.** Core computes
+/// per-transaction fees from its undo data, which a raw block does not carry,
+/// so `get_block_raw` leaves them zero. Writing them through the full
+/// statement would overwrite ~970,000 rows of correct fee data with zeros,
+/// which is the most destructive thing this sweep could do. Omitting them
+/// from the SET list leaves the stored values untouched.
+///
+/// `total_fees` and `total_input_value` are deliberately *not* in that group
+/// and are written here: both come from the coinbase and the subsidy, so a
+/// raw block produces them. `raw_matches_json` confirms exactly nine fields
+/// differ between the two paths.
+///
+/// `the_raw_writer_omits_exactly_the_fee_columns` holds this, so a column
+/// added later cannot silently join the wrong list.
+pub fn update_block_extras_raw(
+    conn: &Connection,
+    blocks: &[Block],
+) -> rusqlite::Result<usize> {
+    let tx = conn.unchecked_transaction()?;
+    let mut updated = 0usize;
+    {
+        let mut stmt = tx.prepare_cached(
+            "UPDATE blocks SET version = ?1, total_fees = ?2, miner = ?3, coinbase_locktime = ?4, coinbase_sequence = ?5, segwit_spend_count = ?6, taproot_spend_count = ?7, omni_count = ?8, omni_bytes = ?9, counterparty_count = ?10, counterparty_bytes = ?11, runes_count = ?12, runes_bytes = ?13, data_carrier_count = ?14, data_carrier_bytes = ?15, p2pk_count = ?16, p2pkh_count = ?17, p2sh_count = ?18, p2wpkh_count = ?19, p2wsh_count = ?20, p2tr_count = ?21, multisig_count = ?22, unknown_script_count = ?23, input_count = ?24, output_count = ?25, rbf_count = ?26, witness_bytes = ?27, inscription_count = ?28, inscription_bytes = ?29, inscription_envelope_bytes = ?30, brc20_count = ?31, taproot_keypath_count = ?32, taproot_scriptpath_count = ?33, total_output_value = ?34, total_input_value = ?35, stamps_count = ?36, largest_tx_size = ?37, legacy_tx_count = ?38, segwit_tx_count = ?39, taproot_tx_count = ?40, coinbase_text = ?41, op_return_count = ?42, op_return_bytes = ?43, p2a_count = ?44, op_return_max_bytes = ?45, op_return_over_80_count = ?46, tx_v1_count = ?47, tx_v2_count = ?48, tx_v3_count = ?49, p2pk_value = ?50, p2tr_value = ?51, multisig_value = ?52, brc20_bytes = ?53, coinbase_output_count = ?54, unspendable_output_count = ?55, backfill_version = ?56 WHERE height = ?57 AND hash = ?58",
+        )?;
+        for block in blocks {
+            updated += stmt.execute(params![
+                block.version,
+                block.total_fees,
+                block.miner,
+                block.coinbase_locktime,
+                block.coinbase_sequence,
+                block.segwit_spend_count,
+                block.taproot_spend_count,
+                block.omni_count,
+                block.omni_bytes,
+                block.counterparty_count,
+                block.counterparty_bytes,
+                block.runes_count,
+                block.runes_bytes,
+                block.data_carrier_count,
+                block.data_carrier_bytes,
+                block.p2pk_count,
+                block.p2pkh_count,
+                block.p2sh_count,
+                block.p2wpkh_count,
+                block.p2wsh_count,
+                block.p2tr_count,
+                block.multisig_count,
+                block.unknown_script_count,
+                block.input_count,
+                block.output_count,
+                block.rbf_count,
+                block.witness_bytes,
+                block.inscription_count,
+                block.inscription_bytes,
+                block.inscription_envelope_bytes,
+                block.brc20_count,
+                block.taproot_keypath_count,
+                block.taproot_scriptpath_count,
+                block.total_output_value,
+                block.total_input_value,
+                block.stamps_count,
+                block.largest_tx_size,
+                block.legacy_tx_count,
+                block.segwit_tx_count,
+                block.taproot_tx_count,
+                block.coinbase_text,
+                block.op_return_count,
+                block.op_return_bytes,
+                block.p2a_count,
+                block.op_return_max_bytes,
+                block.op_return_over_80_count,
+                block.tx_v1_count,
+                block.tx_v2_count,
+                block.tx_v3_count,
+                block.p2pk_value,
+                block.p2tr_value,
+                block.multisig_value,
+                block.brc20_bytes,
+                block.coinbase_output_count,
+                block.unspendable_output_count,
+                BACKFILL_VERSION,
+                block.height,
+                block.hash
+            ])?;
+        }
+    }
+    refresh_daily_blocks_for_timestamps(&tx, blocks.iter().map(|b| b.time))?;
+    tx.commit()?;
+    Ok(updated)
+}
+
 /// Re-write all computed columns for existing blocks and bump their
 /// backfill_version to BACKFILL_VERSION. Used by the extras backfill task.
 pub fn update_block_extras(
@@ -743,7 +955,7 @@ pub fn update_block_extras(
     let tx = conn.unchecked_transaction()?;
     {
         let mut stmt = tx.prepare_cached(
-            "UPDATE blocks SET version = ?1, total_fees = ?2, miner = ?3, median_fee = ?4, median_fee_rate = ?5, coinbase_locktime = ?6, coinbase_sequence = ?7, segwit_spend_count = ?8, taproot_spend_count = ?9, omni_count = ?10, omni_bytes = ?11, counterparty_count = ?12, counterparty_bytes = ?13, runes_count = ?14, runes_bytes = ?15, data_carrier_count = ?16, data_carrier_bytes = ?17, p2pk_count = ?18, p2pkh_count = ?19, p2sh_count = ?20, p2wpkh_count = ?21, p2wsh_count = ?22, p2tr_count = ?23, multisig_count = ?24, unknown_script_count = ?25, input_count = ?26, output_count = ?27, rbf_count = ?28, witness_bytes = ?29, inscription_count = ?30, inscription_bytes = ?31, inscription_envelope_bytes = ?32, brc20_count = ?33, taproot_keypath_count = ?34, taproot_scriptpath_count = ?35, total_output_value = ?36, total_input_value = ?37, fee_rate_p10 = ?38, fee_rate_p90 = ?39, stamps_count = ?40, largest_tx_size = ?41, max_tx_fee = ?42, inscription_fees = ?43, runes_fees = ?44, legacy_tx_count = ?45, segwit_tx_count = ?46, taproot_tx_count = ?47, coinbase_text = ?48, fee_rate_p25 = ?49, fee_rate_p75 = ?50, op_return_count = ?51, op_return_bytes = ?52, backfill_version = ?53 WHERE height = ?54",
+            "UPDATE blocks SET version = ?1, total_fees = ?2, miner = ?3, median_fee = ?4, median_fee_rate = ?5, coinbase_locktime = ?6, coinbase_sequence = ?7, segwit_spend_count = ?8, taproot_spend_count = ?9, omni_count = ?10, omni_bytes = ?11, counterparty_count = ?12, counterparty_bytes = ?13, runes_count = ?14, runes_bytes = ?15, data_carrier_count = ?16, data_carrier_bytes = ?17, p2pk_count = ?18, p2pkh_count = ?19, p2sh_count = ?20, p2wpkh_count = ?21, p2wsh_count = ?22, p2tr_count = ?23, multisig_count = ?24, unknown_script_count = ?25, input_count = ?26, output_count = ?27, rbf_count = ?28, witness_bytes = ?29, inscription_count = ?30, inscription_bytes = ?31, inscription_envelope_bytes = ?32, brc20_count = ?33, taproot_keypath_count = ?34, taproot_scriptpath_count = ?35, total_output_value = ?36, total_input_value = ?37, fee_rate_p10 = ?38, fee_rate_p90 = ?39, stamps_count = ?40, largest_tx_size = ?41, max_tx_fee = ?42, inscription_fees = ?43, runes_fees = ?44, legacy_tx_count = ?45, segwit_tx_count = ?46, taproot_tx_count = ?47, coinbase_text = ?48, fee_rate_p25 = ?49, fee_rate_p75 = ?50, op_return_count = ?51, op_return_bytes = ?52, p2a_count = ?53, op_return_max_bytes = ?54, op_return_over_80_count = ?55, tx_v1_count = ?56, tx_v2_count = ?57, tx_v3_count = ?58, p2pk_value = ?59, p2tr_value = ?60, multisig_value = ?61, brc20_bytes = ?62, coinbase_output_count = ?63, unspendable_output_count = ?64, backfill_version = ?65 WHERE height = ?66 AND hash = ?67",
         )?;
         for block in blocks {
             stmt.execute(params![
@@ -799,8 +1011,21 @@ pub fn update_block_extras(
                 block.fee_rate_p75,
                 block.op_return_count,
                 block.op_return_bytes,
+                block.p2a_count,
+                block.op_return_max_bytes,
+                block.op_return_over_80_count,
+                block.tx_v1_count,
+                block.tx_v2_count,
+                block.tx_v3_count,
+                block.p2pk_value,
+                block.p2tr_value,
+                block.multisig_value,
+                block.brc20_bytes,
+                block.coinbase_output_count,
+                block.unspendable_output_count,
                 BACKFILL_VERSION,
-                block.height
+                block.height,
+                block.hash
             ])?;
         }
     }
@@ -873,6 +1098,8 @@ pub struct BlockRow {
     pub coinbase_text: String,
     pub fee_rate_p25: f64,
     pub fee_rate_p75: f64,
+    pub coinbase_output_count: u64,
+    pub unspendable_output_count: u64,
 }
 
 impl From<DailyRow> for super::types::DailyAggregate {
@@ -905,6 +1132,9 @@ impl From<DailyRow> for super::types::DailyAggregate {
             avg_p2tr_count: r.avg_p2tr_count,
             avg_multisig_count: r.avg_multisig_count,
             avg_unknown_script_count: r.avg_unknown_script_count,
+            avg_p2a_count: r.avg_p2a_count,
+            avg_coinbase_output_count: r.avg_coinbase_output_count,
+            avg_unspendable_output_count: r.avg_unspendable_output_count,
             avg_input_count: r.avg_input_count,
             avg_output_count: r.avg_output_count,
             avg_rbf_count: r.avg_rbf_count,
@@ -990,6 +1220,8 @@ impl From<BlockRow> for super::types::BlockSummary {
             coinbase_text: r.coinbase_text,
             fee_rate_p25: r.fee_rate_p25,
             fee_rate_p75: r.fee_rate_p75,
+            coinbase_output_count: r.coinbase_output_count,
+            unspendable_output_count: r.unspendable_output_count,
         }
     }
 }
@@ -1017,7 +1249,8 @@ pub fn query_blocks(
                 fee_rate_p10, fee_rate_p90, stamps_count, largest_tx_size,
                 max_tx_fee, inscription_fees, runes_fees,
                 legacy_tx_count, segwit_tx_count, taproot_tx_count,
-                coinbase_text, fee_rate_p25, fee_rate_p75
+                coinbase_text, fee_rate_p25, fee_rate_p75,
+                coinbase_output_count, unspendable_output_count
          FROM blocks WHERE height >= ?1 AND height <= ?2 ORDER BY height ASC",
     )?;
     let rows = stmt.query_map(params![from, to], |row| {
@@ -1077,6 +1310,8 @@ pub fn query_blocks(
             coinbase_text: row.get(52)?,
             fee_rate_p25: row.get(53)?,
             fee_rate_p75: row.get(54)?,
+            coinbase_output_count: row.get(55)?,
+            unspendable_output_count: row.get(56)?,
         })
     })?;
     rows.collect()
@@ -1112,7 +1347,8 @@ pub fn query_blocks_by_ts(
                 fee_rate_p10, fee_rate_p90, stamps_count, largest_tx_size,
                 max_tx_fee, inscription_fees, runes_fees,
                 legacy_tx_count, segwit_tx_count, taproot_tx_count,
-                coinbase_text, fee_rate_p25, fee_rate_p75
+                coinbase_text, fee_rate_p25, fee_rate_p75,
+                coinbase_output_count, unspendable_output_count
          FROM blocks WHERE timestamp >= ?1 AND timestamp <= ?2 ORDER BY height ASC LIMIT ?3",
     )?;
     let rows = stmt.query_map(params![from_ts, to_ts, limit], |row| {
@@ -1172,6 +1408,8 @@ pub fn query_blocks_by_ts(
             coinbase_text: row.get(52)?,
             fee_rate_p25: row.get(53)?,
             fee_rate_p75: row.get(54)?,
+            coinbase_output_count: row.get(55)?,
+            unspendable_output_count: row.get(56)?,
         })
     })?;
     rows.collect()
@@ -1426,6 +1664,9 @@ pub struct DailyRow {
     pub avg_p2tr_count: f64,
     pub avg_multisig_count: f64,
     pub avg_unknown_script_count: f64,
+    pub avg_p2a_count: f64,
+    pub avg_coinbase_output_count: f64,
+    pub avg_unspendable_output_count: f64,
     pub avg_input_count: f64,
     pub avg_output_count: f64,
     pub avg_rbf_count: f64,
@@ -1493,7 +1734,8 @@ pub fn refresh_daily_day(
              total_fees, avg_segwit_spend_count, avg_taproot_spend_count,
              avg_p2pk_count, avg_p2pkh_count, avg_p2sh_count,
              avg_p2wpkh_count, avg_p2wsh_count, avg_p2tr_count,
-             avg_multisig_count, avg_unknown_script_count,
+             avg_multisig_count, avg_unknown_script_count, avg_p2a_count,
+             avg_coinbase_output_count, avg_unspendable_output_count,
              avg_input_count, avg_output_count, avg_rbf_count, avg_witness_bytes,
              avg_inscription_count, avg_inscription_bytes, avg_brc20_count,
              avg_taproot_keypath_count, avg_taproot_scriptpath_count,
@@ -1512,7 +1754,8 @@ pub fn refresh_daily_day(
                 AVG(segwit_spend_count), AVG(taproot_spend_count),
                 AVG(p2pk_count), AVG(p2pkh_count), AVG(p2sh_count),
                 AVG(p2wpkh_count), AVG(p2wsh_count), AVG(p2tr_count),
-                AVG(multisig_count), AVG(unknown_script_count),
+                AVG(multisig_count), AVG(unknown_script_count), AVG(p2a_count),
+                AVG(coinbase_output_count), AVG(unspendable_output_count),
                 AVG(input_count), AVG(output_count), AVG(rbf_count), AVG(witness_bytes),
                 AVG(inscription_count), AVG(inscription_bytes), AVG(brc20_count),
                 AVG(taproot_keypath_count), AVG(taproot_scriptpath_count),
@@ -1561,7 +1804,8 @@ const REBUILD_DAILY_SQL: &str = "INSERT OR REPLACE INTO daily_blocks
              total_fees, avg_segwit_spend_count, avg_taproot_spend_count,
              avg_p2pk_count, avg_p2pkh_count, avg_p2sh_count,
              avg_p2wpkh_count, avg_p2wsh_count, avg_p2tr_count,
-             avg_multisig_count, avg_unknown_script_count,
+             avg_multisig_count, avg_unknown_script_count, avg_p2a_count,
+             avg_coinbase_output_count, avg_unspendable_output_count,
              avg_input_count, avg_output_count, avg_rbf_count, avg_witness_bytes,
              avg_inscription_count, avg_inscription_bytes, avg_brc20_count,
              avg_taproot_keypath_count, avg_taproot_scriptpath_count,
@@ -1580,7 +1824,8 @@ const REBUILD_DAILY_SQL: &str = "INSERT OR REPLACE INTO daily_blocks
                 AVG(segwit_spend_count), AVG(taproot_spend_count),
                 AVG(p2pk_count), AVG(p2pkh_count), AVG(p2sh_count),
                 AVG(p2wpkh_count), AVG(p2wsh_count), AVG(p2tr_count),
-                AVG(multisig_count), AVG(unknown_script_count),
+                AVG(multisig_count), AVG(unknown_script_count), AVG(p2a_count),
+                AVG(coinbase_output_count), AVG(unspendable_output_count),
                 AVG(input_count), AVG(output_count), AVG(rbf_count), AVG(witness_bytes),
                 AVG(inscription_count), AVG(inscription_bytes), AVG(brc20_count),
                 AVG(taproot_keypath_count), AVG(taproot_scriptpath_count),
@@ -1676,7 +1921,12 @@ pub fn query_daily_aggregates_fast(
                 total_output_value, total_input_value,
                 avg_inscription_envelope_bytes, total_inscription_fees, total_runes_fees,
                 avg_legacy_tx_count, avg_segwit_tx_count, avg_taproot_tx_count,
-                avg_fee_rate_p25, avg_fee_rate_p75
+                avg_fee_rate_p25, avg_fee_rate_p75,
+                -- Appended rather than placed beside the other script-type
+                -- columns on purpose: these rows are read positionally, so a
+                -- mid-list insertion would shift every index after it.
+                avg_p2a_count, avg_coinbase_output_count,
+                avg_unspendable_output_count
          FROM daily_blocks
          WHERE day >= ?1 AND day <= ?2
          ORDER BY day ASC",
@@ -1735,6 +1985,13 @@ pub fn query_daily_aggregates_fast(
             avg_taproot_tx_count: row.get::<_, Option<f64>>(47)?.unwrap_or(0.0),
             avg_fee_rate_p25: row.get::<_, Option<f64>>(48)?.unwrap_or(0.0),
             avg_fee_rate_p75: row.get::<_, Option<f64>>(49)?.unwrap_or(0.0),
+            avg_p2a_count: row.get::<_, Option<f64>>(50)?.unwrap_or(0.0),
+            avg_coinbase_output_count: row
+                .get::<_, Option<f64>>(51)?
+                .unwrap_or(0.0),
+            avg_unspendable_output_count: row
+                .get::<_, Option<f64>>(52)?
+                .unwrap_or(0.0),
         })
     })?;
 
@@ -1810,7 +2067,12 @@ pub fn query_daily_aggregates(
                 SUM(total_output_value), SUM(total_input_value),
                 AVG(inscription_envelope_bytes), SUM(inscription_fees), SUM(runes_fees),
                 AVG(legacy_tx_count), AVG(segwit_tx_count), AVG(taproot_tx_count),
-                AVG(fee_rate_p25), AVG(fee_rate_p75)
+                AVG(fee_rate_p25), AVG(fee_rate_p75),
+                -- Appended, not placed with the other script types: this row
+                -- is read positionally, so a mid-list insertion would shift
+                -- every index after it.
+                AVG(p2a_count), AVG(coinbase_output_count),
+                AVG(unspendable_output_count)
          FROM blocks
          WHERE timestamp >= ?1 AND timestamp <= ?2
          GROUP BY day
@@ -1870,6 +2132,13 @@ pub fn query_daily_aggregates(
             avg_taproot_tx_count: row.get::<_, Option<f64>>(47)?.unwrap_or(0.0),
             avg_fee_rate_p25: row.get::<_, Option<f64>>(48)?.unwrap_or(0.0),
             avg_fee_rate_p75: row.get::<_, Option<f64>>(49)?.unwrap_or(0.0),
+            avg_p2a_count: row.get::<_, Option<f64>>(50)?.unwrap_or(0.0),
+            avg_coinbase_output_count: row
+                .get::<_, Option<f64>>(51)?
+                .unwrap_or(0.0),
+            avg_unspendable_output_count: row
+                .get::<_, Option<f64>>(52)?
+                .unwrap_or(0.0),
         })
     })?;
     rows.collect()
@@ -3178,6 +3447,21 @@ pub fn query_extremes_with_heights(
 ) -> rusqlite::Result<super::types::ExtremesData> {
     use super::types::{ExtremeRecord, ExtremeRecordF64, ExtremesData};
 
+    // One read transaction across both passes.
+    //
+    // This finds each maximum, then looks up the block holding it. Without a
+    // transaction those are two snapshots: a sweep committing in between can
+    // change the column the maximum came from, so the lookup finds no match
+    // and the record reads back as value 0, height 0 for a block that plainly
+    // exists. Reproduced during the backfill work by committing between the
+    // two passes.
+    //
+    // Deferred rather than immediate, so this still takes no write lock and
+    // the sweep continues to commit freely beside it; WAL gives this reader a
+    // consistent snapshot for the duration.
+    let tx = conn.unchecked_transaction()?;
+    let conn = &*tx;
+
     // Pass 1: single scan to get all MAX values + counts
     let row = conn.query_row(
         "SELECT
@@ -3733,6 +4017,92 @@ mod tests {
     /// What this does **not** cover: a wrong cast, a struct/schema type
     /// mismatch, or a semantically wrong value computed upstream. Position is
     /// the silent failure; those are not.
+    /// The raw writer omits exactly the nine fee-derived columns.
+    ///
+    /// Two wide statements now write the same table, and they must differ in
+    /// precisely one way. A column added to the full statement and forgotten
+    /// in the raw one would simply never be swept, which is the stranded
+    /// column defect that cost a 14-hour pass; a fee column leaking into the
+    /// raw one would zero ~970,000 rows of correct data.
+    ///
+    /// Derived from the two statements rather than listing their columns, so
+    /// it moves when they do.
+    #[test]
+    fn the_raw_writer_omits_exactly_the_fee_columns() {
+        const FEE_DERIVED: &[&str] = &[
+            "median_fee",
+            "median_fee_rate",
+            "fee_rate_p10",
+            "fee_rate_p90",
+            "fee_rate_p25",
+            "fee_rate_p75",
+            "max_tx_fee",
+            "inscription_fees",
+            "runes_fees",
+        ];
+
+        let full = update_set_columns(fn_body(
+            SELF_SRC,
+            "pub fn update_block_extras(",
+        ));
+        let raw = update_set_columns(fn_body(
+            SELF_SRC,
+            "pub fn update_block_extras_raw(",
+        ));
+        assert!(
+            full.len() > 60 && raw.len() > 50,
+            "parsed {} full and {} raw columns; the parser broke",
+            full.len(),
+            raw.len()
+        );
+
+        let missing: Vec<&String> =
+            full.iter().filter(|c| !raw.contains(c)).collect();
+        let mut want: Vec<&str> = FEE_DERIVED.to_vec();
+        let mut got: Vec<&str> = missing.iter().map(|s| s.as_str()).collect();
+        want.sort_unstable();
+        got.sort_unstable();
+        assert_eq!(
+            got, want,
+            "the raw writer must omit the fee-derived columns and nothing \
+             else. A column here that is not a fee column will never be \
+             swept; a fee column absent from this list will be zeroed."
+        );
+
+        let extra: Vec<&String> =
+            raw.iter().filter(|c| !full.contains(c)).collect();
+        assert!(
+            extra.is_empty(),
+            "the raw writer sets columns the full one does not: {extra:?}"
+        );
+    }
+
+    /// The extremes reader takes one snapshot for both of its passes.
+    ///
+    /// It finds each maximum, then looks up the block holding it. Without a
+    /// transaction those are two snapshots, and a sweep committing between
+    /// them makes an existing block read back as value 0, height 0. Static
+    /// rather than concurrent because the failure needs a write landing in a
+    /// specific microsecond; what can be held cheaply is that the
+    /// transaction is still there.
+    #[test]
+    fn the_extremes_reader_reads_one_snapshot() {
+        let body = fn_body(SELF_SRC, "pub fn query_extremes_with_heights(");
+        assert!(
+            body.contains("unchecked_transaction"),
+            "query_extremes_with_heights no longer opens a transaction, so \
+             its two passes can straddle a sweep commit and report an \
+             existing block as value 0, height 0"
+        );
+        let tx_at = body.find("unchecked_transaction").unwrap();
+        let first_query = body.find("query_row").unwrap_or(usize::MAX);
+        assert!(
+            tx_at < first_query,
+            "the transaction must open before the first read, or the first \
+             pass is outside it"
+        );
+    }
+
     #[test]
     fn wide_statements_bind_each_column_to_its_own_field() {
         let mut problems = Vec::new();
@@ -3744,15 +4114,15 @@ mod tests {
 
         assert_eq!(
             cols.len(),
-            60,
-            "parsed {} columns for the block insert, expected 60. The parser \
+            72,
+            "parsed {} columns for the block insert, expected 72. The parser \
              broke, which must not read as a pass.",
             cols.len()
         );
         assert_eq!(
             fields.len(),
-            59,
-            "parsed {} block.* params, expected 59 (the 60th column, \
+            71,
+            "parsed {} block.* params, expected 71 (the 72nd column, \
              backfill_version, is bound to a constant). The parser broke.",
             fields.len()
         );
@@ -3784,25 +4154,34 @@ mod tests {
 
         assert_eq!(
             cols.len(),
-            53,
-            "parsed {} SET columns for the extras update, expected 53. The \
+            65,
+            "parsed {} SET columns for the extras update, expected 65. The \
              parser broke, which must not read as a pass.",
             cols.len()
         );
         assert_eq!(
             fields.len(),
-            53,
-            "parsed {} block.* params for the extras update, expected 53: 52 \
-             in the SET plus `block.height` for the WHERE, with \
-             BACKFILL_VERSION bound to the 53rd column. The parser broke.",
+            66,
+            "parsed {} block.* params for the extras update, expected 66: 64 \
+             in the SET, plus `block.height` and `block.hash` for the WHERE, \
+             with BACKFILL_VERSION bound to the 65th column. The parser broke.",
             fields.len()
         );
 
-        // Only the first 52 pair up. The last SET column is backfill_version,
+        // All but the last pair up. The last SET column is backfill_version,
         // bound to a constant, which shifts `block.height` into the final param
         // slot where it serves the WHERE clause instead. Both are asserted
         // by name below.
-        for (i, (col, field)) in cols.iter().zip(&fields).take(52).enumerate() {
+        //
+        // Derived from `cols.len()` rather than hardcoded. It was `take(52)`,
+        // and when the statement grew to 63 columns on 2026-10-11 the guard
+        // kept passing while silently checking none of the ten new ones. A
+        // bound that does not move with the thing it bounds is the same
+        // defect as a sample that exercises nothing.
+        let paired = cols.len().saturating_sub(1);
+        for (i, (col, field)) in
+            cols.iter().zip(&fields).take(paired).enumerate()
+        {
             if column_for(field) != col {
                 problems.push(format!(
                     "update_block_extras ?{}: column `{col}` is bound to \
@@ -3818,10 +4197,55 @@ mod tests {
                 cols.last()
             ));
         }
-        if fields.last().map(String::as_str) != Some("height") {
+        if fields.last().map(String::as_str) != Some("hash") {
             problems.push(format!(
                 "update_block_extras: last param is `block.{:?}`, expected \
-                 `block.height` for the WHERE clause",
+                 `block.hash`: the WHERE matches height AND hash so a reorg \
+                 cannot graft stale-fork data onto a canonical row",
+                fields.last()
+            ));
+        }
+
+        // ---- the sweep's writer ------------------------------------------
+        // Added 2026-10-11 after a dry run hit InvalidParameterCount(58, 57)
+        // on this statement. The omission guard beside this one compares
+        // column *names* and cannot see a binding count, so the sweep would
+        // have failed on its first batch after a 14-hour build-up.
+        let body = fn_body(SELF_SRC, "pub fn update_block_extras_raw(");
+        let cols = update_set_columns(body);
+        let fields = params_fields(body);
+        assert_eq!(
+            cols.len(),
+            56,
+            "parsed {} SET columns for the raw writer, expected 56. The \
+             parser broke, which must not read as a pass.",
+            cols.len()
+        );
+        assert_eq!(
+            fields.len(),
+            57,
+            "parsed {} block.* params for the raw writer, expected 57: 55 in \
+             the SET, plus `block.height` and `block.hash` for the WHERE, \
+             with BACKFILL_VERSION bound to the 56th column. The parser broke.",
+            fields.len()
+        );
+        let paired = cols.len().saturating_sub(1);
+        for (i, (col, field)) in
+            cols.iter().zip(&fields).take(paired).enumerate()
+        {
+            if column_for(field) != col {
+                problems.push(format!(
+                    "update_block_extras_raw ?{}: column `{col}` is bound to \
+                     `block.{field}`",
+                    i + 1
+                ));
+            }
+        }
+        if fields.last().map(String::as_str) != Some("hash") {
+            problems.push(format!(
+                "update_block_extras_raw: last param is `block.{:?}`, \
+                 expected `block.hash`: the WHERE matches height AND hash so \
+                 a reorg cannot graft stale-fork data onto a canonical row",
                 fields.last()
             ));
         }
@@ -5060,15 +5484,15 @@ mod tests {
         ] {
             assert_eq!(
                 cols.len(),
-                50,
-                "{label}: parsed {} target columns, expected 50. The parser \
+                53,
+                "{label}: parsed {} target columns, expected 53. The parser \
                  broke, which must not read as a pass.",
                 cols.len()
             );
             assert_eq!(
                 exprs.len(),
-                50,
-                "{label}: parsed {} select expressions, expected 50. The \
+                53,
+                "{label}: parsed {} select expressions, expected 53. The \
                  parser broke.",
                 exprs.len()
             );

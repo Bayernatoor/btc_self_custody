@@ -153,6 +153,10 @@ pub struct BlockSummary {
     pub fee_rate_p25: f64,
     /// 75th percentile fee rate in sat/vB.
     pub fee_rate_p75: f64,
+    /// Outputs created by the coinbase transaction, OP_RETURN included.
+    pub coinbase_output_count: u64,
+    /// Coinbase OP_RETURN outputs, BIP-141 commitment included.
+    pub unspendable_output_count: u64,
 }
 
 /// Full block detail for the single-block detail page. Includes coinbase
@@ -250,6 +254,14 @@ pub struct DailyAggregate {
     pub avg_p2tr_count: f64,
     pub avg_multisig_count: f64,
     pub avg_unknown_script_count: f64,
+    /// Average pay-to-anchor outputs per block. The ninth classified type.
+    pub avg_p2a_count: f64,
+    /// Average coinbase outputs per block. `avg_output_count` counts every
+    /// output; consumers measuring user activity subtract this.
+    pub avg_coinbase_output_count: f64,
+    /// Average coinbase OP_RETURN outputs per block, commitment included.
+    /// UTXO growth must retire these, since `avg_op_return_count` does not.
+    pub avg_unspendable_output_count: f64,
     /// Average input count per block.
     pub avg_input_count: f64,
     /// Average output count per block.

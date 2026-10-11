@@ -1868,7 +1868,7 @@ pub const CHARTS: &[ChartMeta] = &[
         }],
         about: Some(About {
             definition: Some("The type of address each new output pays to. Every output commits to a script, and the shape of that script says which format the receiver gave out: a legacy '1', a '3' that commits to a hash of the spending conditions rather than to a single key, a SegWit 'bc1q' or a Taproot 'bc1p'. Modern wallets often put a SegWit program behind a '3', which is why that band did not empty when 'bc1q' arrived. One band is not an address at all: P2PK paid a public key directly, before address formats existed. It has not stopped entirely, but it arrives in bursts rather than a trickle: roughly one block in seven hundred carries one, and most days have none at all. Counting them is how the chain shows a format being adopted."),
-            technical: "Counts of outputs created per script type, from the classification stored per block. Daily values are totals for the day, not per-block averages: 3.0 per block over 10 blocks is 30. Coinbase outputs are excluded.\n\nThe P2SH band is the one that hides things. A '3' output is only a commitment to a hash, so a nested SegWit program, a multi-signature arrangement and a timelock are the same shape on creation, and the script behind it is revealed only when the output is spent. This chart counts outputs as they are created, so it cannot separate them, and no column here does.\n\nA band can also start before the rule that gave it meaning, because a script shape is valid to create before the network agrees what it means. Six P2SH outputs sit in five blocks from 2012-03-07, and the BIP-16 marker is at block 173,805 on 2012-04-01, nearly four thousand blocks later. Taproot does the same, with outputs from 2019 against a 2021 activation. Turn on the BIP activations overlay to see it: the marker lands well to the right of where the band begins.",
+            technical: "Counts of outputs created per script type, from the classification stored per block. Daily values are totals for the day, not per-block averages: 3.0 per block over 10 blocks is 30. Coinbase outputs are included: a coinbase payout is an output of its script type like any other, and excluding it made the early chain, which is almost entirely coinbase, read as empty.\n\nThe P2SH band is the one that hides things. A '3' output is only a commitment to a hash, so a nested SegWit program, a multi-signature arrangement and a timelock are the same shape on creation, and the script behind it is revealed only when the output is spent. This chart counts outputs as they are created, so it cannot separate them, and no column here does.\n\nA band can also start before the rule that gave it meaning, because a script shape is valid to create before the network agrees what it means. Six P2SH outputs sit in five blocks from 2012-03-07, and the BIP-16 marker is at block 173,805 on 2012-04-01, nearly four thousand blocks later. Taproot does the same, with outputs from 2019 against a 2021 activation. Turn on the BIP activations overlay to see it: the marker lands well to the right of where the band begins.",
         }),
     },
     ChartMeta {
@@ -2174,7 +2174,7 @@ pub const CHARTS: &[ChartMeta] = &[
             method_daily: Method::Measured,
             per_block: Aggregation::PerBlockObservation,
             daily: Aggregation::RatioOfTotals,
-            population: "P2PKH outputs over eight classified output types: the six payment types plus bare multisig and unrecognised scripts. OP_RETURN outputs are outside it, and so are coinbase outputs, which are not counted. Note this is a wider denominator than the Address Type Share chart uses, so P2PKH reads lower here than there. The 90-day smoothing exists only at daily resolution. A falling share does not establish that those users moved to another type.",
+            population: "P2PKH outputs over eight classified output types: the six payment types plus bare multisig and unrecognised scripts. OP_RETURN outputs are outside it. Coinbase outputs are counted, which matters most before 2012 when they were much of the chain. Note this is a wider denominator than the Address Type Share chart uses, so P2PKH reads lower here than there. The 90-day smoothing exists only at daily resolution. A falling share does not establish that those users moved to another type.",
         }],
         about: Some(About {
             definition: Some("The decline of the original Bitcoin address format. P2PKH is the '1...' address, and it carried nearly nine in ten outputs through the years between P2SH arriving and SegWit activating, with most of the rest going to '3...'.
@@ -2545,7 +2545,7 @@ The reference lines at 10% and 5% are markers for reading the trend. They are no
                 method_daily: Method::Measured,
                 per_block: Aggregation::PerBlockObservation,
                 daily: Aggregation::MeanOfPerBlockValues,
-                population: "Includes provably unspendable OP_RETURN outputs, which never enter the spendable set, so outputs exceeding inputs does not by itself mean that set grew. Coinbase outputs are not counted.",
+                population: "Every output in the block, coinbase included, and that is the raw tally rather than the change in the spendable set: provably unspendable outputs are in it. The UTXO Growth Rate chart subtracts them.",
             },
             Measurement {
                 series: "Inputs (consumed)",
@@ -2583,11 +2583,11 @@ The reference lines at 10% and 5% are markers for reading the trend. They are no
             method_daily: Method::Estimated,
             per_block: Aggregation::PerBlockObservation,
             daily: Aggregation::DailyTotal,
-            population: "Outputs created less detected OP_RETURN outputs less inputs consumed, over non-coinbase transactions. Coinbase outputs are missing, which leaves the series short by two or three per block. Negative means a net reduction; it does not establish consolidation.",
+            population: "Every output created, less every output that can never be spent, less the inputs consumed. Coinbase outputs are counted, and so are the coinbase's own unspendable outputs; genesis and the two BIP-30 duplicate coinbases add nothing and are treated as such. This reproduces the node's own utxo_increase_actual. Negative means a net reduction; it does not establish consolidation.",
         }],
         about: Some(About {
             definition: Some("Whether the set of spendable coins is growing or shrinking. Every transaction consumes existing outputs and creates new ones, and the running total of unspent ones is the UTXO set. Positive means more were created than consumed, and negative means the reverse, which is consistent with wallets consolidating small coins without establishing that any of them did."),
-            technical: "Outputs created, minus the ones that can never be spent, minus inputs consumed. OP_RETURN outputs are provably unspendable and never enter the set, so they do not count as growth. The coinbase transaction is absent from these counts, so its own outputs are missing and this runs two or three per block short of a node's own figure. Net, not cumulative, which is why it goes negative and why a log axis cannot plot every point. The set matters because every node holds it in memory to validate, making it a running cost to the whole network.",
+            technical: "Outputs created, minus the ones that can never be spent, minus inputs consumed. OP_RETURN outputs are provably unspendable and never enter the set, so they do not count as growth. The coinbase is counted like any other transaction, and unspendability is decided the way a node decides it, by the script rather than by which protocol wrote it: a miner's OP_RETURN tag that is not push-only is still unspendable. It matches the node's own utxo_increase_actual exactly. Net, not cumulative, which is why it goes negative and why a log axis cannot plot every point. The set matters because every node holds it in memory to validate, making it a running cost to the whole network.",
         }),
     },
     ChartMeta {
@@ -2762,7 +2762,7 @@ The reference lines at 10% and 5% are markers for reading the trend. They are no
                 method_daily: Method::Measured,
                 per_block: Aggregation::PerBlockObservation,
                 daily: Aggregation::MeanOfPerBlockValues,
-                population: "P2WPKH plus P2WSH outputs of non-coinbase transactions. Not every possible witness program: unrecognised or future witness versions are not counted here. The band is drawn as \"SegWit v0\", because \"SegWit\" alone read as every witness output rather than the two native v0 types it counts.",
+                population: "P2WPKH plus P2WSH outputs, coinbase included. Not every possible witness program: unrecognised or future witness versions are not counted here. The band is drawn as \"SegWit v0\", because \"SegWit\" alone read as every witness output rather than the two native v0 types it counts.",
             },
             Measurement {
                 series: "Taproot",
@@ -5104,9 +5104,11 @@ mod tests {
             ),
             (
                 "only outputs that can be spent",
-                "it subtracts detected OP_RETURN and omits coinbase outputs \
-                 entirely, running two or three per block short of the node's \
-                 own figure. Declared Estimated.",
+                "it now counts every output including the coinbase's, and \
+                 decides spendability by the script rather than by protocol \
+                 classification, so it matches the node's own \
+                 utxo_increase_actual. Corrected 2026-10-11; it previously \
+                 ran two or three per block short.",
             ),
             (
                 "potential stale block races",

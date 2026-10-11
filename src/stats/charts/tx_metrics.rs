@@ -173,7 +173,19 @@ pub fn batching_chart(blocks: &[BlockSummary]) -> serde_json::Value {
             .filter(|n| *n > 0)
             .map(|real| round(count as f64 / real as f64, 2))
     };
-    let out_fn = |b: &BlockSummary| per_real_tx(b.output_count, b.tx_count);
+    // The numerator must stay non-coinbase, because the denominator is.
+    //
+    // `output_count` became every output in the block, which is structurally
+    // right, but this chart measures outputs per *user* transaction. Dividing
+    // an all-output numerator by a user-transaction denominator inflates the
+    // line by the coinbase's share: block 170 read 3 where the answer is 2,
+    // and block 57,043 read 2 where the answer is 1.
+    let out_fn = |b: &BlockSummary| {
+        per_real_tx(
+            b.output_count.saturating_sub(b.coinbase_output_count),
+            b.tx_count,
+        )
+    };
     let in_fn = |b: &BlockSummary| per_real_tx(b.input_count, b.tx_count);
     let out_raw_str = build_data_array_opt_f64(blocks, out_fn);
     let out_raw = data_array_value(&out_raw_str);
@@ -243,7 +255,11 @@ pub fn batching_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
             // Strictly above one: a day of coinbase-only blocks averages
             // exactly one transaction, and the corrected divisor is then zero.
             if d.avg_tx_count > 1.0 {
-                round(d.avg_output_count / (d.avg_tx_count - 1.0), 2)
+                // Non-coinbase outputs over non-coinbase transactions; see
+                // the per-block arm for why the numerator is corrected.
+                let user_outputs =
+                    d.avg_output_count - d.avg_coinbase_output_count;
+                round(user_outputs / (d.avg_tx_count - 1.0), 2)
             } else {
                 0.0
             }
@@ -585,8 +601,32 @@ pub fn utxo_flow_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
 /// figure and the node's. Fixing it means storing a coinbase output count and
 /// backfilling 966,871 blocks; the `technical` copy says so rather than
 /// implying the number is exact.
+/// Heights whose coinbase output never adds a UTXO entry.
+///
+/// Genesis is unspendable by consensus: Core does not place its output in the
+/// set at all. 91,842 and 91,880 are the BIP30 duplicate coinbases, which
+/// recreated transactions identical to earlier ones and so overwrote existing
+/// entries rather than adding new ones. Core special-cases all three, and a
+/// formula that does not will overstate growth at exactly these heights.
+const NO_UTXO_FROM_COINBASE: &[u64] = &[0, 91_842, 91_880];
+
 fn net_utxo_change(b: &BlockSummary) -> i64 {
-    b.output_count as i64 - b.op_return_count as i64 - b.input_count as i64
+    // Outputs created, less those that can never be spent, less the entries
+    // spent away. This reproduces Core's `getblockstats.utxo_increase_actual`.
+    //
+    // `unspendable_output_count` rather than `op_return_count` is the part
+    // that took three attempts. The two are different sets: `op_return_count`
+    // answers a question about user data and carries policy with it, while
+    // Core prunes on `IsUnspendable`, which is the raw first-byte test. Block
+    // 470,000's coinbase carries an `OP_RETURN "RSKBLOCK:"` that is
+    // `nonstandard` to the Solver yet still unspendable, and counting by
+    // label read -4,297 there against Core's -4,298.
+    let coinbase_adjust = i64::from(NO_UTXO_FROM_COINBASE.contains(&b.height))
+        * b.coinbase_output_count as i64;
+    b.output_count as i64
+        - b.unspendable_output_count as i64
+        - b.input_count as i64
+        - coinbase_adjust
 }
 
 pub fn utxo_growth_chart(blocks: &[BlockSummary]) -> serde_json::Value {
@@ -635,9 +675,29 @@ pub fn utxo_growth_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
     let data: Vec<f64> = days
         .iter()
         .map(|d| {
-            let net = (d.avg_output_count - d.avg_input_count)
+            // The daily arm mirrors the per-block one: averages times the
+            // block count is the sum. `total_op_return_count` is gone from
+            // here because unspendability, not protocol classification, is
+            // what decides whether an output joins the set.
+            //
+            // The genesis and BIP30 exceptions, by date.
+            //
+            // The daily table has no per-height hook, so the three heights
+            // whose coinbase adds no UTXO are matched by the days they fall
+            // on. Leaving them out put the daily line one too high on each:
+            // -101 against the node's -102 on 2010-11-14, and 971 against 970
+            // the next day.
+            //
+            // Three days out of more than six thousand, which is exactly why
+            // it would never have been noticed from the chart.
+            const NO_UTXO_DAYS: &[&str] =
+                &["2009-01-03", "2010-11-14", "2010-11-15"];
+            let exception = i64::from(NO_UTXO_DAYS.contains(&d.date.as_str()));
+            let net = (d.avg_output_count
+                - d.avg_unspendable_output_count
+                - d.avg_input_count)
                 * d.block_count as f64
-                - d.total_op_return_count as f64;
+                - exception as f64;
             round(net, 0)
         })
         .collect();
@@ -935,11 +995,20 @@ mod utxo_tests {
         );
     }
 
-    fn block(outputs: u64, inputs: u64, op_returns: u64) -> BlockSummary {
+    /// The third argument is now **unspendable** outputs, not OP_RETURN
+    /// protocol counts.
+    ///
+    /// Those are different sets, and the formula moved to the first because
+    /// Core prunes on `IsUnspendable`: a coinbase `OP_RETURN "RSKBLOCK:"` is
+    /// `nonstandard` to the Solver and still never enters the set. Both are
+    /// set here, so a fixture cannot silently satisfy the formula through the
+    /// field it no longer reads.
+    fn block(outputs: u64, inputs: u64, unspendable: u64) -> BlockSummary {
         BlockSummary {
             output_count: outputs,
             input_count: inputs,
-            op_return_count: op_returns,
+            unspendable_output_count: unspendable,
+            op_return_count: unspendable,
             ..Default::default()
         }
     }
