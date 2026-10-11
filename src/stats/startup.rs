@@ -55,6 +55,11 @@ const PRICE_REFRESH_INTERVAL: std::time::Duration =
 /// Initialize the stats module. Returns `None` if `BITCOIN_STATS_RPC_URL` is not set
 /// (dormant mode). Otherwise returns
 /// (shared_state, router, zmq_tx_url, zmq_block_url, zmq_sequence_url).
+/// How long the backfill sweep waits before starting, so a cold start's
+/// mempool seed and ZMQ backlog finish first. See the spawn site for why.
+const SWEEP_START_DELAY: std::time::Duration =
+    std::time::Duration::from_secs(180);
+
 pub async fn init() -> Option<(
     Arc<StatsState>,
     Router,
@@ -392,6 +397,24 @@ pub fn spawn_background_tasks(
     {
         let state = Arc::clone(&state);
         tokio::spawn(async move {
+            // Let startup settle before competing for the node's RPC.
+            //
+            // A cold start seeds the whole mempool, enriches the ZMQ backlog
+            // one `getmempoolentry` at a time, and pre-warms caches, all at
+            // once. Adding a sweep on top of that overflowed Core's
+            // `rpcworkqueue`, which defaults to 16: on 2026-10-11 the ZMQ
+            // path logged `rpc_fail=1885` against 1,000 transactions
+            // processed, and the sweep itself lost 8 of its first 100 blocks
+            // to connection errors.
+            //
+            // The sweep is the one task here with no deadline. Three minutes
+            // against a twelve-hour job is free, and it is the difference
+            // between the site being responsive during the sweep and not.
+            //
+            // Placed at the spawn rather than inside `backfill_extras`, so
+            // the function stays directly callable from tests without them
+            // sleeping.
+            tokio::time::sleep(SWEEP_START_DELAY).await;
             ingest::backfill_extras(&state.rpc, &state.db).await;
             ingest::backfill_backwards(&state.rpc, &state.db).await;
         });
