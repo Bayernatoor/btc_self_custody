@@ -862,7 +862,7 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "OP_RETURN scriptPubKey bytes over serialized block bytes. Script bytes only: the output's value and length fields are not included, so this understates the space those outputs occupy.",
         }],
         about: Some(About {
-            definition: Some("How much of a block is OP_RETURN data. An OP_RETURN output is a deliberately unspendable output whose script carries a few dozen bytes, which can timestamp or label things on chain. 63.1% of all blocks contain at least one."),
+            definition: Some("How much of a block is OP_RETURN data. An OP_RETURN output is a deliberately unspendable output whose script carries a few dozen bytes, which can timestamp or label things on chain. About 63% of all blocks contain at least one."),
             technical: "OP_RETURN script bytes over serialized block bytes. Script bytes only, so the output's value and length fields sit outside the numerator, which makes this a floor on the true on-chain cost rather than the whole of it.",
         }),
     },
@@ -1200,7 +1200,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: Some("Everything the site detects as embedded data, by size rather than by count. 63.1% of blocks carry an OP_RETURN output and 19.8% carry a detected inscription, and the two are measured on different bases, which the bands say."),
+            definition: Some("Everything the site detects as embedded data, by size rather than by count. About 63% of blocks carry an OP_RETURN output and about 20% carry a detected inscription, and the two are measured on different bases, which the bands say."),
             technical: "OP_RETURN bands are exact script bytes. The inscription band is an estimated payload, and it includes BRC-20 content because no separate byte column exists for it, unlike the count chart where the two are disjoint. Over the whole chain that is about 6.4 GB of exact bytes against about 44 GB of estimate, so the stack is mostly estimate.",
         }),
     },
@@ -2151,7 +2151,7 @@ pub const CHARTS: &[ChartMeta] = &[
         }],
         about: Some(About {
             definition: Some("Whether an output type is gaining or losing ground, rather than how much it holds. A line above zero means that type's share of outputs grew over the window; below zero means it shrank.\n\nThe figure is in percentage points, not percent. Taproot going from 22% of outputs to 11% fell by 11 points and by 50%. Both describe the same move, and this chart plots the first.\n\nThe share is smoothed before it is differenced, so a point compares the trailing average now against the same average one window earlier, reaching back about twice the window: roughly two months daily, two days per block.\n\nEvery type is drawn, so the lines always add up to zero, which does not mean users moved between them. Through April 2026 P2WPKH rose more than thirteen points while Taproot fell more than eleven, for separate reasons: inscriptions dropped by about two thirds, roughly halving Taproot output creation, while P2WPKH's own output count rose by more than a quarter."),
-            technical: "Each type's outputs as a share of the eight classified output types, averaged across the window, minus that same average one window earlier.\n\nThe window follows the resolution. Per block it is 144 blocks, a day at the ten-minute target, though a real day has held between 98 and 197 blocks over the last year. At daily resolution it is 30 days.\n\nAll eight classified output types are drawn: P2PKH, P2SH, P2WPKH, P2WSH, P2TR, P2PK, bare multisig and unclassified scripts. Because they are the whole denominator, the lines sum to zero at every point, so whatever one type gains the others gave up.\n\nEach of the quiet ones has its own era rather than being permanently flat. P2PK held more than four fifths of outputs in January 2009 and a twentieth of a per cent by late 2010. That handover is the largest move on the chart, and it is why P2PK and P2PKH are mirror images through 2009 and 2010: almost nothing else existed yet, so one type's loss was exactly the other's gain, by more than 56 points. Bare multisig peaks during the Stamps period in 2023, P2WSH during the Ordinals ramp, and unclassified scripts shifted almost four points across the last year. On a short range most of them sit on zero; use the legend to hide any line that crowds the one you are reading.",
+            technical: "Each type's outputs as a share of the eight classified output types, averaged across the window, minus that same average one window earlier.\n\nThe window follows the resolution. Per block it is 144 blocks, a day at the ten-minute target, though a real day has held between 98 and 197 blocks over the last year. At daily resolution it is 30 days.\n\nAll eight classified output types are drawn: P2PKH, P2SH, P2WPKH, P2WSH, P2TR, P2PK, bare multisig and unclassified scripts. Because they are the whole denominator, the lines sum to zero at every point, so whatever one type gains the others gave up.\n\nEach of the quiet ones has its own era rather than being permanently flat. P2PK held virtually every output in January 2009 and about 12% of them by late 2010. That handover is the largest move on the chart, and it is why P2PK and P2PKH are mirror images through 2009 and 2010: no other address type existed yet, so one type's loss was the other's gain, by more than 40 points.\n\nWhat P2PK keeps after that is almost entirely the block reward. Across late 2010 and early 2011 the count of P2PK outputs and the count of coinbase outputs are within half a per cent of each other, so what the line tracks from then on is miners paying themselves to a public key while ordinary payments had moved to P2PKH.\n\nBare multisig peaks during the Stamps period in 2023, P2WSH during the Ordinals ramp, and unclassified scripts shifted almost four points across the last year. On a short range most of them sit on zero; use the legend to hide any line that crowds the one you are reading.",
         }),
     },
     ChartMeta {
@@ -2560,7 +2560,7 @@ The reference lines at 10% and 5% are markers for reading the trend. They are no
         ],
         about: Some(About {
             definition: Some("The two sides of every block: outputs consumed and outputs created. Bitcoin has no accounts, only discrete outputs, so spending means destroying some and making others, and every node keeps the set of unspent ones in order to validate new blocks.\n\nThe gap between the lines is not the change in that set. An OP_RETURN output is created and paid for like any other, but it is provably unspendable, so it never enters the UTXO set: it lifts the green line and never the red one. Over the past year that gap has run about two thousand outputs per block. The UTXO Growth Rate chart subtracts them and follows the set itself."),
-            technical: "Neither line counts the coinbase transaction, so a block carrying nothing else reads zero on both, which happens about ninety thousand times across the chain.\n\nOver a day the chart plots the mean per block rather than the day's total, so the two resolutions share a scale and a busy day does not read as a tall one.",
+            technical: "The coinbase input is not counted, because it consumes nothing: the reward is newly issued rather than spent out of the output set. Its outputs are counted, because they create spendable outputs like any others. So a block carrying nothing but a coinbase consumes nothing and creates only its reward, which happens about ninety thousand times across the chain.\n\nAlmost all of those create a single output. About two thousand create more, from pools that pay their miners straight from the coinbase rather than in a separate transaction: Eligius did this from 2011 to 2017 and Ocean does it today. The largest is block 133,471, an Eligius block that paid 919.\n\nOver a day the chart plots the mean per block rather than the day's total, so the two resolutions share a scale and a busy day does not read as a tall one.",
         }),
     },
     ChartMeta {
@@ -3879,12 +3879,45 @@ mod tests {
             ),
             (
                 "utxo-flow",
-                "a block with only a coinbase reads zero on both lines, about \
-                 ninety thousand times",
-                "SELECT COUNT(*) FROM blocks \
-                 WHERE input_count=0 AND output_count=0",
+                "a block carrying nothing but a coinbase ... about ninety \
+                 thousand times",
+                "SELECT COUNT(*) FROM blocks WHERE tx_count=1",
                 85_000.0,
                 95_000.0,
+            ),
+            // Regression guard on the 2026-10 sweep, not a copy figure. Until
+            // it, coinbase outputs were skipped and a coinbase-only block read
+            // output_count=0 about ninety thousand times. If that behaviour
+            // ever returns this fails immediately, which the count above would
+            // not: it counts blocks, and they exist either way.
+            (
+                "utxo-flow",
+                "Its outputs are counted (coinbase-only blocks with no outputs)",
+                "SELECT COUNT(*) FROM blocks WHERE tx_count=1 AND output_count=0",
+                0.0,
+                0.0,
+            ),
+            (
+                "utxo-flow",
+                "Almost all of those create a single output",
+                "SELECT COUNT(*) FROM blocks WHERE tx_count=1 AND output_count=1",
+                86_000.0,
+                90_000.0,
+            ),
+            (
+                "utxo-flow",
+                "Eligius did this from 2011 to 2017",
+                "SELECT CAST(strftime('%Y', datetime(MAX(timestamp),'unixepoch')) \
+                 AS REAL) FROM blocks WHERE coinbase_text LIKE '%Eligius%'",
+                2017.0,
+                2017.0,
+            ),
+            (
+                "utxo-flow",
+                "block 133,471, an Eligius block that paid 919",
+                "SELECT coinbase_output_count FROM blocks WHERE height=133471",
+                919.0,
+                919.0,
             ),
             // Closed history, so this can only move if a backfill rewrites
             // it. Both halves are asserted because the copy's point is the
@@ -3924,24 +3957,43 @@ mod tests {
             ),
             (
                 "multi-velocity",
-                "P2PK held more than four fifths of outputs in January 2009",
+                "P2PK held virtually every output in January 2009",
                 "SELECT 100.0*SUM(p2pk_count)/SUM(p2pkh_count+p2sh_count \
                  +p2wpkh_count+p2wsh_count+p2tr_count+p2pk_count \
                  +multisig_count+unknown_script_count) FROM blocks \
                  WHERE timestamp < strftime('%s','2009-02-01')",
-                80.0,
-                90.0,
+                99.0,
+                100.0,
             ),
+            // Read 0.05% until the 2026-10 sweep and 11.60% after it, because
+            // coinbase outputs are now classified rather than skipped and
+            // essentially every P2PK output of this era is a block reward.
+            // The old bound would have passed forever on a figure that had
+            // stopped describing the chart.
             (
                 "multi-velocity",
-                "P2PK was a twentieth of a per cent by late 2010",
+                "about 12% of them by late 2010",
                 "SELECT 100.0*SUM(p2pk_count)/SUM(p2pkh_count+p2sh_count \
                  +p2wpkh_count+p2wsh_count+p2tr_count+p2pk_count \
                  +multisig_count+unknown_script_count) FROM blocks \
                  WHERE timestamp >= strftime('%s','2010-11-01') \
                  AND timestamp < strftime('%s','2011-01-01')",
-                0.04,
-                0.06,
+                11.0,
+                13.0,
+            ),
+            // Guards the claim that what remains of P2PK after 2010 is the
+            // block reward. Aggregate over the span, not per month: December
+            // 2010 alone runs 3.3% out because some coinbases moved to P2PKH
+            // early, so a monthly form of this would fail on true copy.
+            (
+                "multi-velocity",
+                "within half a per cent of each other",
+                "SELECT ABS(100.0*SUM(coinbase_output_count)/SUM(p2pk_count) - 100.0) \
+                 FROM blocks \
+                 WHERE timestamp >= strftime('%s','2010-11-01') \
+                 AND timestamp < strftime('%s','2011-04-01')",
+                0.0,
+                0.5,
             ),
             // This one is deliberately the long form, while every row around
             // it is a plain ratio of totals. The claim describes the plotted
@@ -3952,7 +4004,7 @@ mod tests {
             // the reader never sees.
             (
                 "multi-velocity",
-                "one type's loss was the other's gain, by more than 56 points",
+                "one type's loss was the other's gain, by more than 40 points",
                 "WITH sh AS (SELECT day, avg_p2pkh_count*100.0 \
                  /(avg_p2pk_count+avg_p2pkh_count+avg_p2sh_count \
                  +avg_p2wpkh_count+avg_p2wsh_count+avg_p2tr_count \
@@ -3965,8 +4017,8 @@ mod tests {
                  ROWS BETWEEN 29 PRECEDING AND CURRENT ROW) AS h30 FROM sh), \
                  v AS (SELECT h30 - LAG(h30,30) OVER (ORDER BY day) AS d \
                  FROM a) SELECT MAX(d) FROM v",
-                56.0,
-                60.0,
+                40.0,
+                45.0,
             ),
             (
                 "multi-velocity",
@@ -4251,17 +4303,29 @@ mod tests {
             ),
             (
                 "unified-volume",
-                "63.1% of blocks carry an OP_RETURN output",
+                "About 63% of blocks carry an OP_RETURN output",
                 "SELECT 100.0*SUM(op_return_count>0)/COUNT(*) FROM blocks",
-                62.0,
-                65.0,
+                62.5,
+                63.5,
             ),
             (
                 "unified-volume",
-                "19.8% of blocks carry a detected inscription",
+                "about 20% carry a detected inscription",
                 "SELECT 100.0*SUM(inscription_count>0)/COUNT(*) FROM blocks",
-                19.0,
-                21.0,
+                19.5,
+                20.5,
+            ),
+            // Same figure as the unified-volume row above, stated again in
+            // op-block-share's own definition. It sat in KNOWN_UNGUARDED
+            // waiting for the sweep that made it measurable: it was computed
+            // from an op_return_count that double-counted coinbase outputs,
+            // so guarding it before 2026-10 would have pinned a wrong number.
+            (
+                "op-block-share",
+                "About 63% of all blocks contain at least one",
+                "SELECT 100.0*SUM(op_return_count>0)/COUNT(*) FROM blocks",
+                62.5,
+                63.5,
             ),
             // Hedged with "about", so the bounds are wide. The point is to
             // catch the ratio inverting or the estimate running away, not to
@@ -4550,16 +4614,21 @@ mod tests {
         ("fee-spikes", "300"),    // the minimum range the builder needs
         ("fullness-dist", "10%"), // the histogram's bucket width
         ("multi-velocity", "15"), // the points-against-percent example
+        // Same example. It needed no entry until 2026-10 only because
+        // the drift row "by more than 56 points" happened to contain a
+        // "5", and coverage here is a substring match. Retuning that
+        // row to 40 removed the accident and revealed the gap.
+        ("multi-velocity", "5"), // "10 to 15 is 5 points, not 50%"
         ("multi-velocity", "50%"), // arithmetic on 22 and 11, both guarded
-        ("p2pkh-sunset", "10%"),  // a drawn reference line
-        ("p2pkh-sunset", "5%"),   // the other one
-        ("propagation", "60"),    // the chart's own definition of close
-        ("rbf", "125"),           // BIP 125, a number but not a quantity
-        ("time-dist", "63.2%"),   // what an exponential predicts, not the
-        ("time-dist", "5.0%"),    // chain. These three are mathematics and
-        ("time-dist", "0.25%"),   // move only if the distribution does.
-        ("weight-util", "90%"),   // the threshold the prose interprets at
-        ("witness-tx-pct", "0"),  // "reading 0, 0 and 100", a worked case
+        ("p2pkh-sunset", "10%"), // a drawn reference line
+        ("p2pkh-sunset", "5%"),  // the other one
+        ("propagation", "60"),   // the chart's own definition of close
+        ("rbf", "125"),          // BIP 125, a number but not a quantity
+        ("time-dist", "63.2%"),  // what an exponential predicts, not the
+        ("time-dist", "5.0%"),   // chain. These three are mathematics and
+        ("time-dist", "0.25%"),  // move only if the distribution does.
+        ("weight-util", "90%"),  // the threshold the prose interprets at
+        ("witness-tx-pct", "0"), // "reading 0, 0 and 100", a worked case
     ];
 
     /// Figures in live copy that nothing re-measures, as this stood on
@@ -4583,7 +4652,6 @@ mod tests {
         ("interval", "40"),
         ("multi-velocity", "197"),
         ("multi-velocity", "98"),
-        ("op-block-share", "63.1%"),
         ("protocol-fees", "125,000"),
         ("time-dist", "0.3%"),
         ("time-dist", "4.5%"),
