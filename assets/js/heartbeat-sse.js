@@ -1030,7 +1030,24 @@ var MAX_WHALE_ENTRIES = 100;
 // Track seen txids to prevent duplicates when history replays + live arrives
 window._seenNotableTxids = window._seenNotableTxids || new Set();
 
-// Build the feed row HTML and styling from a tx object.
+// One feed cell. The text is assigned as text and is never parsed as markup.
+//
+// This matters because `op_return_text` is bytes chosen by whoever broadcast
+// the transaction: anyone willing to pay a fee decides what goes in it, and
+// `notable.rs::extract_readable_text` admits anything 70% printable, which
+// `<img src=x onerror=...>` satisfies comfortably. Building the row by string
+// concatenation therefore turned a few hundred sats into script execution in
+// every visitor's browser. The row is assembled from nodes so there is no
+// markup for a payload to be part of.
+function _feedSpan(className, text, title) {
+    var el = document.createElement('span');
+    el.className = className;
+    el.textContent = text;
+    if (title) el.title = title;
+    return el;
+}
+
+// Build the feed row's cells and styling from a tx object.
 // Accepts both live SSE format (whale/fee_outlier/... booleans) and
 // persistent notable_txs format (notable_type string).
 function _buildNotableRow(tx) {
@@ -1050,53 +1067,73 @@ function _buildNotableRow(tx) {
     var usdVal = Math.round(tx.value_usd || 0);
     var usdStr = usdVal > 0 ? '$' + usdVal.toLocaleString() : fmtBtc(btcVal) + ' BTC';
     var isConfirmed = !!tx.confirmed_height;
-    var statusIcon = isConfirmed ? '<span class="text-white/40 text-[10px] shrink-0" title="Confirmed">\u2713</span>' : '';
+    var statusNode = isConfirmed
+        ? _feedSpan('text-white/40 text-[10px] shrink-0', '\u2713', 'Confirmed')
+        : null;
 
-    var labelHtml, feedType;
+    var labelNodes, feedType;
     if (isWhale) {
         feedType = 'whale';
-        labelHtml = '<span class="text-[#ffd700] font-bold shrink-0">WHALE</span>' +
-            '<span class="text-[#ffd700]/80 shrink-0">' + usdStr + '</span>';
+        labelNodes = [
+            _feedSpan('text-[#ffd700] font-bold shrink-0', 'WHALE'),
+            _feedSpan('text-[#ffd700]/80 shrink-0', usdStr)
+        ];
     } else if (isRoundNumber) {
         feedType = 'round_number';
         // Show the round output value (the part that triggered detection), not total
         var roundBtc = (tx.max_output_value || tx.value || 0) / 100000000;
-        labelHtml = '<span class="text-[#90ee90] font-bold shrink-0">ROUND #</span>' +
-            '<span class="text-white/60 shrink-0">' + fmtBtc(roundBtc) + ' BTC out</span>';
+        labelNodes = [
+            _feedSpan('text-[#90ee90] font-bold shrink-0', 'ROUND #'),
+            _feedSpan('text-white/60 shrink-0', fmtBtc(roundBtc) + ' BTC out')
+        ];
     } else if (isLargeInscription) {
         feedType = 'inscription';
-        labelHtml = '<span class="text-[#ff00c8] font-bold shrink-0">INSCRIPTION</span>' +
-            '<span class="text-white/50 shrink-0">' + fmtBtc(btcVal) + ' BTC</span>';
+        labelNodes = [
+            _feedSpan('text-[#ff00c8] font-bold shrink-0', 'INSCRIPTION'),
+            _feedSpan('text-white/50 shrink-0', fmtBtc(btcVal) + ' BTC')
+        ];
     } else if (isConsolidation) {
         feedType = 'consolidation';
         var ioC = (tx.input_count || '?') + '->' + (tx.output_count || '?');
-        labelHtml = '<span class="text-[#a855f7] font-bold shrink-0">CONSOL</span>' +
-            '<span class="text-white/50 shrink-0">' + ioC + '</span>';
+        labelNodes = [
+            _feedSpan('text-[#a855f7] font-bold shrink-0', 'CONSOL'),
+            _feedSpan('text-white/50 shrink-0', ioC)
+        ];
     } else if (isFanOut) {
         feedType = 'fan_out';
         var ioF = (tx.input_count || '?') + '->' + (tx.output_count || '?');
-        labelHtml = '<span class="text-[#00d2ff] font-bold shrink-0">FAN-OUT</span>' +
-            '<span class="text-white/50 shrink-0">' + ioF + '</span>';
+        labelNodes = [
+            _feedSpan('text-[#00d2ff] font-bold shrink-0', 'FAN-OUT'),
+            _feedSpan('text-white/50 shrink-0', ioF)
+        ];
     } else if (isFeeOutlier) {
         feedType = 'fee';
-        labelHtml = '<span class="text-[#ff4444] font-bold shrink-0">FEE</span>' +
-            '<span class="text-white/50 shrink-0">' + feeRate + ' sat/vB</span>';
+        labelNodes = [
+            _feedSpan('text-[#ff4444] font-bold shrink-0', 'FEE'),
+            _feedSpan('text-white/50 shrink-0', feeRate + ' sat/vB')
+        ];
     } else if (isOpReturnMsg) {
         feedType = 'op_return';
-        var msgText = (tx.op_return_text || '').substring(0, 30);
-        labelHtml = '<span class="text-[#ffa500] font-bold shrink-0">MSG</span>' +
-            '<span class="text-white/60 shrink-0 truncate max-w-[200px]" title="' + (tx.op_return_text || '').replace(/"/g, '&quot;') + '">' + msgText + '</span>';
+        // The only branch carrying bytes an outsider chose. The full message is
+        // the title and the first 30 characters are the visible text; both are
+        // set as text, so neither can introduce markup.
+        var fullMsg = tx.op_return_text || '';
+        labelNodes = [
+            _feedSpan('text-[#ffa500] font-bold shrink-0', 'MSG'),
+            _feedSpan('text-white/60 shrink-0 truncate max-w-[200px]',
+                      fullMsg.substring(0, 30), fullMsg)
+        ];
     } else {
         feedType = 'other';
-        labelHtml = '<span class="text-white/50 font-bold shrink-0">NOTABLE</span>';
+        labelNodes = [_feedSpan('text-white/50 font-bold shrink-0', 'NOTABLE')];
     }
 
     return {
-        labelHtml: labelHtml,
+        labelNodes: labelNodes,
         feedType: feedType,
         txidShort: txidShort,
         time: time,
-        statusIcon: statusIcon
+        statusNode: statusNode
     };
 }
 
@@ -1128,13 +1165,24 @@ window._notableFeed = function(tx, opts) {
     if (!appendMode) row.style.animation = 'fadeinone 0.5s ease forwards';
     row.dataset.type = built.feedType;
     row.dataset.txid = txid;
-    row.innerHTML = built.labelHtml +
-        built.statusIcon +
-        '<span class="text-white/30 hover:text-[#f7931a] transition-colors cursor-pointer" data-txid-link="' + txid + '">' + built.txidShort + '</span>' +
-        '<span class="text-white/20 ml-auto shrink-0">' + built.time + '</span>';
+
+    for (var i = 0; i < built.labelNodes.length; i++) {
+        row.appendChild(built.labelNodes[i]);
+    }
+    if (built.statusNode) row.appendChild(built.statusNode);
+
+    // `txid` reaches the DOM through dataset rather than an attribute written
+    // into a markup string, so a txid that is not the hex we expect cannot
+    // break out of the attribute.
+    var txSpan = _feedSpan(
+        'text-white/30 hover:text-[#f7931a] transition-colors cursor-pointer',
+        built.txidShort);
+    txSpan.dataset.txidLink = txid;
+    row.appendChild(txSpan);
+
+    row.appendChild(_feedSpan('text-white/20 ml-auto shrink-0', built.time));
 
     // Click txid to open tx detail modal
-    var txSpan = row.querySelector('[data-txid-link]');
     if (txSpan) {
         txSpan.addEventListener('click', function() {
             if (window.showTxDetail) {

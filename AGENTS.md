@@ -22,6 +22,25 @@ Before pushing, the same three things CI runs, in order:
 second), `pre-push` runs all three. Green locally then means green in CI. Bypass with
 `--no-verify` if you must.
 
+**`cargo test` cannot see JavaScript, and one JS path renders attacker-controlled bytes.** So
+`deploy.yml` runs a fourth gate:
+
+    node scripts/test-heartbeat-feed-escaping.mjs
+
+It evaluates `heartbeat-sse.js` against a DOM shim whose `innerHTML` setter **throws**, feeds six
+XSS payloads through the notable-tx feed, and asserts each comes back as text in both the visible
+cell and the title. The `innerHTML` trap is the part that matters: it catches payloads nobody
+thought of, because it fails on the technique rather than on a blocklist.
+
+Verify the harness itself whenever you touch it, by running it against the pre-fix file:
+
+    git show 9f5ce03:assets/js/heartbeat-sse.js > assets/js/__mutant.js
+    node scripts/test-heartbeat-feed-escaping.mjs ./assets/js/__mutant.js   # MUST exit non-zero
+    rm assets/js/__mutant.js
+
+A guard nobody has watched fail is not a guard, and this project has shipped five tests that
+passed while proving nothing.
+
 **Those three prove the code compiles and does what its tests assert. They prove nothing about
 what an endpoint returns.** Run the app and call it before pushing:
 

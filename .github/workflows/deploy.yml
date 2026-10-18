@@ -49,6 +49,12 @@ jobs:
       - name: Run tests
         run: cargo test --lib
 
+      # The Heartbeat feed renders bytes chosen by whoever broadcast a
+      # transaction. cargo test cannot see JS, so this runs separately or it
+      # does not run at all.
+      - name: Heartbeat feed escaping
+        run: node scripts/test-heartbeat-feed-escaping.mjs
+
       - name: Bump service-worker cache version
         run: |
           DEPLOY_TS=$(date +%s)
