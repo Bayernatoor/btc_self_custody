@@ -33,6 +33,13 @@ path = "src/bin/rebuild_daily_blocks.rs"
 name = "rebuild_daily_blocks"
 required-features = ["ssr"]
 
+# Records the orphaned blocks the node still remembers. `required-features`
+# keeps it out of the WASM build, which has no rusqlite or tokio.
+[[bin]]
+path = "src/bin/harvest_stale_blocks.rs"
+name = "harvest_stale_blocks"
+required-features = ["ssr"]
+
 [dependencies]
 axum = { version = "0.8", optional = true }
 console_error_panic_hook = "0.1"

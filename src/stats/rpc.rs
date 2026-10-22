@@ -693,14 +693,28 @@ pub struct Block {
     /// data and carries policy decisions, while this answers a question
     /// about the UTXO set and carries none.
     pub unspendable_output_count: u64,
-    /// Bytes of the witness **items** that matched the BRC-20 marker.
+    /// Estimated BRC-20 payload, after envelope overhead is subtracted.
     ///
-    /// Not the witness of the matching transaction, which is what an earlier
-    /// version of this comment said. The unit matters because `brc20_bytes`
-    /// cannot be subtracted from `inscription_bytes`: that field holds an
-    /// estimated payload after envelope overhead, while this holds whole
-    /// matching items, so the residual can go negative. CQ-19's proposed
-    /// volume split needs a consistent basis and does not yet have one.
+    /// **The same basis as `inscription_bytes`**, and the same expression:
+    /// `item_bytes.saturating_sub(overhead)`. This comment said "whole witness
+    /// items" until 2026-10-21, having gone stale when the accumulator changed
+    /// on 2026-10-11, and a reader who trusted it over the code concluded the
+    /// opposite of the truth about which residual is safe.
+    ///
+    /// So `inscription_bytes - brc20_bytes` is the sound subtraction, and it
+    /// is sound **structurally** rather than by luck: the BRC-20 marker test
+    /// is nested inside the inscription test, over the same item, accumulating
+    /// the same quantity. BRC-20 items are a subset of inscription items by
+    /// construction.
+    ///
+    /// Do not subtract it from `inscription_envelope_bytes`. Both residuals
+    /// happen to be non-negative on current data, so measuring one proves
+    /// nothing about the other, but that one mixes payload against whole
+    /// items and charges 13.9% of envelope overhead to the wrong band.
+    ///
+    /// A cost-basis BRC-20 figure needs a new `brc20_envelope_bytes` column
+    /// and a sweep; it is the one embedded type that cannot reach that basis
+    /// from what is stored today.
     ///
     /// Two envelopes inside one item count once, and an item mixing BRC-20
     /// with unrelated data counts in full; a substring test cannot partition
@@ -1122,6 +1136,23 @@ impl BitcoinRpc {
     /// verbosity=2 RPC call and the subsequent single-pass parser. Call
     /// [`Self::get_block_fresh`] to bypass the cache, or
     /// [`Self::invalidate_block_caches`] on reorg to drop affected entries.
+    /// The forks this node currently tracks, including the active tip.
+    ///
+    /// Deliberately uncached: the set changes as the node accepts and forgets
+    /// forks, and a stale answer here is a stale block we fail to record.
+    ///
+    /// Three non-active statuses, and they are not interchangeable. Measured
+    /// 2026-10-18: `valid-fork` and `valid-headers` both answer `getblock`,
+    /// while `headers-only` returns "Block not available (not fully
+    /// downloaded)". Treating `valid-headers` as dataless would silently drop
+    /// the majority of recoverable orphans.
+    pub async fn get_chain_tips(
+        &self,
+    ) -> Result<Vec<serde_json::Value>, StatsError> {
+        let v = self.call("getchaintips", &[]).await?;
+        Ok(v.as_array().cloned().unwrap_or_default())
+    }
+
     pub async fn get_block(&self, hash: &str) -> Result<Block, StatsError> {
         if let Some(block) = self.block_data_cache.get(&hash.to_string()) {
             return Ok(block);
