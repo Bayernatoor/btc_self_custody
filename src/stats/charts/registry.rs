@@ -649,7 +649,7 @@ pub const CHARTS: &[ChartMeta] = &[
         slug: "all-embedded-share",
         title: "Detected Embedded Data, Block Share",
         desc_per_block: "Share of each block's bytes in detected protocol data: OP_RETURN script bytes plus estimated inscription payload",
-        desc_daily: "Daily average share of block bytes in detected protocol data",
+        desc_daily: "Daily average share of block weight in detected protocol data",
         category: Category::Embedded,
         unit: Unit::Percent,
         shape: Shape::StackedAbsolute,
@@ -681,7 +681,36 @@ pub const CHARTS: &[ChartMeta] = &[
         ],
         about: Some(About {
             definition: Some("How much of a block is data rather than payments. Bitcoin has two places to put arbitrary bytes: an OP_RETURN output, which is a small amount of provably unspendable script, and the witness of a Taproot input, which is where inscriptions live. This is both, as a share of the block."),
-            technical: "Combines OP_RETURN data (in outputs) and inscription data (in witness) as a percentage of total block size. These are disjoint categories that together represent all classified embedded data.",
+            technical: "Combines OP_RETURN data (in outputs) and inscription data (in witness) as a percentage of the block's weight. Disjoint categories: an OP_RETURN output is non-witness and an inscription is witness, so they cannot overlap and their shares add.\n\nBoth sides are the cost to the block rather than the payload. OP_RETURN counts the whole output, script plus its 8-byte value and length prefix, at four weight units per byte. Inscriptions count the whole witness item, envelope and content-type included, at one. Weight is the denominator because it is what the block is rationed in; against size the two would be priced as the same good and the larger of them would change.",
+        }),
+    },
+    ChartMeta {
+        slug: "coinbase-payouts",
+        title: "Coinbase Payout Count",
+        desc_per_block: "How many outputs each block's coinbase creates. Almost all pay the reward once; a few pay hundreds, because some pools settle with their miners in the coinbase itself",
+        desc_daily: "Daily mean coinbase outputs per block. A mean flattens the spikes, so use a range of 1M or shorter to see them",
+        category: Category::Embedded,
+        unit: Unit::Count,
+        shape: Shape::Line,
+        source: Source::Dashboard {
+            per_block: super::coinbase_payout_count_chart,
+            daily: Daily::Fn(super::coinbase_payout_count_chart_daily),
+        },
+        measurements: &[
+            Measurement {
+                series: "Coinbase outputs",
+                series_daily: "Coinbase outputs",
+                quantity: "Outputs created by the block's coinbase transaction",
+                method_per_block: Method::Measured,
+                method_daily: Method::Measured,
+                per_block: Aggregation::PerBlockObservation,
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "Every output of the coinbase transaction, including any OP_RETURN the miner put there, such as the SegWit commitment. So the floor is one rather than zero, and a block paying its reward to a single address reads 1. The daily arm is a mean per block, not a total, so one 919-output block inside a 144-block day lifts that day's mean by about 6.4.",
+            },
+        ],
+        about: Some(About {
+            definition: Some("How many outputs a block's coinbase transaction creates. Almost every block pays the reward to one address and reads 1.\n\nA few read in the hundreds. Those are pools that settle with their miners inside the coinbase itself rather than sending a separate payout transaction, so one block pays everybody at once. Eligius did this from 2011 to 2017 and holds the record at 919 outputs in block 133,471; Ocean does it today."),
+            technical: "Counts every output of the coinbase transaction, taken from the block itself rather than inferred from payout transactions.\n\nThe count includes outputs that are not payments. Since SegWit, almost every coinbase carries a commitment output, and some miners add an OP_RETURN of their own, so the baseline is one or two rather than one. A block whose coinbase creates 400 outputs is distributing to roughly 400 recipients, not exactly.\n\nOn a daily range this is the mean per block, which deliberately understates the peaks: a single 919-output block in a day of 144 contributes about 6.4 to that day's average. The spikes are only legible below the 5,000-block switch to per-block mode, which is a range of 1M or shorter.",
         }),
     },
     ChartMeta {
@@ -842,8 +871,8 @@ pub const CHARTS: &[ChartMeta] = &[
     ChartMeta {
         slug: "op-block-share",
         title: "OP_RETURN Block Share",
-        desc_per_block: "OP_RETURN data as a percentage of each block's size",
-        desc_daily: "Daily average OP_RETURN data as a percentage of block size",
+        desc_per_block: "OP_RETURN cost as a percentage of each block's weight",
+        desc_daily: "Daily average OP_RETURN cost as a percentage of block weight",
         category: Category::Embedded,
         unit: Unit::Percent,
         shape: Shape::Line,
@@ -863,7 +892,7 @@ pub const CHARTS: &[ChartMeta] = &[
         }],
         about: Some(About {
             definition: Some("How much of a block is OP_RETURN data. An OP_RETURN output is a deliberately unspendable output whose script carries a few dozen bytes, which can timestamp or label things on chain. About 63% of all blocks contain at least one."),
-            technical: "OP_RETURN script bytes over serialized block bytes. Script bytes only, so the output's value and length fields sit outside the numerator, which makes this a floor on the true on-chain cost rather than the whole of it.",
+            technical: "What an OP_RETURN output costs the block, in weight units, over the block's weight. The numerator is the script plus the 9 bytes of frame every output carries, an 8-byte value field and a 1-byte length prefix, multiplied by four.\n\nWeight, not size, and the choice changes the answer. Block space is rationed in weight units, and a non-witness byte costs four of them where a witness byte costs one. An OP_RETURN output is non-witness; an inscription is witness. Measuring both against size prices them as the same good: from height 920,000 OP_RETURN is 3.97% of size but 6.68% of weight, while inscriptions are 8.07% of size and 3.40% of weight. Since that height 20.4% of blocks change which of the two is larger depending on that choice.\n\nCounting the script alone understates the cost by about 44%. That is larger than it sounds because a typical OP_RETURN script is only 20 bytes: Runes markers and protocol tags are short, not the 80-byte policy maximum, so a fixed frame is nearly half the output.\n\nThe length prefix widens to 3 bytes once a script reaches 253, which is not modelled. Blocks holding such a script carry 3.5% of all OP_RETURN outputs, which caps the shortfall at 0.2% and the real figure sits well under that.",
         }),
     },
     ChartMeta {
@@ -1132,8 +1161,8 @@ pub const CHARTS: &[ChartMeta] = &[
     ChartMeta {
         slug: "unified-volume",
         title: "Detected Embedded Data, Volume",
-        desc_per_block: "Bytes per block by protocol: exact OP_RETURN script bytes and estimated inscription payload, on one stack",
-        desc_daily: "Daily average bytes per block by protocol, mixing exact OP_RETURN script bytes with estimated inscription payload",
+        desc_per_block: "Data bytes per block by protocol, each format including its own framing, on one stack",
+        desc_daily: "Daily average data bytes per block by protocol, each format including its own framing",
         category: Category::Embedded,
         unit: Unit::Kilobytes,
         shape: Shape::StackedAbsolute,
@@ -1196,12 +1225,12 @@ pub const CHARTS: &[ChartMeta] = &[
                 method_daily: Method::HeuristicallyDetected,
                 per_block: Aggregation::PerBlockObservation,
                 daily: Aggregation::MeanOfPerBlockValues,
-                population: "An estimated payload, whereas the OP_RETURN bands are exact script bytes, so the stack mixes two byte bases: about 6.4 GB of exact script bytes against about 44 GB of estimate over the whole chain. BRC-20 content is inside this band because no separate byte column exists for it, unlike the count chart where the two are disjoint.",
+                population: "An estimated payload, whereas the OP_RETURN bands are measured script bytes, so the stack mixes two bases: about 6.6 GB measured against about 44 GB estimated over the whole chain. BRC-20 is folded into this band rather than drawn beside it, unlike the count chart where it has a band of its own.",
             },
         ],
         about: Some(About {
             definition: Some("Everything the site detects as embedded data, by size rather than by count. About 63% of blocks carry an OP_RETURN output and about 20% carry a detected inscription, and the two are measured on different bases, which the bands say."),
-            technical: "OP_RETURN bands are exact script bytes. The inscription band is an estimated payload, and it includes BRC-20 content because no separate byte column exists for it, unlike the count chart where the two are disjoint. Over the whole chain that is about 6.4 GB of exact bytes against about 44 GB of estimate, so the stack is mostly estimate.",
+            technical: "The OP_RETURN bands are measured: they are the script bytes themselves. BRC-20 is folded into the inscription band rather than drawn beside it, so the bands here are not the same split as the count chart, where BRC-20 has a band of its own.\n\nThe inscription band is an estimate. Inscriptions are a convention rather than a consensus rule, so there is no field to read: they are found by looking for the marker bytes that open an Ordinals envelope. The band then counts the whole witness item that matched, envelope and content-type included, so it over-states payload rather than under-stating it: an item carrying an inscription alongside unrelated data is counted in full.\n\nAcross the whole chain that is about 6.6 GB measured against about 44 GB estimated. Most of this stack's height therefore rests on an estimate rather than a count.\n\nTwo limits on the per-protocol split, both of which matter more than the totals. The Runes band is a size test, outputs of six bytes or fewer from height 840,000, and it now takes in most post-840,000 OP_RETURN outputs, so read it as a lower bound on a category rather than a count of Runes. And Stamps is named nowhere here because the site does not currently detect it. Coinbase OP_RETURN outputs are excluded throughout.",
         }),
     },
     ChartMeta {
@@ -2147,11 +2176,11 @@ pub const CHARTS: &[ChartMeta] = &[
             method_daily: Method::Calculated,
             per_block: Aggregation::WindowedDerived,
             daily: Aggregation::WindowedDerived,
-            population: "Each type's outputs over all outputs of the eight classified types, averaged across the window, minus the same average one window earlier: 144 blocks per block, 30 days daily. The result is in percentage points, so a share moving from 10 to 15 is 5 points and not 5 percent. All eight are drawn, so the lines sum to zero at every point. Divergent lines do not establish that users migrated between types.",
+            population: "Each type's outputs over all outputs of the nine classified types, averaged across the window, minus the same average one window earlier: 144 blocks per block, 30 days daily. The result is in percentage points, so a share moving from 10 to 15 is 5 points and not 5 percent. All eight are drawn, so the lines sum to zero at every point. Divergent lines do not establish that users migrated between types.",
         }],
         about: Some(About {
             definition: Some("Whether an output type is gaining or losing ground, rather than how much it holds. A line above zero means that type's share of outputs grew over the window; below zero means it shrank.\n\nThe figure is in percentage points, not percent. Taproot going from 22% of outputs to 11% fell by 11 points and by 50%. Both describe the same move, and this chart plots the first.\n\nThe share is smoothed before it is differenced, so a point compares the trailing average now against the same average one window earlier, reaching back about twice the window: roughly two months daily, two days per block.\n\nEvery type is drawn, so the lines always add up to zero, which does not mean users moved between them. Through April 2026 P2WPKH rose more than thirteen points while Taproot fell more than eleven, for separate reasons: inscriptions dropped by about two thirds, roughly halving Taproot output creation, while P2WPKH's own output count rose by more than a quarter."),
-            technical: "Each type's outputs as a share of the eight classified output types, averaged across the window, minus that same average one window earlier.\n\nThe window follows the resolution. Per block it is 144 blocks, a day at the ten-minute target, though a real day has held between 98 and 197 blocks over the last year. At daily resolution it is 30 days.\n\nAll eight classified output types are drawn: P2PKH, P2SH, P2WPKH, P2WSH, P2TR, P2PK, bare multisig and unclassified scripts. Because they are the whole denominator, the lines sum to zero at every point, so whatever one type gains the others gave up.\n\nEach of the quiet ones has its own era rather than being permanently flat. P2PK held virtually every output in January 2009 and about 12% of them by late 2010. That handover is the largest move on the chart, and it is why P2PK and P2PKH are mirror images through 2009 and 2010: no other address type existed yet, so one type's loss was the other's gain, by more than 40 points.\n\nWhat P2PK keeps after that is almost entirely the block reward. Across late 2010 and early 2011 the count of P2PK outputs and the count of coinbase outputs are within half a per cent of each other, so what the line tracks from then on is miners paying themselves to a public key while ordinary payments had moved to P2PKH.\n\nBare multisig peaks during the Stamps period in 2023, P2WSH during the Ordinals ramp, and unclassified scripts shifted almost four points across the last year. On a short range most of them sit on zero; use the legend to hide any line that crowds the one you are reading.",
+            technical: "Each type's outputs as a share of the nine classified output types, averaged across the window, minus that same average one window earlier.\n\nThe window follows the resolution. Per block it is 144 blocks, a day at the ten-minute target, though a real day has held between 98 and 197 blocks over the last year. At daily resolution it is 30 days.\n\nAll nine classified output types are drawn: P2PKH, P2SH, P2WPKH, P2WSH, P2TR, P2PK, bare multisig, pay-to-anchor and unclassified scripts. Because they are the whole denominator, the lines sum to zero at every point, so whatever one type gains the others gave up.\n\nEach of the quiet ones has its own era rather than being permanently flat. P2PK held virtually every output in January 2009 and about 12% of them by late 2010. That handover is the largest move on the chart, and it is why P2PK and P2PKH are mirror images through 2009 and 2010: no other address type existed yet, so one type's loss was the other's gain, by more than 40 points.\n\nWhat P2PK keeps after that is almost entirely the block reward. Across late 2010 and early 2011 the count of P2PK outputs and the count of coinbase outputs are within half a per cent of each other, so what the line tracks from then on is miners paying themselves to a public key while ordinary payments had moved to P2PKH.\n\nBare multisig peaks during the Stamps period in 2023 and P2WSH during the Ordinals ramp. P2A is the newest line and the busiest of the quiet ones: pay-to-anchor outputs did not exist before June 2024 and have moved almost four points in a thirty-day window since. Unclassified scripts are whatever is left once the eight named types are taken out, and that now averages about a hundredth of a per cent. On a short range most of them sit on zero; use the legend to hide any line that crowds the one you are reading.",
         }),
     },
     ChartMeta {
@@ -2174,7 +2203,7 @@ pub const CHARTS: &[ChartMeta] = &[
             method_daily: Method::Measured,
             per_block: Aggregation::PerBlockObservation,
             daily: Aggregation::RatioOfTotals,
-            population: "P2PKH outputs over eight classified output types: the six payment types plus bare multisig and unrecognised scripts. OP_RETURN outputs are outside it. Coinbase outputs are counted, which matters most before 2012 when they were much of the chain. Note this is a wider denominator than the Address Type Share chart uses, so P2PKH reads lower here than there. The 90-day smoothing exists only at daily resolution. A falling share does not establish that those users moved to another type.",
+            population: "P2PKH outputs over nine classified output types: the six payment types plus bare multisig, pay-to-anchor and unrecognised scripts. OP_RETURN outputs are outside it. Coinbase outputs are counted, which matters most before 2012 when they were much of the chain. Note this is a wider denominator than the Address Type Share chart uses, so P2PKH reads lower here than there. The 90-day smoothing exists only at daily resolution. A falling share does not establish that those users moved to another type.",
         }],
         about: Some(About {
             definition: Some("The decline of the original Bitcoin address format. P2PKH is the '1...' address, and it carried nearly nine in ten outputs through the years between P2SH arriving and SegWit activating, with most of the rest going to '3...'.
@@ -2182,7 +2211,7 @@ pub const CHARTS: &[ChartMeta] = &[
 Its share has fallen steadily since. Taproot overtook it in 2023 and is still ahead, but the two are not a seesaw: through 2026 both fell, and Taproot fell faster, because the share they both lost went to P2WPKH.
 
 The reference lines at 10% and 5% are markers for reading the trend. They are not protocol thresholds and nothing happens when the line crosses one."),
-            technical: "P2PKH outputs as a share of the eight classified output types, with a 90-day moving average at daily resolution only. The horizontal lines at 10% and 5% are reference marks chosen for this chart, not protocol thresholds. A falling share means other output types grew faster; it does not follow that any particular wallet or user moved.",
+            technical: "P2PKH outputs as a share of the nine classified output types, with a 90-day moving average at daily resolution only. The horizontal lines at 10% and 5% are reference marks chosen for this chart, not protocol thresholds. A falling share means other output types grew faster; it does not follow that any particular wallet or user moved.",
         }),
     },
     ChartMeta {
@@ -2559,7 +2588,7 @@ The reference lines at 10% and 5% are markers for reading the trend. They are no
             },
         ],
         about: Some(About {
-            definition: Some("The two sides of every block: outputs consumed and outputs created. Bitcoin has no accounts, only discrete outputs, so spending means destroying some and making others, and every node keeps the set of unspent ones in order to validate new blocks.\n\nThe gap between the lines is not the change in that set. An OP_RETURN output is created and paid for like any other, but it is provably unspendable, so it never enters the UTXO set: it lifts the green line and never the red one. Over the past year that gap has run about two thousand outputs per block. The UTXO Growth Rate chart subtracts them and follows the set itself."),
+            definition: Some("The two sides of every block: outputs consumed and outputs created. Bitcoin has no accounts, only discrete outputs, so spending means destroying some and making others, and every node keeps the set of unspent ones in order to validate new blocks.\n\nThe gap between the lines is not the change in that set. An OP_RETURN output is created and paid for like any other, but it is provably unspendable, so it never enters the UTXO set: it lifts the green line and never the red one. Over the past year that gap has run about two thousand outputs per block. The two can disagree about direction and not merely size: across 2025 the gap averaged about 450 outputs per block while the set itself shrank by about 390. The UTXO Growth Rate chart subtracts them and follows the set itself."),
             technical: "The coinbase input is not counted, because it consumes nothing: the reward is newly issued rather than spent out of the output set. Its outputs are counted, because they create spendable outputs like any others. So a block carrying nothing but a coinbase consumes nothing and creates only its reward, which happens about ninety thousand times across the chain.\n\nAlmost all of those create a single output. About two thousand create more, from pools that pay their miners straight from the coinbase rather than in a separate transaction: Eligius did this from 2011 to 2017 and Ocean does it today. The largest is block 133,471, an Eligius block that paid 919.\n\nOver a day the chart plots the mean per block rather than the day's total, so the two resolutions share a scale and a busy day does not read as a tall one.",
         }),
     },
@@ -3877,6 +3906,28 @@ mod tests {
                 1_000.0,
                 4_000.0,
             ),
+            // A closed year, so these move only if the data is rewritten.
+            // Both halves are asserted because the copy's point is that they
+            // disagree in sign: guarding one would leave the claim half made.
+            (
+                "utxo-flow",
+                "the gap averaged about 450 outputs per block",
+                "SELECT AVG(output_count)-AVG(input_count) FROM blocks \
+                 WHERE timestamp >= strftime('%s','2025-01-01') \
+                 AND timestamp < strftime('%s','2026-01-01')",
+                430.0,
+                460.0,
+            ),
+            (
+                "utxo-flow",
+                "the set itself shrank by about 390",
+                "SELECT AVG(output_count)-AVG(unspendable_output_count) \
+                 -AVG(input_count) FROM blocks \
+                 WHERE timestamp >= strftime('%s','2025-01-01') \
+                 AND timestamp < strftime('%s','2026-01-01')",
+                -400.0,
+                -380.0,
+            ),
             (
                 "utxo-flow",
                 "a block carrying nothing but a coinbase ... about ninety \
@@ -3911,6 +3962,13 @@ mod tests {
                  AS REAL) FROM blocks WHERE coinbase_text LIKE '%Eligius%'",
                 2017.0,
                 2017.0,
+            ),
+            (
+                "coinbase-payouts",
+                "holds the record at 919 outputs in block 133,471",
+                "SELECT MAX(coinbase_output_count) FROM blocks",
+                919.0,
+                919.0,
             ),
             (
                 "utxo-flow",
@@ -3954,6 +4012,51 @@ mod tests {
                  AND timestamp < strftime('%s','2026-03-27'))",
                 -13.0,
                 -11.0,
+            ),
+            // Written in words, so `measurement_figures` cannot see them and
+            // the unguarded-number gate will not ask for these. Added by hand:
+            // a claim nothing re-measures is unguarded whether or not a test
+            // happens to notice.
+            (
+                "multi-velocity",
+                "pay-to-anchor outputs did not exist before June 2024",
+                "SELECT MIN(height) FROM blocks WHERE p2a_count > 0",
+                849_000.0,
+                851_000.0,
+            ),
+            (
+                "multi-velocity",
+                "have moved almost four points in a thirty-day window",
+                "WITH sh AS (SELECT day, avg_p2a_count*100.0 \
+                 /(avg_p2pk_count+avg_p2pkh_count+avg_p2sh_count \
+                 +avg_p2wpkh_count+avg_p2wsh_count+avg_p2tr_count \
+                 +avg_multisig_count+avg_unknown_script_count) AS p \
+                 FROM daily_blocks \
+                 WHERE (avg_p2pk_count+avg_p2pkh_count+avg_p2sh_count \
+                 +avg_p2wpkh_count+avg_p2wsh_count+avg_p2tr_count \
+                 +avg_multisig_count+avg_unknown_script_count) > 0 \
+                 AND day >= date('now','-1 year')), \
+                 a AS (SELECT day, AVG(p) OVER (ORDER BY day \
+                 ROWS BETWEEN 29 PRECEDING AND CURRENT ROW) AS p30 FROM sh), \
+                 v AS (SELECT p30 - LAG(p30,30) OVER (ORDER BY day) AS d \
+                 FROM a) SELECT MAX(d) FROM v",
+                3.5,
+                4.5,
+            ),
+            (
+                "multi-velocity",
+                "now averages about a hundredth of a per cent",
+                "SELECT AVG((avg_unknown_script_count-avg_p2a_count)*100.0 \
+                 /(avg_p2pk_count+avg_p2pkh_count+avg_p2sh_count \
+                 +avg_p2wpkh_count+avg_p2wsh_count+avg_p2tr_count \
+                 +avg_multisig_count+avg_unknown_script_count)) \
+                 FROM daily_blocks \
+                 WHERE (avg_p2pk_count+avg_p2pkh_count+avg_p2sh_count \
+                 +avg_p2wpkh_count+avg_p2wsh_count+avg_p2tr_count \
+                 +avg_multisig_count+avg_unknown_script_count) > 0 \
+                 AND day >= date('now','-1 year')",
+                0.0,
+                0.05,
             ),
             (
                 "multi-velocity",
@@ -4338,6 +4441,90 @@ mod tests {
                 40.0,
                 52.0,
             ),
+            // The measured half of the same stack. Was exempt in
+            // KNOWN_UNGUARDED at "6.4" and had drifted to 6.57 unnoticed,
+            // which is the failure mode an exemption always has: it does not
+            // expire.
+            (
+                "op-block-share",
+                "OP_RETURN is 3.97% of size",
+                "SELECT 100.0*(SUM(op_return_bytes)+9*SUM(op_return_count))/SUM(size) FROM blocks WHERE height >= 920000",
+                3.8,
+                4.1,
+            ),
+            (
+                "op-block-share",
+                "but 6.68% of weight",
+                "SELECT 100.0*4*(SUM(op_return_bytes)+9*SUM(op_return_count))/SUM(weight) FROM blocks WHERE height >= 920000",
+                6.5,
+                6.9,
+            ),
+            (
+                "op-block-share",
+                "while inscriptions are 8.07% of size",
+                "SELECT 100.0*SUM(inscription_envelope_bytes)/SUM(size) FROM blocks WHERE height >= 920000",
+                7.8,
+                8.4,
+            ),
+            (
+                "op-block-share",
+                "and 3.40% of weight",
+                "SELECT 100.0*SUM(inscription_envelope_bytes)/SUM(weight) FROM blocks WHERE height >= 920000",
+                3.3,
+                3.6,
+            ),
+            (
+                "op-block-share",
+                "20.4% of blocks change which of the two is larger",
+                "SELECT 100.0*SUM(CASE WHEN ((4.0*(op_return_bytes+9*op_return_count)/weight) > (1.0*inscription_envelope_bytes/weight)) <> ((1.0*(op_return_bytes+9*op_return_count)/size) > (1.0*inscription_envelope_bytes/size)) THEN 1 ELSE 0 END)/COUNT(*) FROM blocks WHERE height >= 920000",
+                19.0,
+                22.0,
+            ),
+            (
+                "op-block-share",
+                "a typical OP_RETURN script is only 20 bytes",
+                "SELECT 1.0*SUM(op_return_bytes)/SUM(op_return_count) FROM blocks \
+                 WHERE timestamp >= strftime('%s','now','-1 year') \
+                 AND op_return_count > 0",
+                19.0,
+                22.0,
+            ),
+            (
+                "op-block-share",
+                "understates the cost by about 44%",
+                "SELECT 100.0*9*SUM(op_return_count)/SUM(op_return_bytes) FROM blocks \
+                 WHERE timestamp >= strftime('%s','now','-1 year')",
+                42.0,
+                46.0,
+            ),
+            // An upper bound, not a measurement: `blocks` stores no per-output
+            // script length, so this counts every OP_RETURN output in any
+            // block holding one script of 253+ bytes. Nearly all of them are
+            // ordinary short scripts, so the true shortfall is far smaller.
+            (
+                "op-block-share",
+                "caps the shortfall at 0.2%",
+                "SELECT 100.0*2*(SELECT SUM(op_return_count) FROM blocks \
+                 WHERE op_return_max_bytes >= 253) \
+                 /(SUM(op_return_bytes)+9*SUM(op_return_count)) FROM blocks",
+                0.0,
+                0.5,
+            ),
+            (
+                "op-block-share",
+                "carry 3.5% of all OP_RETURN outputs",
+                "SELECT 100.0*(SELECT SUM(op_return_count) FROM blocks \
+                 WHERE op_return_max_bytes >= 253)/SUM(op_return_count) FROM blocks",
+                3.0,
+                4.5,
+            ),
+            (
+                "unified-volume",
+                "about 6.6 GB measured",
+                "SELECT SUM(op_return_bytes)/1e9 FROM blocks",
+                6.0,
+                7.0,
+            ),
             // A whole-chain median, so it moves only as the chain grows. Tight
             // bounds are safe and a move would mean something real.
             (
@@ -4483,6 +4670,22 @@ mod tests {
     /// A figure counts as a measurement when a hedge introduces it or a unit
     /// follows it. Bare integers in prose ("split into 2 groups") assert
     /// nothing about the chain and are skipped.
+    /// Figures written in words are invisible here, and deliberately so.
+    ///
+    /// Only tokens starting with a digit are considered, so "almost four
+    /// points" and "about a hundredth of a per cent" pass unseen. That is a
+    /// real gap: both of those are claims about the chain.
+    ///
+    /// It is not worth closing automatically. Measured 2026-10-18 across the
+    /// long copy: 28 word-number-plus-unit phrases, and most are ordinary
+    /// English rather than measurements, like "more than one transaction" or
+    /// "within one block". A rule that flagged them would be mostly noise,
+    /// and a noisy gate teaches people to reach for an exemption, which is
+    /// how a figure stops being re-read at all.
+    ///
+    /// So the obligation sits with the author: **a claim written in words
+    /// still needs a drift row.** The P2A claims added that day are guarded by
+    /// hand for exactly this reason.
     fn measurement_figures(text: &str) -> Vec<String> {
         const HEDGES: &[&str] = &[
             "about", "around", "roughly", "nearly", "almost", "than", "over",
@@ -4619,16 +4822,44 @@ mod tests {
         // "5", and coverage here is a substring match. Retuning that
         // row to 40 removed the accident and revealed the gap.
         ("multi-velocity", "5"), // "10 to 15 is 5 points, not 50%"
+        // The serialised frame of any transaction output: an 8-byte value
+        // field plus a 1-byte CompactSize length prefix. Fixed by the
+        // transaction format, so no chain movement can change it.
+        ("op-block-share", "9"),
+        // "distributing to roughly 400 recipients" is an illustration of how
+        // to read the axis, not a figure off the chain.
+        ("coinbase-payouts", "400"),
+        // 919 / 144, the worked example of why the daily mean hides the
+        // spikes. The 919 itself is guarded by a drift row.
+        ("coinbase-payouts", "6.4"),
+        // The floor of the count: every coinbase creates at least one output,
+        // and since SegWit almost always a commitment output beside it.
+        ("coinbase-payouts", "1"),
+        ("coinbase-payouts", "2"),
+        // Eligius ran until 2017. Guarded as a date by the utxo-flow row that
+        // measures it; repeated here because this chart states it too.
+        ("coinbase-payouts", "2017"),
+        // CompactSize: a length prefix is 1 byte below 253 and 3 at or above
+        // it. Fixed by the serialisation format.
+        ("op-block-share", "3"),
+        // The shape of an unbatched payment, not a measurement: one or two
+        // inputs, then payment plus change.
+        ("batching", "2"),
+        // The retarget target in weeks, which is 2,016 blocks at the ten
+        // minute spacing. Both halves are consensus.
+        ("diff-adjustment", "2"),
+        // The pre-SegWit block size limit in MB.
+        ("witness-share", "1"),
         ("multi-velocity", "50%"), // arithmetic on 22 and 11, both guarded
-        ("p2pkh-sunset", "10%"), // a drawn reference line
-        ("p2pkh-sunset", "5%"),  // the other one
-        ("propagation", "60"),   // the chart's own definition of close
-        ("rbf", "125"),          // BIP 125, a number but not a quantity
-        ("time-dist", "63.2%"),  // what an exponential predicts, not the
-        ("time-dist", "5.0%"),   // chain. These three are mathematics and
-        ("time-dist", "0.25%"),  // move only if the distribution does.
-        ("weight-util", "90%"),  // the threshold the prose interprets at
-        ("witness-tx-pct", "0"), // "reading 0, 0 and 100", a worked case
+        ("p2pkh-sunset", "10%"),   // a drawn reference line
+        ("p2pkh-sunset", "5%"),    // the other one
+        ("propagation", "60"),     // the chart's own definition of close
+        ("rbf", "125"),            // BIP 125, a number but not a quantity
+        ("time-dist", "63.2%"),    // what an exponential predicts, not the
+        ("time-dist", "5.0%"),     // chain. These three are mathematics and
+        ("time-dist", "0.25%"),    // move only if the distribution does.
+        ("weight-util", "90%"),    // the threshold the prose interprets at
+        ("witness-tx-pct", "0"),   // "reading 0, 0 and 100", a worked case
     ];
 
     /// Figures in live copy that nothing re-measures, as this stood on
@@ -4656,7 +4887,6 @@ mod tests {
         ("time-dist", "0.3%"),
         ("time-dist", "4.5%"),
         ("time-dist", "63.9%"),
-        ("unified-volume", "6.4"),
     ];
 
     /// You cannot ship a number the drift test has never heard of.
@@ -4706,9 +4936,22 @@ mod tests {
                         continue;
                     }
                     let bare = fig.trim_end_matches('%');
-                    let covered = guarded
-                        .iter()
-                        .any(|(s, claim)| s == c.slug && claim.contains(bare));
+                    // Whole-token match, not a substring. Coverage used to be
+                    // `claim.contains(bare)`, under which the figure `5` was
+                    // "guarded" by the `5` inside a row labelled "by more than
+                    // 56 points": an unrelated number that happened to contain
+                    // it. Retuning that row to 40 removed the accident and
+                    // exposed the gap, which is the only reason anyone looked.
+                    let covered = guarded.iter().any(|(s, claim)| {
+                        s == c.slug
+                            && claim
+                                .split(|ch: char| {
+                                    !ch.is_ascii_digit()
+                                        && ch != '.'
+                                        && ch != ','
+                                })
+                                .any(|tok| tok == bare)
+                    });
                     if !covered {
                         found.push((c.slug.to_string(), fig));
                     }

@@ -887,7 +887,14 @@ pub fn multi_velocity_chart_daily(
     let p2wsh_pct = compute_pct(days, |d| d.avg_p2wsh_count);
     let p2pk_pct = compute_pct(days, |d| d.avg_p2pk_count);
     let multisig_pct = compute_pct(days, |d| d.avg_multisig_count);
-    let unclassified_pct = compute_pct(days, |d| d.avg_unknown_script_count);
+    // Anchors are counted inside `unknown_script_count`, so the denominator
+    // above still sums eight terms and already totals all nine types. Adding
+    // `avg_p2a_count` beside it would count anchors twice and inflate the
+    // denominator by about 1.6% of outputs, silently deflating every other
+    // share. The promotion is a split of this series, not a wider total.
+    let unclassified_pct =
+        compute_pct(days, |d| d.avg_unknown_script_count - d.avg_p2a_count);
+    let p2a_pct = compute_pct(days, |d| d.avg_p2a_count);
 
     // 30-day MA then velocity (diff from 30 days ago)
     let make_velocity = |pct: &[Option<f64>]| -> Vec<serde_json::Value> {
@@ -914,6 +921,7 @@ pub fn multi_velocity_chart_daily(
     let v_p2pk = make_velocity(&p2pk_pct);
     let v_multisig = make_velocity(&multisig_pct);
     let v_unclassified = make_velocity(&unclassified_pct);
+    let v_p2a = make_velocity(&p2a_pct);
 
     build_option(json!({
         "xAxis": x_axis_for(true, &cats),
@@ -956,6 +964,11 @@ pub fn multi_velocity_chart_daily(
                 "name": "Bare multisig", "type": "line", "data": v_multisig,
                 "lineStyle": { "width": 1.5, "color": MULTISIG_COLOR },
                 "itemStyle": { "color": MULTISIG_COLOR }, "symbol": "none"
+            },
+            {
+                "name": "P2A", "type": "line", "data": v_p2a,
+                "lineStyle": { "width": 1.5, "color": P2A_COLOR },
+                "itemStyle": { "color": P2A_COLOR }, "symbol": "none"
             },
             {
                 "name": "Unclassified", "type": "line", "data": v_unclassified,
@@ -1067,7 +1080,11 @@ pub fn multi_velocity_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let p2wsh_pct = compute_pct(blocks, |b| b.p2wsh_count);
     let p2pk_pct = compute_pct(blocks, |b| b.p2pk_count);
     let multisig_pct = compute_pct(blocks, |b| b.multisig_count);
-    let unclassified_pct = compute_pct(blocks, |b| b.unknown_script_count);
+    // See the daily twin: anchors live inside `unknown_script_count`, so this
+    // is a split rather than an addition to the denominator.
+    let unclassified_pct =
+        compute_pct(blocks, |b| b.unknown_script_count - b.p2a_count);
+    let p2a_pct = compute_pct(blocks, |b| b.p2a_count);
 
     // 144-block MA (~1 day) then velocity (diff from 144 blocks ago)
     let make_velocity =
@@ -1108,6 +1125,7 @@ pub fn multi_velocity_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let v_p2pk = make_velocity(&p2pk_pct, blocks);
     let v_multisig = make_velocity(&multisig_pct, blocks);
     let v_unclassified = make_velocity(&unclassified_pct, blocks);
+    let v_p2a = make_velocity(&p2a_pct, blocks);
 
     build_option(json!({
         "xAxis": x_axis_for(false, &[]),
@@ -1150,6 +1168,11 @@ pub fn multi_velocity_chart(blocks: &[BlockSummary]) -> serde_json::Value {
                 "name": "Bare multisig", "type": "line", "data": data_array_value(&v_multisig),
                 "lineStyle": { "width": 1.5, "color": MULTISIG_COLOR },
                 "itemStyle": { "color": MULTISIG_COLOR }, "symbol": "none"
+            },
+            {
+                "name": "P2A", "type": "line", "data": data_array_value(&v_p2a),
+                "lineStyle": { "width": 1.5, "color": P2A_COLOR },
+                "itemStyle": { "color": P2A_COLOR }, "symbol": "none"
             },
             {
                 "name": "Unclassified", "type": "line", "data": data_array_value(&v_unclassified),

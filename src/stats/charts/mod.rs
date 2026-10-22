@@ -84,6 +84,7 @@ pub(crate) const P2TR_COLOR: &str = "#22c55e"; // Green (Taproot)
 // Nothing else there is pink or near-white, and the worst remaining pair is
 // the pre-existing P2WPKH against P2WSH at 89.
 pub(crate) const MULTISIG_COLOR: &str = "#f472b6"; // Pink (bare multisig)
+pub(crate) const P2A_COLOR: &str = "#14b8a6"; // Teal (pay-to-anchor)
 pub(crate) const UNCLASSIFIED_COLOR: &str = "#e2e8f0"; // Near-white (residual)
 pub(crate) const RBF_COLOR: &str = "#06b6d4"; // Cyan
 
@@ -4740,6 +4741,7 @@ mod tests {
             unknown_script_count: 0,
             input_count: 0,
             output_count: 0,
+            p2a_count: 0,
             coinbase_output_count: 0,
             unspendable_output_count: 0,
             rbf_count: 0,
@@ -4952,6 +4954,7 @@ mod tests {
             // A real block's coinbase contributes outputs to output_count.
             // Leaving this at zero is what let the batching tests keep
             // passing while the metric itself changed population.
+            p2a_count: 0,
             coinbase_output_count: 2,
             rbf_count: 800,
             witness_bytes: 600_000,

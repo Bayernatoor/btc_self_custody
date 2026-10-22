@@ -396,6 +396,7 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
 
     // Reorgs log table
     init_reorgs_table(conn)?;
+    init_stale_blocks_table(conn)?;
 
     // Migration: add value columns to daily_blocks if missing
     {
@@ -1098,6 +1099,7 @@ pub struct BlockRow {
     pub coinbase_text: String,
     pub fee_rate_p25: f64,
     pub fee_rate_p75: f64,
+    pub p2a_count: u64,
     pub coinbase_output_count: u64,
     pub unspendable_output_count: u64,
 }
@@ -1220,6 +1222,7 @@ impl From<BlockRow> for super::types::BlockSummary {
             coinbase_text: r.coinbase_text,
             fee_rate_p25: r.fee_rate_p25,
             fee_rate_p75: r.fee_rate_p75,
+            p2a_count: r.p2a_count,
             coinbase_output_count: r.coinbase_output_count,
             unspendable_output_count: r.unspendable_output_count,
         }
@@ -1250,7 +1253,7 @@ pub fn query_blocks(
                 max_tx_fee, inscription_fees, runes_fees,
                 legacy_tx_count, segwit_tx_count, taproot_tx_count,
                 coinbase_text, fee_rate_p25, fee_rate_p75,
-                coinbase_output_count, unspendable_output_count
+                coinbase_output_count, unspendable_output_count, p2a_count
          FROM blocks WHERE height >= ?1 AND height <= ?2 ORDER BY height ASC",
     )?;
     let rows = stmt.query_map(params![from, to], |row| {
@@ -1312,6 +1315,7 @@ pub fn query_blocks(
             fee_rate_p75: row.get(54)?,
             coinbase_output_count: row.get(55)?,
             unspendable_output_count: row.get(56)?,
+            p2a_count: row.get(57)?,
         })
     })?;
     rows.collect()
@@ -1348,7 +1352,7 @@ pub fn query_blocks_by_ts(
                 max_tx_fee, inscription_fees, runes_fees,
                 legacy_tx_count, segwit_tx_count, taproot_tx_count,
                 coinbase_text, fee_rate_p25, fee_rate_p75,
-                coinbase_output_count, unspendable_output_count
+                coinbase_output_count, unspendable_output_count, p2a_count
          FROM blocks WHERE timestamp >= ?1 AND timestamp <= ?2 ORDER BY height ASC LIMIT ?3",
     )?;
     let rows = stmt.query_map(params![from_ts, to_ts, limit], |row| {
@@ -1410,6 +1414,7 @@ pub fn query_blocks_by_ts(
             fee_rate_p75: row.get(54)?,
             coinbase_output_count: row.get(55)?,
             unspendable_output_count: row.get(56)?,
+            p2a_count: row.get(57)?,
         })
     })?;
     rows.collect()
@@ -3676,6 +3681,99 @@ pub fn delete_block(conn: &Connection, height: u64) -> rusqlite::Result<usize> {
     conn.execute("DELETE FROM blocks WHERE height = ?1", params![height])
 }
 
+/// Blocks that were mined, propagated and then lost a race.
+///
+/// Kept in its own table and **never** mixed into `blocks`. Every chart, every
+/// aggregate and the whole backfill assume one row per height; a stale block
+/// shares a height with a canonical one, so putting it in `blocks` would
+/// corrupt every count on the site.
+///
+/// The block facts are nullable because `getchaintips` reports three kinds of
+/// non-active tip and only two of them have data. Measured 2026-10-18 against
+/// the node: `valid-fork` and `valid-headers` both answer `getblock`, while
+/// `headers-only` returns "Block not available (not fully downloaded)". Those
+/// are still recorded, because the fact that a fork existed at that height is
+/// itself unreconstructable once the node forgets the tip.
+///
+/// `first_seen` is when we recorded it, never when it was mined, and the name
+/// should keep saying so.
+pub fn init_stale_blocks_table(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS stale_blocks (
+            hash            TEXT PRIMARY KEY,
+            height          INTEGER NOT NULL,
+            canonical_hash  TEXT,
+            timestamp       INTEGER,
+            tx_count        INTEGER,
+            size            INTEGER,
+            weight          INTEGER,
+            miner           TEXT,
+            total_fees      INTEGER,
+            branch_len      INTEGER NOT NULL,
+            chaintip_status TEXT NOT NULL,
+            first_seen      INTEGER NOT NULL,
+            source          TEXT NOT NULL
+        );
+         CREATE INDEX IF NOT EXISTS idx_stale_height ON stale_blocks(height);",
+    )
+}
+
+/// Insert a stale block, keeping whichever row already has more detail.
+///
+/// Idempotent on `hash`, so a harvest can run as often as you like. A tip can
+/// also be upgraded in place: a `headers-only` tip recorded with no facts
+/// becomes a full row once the node finishes downloading it, which is why this
+/// fills nulls rather than ignoring the conflict.
+#[allow(clippy::too_many_arguments)]
+pub fn insert_stale_block(
+    conn: &Connection,
+    hash: &str,
+    height: u64,
+    canonical_hash: Option<&str>,
+    timestamp: Option<u64>,
+    tx_count: Option<u64>,
+    size: Option<u64>,
+    weight: Option<u64>,
+    miner: Option<&str>,
+    total_fees: Option<u64>,
+    branch_len: u64,
+    chaintip_status: &str,
+    first_seen: u64,
+    source: &str,
+) -> rusqlite::Result<usize> {
+    conn.execute(
+        "INSERT INTO stale_blocks (hash, height, canonical_hash, timestamp,
+             tx_count, size, weight, miner, total_fees, branch_len,
+             chaintip_status, first_seen, source)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)
+         ON CONFLICT(hash) DO UPDATE SET
+             canonical_hash  = COALESCE(stale_blocks.canonical_hash, excluded.canonical_hash),
+             timestamp       = COALESCE(stale_blocks.timestamp, excluded.timestamp),
+             tx_count        = COALESCE(stale_blocks.tx_count, excluded.tx_count),
+             size            = COALESCE(stale_blocks.size, excluded.size),
+             weight          = COALESCE(stale_blocks.weight, excluded.weight),
+             miner           = COALESCE(stale_blocks.miner, excluded.miner),
+             total_fees      = COALESCE(stale_blocks.total_fees, excluded.total_fees),
+             chaintip_status = excluded.chaintip_status,
+             first_seen      = MIN(stale_blocks.first_seen, excluded.first_seen)",
+        params![
+            hash,
+            height,
+            canonical_hash,
+            timestamp,
+            tx_count,
+            size,
+            weight,
+            miner,
+            total_fees,
+            branch_len,
+            chaintip_status,
+            first_seen,
+            source
+        ],
+    )
+}
+
 /// Create the reorgs table to log detected chain reorganizations.
 pub fn init_reorgs_table(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute_batch(
@@ -5563,6 +5661,116 @@ mod tests {
     ///
     /// Found by re-deriving from the node and comparing, six months later.
     /// This guard is what makes that a build failure instead.
+    /// A header-only tip is recorded with no facts, then upgraded in place
+    /// once the node finishes downloading the block.
+    ///
+    /// This is the case the harvest exists to survive: `getchaintips` reports
+    /// three kinds of non-active tip and only two answer `getblock`. Writing
+    /// the dataless ones is the point, because the node forgetting a fork is
+    /// what destroys the evidence, and `INSERT OR IGNORE` would then refuse
+    /// the later row that actually has the block in it.
+    #[test]
+    fn a_dataless_stale_tip_is_upgraded_rather_than_ignored() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_stale_blocks_table(&conn).unwrap();
+        let h = "00000000000000000000deadbeef";
+
+        // As a headers-only tip: existence only.
+        insert_stale_block(
+            &conn,
+            h,
+            900_000,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            1,
+            "headers-only",
+            1_700_000_100,
+            "harvest",
+        )
+        .unwrap();
+
+        // Later, with the block downloaded.
+        insert_stale_block(
+            &conn,
+            h,
+            900_000,
+            Some("canon"),
+            Some(1_600_000_000),
+            Some(2_500),
+            Some(1_400_000),
+            Some(3_900_000),
+            Some("Foundry USA"),
+            Some(12_345),
+            1,
+            "valid-fork",
+            1_700_000_200,
+            "harvest",
+        )
+        .unwrap();
+
+        let (n, tx, miner, status, seen): (
+            u64,
+            Option<u64>,
+            Option<String>,
+            String,
+            u64,
+        ) = conn
+            .query_row(
+                "SELECT (SELECT COUNT(*) FROM stale_blocks), tx_count, miner,
+                        chaintip_status, first_seen
+                 FROM stale_blocks WHERE hash = ?1",
+                params![h],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+            )
+            .unwrap();
+
+        assert_eq!(n, 1, "the upgrade must not create a second row");
+        assert_eq!(tx, Some(2_500), "block facts must fill in");
+        assert_eq!(miner.as_deref(), Some("Foundry USA"));
+        assert_eq!(status, "valid-fork", "status reflects the latest reading");
+        assert_eq!(
+            seen, 1_700_000_100,
+            "first_seen keeps the EARLIER sighting: it records when we first \
+             knew the fork existed, not when we filled in its details"
+        );
+
+        // And the reverse order must not wipe what is already known.
+        insert_stale_block(
+            &conn,
+            h,
+            900_000,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            1,
+            "valid-headers",
+            1_700_000_300,
+            "live",
+        )
+        .unwrap();
+        let tx2: Option<u64> = conn
+            .query_row(
+                "SELECT tx_count FROM stale_blocks WHERE hash = ?1",
+                params![h],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            tx2,
+            Some(2_500),
+            "a later dataless sighting must not null out known facts"
+        );
+    }
+
     #[test]
     fn a_column_derived_by_the_parser_is_reachable_by_a_sweep() {
         let ins_body = fn_body(SELF_SRC, "pub fn insert_blocks(");

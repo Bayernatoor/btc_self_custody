@@ -84,6 +84,10 @@ fn synthetic_blocks(n: usize) -> Vec<BlockSummary> {
                 taproot_spend_count: 100 + i,
                 multisig_count: 10 + i,
                 unknown_script_count: 1 + i,
+                // Anchors are a SUBSET of unknown_script_count, as they are
+                // on chain, so a builder that adds both to one denominator
+                // double-counts them and the sum-to-zero check must fail.
+                p2a_count: i / 2,
                 // The six script-type columns were left at their default of
                 // zero, so every address-type chart was built from nothing and
                 // its conformance check passed on an empty fixture: six
@@ -224,6 +228,8 @@ fn synthetic_days(n: usize) -> Vec<DailyAggregate> {
                 // tolerance. A fixture value can be present and still make an
                 // assertion vacuous if it is too small to move the result.
                 avg_unknown_script_count: 40.0 + f * 1.5,
+                avg_p2a_count: 18.0 + f * 0.7,
+                avg_coinbase_output_count: 1.0 + f * 0.05,
                 avg_input_count: 5_000.0 + f * 2.0,
                 avg_output_count: 5_200.0 + f * 2.0,
                 avg_rbf_count: 90.0 + f * 0.2,
@@ -2219,11 +2225,16 @@ mod tests {
     /// readings: 200 envelope bytes in a 1,000-byte block is 20% whether the
     /// block holds one inscription or fifty.
     #[test]
-    fn inscription_block_share_is_bytes_over_bytes() {
+    fn inscription_block_share_is_bytes_over_weight() {
+        // Weight, not size. Inscriptions are witness data, so they cost one
+        // weight unit per byte while a non-witness byte costs four. Dividing
+        // by size prices the two as the same good, which on current data
+        // reverses which embedded type looks larger.
         let block = |inscriptions: u64, tx_count: u64| BlockSummary {
             height: 800_000,
             timestamp: 1_700_000_000,
             size: 1_000,
+            weight: 1_000,
             inscription_envelope_bytes: 200,
             inscription_count: inscriptions,
             tx_count,
@@ -2235,7 +2246,11 @@ mod tests {
                 .as_f64()
                 .expect("a plotted share")
         };
-        assert_eq!(share(block(1, 2)), 20.0, "200 bytes of a 1,000-byte block");
+        assert_eq!(
+            share(block(1, 2)),
+            20.0,
+            "200 witness bytes against 1,000 weight units"
+        );
         assert_eq!(
             share(block(50, 3_000)),
             20.0,
@@ -3083,12 +3098,22 @@ mod tests {
         for b in blocks.iter_mut() {
             b.height = 770_000; // below the old gate, above the real first
             b.size = 1_000_000;
+            // Weight equals size here only to keep the arithmetic readable;
+            // this fixture exists to pin the height gate, not to model a real
+            // witness ratio. Share charts divide by weight, so a fixture with
+            // no weight plots nothing and the test would pass vacuously.
+            b.weight = 1_000_000;
             b.inscription_count = 0;
             b.inscription_bytes = 0;
+            b.inscription_envelope_bytes = 0;
         }
-        // One real early inscription block, 65% inscription data.
+        // One real early inscription block, 65% inscription data. The share
+        // reads the ENVELOPE column: payload alone understates what the
+        // witness item cost the block, and mixing it with OP_RETURN's
+        // output-level cost in one stack compares two different things.
         blocks[1].inscription_count = 4;
-        blocks[1].inscription_bytes = 650_000;
+        blocks[1].inscription_bytes = 600_000;
+        blocks[1].inscription_envelope_bytes = 650_000;
 
         let opt = super::super::all_embedded_share_chart(&blocks);
         let insc = opt["series"]
@@ -3582,9 +3607,11 @@ mod tests {
             let series = opt["series"].as_array().expect("series");
             assert_eq!(
                 series.len(),
-                8,
-                "{label}: all eight classified types must be drawn, or the \
-                 lines cannot sum to zero"
+                9,
+                "{label}: all nine classified types must be drawn, or the \
+                 lines cannot sum to zero. Pay-to-anchor became the ninth on \
+                 2026-10-18; it was counted inside unknown_script_count \
+                 before that, so the denominator did not change."
             );
             let len = series[0]["data"].as_array().expect("data").len();
             let mut checked = 0usize;
@@ -3607,15 +3634,17 @@ mod tests {
                     continue;
                 }
                 assert_eq!(
-                    present, 8,
-                    "{label}: point {i} has {present} of 8 lines defined, so \
+                    present, 9,
+                    "{label}: point {i} has {present} of 9 lines defined, so \
                      the residual is invisible at that x"
                 );
                 assert!(
                     total.abs() < 0.05,
-                    "{label}: the eight velocities at point {i} sum to \
+                    "{label}: the nine velocities at point {i} sum to \
                      {total}, not zero, so one type's gain is not the \
-                     others' loss"
+                     others' loss. If this broke when anchors were promoted, \
+                     the denominator gained p2a_count while \
+                     unknown_script_count still contained it: a double count."
                 );
                 checked += 1;
             }

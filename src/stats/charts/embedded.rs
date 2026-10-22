@@ -85,6 +85,52 @@ pub fn op_return_count_chart_daily(
     }))
 }
 
+/// Serialised bytes an OP_RETURN output costs beyond its script: the 8-byte
+/// `value` field plus the 1-byte CompactSize length prefix.
+///
+/// Counting script bytes alone understates the real cost by **44%** over the
+/// last year, which is larger than it sounds because a typical OP_RETURN
+/// script is only 20.5 bytes. Runes markers and protocol tags are short, not
+/// the 80-byte policy maximum, so a fixed 9-byte frame is nearly half the
+/// output.
+///
+/// The prefix widens to 3 bytes once a script reaches 253. Measured
+/// 2026-10-21: 3.5% of OP_RETURN outputs sit in blocks containing at least one
+/// such script, which caps the shortfall at 0.76% of the correction. Not
+/// modelled, because `blocks` stores no per-output script length.
+///
+/// That cap is a live figure, not a closed one: 3,507 of the 3,701 blocks ever
+/// carrying a script of 253 bytes or more are above height 920,000. If large
+/// OP_RETURNs keep growing, re-measure rather than assuming this stays small.
+const OP_RETURN_OUTPUT_OVERHEAD: u64 = 9;
+
+/// What an OP_RETURN output actually costs the block, not just its script.
+fn op_return_output_bytes(script_bytes: u64, output_count: u64) -> f64 {
+    (script_bytes + OP_RETURN_OUTPUT_OVERHEAD * output_count) as f64
+}
+
+/// Weight units an OP_RETURN output costs: its serialised bytes, times four.
+///
+/// **Share charts divide by weight, not size, and the difference reverses the
+/// answer.** Block space is rationed by weight (4,000,000 units), and a
+/// non-witness byte costs four units where a witness byte costs one. Dividing
+/// by `size` prices them as the same good. Measured 2026-10-21 from height
+/// 920,000:
+///
+/// ```text
+///                   % of size    % of weight
+/// OP_RETURN            3.97          6.68
+/// inscriptions         8.07          3.40
+/// ```
+///
+/// On size, inscriptions look twice OP_RETURN. On weight, OP_RETURN is nearly
+/// twice inscriptions, and 20.9% of individual blocks flip ranking on the
+/// choice. Inscriptions live in the witness and OP_RETURN outputs do not, so
+/// this is not a rounding difference: it is the wrong good being measured.
+fn op_return_weight(script_bytes: u64, output_count: u64) -> f64 {
+    4.0 * op_return_output_bytes(script_bytes, output_count)
+}
+
 /// OP_RETURN bytes bar chart.
 pub fn op_return_bytes_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     if blocks.is_empty() {
@@ -183,11 +229,17 @@ pub fn runes_pct_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     // output into exactly one of the four band columns and then increments
     // `op_return_count` (`rpc.rs:964-985`), so the identity holds by
     // construction, and it does hold for all of the last 1,000 blocks. But
-    // `db::update_block_extras` rewrites the four band columns and **not**
-    // `op_return_count`, so rows re-classified by a later backfill kept an
-    // older total: 291,016 blocks between heights 246,816 and 941,909 have a
-    // larger `op_return_count` than the sum of their bands, 103,398 of them by
-    // exactly one output.
+    // The historical divergence this guarded against is **gone**. It was
+    // 291,016 blocks between heights 246,816 and 941,909 whose stored
+    // `op_return_count` exceeded the sum of their bands, because
+    // `db::update_block_extras` rewrote the bands and not the total. The
+    // 2026-10 raw-block sweep rewrote every row from the parser, and the
+    // identity now holds everywhere. Measured 2026-10-21 across all 972k
+    // blocks: zero mismatches in either direction.
+    //
+    // The denominator below is kept anyway. It costs nothing, it is the
+    // columns that are maintained together, and the defect it survived came
+    // from exactly the kind of partial rewrite a future backfill could repeat.
     //
     // Dividing by the stale total made the stack stop short of 100% with no
     // residual band and nothing to explain the gap. Dividing by the sum of the
@@ -306,8 +358,12 @@ pub fn op_return_block_share_chart(
     }
 
     let share_fn = |b: &BlockSummary| {
-        if b.size > 0 {
-            ((b.op_return_bytes as f64 / b.size as f64 * 100.0 * 100.0).round()
+        if b.weight > 0 {
+            ((op_return_weight(b.op_return_bytes, b.op_return_count)
+                / b.weight as f64
+                * 100.0
+                * 100.0)
+                .round()
                 / 100.0)
                 .min(100.0)
         } else {
@@ -361,9 +417,14 @@ pub fn op_return_block_share_chart_daily(
     let vals: Vec<f64> = days
         .iter()
         .map(|d| {
-            let total_size = d.avg_size * d.block_count as f64;
-            if total_size > 0.0 {
-                ((d.total_op_return_bytes as f64 / total_size * 100.0 * 100.0)
+            let total_weight = d.avg_weight * d.block_count as f64;
+            if total_weight > 0.0 {
+                ((op_return_weight(
+                    d.total_op_return_bytes,
+                    d.total_op_return_count,
+                ) / total_weight
+                    * 100.0
+                    * 100.0)
                     .round()
                     / 100.0)
                     .min(100.0)
@@ -484,13 +545,15 @@ pub fn inscription_share_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 
     // Use envelope bytes (full witness item size) for accurate block share
     let insc_fn = |b: &BlockSummary| {
-        if b.size > 0 {
+        if b.weight > 0 {
             let bytes = if b.inscription_envelope_bytes > 0 {
                 b.inscription_envelope_bytes
             } else {
                 b.inscription_bytes // fallback for pre-backfill blocks
             };
-            ((bytes as f64 / b.size as f64 * 100.0 * 100.0).round() / 100.0)
+            // Witness bytes cost one weight unit each, so no factor of four
+            // here, unlike the OP_RETURN side. That asymmetry IS the point.
+            ((bytes as f64 / b.weight as f64 * 100.0 * 100.0).round() / 100.0)
                 .min(100.0)
         } else {
             0.0
@@ -593,8 +656,13 @@ pub fn all_embedded_share_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     }
 
     let op_str = build_data_array_f64(blocks, |b| {
-        if b.size > 0 {
-            round(b.op_return_bytes as f64 / b.size as f64 * 100.0, 2)
+        if b.weight > 0 {
+            round(
+                op_return_weight(b.op_return_bytes, b.op_return_count)
+                    / b.weight as f64
+                    * 100.0,
+                2,
+            )
         } else {
             0.0
         }
@@ -642,7 +710,11 @@ pub fn all_embedded_share_chart(blocks: &[BlockSummary]) -> serde_json::Value {
                 insc_buf,
                 "[{},{},{}]",
                 ts_ms(b.timestamp),
-                round(b.inscription_bytes as f64 / b.size as f64 * 100.0, 2),
+                round(
+                    b.inscription_envelope_bytes as f64 / b.weight as f64
+                        * 100.0,
+                    2
+                ),
                 b.height
             );
         } else {
@@ -688,9 +760,16 @@ pub fn all_embedded_share_chart_daily(
     let op_vals: Vec<f64> = days
         .iter()
         .map(|d| {
-            let total_size = d.avg_size * d.block_count as f64;
-            if total_size > 0.0 {
-                round(d.total_op_return_bytes as f64 / total_size * 100.0, 2)
+            let total_weight = d.avg_weight * d.block_count as f64;
+            if total_weight > 0.0 {
+                round(
+                    op_return_weight(
+                        d.total_op_return_bytes,
+                        d.total_op_return_count,
+                    ) / total_weight
+                        * 100.0,
+                    2,
+                )
             } else {
                 0.0
             }
@@ -714,11 +793,11 @@ pub fn all_embedded_share_chart_daily(
             if i < first_insc_day {
                 json!(null)
             } else {
-                let total_size = d.avg_size * d.block_count as f64;
-                if total_size > 0.0 {
+                let total_weight = d.avg_weight * d.block_count as f64;
+                if total_weight > 0.0 {
                     json!(round(
-                        d.avg_inscription_bytes * d.block_count as f64
-                            / total_size
+                        d.avg_inscription_envelope_bytes * d.block_count as f64
+                            / total_weight
                             * 100.0,
                         2,
                     ))
@@ -876,7 +955,11 @@ pub fn unified_embedded_volume_chart(
         build_data_array_i64(blocks, |b| b.data_carrier_bytes as i64);
     let other_op = data_array_value(&other_op_str);
     let inscriptions_str =
-        build_data_array_i64(blocks, |b| b.inscription_bytes as i64);
+        // Envelope, not payload: the OP_RETURN bands beside it are script
+        // bytes, which include each output's own OP_RETURN and push opcodes.
+        // Stacking those against a payload with its envelope stripped put two
+        // different levels in one bar.
+        build_data_array_i64(blocks, |b| b.inscription_envelope_bytes as i64);
     let inscriptions = data_array_value(&inscriptions_str);
 
     build_option(json!({
@@ -928,7 +1011,7 @@ pub fn unified_embedded_volume_chart_daily(
         .collect();
     let inscriptions: Vec<f64> = days
         .iter()
-        .map(|d| round(d.avg_inscription_bytes / 1000.0, 1))
+        .map(|d| round(d.avg_inscription_envelope_bytes / 1000.0, 1))
         .collect();
 
     build_option(json!({
@@ -1341,6 +1424,93 @@ pub fn protocol_fee_competition_chart_daily(
 /// Average coinbase message length per block (bytes of decoded ASCII text).
 /// Longer messages often indicate pools encoding custom data, timestamps, or
 /// signaling information in the coinbase.
+/// How many outputs each block's coinbase transaction creates.
+///
+/// Almost every block pays the reward to one output. A few pay hundreds,
+/// because some pools settle with their miners **in the coinbase itself**
+/// rather than sending a separate payout transaction. That is the whole story
+/// this chart tells, and it is visible nowhere else on the site.
+///
+/// Measured 2026-10-18: Eligius averaged 87.8 coinbase outputs across 9,378
+/// blocks from 2011 to 2017 and holds the record at 919 (block 133,471);
+/// CKPool averaged 150.9; Ocean averages 49.9 and is still doing it. Of
+/// 89,940 coinbase-only blocks, 88,000 create exactly one output.
+pub fn coinbase_payout_count_chart(
+    blocks: &[BlockSummary],
+) -> serde_json::Value {
+    if blocks.is_empty() {
+        return no_data_chart("Coinbase Payout Count");
+    }
+
+    let count_fn = |b: &BlockSummary| b.coinbase_output_count as f64;
+    let raw_str = build_data_array_f64(blocks, count_fn);
+    let raw = data_array_value(&raw_str);
+    let vals: Vec<f64> = blocks.iter().map(count_fn).collect();
+    let ma = moving_average(&vals, 144);
+    let ma_str = build_ma_array(blocks, &ma);
+    let ma_data = data_array_value(&ma_str);
+    let has_ma = show_ma(blocks.len());
+
+    let mut series = vec![json!({
+        "name": "Coinbase outputs", "type": "line", "data": raw,
+        "lineStyle": { "width": if has_ma { 1.0 } else { 1.5 }, "color": "#f59e0b" },
+        "itemStyle": { "color": "#f59e0b" }, "symbol": "none",
+        "opacity": if has_ma { 0.3 } else { 1.0 }
+    })];
+    if has_ma {
+        series.push(json!({
+            "name": "144-block MA", "type": "line", "data": ma_data,
+            "lineStyle": { "width": 2, "color": MA_COLOR },
+            "itemStyle": { "color": MA_COLOR }, "symbol": "none"
+        }));
+    }
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": y_axis("Outputs"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": has_ma },
+        "series": series
+    }))
+}
+
+/// Daily mean coinbase outputs per block.
+///
+/// A mean flattens the spikes this chart exists to show: one 919-output block
+/// inside a day of 144 reads as 7.4. The per-block arm is where the record
+/// lives, and the copy says so rather than leaving a reader to wonder why the
+/// long range looks calm.
+pub fn coinbase_payout_count_chart_daily(
+    days: &[DailyAggregate],
+) -> serde_json::Value {
+    if days.is_empty() {
+        return no_data_chart("Coinbase Payout Count (daily)");
+    }
+    let dates: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    let vals: Vec<f64> = days
+        .iter()
+        .map(|d| round(d.avg_coinbase_output_count, 2))
+        .collect();
+    let ma = moving_average(&vals, 7);
+
+    build_option(json!({
+        "xAxis": x_axis_for(true, &dates),
+        "yAxis": y_axis("Avg outputs/block"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            { "name": "Coinbase outputs", "type": "line", "data": vals,
+              "lineStyle": { "width": 1.0, "color": "#f59e0b" },
+              "itemStyle": { "color": "#f59e0b" }, "symbol": "none", "opacity": 0.35 },
+            { "name": "7-day MA", "type": "line", "data": ma,
+              "lineStyle": { "width": 2, "color": MA_COLOR },
+              "itemStyle": { "color": MA_COLOR }, "symbol": "none" }
+        ]
+    }))
+}
+
 pub fn coinbase_message_length_chart(
     blocks: &[BlockSummary],
 ) -> serde_json::Value {

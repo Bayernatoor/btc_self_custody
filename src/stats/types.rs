@@ -154,6 +154,9 @@ pub struct BlockSummary {
     /// 75th percentile fee rate in sat/vB.
     pub fee_rate_p75: f64,
     /// Outputs created by the coinbase transaction, OP_RETURN included.
+    /// Pay-to-anchor outputs. A subset of `unknown_script_count` until the
+    /// 2026-10 promotion; a sibling of it afterwards.
+    pub p2a_count: u64,
     pub coinbase_output_count: u64,
     /// Coinbase OP_RETURN outputs, BIP-141 commitment included.
     pub unspendable_output_count: u64,
