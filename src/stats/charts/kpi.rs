@@ -80,6 +80,19 @@ pub enum Kpis {
         /// total is the meaningful one.
         dominant: String,
         dominant_share_pct: f64,
+        /// Whether `dominant_share_pct` was taken over the whole range or at
+        /// the last point.
+        ///
+        /// **Carried rather than re-derived, because the label used to guess
+        /// and guessed wrong.** The renderer had no `unit`, so it inferred the
+        /// basis from `total_range.is_some()`, which is a *stricter* condition
+        /// than the one that chose the basis: it also requires
+        /// `points_are_interval_totals`. On a chart whose unit totals but
+        /// whose points are daily per-block means, the share was computed over
+        /// the range and labelled "of latest total". Measured 2026-10-21 on
+        /// OP_RETURN Volume: Runes printed as "91.4% of latest total" beside a
+        /// latest total it was 78.6% of.
+        dominant_over_range: bool,
         band_count: usize,
         observations: usize,
     },
@@ -440,7 +453,8 @@ fn bands(
     let total_latest: f64 = latest.iter().map(|(_, v)| *v).sum();
     // Rank the bands on whichever total is meaningful, so "largest band" and
     // the share beside it never describe a different window from each other.
-    let totals = if unit.totals_over_a_range() {
+    let dominant_over_range = unit.totals_over_a_range();
+    let totals = if dominant_over_range {
         &summed
     } else {
         &latest
@@ -467,6 +481,7 @@ fn bands(
             .then(|| grand_sum / filled.len() as f64),
         total_latest,
         dominant,
+        dominant_over_range,
         dominant_share_pct: if denominator > 0.0 {
             top / denominator * 100.0
         } else {
@@ -680,6 +695,53 @@ mod tests {
             {"name":"P2PKH","data":[[1,10.0],[2,20.0]],"stack":"t"},
             {"name":"P2TR","data":[[1,50.0],[2,60.0]],"stack":"t"}]}"#;
 
+    /// The leading band's share and its label must describe the same window.
+    ///
+    /// They did not. The renderer had no `unit`, so it inferred the basis from
+    /// `total_range.is_some()`. That flag carries an **extra** condition,
+    /// `points_are_interval_totals`, which the basis choice does not. A chart
+    /// whose unit adds up but whose points are daily per-block means therefore
+    /// had its share taken over the whole range and printed "of latest total".
+    ///
+    /// Measured on OP_RETURN Volume, 2026-10-21: Runes read "91.4% of latest
+    /// total" directly beneath a latest total it was 78.6% of. Two adjacent
+    /// lines, two different populations, and the number was never wrong, only
+    /// the label.
+    ///
+    /// This case is the divergence itself: `total_range` is `None` while the
+    /// ranking is still over the range.
+    #[test]
+    fn the_leading_band_label_names_the_window_the_share_was_taken_over() {
+        match compute(TWO_BANDS, Shape::StackedAbsolute, Unit::Count, false) {
+            Kpis::Bands {
+                total_range,
+                dominant_over_range,
+                dominant_share_pct,
+                ..
+            } => {
+                assert_eq!(
+                    total_range, None,
+                    "points that are not interval totals must not report a \
+                     range total; if this changes the test no longer covers \
+                     the divergence it was written for"
+                );
+                assert!(
+                    dominant_over_range,
+                    "the unit still adds up, so the band was ranked over the \
+                     range. Inferring the basis from total_range here is what \
+                     produced the wrong label."
+                );
+                // 10+20+50+60 = 140 over the range, so the 50+60 band is 110
+                // of it. At the last point alone it would be 60 of 80, 75%.
+                assert!(
+                    (dominant_share_pct - 110.0 / 140.0 * 100.0).abs() < 0.01,
+                    "share is over the range, not the last point: got {dominant_share_pct}"
+                );
+            }
+            other => panic!("expected Bands, got {other:?}"),
+        }
+    }
+
     #[test]
     fn stacked_reports_both_totals_and_a_leading_band_not_an_average() {
         match compute(TWO_BANDS, Shape::StackedAbsolute, Unit::Count, true) {
@@ -689,11 +751,17 @@ mod tests {
                 total_latest,
                 dominant,
                 dominant_share_pct,
+                dominant_over_range,
                 band_count,
                 observations,
             } => {
                 assert_eq!(band_count, 2);
                 assert_eq!(observations, 2);
+                assert!(
+                    dominant_over_range,
+                    "a Count unit adds up over time, so the leading band is \
+                     ranked over the range and its label must say so"
+                );
                 // 10+20+50+60 across the window, against 20+60 at the last
                 // point. The rail reports both because they answer different
                 // questions and it used to offer only the second.

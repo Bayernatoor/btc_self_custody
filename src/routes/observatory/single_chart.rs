@@ -1702,7 +1702,7 @@ fn fact_hint(label: &str) -> &'static str {
         "range total" => "Every band summed across every point in the range. Absent on a percentage chart, where a total of shares is not a share.",
         "average total" => "The stacked total averaged across the points in the range: per block on short ranges, per day once the range is long enough to use daily aggregates. Absent on a 100%-stacked chart, where it would report the chart's shape rather than this range.",
         "latest total" => "The sum of every band at the most recent point in the range.",
-        "largest band" => "The band holding the biggest share of the range total, or of the latest total on a percentage chart, so it always matches whichever total is meaningful.",
+        "largest band" => "The band contributing the most. The percentage beside it says what it is a share of: \"of total\" means across the whole range, \"of latest total\" means at the most recent point alone.",
         "bands" => "How many stacked categories the chart is divided into.",
         "largest" => "The category with the biggest share over the whole range.",
         "its value" => "The value behind that share, in the chart's own unit.",
@@ -1753,7 +1753,7 @@ fn KeyFacts(
                     </div>
                 }.into_any()
             }
-            Kpis::Bands { total_range, average_total, total_latest, dominant, dominant_share_pct, band_count, observations } => {
+            Kpis::Bands { total_range, average_total, total_latest, dominant, dominant_share_pct, dominant_over_range, band_count, observations } => {
                 // **Deliberately not qualified with the unit**, unlike the
                 // time-series rail above. `ChartMeta` declares one `Unit` per
                 // chart while the real unit is per resolution: `opreturn-bytes`
@@ -1775,7 +1775,7 @@ fn KeyFacts(
                             <Fact label="average total" value=fmt_num(a) note=None/>
                         })}
                         <Fact label="latest total" value=fmt_num(total_latest) note=None/>
-                        <Fact label="largest band" value=dominant note=Some(share_note(dominant_share_pct, total_range.is_some()))/>
+                        <Fact label="largest band" value=dominant note=Some(share_note(dominant_share_pct, dominant_over_range))/>
                         <Fact label="bands" value=band_count.to_string() note=None/>
                         <Fact label="observations" value=observations.to_string() note=None/>
                     </div>
@@ -2164,6 +2164,51 @@ mod tests {
     /// rendered rather than a second list that can drift from it. Same
     /// technique the registry uses against the four page sources.
     const SELF: &str = include_str!("single_chart.rs");
+
+    /// The leading band's share must be labelled with the basis it was
+    /// computed on, which is `dominant_over_range` and nothing else.
+    ///
+    /// **A source-level guard, because the type system cannot express this.**
+    /// `share_note` takes a `bool`, and `total_range.is_some()` is also a
+    /// `bool`, so passing the wrong one compiles cleanly and prints a correct
+    /// number under a wrong label. That is precisely what shipped: `kpi.rs`
+    /// ranks the band over the range whenever the unit adds up over time,
+    /// while `total_range` additionally requires `points_are_interval_totals`.
+    /// On OP_RETURN Volume, Runes printed "91.4% of latest total" beside a
+    /// latest total it was 78.6% of.
+    ///
+    /// The unit test beside this one pins the data. This pins the pairing,
+    /// and reverting the call site to `total_range.is_some()` fails here.
+    #[test]
+    fn the_band_share_is_labelled_with_the_basis_it_was_computed_on() {
+        // Search only the code above `mod tests`. A self-reading guard that
+        // scans its own assertion text finds the pattern it is hunting for
+        // and fails on itself, which is a different bug wearing the same
+        // error message.
+        let code = &SELF[..SELF.find("\nmod tests").unwrap_or(SELF.len())];
+        let site = "share_note(dominant_share_pct,";
+        let calls: Vec<&str> = code
+            .match_indices(site)
+            .map(|(i, _)| {
+                let rest = &code[i + site.len()..];
+                &rest[..rest.find(')').unwrap_or(rest.len())]
+            })
+            .collect();
+
+        assert!(
+            !calls.is_empty(),
+            "the band-share call site was not found above the test module. \
+             The parser broke, which must not read as a pass."
+        );
+        for arg in &calls {
+            assert!(
+                arg.contains("dominant_over_range"),
+                "the band share is labelled from `{arg}` rather than the \
+                 basis it was computed on. Inferring it from the range total \
+                 is the wrong source and type-checks cleanly."
+            );
+        }
+    }
 
     /// Every attribute value in the file, which for these guards means every
     /// piece of user-facing copy: tooltips, titles and labels.
