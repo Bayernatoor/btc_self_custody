@@ -160,9 +160,15 @@ pub fn identify_miner(coinbase_hex: &str) -> String {
         }
     }
 
-    // OCEAN template miners: coinbase contains "ocean.xyz" or "ocean" followed
-    // by the miner's own tag. Extract printable ASCII after ">" as the sub-miner.
-    if ascii.contains("ocean.xyz") || ascii.contains("ocean") {
+    // OCEAN template miners. Extract printable ASCII after ">" as the sub-miner.
+    //
+    // The marker must be the full domain. A bare "ocean" substring matched
+    // block 270,035 from November 2013, whose coinbase reads "Mined by user
+    // oceandull": a BTC Guild miner, a decade before the pool existed. That
+    // was the only such match in 1,604 OCEAN-tagged blocks, so the loose form
+    // bought nothing and cost one wrong attribution. Measured 2026-10-18:
+    // 1,603 of 1,604 carry "ocean.xyz".
+    if ascii.contains("ocean.xyz") {
         if let Some(sub_miner) = extract_ocean_subminer(&bytes) {
             return format!("OCEAN / {sub_miner}");
         }
@@ -341,6 +347,29 @@ mod tests {
     fn miner_f2pool() {
         let hex = hex::encode("Mined by F2Pool");
         assert_eq!(identify_miner(&hex), "F2Pool");
+    }
+
+    /// A coinbase merely containing the letters "ocean" is not OCEAN.
+    ///
+    /// Block 270,035, November 2013: "Mined by user oceandull", a BTC Guild
+    /// miner tagged as a pool that did not exist until late 2023. One wrong
+    /// row in 1,604, which is exactly the kind of error a substring matcher
+    /// produces and nothing notices.
+    #[test]
+    fn a_coincidental_ocean_substring_is_not_the_pool() {
+        let hex = hex::encode("3QlQ4L9!sVAu?8TMined by user oceandull");
+        assert_eq!(
+            identify_miner(&hex),
+            "Unknown",
+            "a user handle containing 'ocean' must not be read as the pool"
+        );
+        // hashocean.com was a 2016 cloud-mining site, also not the pool.
+        let hex2 = hex::encode("Mined by AntPool usa1 / www.hashocean.com/");
+        assert_ne!(
+            identify_miner(&hex2),
+            "OCEAN",
+            "an unrelated domain containing 'ocean' must not be read as the pool"
+        );
     }
 
     #[test]
