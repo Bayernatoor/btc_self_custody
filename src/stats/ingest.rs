@@ -107,10 +107,28 @@ pub async fn run(
     tracing::info!("Chain tip: {} ({})", tip, info.chain);
 
     let db_max = db::max_height(conn)?;
-    let start = match db_max {
-        Some(h) => h + 1,
-        None => tip.saturating_sub(initial_count),
-    };
+    let allow_empty = std::env::var("BITCOIN_STATS_ALLOW_EMPTY_INGEST")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+
+    let start =
+        match initial_start_height(db_max, tip, initial_count, allow_empty) {
+            Some(s) => s,
+            None => {
+                tracing::error!(
+                    "Refusing to ingest {} blocks into an EMPTY database. An \
+                 established deployment with no rows is far more likely to be \
+                 pointed at the wrong file than to be starting fresh: \
+                 BITCOIN_STATS_DB_PATH may be unset, in which case the app \
+                 falls back to ./bitcoin_stats.db relative to its working \
+                 directory. Check which file is open, then set \
+                 BITCOIN_STATS_ALLOW_EMPTY_INGEST=1 if a full ingest really \
+                 is intended.",
+                    initial_count
+                );
+                return Ok(());
+            }
+        };
 
     if start > tip {
         tracing::info!("Database is up to date");
@@ -118,6 +136,32 @@ pub async fn run(
     }
 
     ingest_range(rpc, conn, start, tip, "Ingesting").await
+}
+
+/// Where a fresh ingest should begin, or `None` if it must not run at all.
+///
+/// Split out from [`run`] so the decision can be tested without a node or a
+/// database, because the case that matters is the one that is hardest to
+/// reach by accident and most expensive to get wrong.
+///
+/// **An empty database is treated as suspicious rather than as a cue.**
+/// `config.rs` falls back to `./bitcoin_stats.db` when `BITCOIN_STATS_DB_PATH`
+/// is unset, resolved against the working directory, and a zero-byte file of
+/// that name has sat in the production app directory since April 2026. SQLite
+/// opens it happily as an empty database, and the old code read that as
+/// "ingest a million blocks", which on the droplet means a million blocks over
+/// a WireGuard tunnel to a home node.
+fn initial_start_height(
+    db_max: Option<u64>,
+    tip: u64,
+    initial_count: u64,
+    allow_empty: bool,
+) -> Option<u64> {
+    match db_max {
+        Some(h) => Some(h + 1),
+        None if allow_empty => Some(tip.saturating_sub(initial_count)),
+        None => None,
+    }
 }
 
 /// Background: check for new blocks and ingest them. Runs every 15 seconds.
@@ -717,4 +761,58 @@ async fn ingest_range(
     );
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// An empty database must not trigger a full-chain ingest by default.
+    ///
+    /// This is the guard, and it is worth stating what it is guarding against:
+    /// production's app directory holds a zero-byte `bitcoin_stats.db`, and
+    /// `config.rs` falls back to that relative path when the env var is unset.
+    /// Opening it is indistinguishable from a first run, and the old code
+    /// answered that by ingesting a million blocks over the tunnel.
+    #[test]
+    fn an_empty_database_does_not_start_a_full_ingest_on_its_own() {
+        assert_eq!(
+            initial_start_height(None, 900_000, 1_000_000, false),
+            None,
+            "an empty database with no explicit opt-in must refuse"
+        );
+        assert_eq!(
+            initial_start_height(None, 900_000, 1_000_000, true),
+            Some(0),
+            "with the opt-in, a first run still works and saturates at 0"
+        );
+        assert_eq!(
+            initial_start_height(None, 900_000, 1_000, true),
+            Some(899_000),
+            "the opt-in honours a bounded initial count"
+        );
+    }
+
+    /// A populated database is unaffected, with or without the flag.
+    ///
+    /// The guard would be worse than useless if it could stop ordinary
+    /// forward ingestion, so both paths are asserted rather than just the
+    /// interesting one.
+    #[test]
+    fn a_populated_database_always_resumes_from_the_next_height() {
+        for allow in [false, true] {
+            assert_eq!(
+                initial_start_height(Some(899_999), 900_000, 1_000_000, allow),
+                Some(900_000),
+                "resume must not depend on the empty-database opt-in \
+                 (allow_empty = {allow})"
+            );
+        }
+        assert_eq!(
+            initial_start_height(Some(900_000), 900_000, 1_000_000, false),
+            Some(900_001),
+            "a database already at the tip returns a start above it, which \
+             run() treats as up to date"
+        );
+    }
 }
