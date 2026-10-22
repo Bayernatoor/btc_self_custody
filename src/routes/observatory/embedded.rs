@@ -99,6 +99,10 @@ pub fn EmbeddedChartsPage() -> impl IntoView {
                         |blocks| crate::stats::charts::protocol_fee_competition_chart(blocks),
                         |days| crate::stats::charts::protocol_fee_competition_chart_daily(days)
                     );
+                    let coinbase_payouts_option = chart_memo!(dashboard_data, range, overlay_flags,
+                        |blocks| crate::stats::charts::coinbase_payout_count_chart(blocks),
+                        |days| crate::stats::charts::coinbase_payout_count_chart_daily(days)
+                    );
                     let coinbase_msg_option = chart_memo!(dashboard_data, range, overlay_flags,
                         |blocks| crate::stats::charts::coinbase_message_length_chart(blocks),
                         |_days| crate::stats::charts::coinbase_message_length_chart_daily(_days)
@@ -108,16 +112,16 @@ pub fn EmbeddedChartsPage() -> impl IntoView {
                         <div class="space-y-10">
                             // ── Overview ─────────────────────────
                             <SectionHeading id="section-overview" title="Overview"/>
-                            <ChartCard title="Detected Embedded Data, Block Share" description=chart_desc(range, "Share of each block's bytes in detected protocol data: OP_RETURN script bytes plus estimated inscription payload", "Daily average share of block bytes in detected protocol data") chart_id="chart-all-embedded-share" option=all_embedded_share_option/>
+                            <ChartCard title="Detected Embedded Data, Block Share" description=chart_desc(range, "Share of each block's bytes in detected protocol data: OP_RETURN script bytes plus estimated inscription payload", "Daily average share of block weight in detected protocol data") chart_id="chart-all-embedded-share" option=all_embedded_share_option/>
                             <ChartCard title="Detected Embedded Data, Count" description=chart_desc(range, "Per block, by protocol: OP_RETURN outputs for the first four bands and inscription-bearing witness items for the last two", "Daily average per block: OP_RETURN outputs and inscription-bearing witness items, by protocol") chart_id="chart-unified-count" option=unified_count_option/>
-                            <ChartCard title="Detected Embedded Data, Volume" description=chart_desc(range, "Bytes per block by protocol: exact OP_RETURN script bytes and estimated inscription payload, on one stack", "Daily average bytes per block by protocol, mixing exact OP_RETURN script bytes with estimated inscription payload") chart_id="chart-unified-volume" option=unified_volume_option/>
+                            <ChartCard title="Detected Embedded Data, Volume" description=chart_desc(range, "Data bytes per block by protocol, each format including its own framing, on one stack", "Daily average data bytes per block by protocol, each format including its own framing") chart_id="chart-unified-volume" option=unified_volume_option/>
 
                             // ── Protocols ────────────────────────
                             <SectionHeading id="section-protocols" title="OP_RETURN"/>
                             <ChartCard title="OP_RETURN Count" description=chart_desc(range, "Number of OP_RETURN outputs per block by protocol", "Daily average OP_RETURN outputs per block by protocol") chart_id="chart-opreturn-count" option=op_count_option/>
                             <ChartCard title="OP_RETURN Volume" description=chart_desc(range, "Bytes of data stored in OP_RETURN outputs per block by protocol", "Daily average OP_RETURN bytes per block by protocol") chart_id="chart-opreturn-bytes" option=op_bytes_option/>
                             <ChartCard title="OP_RETURN Protocol Share" description="Detected OP_RETURN outputs by protocol. Runes were 96.9% of them in 2024, the year they launched, and over 97% so far in 2026" chart_id="chart-runes-pct" option=runes_pct_option/>
-                            <ChartCard title="OP_RETURN Block Share" description=chart_desc(range, "OP_RETURN data as a percentage of each block's size", "Daily average OP_RETURN data as a percentage of block size") chart_id="chart-op-block-share" option=op_block_share_option/>
+                            <ChartCard title="OP_RETURN Block Share" description=chart_desc(range, "OP_RETURN cost as a percentage of each block's weight", "Daily average OP_RETURN cost as a percentage of block weight") chart_id="chart-op-block-share" option=op_block_share_option/>
 
                             // ── Inscriptions ─────────────────────
                             <SectionHeading id="section-witness" title="Ordinals & Witness Data"/>
@@ -129,6 +133,7 @@ pub fn EmbeddedChartsPage() -> impl IntoView {
 
                             // ── Miner Signals ────────────────────
                             <SectionHeading id="section-coinbase" title="Miner Signals"/>
+                            <ChartCard title="Coinbase Payout Count" description=chart_desc(range, "How many outputs each block's coinbase creates. Almost all pay the reward once; a few pay hundreds, because some pools settle with their miners in the coinbase itself", "Daily mean coinbase outputs per block. A mean flattens the spikes, so use a range of 1M or shorter to see them") chart_id="chart-coinbase-payouts" option=coinbase_payouts_option/>
                             <ChartCard title="Coinbase Message Length" description="Length of decoded ASCII text found in each block's coinbase transaction. Mining pools embed identifiers, timestamps, and occasionally custom messages in this space" chart_id="chart-coinbase-msg-length" option=coinbase_msg_option/>
                         </div>
                     }

@@ -378,10 +378,16 @@ fn drawer_pages() -> Vec<DrawerPage> {
                 },
                 DrawerSection {
                     label: "Miner Signals",
-                    charts: vec![DrawerChart {
-                        label: "Coinbase Message Length",
-                        card_id: "card-chart-coinbase-msg-length",
-                    }],
+                    charts: vec![
+                        DrawerChart {
+                            label: "Coinbase Message Length",
+                            card_id: "card-chart-coinbase-msg-length",
+                        },
+                        DrawerChart {
+                            label: "Coinbase Payout Count",
+                            card_id: "card-chart-coinbase-payouts",
+                        },
+                    ],
                 },
             ],
         },

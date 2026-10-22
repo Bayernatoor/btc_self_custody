@@ -158,6 +158,11 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://www.wehodlbtc.com/observatory/chart/coinbase-payouts</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://www.wehodlbtc.com/observatory/chart/coinbase-msg-length</loc>
     <changefreq>daily</changefreq>
     <priority>0.6</priority>
