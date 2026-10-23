@@ -1694,7 +1694,7 @@ fn meta_description(meta: &ChartMeta) -> String {
 /// what stops the two drifting.
 fn fact_hint(label: &str) -> &'static str {
     match label {
-        "average" => "The mean of every plotted point over the selected range. Not a running average: change the range and this changes with it.",
+        "average" => "The mean of every plotted point, each counting the same. On a percentage or ratio chart that is not the figure for the range as a whole, because a day holding more blocks does not count for more. Not a running average: change the range and this changes with it.",
         "peak" => "The highest single value in the range, and when it happened.",
         "low" => "The lowest single value in the range, and when it happened.",
         "change" => "Last value minus first value over the range. The percentage is shown only when the starting value is large enough for it to mean something.",
@@ -1737,9 +1737,29 @@ fn KeyFacts(
                 let pct = (first != 0.0
                     && (last / first).abs() < PCT_MEANINGFUL_RATIO)
                     .then(|| change / first.abs() * 100.0);
+                // A mean of per-point ratios is not the ratio over the range,
+                // and the gap widens with the range rather than staying in
+                // the last decimal. OP_RETURN Block Share over ALL reads
+                // 1.06% as a mean of daily shares against 1.60% across all of
+                // them, because a 2011 day of near-empty blocks counts as
+                // much as a 2025 day of full ones. Measured 2026-10-22.
+                //
+                // Naming the population rather than changing the computation,
+                // because the mean of points is the honest answer for every
+                // non-ratio chart and switching would silently restate a
+                // published figure on every percentage chart at once.
+                let averaged_population = match unit.get() {
+                    registry::Unit::Percent => {
+                        Some("mean of per-point shares".to_string())
+                    }
+                    registry::Unit::Ratio => {
+                        Some("mean of per-point ratios".to_string())
+                    }
+                    _ => None,
+                };
                 view! {
                     <div class=FACT_GRID>
-                        <Fact label="average" value=unit.get().qualify(&fmt_num(average)) note=None/>
+                        <Fact label="average" value=unit.get().qualify(&fmt_num(average)) note=averaged_population/>
                         <Fact label="peak" value=fmt_num(peak.y) note=point_label(&peak, &axis_labels)/>
                         <Fact label="low" value=fmt_num(low.y) note=point_label(&low, &axis_labels)/>
                         {reports_change.then(|| view! {
@@ -2208,6 +2228,55 @@ mod tests {
                  is the wrong source and type-checks cleanly."
             );
         }
+    }
+
+    /// "average" must say what population it averaged on a ratio chart.
+    ///
+    /// The value is a mean of plotted points, each weighted equally. On a
+    /// percentage chart that is a different quantity from the share across
+    /// the range, and the gap grows with the range rather than sitting in the
+    /// last decimal: OP_RETURN Block Share over ALL reads 1.06% against
+    /// 1.60%, measured 2026-10-22.
+    ///
+    /// Guarded by reading the source rather than the rendered value, for the
+    /// same reason as the band-share guard above: `note` takes an
+    /// `Option<String>`, so passing `None` back type-checks cleanly and
+    /// nothing else in the suite would notice. Scoped above `mod tests` so
+    /// this assertion's own text cannot satisfy it.
+    #[test]
+    fn the_average_names_its_population_on_a_ratio_chart() {
+        let code = &SELF[..SELF.find("\nmod tests").unwrap_or(SELF.len())];
+        let site = "<Fact label=\"average\"";
+        let calls: Vec<&str> = code
+            .match_indices(site)
+            .map(|(i, _)| {
+                let rest = &code[i + site.len()..];
+                &rest[..rest.find("/>").unwrap_or(rest.len())]
+            })
+            .collect();
+
+        assert!(
+            !calls.is_empty(),
+            "the average fact's call site was not found above the test \
+             module. The parser broke, which must not read as a pass."
+        );
+        for arg in &calls {
+            assert!(
+                arg.contains("averaged_population"),
+                "the average is rendered with `{arg}`, so a percentage chart \
+                 states a mean of per-point shares as though it were the \
+                 share over the range."
+            );
+        }
+
+        // And the population strings have to exist, or the binding above
+        // could be wired to a `match` that returns `None` throughout.
+        assert!(
+            code.contains("mean of per-point shares")
+                && code.contains("mean of per-point ratios"),
+            "the notes naming the averaged population are gone, so the \
+             binding is carrying nothing"
+        );
     }
 
     /// Every attribute value in the file, which for these guards means every
