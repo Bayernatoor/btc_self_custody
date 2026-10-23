@@ -332,10 +332,16 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
     },
     HallOfFameEntry {
         slug: "most-outputs-block",
-        title: "Most Outputs in a Block (26,906)",
-        // DB: height 826052, output_count 26,906, 480 txs, miner Foundry USA
-        description: "Block 826,052 created 26,906 new UTXOs from just 480 transactions. Likely a mass payout or airdrop operation. Mined by Foundry USA.",
-        short_context: Some("Block 826,052 created 26,906 new UTXOs from just 480 transactions, likely a mass payout"),
+        title: "Most Outputs in a Block (26,908)",
+        // DB: height 826052, output_count 26,908, 480 txs, miner Foundry USA.
+        // The figure read 26,906 until 2026-10-22, which was the same block
+        // counted under an older definition: `output_count` now includes the
+        // coinbase transaction's outputs, and this block's coinbase makes two.
+        // Both readings are of the same chain, and the current one matches the
+        // sentence, since a coinbase output is a new UTXO and the coinbase is
+        // one of the 480 transactions.
+        description: "Block 826,052 created 26,908 new UTXOs from just 480 transactions. Likely a mass payout or airdrop operation. Mined by Foundry USA.",
+        short_context: Some("Block 826,052 created 26,908 new UTXOs from just 480 transactions, likely a mass payout"),
         almanac: true,
         category: Records,
         date: "2024-01-16",
@@ -367,7 +373,7 @@ pub const HALL_OF_FAME: &[HallOfFameEntry] = &[
         // which despite its name counts *created* P2TR outputs and is
         // byte-identical to p2tr_count in every row.
         //
-        // DB: height 840655, p2tr_count 22,367, output_count 22,679,
+        // DB: height 840655, p2tr_count 22,367, output_count 22,685,
         // input_count 327, 186 txs, miner F2Pool, 2024-04-24.
         // The slug stays as it is because it is a public anchor.
         description: "Block 840,655 created 22,367 Taproot (P2TR) outputs across just 186 transactions, about 120 outputs per transaction. That is batch creation rather than spending: the block holds only 327 inputs in total. Mined by F2Pool four days after the fourth halving.",

@@ -5,6 +5,11 @@
 
 pub mod charts;
 pub mod hall_of_fame_data;
+/// Test-only: the SQL that re-finds each curated record. Gated rather than
+/// shipped so the queries stay out of both the server binary and the WASM
+/// bundle, which have no use for them.
+#[cfg(all(test, feature = "ssr"))]
+mod hall_of_fame_records;
 pub mod server_fns;
 pub mod types;
 
