@@ -600,17 +600,22 @@ pub fn inscription_share_chart_daily(
         return no_data_chart("Inscription Block Share");
     }
     let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
-    // Use envelope bytes when available for accurate block share
+    // Weight, matching the per-block arm and every other share chart here.
+    // Both fields are per-block means over the same day, so their ratio is
+    // the day's total envelope bytes over its total weight.
     let vals: Vec<f64> = days
         .iter()
         .map(|d| {
-            if d.avg_size > 0.0 {
+            if d.avg_weight > 0.0 {
+                // Envelope bytes where stored, payload for blocks recorded
+                // before envelope sizes were, which reads low rather than
+                // absent.
                 let bytes = if d.avg_inscription_envelope_bytes > 0.0 {
                     d.avg_inscription_envelope_bytes
                 } else {
                     d.avg_inscription_bytes
                 };
-                ((bytes / d.avg_size * 100.0 * 100.0).round() / 100.0)
+                ((bytes / d.avg_weight * 100.0 * 100.0).round() / 100.0)
                     .min(100.0)
             } else {
                 0.0

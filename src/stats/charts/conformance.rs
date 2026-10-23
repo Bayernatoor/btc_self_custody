@@ -2230,12 +2230,19 @@ mod tests {
         // weight unit per byte while a non-witness byte costs four. Dividing
         // by size prices the two as the same good, which on current data
         // reverses which embedded type looks larger.
+        //
+        // **`size` and `weight` must differ here.** They were both 1,000
+        // until 2026-10-22, under which this test could not tell the two
+        // denominators apart at all: it asserted the name in its own title
+        // and nothing else. The daily arm went on dividing by size through
+        // the whole basis rework because of it, reading 7.90% over the last
+        // year where the per-block arm read 3.45%.
         let block = |inscriptions: u64, tx_count: u64| BlockSummary {
             height: 800_000,
             timestamp: 1_700_000_000,
             size: 1_000,
-            weight: 1_000,
-            inscription_envelope_bytes: 200,
+            weight: 2_500,
+            inscription_envelope_bytes: 500,
             inscription_count: inscriptions,
             tx_count,
             ..Default::default()
@@ -2249,14 +2256,34 @@ mod tests {
         assert_eq!(
             share(block(1, 2)),
             20.0,
-            "200 witness bytes against 1,000 weight units"
+            "500 witness bytes against 2,500 weight units; 50.0 means the \
+             builder divided by size"
         );
         assert_eq!(
             share(block(50, 3_000)),
             20.0,
             "fifty inscriptions across 3,000 transactions carrying the same \
-             200 bytes is the same share; if this moved, the chart is \
+             500 bytes is the same share; if this moved, the chart is \
              counting items or transactions"
+        );
+
+        // The daily arm answers the same question, so it must answer it the
+        // same way. One chart that changes basis when the reader switches
+        // resolution is worse than either basis alone.
+        let day = |envelope: f64| DailyAggregate {
+            date: "2024-02-03".to_string(),
+            block_count: 144,
+            avg_size: 1_000.0,
+            avg_weight: 2_500.0,
+            avg_inscription_envelope_bytes: envelope,
+            ..Default::default()
+        };
+        let opt = super::super::inscription_share_chart_daily(&[day(500.0)]);
+        assert_eq!(
+            opt["series"][0]["data"][0].as_f64(),
+            Some(20.0),
+            "the daily arm must divide by weight like the per-block arm; \
+             50.0 means it is still dividing by size"
         );
     }
 

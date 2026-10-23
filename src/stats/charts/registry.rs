@@ -661,22 +661,22 @@ pub const CHARTS: &[ChartMeta] = &[
             Measurement {
                 series: "OP_RETURN",
                 series_daily: "",
-                quantity: "Share of block bytes in OP_RETURN scripts",
+                quantity: "Share of a block's weight spent on OP_RETURN outputs",
                 method_per_block: Method::Measured,
                 method_daily: Method::Measured,
                 per_block: Aggregation::PerBlockObservation,
                 daily: Aggregation::RatioOfTotals,
-                population: "OP_RETURN script bytes over serialized block bytes. Script bytes only, so the output's value and length fields are outside the numerator.",
+                population: "The weight those outputs cost, over the block's weight. Non-witness bytes at four weight units each, counting the output's value and length fields as well as the script.",
             },
             Measurement {
                 series: "Inscriptions",
                 series_daily: "",
-                quantity: "Share of block bytes in inscription payloads",
+                quantity: "Share of a block's weight spent on inscription witness items",
                 method_per_block: Method::HeuristicallyDetected,
                 method_daily: Method::HeuristicallyDetected,
                 per_block: Aggregation::PerBlockObservation,
                 daily: Aggregation::RatioOfTotals,
-                population: "Estimated inscription payload over serialized block bytes. The two bands measure bytes on different bases, since one is exact script bytes and the other an estimated payload, so their sum is not a single well-defined quantity.",
+                population: "Envelope bytes of matching witness items, over the block's weight. Witness bytes cost one weight unit each against the four a non-witness byte costs, and that asymmetry is the measurement rather than a quirk. Both bands are on the same basis, so their sum is the share of the block's weight the two together consumed.",
             },
         ],
         about: Some(About {
@@ -829,15 +829,15 @@ pub const CHARTS: &[ChartMeta] = &[
         measurements: &[Measurement {
             series: "",
             series_daily: "",
-            quantity: "Share of block bytes in detected inscription envelopes",
+            quantity: "Share of a block's weight spent on inscription witness items",
             method_per_block: Method::HeuristicallyDetected,
             method_daily: Method::HeuristicallyDetected,
             per_block: Aggregation::PerBlockObservation,
             daily: Aggregation::RatioOfTotals,
-            population: "Envelope bytes of matching witness items over serialized block bytes, so a byte fraction and not a count of anything. Falls back to payload bytes for blocks recorded before envelope sizes were stored, which makes the early series slightly lower than the late one on the same activity.",
+            population: "Envelope bytes of matching witness items, over the block's weight, so a weight fraction and not a count of anything. Witness bytes cost one weight unit each against the four a non-witness byte costs, which is why an inscription can fill a block by bytes while leaving room by weight. Falls back to payload bytes for blocks recorded before envelope sizes were stored, which makes the early series slightly lower than the late one on the same activity.",
         }],
         about: Some(About {
-            definition: Some("How much of a block is inscription data. Inscriptions go in the witness, which the protocol charges a quarter rate for, so they can fill a block by bytes while leaving room by weight. Two blocks in the chain are 99.99% inscription by bytes: 892,279 and 899,687."),
+            definition: Some("How much of a block's weight went on inscription data. Inscriptions go in the witness, which the protocol charges a quarter rate for, so they can fill a block by bytes while leaving room by weight. Two blocks come closer than any others to being nothing else: 892,279 and 899,687, both 99.96% inscription by weight."),
             technical: "Includes both the inscription content (images, text, JSON) and the witness envelope structure (OP_FALSE OP_IF, push opcodes, 'ord' marker). This is the whole matching witness item, payload and envelope together, as the detector found it. Witness bytes count one weight unit each instead of four, so an inscription consumes a quarter of the block weight its byte count suggests.",
         }),
     },
@@ -883,12 +883,12 @@ pub const CHARTS: &[ChartMeta] = &[
         measurements: &[Measurement {
             series: "",
             series_daily: "",
-            quantity: "Share of block bytes in OP_RETURN scripts",
+            quantity: "Share of a block's weight spent on OP_RETURN outputs",
             method_per_block: Method::Measured,
             method_daily: Method::Measured,
             per_block: Aggregation::PerBlockObservation,
             daily: Aggregation::RatioOfTotals,
-            population: "OP_RETURN scriptPubKey bytes over serialized block bytes. Script bytes only: the output's value and length fields are not included, so this understates the space those outputs occupy.",
+            population: "The weight those outputs cost, over the block's weight. An OP_RETURN output is non-witness, so each of its bytes costs four weight units, and its serialized size is the script plus the eight-byte value field and a one-byte length prefix. Block space is rationed in weight, so this measures what the outputs cost the block rather than how many bytes of data they carry.",
         }],
         about: Some(About {
             definition: Some("How much of a block is OP_RETURN data. An OP_RETURN output is a deliberately unspendable output whose script carries a few dozen bytes, which can timestamp or label things on chain. About 63% of all blocks contain at least one."),
@@ -3755,6 +3755,17 @@ mod tests {
                 2.0,
                 2.7,
             ),
+            // The two blocks named in the copy, measured on the basis the
+            // chart actually plots. They read 99.99% by size, which is what
+            // the sentence said until the denominator became weight.
+            (
+                "inscription-share",
+                "both 99.96% inscription by weight",
+                "SELECT MIN(100.0*inscription_envelope_bytes/weight) \
+                 FROM blocks WHERE height IN (892279, 899687)",
+                99.9,
+                100.0,
+            ),
             (
                 "witness-share",
                 "about 51% over the last 10,000 blocks",
@@ -4879,7 +4890,6 @@ mod tests {
         ("inscription-envelope", "17.9%"),
         ("inscription-envelope", "190,000"),
         ("inscription-envelope", "94%"),
-        ("inscription-share", "99.99%"),
         ("interval", "40"),
         ("multi-velocity", "197"),
         ("multi-velocity", "98"),
