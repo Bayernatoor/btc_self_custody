@@ -376,6 +376,7 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
             avg_p2a_count              REAL NOT NULL DEFAULT 0,
             avg_coinbase_output_count  REAL NOT NULL DEFAULT 0,
             avg_unspendable_output_count REAL NOT NULL DEFAULT 0,
+            avg_brc20_bytes            REAL NOT NULL DEFAULT 0,
             avg_input_count            REAL NOT NULL DEFAULT 0,
             avg_output_count           REAL NOT NULL DEFAULT 0,
             avg_rbf_count              REAL NOT NULL DEFAULT 0,
@@ -451,6 +452,19 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
                  ALTER TABLE daily_blocks ADD COLUMN avg_taproot_tx_count REAL NOT NULL DEFAULT 0;
                  ALTER TABLE daily_blocks ADD COLUMN avg_fee_rate_p25 REAL NOT NULL DEFAULT 0;
                  ALTER TABLE daily_blocks ADD COLUMN avg_fee_rate_p75 REAL NOT NULL DEFAULT 0;",
+            )?;
+        }
+        // Tested on its own rather than nested under the v11 block, so a
+        // database that already took those columns still gets this one.
+        //
+        // Adding the column is not enough to populate it: every historical
+        // row keeps its `DEFAULT 0` until something re-aggregates the day.
+        // `rebuild_all_daily_blocks_force` is the repair path for that, and
+        // `cargo run --bin rebuild_daily_blocks` runs it.
+        if !daily_cols.contains("avg_brc20_bytes") {
+            tracing::info!("Migrating daily_blocks: adding avg_brc20_bytes");
+            conn.execute_batch(
+                "ALTER TABLE daily_blocks ADD COLUMN avg_brc20_bytes REAL NOT NULL DEFAULT 0;",
             )?;
         }
     }
@@ -1102,6 +1116,8 @@ pub struct BlockRow {
     pub p2a_count: u64,
     pub coinbase_output_count: u64,
     pub unspendable_output_count: u64,
+    /// Estimated BRC-20 payload bytes, a subset of `inscription_bytes`.
+    pub brc20_bytes: u64,
 }
 
 impl From<DailyRow> for super::types::DailyAggregate {
@@ -1158,6 +1174,7 @@ impl From<DailyRow> for super::types::DailyAggregate {
             avg_legacy_tx_count: r.avg_legacy_tx_count,
             avg_segwit_tx_count: r.avg_segwit_tx_count,
             avg_taproot_tx_count: r.avg_taproot_tx_count,
+            avg_brc20_bytes: r.avg_brc20_bytes,
             avg_fee_rate_p25: r.avg_fee_rate_p25,
             avg_fee_rate_p75: r.avg_fee_rate_p75,
         }
@@ -1225,6 +1242,7 @@ impl From<BlockRow> for super::types::BlockSummary {
             p2a_count: r.p2a_count,
             coinbase_output_count: r.coinbase_output_count,
             unspendable_output_count: r.unspendable_output_count,
+            brc20_bytes: r.brc20_bytes,
         }
     }
 }
@@ -1253,7 +1271,8 @@ pub fn query_blocks(
                 max_tx_fee, inscription_fees, runes_fees,
                 legacy_tx_count, segwit_tx_count, taproot_tx_count,
                 coinbase_text, fee_rate_p25, fee_rate_p75,
-                coinbase_output_count, unspendable_output_count, p2a_count
+                coinbase_output_count, unspendable_output_count, p2a_count,
+                brc20_bytes
          FROM blocks WHERE height >= ?1 AND height <= ?2 ORDER BY height ASC",
     )?;
     let rows = stmt.query_map(params![from, to], |row| {
@@ -1315,6 +1334,7 @@ pub fn query_blocks(
             fee_rate_p75: row.get(54)?,
             coinbase_output_count: row.get(55)?,
             unspendable_output_count: row.get(56)?,
+            brc20_bytes: row.get(58)?,
             p2a_count: row.get(57)?,
         })
     })?;
@@ -1352,7 +1372,8 @@ pub fn query_blocks_by_ts(
                 max_tx_fee, inscription_fees, runes_fees,
                 legacy_tx_count, segwit_tx_count, taproot_tx_count,
                 coinbase_text, fee_rate_p25, fee_rate_p75,
-                coinbase_output_count, unspendable_output_count, p2a_count
+                coinbase_output_count, unspendable_output_count, p2a_count,
+                brc20_bytes
          FROM blocks WHERE timestamp >= ?1 AND timestamp <= ?2 ORDER BY height ASC LIMIT ?3",
     )?;
     let rows = stmt.query_map(params![from_ts, to_ts, limit], |row| {
@@ -1414,6 +1435,7 @@ pub fn query_blocks_by_ts(
             fee_rate_p75: row.get(54)?,
             coinbase_output_count: row.get(55)?,
             unspendable_output_count: row.get(56)?,
+            brc20_bytes: row.get(58)?,
             p2a_count: row.get(57)?,
         })
     })?;
@@ -1694,6 +1716,7 @@ pub struct DailyRow {
     pub avg_legacy_tx_count: f64,
     pub avg_segwit_tx_count: f64,
     pub avg_taproot_tx_count: f64,
+    pub avg_brc20_bytes: f64,
     pub avg_fee_rate_p25: f64,
     pub avg_fee_rate_p75: f64,
 }
@@ -1748,7 +1771,8 @@ pub fn refresh_daily_day(
              total_output_value, total_input_value,
              avg_inscription_envelope_bytes, total_inscription_fees, total_runes_fees,
              avg_legacy_tx_count, avg_segwit_tx_count, avg_taproot_tx_count,
-             avg_fee_rate_p25, avg_fee_rate_p75)
+             avg_fee_rate_p25, avg_fee_rate_p75,
+             avg_brc20_bytes)
          SELECT ?1,
                 COUNT(*), AVG(size), AVG(weight), AVG(tx_count), AVG(difficulty),
                 SUM(op_return_count), SUM(runes_count), SUM(omni_count),
@@ -1768,7 +1792,8 @@ pub fn refresh_daily_day(
                 SUM(total_output_value), SUM(total_input_value),
                 AVG(inscription_envelope_bytes), SUM(inscription_fees), SUM(runes_fees),
                 AVG(legacy_tx_count), AVG(segwit_tx_count), AVG(taproot_tx_count),
-                AVG(fee_rate_p25), AVG(fee_rate_p75)
+                AVG(fee_rate_p25), AVG(fee_rate_p75),
+                AVG(brc20_bytes)
          FROM blocks
          WHERE timestamp >= ?2 AND timestamp < ?3
          HAVING COUNT(*) > 0",
@@ -1818,7 +1843,8 @@ const REBUILD_DAILY_SQL: &str = "INSERT OR REPLACE INTO daily_blocks
              total_output_value, total_input_value,
              avg_inscription_envelope_bytes, total_inscription_fees, total_runes_fees,
              avg_legacy_tx_count, avg_segwit_tx_count, avg_taproot_tx_count,
-             avg_fee_rate_p25, avg_fee_rate_p75)
+             avg_fee_rate_p25, avg_fee_rate_p75,
+             avg_brc20_bytes)
          SELECT date(datetime(timestamp, 'unixepoch')),
                 COUNT(*), AVG(size), AVG(weight), AVG(tx_count), AVG(difficulty),
                 SUM(op_return_count), SUM(runes_count), SUM(omni_count),
@@ -1838,7 +1864,8 @@ const REBUILD_DAILY_SQL: &str = "INSERT OR REPLACE INTO daily_blocks
                 SUM(total_output_value), SUM(total_input_value),
                 AVG(inscription_envelope_bytes), SUM(inscription_fees), SUM(runes_fees),
                 AVG(legacy_tx_count), AVG(segwit_tx_count), AVG(taproot_tx_count),
-                AVG(fee_rate_p25), AVG(fee_rate_p75)
+                AVG(fee_rate_p25), AVG(fee_rate_p75),
+                AVG(brc20_bytes)
          FROM blocks
          GROUP BY date(datetime(timestamp, 'unixepoch'))";
 
@@ -1931,7 +1958,7 @@ pub fn query_daily_aggregates_fast(
                 -- columns on purpose: these rows are read positionally, so a
                 -- mid-list insertion would shift every index after it.
                 avg_p2a_count, avg_coinbase_output_count,
-                avg_unspendable_output_count
+                avg_unspendable_output_count, avg_brc20_bytes
          FROM daily_blocks
          WHERE day >= ?1 AND day <= ?2
          ORDER BY day ASC",
@@ -1997,6 +2024,7 @@ pub fn query_daily_aggregates_fast(
             avg_unspendable_output_count: row
                 .get::<_, Option<f64>>(52)?
                 .unwrap_or(0.0),
+            avg_brc20_bytes: row.get::<_, Option<f64>>(53)?.unwrap_or(0.0),
         })
     })?;
 
@@ -2077,7 +2105,7 @@ pub fn query_daily_aggregates(
                 -- is read positionally, so a mid-list insertion would shift
                 -- every index after it.
                 AVG(p2a_count), AVG(coinbase_output_count),
-                AVG(unspendable_output_count)
+                AVG(unspendable_output_count), AVG(brc20_bytes)
          FROM blocks
          WHERE timestamp >= ?1 AND timestamp <= ?2
          GROUP BY day
@@ -2144,6 +2172,7 @@ pub fn query_daily_aggregates(
             avg_unspendable_output_count: row
                 .get::<_, Option<f64>>(52)?
                 .unwrap_or(0.0),
+            avg_brc20_bytes: row.get::<_, Option<f64>>(53)?.unwrap_or(0.0),
         })
     })?;
     rows.collect()
@@ -3900,7 +3929,7 @@ mod tests {
     /// so the guard cannot be "fixed" by loosening it: anything not in here
     /// must match exactly.
     const FIELD_TO_COLUMN: &[(&str, &str)] =
-        &[("time", "timestamp"), ("n_tx", "tx_count")];
+        &[("time", "timestamp"), ("n_tx", "tx_count"), ("date", "day")];
 
     fn column_for(field: &str) -> &str {
         FIELD_TO_COLUMN
@@ -3923,7 +3952,17 @@ mod tests {
     fn columns_between(body: &str, from: &str, to: &str) -> Vec<String> {
         let s = body.find(from).expect("start marker");
         let e = body[s..].find(to).expect("end marker") + s;
-        let mut seg = &body[s + from.len()..e];
+        // Strip `--` comments before anything else. The daily reader
+        // documents its appended columns inline, and those lines were being
+        // counted as columns, which shifted every index after them and made
+        // the function look misbound in four places. A comment containing a
+        // paren would also have truncated the list below.
+        let decommented: String = body[s + from.len()..e]
+            .lines()
+            .map(|l| l.split("--").next().unwrap_or(""))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let mut seg = decommented.as_str();
         // The INSERT wraps its list in parentheses; a SELECT does not.
         if let Some((_, after)) = seg.split_once('(') {
             seg = after;
@@ -3972,13 +4011,144 @@ mod tests {
 
     /// `field: row.get(N)` bindings, as (field, index) pairs.
     fn row_get_fields(body: &str) -> Vec<(String, usize)> {
-        body.lines()
-            .filter_map(|l| {
-                let (field, rest) = l.trim().split_once(": row.get(")?;
-                let idx = rest.split(')').next()?.parse().ok()?;
-                Some((field.to_string(), idx))
-            })
-            .collect()
+        // Normalised rather than read line by line, because the daily readers
+        // bind through `row.get::<_, Option<f64>>(51)?` and rustfmt splits
+        // that across three lines. The old line-based form saw neither shape,
+        // so it reported 40 bindings for a 54-column select and those two
+        // functions sat outside this guard entirely.
+        let flat = body
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .replace(" .", ".");
+        let mut out = Vec::new();
+        for (i, _) in flat.match_indices("row.get") {
+            let Some(colon) = flat[..i].rfind(':') else {
+                continue;
+            };
+            let field: String = flat[..colon]
+                .chars()
+                .rev()
+                .take_while(|c| c.is_alphanumeric() || *c == '_')
+                .collect::<Vec<char>>()
+                .into_iter()
+                .rev()
+                .collect();
+            if field.is_empty() {
+                continue;
+            }
+            // The first paren after the token, which is the index whether or
+            // not a turbofish sits between. Bounded so a malformed binding
+            // cannot silently pair with a paren far down the function.
+            let after = &flat[i + "row.get".len()..];
+            let Some(open) = after.find('(').filter(|o| *o < 40) else {
+                continue;
+            };
+            let digits: String = after[open + 1..]
+                .chars()
+                .take_while(|c| c.is_ascii_digit())
+                .collect();
+            if let Ok(idx) = digits.parse() {
+                out.push((field, idx));
+            }
+        }
+        out
+    }
+
+    /// The daily reader returns what the rollup stores, read through Rust.
+    ///
+    /// `wide_statements_bind_each_column_to_its_own_field` pairs columns to
+    /// bindings by reading the source, which is a strong check and still a
+    /// check on text. This one observes a value coming out of
+    /// `query_daily_aggregates_fast` and compares it to the same day computed
+    /// straight from `blocks`.
+    ///
+    /// Written because `avg_brc20_bytes` was added by hand at an index I
+    /// verified by counting columns, which is the kind of verification that
+    /// feels like evidence and is not.
+    ///
+    /// Ignored: needs the real database.
+    #[test]
+    #[ignore]
+    fn the_daily_reader_returns_what_the_rollup_stores() {
+        let conn = Connection::open_with_flags(
+            "bitcoin_stats.db",
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )
+        .expect("bitcoin_stats.db in the working directory");
+
+        // A day late enough to carry BRC-20 activity, read both ways.
+        let (day, from_ts, to_ts): (String, u64, u64) = conn
+            .query_row(
+                "SELECT date(timestamp,'unixepoch'),
+                        MIN(timestamp), MAX(timestamp)
+                 FROM blocks
+                 GROUP BY date(timestamp,'unixepoch')
+                 HAVING AVG(brc20_bytes) > 0
+                 ORDER BY 1 DESC LIMIT 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .expect("a day with BRC-20 bytes");
+
+        let rows = query_daily_aggregates_fast(&conn, from_ts, to_ts)
+            .expect("the fast reader");
+        let got = rows
+            .iter()
+            .find(|r| r.date == day)
+            .unwrap_or_else(|| panic!("{day} missing from the fast reader"));
+
+        let (want_brc20, want_insc, want_blocks): (f64, f64, u64) = conn
+            .query_row(
+                "SELECT AVG(brc20_bytes), AVG(inscription_bytes), COUNT(*)
+                 FROM blocks WHERE date(timestamp,'unixepoch') = ?1",
+                rusqlite::params![day],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .expect("the same day from blocks");
+
+        assert_eq!(got.block_count, want_blocks, "{day}: block count");
+        assert!(
+            (got.avg_brc20_bytes - want_brc20).abs() < 0.001,
+            "{day}: avg_brc20_bytes read {} but blocks say {want_brc20}. A \
+             slipped index reads a neighbouring column, which is wrong data \
+             rather than an error.",
+            got.avg_brc20_bytes
+        );
+        // A neighbour, so the test fails if the two columns were swapped
+        // rather than passing because both happened to be plausible.
+        assert!(
+            (got.avg_inscription_bytes - want_insc).abs() < 0.001,
+            "{day}: avg_inscription_bytes read {} but blocks say {want_insc}",
+            got.avg_inscription_bytes
+        );
+        assert!(
+            want_brc20 > 0.0 && (want_brc20 - want_insc).abs() > 0.001,
+            "the chosen day must have BRC-20 bytes and must not have them \
+             equal to inscription bytes, or a swap would pass"
+        );
+    }
+
+    /// The binding parser must see both shapes, or widening its reach is a
+    /// no-op that reads as coverage.
+    #[test]
+    fn the_binding_parser_reads_turbofish_and_wrapped_bindings() {
+        let got = row_get_fields(
+            "height: row.get(0)?,
+             avg_p2a_count: row.get::<_, Option<f64>>(50)?.unwrap_or(0.0),
+             avg_coinbase_output_count: row
+                 .get::<_, Option<f64>>(51)?
+                 .unwrap_or(0.0),",
+        );
+        assert_eq!(
+            got,
+            vec![
+                ("height".to_string(), 0),
+                ("avg_p2a_count".to_string(), 50),
+                ("avg_coinbase_output_count".to_string(), 51),
+            ],
+            "a shape this parser cannot see is a column nothing checks"
+        );
     }
 
     /// Split on commas that are not inside parentheses.
@@ -4349,20 +4519,42 @@ mod tests {
         }
 
         // ---- read paths ---------------------------------------------------
-        for (sig, min_cols) in [
-            ("pub fn query_blocks(", 55),
-            ("pub fn query_blocks_by_ts(", 55),
-            ("pub fn query_block_by_height(", 27),
+        //
+        // `query_daily_aggregates_fast` reads the rollup rather than `blocks`,
+        // so it needs its own terminator. It was outside this guard until
+        // 2026-10-24, which is how `avg_brc20_bytes` came to be bound by hand
+        // at an index nothing checked: every chart above MAX_PER_BLOCK_RANGE
+        // reads through here, so a slipped index is wrong data on every long
+        // range rather than a crash.
+        for (sig, min_cols, from) in [
+            ("pub fn query_blocks(", 55, "FROM blocks"),
+            ("pub fn query_blocks_by_ts(", 55, "FROM blocks"),
+            ("pub fn query_block_by_height(", 27, "FROM blocks"),
+            (
+                "pub fn query_daily_aggregates_fast(",
+                50,
+                "FROM daily_blocks",
+            ),
         ] {
             let body = fn_body(SELF_SRC, sig);
-            let cols = columns_between(body, "\"SELECT", "FROM blocks");
+            let cols = columns_between(body, "\"SELECT", from);
             let binds = row_get_fields(body);
 
             assert!(
-                cols.len() >= min_cols && binds.len() >= min_cols,
-                "{sig}: parsed {} columns and {} row.get bindings, expected at \
-                 least {min_cols} of each. The parser broke, which must not \
-                 read as a pass.",
+                cols.len() >= min_cols,
+                "{sig}: parsed {} columns, expected at least {min_cols}. The \
+                 parser broke, which must not read as a pass.",
+                cols.len()
+            );
+            // **Equality, not a floor.** A floor let a parser that could not
+            // see wrapped bindings report 51 of 54 and still pass, which is
+            // how the daily readers went unguarded. Every selected column
+            // must be read by exactly one binding, or the index of every
+            // column after the gap is a guess.
+            assert_eq!(
+                cols.len(),
+                binds.len(),
+                "{sig}: {} columns selected but {} bindings read them",
                 cols.len(),
                 binds.len()
             );
@@ -5582,15 +5774,15 @@ mod tests {
         ] {
             assert_eq!(
                 cols.len(),
-                53,
-                "{label}: parsed {} target columns, expected 53. The parser \
+                54,
+                "{label}: parsed {} target columns, expected 54. The parser \
                  broke, which must not read as a pass.",
                 cols.len()
             );
             assert_eq!(
                 exprs.len(),
-                53,
-                "{label}: parsed {} select expressions, expected 53. The \
+                54,
+                "{label}: parsed {} select expressions, expected 54. The \
                  parser broke.",
                 exprs.len()
             );

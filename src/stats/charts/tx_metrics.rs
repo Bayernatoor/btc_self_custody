@@ -241,10 +241,10 @@ pub fn batching_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 
 /// Transaction batching (daily).
 pub fn batching_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
-    // Same coinbase correction as the per-block path. `avg_tx_count`
-    // includes the coinbase and `avg_output_count` does not, and a day of
-    // near-empty blocks drives the average toward 1, where the uncorrected
-    // divisor is off by half.
+    // Same coinbase correction as the per-block path. Both `avg_tx_count`
+    // and `avg_output_count` include the coinbase, so both sides of the
+    // ratio need it removed, and a day of near-empty blocks drives the
+    // average toward 1, where the uncorrected divisor is off by half.
     if days.is_empty() {
         return no_data_chart("Transaction Batching");
     }
@@ -593,14 +593,11 @@ pub fn utxo_flow_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
 /// as growth inflates the series permanently. They are 262,908,750 of the
 /// 3,918,115,271 outputs ever created, 6.7% lifetime and far higher lately.
 ///
-/// **The coinbase transaction is not in these counts at all.** A block with
-/// only a coinbase records `input_count = 0` and `output_count = 0`, which is
-/// how the ingest is built. So there is no coinbase input to correct for, and
-/// the coinbase's own outputs, which do enter the set, are missing. That
-/// leaves this roughly 3 per block short, the residual between the corrected
-/// figure and the node's. Fixing it means storing a coinbase output count and
-/// backfilling 966,871 blocks; the `technical` copy says so rather than
-/// implying the number is exact.
+/// **The coinbase's outputs are counted, and they do enter the set.**
+/// `output_count` is every output in the block, so a coinbase-only block
+/// records `output_count = coinbase_output_count` rather than zero: true of
+/// all 89,940 of them. The coinbase has no input to correct for, and the
+/// three heights whose coinbase never adds an entry are handled below.
 /// Heights whose coinbase output never adds a UTXO entry.
 ///
 /// Genesis is unspendable by consensus: Core does not place its output in the

@@ -217,6 +217,7 @@ fn synthetic_days(n: usize) -> Vec<DailyAggregate> {
                 // BRC-20 left the sixth band of Unified Embedded Count at
                 // zero in every test that built it.
                 avg_brc20_count: 2.0 + f * 0.01,
+                avg_brc20_bytes: 900.0 + f * 3.0,
                 avg_fee_rate_p10: 2.0 + f * 0.02,
                 avg_fee_rate_p90: 14.0 + f * 0.12,
                 avg_multisig_count: 15.0 + f * 0.1,
@@ -451,6 +452,235 @@ fn has_stack(option: &serde_json::Value) -> bool {
         .get("series")
         .and_then(|s| s.as_array())
         .is_some_and(|a| a.iter().any(|s| s.get("stack").is_some()))
+}
+
+// ---------------------------------------------------------------------------
+// Both arms of a chart, built from one chain
+// ---------------------------------------------------------------------------
+
+/// Blocks per day in the paired fixture, and a real day at the ten-minute
+/// target, so a chart dividing by either reaches the same answer.
+const BLOCKS_PER_DAY: u64 = 144;
+
+/// The one block every point in the paired fixture is a copy of.
+///
+/// **Every field carries a different value, and the values are proportioned
+/// like a real block.** Both halves matter. Distinct values mean a chart
+/// reading the neighbouring field is caught rather than coincidentally right.
+/// Realistic proportions mean no share lands on a clamp: the builders end in
+/// `.min(100.0)`, and two arms that both saturate agree for a reason that has
+/// nothing to do with measuring the same thing.
+///
+/// So the counts are internally consistent the way the chain is. The script
+/// types sum to `output_count`, the four OP_RETURN protocols sum to
+/// `op_return_count` in both count and bytes, the Taproot spend paths sum to
+/// `taproot_spend_count`, and the transaction types sum to the non-coinbase
+/// transactions.
+fn uniform_block(height: u64, timestamp: u64) -> BlockSummary {
+    BlockSummary {
+        height,
+        hash: format!("{height:064x}"),
+        timestamp,
+        tx_count: 2_500,
+        size: 1_200_000,
+        weight: 3_600_000,
+        difficulty: 1.1e14,
+        total_fees: 25_000_000,
+        median_fee: 2_400,
+        median_fee_rate: 12.5,
+        segwit_spend_count: 1_800,
+        // Deliberately not equal to `p2tr_count`, which stored rows always
+        // are. The two mean different things and one chart already read the
+        // wrong one; equal values here would hide the next such swap.
+        taproot_spend_count: 1_950,
+        p2pk_count: 30,
+        p2pkh_count: 900,
+        p2sh_count: 700,
+        p2wpkh_count: 1_500,
+        p2wsh_count: 400,
+        p2tr_count: 2_000,
+        multisig_count: 20,
+        // Anchors are inside this, not beside it.
+        unknown_script_count: 450,
+        p2a_count: 50,
+        input_count: 5_000,
+        output_count: 6_000,
+        // **Both large enough to survive rounding to two decimals.** At
+        // three coinbase outputs in six thousand, dropping the coinbase
+        // correction from the daily batching arm moved the ratio by 0.001
+        // and the test could not see it: the same defect as a fixture whose
+        // size and weight are equal. A pool paying its miners inside the
+        // coinbase really does produce hundreds, up to 919 at block 133,471.
+        coinbase_output_count: 200,
+        // At least the OP_RETURN outputs, which are unspendable by
+        // construction, so the UTXO arithmetic has something to subtract.
+        unspendable_output_count: 320,
+        rbf_count: 1_000,
+        witness_bytes: 600_000,
+        inscription_count: 120,
+        inscription_bytes: 150_000,
+        inscription_envelope_bytes: 180_000,
+        brc20_count: 40,
+        // A strict subset of `inscription_bytes`, which it is by
+        // construction: the BRC-20 test is nested inside the inscription one.
+        brc20_bytes: 20_000,
+        op_return_count: 300,
+        op_return_bytes: 6_000,
+        runes_count: 200,
+        runes_bytes: 3_000,
+        omni_count: 30,
+        omni_bytes: 900,
+        counterparty_count: 20,
+        counterparty_bytes: 700,
+        data_carrier_count: 50,
+        data_carrier_bytes: 1_400,
+        taproot_keypath_count: 1_700,
+        taproot_scriptpath_count: 250,
+        total_output_value: 50_000_000_000,
+        total_input_value: 50_025_000_000,
+        fee_rate_p10: 3.2,
+        fee_rate_p25: 6.4,
+        fee_rate_p75: 20.1,
+        fee_rate_p90: 42.7,
+        stamps_count: 5,
+        largest_tx_size: 90_000,
+        max_tx_fee: 1_500_000,
+        inscription_fees: 4_000_000,
+        runes_fees: 2_000_000,
+        legacy_tx_count: 300,
+        segwit_tx_count: 1_400,
+        taproot_tx_count: 799,
+        coinbase_text: "/uniform/".to_string(),
+    }
+}
+
+/// The rollup row `BLOCKS_PER_DAY` copies of `b` would produce.
+///
+/// Mirrors the aggregate in `db.rs` field for field: `avg_*` is `AVG(x)`,
+/// which for identical blocks is `x`, and `total_*` is `SUM(x)`, which is
+/// `x * n`. Written out rather than derived, because the point of the test
+/// is to compare two independent computations and a clever mapping here
+/// would just be a third place for the same mistake to live.
+fn uniform_day(b: &BlockSummary, date: &str) -> DailyAggregate {
+    let n = BLOCKS_PER_DAY;
+    DailyAggregate {
+        date: date.to_string(),
+        block_count: n,
+        avg_size: b.size as f64,
+        avg_weight: b.weight as f64,
+        avg_tx_count: b.tx_count as f64,
+        avg_difficulty: b.difficulty,
+        total_op_return_count: b.op_return_count * n,
+        total_op_return_bytes: b.op_return_bytes * n,
+        total_runes_count: b.runes_count * n,
+        total_runes_bytes: b.runes_bytes * n,
+        total_omni_count: b.omni_count * n,
+        total_omni_bytes: b.omni_bytes * n,
+        total_counterparty_count: b.counterparty_count * n,
+        total_counterparty_bytes: b.counterparty_bytes * n,
+        total_data_carrier_count: b.data_carrier_count * n,
+        total_data_carrier_bytes: b.data_carrier_bytes * n,
+        total_fees: b.total_fees * n,
+        avg_segwit_spend_count: b.segwit_spend_count as f64,
+        avg_taproot_spend_count: b.taproot_spend_count as f64,
+        avg_p2pk_count: b.p2pk_count as f64,
+        avg_p2pkh_count: b.p2pkh_count as f64,
+        avg_p2sh_count: b.p2sh_count as f64,
+        avg_p2wpkh_count: b.p2wpkh_count as f64,
+        avg_p2wsh_count: b.p2wsh_count as f64,
+        avg_p2tr_count: b.p2tr_count as f64,
+        avg_multisig_count: b.multisig_count as f64,
+        avg_unknown_script_count: b.unknown_script_count as f64,
+        avg_p2a_count: b.p2a_count as f64,
+        avg_coinbase_output_count: b.coinbase_output_count as f64,
+        avg_unspendable_output_count: b.unspendable_output_count as f64,
+        avg_input_count: b.input_count as f64,
+        avg_output_count: b.output_count as f64,
+        avg_rbf_count: b.rbf_count as f64,
+        avg_witness_bytes: b.witness_bytes as f64,
+        avg_inscription_count: b.inscription_count as f64,
+        avg_inscription_bytes: b.inscription_bytes as f64,
+        avg_inscription_envelope_bytes: b.inscription_envelope_bytes as f64,
+        avg_brc20_count: b.brc20_count as f64,
+        avg_brc20_bytes: b.brc20_bytes as f64,
+        avg_taproot_keypath_count: b.taproot_keypath_count as f64,
+        avg_taproot_scriptpath_count: b.taproot_scriptpath_count as f64,
+        avg_fee_rate_p10: b.fee_rate_p10,
+        avg_fee_rate_p25: b.fee_rate_p25,
+        avg_fee_rate_p75: b.fee_rate_p75,
+        avg_fee_rate_p90: b.fee_rate_p90,
+        avg_stamps_count: b.stamps_count as f64,
+        avg_median_fee_rate: b.median_fee_rate,
+        total_output_value: b.total_output_value * n,
+        total_input_value: b.total_input_value * n,
+        total_inscription_fees: b.inscription_fees * n,
+        total_runes_fees: b.runes_fees * n,
+        avg_legacy_tx_count: b.legacy_tx_count as f64,
+        avg_segwit_tx_count: b.segwit_tx_count as f64,
+        avg_taproot_tx_count: b.taproot_tx_count as f64,
+    }
+}
+
+/// `DAYS` days of identical blocks, and the rollup rows for exactly those
+/// blocks. Three days rather than one so a daily arm with a moving average
+/// or a difference has a history to work against.
+const DAYS: u64 = 3;
+
+fn paired_inputs() -> (Vec<BlockSummary>, Vec<DailyAggregate>) {
+    // 2025-06-10T00:00:00Z, and `DAYS * BLOCKS_PER_DAY` blocks at the
+    // ten-minute target land exactly on the day boundaries.
+    //
+    // **The height and the date have to agree about which halving era this
+    // is**, because the two arms read the subsidy from different things: the
+    // per-block arm from the height, the daily arm from the date. Height
+    // 900,000 dated 2024-02-01 straddled the April 2024 halving, so
+    // `subsidy-fees` reported 3.125 against 6.25 and `fee-revenue-share`
+    // inherited it. That was the fixture disagreeing with itself, not the
+    // chart. Block 900,000 was mined 2025-06-06, so these line up.
+    const START: u64 = 1_749_513_600;
+    const START_HEIGHT: u64 = 900_576;
+    let blocks: Vec<BlockSummary> = (0..DAYS * BLOCKS_PER_DAY)
+        .map(|i| uniform_block(START_HEIGHT + i, START + i * 600))
+        .collect();
+    let days: Vec<DailyAggregate> = (0..DAYS)
+        .map(|i| {
+            let date = chrono::DateTime::from_timestamp(
+                (START + i * 86_400) as i64,
+                0,
+            )
+            .expect("valid")
+            .format("%Y-%m-%d")
+            .to_string();
+            uniform_day(&blocks[0], &date)
+        })
+        .collect();
+    (blocks, days)
+}
+
+/// The last plotted value of a series, whichever point shape it uses.
+///
+/// A per-block point is `[timestamp, value, height]`; a daily point on a
+/// category axis is the bare number. Nulls are skipped from the end, since a
+/// moving average is null until its window fills.
+fn last_plotted(series: &serde_json::Value) -> Option<f64> {
+    let data = series["data"].as_array()?;
+    for point in data.iter().rev() {
+        let v = match point {
+            serde_json::Value::Array(a) => a.get(1),
+            other => Some(other),
+        };
+        if let Some(n) = v.and_then(|x| x.as_f64()) {
+            return Some(n);
+        }
+    }
+    None
+}
+
+/// Series whose value is a smoothing of another series, which the two arms
+/// smooth over different windows by design: 144 blocks against 7 days.
+fn is_smoothed(name: &str) -> bool {
+    let n = name.to_lowercase();
+    n.contains(" ma") || n.ends_with("ma") || n.contains("moving average")
 }
 
 #[cfg(test)]
@@ -4279,5 +4509,205 @@ mod inventory {
                 names.join(" | ")
             );
         }
+    }
+
+    /// Bands whose two arms plot the same quantity in different units.
+    ///
+    /// Both of these declare `Unit::Kilobytes`. The daily arm honours it and
+    /// the per-block arm plots raw bytes, so the two differ by exactly a
+    /// thousand. The Key Facts rail already works around it by printing no
+    /// unit at all on these charts, which `single_chart.rs` calls "worse
+    /// writing and correct". Per-resolution units are tracked in
+    /// `tasks/todo.md`.
+    ///
+    /// **Listed rather than tolerated.** Fixing it divides two live charts'
+    /// y axis by a thousand, which is a visible change and not one to make
+    /// inside a test. The list is shrink-only: an entry that stops
+    /// disagreeing fails, so it cannot outlive the fix.
+    const ARMS_IN_DIFFERENT_UNITS: &[(&str, &str)] = &[
+        ("opreturn-bytes", "Runes"),
+        ("opreturn-bytes", "Omni"),
+        ("opreturn-bytes", "Counterparty"),
+        ("opreturn-bytes", "Other"),
+        ("unified-volume", "Runes"),
+        ("unified-volume", "Omni"),
+        ("unified-volume", "Counterparty"),
+        ("unified-volume", "Other OP_RETURN"),
+        ("unified-volume", "Inscriptions incl. BRC-20"),
+    ];
+
+    /// Both arms of a chart must answer the same question.
+    ///
+    /// Every chart has two builders. The per-block arm plots one point per
+    /// block on short ranges; the daily arm plots one point per day on long
+    /// ones, reading the rollup instead, because nobody wants 970,000 points
+    /// in a browser. They are the same measurement at two resolutions, and
+    /// until now nothing checked that they were.
+    ///
+    /// **Inscription Block Share divided by weight in one arm and by size in
+    /// the other**, reading 3.45% per-block against 7.90% daily over the same
+    /// year. The chart had a test named for the property it got wrong, which
+    /// built one arm and set `size` and `weight` to the same number.
+    ///
+    /// # Why the fixture makes every block identical
+    ///
+    /// The arms genuinely aggregate differently: 39 declared measurements
+    /// average the day and 19 take a ratio of its totals. Exempting that
+    /// difference chart by chart would exempt nearly the whole registry.
+    ///
+    /// Make every block in the day the same, and the difference collapses.
+    /// The mean of 144 copies of V is V, and so is the ratio of their totals.
+    /// So the declared aggregation stops mattering and any arm that disagrees
+    /// is measuring something else.
+    ///
+    /// # What is exempt, and why it is a list of four declarations
+    ///
+    /// Only four aggregations give a legitimately different daily answer, and
+    /// each is read off the registry rather than from a list of slugs, so a
+    /// new chart is covered the day it is registered:
+    ///
+    /// - `DailyTotal` sums the day, so the daily point is `144 * V` by design
+    /// - `InverseOfDailyCount` is `1,440 minutes / blocks that day`
+    /// - `WindowedDerived` derives over a window whose length is per arm
+    /// - `GroupedSummary` and `Unsupported` have no comparable daily series
+    ///
+    /// # What this does not catch
+    ///
+    /// Two arms wrong the same way agree, and pass. This is a consistency
+    /// check, not a correctness one, which is why SQL oracles against the
+    /// real chain stay on the list beside it.
+    #[test]
+    fn both_arms_of_a_chart_agree_on_what_they_measure() {
+        let (blocks, days) = paired_inputs();
+        let mut compared = 0usize;
+        let mut disagree: Vec<(&str, String, String)> = Vec::new();
+
+        for meta in registry::CHARTS {
+            let Source::Dashboard { per_block, daily } = meta.source else {
+                // The non-dashboard sources either have no daily arm or take
+                // inputs that are not derived from these blocks.
+                continue;
+            };
+            let Daily::Fn(daily_fn) = daily else { continue };
+
+            let per = per_block(&blocks);
+            let dly = daily_fn(&days);
+            let Some(per_series) = per["series"].as_array() else {
+                continue;
+            };
+            let Some(dly_series) = dly["series"].as_array() else {
+                continue;
+            };
+
+            for ps in per_series {
+                let name = ps["name"].as_str().unwrap_or("");
+                if name.is_empty() || is_smoothed(name) {
+                    continue;
+                }
+                // The declaration for this band, found by the name the
+                // per-block arm gives it. A chart with one measurement
+                // leaves `series` empty rather than repeating its own title,
+                // so that one declaration covers whatever the builder named
+                // the line.
+                let Some(m) = meta
+                    .measurements
+                    .iter()
+                    .find(|m| m.series == name || m.series_daily == name)
+                    .or_else(|| {
+                        (meta.measurements.len() == 1)
+                            .then(|| &meta.measurements[0])
+                    })
+                else {
+                    continue;
+                };
+                if matches!(
+                    m.daily,
+                    registry::Aggregation::DailyTotal
+                        | registry::Aggregation::InverseOfDailyCount
+                        | registry::Aggregation::WindowedDerived
+                        | registry::Aggregation::GroupedSummary
+                        | registry::Aggregation::Unsupported
+                ) {
+                    continue;
+                }
+                let want_daily = if m.series_daily.is_empty() {
+                    name
+                } else {
+                    m.series_daily
+                };
+                // Match the daily band by name, falling back to position for
+                // the single-series charts whose two arms name the same line
+                // differently.
+                let Some(ds) = dly_series
+                    .iter()
+                    .find(|s| s["name"].as_str() == Some(want_daily))
+                    .or_else(|| {
+                        (meta.measurements.len() == 1 && dly_series.len() <= 2)
+                            .then(|| &dly_series[0])
+                    })
+                else {
+                    continue;
+                };
+                if is_smoothed(ds["name"].as_str().unwrap_or("")) {
+                    continue;
+                }
+
+                let (Some(a), Some(b)) = (last_plotted(ps), last_plotted(ds))
+                else {
+                    continue;
+                };
+                compared += 1;
+                // Both arms round to two decimals, so an exact match is the
+                // expectation and the tolerance only absorbs the different
+                // integer-versus-float division paths.
+                let slack = (a.abs() * 1e-6).max(0.011);
+                if (a - b).abs() > slack {
+                    disagree.push((
+                        meta.slug,
+                        name.to_string(),
+                        format!("per-block {a}, daily {b}"),
+                    ));
+                }
+            }
+        }
+
+        assert!(
+            compared >= 40,
+            "only {compared} series were compared, so the matcher has broken \
+             and this test would pass by looking at almost nothing"
+        );
+        let known = |slug: &str, name: &str| {
+            ARMS_IN_DIFFERENT_UNITS
+                .iter()
+                .any(|(s, n)| *s == slug && *n == name)
+        };
+        let fresh: Vec<String> = disagree
+            .iter()
+            .filter(|(slug, name, _)| !known(slug, name))
+            .map(|(slug, name, how)| format!("{slug} [{name}]: {how}"))
+            .collect();
+        assert!(
+            fresh.is_empty(),
+            "{} of {compared} series answer differently depending on the \
+             range the reader picked. Every block in the fixture is \
+             identical, so a mean of them and a ratio of their totals are \
+             both the per-block value:\n  {}",
+            fresh.len(),
+            fresh.join("\n  ")
+        );
+
+        let fixed: Vec<String> = ARMS_IN_DIFFERENT_UNITS
+            .iter()
+            .filter(|(slug, name)| {
+                !disagree.iter().any(|(s, n, _)| s == slug && n == name)
+            })
+            .map(|(slug, name)| format!("{slug} [{name}]"))
+            .collect();
+        assert!(
+            fixed.is_empty(),
+            "these arms agree now, so delete them from \
+             ARMS_IN_DIFFERENT_UNITS. The list only shrinks:\n  {}",
+            fixed.join("\n  ")
+        );
     }
 }

@@ -160,6 +160,15 @@ pub struct BlockSummary {
     pub coinbase_output_count: u64,
     /// Coinbase OP_RETURN outputs, BIP-141 commitment included.
     pub unspendable_output_count: u64,
+    /// Estimated BRC-20 payload bytes.
+    ///
+    /// The same expression as `inscription_bytes`, and a strict subset of it:
+    /// the BRC-20 marker test is nested inside the inscription test, over the
+    /// same witness item. So `inscription_bytes - brc20_bytes` is
+    /// non-negative structurally rather than by observation. Do not subtract
+    /// it from `inscription_envelope_bytes`, which is whole-item bytes and a
+    /// different level.
+    pub brc20_bytes: u64,
 }
 
 /// Full block detail for the single-block detail page. Includes coinbase
@@ -303,6 +312,13 @@ pub struct DailyAggregate {
     /// Average Taproot transaction count per block.
     pub avg_taproot_tx_count: f64,
     /// Average 25th percentile fee rate in sat/vB per block.
+    /// Mean `brc20_bytes` per block that day.
+    ///
+    /// Payload bytes, the same expression as `avg_inscription_bytes`, so the
+    /// two subtract cleanly: BRC-20 items are a subset of inscription items
+    /// by construction. Added 2026-10-23; rows aggregated before that keep a
+    /// zero until the day is re-aggregated.
+    pub avg_brc20_bytes: f64,
     pub avg_fee_rate_p25: f64,
     /// Average 75th percentile fee rate in sat/vB per block.
     pub avg_fee_rate_p75: f64,

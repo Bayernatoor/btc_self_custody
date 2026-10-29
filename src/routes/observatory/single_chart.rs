@@ -821,7 +821,7 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                                 explain=false
                             />
                         </Show>
-                        <RailRange/>
+                        <RailRange resolved_daily=resolved_daily/>
                         <button
                             class="hidden lg:inline-flex items-center text-white/60 hover:text-[#f7931a] transition-colors cursor-pointer p-1 rounded-md hover:bg-white/5 mt-0.5"
                             title=move || if rail_open.get() { "Hide the side panel and widen the chart" } else { "Show the side panel" }
@@ -1335,7 +1335,15 @@ fn right_axis_label(
 /// with the panel's picker through `validate_custom_range`, so the two cannot
 /// disagree about what a valid window is.
 #[component]
-fn RailRange() -> impl IntoView {
+fn RailRange(
+    /// Whether a point is a day, read off the data actually fetched rather
+    /// than re-derived from the range name. Passed in rather than recomputed
+    /// here because `range_to_blocks` maps "custom" to 999,999, so the name
+    /// reads as daily even for a two-day custom window served per block, and
+    /// two derivations of one fact are what let the label disagree with the
+    /// chart beside it.
+    resolved_daily: Signal<bool>,
+) -> impl IntoView {
     const PRESETS: &[&str] = &[
         "1d", "1w", "1m", "3m", "6m", "ytd", "1y", "2y", "5y", "10y", "all",
     ];
@@ -1374,17 +1382,26 @@ fn RailRange() -> impl IntoView {
         }
     };
 
-    // Whether the selected range is served per block or from daily
-    // aggregates. Worth surfacing because it changes what a point means, and
-    // nine charts have no daily variant at all.
+    // What one point on the chart is.
+    //
+    // **Says what a point is, rather than naming an aggregation.** "daily
+    // averages" told a reader the method and left them to infer the unit,
+    // and the resolution switch was missed entirely: it is a footnote beside
+    // a bright range selector, and crossing it silently changes what every
+    // point means. Inscription Block Share read 1.6% at 1M and 3.9% at 3M
+    // for a month under a bug, and nothing on the page said the two numbers
+    // were measured over different things.
+    //
+    // Reads `resolved_daily`, which comes off the data actually fetched,
+    // rather than re-deriving from the range name. `range_to_blocks` maps
+    // "custom" to 999,999, so the name says daily even for a two-day custom
+    // window that was correctly served per block. Deriving the same fact
+    // twice in one file is what let those disagree.
     let mode = move || {
-        let r = range.get();
-        if r == "custom" {
-            "custom range".to_string()
-        } else if uses_daily_aggregates(range_to_blocks(&r)) {
-            "daily averages".to_string()
+        if resolved_daily.get() {
+            "1 point = 1 day".to_string()
         } else {
-            "per block".to_string()
+            "1 point = 1 block".to_string()
         }
     };
 
@@ -1515,8 +1532,19 @@ fn RailRange() -> impl IntoView {
         <Show when=move || problem.get().is_some()>
             <p class="text-[0.7rem] text-[#f7931a] mt-1">{move || problem.get().unwrap_or_default()}</p>
         </Show>
-        <p class="text-[0.7rem] text-white/65 mt-1.5 inline-flex items-center gap-1">
-            <span class="whitespace-nowrap">
+        // A pill rather than a line of small print, for the reason the
+        // Logbook's "About dates" pill exists: as bare text beside the range
+        // tray this was missed, and it is the one label that changes meaning
+        // when the reader clicks a different range.
+        //
+        // **One colour, matching that pill.** Colouring the two resolutions
+        // differently borrowed the range tray's own vocabulary, where orange
+        // is the selected preset and a pale border is an unselected one, so
+        // a grey "1 point = 1 block" read as a disabled control rather than
+        // a statement of fact. The text already changes; the colour was
+        // carrying nothing the words did not.
+        <p class="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-[#f7931a]/40 bg-[#f7931a]/10 text-[#f7931a] text-[0.7rem]">
+            <span class="whitespace-nowrap font-mono">
                 <DefinedTerm
                     label=Signal::derive(mode)
                     text="Short ranges plot one point per block, about one every ten minutes. Longer ranges plot one point per day, computed from every block in that day. How it is computed depends on the chart: some average, some total the day up, some are a ratio of the day's sums, and each chart says which. Either way a brief spike inside a day is smoothed away."
@@ -1694,7 +1722,7 @@ fn meta_description(meta: &ChartMeta) -> String {
 /// what stops the two drifting.
 fn fact_hint(label: &str) -> &'static str {
     match label {
-        "average" => "The mean of every plotted point, each counting the same. On a percentage or ratio chart that is not the figure for the range as a whole, because a day holding more blocks does not count for more. Not a running average: change the range and this changes with it.",
+        "average" => "Adds up every point on the chart and divides by how many there are. Each point counts once, so on a percentage chart a quiet day counts as much as a busy one, which makes this close to but not the same as the share across the whole range. Change the range and this changes with it.",
         "peak" => "The highest single value in the range, and when it happened.",
         "low" => "The lowest single value in the range, and when it happened.",
         "change" => "Last value minus first value over the range. The percentage is shown only when the starting value is large enough for it to mean something.",
@@ -1748,15 +1776,20 @@ fn KeyFacts(
                 // because the mean of points is the honest answer for every
                 // non-ratio chart and switching would silently restate a
                 // published figure on every percentage chart at once.
-                let averaged_population = match unit.get() {
-                    registry::Unit::Percent => {
-                        Some("mean of per-point shares".to_string())
-                    }
-                    registry::Unit::Ratio => {
-                        Some("mean of per-point ratios".to_string())
-                    }
-                    _ => None,
-                };
+                // **Say "across", and say how many.** This read "mean of
+                // per-point shares" until a reader took it to mean the mean
+                // *within* one point, and asked whether a daily point was
+                // therefore an average of its blocks. It is the opposite: a
+                // point is already a finished figure, and this averages the
+                // points. Naming the count ties it to the observations row
+                // directly below, where the same number appears.
+                let averaged_population = matches!(
+                    unit.get(),
+                    registry::Unit::Percent | registry::Unit::Ratio
+                )
+                .then(|| {
+                    format!("across {observations} points, each counting once")
+                });
                 view! {
                     <div class=FACT_GRID>
                         <Fact label="average" value=unit.get().qualify(&fmt_num(average)) note=averaged_population/>
@@ -2230,6 +2263,45 @@ mod tests {
         }
     }
 
+    /// The resolution label says what a point is, and reads the resolved
+    /// value rather than the range name.
+    ///
+    /// Two failures, one guard. The label used to read "daily averages",
+    /// which names a method and leaves the unit to inference, and it was
+    /// derived from `range_to_blocks`, which maps "custom" to 999,999 and so
+    /// reported daily for a two-day custom window served per block.
+    ///
+    /// Source-read for the same reason as the other two guards here: both
+    /// halves are strings and booleans that type-check whichever way round
+    /// they go. Scoped above `mod tests` so this test's own prose cannot
+    /// satisfy it.
+    #[test]
+    fn the_resolution_label_names_the_point_and_trusts_the_data() {
+        let code = &SELF[..SELF.find("\nmod tests").unwrap_or(SELF.len())];
+        let body = {
+            let start = code.find("let mode = move || {").expect("mode");
+            &code[start..start + 400]
+        };
+        assert!(
+            body.contains("resolved_daily"),
+            "the resolution label is derived from something other than \
+             `resolved_daily`. The range name says daily for every custom \
+             window, however short: {body}"
+        );
+        assert!(
+            !body.contains("range_to_blocks"),
+            "the resolution label is back to re-deriving from the range \
+             name, which is wrong for a custom range: {body}"
+        );
+        for want in ["1 point = 1 day", "1 point = 1 block"] {
+            assert!(
+                body.contains(want),
+                "the label no longer tells the reader what a point is. \
+                 Expected {want:?} in: {body}"
+            );
+        }
+    }
+
     /// "average" must say what population it averaged on a ratio chart.
     ///
     /// The value is a mean of plotted points, each weighted equally. On a
@@ -2269,12 +2341,15 @@ mod tests {
             );
         }
 
-        // And the population strings have to exist, or the binding above
-        // could be wired to a `match` that returns `None` throughout.
+        // And the note itself has to exist, or the binding above could be
+        // wired to something that returns `None` throughout.
+        //
+        // "across" is asserted rather than just the phrase, because the
+        // defect this replaced was a note that read as the mean *within* a
+        // point. A replacement that drops the direction reintroduces it.
         assert!(
-            code.contains("mean of per-point shares")
-                && code.contains("mean of per-point ratios"),
-            "the notes naming the averaged population are gone, so the \
+            code.contains("across {observations} points, each counting once"),
+            "the note naming what the average ranged over is gone, so the \
              binding is carrying nothing"
         );
     }
