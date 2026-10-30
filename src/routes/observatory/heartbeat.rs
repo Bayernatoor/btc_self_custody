@@ -468,20 +468,48 @@ pub fn HeartbeatPage() -> impl IntoView {
         }
     });
 
-    // LIVE indicator colour + label, derived from the SSE connection state.
-    let status_color =
-        Signal::derive(move || match conn_state.get().as_str() {
-            "disconnected" => "#f44336", // red
-            "stale" => "#f7931a",        // amber
-            _ => "#00e676",              // green (live)
-        });
-    let status_label = Signal::derive(move || {
-        match conn_state.get().as_str() {
-            "disconnected" => "RECONNECTING",
-            "stale" => "STALE",
-            _ => "LIVE",
+    // Whether the data behind the page is stale, as opposed to the browser's
+    // connection to us.
+    //
+    // **The same predicate `NodeStatusBanner` uses, deliberately.** That
+    // banner renders on every observatory page including this one, and reads
+    // `!connected || stale`. This badge read neither, so on 2026-10-23, when
+    // the node lost its peers for several hours, the page carried an amber
+    // "Home node not currently responding" banner at the top and a green
+    // LIVE badge inside the card. Two indicators contradicting each other is
+    // worse than one being absent, and the badge is the one inside the thing
+    // a reader is watching.
+    //
+    // Sharing the predicate rather than re-deriving it means they cannot
+    // drift apart again: `connected` goes false when the live-stats call
+    // itself errors, `stale` when it succeeded but the node did not answer.
+    let live_ctx = expect_context::<super::shared::LiveContext>();
+    let connected = live_ctx.connected;
+    let live_resource = live_ctx.live;
+    let node_stale = Signal::derive(move || {
+        // Suppressed until the live resource has resolved once, the same
+        // guard the banner carries and for the same reason: `connected`
+        // starts `false`, so without this every first paint accuses the node
+        // of being down. Caught in SSR, where the badge rendered NODE STALE
+        // before any fetch had happened.
+        if live_resource.get().is_none() {
+            return false;
         }
-        .to_string()
+        !connected.get() || cached_live.get().is_some_and(|l| l.stale)
+    });
+
+    let status_color = Signal::derive(move || {
+        status_for(&conn_state.get(), node_stale.get()).0
+    });
+    let status_label = Signal::derive(move || {
+        status_for(&conn_state.get(), node_stale.get())
+            .1
+            .to_string()
+    });
+    let status_tip = Signal::derive(move || {
+        status_for(&conn_state.get(), node_stale.get())
+            .2
+            .to_string()
     });
 
     // Tick counter that increments every second for the live countdown, and
@@ -634,7 +662,16 @@ pub fn HeartbeatPage() -> impl IntoView {
                 // Status bar
                 <div class="flex flex-wrap items-center justify-between px-3 sm:px-4 py-2 sm:py-2.5 gap-x-3 gap-y-1 border-b border-white/5">
                     <div class="flex items-center gap-2 sm:gap-3">
-                        <div class="flex items-center gap-1.5">
+                        // `data-tip` and `tabindex` so the reason is reachable
+                        // on hover, on tap and from the keyboard, the way every
+                        // other explained term on the site is. A badge that
+                        // says NODE STALE without saying what that means sends
+                        // the reader to refresh the page, which cannot help.
+                        <div
+                            class="flex items-center gap-1.5 cursor-help"
+                            data-tip=move || status_tip.get()
+                            tabindex="0"
+                        >
                             <span class="relative flex h-2 w-2">
                                 <span
                                     class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-60"
@@ -1205,6 +1242,45 @@ struct OrganismStatus {
     color: String,
 }
 
+/// Colour, label and explanation for the liveness badge.
+///
+/// **Worst-known state wins**, because a reader needs the most severe reason
+/// the numbers might be wrong, not the first one that happens to match.
+///
+/// Pure, and separate from the signals that call it, so the precedence can be
+/// tested without a reactive runtime. The two inputs are independent
+/// failures: `conn` is the browser's SSE stream, `node_stale` is whether the
+/// server fell back to a cached RPC value. On 2026-10-23 the node lost its
+/// peers for hours while the stream stayed healthy, and the badge read LIVE
+/// over data that had stopped moving, because only the first input was
+/// consulted.
+fn status_for(
+    conn: &str,
+    node_stale: bool,
+) -> (&'static str, &'static str, &'static str) {
+    match conn {
+        "disconnected" => (
+            "#f44336",
+            "RECONNECTING",
+            "The live connection to this site dropped and is retrying. The chart holds its last known state until it comes back.",
+        ),
+        "stale" => (
+            "#f7931a",
+            "STALE",
+            "The live connection is open but has gone quiet. Nothing new has arrived for a while.",
+        ),
+        // Named apart from the stream's own staleness: the stream is fine
+        // here, and knowing which link broke is the difference between
+        // waiting and going to look at the node.
+        _ if node_stale => (
+            "#f7931a",
+            "NODE STALE",
+            "The connection is fine, but the Bitcoin node behind it did not answer, so these figures are the last values it gave and may be out of date.",
+        ),
+        _ => ("#00e676", "LIVE", "Live from this site's own Bitcoin node."),
+    }
+}
+
 fn parse_status_json(json: &str) -> Option<OrganismStatus> {
     if json.len() < 3 {
         return None;
@@ -1214,4 +1290,134 @@ fn parse_status_json(json: &str) -> Option<OrganismStatus> {
         description: extract_json_str(json, "description"),
         color: extract_json_str(json, "color"),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::status_for;
+
+    /// The source of this file, for the wiring guard below.
+    const SELF: &str = include_str!("heartbeat.rs");
+
+    /// `node_stale` must actually come from `LiveStats.stale`.
+    ///
+    /// The tests above prove `status_for` decides correctly once told the
+    /// node is behind. They cannot prove anything tells it: replacing the
+    /// signal's body with `false` leaves every one of them passing, which is
+    /// precisely the shape of a guard that watches the wrong half.
+    ///
+    /// Source-read because the alternative is a reactive runtime and a
+    /// server-function round trip to assert one field reaches one closure.
+    /// Scoped above `mod tests` so this test's own prose cannot satisfy it.
+    #[test]
+    fn the_badge_reads_the_servers_own_staleness_flag() {
+        let code = &SELF[..SELF.find("\n#[cfg(test)]").unwrap_or(SELF.len())];
+        let site = code
+            .find("let node_stale =")
+            .expect("the node_stale binding is gone");
+        // Bounded by the binding's own closing brace rather than a fixed
+        // width, which went stale the moment the body grew a comment.
+        //
+        // **Comments stripped.** The body explains why `connected` is part
+        // of the predicate, so asserting on the raw text passed even with
+        // `connected` deleted from the code: the guard was reading its own
+        // justification.
+        let body: String = {
+            let end = code[site..]
+                .find("});")
+                .map(|e| site + e + 3)
+                .unwrap_or(code.len());
+            code[site..end]
+                .lines()
+                .map(|l| l.split("//").next().unwrap_or(""))
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+        assert!(
+            body.contains("cached_live") && body.contains("stale"),
+            "node_stale no longer reads LiveStats.stale, so the badge cannot \
+             know the node is behind however well it decides: {body}"
+        );
+        // The banner above this page already renders on `!connected ||
+        // stale`. The badge must use both halves or the two can disagree,
+        // which is the state this change exists to end.
+        // Without the first-paint guard, `connected` starts false and every
+        // initial render accuses the node of being down. The banner carries
+        // the same suppression; this badge rendered NODE STALE in SSR until
+        // it did too.
+        assert!(
+            body.contains("is_none()"),
+            "the first-paint suppression is gone, so every page load will \
+             open by claiming the node is not responding: {body}"
+        );
+        assert!(
+            body.contains("connected"),
+            "the badge dropped the `connected` half of the predicate, so it \
+             can now read LIVE under the banner that says otherwise: {body}"
+        );
+        assert!(
+            code.contains("status_for(&conn_state.get(), node_stale.get())"),
+            "the badge signals no longer pass node_stale to status_for, so \
+             the second input is ignored"
+        );
+    }
+
+    /// A healthy stream over a silent node must not read LIVE.
+    ///
+    /// This is the case that shipped: `conn` is "live" because the browser's
+    /// SSE stream is open and the server is answering it, while the node
+    /// behind the server has stopped returning fresh data. Both inputs have
+    /// to be consulted, and the node's state has to win.
+    #[test]
+    fn a_healthy_stream_over_a_stale_node_says_so() {
+        let (colour, label, tip) = status_for("live", true);
+        assert_eq!(
+            label, "NODE STALE",
+            "a live stream over a stale node read {label:?}, which tells a \
+             reader the figures are current when they are not"
+        );
+        assert_ne!(colour, "#00e676", "green is the all-clear colour");
+        assert!(
+            tip.contains("node"),
+            "the explanation must name the node, or a reader cannot tell \
+             this from a dropped connection: {tip}"
+        );
+    }
+
+    /// The all-clear requires both halves to be healthy.
+    #[test]
+    fn live_means_both_the_stream_and_the_node_are_fine() {
+        assert_eq!(status_for("live", false).1, "LIVE");
+        assert_eq!(status_for("live", false).0, "#00e676");
+    }
+
+    /// A dropped stream outranks a stale node: with nothing arriving, the
+    /// node's state is unknowable and the reader's action is different.
+    #[test]
+    fn the_worst_known_state_wins() {
+        assert_eq!(status_for("disconnected", true).1, "RECONNECTING");
+        assert_eq!(status_for("disconnected", false).1, "RECONNECTING");
+        assert_eq!(status_for("stale", true).1, "STALE");
+    }
+
+    /// Every state explains itself, and no two share wording.
+    #[test]
+    fn each_state_carries_its_own_explanation() {
+        let tips: Vec<&str> = [
+            ("live", false),
+            ("live", true),
+            ("stale", false),
+            ("disconnected", false),
+        ]
+        .iter()
+        .map(|(c, n)| status_for(c, *n).2)
+        .collect();
+        for t in &tips {
+            assert!(t.len() > 30, "a badge with no usable explanation: {t}");
+        }
+        let mut uniq = tips.clone();
+        uniq.sort_unstable();
+        uniq.dedup();
+        assert_eq!(uniq.len(), tips.len(), "two states share an explanation");
+    }
 }
