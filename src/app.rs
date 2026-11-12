@@ -18,6 +18,7 @@
 //!   /observatory/charts/fees                 -> Fee charts (total fees, subsidy breakdown)
 //!   /observatory/charts/mining               -> Mining charts (difficulty, pool distribution)
 //!   /observatory/charts/embedded             -> Embedded data charts (OP_RETURN, inscriptions)
+//!   /observatory/charts/post-quantum         -> Post-quantum exposure
 //!   /observatory/signaling                   -> Signaling (BIP version-bit tracker)
 //!   /observatory/logbook                     -> The Logbook (network observations by range)
 //!   /observatory/almanac                     -> Almanac (what happened on any calendar date)
@@ -48,8 +49,8 @@ use crate::routes::observatory::learn::protocols::ProtocolGuidePage;
 use crate::routes::observatory::{
     EmbeddedChartsPage, FeeChartsPage, HallOfFamePage, HeartbeatPage,
     MiningChartsPage, NetworkChartsPage, ObservatoryOverview, ObservatoryPage,
-    OnThisDayPage, SignalingPage, SingleChartPage, StatsSummaryPage,
-    WhaleWatchPage,
+    OnThisDayPage, PostQuantumChartsPage, SignalingPage, SingleChartPage,
+    StatsSummaryPage, WhaleWatchPage,
 };
 use leptos::prelude::*;
 use leptos_meta::*;
@@ -208,6 +209,7 @@ pub fn App() -> impl IntoView {
                             <Route path=path!("/charts/fees") view=FeeChartsPage/>
                             <Route path=path!("/charts/mining") view=MiningChartsPage/>
                             <Route path=path!("/charts/embedded") view=EmbeddedChartsPage/>
+                            <Route path=path!("/charts/post-quantum") view=PostQuantumChartsPage/>
                             <Route path=path!("/chart/:slug") view=SingleChartPage/>
                             <Route path=path!("/signaling") view=SignalingPage/>
                             <Route path=path!("/logbook") view=StatsSummaryPage/>

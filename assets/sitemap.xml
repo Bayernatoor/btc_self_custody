@@ -93,6 +93,11 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://www.wehodlbtc.com/observatory/charts/post-quantum</loc>
+    <changefreq>hourly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://www.wehodlbtc.com/observatory/signaling</loc>
     <changefreq>hourly</changefreq>
     <priority>0.8</priority>
@@ -399,6 +404,16 @@
   </url>
   <url>
     <loc>https://www.wehodlbtc.com/observatory/chart/taproot</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://www.wehodlbtc.com/observatory/chart/pq-exposure</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://www.wehodlbtc.com/observatory/chart/pq-p2pk-creation</loc>
     <changefreq>daily</changefreq>
     <priority>0.6</priority>
   </url>

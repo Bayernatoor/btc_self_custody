@@ -12,7 +12,7 @@
 //! `unit`.
 //!
 //! **You cannot forget.** `registry_covers_every_chart_on_every_page` parses
-//! the four page sources and fails if either side holds an entry the other
+//! the five page sources and fails if either side holds an entry the other
 //! lacks, and `registry_titles_match_the_pages` fails if a title drifts. A new
 //! chart therefore breaks the build until it is registered, which is the point:
 //! the drawer nav is a second hand-maintained list of the same charts, and a
@@ -41,6 +41,13 @@ pub enum Category {
     Fees,
     Mining,
     Embedded,
+    /// Which outputs have published a public key on chain.
+    ///
+    /// Its own category rather than a corner of Network because the question
+    /// cuts across every script type and the framing has to travel with it:
+    /// these charts count outputs **created**, never held, and nothing in
+    /// them says when or whether any of it becomes exploitable.
+    PostQuantum,
 }
 
 impl Category {
@@ -50,6 +57,7 @@ impl Category {
             Self::Fees => "Fees",
             Self::Mining => "Mining",
             Self::Embedded => "Embedded Data",
+            Self::PostQuantum => "Post-Quantum",
         }
     }
 
@@ -59,6 +67,7 @@ impl Category {
             Self::Fees => "/observatory/charts/fees",
             Self::Mining => "/observatory/charts/mining",
             Self::Embedded => "/observatory/charts/embedded",
+            Self::PostQuantum => "/observatory/charts/post-quantum",
         }
     }
 }
@@ -892,7 +901,7 @@ pub const CHARTS: &[ChartMeta] = &[
         }],
         about: Some(About {
             definition: Some("How much of a block is OP_RETURN data. An OP_RETURN output is a deliberately unspendable output whose script carries a few dozen bytes, which can timestamp or label things on chain. About 63% of all blocks contain at least one."),
-            technical: "What an OP_RETURN output costs the block, in weight units, over the block's weight. The numerator is the script plus the 9 bytes of frame every output carries, an 8-byte value field and a 1-byte length prefix, multiplied by four.\n\nWeight, not size, and the choice changes the answer. Block space is rationed in weight units, and a non-witness byte costs four of them where a witness byte costs one. An OP_RETURN output is non-witness; an inscription is witness. Measuring both against size prices them as the same good: from height 920,000 OP_RETURN is 3.97% of size but 6.68% of weight, while inscriptions are 8.07% of size and 3.40% of weight. Since that height 20.4% of blocks change which of the two is larger depending on that choice.\n\nCounting the script alone understates the cost by about 44%. That is larger than it sounds because a typical OP_RETURN script is only 20 bytes: Runes markers and protocol tags are short, not the 80-byte policy maximum, so a fixed frame is nearly half the output.\n\nThe length prefix widens to 3 bytes once a script reaches 253, which is not modelled. Blocks holding such a script carry 3.5% of all OP_RETURN outputs, which caps the shortfall at 0.2% and the real figure sits well under that.",
+            technical: "What an OP_RETURN output costs the block, in weight units, over the block's weight. The numerator is the script plus the 9 bytes of frame every output carries, an 8-byte value field and a 1-byte length prefix, multiplied by four.\n\nWeight, not size, and the choice changes the answer. Block space is rationed in weight units, and a non-witness byte costs four of them where a witness byte costs one. An OP_RETURN output is non-witness; an inscription is witness. Measuring both against size prices them as the same good: from height 920,000 OP_RETURN is 3.97% of size but 6.68% of weight, while inscriptions are 8.07% of size and 3.40% of weight. Since that height 20.4% of blocks change which of the two is larger depending on that choice.\n\nCounting the script alone understates the cost by about 44%. That is larger than it sounds because a typical OP_RETURN script is only 20 bytes: Runes markers and protocol tags are short, not the 80-byte policy maximum, so a fixed frame is nearly half the output.\n\nThe length prefix widens to 3 bytes once a script reaches 253, which is not modelled. Blocks holding such a script carry 4.7% of all OP_RETURN outputs, which caps the shortfall at 0.3% and the real figure sits well under that, since the cap assumes every output in those blocks is itself over the threshold.",
         }),
     },
     ChartMeta {
@@ -1925,6 +1934,69 @@ pub const CHARTS: &[ChartMeta] = &[
         about: Some(About {
             definition: Some("The same output types as a share of the total rather than as counts. Counts rise and fall with how busy the chain is, which hides a format gaining ground during a quiet week; a share strips that out and shows the types competing with each other. The bands total 100% by construction, so one type can only grow at another's expense."),
             technical: "Six payment types normalised to 100%, so the bands total the whole. OP_RETURN outputs, bare multisig and unrecognised scripts are outside that denominator, which is why this chart and P2PKH Sunset give different percentages for the same type. This one divides by those six; P2PKH Sunset divides by eight, adding bare multisig and unrecognised scripts, so its denominator is the larger and its figure for the same type is always the smaller of the two. Neither counts OP_RETURN outputs, which are not payments to anyone.",
+        }),
+    },
+    // ---------------------------------------------------------------------
+    // Post-quantum exposure
+    //
+    // Two charts, not the three the scope doc proposed. Its "Taproot Exposure
+    // Rate", P2TR outputs created per block, is the `taproot` chart that
+    // already exists; building it again under a new title would have shipped
+    // a duplicate. The post-quantum framing is the value there, not a second
+    // plot, so this page links to it instead.
+    // ---------------------------------------------------------------------
+    ChartMeta {
+        slug: "pq-exposure",
+        title: "Exposure by Construction",
+        desc_per_block: "Share of outputs created whose public key is on chain from the moment they exist",
+        desc_daily: "Share of outputs created whose public key is on chain, totalled over each day",
+        category: Category::PostQuantum,
+        unit: Unit::Percent,
+        shape: Shape::StackedPercent,
+        source: Source::Dashboard {
+            per_block: super::pq_exposure_chart,
+            daily: Daily::Fn(super::pq_exposure_chart_daily),
+        },
+        measurements: &[Measurement {
+            series: "",
+            series_daily: "",
+            quantity: "Share of classified outputs created, by whether the output publishes a public key",
+            method_per_block: Method::Measured,
+            method_daily: Method::Measured,
+            per_block: Aggregation::PerBlockObservation,
+            daily: Aggregation::RatioOfTotals,
+            population: "The eight classified script types, summed, which is narrower than every output: provably unspendable outputs such as OP_RETURN carry no public key and never enter the UTXO set, so counting them would dilute the share for a reason unrelated to exposure. This is the same eight-type denominator P2PKH Sunset and Adoption Velocity use, so a script type reads identically across those three. It is narrower than Output Type Breakdown, which divides by every output including unspendable ones, and wider than Address Type Share, which divides by six types. Counts outputs created, never held: an output counted here may have been spent years ago.",
+        }],
+        about: Some(About {
+            definition: Some("Quantum risk is about public keys, not addresses. Shor's algorithm recovers a private key from a public key, so the only question about a coin is whether its public key has ever appeared on chain. Three output types publish one the moment they are created: P2PK and bare multisig put the key in the script, and a Taproot output is itself a tweaked public key. The other four publish only a hash, which reveals nothing until the output is spent."),
+            technical: "Bands total 100% of classified outputs created in the period. Pay-to-anchor is broken out from the unclassified band because it carries no key in either direction: the output is a fixed two-byte program, so it is neither exposed nor hash-protected, and by 2026 it was almost everything the classifier could not otherwise place. \n\nTaproot's exposure is structural, not a flaw: putting the key in the output is what makes Taproot outputs small and makes a cooperative spend indistinguishable from a single signature. It is a deliberate trade, and it is what this chart measures. \n\nTwo limits matter more than the numbers. This counts outputs created, not outputs still unspent, so it is a flow and not a balance; a current exposed supply needs a UTXO set snapshot, which this site does not yet take. And it counts exposure by construction only. A hash-protected output reveals its key when spent, so a reused address holding a balance is exposed too, and that is not counted anywhere here.  \n\nNothing on this page says when, or whether, any of this becomes exploitable.",
+        }),
+    },
+    ChartMeta {
+        slug: "pq-p2pk-creation",
+        title: "P2PK Outputs Created",
+        desc_per_block: "Outputs paying a raw public key, the oldest exposed form, still created today",
+        desc_daily: "Outputs paying a raw public key, averaged per block over each day",
+        category: Category::PostQuantum,
+        unit: Unit::Count,
+        shape: Shape::Line,
+        source: Source::Dashboard {
+            per_block: super::pq_p2pk_creation_chart,
+            daily: Daily::Fn(super::pq_p2pk_creation_chart_daily),
+        },
+        measurements: &[Measurement {
+            series: "",
+            series_daily: "",
+            quantity: "Outputs created that pay a raw public key",
+            method_per_block: Method::Measured,
+            method_daily: Method::Measured,
+            per_block: Aggregation::PerBlockObservation,
+            daily: Aggregation::MeanOfPerBlockValues,
+            population: "P2PK outputs created, coinbase outputs included, which matters here because almost every early mining reward was one. Counts creation rather than holdings: many of these have since been spent, and this chart cannot say which.",
+        }],
+        about: Some(About {
+            definition: Some("The oldest output type, and the one that exposes a public key most plainly: the key sits in the output script in the clear. It was how almost every mining reward was paid in the first year, including the earliest coins. It did not then disappear: creation peaked in 2019, not 2009, and most P2PK outputs ever made were created between 2017 and 2021 rather than in the early era. This chart shows both, which is why it is plotted on its own axis."),
+            technical: "Its own chart rather than a band inside Address Type Count, where at modern volumes this line sits on the axis floor and cannot be read. \n\nP2PK is counted by script shape with the public key's header byte validated, which matters: the 2012-era outputs that embedded text where a key belongs match the shape exactly, and Core calls those nonstandard. They are excluded here and counted as unclassified. \n\nAs everywhere in this section, this counts outputs created rather than coins still held.",
         }),
     },
     ChartMeta {
@@ -3141,13 +3213,14 @@ mod tests {
     /// strings that matter.
     const SELF_SRC: &str = include_str!("registry.rs");
 
-    /// The four page sources, parsed rather than trusted, so the registry
+    /// The five page sources, parsed rather than trusted, so the registry
     /// cannot drift from what is actually rendered.
     const PAGES: &[&str] = &[
         include_str!("../../routes/observatory/network.rs"),
         include_str!("../../routes/observatory/fees.rs"),
         include_str!("../../routes/observatory/mining.rs"),
         include_str!("../../routes/observatory/embedded.rs"),
+        include_str!("../../routes/observatory/post_quantum.rs"),
     ];
 
     /// Every `<ChartCard>` on a page, as (slug, title). Each chunk after a
@@ -4521,13 +4594,35 @@ mod tests {
                 0.0,
                 0.5,
             ),
+            // Rising: 3.5% when written in 2026-10, 4.66% by 2026-11,
+            // because long OP_RETURN scripts are a current trend rather
+            // than a settled fact. Band widened once; if it trips again
+            // the sentence needs rewriting rather than renumbering.
+            // The comment sits above the opening paren: `guarded_claims`
+            // reads the slug from the line after `(` and the claim from the
+            // one after that, so a comment inside the tuple makes the row
+            // parse as nothing and the figure silently stops being guarded.
             (
                 "op-block-share",
-                "carry 3.5% of all OP_RETURN outputs",
+                "carry 4.7% of all OP_RETURN outputs, capping the shortfall at 0.3%",
                 "SELECT 100.0*(SELECT SUM(op_return_count) FROM blocks \
                  WHERE op_return_max_bytes >= 253)/SUM(op_return_count) FROM blocks",
-                3.0,
-                4.5,
+                3.5,
+                6.5,
+            ),
+            // The cap the sentence quotes, derived rather than asserted: two
+            // unmodelled prefix bytes are 8 weight units, charged against
+            // every OP_RETURN output in a block that holds a 253-byte
+            // script. An upper bound, because it assumes all of them are
+            // over the threshold when almost none are.
+            (
+                "op-block-share",
+                "capping the shortfall at 0.3%",
+                "SELECT 100.0 * (SELECT SUM(op_return_count)*8 FROM blocks \
+                 WHERE op_return_max_bytes>=253) \
+                 / SUM(4.0*(op_return_bytes + 9*op_return_count)) FROM blocks",
+                0.15,
+                0.6,
             ),
             (
                 "unified-volume",
@@ -4812,22 +4907,25 @@ mod tests {
         ("address-types", "3.0"), // "3.0 per block over 10 blocks is 30"
         ("address-types", "30"),  // the other half of that same sentence
         ("address-types-pct", "100%"), // the bands are normalised to it
-        ("diff-ribbon", "128"),   // the longest span
+        // Same reason: a 100%-stacked chart's bands are normalised to it,
+        // so the figure is the chart's shape and not a chain measurement.
+        ("pq-exposure", "100%"),
+        ("diff-ribbon", "128"),    // the longest span
         ("fullness-dist", "100%"), // the weight limit, which is the axis
-        ("halving-era", "100"),   // each era is indexed against its own peak
-        ("multi-velocity", "30"), // the daily window
-        ("size", "4"),            // "4 million weight units"
-        ("subsidy-fees", "4"),    // "~4 years", the halving period
-        ("weight-util", "4"),     // "4 million weight units" again
-        ("diff-ribbon", "7"),     // span, per-block arm
-        ("diff-ribbon", "9"),     // span, daily arm
-        ("diff-ribbon", "14"),    // span, both arms
-        ("diversity", "1%"),      // the HHI worked example
-        ("diversity", "50%"),     // the same example
-        ("fee-heatmap", "80%"),   // p10 to p90 spans it by definition
-        ("fee-spikes", "300"),    // the minimum range the builder needs
-        ("fullness-dist", "10%"), // the histogram's bucket width
-        ("multi-velocity", "15"), // the points-against-percent example
+        ("halving-era", "100"),    // each era is indexed against its own peak
+        ("multi-velocity", "30"),  // the daily window
+        ("size", "4"),             // "4 million weight units"
+        ("subsidy-fees", "4"),     // "~4 years", the halving period
+        ("weight-util", "4"),      // "4 million weight units" again
+        ("diff-ribbon", "7"),      // span, per-block arm
+        ("diff-ribbon", "9"),      // span, daily arm
+        ("diff-ribbon", "14"),     // span, both arms
+        ("diversity", "1%"),       // the HHI worked example
+        ("diversity", "50%"),      // the same example
+        ("fee-heatmap", "80%"),    // p10 to p90 spans it by definition
+        ("fee-spikes", "300"),     // the minimum range the builder needs
+        ("fullness-dist", "10%"),  // the histogram's bucket width
+        ("multi-velocity", "15"),  // the points-against-percent example
         // Same example. It needed no entry until 2026-10 only because
         // the drift row "by more than 56 points" happened to contain a
         // "5", and coverage here is a substring match. Retuning that
@@ -5849,7 +5947,7 @@ mod tests {
         }
     }
 
-    /// True when the literal appears in one of the four page sources.
+    /// True when the literal appears in one of the five page sources.
     fn src_contains(needle: &str) -> bool {
         PAGES.iter().any(|src| src.contains(needle))
     }

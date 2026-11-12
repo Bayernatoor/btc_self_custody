@@ -37,6 +37,7 @@ pub mod gauges;
 pub mod kpi;
 pub mod mining;
 pub mod network;
+pub mod post_quantum;
 pub mod registry;
 pub mod signaling;
 pub mod tx_metrics;
@@ -47,6 +48,7 @@ pub use fees::*;
 pub use gauges::*;
 pub use mining::*;
 pub use network::*;
+pub use post_quantum::*;
 pub use signaling::*;
 pub use tx_metrics::*;
 

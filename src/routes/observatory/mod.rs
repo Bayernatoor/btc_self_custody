@@ -17,6 +17,7 @@
 //!   /observatory/charts/fees         -> Fee charts (total fees, subsidy breakdown)
 //!   /observatory/charts/mining       -> Mining charts (difficulty, pool distribution)
 //!   /observatory/charts/embedded     -> Embedded data charts (OP_RETURN, inscriptions)
+//!   /observatory/charts/post-quantum -> Post-quantum exposure (which outputs publish a key)
 //!   /observatory/learn/protocols     -> Protocol guide
 //!
 //! Legacy paths with 301 redirects (declared in `src/app.rs`):
@@ -38,6 +39,7 @@ mod mining;
 mod network;
 mod on_this_day;
 mod overview;
+mod post_quantum;
 mod signaling;
 mod single_chart;
 mod stats;
@@ -51,6 +53,7 @@ pub use mining::MiningChartsPage;
 pub use network::NetworkChartsPage;
 pub use on_this_day::OnThisDayPage;
 pub use overview::ObservatoryOverview;
+pub use post_quantum::PostQuantumChartsPage;
 pub use signaling::SignalingPage;
 pub use single_chart::SingleChartPage;
 pub use stats::StatsSummaryPage;

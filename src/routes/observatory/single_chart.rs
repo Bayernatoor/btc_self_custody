@@ -2215,7 +2215,7 @@ mod tests {
 
     /// This file, read back, so the guards below check what is actually
     /// rendered rather than a second list that can drift from it. Same
-    /// technique the registry uses against the four page sources.
+    /// technique the registry uses against the five page sources.
     const SELF: &str = include_str!("single_chart.rs");
 
     /// The leading band's share must be labelled with the basis it was

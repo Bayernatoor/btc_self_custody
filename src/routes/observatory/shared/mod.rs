@@ -509,7 +509,7 @@ fn OverlayCheckbox(
 /// its own question yet. They are ordered rather than labelled, so the nav
 /// makes no claim about the site's state that would need retracting later.
 ///
-/// Row 2 is the chart explorer sub-nav (Network, Fees, Mining, Embedded),
+/// Row 2 is the chart explorer sub-nav (Network, Fees, Mining, Embedded, Post-Quantum),
 /// only shown when the user is actually on a /charts/* page. The main
 /// "Charts" tab in Row 1 provides the entry point so charts are
 /// discoverable from anywhere; once inside, Row 2 handles sub-navigation
@@ -535,6 +535,7 @@ pub fn ObservatoryNav() -> impl IntoView {
         ("/observatory/charts/fees", "Fees"),
         ("/observatory/charts/mining", "Mining"),
         ("/observatory/charts/embedded", "Embedded"),
+        ("/observatory/charts/post-quantum", "Post-Quantum"),
     ];
 
     let location = use_location();

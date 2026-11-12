@@ -391,6 +391,23 @@ fn drawer_pages() -> Vec<DrawerPage> {
                 },
             ],
         },
+        DrawerPage {
+            label: "Post-Quantum",
+            path_prefix: "/observatory/charts/post-quantum",
+            sections: vec![DrawerSection {
+                label: "Exposed by construction",
+                charts: vec![
+                    DrawerChart {
+                        label: "Exposure by Construction",
+                        card_id: "card-chart-pq-exposure",
+                    },
+                    DrawerChart {
+                        label: "P2PK Outputs Created",
+                        card_id: "card-chart-pq-p2pk-creation",
+                    },
+                ],
+            }],
+        },
     ]
 }
 
@@ -624,6 +641,7 @@ mod tests {
             include_str!("../fees.rs"),
             include_str!("../mining.rs"),
             include_str!("../embedded.rs"),
+            include_str!("../post_quantum.rs"),
         ];
 
         let rendered: Vec<String> = PAGES
