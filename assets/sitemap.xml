@@ -408,6 +408,11 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://www.wehodlbtc.com/observatory/chart/pq-exposed-value</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://www.wehodlbtc.com/observatory/chart/pq-exposure</loc>
     <changefreq>daily</changefreq>
     <priority>0.6</priority>

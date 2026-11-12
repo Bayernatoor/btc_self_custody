@@ -160,6 +160,20 @@ pub struct BlockSummary {
     pub coinbase_output_count: u64,
     /// Coinbase OP_RETURN outputs, BIP-141 commitment included.
     pub unspendable_output_count: u64,
+    /// Satoshis created in outputs that publish a public key.
+    ///
+    /// **Coinbase outputs are included**, which matters more here than
+    /// anywhere else: nearly every pre-2012 reward paid a raw public key, and
+    /// those are the coins this measures. The matching denominator must
+    /// therefore also include the coinbase, which `total_output_value` does
+    /// not: it is non-coinbase only. Use
+    /// `total_output_value + total_fees + block_subsidy(height)`.
+    ///
+    /// Measured 2026-11-11: dividing by `total_output_value` alone puts
+    /// 95,044 blocks above 100%, all of them early.
+    pub p2pk_value: u64,
+    pub p2tr_value: u64,
+    pub multisig_value: u64,
     /// Estimated BRC-20 payload bytes.
     ///
     /// The same expression as `inscription_bytes`, and a strict subset of it:
@@ -319,6 +333,14 @@ pub struct DailyAggregate {
     /// by construction. Added 2026-10-23; rows aggregated before that keep a
     /// zero until the day is re-aggregated.
     pub avg_brc20_bytes: f64,
+    /// Satoshis created that day in outputs publishing a public key.
+    pub total_p2pk_value: u64,
+    pub total_p2tr_value: u64,
+    pub total_multisig_value: u64,
+    /// The day's block subsidy, summed. Needed because a value share must
+    /// divide by every satoshi created and  is
+    /// non-coinbase only; the rollup has no height to derive it from.
+    pub total_subsidy: u64,
     pub avg_fee_rate_p25: f64,
     /// Average 75th percentile fee rate in sat/vB per block.
     pub avg_fee_rate_p75: f64,

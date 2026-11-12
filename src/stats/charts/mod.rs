@@ -41,6 +41,8 @@ pub mod post_quantum;
 pub mod registry;
 pub mod signaling;
 pub mod tx_metrics;
+/// The unspent output set, measured once and committed as constants.
+pub mod utxo_snapshot_data;
 
 pub use adoption::*;
 pub use embedded::*;
@@ -51,6 +53,9 @@ pub use network::*;
 pub use post_quantum::*;
 pub use signaling::*;
 pub use tx_metrics::*;
+pub use utxo_snapshot_data::{
+    snapshot_composition_chart, snapshot_exposed_by_year_chart,
+};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -4734,6 +4739,9 @@ mod tests {
             segwit_spend_count: 0,
             taproot_spend_count: 0,
             brc20_bytes: 0,
+            p2pk_value: 0,
+            p2tr_value: 0,
+            multisig_value: 0,
             p2pk_count: 0,
             p2pkh_count: 0,
             p2sh_count: 0,
@@ -4945,6 +4953,9 @@ mod tests {
             segwit_spend_count: 1500,
             taproot_spend_count: 200,
             brc20_bytes: 1_200,
+            p2pk_value: 0,
+            p2tr_value: 4_000_000_000,
+            multisig_value: 0,
             p2pk_count: 0,
             p2pkh_count: 500,
             p2sh_count: 300,

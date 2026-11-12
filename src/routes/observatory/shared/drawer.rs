@@ -398,6 +398,10 @@ fn drawer_pages() -> Vec<DrawerPage> {
                 label: "Exposed by construction",
                 charts: vec![
                     DrawerChart {
+                        label: "Value in Exposed Outputs",
+                        card_id: "card-chart-pq-exposed-value",
+                    },
+                    DrawerChart {
                         label: "Exposure by Construction",
                         card_id: "card-chart-pq-exposure",
                     },

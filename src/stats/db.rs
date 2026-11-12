@@ -377,6 +377,10 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
             avg_coinbase_output_count  REAL NOT NULL DEFAULT 0,
             avg_unspendable_output_count REAL NOT NULL DEFAULT 0,
             avg_brc20_bytes            REAL NOT NULL DEFAULT 0,
+            total_p2pk_value           INTEGER NOT NULL DEFAULT 0,
+            total_p2tr_value           INTEGER NOT NULL DEFAULT 0,
+            total_multisig_value       INTEGER NOT NULL DEFAULT 0,
+            total_subsidy              INTEGER NOT NULL DEFAULT 0,
             avg_input_count            REAL NOT NULL DEFAULT 0,
             avg_output_count           REAL NOT NULL DEFAULT 0,
             avg_rbf_count              REAL NOT NULL DEFAULT 0,
@@ -461,6 +465,19 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
         // row keeps its `DEFAULT 0` until something re-aggregates the day.
         // `rebuild_all_daily_blocks_force` is the repair path for that, and
         // `cargo run --bin rebuild_daily_blocks` runs it.
+        // A value share must divide by every satoshi created, and
+        // `total_output_value` is non-coinbase only. `daily_blocks` carries
+        // no height, so the subsidy is summed in SQL here rather than
+        // derived by the caller.
+        if !daily_cols.contains("total_subsidy") {
+            tracing::info!("Migrating daily_blocks: adding script-type values");
+            conn.execute_batch(
+                "ALTER TABLE daily_blocks ADD COLUMN total_p2pk_value INTEGER NOT NULL DEFAULT 0;
+                 ALTER TABLE daily_blocks ADD COLUMN total_p2tr_value INTEGER NOT NULL DEFAULT 0;
+                 ALTER TABLE daily_blocks ADD COLUMN total_multisig_value INTEGER NOT NULL DEFAULT 0;
+                 ALTER TABLE daily_blocks ADD COLUMN total_subsidy INTEGER NOT NULL DEFAULT 0;",
+            )?;
+        }
         if !daily_cols.contains("avg_brc20_bytes") {
             tracing::info!("Migrating daily_blocks: adding avg_brc20_bytes");
             conn.execute_batch(
@@ -1118,6 +1135,9 @@ pub struct BlockRow {
     pub unspendable_output_count: u64,
     /// Estimated BRC-20 payload bytes, a subset of `inscription_bytes`.
     pub brc20_bytes: u64,
+    pub p2pk_value: u64,
+    pub p2tr_value: u64,
+    pub multisig_value: u64,
 }
 
 impl From<DailyRow> for super::types::DailyAggregate {
@@ -1175,6 +1195,10 @@ impl From<DailyRow> for super::types::DailyAggregate {
             avg_segwit_tx_count: r.avg_segwit_tx_count,
             avg_taproot_tx_count: r.avg_taproot_tx_count,
             avg_brc20_bytes: r.avg_brc20_bytes,
+            total_p2pk_value: r.total_p2pk_value,
+            total_p2tr_value: r.total_p2tr_value,
+            total_multisig_value: r.total_multisig_value,
+            total_subsidy: r.total_subsidy,
             avg_fee_rate_p25: r.avg_fee_rate_p25,
             avg_fee_rate_p75: r.avg_fee_rate_p75,
         }
@@ -1243,6 +1267,9 @@ impl From<BlockRow> for super::types::BlockSummary {
             coinbase_output_count: r.coinbase_output_count,
             unspendable_output_count: r.unspendable_output_count,
             brc20_bytes: r.brc20_bytes,
+            p2pk_value: r.p2pk_value,
+            p2tr_value: r.p2tr_value,
+            multisig_value: r.multisig_value,
         }
     }
 }
@@ -1272,7 +1299,7 @@ pub fn query_blocks(
                 legacy_tx_count, segwit_tx_count, taproot_tx_count,
                 coinbase_text, fee_rate_p25, fee_rate_p75,
                 coinbase_output_count, unspendable_output_count, p2a_count,
-                brc20_bytes
+                brc20_bytes, p2pk_value, p2tr_value, multisig_value
          FROM blocks WHERE height >= ?1 AND height <= ?2 ORDER BY height ASC",
     )?;
     let rows = stmt.query_map(params![from, to], |row| {
@@ -1335,6 +1362,9 @@ pub fn query_blocks(
             coinbase_output_count: row.get(55)?,
             unspendable_output_count: row.get(56)?,
             brc20_bytes: row.get(58)?,
+            p2pk_value: row.get(59)?,
+            p2tr_value: row.get(60)?,
+            multisig_value: row.get(61)?,
             p2a_count: row.get(57)?,
         })
     })?;
@@ -1373,7 +1403,7 @@ pub fn query_blocks_by_ts(
                 legacy_tx_count, segwit_tx_count, taproot_tx_count,
                 coinbase_text, fee_rate_p25, fee_rate_p75,
                 coinbase_output_count, unspendable_output_count, p2a_count,
-                brc20_bytes
+                brc20_bytes, p2pk_value, p2tr_value, multisig_value
          FROM blocks WHERE timestamp >= ?1 AND timestamp <= ?2 ORDER BY height ASC LIMIT ?3",
     )?;
     let rows = stmt.query_map(params![from_ts, to_ts, limit], |row| {
@@ -1436,6 +1466,9 @@ pub fn query_blocks_by_ts(
             coinbase_output_count: row.get(55)?,
             unspendable_output_count: row.get(56)?,
             brc20_bytes: row.get(58)?,
+            p2pk_value: row.get(59)?,
+            p2tr_value: row.get(60)?,
+            multisig_value: row.get(61)?,
             p2a_count: row.get(57)?,
         })
     })?;
@@ -1717,6 +1750,10 @@ pub struct DailyRow {
     pub avg_segwit_tx_count: f64,
     pub avg_taproot_tx_count: f64,
     pub avg_brc20_bytes: f64,
+    pub total_p2pk_value: u64,
+    pub total_p2tr_value: u64,
+    pub total_multisig_value: u64,
+    pub total_subsidy: u64,
     pub avg_fee_rate_p25: f64,
     pub avg_fee_rate_p75: f64,
 }
@@ -1772,7 +1809,8 @@ pub fn refresh_daily_day(
              avg_inscription_envelope_bytes, total_inscription_fees, total_runes_fees,
              avg_legacy_tx_count, avg_segwit_tx_count, avg_taproot_tx_count,
              avg_fee_rate_p25, avg_fee_rate_p75,
-             avg_brc20_bytes)
+             avg_brc20_bytes, total_p2pk_value, total_p2tr_value,
+             total_multisig_value, total_subsidy)
          SELECT ?1,
                 COUNT(*), AVG(size), AVG(weight), AVG(tx_count), AVG(difficulty),
                 SUM(op_return_count), SUM(runes_count), SUM(omni_count),
@@ -1793,7 +1831,13 @@ pub fn refresh_daily_day(
                 AVG(inscription_envelope_bytes), SUM(inscription_fees), SUM(runes_fees),
                 AVG(legacy_tx_count), AVG(segwit_tx_count), AVG(taproot_tx_count),
                 AVG(fee_rate_p25), AVG(fee_rate_p75),
-                AVG(brc20_bytes)
+                AVG(brc20_bytes),
+                SUM(p2pk_value), SUM(p2tr_value), SUM(multisig_value),
+                SUM(CASE WHEN height < 210000 THEN 5000000000
+                         WHEN height < 420000 THEN 2500000000
+                         WHEN height < 630000 THEN 1250000000
+                         WHEN height < 840000 THEN 625000000
+                         ELSE 312500000 END)
          FROM blocks
          WHERE timestamp >= ?2 AND timestamp < ?3
          HAVING COUNT(*) > 0",
@@ -1844,7 +1888,8 @@ const REBUILD_DAILY_SQL: &str = "INSERT OR REPLACE INTO daily_blocks
              avg_inscription_envelope_bytes, total_inscription_fees, total_runes_fees,
              avg_legacy_tx_count, avg_segwit_tx_count, avg_taproot_tx_count,
              avg_fee_rate_p25, avg_fee_rate_p75,
-             avg_brc20_bytes)
+             avg_brc20_bytes, total_p2pk_value, total_p2tr_value,
+             total_multisig_value, total_subsidy)
          SELECT date(datetime(timestamp, 'unixepoch')),
                 COUNT(*), AVG(size), AVG(weight), AVG(tx_count), AVG(difficulty),
                 SUM(op_return_count), SUM(runes_count), SUM(omni_count),
@@ -1865,7 +1910,13 @@ const REBUILD_DAILY_SQL: &str = "INSERT OR REPLACE INTO daily_blocks
                 AVG(inscription_envelope_bytes), SUM(inscription_fees), SUM(runes_fees),
                 AVG(legacy_tx_count), AVG(segwit_tx_count), AVG(taproot_tx_count),
                 AVG(fee_rate_p25), AVG(fee_rate_p75),
-                AVG(brc20_bytes)
+                AVG(brc20_bytes),
+                SUM(p2pk_value), SUM(p2tr_value), SUM(multisig_value),
+                SUM(CASE WHEN height < 210000 THEN 5000000000
+                         WHEN height < 420000 THEN 2500000000
+                         WHEN height < 630000 THEN 1250000000
+                         WHEN height < 840000 THEN 625000000
+                         ELSE 312500000 END)
          FROM blocks
          GROUP BY date(datetime(timestamp, 'unixepoch'))";
 
@@ -1958,7 +2009,9 @@ pub fn query_daily_aggregates_fast(
                 -- columns on purpose: these rows are read positionally, so a
                 -- mid-list insertion would shift every index after it.
                 avg_p2a_count, avg_coinbase_output_count,
-                avg_unspendable_output_count, avg_brc20_bytes
+                avg_unspendable_output_count, avg_brc20_bytes,
+                total_p2pk_value, total_p2tr_value, total_multisig_value,
+                total_subsidy
          FROM daily_blocks
          WHERE day >= ?1 AND day <= ?2
          ORDER BY day ASC",
@@ -2025,6 +2078,13 @@ pub fn query_daily_aggregates_fast(
                 .get::<_, Option<f64>>(52)?
                 .unwrap_or(0.0),
             avg_brc20_bytes: row.get::<_, Option<f64>>(53)?.unwrap_or(0.0),
+            total_p2pk_value: row.get::<_, Option<i64>>(54)?.unwrap_or(0)
+                as u64,
+            total_p2tr_value: row.get::<_, Option<i64>>(55)?.unwrap_or(0)
+                as u64,
+            total_multisig_value: row.get::<_, Option<i64>>(56)?.unwrap_or(0)
+                as u64,
+            total_subsidy: row.get::<_, Option<i64>>(57)?.unwrap_or(0) as u64,
         })
     })?;
 
@@ -2105,7 +2165,13 @@ pub fn query_daily_aggregates(
                 -- is read positionally, so a mid-list insertion would shift
                 -- every index after it.
                 AVG(p2a_count), AVG(coinbase_output_count),
-                AVG(unspendable_output_count), AVG(brc20_bytes)
+                AVG(unspendable_output_count), AVG(brc20_bytes),
+                SUM(p2pk_value), SUM(p2tr_value), SUM(multisig_value),
+                SUM(CASE WHEN height < 210000 THEN 5000000000
+                         WHEN height < 420000 THEN 2500000000
+                         WHEN height < 630000 THEN 1250000000
+                         WHEN height < 840000 THEN 625000000
+                         ELSE 312500000 END)
          FROM blocks
          WHERE timestamp >= ?1 AND timestamp <= ?2
          GROUP BY day
@@ -2173,6 +2239,13 @@ pub fn query_daily_aggregates(
                 .get::<_, Option<f64>>(52)?
                 .unwrap_or(0.0),
             avg_brc20_bytes: row.get::<_, Option<f64>>(53)?.unwrap_or(0.0),
+            total_p2pk_value: row.get::<_, Option<i64>>(54)?.unwrap_or(0)
+                as u64,
+            total_p2tr_value: row.get::<_, Option<i64>>(55)?.unwrap_or(0)
+                as u64,
+            total_multisig_value: row.get::<_, Option<i64>>(56)?.unwrap_or(0)
+                as u64,
+            total_subsidy: row.get::<_, Option<i64>>(57)?.unwrap_or(0) as u64,
         })
     })?;
     rows.collect()
@@ -4227,6 +4300,27 @@ mod tests {
                 return (expr != "COUNT(*)")
                     .then(|| format!("`block_count` is filled from `{expr}`"))
             }
+            // Derived from height rather than summed from a column, because
+            // there is no `subsidy` column: the schedule is consensus, and
+            // `daily_blocks` has no height for a caller to derive it from.
+            // Still asserted, on the halving boundaries and the current era.
+            "total_subsidy" => {
+                let halvings =
+                    ["210000", "420000", "630000", "840000", "312500000"];
+                let missing: Vec<&str> = halvings
+                    .iter()
+                    .copied()
+                    .filter(|h| !expr.contains(h))
+                    .collect();
+                return (!expr.starts_with("SUM(CASE WHEN height")
+                    || !missing.is_empty())
+                .then(|| {
+                    format!(
+                        "`total_subsidy` must sum the halving schedule by \
+                             height; `{expr}` is missing {missing:?}"
+                    )
+                });
+            }
             _ => {}
         }
         let (agg, stem) = if let Some(s) = col.strip_prefix("avg_") {
@@ -5774,15 +5868,15 @@ mod tests {
         ] {
             assert_eq!(
                 cols.len(),
-                54,
-                "{label}: parsed {} target columns, expected 54. The parser \
+                58,
+                "{label}: parsed {} target columns, expected 58. The parser \
                  broke, which must not read as a pass.",
                 cols.len()
             );
             assert_eq!(
                 exprs.len(),
-                54,
-                "{label}: parsed {} select expressions, expected 54. The \
+                58,
+                "{label}: parsed {} select expressions, expected 58. The \
                  parser broke.",
                 exprs.len()
             );

@@ -68,7 +68,11 @@ fn main() {
     let reader = BufReader::with_capacity(1 << 22, file);
 
     let mut by_kind: BTreeMap<&'static str, (u64, u128)> = BTreeMap::new();
-    let mut exposed_by_year: BTreeMap<u16, (u64, u128)> = BTreeMap::new();
+    // Keyed by year and kind, because the whole point of the yearly view is
+    // that the old exposure and the new exposure are different types: P2PK
+    // before 2012, Taproot after 2022. One number per year hides that.
+    let mut exposed_by_year: BTreeMap<(u16, &'static str), (u64, u128)> =
+        BTreeMap::new();
     let mut exposed_unknown_year: (u64, u128) = (0, 0);
     let mut total_coins: u64 = 0;
     let mut total_sats: u128 = 0;
@@ -83,7 +87,8 @@ fn main() {
         if c.kind.is_exposed() {
             match year_for(c.height) {
                 Some(y) => {
-                    let e = exposed_by_year.entry(y).or_default();
+                    let e =
+                        exposed_by_year.entry((y, c.kind.label())).or_default();
                     e.0 += 1;
                     e.1 += u128::from(c.value_sats);
                 }
@@ -124,13 +129,15 @@ fn main() {
             println!("    \"{k}\": {{ \"utxos\": {c}, \"sats\": {v} }}{comma}");
         }
         println!("  }},");
-        println!("  \"exposed_by_year\": {{");
+        println!("  \"exposed_by_year\": [");
         let n = exposed_by_year.len();
-        for (i, (y, (c, v))) in exposed_by_year.iter().enumerate() {
+        for (i, ((y, k), (c, v))) in exposed_by_year.iter().enumerate() {
             let comma = if i + 1 < n { "," } else { "" };
-            println!("    \"{y}\": {{ \"utxos\": {c}, \"sats\": {v} }}{comma}");
+            println!(
+                "    {{ \"year\": {y}, \"kind\": \"{k}\", \"utxos\": {c}, \"sats\": {v} }}{comma}"
+            );
         }
-        println!("  }}");
+        println!("  ]");
         println!("}}");
         return;
     }
@@ -172,12 +179,15 @@ fn main() {
         btc(exposed_sats),
         100.0 * exposed_sats as f64 / total_sats as f64
     );
-    println!("\n{:<8}{:>14}{:>18}{:>10}", "YEAR", "UTXOs", "BTC", "cum %");
+    println!(
+        "\n{:<8}{:<16}{:>14}{:>18}{:>10}",
+        "YEAR", "KIND", "UTXOs", "BTC", "cum %"
+    );
     let mut cum: u128 = 0;
-    for (y, (c, v)) in &exposed_by_year {
+    for ((y, k), (c, v)) in &exposed_by_year {
         cum += v;
         println!(
-            "{y:<8}{c:>14}{:>18.2}{:>9.2}%",
+            "{y:<8}{k:<16}{c:>14}{:>18.2}{:>9.2}%",
             btc(*v),
             100.0 * cum as f64 / exposed_sats as f64
         );

@@ -1946,6 +1946,33 @@ pub const CHARTS: &[ChartMeta] = &[
     // plot, so this page links to it instead.
     // ---------------------------------------------------------------------
     ChartMeta {
+        slug: "pq-exposed-value",
+        title: "Value in Exposed Outputs",
+        desc_per_block: "Share of the value each block creates that goes into outputs publishing a public key",
+        desc_daily: "Share of the value created that goes into outputs publishing a public key, by day",
+        category: Category::PostQuantum,
+        unit: Unit::Percent,
+        shape: Shape::StackedPercent,
+        source: Source::Dashboard {
+            per_block: super::pq_exposed_value_chart,
+            daily: Daily::Fn(super::pq_exposed_value_chart_daily),
+        },
+        measurements: &[Measurement {
+            series: "",
+            series_daily: "",
+            quantity: "Share of satoshis created in outputs that publish a public key",
+            method_per_block: Method::Measured,
+            method_daily: Method::Measured,
+            per_block: Aggregation::PerBlockObservation,
+            daily: Aggregation::RatioOfTotals,
+            population: "Every satoshi a block creates, the coinbase included, which is wider than the non-coinbase total used elsewhere on the site. It has to be: almost every reward before 2012 paid a raw public key, and leaving the coinbase out of the denominator while counting it in the numerator puts the early years above 100%. Measures value created, not value still held.",
+        }],
+        about: Some(About {
+            definition: Some("How much of the money entering the chain goes into outputs that publish a public key. This is the weight-of-money view of the same question the other charts count: a Taproot output holding four thousandths of a coin and one holding a thousand coins are one output each, and very different amounts of exposure."),
+            technical: "Counting and value-weighting give different answers, and the gap is large. Of the outputs created since 2020, 15.2% publish a key by count and 1.7% by value, because the count is dominated by Taproot dust and inscription outputs. \n\nThis chart is potential exposure: money being placed into key-publishing outputs as it is created. It does not say how much is exposed now, because an output created years ago may long since have been spent. That question needs a snapshot of the unspent output set. \n\nAs everywhere in this section, exposure by reuse is not counted, so the figure is a floor rather than a total.",
+        }),
+    },
+    ChartMeta {
         slug: "pq-exposure",
         title: "Exposure by Construction",
         desc_per_block: "Share of outputs created whose public key is on chain from the moment they exist",
@@ -3883,6 +3910,40 @@ mod tests {
                 0.004,
             ),
             (
+                "pq-exposed-value",
+                // The count arm of the sentence this chart exists to make.
+                // Bounds are wide because both are cumulative sums over six
+                // years, so a month of chain moves them very little; a row
+                // this slow is a check against a mistyped figure rather than
+                // against drift.
+                "since 2020, 15.2% publish a key by count",
+                "SELECT 100.0*SUM(p2pk_count+multisig_count+p2tr_count)/ \
+                 SUM(p2pkh_count+p2sh_count+p2wpkh_count+p2wsh_count \
+                 +p2tr_count+p2pk_count+multisig_count+unknown_script_count \
+                 +p2a_count) FROM blocks \
+                 WHERE timestamp >= strftime('%s','2020-01-01')",
+                13.0,
+                18.0,
+            ),
+            (
+                "pq-exposed-value",
+                // The value arm, against the same window and the same
+                // coinbase-inclusive denominator the builder uses. The gap
+                // between this and the row above is the chart's whole point,
+                // so the two have to be measured the same way.
+                "and 1.7% by value",
+                "SELECT 100.0*SUM(p2pk_value+p2tr_value+multisig_value)/ \
+                 SUM(total_output_value + total_fees + \
+                 CASE WHEN height < 210000 THEN 5000000000 \
+                      WHEN height < 420000 THEN 2500000000 \
+                      WHEN height < 630000 THEN 1250000000 \
+                      WHEN height < 840000 THEN 625000000 \
+                      ELSE 312500000 END) FROM blocks \
+                 WHERE timestamp >= strftime('%s','2020-01-01')",
+                1.3,
+                2.2,
+            ),
+            (
                 "address-types",
                 "six P2SH outputs in five blocks before BIP-16 activated",
                 "SELECT SUM(p2sh_count) FROM blocks WHERE p2sh_count > 0 \
@@ -4744,19 +4805,63 @@ mod tests {
             .0;
         let mut out = Vec::new();
         let lines: Vec<&str> = table.lines().collect();
+        let mut rows = 0usize;
+
+        // Comments are skipped rather than counted as positions, because
+        // reading the slug and claim at fixed offsets made a row stop being
+        // guarded the moment anyone explained it. Two rows were already in
+        // that state, and nothing said so: a comment above the claim is the
+        // most natural thing to write and silently removed the guard.
+        let quoted = |mut n: usize| -> Option<(String, usize)> {
+            while lines.get(n)?.trim().starts_with("//")
+                || lines.get(n)?.trim().is_empty()
+            {
+                n += 1;
+            }
+            // A claim long enough to need Rust's `\`-continuation is still
+            // one string, and reading only its first line left the figures
+            // in the rest of it unguarded. `witness-pct` and `utxo-flow`
+            // were both in that state.
+            let mut joined = String::new();
+            loop {
+                let l = lines.get(n)?.trim();
+                match l.strip_suffix('\\') {
+                    Some(head) => {
+                        joined.push_str(head);
+                        n += 1;
+                    }
+                    None => {
+                        joined.push_str(l);
+                        break;
+                    }
+                }
+            }
+            let inner = joined.strip_prefix('"')?.rsplit_once("\",")?.0;
+            Some((inner.to_string(), n))
+        };
+
         for (i, line) in lines.iter().enumerate() {
             if line.trim() != "(" {
                 continue;
             }
-            let quoted = |n: usize| -> Option<String> {
-                let l = lines.get(n)?.trim();
-                let inner = l.strip_prefix('"')?.rsplit_once("\",")?.0;
-                Some(inner.to_string())
-            };
-            if let (Some(slug), Some(claim)) = (quoted(i + 1), quoted(i + 2)) {
-                out.push((slug, claim));
+            rows += 1;
+            if let Some((slug, at)) = quoted(i + 1) {
+                if let Some((claim, _)) = quoted(at + 1) {
+                    out.push((slug, claim));
+                }
             }
         }
+
+        // A row the parser cannot read is a row with no guard behind it, and
+        // the failure mode is silence: the chart's figures simply look
+        // unguarded, or worse, look guarded by the row above.
+        assert_eq!(
+            out.len(),
+            rows,
+            "the drift table has {rows} rows and {} parsed; a row's slug or \
+             claim is not a plain quoted string on its own line",
+            out.len()
+        );
         out
     }
 
@@ -4910,6 +5015,7 @@ mod tests {
         // Same reason: a 100%-stacked chart's bands are normalised to it,
         // so the figure is the chart's shape and not a chain measurement.
         ("pq-exposure", "100%"),
+        ("pq-exposed-value", "100%"),
         ("diff-ribbon", "128"),    // the longest span
         ("fullness-dist", "100%"), // the weight limit, which is the axis
         ("halving-era", "100"),    // each era is indexed against its own peak

@@ -130,6 +130,123 @@ fn classified_daily(d: &DailyAggregate) -> f64 {
     exposed_daily(d) + hash_protected_daily(d) + d.avg_unknown_script_count
 }
 
+/// Every satoshi a block created, coinbase included.
+///
+/// **Not `total_output_value`**, which is non-coinbase only. The exposed
+/// value columns do include the coinbase, and nearly every pre-2012 reward
+/// paid a raw public key, so dividing by the non-coinbase total put 95,044
+/// blocks above 100% when measured on 2026-11-11, all of them early and all
+/// of them the ones this chart is about.
+fn value_created(b: &BlockSummary) -> u64 {
+    b.total_output_value + b.total_fees + block_subsidy(b.height)
+}
+
+fn value_created_daily(d: &DailyAggregate) -> f64 {
+    (d.total_output_value + d.total_fees + d.total_subsidy) as f64
+}
+
+/// Value created in outputs that publish a public key, as a share of all
+/// value created.
+///
+/// **The companion to the snapshot, and a different question from it.** This
+/// is potential exposure: money being put into key-publishing outputs as it
+/// is created. The snapshot answers how much is sitting in them now. Neither
+/// substitutes for the other, and a reader needs both told apart.
+///
+/// Value-weighted rather than counted, which is the whole point. By count the
+/// exposed share of outputs created since 2020 is 15.9%; by value it is 1.7%,
+/// because the count is dominated by Taproot dust and inscription outputs
+/// averaging four thousandths of a coin. A reader asking how much Bitcoin is
+/// exposed and getting the count takes away roughly nine times the truth.
+pub fn pq_exposed_value_chart(blocks: &[BlockSummary]) -> serde_json::Value {
+    if blocks.is_empty() {
+        return no_data_chart("Value in Exposed Outputs");
+    }
+
+    let make_pct = |f: fn(&BlockSummary) -> u64| -> serde_json::Value {
+        let s = build_data_array_f64(blocks, |b| {
+            let total = value_created(b);
+            if total > 0 {
+                round(f(b) as f64 / total as f64 * 100.0, 3).min(100.0)
+            } else {
+                f64::NAN
+            }
+        });
+        data_array_value(&s)
+    };
+    let not_exposed = |b: &BlockSummary| -> u64 {
+        value_created(b)
+            .saturating_sub(b.p2pk_value + b.p2tr_value + b.multisig_value)
+    };
+
+    let band = |name: &str, data: serde_json::Value, colour: &str| {
+        json!({
+            "name": name, "type": "line", "data": data, "stack": "pct",
+            "areaStyle": { "opacity": 0.6 },
+            "lineStyle": { "width": 0, "color": colour },
+            "itemStyle": { "color": colour }, "symbol": "none"
+        })
+    };
+
+    build_option(json!({
+        "xAxis": x_axis_for(false, &[]),
+        "yAxis": { "type": "value", "name": "% of value created", "max": 100, "nameTextStyle": { "color": "#d4d4d4" }, "axisLabel": { "color": "#d4d4d4" }, "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.05)", "type": "dashed" } } },
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            band("P2TR", make_pct(|b| b.p2tr_value), P2TR_COLOR),
+            band("P2PK", make_pct(|b| b.p2pk_value), P2PK_COLOR),
+            band("Bare multisig", make_pct(|b| b.multisig_value), MULTISIG_COLOR),
+            band("Not exposed", make_pct(not_exposed), P2WPKH_COLOR)
+        ]
+    }))
+}
+
+/// Daily arm, same denominator.
+pub fn pq_exposed_value_chart_daily(
+    days: &[DailyAggregate],
+) -> serde_json::Value {
+    if days.is_empty() {
+        return no_data_chart("Value in Exposed Outputs");
+    }
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    let series = |f: fn(&DailyAggregate) -> f64| -> Vec<Option<f64>> {
+        days.iter()
+            .map(|d| {
+                let total = value_created_daily(d);
+                (total > 0.0)
+                    .then(|| (round(f(d) / total * 100.0, 3)).min(100.0))
+            })
+            .collect()
+    };
+    let band = |name: &str, data: Vec<Option<f64>>, colour: &str| {
+        json!({
+            "name": name, "type": "line", "data": data, "stack": "pct",
+            "areaStyle": { "opacity": 0.6 },
+            "lineStyle": { "width": 0, "color": colour },
+            "itemStyle": { "color": colour }, "symbol": "none"
+        })
+    };
+    build_option(json!({
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": { "type": "value", "name": "% of value created", "max": 100, "nameTextStyle": { "color": "#d4d4d4" }, "axisLabel": { "color": "#d4d4d4" }, "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.05)", "type": "dashed" } } },
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            band("P2TR", series(|d| d.total_p2tr_value as f64), P2TR_COLOR),
+            band("P2PK", series(|d| d.total_p2pk_value as f64), P2PK_COLOR),
+            band("Bare multisig", series(|d| d.total_multisig_value as f64), MULTISIG_COLOR),
+            band("Not exposed", series(|d| {
+                value_created_daily(d)
+                    - (d.total_p2pk_value + d.total_p2tr_value
+                        + d.total_multisig_value) as f64
+            }), P2WPKH_COLOR)
+        ]
+    }))
+}
+
 /// Exposure by construction, as a share of classified outputs created.
 ///
 /// Six bands that total 100 by construction: the three exposed types, the
@@ -400,11 +517,181 @@ mod tests {
         );
     }
 
+    /// The first point of a named band, so a test says which band it means.
+    fn band_at(opt: &serde_json::Value, name: &str, i: usize) -> Option<f64> {
+        let s = opt["series"]
+            .as_array()?
+            .iter()
+            .find(|s| s["name"] == name)?;
+        let p = &s["data"][i];
+        // The per-block arm plots `[timestamp, value]`, the daily arm plots
+        // a bare value against a category axis.
+        p.get(1).unwrap_or(p).as_f64()
+    }
+
+    /// The denominator includes the coinbase, or the early era breaks.
+    ///
+    /// This is the defect the chart was built around: the exposed value
+    /// columns count coinbase outputs and `total_output_value` does not, so
+    /// dividing by it alone put 95,044 blocks over 100%, all of them early
+    /// and all of them the ones that matter.
+    #[test]
+    fn the_value_denominator_counts_the_coinbase() {
+        // A 2009-shaped block: the whole 50 BTC reward paid to a raw key,
+        // nothing else moving. total_output_value is non-coinbase, so zero.
+        let b = BlockSummary {
+            height: 1,
+            timestamp: 1_231_000_000,
+            p2pk_value: 5_000_000_000,
+            total_output_value: 0,
+            total_fees: 0,
+            ..Default::default()
+        };
+        let opt = pq_exposed_value_chart(&[b]);
+        let p2pk = band_at(&opt, "P2PK", 0).expect("a share");
+        assert_eq!(
+            p2pk, 100.0,
+            "the whole reward went to a raw public key, so the share is \
+             100%; {p2pk} means the denominator dropped the coinbase"
+        );
+    }
+
+    /// Value bands total 100 and never exceed it.
+    #[test]
+    fn the_value_bands_total_one_hundred() {
+        let b = BlockSummary {
+            height: 800_000,
+            timestamp: 1_700_000_000,
+            p2pk_value: 100_000_000,
+            p2tr_value: 300_000_000,
+            multisig_value: 50_000_000,
+            total_output_value: 2_000_000_000,
+            total_fees: 10_000_000,
+            ..Default::default()
+        };
+        let opt = pq_exposed_value_chart(&[b]);
+        let sum: f64 = ["P2TR", "P2PK", "Bare multisig", "Not exposed"]
+            .iter()
+            .map(|n| band_at(&opt, n, 0).unwrap_or(0.0))
+            .sum();
+        assert!(
+            (sum - 100.0).abs() < 0.01,
+            "bands total {sum}, so a reader can take a share that does not \
+             exist off the chart"
+        );
+    }
+
+    /// Both arms of the value chart divide by the same thing.
+    #[test]
+    fn the_value_arms_agree() {
+        let per = pq_exposed_value_chart(&[BlockSummary {
+            height: 800_000,
+            timestamp: 1_700_000_000,
+            p2pk_value: 100_000_000,
+            p2tr_value: 300_000_000,
+            multisig_value: 50_000_000,
+            total_output_value: 2_000_000_000,
+            total_fees: 10_000_000,
+            ..Default::default()
+        }]);
+        let day = pq_exposed_value_chart_daily(&[DailyAggregate {
+            date: "2024-02-01".to_string(),
+            block_count: 1,
+            total_p2pk_value: 100_000_000,
+            total_p2tr_value: 300_000_000,
+            total_multisig_value: 50_000_000,
+            total_output_value: 2_000_000_000,
+            total_fees: 10_000_000,
+            total_subsidy: block_subsidy(800_000),
+            ..Default::default()
+        }]);
+        let a = band_at(&per, "P2PK", 0).expect("per block");
+        let b = band_at(&day, "P2PK", 0).expect("daily");
+        assert_eq!(a, b, "per-block says {a}% and daily says {b}%");
+    }
+
+    /// Counting and value-weighting answer different questions, and the
+    /// chart must not be silently reading the count.
+    #[test]
+    fn value_weighting_differs_from_counting() {
+        // One huge hash-protected output beside many tiny exposed ones.
+        let b = BlockSummary {
+            height: 800_000,
+            timestamp: 1_700_000_000,
+            p2tr_count: 99,
+            p2pkh_count: 1,
+            p2tr_value: 99_000,
+            total_output_value: 10_000_000_000,
+            total_fees: 0,
+            ..Default::default()
+        };
+        let by_count =
+            band_at(&pq_exposure_chart(std::slice::from_ref(&b)), "P2TR", 0)
+                .expect("count share");
+        let by_value = band_at(&pq_exposed_value_chart(&[b]), "P2TR", 0)
+            .expect("value share");
+        assert!(
+            by_count > 90.0,
+            "P2TR is 99 of 100 outputs, so the count share is high: {by_count}"
+        );
+        assert!(
+            by_value < 1.0,
+            "those outputs hold almost nothing, so the value share is low; \
+             {by_value} means the value chart is counting"
+        );
+    }
+
     /// P2PK is plotted on its own axis, not as a share, so the early era is
     /// legible rather than pinned to the floor.
     #[test]
     fn p2pk_creation_plots_counts() {
         let opt = pq_p2pk_creation_chart(&[block(37, 0, 0, 0, 0)]);
         assert_eq!(opt["series"][0]["data"][0][1].as_f64(), Some(37.0));
+    }
+
+    /// The two exposure charts sit next to each other, so they stack the
+    /// three exposed types in the same order. A reader comparing them should
+    /// not have to re-read the legend.
+    ///
+    /// Only the exposed prefix is compared. The count chart can split the
+    /// remainder into hash-protected, anchor and unclassified because it has
+    /// a column for each; the value chart has value columns for the three
+    /// exposed types only, so its remainder is one band by necessity.
+    #[test]
+    fn the_two_exposure_charts_stack_in_the_same_order() {
+        let b = BlockSummary {
+            height: 800_000,
+            timestamp: 1_700_000_000,
+            p2tr_count: 10,
+            p2pk_count: 1,
+            multisig_count: 1,
+            p2pkh_count: 5,
+            p2tr_value: 1_000,
+            p2pk_value: 2_000,
+            multisig_value: 3_000,
+            total_output_value: 1_000_000_000,
+            total_fees: 1_000,
+            ..Default::default()
+        };
+        let names = |opt: &serde_json::Value| -> Vec<String> {
+            opt["series"]
+                .as_array()
+                .expect("series")
+                .iter()
+                .map(|s| s["name"].as_str().unwrap_or("").to_string())
+                .collect()
+        };
+        let count = names(&pq_exposure_chart(std::slice::from_ref(&b)));
+        let value = names(&pq_exposed_value_chart(&[b]));
+        assert_eq!(
+            count[..3],
+            value[..3],
+            "the exposed bands are ordered differently"
+        );
+        assert_eq!(
+            value.last().map(String::as_str),
+            Some("Not exposed"),
+            "the value chart's remainder is one band"
+        );
     }
 }

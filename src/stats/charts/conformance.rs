@@ -218,6 +218,10 @@ fn synthetic_days(n: usize) -> Vec<DailyAggregate> {
                 // zero in every test that built it.
                 avg_brc20_count: 2.0 + f * 0.01,
                 avg_brc20_bytes: 900.0 + f * 3.0,
+                total_p2pk_value: 100_000_000 + u * 1_000,
+                total_p2tr_value: 400_000_000 + u * 2_000,
+                total_multisig_value: 50_000_000 + u * 500,
+                total_subsidy: 312_500_000 * 144,
                 avg_fee_rate_p10: 2.0 + f * 0.02,
                 avg_fee_rate_p90: 14.0 + f * 0.12,
                 avg_multisig_count: 15.0 + f * 0.1,
@@ -524,6 +528,12 @@ fn uniform_block(height: u64, timestamp: u64) -> BlockSummary {
         // A strict subset of `inscription_bytes`, which it is by
         // construction: the BRC-20 test is nested inside the inscription one.
         brc20_bytes: 20_000,
+        // Value in key-publishing outputs. Deliberately a minority of the
+        // block's value, and deliberately not equal to each other, so a
+        // chart reading the wrong one is caught.
+        p2pk_value: 1_000_000_000,
+        p2tr_value: 3_000_000_000,
+        multisig_value: 500_000_000,
         op_return_count: 300,
         op_return_bytes: 6_000,
         runes_count: 200,
@@ -603,6 +613,12 @@ fn uniform_day(b: &BlockSummary, date: &str) -> DailyAggregate {
         avg_inscription_envelope_bytes: b.inscription_envelope_bytes as f64,
         avg_brc20_count: b.brc20_count as f64,
         avg_brc20_bytes: b.brc20_bytes as f64,
+        total_p2pk_value: b.p2pk_value * n,
+        total_p2tr_value: b.p2tr_value * n,
+        total_multisig_value: b.multisig_value * n,
+        // The subsidy the fixture's era pays, times the block count, so the
+        // daily denominator matches what the per-block arm computes.
+        total_subsidy: 312_500_000 * n,
         avg_taproot_keypath_count: b.taproot_keypath_count as f64,
         avg_taproot_scriptpath_count: b.taproot_scriptpath_count as f64,
         avg_fee_rate_p10: b.fee_rate_p10,
@@ -1695,6 +1711,14 @@ mod tests {
                 total_input_value: m(d.total_input_value),
                 total_inscription_fees: m(d.total_inscription_fees),
                 total_runes_fees: m(d.total_runes_fees),
+                // Also sums over the day, and the subsidy especially: it is
+                // part of the denominator the exposed-value chart divides
+                // by, so leaving it unscaled made a correctly declared
+                // ratio look like it moved.
+                total_p2pk_value: m(d.total_p2pk_value),
+                total_p2tr_value: m(d.total_p2tr_value),
+                total_multisig_value: m(d.total_multisig_value),
+                total_subsidy: m(d.total_subsidy),
                 ..d
             }
         };
