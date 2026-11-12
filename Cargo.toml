@@ -33,6 +33,15 @@ path = "src/bin/rebuild_daily_blocks.rs"
 name = "rebuild_daily_blocks"
 required-features = ["ssr"]
 
+# Aggregates a dumptxoutset snapshot. The only tool here that answers a stock
+# question rather than a flow one, and the only one that reads a file instead
+# of the node. Run as
+# `cargo run --release --bin parse_utxo_snapshot --features ssr -- <file>`.
+[[bin]]
+path = "src/bin/parse_utxo_snapshot.rs"
+name = "parse_utxo_snapshot"
+required-features = ["ssr"]
+
 # Records the orphaned blocks the node still remembers. `required-features`
 # keeps it out of the WASM build, which has no rusqlite or tokio.
 [[bin]]

@@ -36,6 +36,8 @@ pub mod rpc_cache;
 #[cfg(feature = "ssr")]
 pub mod startup;
 #[cfg(feature = "ssr")]
+pub mod utxo_snapshot;
+#[cfg(feature = "ssr")]
 pub mod zmq_subscriber;
 
 // Integration tests covering the full Axum router + DB path. Lives in the
