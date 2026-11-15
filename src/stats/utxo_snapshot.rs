@@ -3,7 +3,7 @@
 //! A snapshot is the only way to answer a **stock** question about the chain:
 //! how many coins exist right now, in what script types, holding what value.
 //! Every other figure on this site is a **flow**, derived from blocks, and the
-//! two are not interchangeable. 371.7 million P2TR outputs have been created;
+//! two are not interchangeable. 372.7 million P2TR outputs have been created;
 //! 52.9 million are unspent.
 //!
 //! # Why this is hand-rolled

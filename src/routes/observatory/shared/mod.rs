@@ -706,6 +706,14 @@ pub fn ChartPageLayout(
     #[prop(into)] description: &'static str,
     #[prop(optional, into)] seo_text: Option<&'static str>,
     #[prop(optional, into)] header: Option<ViewFn>,
+    /// Content between the hero and the range toolbar.
+    ///
+    /// The toolbar controls the charts, so it belongs next to them. A page
+    /// with framing to set first pushed it hundreds of pixels away from
+    /// anything it changes, where it read as part of the banner. Anything
+    /// passed here renders above it instead.
+    #[prop(optional, into)]
+    intro: Option<ViewFn>,
     children: Children,
 ) -> impl IntoView {
     view! {
@@ -726,6 +734,7 @@ pub fn ChartPageLayout(
         {seo_text.map(|text| view! {
             <p class="sr-only">{text}</p>
         })}
+        {intro.map(|i| view! { <>{i.run()}</> })}
         // Compact toolbar: section selector (left) + range (right)
         <div class="flex flex-col sm:flex-row sm:items-start gap-3 mb-6">
             <div class="flex items-center gap-3 flex-shrink-0">

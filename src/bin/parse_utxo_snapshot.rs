@@ -10,7 +10,7 @@
 //!
 //! **This answers a stock question, which no other tool here can.** Every
 //! chart on the site is a flow derived from blocks: outputs created, never
-//! outputs still unspent. 371.7 million P2TR outputs have been created and
+//! outputs still unspent. 372.7 million P2TR outputs have been created and
 //! 52.9 million are unspent, and conflating the two is the easiest way to
 //! publish a wrong number on this subject.
 //!

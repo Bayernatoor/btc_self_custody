@@ -507,6 +507,14 @@
                     for (var ai = 0; ai < axes.length; ai++) {
                         axisNames.push((axes[ai] && axes[ai].name) || '');
                     }
+                    // On a horizontal bar chart the categories are on y and
+                    // the quantity is on x, so the unit is named there. Read
+                    // it off x when y is holding the category names, or every
+                    // value prints bare.
+                    if (axes.length === 1 && axes[0] && axes[0].type === 'category' && opts.xAxis) {
+                        var xa = Array.isArray(opts.xAxis) ? opts.xAxis[0] : opts.xAxis;
+                        axisNames[0] = (xa && xa.name) || axisNames[0];
+                    }
                 }
                 var seriesAxis = [];
                 if (Array.isArray(opts.series)) {
@@ -525,7 +533,10 @@
                     var first = params[0];
                     if (!first) return '';
                     var header;
-                    if (first.axisType === 'xAxis.category') {
+                    // Any category axis, not only one on x. A horizontal bar
+                    // chart reports 'yAxis.category', fell through to the
+                    // date branch, and printed every header as 1/1/1970.
+                    if (first.axisType && first.axisType.indexOf('category') !== -1) {
                         header = first.axisValueLabel || first.name || '';
                     } else {
                         var ts = first.data && Array.isArray(first.data) ? first.data[0] : first.value;

@@ -1947,9 +1947,9 @@ pub const CHARTS: &[ChartMeta] = &[
     // ---------------------------------------------------------------------
     ChartMeta {
         slug: "pq-exposed-value",
-        title: "Value in Exposed Outputs",
-        desc_per_block: "Share of the value each block creates that goes into outputs publishing a public key",
-        desc_daily: "Share of the value created that goes into outputs publishing a public key, by day",
+        title: "Value Exposed by Construction",
+        desc_per_block: "Share of the bitcoin each block creates that lands in outputs publishing a public key",
+        desc_daily: "Share of the bitcoin created each day that lands in outputs publishing a public key",
         category: Category::PostQuantum,
         unit: Unit::Percent,
         shape: Shape::StackedPercent,
@@ -1965,11 +1965,11 @@ pub const CHARTS: &[ChartMeta] = &[
             method_daily: Method::Measured,
             per_block: Aggregation::PerBlockObservation,
             daily: Aggregation::RatioOfTotals,
-            population: "Every satoshi a block creates, the coinbase included, which is wider than the non-coinbase total used elsewhere on the site. It has to be: almost every reward before 2012 paid a raw public key, and leaving the coinbase out of the denominator while counting it in the numerator puts the early years above 100%. Measures value created, not value still held.",
+            population: "Every satoshi a block creates, the block reward included. That is wider than the non-coinbase total other charts use, and it has to be: almost every reward before 2012 was paid to a raw public key, so leaving the reward out would push the early years past 100%. Counts value as it is created, not value still held.",
         }],
         about: Some(About {
-            definition: Some("How much of the money entering the chain goes into outputs that publish a public key. This is the weight-of-money view of the same question the other charts count: a Taproot output holding four thousandths of a coin and one holding a thousand coins are one output each, and very different amounts of exposure."),
-            technical: "Counting and value-weighting give different answers, and the gap is large. Of the outputs created since 2020, 15.2% publish a key by count and 1.7% by value, because the count is dominated by Taproot dust and inscription outputs. \n\nThis chart is potential exposure: money being placed into key-publishing outputs as it is created. It does not say how much is exposed now, because an output created years ago may long since have been spent. That question needs a snapshot of the unspent output set. \n\nAs everywhere in this section, exposure by reuse is not counted, so the figure is a floor rather than a total.",
+            definition: Some("How much of the bitcoin a block pays out lands in outputs that publish a public key. Exposure by Construction asks the same question by counting outputs; this one weighs them. An output holding four thousandths of a coin and one holding a thousand coins are a single output each, and very different amounts of money standing behind a published key."),
+            technical: "Counting outputs and weighing them give different answers, and the gap is wide. Of the outputs created since 2020, 15.2% publish a key by count and 1.7% by value, because the count is dominated by Taproot outputs holding a few hundred satoshis apiece.\n\nThis is potential exposure: bitcoin placed into key-publishing outputs at the moment it is paid out. It does not say how much is exposed today, because an output created years ago may have been spent long since. Answering that needs the unspent transaction output set, which the snapshot at the foot of the Post-Quantum page measures.\n\nAs everywhere in this section, exposure through address reuse is not counted, so this is a floor and not a total.",
         }),
     },
     ChartMeta {
@@ -5783,6 +5783,70 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// The node is mine, singular, and the copy says so.
+    ///
+    /// The site is written in one person's voice: "my node", "I would
+    /// recommend". A corporate "our node" or an impersonal "this site's own
+    /// node" is a different publication speaking, and it slips in easily
+    /// because the code's own comments use "we" freely.
+    ///
+    /// Checks the route sources as well as the registry, since the longest
+    /// prose on a chart page is often the page's own, not a `ChartMeta`.
+    #[test]
+    fn the_node_is_mine() {
+        const BANNED: &[&str] = &[
+            "our node",
+            "our own node",
+            "our Bitcoin node",
+            "this site's own node",
+            "the site's own node",
+        ];
+        // Route prose is scanned as source; registry prose is scanned field
+        // by field, because `SELF_SRC` contains the banned list above and
+        // would match itself on every run.
+        const SOURCES: &[(&str, &str)] = &[
+            (
+                "post_quantum.rs",
+                include_str!("../../routes/observatory/post_quantum.rs"),
+            ),
+            (
+                "components.rs",
+                include_str!("../../routes/observatory/components.rs"),
+            ),
+        ];
+        let mut copy: Vec<(String, String)> = SOURCES
+            .iter()
+            .map(|(n, s)| (n.to_string(), s.to_string()))
+            .collect();
+        for c in CHARTS {
+            let mut text =
+                format!("{} {} {}", c.title, c.desc_per_block, c.desc_daily);
+            for m in c.measurements {
+                text.push_str(m.quantity);
+                text.push(' ');
+                text.push_str(m.population);
+            }
+            if let Some(a) = c.about {
+                text.push_str(a.definition.unwrap_or_default());
+                text.push_str(a.technical);
+            }
+            copy.push((c.slug.to_string(), text));
+        }
+        let mut found = Vec::new();
+        for (name, src) in &copy {
+            let lower = src.to_lowercase();
+            for phrase in BANNED {
+                if lower.contains(&phrase.to_lowercase()) {
+                    found.push(format!("{name}: {phrase:?}"));
+                }
+            }
+        }
+        assert!(
+            found.is_empty(),
+            "the site speaks as one person, so this is \"my node\": {found:?}"
+        );
     }
 
     /// A comparison **candidate** has to be buildable from the dashboard rows

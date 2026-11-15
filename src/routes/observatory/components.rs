@@ -150,10 +150,36 @@ pub fn NodeStatusBanner() -> impl IntoView {
 pub fn SectionHeading(
     #[prop(into)] id: String,
     #[prop(into)] title: String,
+    /// One sentence saying what the section answers.
+    #[prop(optional, into)]
+    lede: Option<String>,
+    /// A small caps line above the title, for a section whose figures are
+    /// true as of one moment rather than continuously.
+    #[prop(optional, into)]
+    stamp: Option<String>,
 ) -> impl IntoView {
-    view! {
-        <h2 id=id class="text-base text-white/60 font-semibold pt-4 first:pt-0">{title}</h2>
+    // Plain grey label unless the caller gives it something to say. Four
+    // pages use the bare form and are left exactly as they were.
+    if lede.is_none() && stamp.is_none() {
+        return view! {
+            <h2 id=id class="text-base text-white/60 font-semibold pt-4 first:pt-0">{title}</h2>
+        }
+        .into_any();
     }
+    view! {
+        <div id=id class="pt-4 first:pt-0 border-t border-white/10">
+            {stamp.map(|s| view! {
+                <div class="text-[11px] uppercase tracking-[0.12em] text-[#f7931a]/80 font-semibold mb-1">
+                    {s}
+                </div>
+            })}
+            <h2 class="text-xl text-white font-semibold tracking-tight">{title}</h2>
+            {lede.map(|l| view! {
+                <p class="text-sm text-white/55 mt-1 max-w-3xl leading-relaxed">{l}</p>
+            })}
+        </div>
+    }
+    .into_any()
 }
 
 // ---------------------------------------------------------------------------

@@ -9,8 +9,8 @@
 //!
 //! # Flow, not stock
 //!
-//! These count outputs **created**. 371.7 million P2TR outputs created is not
-//! 371.7 million exposed UTXOs, because most have since been spent. Conflating
+//! These count outputs **created**. 372.7 million P2TR outputs created is not
+//! 372.7 million exposed UTXOs, because most have since been spent. Conflating
 //! the two is the single easiest way to publish a wrong number on this subject,
 //! so every title, axis and caption says "created". A current balance needs a
 //! `dumptxoutset` snapshot, which is tier 2 and not built.

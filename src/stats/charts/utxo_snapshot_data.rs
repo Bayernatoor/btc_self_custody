@@ -1,12 +1,12 @@
 //! The unspent output set, measured once and committed.
 //!
 //! **Everything else on this site is a flow; this is the stock.** Every chart
-//! is derived from blocks, so it counts outputs *created*. 371.7 million
+//! is derived from blocks, so it counts outputs *created*. 372.7 million
 //! Taproot outputs have been created and 52.9 million are unspent, and
 //! conflating the two is the easiest way to publish a wrong number on this
 //! subject.
 //!
-//! The figures come from `dumptxoutset` on our own node, parsed by
+//! The figures come from `dumptxoutset` on my own node, parsed by
 //! `src/bin/parse_utxo_snapshot.rs`. They live here as constants rather than
 //! in the database because they are reference data refreshed a few times a
 //! year, not something the droplet needs to recompute or sync.
@@ -24,7 +24,7 @@
 
 use serde_json::{json, Value};
 
-use super::{MULTISIG_COLOR, P2PK_COLOR, P2TR_COLOR};
+use super::{tooltip_axis, MULTISIG_COLOR, P2PK_COLOR, P2TR_COLOR};
 
 /// When the snapshot was taken, as the page states it.
 pub const TAKEN: &str = "11 November 2026";
@@ -35,6 +35,19 @@ pub const BASE_HASH: &str =
 
 /// Unspent outputs in the whole set.
 pub const TOTAL_UTXOS: u64 = 163_370_361;
+/// Taproot outputs ever created, as of `BASE_HEIGHT`.
+///
+/// Read from the blocks table, not from the snapshot, because the snapshot
+/// knows only what survives. Stated at the snapshot's own height so it is a
+/// fixed fact rather than a number that moves every ten minutes:
+///
+/// ```text
+/// SELECT SUM(p2tr_count) FROM blocks WHERE height <= 975464;
+/// ```
+///
+/// It sits beside the 52.9 million Taproot outputs still unspent, and the gap
+/// between the two is the whole reason this module exists.
+pub const P2TR_CREATED: u64 = 372_725_872;
 /// Satoshis in the whole set.
 ///
 /// Verified against `gettxoutsetinfo none 975464`, which returns the total at
@@ -120,6 +133,20 @@ pub const EXPOSED_BY_YEAR: &[(u16, &str, u64, u128)] = &[
     (2026, "P2TR", 3_334_610, 13_443_176_884_924),
     (2026, "Bare multisig", 89_103, 71_622_398),
 ];
+
+/// `TAKEN` with the month abbreviated, for the date chips on the cards.
+///
+/// Derived rather than a second constant, so a refresh that updates `TAKEN`
+/// cannot leave the chips quoting the previous snapshot.
+pub fn taken_short() -> String {
+    let mut parts = TAKEN.split(' ');
+    match (parts.next(), parts.next(), parts.next()) {
+        (Some(d), Some(m), Some(y)) if m.len() > 3 => {
+            format!("{d} {} {y}", &m[..3])
+        }
+        _ => TAKEN.to_string(),
+    }
+}
 
 /// Unspent outputs that publish a public key.
 pub fn exposed_utxos() -> u64 {
@@ -246,7 +273,7 @@ pub fn snapshot_exposed_by_year_chart() -> Value {
             "textStyle": { "color": "#e8e8e8", "fontSize": 11 }
         },
         "grid": { "left": 70, "right": 60, "top": 40, "bottom": 30, "containLabel": true },
-        "tooltip": { "trigger": "axis", "axisPointer": { "type": "shadow" } },
+        "tooltip": tooltip_axis(),
         "xAxis": {
             "type": "category",
             "data": years.iter().map(|y| y.to_string()).collect::<Vec<_>>(),
@@ -307,10 +334,10 @@ pub fn snapshot_composition_chart() -> Value {
             "textStyle": { "color": "#e8e8e8", "fontSize": 11 }
         },
         "grid": { "left": 100, "right": 40, "top": 34, "bottom": 34, "containLabel": true },
-        "tooltip": { "trigger": "axis", "axisPointer": { "type": "shadow" } },
+        "tooltip": tooltip_axis(),
         "xAxis": {
             "type": "value",
-            "name": "% of the set",
+            "name": "% of the UTXO set",
             "nameLocation": "middle",
             "nameGap": 28,
             "nameTextStyle": { "color": "#888", "fontSize": 11 },
@@ -543,5 +570,119 @@ mod tests {
             BY_KIND.len() - empty.len(),
             "{empty:?} should be in BY_KIND and off the chart"
         );
+    }
+    /// Every figure the page states in prose, re-derived from the constants.
+    ///
+    /// The snapshot section quotes about a dozen numbers in its copy, each one
+    /// typed by hand off a parse run. A refresh updates the constants, the
+    /// charts redraw, and the prose beside them goes on asserting last year's
+    /// measurement with nothing to say so. This is that guard.
+    ///
+    /// It caught one on arrival: the copy claimed "34,131 outputs created
+    /// before the first halving", a figure rolled up by block height, which
+    /// nothing committed here can reproduce. The chart plots years, so the
+    /// sentence now counts years and both agree.
+    #[test]
+    fn the_page_copy_states_the_measured_figures() {
+        const PAGE: &str =
+            include_str!("../../routes/observatory/post_quantum.rs");
+
+        let kind = |label: &str| -> (u64, u128) {
+            BY_KIND
+                .iter()
+                .find(|(k, _, _)| *k == label)
+                .map(|(_, c, v)| (*c, *v))
+                .unwrap_or_else(|| panic!("{label} is not a kind"))
+        };
+        let (p2pk_c, p2pk_v) = kind("P2PK");
+        let (p2tr_c, p2tr_v) = kind("P2TR");
+
+        // Everything created up to and including 2012, which is the span the
+        // copy calls Bitcoin's first four years.
+        let early: Vec<_> = EXPOSED_BY_YEAR
+            .iter()
+            .filter(|(y, ..)| *y <= 2012)
+            .collect();
+        let early_c: u64 = early.iter().map(|(_, _, c, _)| c).sum();
+        let early_v: u128 = early.iter().map(|(.., v)| v).sum();
+
+        let group = |n: u64| {
+            n.to_string()
+                .as_bytes()
+                .rchunks(3)
+                .rev()
+                .map(|c| String::from_utf8_lossy(c).to_string())
+                .collect::<Vec<_>>()
+                .join(",")
+        };
+        let pct = |a: u128, b: u128| 100.0 * a as f64 / b as f64;
+
+        // Only figures the copy types out. The snapshot total and the exposed
+        // counts are interpolated from these same constants at render time,
+        // so they cannot drift and there is nothing for a guard to catch.
+        let claims: &[(String, &str)] = &[
+            (group(p2pk_c), "P2PK outputs"),
+            (
+                format!("{:.2}%", pct(p2pk_c as u128, TOTAL_UTXOS as u128)),
+                "P2PK share of outputs",
+            ),
+            (
+                format!("{:.1}%", pct(p2pk_v, TOTAL_SATS)),
+                "P2PK share of value",
+            ),
+            (
+                format!("{:.1} BTC", p2pk_v as f64 / 1e8 / p2pk_c as f64),
+                "average P2PK",
+            ),
+            (
+                format!("{:.3} BTC", p2tr_v as f64 / 1e8 / p2tr_c as f64),
+                "average Taproot",
+            ),
+            (group(early_c), "outputs from the first four years"),
+            (
+                format!("{:.2} million BTC", early_v as f64 / 1e8 / 1e6),
+                "value in them",
+            ),
+            (
+                format!("{:.0}%", pct(early_v, exposed_sats())),
+                "their share of exposed value",
+            ),
+            (
+                format!("{:.1}%", pct(early_v, TOTAL_SATS)),
+                "their share of all bitcoin",
+            ),
+        ];
+        let missing: Vec<String> = claims
+            .iter()
+            .filter(|(figure, _)| !PAGE.contains(figure.as_str()))
+            .map(|(figure, what)| format!("{figure} ({what})"))
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "the snapshot copy no longer states these measured figures, so \
+             it is quoting an older parse: {missing:?}"
+        );
+    }
+    /// The chip date is the same date as the heading, just shorter.
+    #[test]
+    fn the_short_date_is_the_same_date() {
+        let short = taken_short();
+        let (d, rest) = TAKEN.split_once(' ').expect("a day and a month");
+        let (month, year) = rest.split_once(' ').expect("a month and a year");
+        assert!(
+            short.starts_with(d) && short.ends_with(year),
+            "{short:?} is not {TAKEN:?} with the month shortened"
+        );
+        assert!(
+            month.starts_with(
+                short
+                    .trim_start_matches(d)
+                    .trim()
+                    .trim_end_matches(year)
+                    .trim()
+            ),
+            "{short:?} abbreviates to something {month:?} does not start with"
+        );
+        assert!(short.len() <= TAKEN.len(), "the short form is not shorter");
     }
 }
