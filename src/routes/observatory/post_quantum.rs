@@ -347,7 +347,7 @@ fn SnapshotSection() -> impl IntoView {
                     "34,178 outputs created in Bitcoin's first four years hold 1.71 million BTC
                      between them: 88% of all the exposed bitcoin, and 8.5% of every bitcoin that
                      exists. The dashed line is a running total, measured against all the exposed
-                     bitcoin rather than against the year beside it: 60% of it was already sitting
+                     bitcoin: 60% of it was already sitting
                      in its output by the end of 2009, 88% by 2011, and then it barely moves for a
                      decade.
                      Almost all of it is P2PK, block rewards paid straight to a raw public key,
@@ -444,7 +444,8 @@ fn FlowStockPivot() -> impl IntoView {
                 <p class="text-sm text-white/70 leading-relaxed">
                     "Only the outputs nobody has "
                     <strong class="text-white/90">"spent"</strong>
-                    ", frozen at one block. Of those Taproot outputs, "
+                    ", frozen at block "{thousands(snap::BASE_HEIGHT)}
+                    ". Of those Taproot outputs, "
                     {format!("{:.1}", taproot_unspent as f64 / 1e6)}
                     " million are still there; the rest were spent and no longer exist."
                 </p>
