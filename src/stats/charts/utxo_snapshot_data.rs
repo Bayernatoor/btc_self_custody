@@ -566,12 +566,25 @@ mod tests {
         assert_eq!(coins, TOTAL_UTXOS);
         assert_eq!(sats, TOTAL_SATS);
         for (label, count, value) in BY_KIND {
+            // A type the parse never saw is zero, not missing. `P2A` is
+            // exactly that and the table records it as a measurement, so
+            // panicking here failed the verification on a correct snapshot.
             let (c, v) = by_kind
                 .iter()
                 .find(|(k, _)| k.eq_ignore_ascii_case(label))
                 .map(|(_, v)| *v)
-                .unwrap_or_else(|| panic!("{label} absent from the file"));
+                .unwrap_or((0, 0));
             assert_eq!((c, v), (*count, *value), "{label} disagrees");
+        }
+        // And nothing the parse saw may be missing from the table.
+        for (label, (c, v)) in &by_kind {
+            assert!(
+                BY_KIND
+                    .iter()
+                    .any(|(l, _, _)| l.eq_ignore_ascii_case(label)),
+                "the file holds {c} {label} outputs worth {v} sats and \
+                 BY_KIND has no row for them"
+            );
         }
     }
     /// A type with no unspent outputs is in the table and not on the chart.
@@ -607,6 +620,24 @@ mod tests {
     /// sentence now counts years and both agree.
     #[test]
     fn the_page_copy_states_the_measured_figures() {
+        // Four places quote these figures, and three of them are the ones
+        // nobody looks at again: the meta description, the crawlable SEO
+        // paragraph, the JSON-LD dataset and llms.txt. A refresh that
+        // updates the constants and the visible copy would leave all three
+        // asserting last year's snapshot to search engines and to models.
+        const SOURCES: &[(&str, &str)] = &[
+            (
+                "post_quantum.rs",
+                include_str!("../../routes/observatory/post_quantum.rs"),
+            ),
+            (
+                "dataset-post-quantum.json",
+                include_str!(
+                    "../../../assets/schema/dataset-post-quantum.json"
+                ),
+            ),
+            ("llms.txt", include_str!("../../../assets/llms.txt")),
+        ];
         const PAGE: &str =
             include_str!("../../routes/observatory/post_quantum.rs");
 
@@ -697,6 +728,48 @@ mod tests {
             missing.is_empty(),
             "the snapshot copy no longer states these measured figures, so \
              it is quoting an older parse: {missing:?}"
+        );
+
+        // The headline pair, which every off-page description repeats.
+        let headline: &[(String, &str)] = &[
+            (group(exposed_utxos()), "exposed outputs"),
+            (group(exposed_sats() as u64 / 100_000_000), "exposed BTC"),
+        ];
+        // Pull the two metadata strings out of the page source and treat
+        // each as its own source. Checking the file as a whole let a stale
+        // meta description hide behind a correct `seo_text` three hundred
+        // lines away, which is exactly the pair most likely to drift apart.
+        let between = |src: &'static str, after: &str| -> String {
+            src.split_once(after)
+                .and_then(|(_, rest)| rest.split_once('"'))
+                .map(|(v, _)| v.to_string())
+                .unwrap_or_default()
+        };
+        let page = SOURCES[0].1;
+        let meta = between(page, "<Meta name=\"description\" content=\"");
+        let seo = between(page, "seo_text=\"");
+        assert!(
+            meta.len() > 80 && seo.len() > 80,
+            "could not read the meta description ({}) or seo_text ({}) out \
+             of the page; the guard below is checking nothing",
+            meta.len(),
+            seo.len()
+        );
+        let mut sources: Vec<(&str, &str)> = SOURCES.to_vec();
+        sources.push(("meta description", meta.as_str()));
+        sources.push(("seo_text", seo.as_str()));
+
+        let mut stale = Vec::new();
+        for (name, src) in &sources {
+            for (figure, what) in headline {
+                if !src.contains(figure.as_str()) {
+                    stale.push(format!("{name}: {figure} ({what})"));
+                }
+            }
+        }
+        assert!(
+            stale.is_empty(),
+            "these quote the snapshot but not its current figures: {stale:?}"
         );
     }
     /// The chip date is the same date as the heading, just shorter.

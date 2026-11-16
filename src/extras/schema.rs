@@ -92,6 +92,9 @@ pub mod static_docs {
     /// BIP-signaling `Dataset`, on the signaling page.
     pub const DATASET_SIGNALING: &str =
         include_str!("../../assets/schema/dataset-signaling.json");
+    /// Public-key-exposure `Dataset`, on the post-quantum chart page.
+    pub const DATASET_POST_QUANTUM: &str =
+        include_str!("../../assets/schema/dataset-post-quantum.json");
     /// `Article` for the embedding-protocols guide.
     pub const ARTICLE_PROTOCOLS: &str =
         include_str!("../../assets/schema/article-protocols.json");
@@ -107,6 +110,7 @@ pub mod static_docs {
         ("observatory", OBSERVATORY),
         ("dataset-embedded", DATASET_EMBEDDED),
         ("dataset-signaling", DATASET_SIGNALING),
+        ("dataset-post-quantum", DATASET_POST_QUANTUM),
         ("article-protocols", ARTICLE_PROTOCOLS),
         ("article-methodology", ARTICLE_METHODOLOGY),
         ("faq", FAQ),
@@ -339,6 +343,7 @@ mod tests {
             ("article-methodology", "/observatory/learn/methodology"),
             ("dataset-embedded", "/observatory/charts/embedded"),
             ("dataset-signaling", "/observatory/signaling"),
+            ("dataset-post-quantum", "/observatory/charts/post-quantum"),
         ];
         for (name, path) in expected {
             let doc =

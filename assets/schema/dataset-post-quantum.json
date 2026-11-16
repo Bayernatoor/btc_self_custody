@@ -1,0 +1,20 @@
+{
+ "@context": "https://schema.org",
+ "@type": "Dataset",
+ "name": "Bitcoin Public Key Exposure Analytics",
+ "description": "Which Bitcoin outputs have published a public key on chain, measured from a full Bitcoin Core node. Covers outputs created per block and per day by type (P2PK, bare multisig and Taproot publish a key when created; P2PKH, P2SH, P2WPKH and P2WSH publish only a hash), weighted both by output count and by the bitcoin in them. Includes a dumptxoutset snapshot of the unspent transaction output set at block 975,464, reconciled to the satoshi against gettxoutsetinfo: 55,611,217 unspent outputs carrying a public key, holding 1,935,871 BTC, broken down by output type and by the year each output was created. Measures exposure by construction only and does not count public keys revealed through address reuse.",
+ "url": "https://www.wehodlbtc.com/observatory/charts/post-quantum",
+ "temporalCoverage": "2009-01-03/..",
+ "variableMeasured": [
+  "Share of outputs created that publish a public key",
+  "Share of bitcoin created that is paid into outputs publishing a public key",
+  "Unspent outputs by output type",
+  "Bitcoin held in unspent outputs by output type",
+  "Exposed bitcoin by the year the output was created"
+ ],
+ "isAccessibleForFree": true,
+ "creator": {
+  "@type": "Organization",
+  "name": "We Hodl BTC"
+ }
+}

@@ -13,6 +13,7 @@ use super::components::*;
 use super::helpers::chart_desc;
 use super::shared::*;
 use crate::chart_memo;
+use crate::extras::schema::{static_docs, StaticJsonLd};
 
 /// Thousands separators, because every figure in this section is large enough
 /// to be misread by an order of magnitude without them.
@@ -62,12 +63,16 @@ pub fn PostQuantumChartsPage() -> impl IntoView {
 
     view! {
         <Title text="Bitcoin Post-Quantum Exposure: Which Outputs Publish a Public Key | We Hodl BTC"/>
-        <Meta name="description" content="Which Bitcoin outputs publish a public key on chain, measured from my own Bitcoin node. P2PK, bare multisig and Taproot expose a key when created; P2PKH, P2SH and SegWit v0 publish only a hash. Counts outputs created, not coins held."/>
+        <Meta name="description" content="Which Bitcoin outputs publish a public key on chain, measured from my own node. 55,611,217 unspent outputs hold 1,935,871 BTC with their key already exposed."/>
         <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/charts/post-quantum"/>
+        // Server-rendered, like the embedded-data and signaling datasets, so a
+        // consumer that does not run JavaScript still sees what this page
+        // measures.
+        <StaticJsonLd doc=static_docs::DATASET_POST_QUANTUM/>
         <ChartPageLayout
             title="Post-Quantum"
             description="Public key exposure by output type, by value, and across the unspent output set"
-            seo_text="Quantum risk in Bitcoin is a question about public keys rather than addresses. An algorithm that recovers a private key from a public key only matters for coins whose public key has appeared on chain. Three output types publish one the moment they are created: P2PK and bare multisig carry keys in the output script, and a Taproot output is itself a tweaked public key. P2PKH, P2SH, P2WPKH and P2WSH publish only a hash, and reveal a key when they are spent. These charts count outputs created, measured from my own Bitcoin node, and say nothing about when or whether any of it becomes exploitable."
+            seo_text="Quantum risk in Bitcoin is a question about public keys rather than addresses. An algorithm that recovers a private key from a public key only matters for coins whose public key has appeared on chain. Three output types publish one the moment they are created: P2PK and bare multisig carry keys in the output script, and a Taproot output is itself a tweaked public key. P2PKH, P2SH, P2WPKH and P2WSH publish only a hash, and reveal a key when they are spent. The first charts count outputs as they are created, by number and by the bitcoin paid into them. The section below them measures the unspent transaction output set instead, taken with dumptxoutset at block 975,464 and reconciled to the satoshi against Bitcoin Core's own accounting: 55,611,217 unspent outputs carry a public key and hold 1,935,871 BTC between them, 88% of it placed there before 2013. Everything here is measured from my own Bitcoin node, counts exposure by construction only, and says nothing about when or whether any of it becomes exploitable."
             intro=move || view! {
                 // The warning rides on the summary line so it cannot be
                 // missed; the reasoning sits behind the toggle so it cannot
@@ -174,9 +179,9 @@ pub fn PostQuantumChartsPage() -> impl IntoView {
                                     <p class="mb-2">
                                         "The year shown is when each output was "
                                         <strong class="text-white/90">"created"</strong>
-                                        ", not when anything last moved. An output made in 2009 and never spent has sat
-                                         untouched for seventeen years, and nothing on chain says whether the key was
-                                         lost or whether nobody chose to spend it."
+                                        ", not when anything last moved. An output made in 2009 and never spent has not
+                                         moved since, and nothing on chain says whether the key was lost or whether
+                                         nobody chose to spend it."
                                     </p>
                                     <p class="mb-2">
                                         "That distinction protects less than it sounds like it should. The public key
@@ -432,9 +437,7 @@ fn FlowStockPivot() -> impl IntoView {
                 <p class="text-sm text-white/70 leading-relaxed">
                     "Every output the chain has ever "
                     <strong class="text-white/90">"created"</strong>
-                    ", seventeen years of them, redrawn as each new block arrives. "
-                    {format!("{:.1}", snap::P2TR_CREATED as f64 / 1e6)}
-                    " million Taproot outputs have been created since 2021."
+                    ", from the genesis block onward, redrawn as each new block arrives."
                 </p>
             </div>
             <div class="rounded-xl border border-[#f7931a]/25 bg-[#f7931a]/[0.04] px-4 py-3">
@@ -445,7 +448,8 @@ fn FlowStockPivot() -> impl IntoView {
                     "Only the outputs nobody has "
                     <strong class="text-white/90">"spent"</strong>
                     ", frozen at block "{thousands(snap::BASE_HEIGHT)}
-                    ". Of those Taproot outputs, "
+                    ". Of the "{format!("{:.1}", snap::P2TR_CREATED as f64 / 1e6)}
+                    " million Taproot outputs created by then, "
                     {format!("{:.1}", taproot_unspent as f64 / 1e6)}
                     " million are still there; the rest were spent and no longer exist."
                 </p>
