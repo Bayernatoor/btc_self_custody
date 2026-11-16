@@ -66,7 +66,7 @@ pub fn PostQuantumChartsPage() -> impl IntoView {
         <Link rel="canonical" href="https://www.wehodlbtc.com/observatory/charts/post-quantum"/>
         <ChartPageLayout
             title="Post-Quantum"
-            description="Which outputs have published a public key on chain, and which have published only a hash"
+            description="Public key exposure by output type, by value, and across the unspent output set"
             seo_text="Quantum risk in Bitcoin is a question about public keys rather than addresses. An algorithm that recovers a private key from a public key only matters for coins whose public key has appeared on chain. Three output types publish one the moment they are created: P2PK and bare multisig carry keys in the output script, and a Taproot output is itself a tweaked public key. P2PKH, P2SH, P2WPKH and P2WSH publish only a hash, and reveal a key when they are spent. These charts count outputs created, measured from my own Bitcoin node, and say nothing about when or whether any of it becomes exploitable."
             intro=move || view! {
                 // The warning rides on the summary line so it cannot be
@@ -140,15 +140,25 @@ pub fn PostQuantumChartsPage() -> impl IntoView {
                             <ChartCard title="Exposure by Construction" description=chart_desc(range, "Share of outputs created whose public key is on chain from the moment they exist", "Share of outputs created whose public key is on chain, totalled over each day") chart_id="chart-pq-exposure" option=exposure_option/>
                             <ChartCard title="P2PK Outputs Created" description=chart_desc(range, "Outputs paying a raw public key, the oldest exposed form, still created today", "Outputs paying a raw public key, averaged per block over each day") chart_id="chart-pq-p2pk-creation" option=p2pk_option/>
 
+                            // The rule is the boundary, the pivot explains
+                            // it, and the heading starts the new section.
+                            <div class="border-t border-white/10 pt-6">
+                                <FlowStockPivot/>
+                            </div>
                             <SectionHeading
+                                flush=true
                                 id="section-snapshot"
-                                title="What is still unspent"
+                                title="Exposure in the coins that exist today"
                                 stamp=format!(
-                                    "As of {} \u{b7} block {}",
+                                    "As of {}",
                                     crate::stats::charts::utxo_snapshot_data::TAKEN,
+                                )
+                                lede=format!(
+                                    "Every unspent output as of block {}: what type each one is, \
+                                     how much bitcoin sits in it, and when the ones carrying a \
+                                     public key were created.",
                                     thousands(crate::stats::charts::utxo_snapshot_data::BASE_HEIGHT),
                                 )
-                                lede="The same question asked of the coins that are still there, rather than of every output ever created. These figures are a single measurement, not a live reading."
                             />
                             <SnapshotSection/>
 
@@ -159,16 +169,27 @@ pub fn PostQuantumChartsPage() -> impl IntoView {
                                 <Caveat summary=view! {
                                     "None of this is a count of bitcoin "
                                     <strong class="text-white/90">"at risk"</strong>
-                                    ": these are creation years, reuse is not counted, and a lost key cannot be stolen."
+                                    ": these are creation years, reuse is not counted, and exposure is not the same as vulnerability."
                                 }.into_any()>
                                     <p class="mb-2">
                                         "The year shown is when each output was "
                                         <strong class="text-white/90">"created"</strong>
                                         ", not when anything last moved. An output made in 2009 and never spent has sat
-                                         untouched for seventeen years, and nothing on chain says whether that is
-                                         because the private key was lost or because nobody chose to spend it. A coin
-                                         whose key is lost cannot be stolen in any sense that matters to whoever once
-                                         held it, so none of this is a count of bitcoin at risk."
+                                         untouched for seventeen years, and nothing on chain says whether the key was
+                                         lost or whether nobody chose to spend it."
+                                    </p>
+                                    <p class="mb-2">
+                                        "That distinction protects less than it sounds like it should. The public key
+                                         is on chain either way, and an attacker deriving a key from it never needs the
+                                         owner's copy. A coin nobody is watching is also the one least likely to ever be
+                                         moved behind a hash, so on this chart the lost coins are the softest target
+                                         rather than the safest."
+                                    </p>
+                                    <p class="mb-2">
+                                        "It is still not a count of bitcoin "
+                                        <strong class="text-white/90">"at risk"</strong>
+                                        ", because nothing here says a published key can be broken, or when. This page
+                                         measures what is exposed and stops there."
                                     </p>
                                     <p>
                                         "It is also still exposure "
@@ -226,11 +247,6 @@ fn SnapshotSection() -> impl IntoView {
         .unwrap_or_default()
     });
 
-    let taproot_unspent = snap::BY_KIND
-        .iter()
-        .find(|(k, _, _)| *k == "P2TR")
-        .map(|(_, c, _)| *c)
-        .unwrap_or(0);
     let exposed_utxos = snap::exposed_utxos();
     let exposed_btc = snap::exposed_sats() as f64 / 1e8;
     let pct_utxos = 100.0 * exposed_utxos as f64 / snap::TOTAL_UTXOS as f64;
@@ -254,16 +270,6 @@ fn SnapshotSection() -> impl IntoView {
                     " outputs in that file was decoded and added up, and the total comes to the same
                      satoshi Bitcoin Core reports for that block."
                 </p>
-                <p>
-                    "Every chart above counts outputs at the moment they were "
-                    <strong class="text-white/90">"created"</strong>
-                    ", which is a different number entirely. By that same block "
-                    {format!("{:.1}", snap::P2TR_CREATED as f64 / 1e6)}
-                    " million Taproot outputs had been created since 2021, and only "
-                    {format!("{:.1}", taproot_unspent as f64 / 1e6)}
-                    " million of them were still unspent. The rest have been spent and no longer
-                     exist as coins."
-                </p>
             </Caveat>
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -272,7 +278,7 @@ fn SnapshotSection() -> impl IntoView {
                         <div class="text-2xl font-semibold text-[#f7931a]">
                             {thousands(exposed_utxos)}
                         </div>
-                        <span class="ml-auto shrink-0 text-[10px] uppercase tracking-wider text-white/40 border border-white/10 rounded px-1.5 py-0.5 mt-1">
+                        <span class="ml-auto shrink-0 text-[10px] uppercase tracking-wider text-[#8899aa] border border-white/20 rounded px-1.5 py-0.5 mt-1">
                             {snap::taken_short()}
                         </span>
                     </div>
@@ -286,7 +292,7 @@ fn SnapshotSection() -> impl IntoView {
                         <div class="text-2xl font-semibold text-[#f7931a]">
                             {format!("{} BTC", thousands(exposed_btc as u64))}
                         </div>
-                        <span class="ml-auto shrink-0 text-[10px] uppercase tracking-wider text-white/40 border border-white/10 rounded px-1.5 py-0.5 mt-1">
+                        <span class="ml-auto shrink-0 text-[10px] uppercase tracking-wider text-[#8899aa] border border-white/20 rounded px-1.5 py-0.5 mt-1">
                             {snap::taken_short()}
                         </span>
                     </div>
@@ -298,20 +304,21 @@ fn SnapshotSection() -> impl IntoView {
             </div>
 
             <div class="rounded-xl border border-white/10 bg-white/[0.02] p-4">
-                <div class="flex items-baseline gap-3">
+                <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                     <h3 class="text-base font-semibold text-white/90">
                         "The UTXO Set by Output Type"
                     </h3>
-                    <span class="ml-auto shrink-0 text-[10px] uppercase tracking-wider text-white/40 border border-white/10 rounded px-1.5 py-0.5">
+                    <span class="sm:ml-auto shrink-0 text-[10px] uppercase tracking-wider text-[#8899aa] border border-white/20 rounded px-1.5 py-0.5">
                         {snap::taken_short()}
                     </span>
                 </div>
                 <p class="text-sm text-white/60 mt-1 mb-2">
-                    "How many unspent outputs each address type holds, against how much bitcoin is
-                     in them"
+                    "Every output type in the set, by share of outputs and share of bitcoin. The
+                     three marked in orange are the ones that publish a public key; the rest publish
+                     only a hash."
                 </p>
                 <Chart id="chart-snapshot-composition" option=composition class="w-full h-[360px]"/>
-                <p class="text-sm text-white/70 leading-relaxed mt-2">
+                <ChartNote>
                     "Counting outputs and weighing them give opposite answers, and the two types
                      that publish a key are where they diverge most. P2PK, the original format that
                      pays straight to a public key with no address in between, is 0.03% of unspent
@@ -319,15 +326,15 @@ fn SnapshotSection() -> impl IntoView {
                      Taproot runs the other way, holding a third of the outputs and roughly one
                      percent of the value, averaging 0.004 BTC apiece, which is the size of a
                      typical inscription or dust output rather than a stored balance."
-                </p>
+                </ChartNote>
             </div>
 
             <div class="rounded-xl border border-white/10 bg-white/[0.02] p-4">
-                <div class="flex items-baseline gap-3">
+                <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                     <h3 class="text-base font-semibold text-white/90">
                         "Exposed Bitcoin by the Year It Was Created"
                     </h3>
-                    <span class="ml-auto shrink-0 text-[10px] uppercase tracking-wider text-white/40 border border-white/10 rounded px-1.5 py-0.5">
+                    <span class="sm:ml-auto shrink-0 text-[10px] uppercase tracking-wider text-[#8899aa] border border-white/20 rounded px-1.5 py-0.5">
                         {snap::taken_short()}
                     </span>
                 </div>
@@ -336,13 +343,16 @@ fn SnapshotSection() -> impl IntoView {
                      output was created"
                 </p>
                 <Chart id="chart-snapshot-era" option=era class="w-full h-[400px]"/>
-                <p class="text-sm text-white/70 leading-relaxed mt-2">
+                <ChartNote>
                     "34,178 outputs created in Bitcoin's first four years hold 1.71 million BTC
                      between them: 88% of all the exposed bitcoin, and 8.5% of every bitcoin that
-                     exists. The dashed line reaches 88% at 2012 and then barely moves for a decade.
+                     exists. The dashed line is a running total, measured against all the exposed
+                     bitcoin rather than against the year beside it: 60% of it was already sitting
+                     in its output by the end of 2009, 88% by 2011, and then it barely moves for a
+                     decade.
                      Almost all of it is P2PK, block rewards paid straight to a raw public key,
                      which is simply how mined coins were paid out in the earliest years."
-                </p>
+                </ChartNote>
             </div>
 
         </div>
@@ -359,9 +369,9 @@ fn SnapshotSection() -> impl IntoView {
 fn Caveat(#[prop(into)] summary: AnyView, children: Children) -> impl IntoView {
     view! {
         <details class="group rounded-xl border border-white/10 bg-[#0d2137] overflow-hidden">
-            <summary class="cursor-pointer list-none select-none px-4 py-3 flex items-baseline gap-4 hover:bg-white/[0.03] [&::-webkit-details-marker]:hidden">
+            <summary class="cursor-pointer list-none select-none px-4 py-3 flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-4 hover:bg-white/[0.03] [&::-webkit-details-marker]:hidden">
                 <span class="text-sm text-white/70 leading-relaxed">{summary}</span>
-                <span class="ml-auto shrink-0 text-xs text-[#f7931a] whitespace-nowrap">
+                <span class="sm:ml-auto shrink-0 text-xs text-[#f7931a] whitespace-nowrap">
                     "How this is measured"
                     <span class="inline-block ml-1 transition-transform group-open:rotate-180">
                         "\u{25be}"
@@ -372,5 +382,73 @@ fn Caveat(#[prop(into)] summary: AnyView, children: Children) -> impl IntoView {
                 {children()}
             </div>
         </details>
+    }
+}
+
+/// The paragraph under a chart: collapsed on a phone, open on a desktop.
+///
+/// See `style/tailwind.css` for the half of this that decides which.
+#[component]
+fn ChartNote(children: Children) -> impl IntoView {
+    view! {
+        <details class="note group mt-2">
+            <summary class="cursor-pointer list-none select-none text-xs text-[#f7931a] py-1 [&::-webkit-details-marker]:hidden">
+                "What this shows"
+                <span class="inline-block ml-1 transition-transform group-open:rotate-180">
+                    "\u{25be}"
+                </span>
+            </summary>
+            <div class="note-body text-sm text-white/70 leading-relaxed">
+                {children()}
+            </div>
+        </details>
+    }
+}
+
+/// The hinge between the two halves of the page.
+///
+/// Everything above it is a flow, everything below a stock, and a reader who
+/// misses that reads the snapshot figures as if they were the same
+/// measurement at a different resolution. It sits on the boundary, above the
+/// heading that crosses it, because "the charts above" has to be read while
+/// the charts above are still the ones in mind.
+#[component]
+fn FlowStockPivot() -> impl IntoView {
+    use crate::stats::charts::utxo_snapshot_data as snap;
+    let taproot_unspent = snap::BY_KIND
+        .iter()
+        .find(|(k, _, _)| *k == "P2TR")
+        .map(|(_, c, _)| *c)
+        .unwrap_or(0);
+    view! {
+        // The one thing a reader has to carry into this section: these
+        // charts answer a different question from every chart above, and
+        // the Taproot figures show how far apart the two answers are.
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
+                <div class="text-[11px] uppercase tracking-[0.12em] text-[#8899aa] font-semibold mb-1">
+                    "The charts above"
+                </div>
+                <p class="text-sm text-white/70 leading-relaxed">
+                    "Every output the chain has ever "
+                    <strong class="text-white/90">"created"</strong>
+                    ", seventeen years of them, redrawn as each new block arrives. "
+                    {format!("{:.1}", snap::P2TR_CREATED as f64 / 1e6)}
+                    " million Taproot outputs have been created since 2021."
+                </p>
+            </div>
+            <div class="rounded-xl border border-[#f7931a]/25 bg-[#f7931a]/[0.04] px-4 py-3">
+                <div class="text-[11px] uppercase tracking-[0.12em] text-[#f7931a]/80 font-semibold mb-1">
+                    "The charts below"
+                </div>
+                <p class="text-sm text-white/70 leading-relaxed">
+                    "Only the outputs nobody has "
+                    <strong class="text-white/90">"spent"</strong>
+                    ", frozen at one block. Of those Taproot outputs, "
+                    {format!("{:.1}", taproot_unspent as f64 / 1e6)}
+                    " million are still there; the rest were spent and no longer exist."
+                </p>
+            </div>
+        </div>
     }
 }

@@ -89,9 +89,14 @@ pub const EXPOSED_KINDS: &[&str] = &["P2PK", "Bare multisig", "P2TR"];
 /// The year is the *creation* height's year, not the year anything moved. A
 /// pre-2012 output in this table has been unspent ever since, which is the
 /// whole reason the table is interesting and also the reason the page must
-/// not call it "at risk": nothing here distinguishes lost from deliberately
-/// untouched, and coins that are lost cannot be stolen in any sense that
-/// matters to their owner.
+/// not call it "at risk": nothing here says a published key can be broken,
+/// or when.
+///
+/// **Do not write that a lost coin cannot be stolen.** It is true of a
+/// stolen key and false of a derived one, which is the only threat this
+/// section is about: the attacker works from the public key on chain and
+/// never needs the owner's copy. A lost coin is the softest target here,
+/// because nobody is watching it and nobody will move it behind a hash.
 pub const EXPOSED_BY_YEAR: &[(u16, &str, u64, u128)] = &[
     (2009, "P2PK", 23_217, 116_347_209_000_000),
     (2010, "P2PK", 10_388, 52_261_318_555_826),
@@ -182,9 +187,10 @@ fn btc(sats: u128) -> f64 {
 /// hanging downward and read as a negative quantity. A line has no baseline
 /// to get wrong.
 ///
-/// The line is cumulative share across all three types, which is the question
-/// a reader actually arrives with: how much of this was already sitting there
-/// by year X.
+/// The line is the running total as a share of **all** exposed bitcoin, so
+/// its denominator is `exposed_sats()` and not the year sitting beside it in
+/// the tooltip. Two readers in a row read the two as one figure, which is why
+/// the series carries its own denominator in its name.
 pub fn snapshot_exposed_by_year_chart() -> Value {
     let total = exposed_sats() as f64;
     // The floor is derived, not chosen. A hardcoded one silently clipped the
@@ -252,7 +258,7 @@ pub fn snapshot_exposed_by_year_chart() -> Value {
 
     let mut series = lines;
     series.push(json!({
-        "name": "Cumulative share",
+        "name": "Cumulative % of all exposed BTC",
         "type": "line",
         "data": cumulative,
         "yAxisIndex": 1,
@@ -277,24 +283,24 @@ pub fn snapshot_exposed_by_year_chart() -> Value {
         "xAxis": {
             "type": "category",
             "data": years.iter().map(|y| y.to_string()).collect::<Vec<_>>(),
-            "axisLabel": { "color": "#888", "fontSize": 10 },
+            "axisLabel": { "color": "#d4d4d4", "fontSize": 10 },
             "axisLine": { "lineStyle": { "color": "#333" } }
         },
         "yAxis": [
             {
                 "type": "log",
                 "name": "BTC",
-                "nameTextStyle": { "color": "#888", "fontSize": 11 },
+                "nameTextStyle": { "color": "#d4d4d4", "fontSize": 11 },
                 "min": floor,
-                "axisLabel": { "color": "#888", "fontSize": 10 },
-                "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.06)" } }
+                "axisLabel": { "color": "#d4d4d4", "fontSize": 10 },
+                "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.05)", "type": "dashed" } }
             },
             {
                 "type": "value",
-                "name": "cumulative %",
-                "nameTextStyle": { "color": "#888", "fontSize": 11 },
+                "name": "% of all exposed",
+                "nameTextStyle": { "color": "#d4d4d4", "fontSize": 11 },
                 "min": 0, "max": 100,
-                "axisLabel": { "color": "#888", "fontSize": 10, "formatter": "{value}%" },
+                "axisLabel": { "color": "#d4d4d4", "fontSize": 10, "formatter": "{value}%" },
                 "splitLine": { "show": false }
             }
         ],
@@ -316,7 +322,24 @@ pub fn snapshot_composition_chart() -> Value {
         BY_KIND.iter().filter(|(_, c, _)| *c > 0).collect();
     rows.sort_by_key(|r| std::cmp::Reverse(r.2));
 
-    let labels: Vec<&str> = rows.iter().map(|(k, _, _)| *k).collect();
+    // The chart shows every type in the set, not only the exposed ones, and
+    // nothing said so: a reader arriving from a section about public keys
+    // could read the P2WPKH bar as exposed. ECharts takes a per-category
+    // `textStyle` in `yAxis.data`, so the three key-publishing types are
+    // marked in the axis itself rather than in a caption nobody reads.
+    let labels: Vec<Value> = rows
+        .iter()
+        .map(|(k, _, _)| {
+            let exposed = EXPOSED_KINDS.contains(k);
+            json!({
+                "value": k,
+                "textStyle": {
+                    "color": if exposed { "#f7931a" } else { "#d4d4d4" },
+                    "fontWeight": if exposed { "bold" } else { "normal" },
+                }
+            })
+        })
+        .collect();
     let by_value: Vec<f64> = rows
         .iter()
         .map(|(_, _, v)| 100.0 * *v as f64 / TOTAL_SATS as f64)
@@ -340,15 +363,15 @@ pub fn snapshot_composition_chart() -> Value {
             "name": "% of the UTXO set",
             "nameLocation": "middle",
             "nameGap": 28,
-            "nameTextStyle": { "color": "#888", "fontSize": 11 },
-            "axisLabel": { "color": "#888", "fontSize": 10, "formatter": "{value}%" },
-            "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.06)" } }
+            "nameTextStyle": { "color": "#d4d4d4", "fontSize": 11 },
+            "axisLabel": { "color": "#d4d4d4", "fontSize": 10, "formatter": "{value}%" },
+            "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.05)", "type": "dashed" } }
         },
         "yAxis": {
             "type": "category",
             "data": labels,
             "inverse": true,
-            "axisLabel": { "color": "#888", "fontSize": 11 },
+            "axisLabel": { "fontSize": 11 },
             "axisLine": { "lineStyle": { "color": "#333" } }
         },
         "series": [
@@ -450,7 +473,7 @@ mod tests {
             .as_array()
             .expect("series")
             .iter()
-            .find(|s| s["name"] == "Cumulative share")
+            .find(|s| s["name"] == "Cumulative % of all exposed BTC")
             .expect("the line")["data"]
             .as_array()
             .expect("points");
@@ -606,6 +629,15 @@ mod tests {
         let early_c: u64 = early.iter().map(|(_, _, c, _)| c).sum();
         let early_v: u128 = early.iter().map(|(.., v)| v).sum();
 
+        // The running total's first point, which the note quotes to show
+        // what the dashed line is a share of.
+        let first_year = EXPOSED_BY_YEAR.first().map(|(y, ..)| *y).unwrap_or(0);
+        let first_v: u128 = EXPOSED_BY_YEAR
+            .iter()
+            .filter(|(y, ..)| *y == first_year)
+            .map(|(.., v)| v)
+            .sum();
+
         let group = |n: u64| {
             n.to_string()
                 .as_bytes()
@@ -651,6 +683,10 @@ mod tests {
                 format!("{:.1}%", pct(early_v, TOTAL_SATS)),
                 "their share of all bitcoin",
             ),
+            (
+                format!("{:.0}%", pct(first_v, exposed_sats())),
+                "the running total at its first year",
+            ),
         ];
         let missing: Vec<String> = claims
             .iter()
@@ -684,5 +720,115 @@ mod tests {
             "{short:?} abbreviates to something {month:?} does not start with"
         );
         assert!(short.len() <= TAKEN.len(), "the short form is not shorter");
+    }
+    /// Exactly the key-publishing types are marked on the axis.
+    ///
+    /// The chart carries every type in the set, so the mark is the only
+    /// thing separating the three that publish a public key from the six
+    /// that do not. Marking one too many would say an output is exposed when
+    /// it is not, which is the unsafe direction on this subject.
+    #[test]
+    fn the_axis_marks_the_exposed_types_and_no_others() {
+        let opt = snapshot_composition_chart();
+        let cats = opt["yAxis"]["data"].as_array().expect("categories");
+        let mut marked: Vec<&str> = Vec::new();
+        for c in cats {
+            let label = c["value"].as_str().expect("a label");
+            let colour = c["textStyle"]["color"].as_str().expect("a colour");
+            if colour == "#f7931a" {
+                marked.push(label);
+            }
+            assert_eq!(
+                EXPOSED_KINDS.contains(&label),
+                colour == "#f7931a",
+                "{label} is marked as exposed: {}, but is exposed: {}",
+                colour == "#f7931a",
+                EXPOSED_KINDS.contains(&label)
+            );
+        }
+        let mut want: Vec<&str> = EXPOSED_KINDS
+            .iter()
+            .copied()
+            .filter(|k| BY_KIND.iter().any(|(l, c, _)| l == k && *c > 0))
+            .collect();
+        want.sort_unstable();
+        marked.sort_unstable();
+        assert_eq!(marked, want, "the marked set is not the exposed set");
+    }
+    /// The year the running total first rounds to 88%, which the page states.
+    ///
+    /// The copy said 2012 and the data says 2011. Nothing checked it, because
+    /// the figure itself, 88%, is correct for both the first-four-years total
+    /// and the 2011 crossing, so the guard on figures could not see the wrong
+    /// year beside the right number.
+    #[test]
+    fn the_running_total_reaches_eighty_eight_at_2011() {
+        let total = exposed_sats();
+        let mut years: Vec<u16> =
+            EXPOSED_BY_YEAR.iter().map(|(y, ..)| *y).collect();
+        years.dedup();
+        let mut run: u128 = 0;
+        let mut first = None;
+        for y in years {
+            run += EXPOSED_BY_YEAR
+                .iter()
+                .filter(|(ry, ..)| *ry == y)
+                .map(|(.., v)| v)
+                .sum::<u128>();
+            if first.is_none() && (100.0 * run as f64 / total as f64) >= 87.5 {
+                first = Some(y);
+            }
+        }
+        assert_eq!(
+            first,
+            Some(2011),
+            "the page says the running total reaches 88% by 2011"
+        );
+    }
+    /// These two charts sit beside registry charts and have to look like
+    /// them, but nothing in `conformance.rs` covers them: the registry's
+    /// model is a function of blocks or days, and a snapshot is neither.
+    ///
+    /// Written after both shipped with `#888` axes, which read as disabled
+    /// next to the `#d4d4d4` of every chart above them on the same page.
+    #[test]
+    fn the_snapshot_charts_use_the_sites_axis_colours() {
+        for (name, opt) in [
+            ("by year", snapshot_exposed_by_year_chart()),
+            ("composition", snapshot_composition_chart()),
+        ] {
+            let json = opt.to_string();
+            for dim in ["#888", "#999", "#777", "rgba(255,255,255,0.06)"] {
+                assert!(
+                    !json.contains(dim),
+                    "{name} uses {dim}, which is dimmer than the axis \
+                     colour every other chart on the page uses"
+                );
+            }
+            // Every axis label and axis name is the shared colour, except
+            // the deliberate orange on the key-publishing categories.
+            let mut checked = 0;
+            for axis in ["xAxis", "yAxis"] {
+                let axes = match opt[axis].as_array() {
+                    Some(a) => a.clone(),
+                    None => vec![opt[axis].clone()],
+                };
+                for a in axes {
+                    for key in ["axisLabel", "nameTextStyle"] {
+                        if let Some(c) = a[key]["color"].as_str() {
+                            assert_eq!(
+                                c, "#d4d4d4",
+                                "{name} {axis}.{key} is {c}"
+                            );
+                            checked += 1;
+                        }
+                    }
+                }
+            }
+            // Two is the floor: the composition chart leaves its category
+            // axis without a colour of its own, because each label carries
+            // its own `textStyle` to mark the key-publishing types.
+            assert!(checked >= 2, "{name}: only {checked} axis colours seen");
+        }
     }
 }

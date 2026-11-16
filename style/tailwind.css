@@ -730,3 +730,23 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   .animate-fadeinone,
   .animate-slideup { animation: none; opacity: 1; }
 }
+
+/* A note under a chart: an accordion on a phone, plain prose from `sm` up.
+   The paragraph explaining each snapshot chart runs to a full screenful at
+   393px and pushed the next chart out of reach, but on a desktop it is the
+   payoff of the chart above it and should simply be read.
+
+   Done in CSS rather than by branching on a media query in Rust, because
+   `open` is an attribute: deciding it at render time means the server and the
+   hydrating client can disagree about the markup. Here the element is always
+   the same and only its presentation changes. */
+@media (min-width: 640px) {
+  details.note > summary { display: none; }
+  /* Chrome 131+ hides a closed `details` through the `::details-content`
+     pseudo-element with `content-visibility: hidden`, so overriding the
+     child's own `display` no longer reveals it: the note vanished at every
+     width instead of only on a phone. Both rules are here because engines
+     without the pseudo still honour the second. */
+  details.note::details-content { content-visibility: visible; }
+  details.note > .note-body { display: block; }
+}

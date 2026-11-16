@@ -157,6 +157,10 @@ pub fn SectionHeading(
     /// true as of one moment rather than continuously.
     #[prop(optional, into)]
     stamp: Option<String>,
+    /// Drop the rule above the title, for a section whose boundary is already
+    /// drawn by something sitting between it and the previous one.
+    #[prop(optional)]
+    flush: bool,
 ) -> impl IntoView {
     // Plain grey label unless the caller gives it something to say. Four
     // pages use the bare form and are left exactly as they were.
@@ -167,13 +171,13 @@ pub fn SectionHeading(
         .into_any();
     }
     view! {
-        <div id=id class="pt-4 first:pt-0 border-t border-white/10">
+        <div id=id class=if flush { "pt-0" } else { "pt-6 first:pt-0 border-t border-white/10" }>
             {stamp.map(|s| view! {
                 <div class="text-[11px] uppercase tracking-[0.12em] text-[#f7931a]/80 font-semibold mb-1">
                     {s}
                 </div>
             })}
-            <h2 class="text-xl text-white font-semibold tracking-tight">{title}</h2>
+            <h2 class="text-2xl sm:text-3xl text-white font-semibold tracking-tight">{title}</h2>
             {lede.map(|l| view! {
                 <p class="text-sm text-white/55 mt-1 max-w-3xl leading-relaxed">{l}</p>
             })}
