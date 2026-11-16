@@ -82,10 +82,17 @@ fi
 # RPC client init, ZMQ subscribe, mempool seed, and forward-ingestion
 # catch-up all run before /  serves. A single shot gambled against
 # variable startup time; previous deploys flagged a failure when the
-# binary was simply still warming up. Poll up to ~30s before giving up.
+# binary was simply still warming up. Poll up to ~60s before giving up.
+#
+# Sixty rather than thirty because a release that adds a column also
+# repopulates it: the script-type value migration rebuilds every
+# daily_blocks row before the listener binds, 5.7s on a desktop and
+# several times that on two vCPUs. It runs once per migrating release,
+# but a rollback triggered by a slow first boot reads as a broken deploy.
+# Costs nothing on a healthy deploy, which passes on the first attempt.
 if command -v curl >/dev/null 2>&1; then
     HEALTHY=0
-    for attempt in $(seq 1 15); do
+    for attempt in $(seq 1 30); do
         if curl -fsS -o /dev/null -m 5 http://127.0.0.1:8000/; then
             HEALTHY=1
             log "Health check passed on attempt ${attempt}"

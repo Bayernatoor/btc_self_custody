@@ -477,6 +477,17 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
                  ALTER TABLE daily_blocks ADD COLUMN total_multisig_value INTEGER NOT NULL DEFAULT 0;
                  ALTER TABLE daily_blocks ADD COLUMN total_subsidy INTEGER NOT NULL DEFAULT 0;",
             )?;
+            // Self-contained, for the reason the input-value migration below
+            // records: a column added at `DEFAULT 0` leaves every historical
+            // day reading zero, and the only thing that would have fixed it
+            // was a human remembering to run the repair bin. Value Exposed by
+            // Construction defaults to ALL, which is the daily arm, so the
+            // chart would have shipped reading 0% exposed for all of history.
+            // A full rebuild is under a second per thousand days here.
+            let days = rebuild_daily_blocks_force(conn)?;
+            tracing::info!(
+                "Rebuilt all {days} daily_blocks rows so the script-type value columns are populated"
+            );
         }
         if !daily_cols.contains("avg_brc20_bytes") {
             tracing::info!("Migrating daily_blocks: adding avg_brc20_bytes");
@@ -5217,6 +5228,51 @@ mod tests {
             "the 00:01 block belongs to the following day"
         );
         assert_eq!(daily_blocks_missing_days(&conn).unwrap(), 0);
+    }
+
+    /// A migration that adds a column must populate it.
+    ///
+    /// `DEFAULT 0` is not a value, it is the absence of one, and the only
+    /// thing that turned the four script-type value columns into real
+    /// numbers was a human remembering to run the repair bin. Value Exposed
+    /// by Construction defaults to ALL, which reads the daily rollup, so a
+    /// deploy without the rebuild would have published a chart reading 0%
+    /// exposed for the whole of history.
+    ///
+    /// Proved against a copy of the production database on 2026-11-16:
+    /// columns absent, migration run, 6,522 days rebuilt in 5.7 seconds.
+    #[test]
+    fn adding_the_value_columns_also_fills_them() {
+        let conn = setup_db();
+        insert_test_block(&conn, 1, 1713571200, 2_000_000, 100, 1000);
+        insert_test_block(&conn, 2, 1713600000, 4_000_000, 200, 2000);
+        refresh_daily_day(&conn, 1713571200).unwrap();
+
+        // `setup_db` has already migrated, so put the table back the way a
+        // droplet that has never seen this release would have it.
+        conn.execute_batch(
+            "ALTER TABLE daily_blocks DROP COLUMN total_p2pk_value;
+             ALTER TABLE daily_blocks DROP COLUMN total_p2tr_value;
+             ALTER TABLE daily_blocks DROP COLUMN total_multisig_value;
+             ALTER TABLE daily_blocks DROP COLUMN total_subsidy;",
+        )
+        .expect("drop the columns this release adds");
+
+        init_schema(&conn).expect("re-run the migration");
+
+        let subsidy: i64 = conn
+            .query_row(
+                "SELECT total_subsidy FROM daily_blocks WHERE day = '2024-04-20'",
+                [],
+                |r| r.get(0),
+            )
+            .expect("the day survived the migration");
+        assert!(
+            subsidy > 0,
+            "the migration added total_subsidy and left it at DEFAULT 0, so \
+             every daily-mode share divides by a denominator missing the \
+             block reward"
+        );
     }
 
     #[test]
