@@ -589,10 +589,17 @@ pub fn ObservatoryNav() -> impl IntoView {
             // the SSR/hydrate mismatch that conditional rendering via
             // <Show> triggers when use_location() is involved.
             <div
-                class="flex items-center justify-center gap-x-3 sm:gap-x-6 px-3 sm:px-5 py-1.5 rounded-full bg-white/[0.03] border border-white/[0.06]"
+                // Scrolls inside the pill rather than pushing the document
+                // wider than the viewport. At 393px the six items need 392px
+                // inside 345px of room, so they spilled past the right edge
+                // and every observatory chart page scrolled sideways by 8px.
+                // Centred once there is room for it, left-aligned when there
+                // is not, because centring overflowing flex content hides the
+                // first item off the left edge where it cannot be scrolled to.
+                class="flex items-center justify-start sm:justify-center gap-x-3 sm:gap-x-6 px-3 sm:px-5 py-1.5 rounded-full bg-white/[0.03] border border-white/[0.06] max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                 class:hidden=move || !on_charts.get()
             >
-                <span class="text-[10px] sm:text-[11px] uppercase tracking-widest text-white/20 mr-1 sm:mr-2">"Charts"</span>
+                <span class="text-[10px] sm:text-[11px] uppercase tracking-widest text-white/20 mr-1 sm:mr-2 shrink-0">"Charts"</span>
                 {charts.into_iter().map(|(href, label)| {
                     let href_str = href.to_string();
                     view! {
@@ -602,9 +609,9 @@ pub fn ObservatoryNav() -> impl IntoView {
                                 let path = location.pathname.get();
                                 let active = path.starts_with(&href_str);
                                 if active {
-                                    "text-xs sm:text-[13px] font-semibold text-[#f7931a] border-b border-[#f7931a]/50 pb-0.5 transition-all duration-200 whitespace-nowrap active:scale-95 active:opacity-70"
+                                    "text-xs sm:text-[13px] font-semibold text-[#f7931a] border-b border-[#f7931a]/50 pb-0.5 transition-all duration-200 whitespace-nowrap active:scale-95 active:opacity-70 shrink-0"
                                 } else {
-                                    "text-xs sm:text-[13px] font-medium text-white/30 hover:text-white/60 border-b border-transparent pb-0.5 transition-all duration-200 whitespace-nowrap active:scale-95 active:opacity-70"
+                                    "text-xs sm:text-[13px] font-medium text-white/30 hover:text-white/60 border-b border-transparent pb-0.5 transition-all duration-200 whitespace-nowrap active:scale-95 active:opacity-70 shrink-0"
                                 }
                             }
                         >

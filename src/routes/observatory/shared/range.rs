@@ -116,7 +116,7 @@ pub fn RangeSelector() -> impl IntoView {
     view! {
         <div class="flex flex-col gap-2">
             // Mobile: dropdown + label
-            <div class="flex sm:hidden items-center gap-2">
+            <div class="flex lg:hidden items-center gap-2">
                 <div class="relative inline-block">
                     <select
                         aria-label="Time range"
@@ -163,7 +163,7 @@ pub fn RangeSelector() -> impl IntoView {
                 <span class="text-xs text-white/40">{range_label}</span>
             </div>
             // Desktop: button grid + label
-            <div class="hidden sm:flex items-center">
+            <div class="hidden lg:flex items-center">
                 <div class="flex gap-1.5 bg-[#0a1a2e] rounded-xl p-1.5 border border-white/5">
                     {presets.into_iter().map(|r| {
                         let r_str = r.to_string();
