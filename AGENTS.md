@@ -335,7 +335,8 @@ gitignored, so nothing in it reaches a fresh clone or another machine.
   material for the Start9 and droplet setup goes in `docs/` as documentation, or stays local.
 - `master` is kept linear. Rebase feature branches; never merge master into one.
 - Never push without being asked. Stage work and hand over the commit command; GPG signing
-  fails in sandboxed runs.
+  fails in sandboxed runs. **The handed-over command takes `-s`**, so it carries a
+  `Signed-off-by` line: `git commit -s -m "..."`.
 - Comments explain why the current code is as it is, never how it got there.
 - Prefer writing under 50 lines to adding a dependency. Lock exact versions.
 - **That rule does not cover implementing a standard someone else has already vetted.** The point
