@@ -389,6 +389,19 @@ fn synthesize_block_value(block: &bitcoin::Block, height: u64) -> Value {
                     if ty == "multisig" {
                         spk["asm"] = json!(multisig_asm(&o.script_pubkey));
                     }
+                    // Core emits `address` on any output it can render one
+                    // for. Without it the sweep path produced an empty
+                    // `coinbase_payout_address` on every block while the
+                    // verbosity-2 path filled it, which is the two-paths-
+                    // disagree defect this synthesiser exists to prevent.
+                    // Absent for bare public keys and other scripts with no
+                    // address form, which is what Core does too.
+                    if let Ok(addr) = bitcoin::Address::from_script(
+                        &o.script_pubkey,
+                        bitcoin::Network::Bitcoin,
+                    ) {
+                        spk["address"] = json!(addr.to_string());
+                    }
                     json!({
                         // Core reports value in BTC, and the parser converts
                         // back to sats. Kept in BTC so the arithmetic is the
@@ -769,6 +782,13 @@ pub struct Block {
     pub taproot_tx_count: u64,
     /// Decoded ASCII text from the coinbase scriptSig.
     pub coinbase_text: String,
+    /// Address the coinbase pays its largest output to.
+    ///
+    /// Empty when the output is not address-shaped, which is normal for the
+    /// earliest blocks: they pay bare public keys. Stored rather than mapped
+    /// to a pool, because an address identifies a payout destination and only
+    /// a curated list turns that into a pool name.
+    pub coinbase_payout_address: String,
     /// 25th percentile fee rate in sat/vB.
     pub fee_rate_p25: f64,
     /// 75th percentile fee rate in sat/vB.
@@ -1257,6 +1277,7 @@ impl BitcoinRpc {
         // === Coinbase extraction: fees, miner ID, locktime, text ===
         let mut total_fees = 0u64;
         let mut coinbase_text = String::new();
+        let mut coinbase_payout_address = String::new();
         let mut coinbase_locktime = 0u64;
         let mut coinbase_sequence = 0xFFFF_FFFFu64;
         let mut miner = String::from("Unknown");
@@ -1275,6 +1296,7 @@ impl BitcoinRpc {
 
                 // Total fees = coinbase output value - block subsidy
                 let mut coinbase_value = 0u64;
+                let mut best_payout_sats = 0u64;
                 if let Some(vouts) = coinbase_tx["vout"].as_array() {
                     for vout in vouts {
                         let sats = vout["value"]
@@ -1282,6 +1304,28 @@ impl BitcoinRpc {
                             .map(|v| (v * 100_000_000.0).round() as u64)
                             .unwrap_or(0);
                         coinbase_value += sats;
+
+                        // Payout address: the coinbase's largest output.
+                        //
+                        // Not the first. Only 645 blocks since 2017 have a
+                        // single coinbase output; the rest carry two to
+                        // eight, and pools put the witness commitment or a
+                        // dust side output at vout[0]. The first output is
+                        // the payout only in the single-output era, which is
+                        // the era that motivated this column and is why
+                        // spot-checking 2015 blocks missed it.
+                        //
+                        // Guarded on an address being present, so a coinbase
+                        // paying a bare public key still stores empty rather
+                        // than reaching past it for a lesser output.
+                        if sats > best_payout_sats {
+                            if let Some(addr) =
+                                vout["scriptPubKey"]["address"].as_str()
+                            {
+                                best_payout_sats = sats;
+                                coinbase_payout_address = addr.to_string();
+                            }
+                        }
                         coinbase_output_count += 1;
                         if is_unspendable(
                             vout["scriptPubKey"]["hex"].as_str().unwrap_or(""),
@@ -2003,6 +2047,7 @@ impl BitcoinRpc {
             segwit_tx_count,
             taproot_tx_count,
             coinbase_text,
+            coinbase_payout_address,
             fee_rate_p25,
             fee_rate_p75,
         }
@@ -3271,6 +3316,79 @@ mod raw_parity {
                 start.elapsed().as_secs_f64()
             );
         }
+    }
+
+    /// The payout address is the coinbase's largest output, not its first.
+    ///
+    /// Measured against the node on 2026-11-17: over 120 blocks from
+    /// 976,000 the first output was the largest only 66 times, so a
+    /// first-output reading is wrong for 45% of modern blocks. Over 120
+    /// blocks from 367,800 it was right 112 times, which is why spot
+    /// checks in the 2015 era that motivated this column missed it.
+    ///
+    /// Both paths are checked. The raw sweep builds its own
+    /// verbosity-2-shaped value, and an earlier version of this change
+    /// emitted no address there at all while the JSON path worked.
+    ///
+    /// ```text
+    /// set -a; source .env; set +a
+    /// cargo test --features ssr payout_address_is_the_largest -- --ignored --nocapture
+    /// ```
+    #[tokio::test]
+    #[ignore]
+    async fn payout_address_is_the_largest_output() {
+        let Some(rpc) = rpc_from_env() else {
+            panic!("set BITCOIN_STATS_RPC_URL/USER/PASSWORD; source .env first")
+        };
+        // Heights chosen for shape, not for era: a bare-pubkey coinbase with
+        // no address at all, the F2Pool blocks whose tag the matcher misses,
+        // and multi-output modern blocks where the first output is not the
+        // payout.
+        let cases: &[(u64, &str)] = &[
+            (1, ""),
+            (360_138, "1KFHE7w8BhaENAswwryaoccDb6qcT6DbYY"),
+            (367_853, "1KFHE7w8BhaENAswwryaoccDb6qcT6DbYY"),
+            (367_885, "1KFHE7w8BhaENAswwryaoccDb6qcT6DbYY"),
+        ];
+        let mut bad = Vec::new();
+        for &(h, want) in cases {
+            let hash = rpc.get_block_hash(h).await.expect("getblockhash");
+            let json = rpc.get_block_fresh(&hash).await.expect("verbosity 2");
+            let raw = rpc.get_block_raw(&hash, h).await.expect("verbosity 0");
+            println!(
+                "  {h:>7}  json={:<44} raw={}",
+                json.coinbase_payout_address, raw.coinbase_payout_address
+            );
+            if json.coinbase_payout_address != want {
+                bad.push(format!(
+                    "{h}: json gave {:?}, want {want:?}",
+                    json.coinbase_payout_address
+                ));
+            }
+            if raw.coinbase_payout_address != json.coinbase_payout_address {
+                bad.push(format!(
+                    "{h}: raw {:?} != json {:?}",
+                    raw.coinbase_payout_address, json.coinbase_payout_address
+                ));
+            }
+        }
+
+        // And the property itself, over a live window: whatever is stored
+        // must be the address of the largest coinbase output.
+        let tip = rpc
+            .get_blockchain_info_fresh()
+            .await
+            .expect("getblockchaininfo")
+            .blocks;
+        for h in (tip - 40)..tip {
+            let hash = rpc.get_block_hash(h).await.expect("getblockhash");
+            let b = rpc.get_block_raw(&hash, h).await.expect("verbosity 0");
+            let v = rpc.get_block_fresh(&hash).await.expect("verbosity 2");
+            if b.coinbase_payout_address != v.coinbase_payout_address {
+                bad.push(format!("{h}: raw/json disagree"));
+            }
+        }
+        assert!(bad.is_empty(), "{bad:#?}");
     }
 
     /// The raw path must agree with the verbosity-2 path on every column a

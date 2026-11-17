@@ -8,6 +8,31 @@ needs that those do not: commands, the traps, and where to look.
 
 ## Commands
 
+### Stop `cargo leptos watch` before an agent session touches the data path
+
+**It writes to the same database and the same `target/site` the work does**,
+so a dev server left running during a schema or parser change corrupts both,
+silently and in ways the tests pass through. Twice on 2026-11-16:
+
+- A rebuild wrote `target/site/pkg` while watch was serving it, so the browser
+  fetched a `.js` and a `.wasm` from different builds and every observatory
+  page died with `tachys hydration.rs:163 unreachable` on a page nothing had
+  touched. It reads as "the last change broke everything".
+- `BACKFILL_VERSION` was bumped mid-change, watch restarted on the half-fixed
+  binary, and its sweep stamped **2,278 rows at the new version with 535 of
+  them empty**. `heights_needing_backfill` selects
+  `backfill_version < BACKFILL_VERSION`, so those rows were excluded from
+  every future sweep. The repair is another version bump, which costs a
+  full-chain re-sweep.
+
+The second one is the dangerous shape: a background writer stamping rows as
+done with values a later fix would have changed. Nothing fails, nothing warns,
+and the rows are unreachable afterwards.
+
+So: stop watch first, run the server by hand against a **copy** of the
+database when a change needs exercising, and bump the version again if a
+sweep ran on code that then changed.
+
     cargo leptos watch                  # dev server on 127.0.0.1:8000, live reload on 3002
     ./target/debug/we_hodl_btc          # the built binary, which listens on 3000, not 8000
     cargo leptos build --release         # production build

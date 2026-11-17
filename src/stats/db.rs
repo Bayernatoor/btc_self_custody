@@ -59,7 +59,7 @@ use super::rpc::Block;
 /// a full sweep, including a local `cargo leptos watch` or a debug binary run for
 /// an unrelated reason. Between a bump and a deliberate sweep, do not start the
 /// app.
-pub const BACKFILL_VERSION: u64 = 13;
+pub const BACKFILL_VERSION: u64 = 15;
 
 /// Type alias for the connection pool used throughout the stats module.
 pub type DbPool = r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>;
@@ -553,6 +553,21 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
         )?;
     }
 
+    // v14. The coinbase's largest output address, which is how a pool is
+    // identified
+    // when it does not tag its coinbase. F2Pool tagged 2015 blocks
+    // "Mined by <username>", so the tag matcher only caught the ones whose
+    // username happened to contain "f2pool" and left the rest Unknown; every
+    // one of them paid the same address. Stored rather than resolved into a
+    // pool name here, so the mapping stays a question the database can be
+    // re-asked as the address list improves, without another chain sweep.
+    if !has("coinbase_payout_address") {
+        tracing::info!("Migrating: adding v14 coinbase payout address");
+        conn.execute_batch(
+            "ALTER TABLE blocks ADD COLUMN coinbase_payout_address TEXT NOT NULL DEFAULT '';",
+        )?;
+    }
+
     // Last, after every ALTER above. This reads and rewrites data rather than
     // shaping the schema, and its rollup rebuild SELECTs the v10 and v11
     // columns added just above, so running it earlier fails with "no such
@@ -729,8 +744,9 @@ pub fn insert_blocks(
               tx_v1_count, tx_v2_count, tx_v3_count,
               p2pk_value, p2tr_value, multisig_value, brc20_bytes,
               coinbase_output_count, unspendable_output_count,
+              coinbase_payout_address,
               backfill_version)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36,?37,?38,?39,?40,?41,?42,?43,?44,?45,?46,?47,?48,?49,?50,?51,?52,?53,?54,?55,?56,?57,?58,?59,?60,?61,?62,?63,?64,?65,?66,?67,?68,?69,?70,?71,?72)",
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36,?37,?38,?39,?40,?41,?42,?43,?44,?45,?46,?47,?48,?49,?50,?51,?52,?53,?54,?55,?56,?57,?58,?59,?60,?61,?62,?63,?64,?65,?66,?67,?68,?69,?70,?71,?72,?73)",
         )?;
         for block in blocks {
             stmt.execute(params![
@@ -805,6 +821,7 @@ pub fn insert_blocks(
                 block.brc20_bytes,
                 block.coinbase_output_count,
                 block.unspendable_output_count,
+                block.coinbase_payout_address,
                 BACKFILL_VERSION,
             ])?;
         }
@@ -919,7 +936,7 @@ pub fn update_block_extras_raw(
     let mut updated = 0usize;
     {
         let mut stmt = tx.prepare_cached(
-            "UPDATE blocks SET version = ?1, total_fees = ?2, miner = ?3, coinbase_locktime = ?4, coinbase_sequence = ?5, segwit_spend_count = ?6, taproot_spend_count = ?7, omni_count = ?8, omni_bytes = ?9, counterparty_count = ?10, counterparty_bytes = ?11, runes_count = ?12, runes_bytes = ?13, data_carrier_count = ?14, data_carrier_bytes = ?15, p2pk_count = ?16, p2pkh_count = ?17, p2sh_count = ?18, p2wpkh_count = ?19, p2wsh_count = ?20, p2tr_count = ?21, multisig_count = ?22, unknown_script_count = ?23, input_count = ?24, output_count = ?25, rbf_count = ?26, witness_bytes = ?27, inscription_count = ?28, inscription_bytes = ?29, inscription_envelope_bytes = ?30, brc20_count = ?31, taproot_keypath_count = ?32, taproot_scriptpath_count = ?33, total_output_value = ?34, total_input_value = ?35, stamps_count = ?36, largest_tx_size = ?37, legacy_tx_count = ?38, segwit_tx_count = ?39, taproot_tx_count = ?40, coinbase_text = ?41, op_return_count = ?42, op_return_bytes = ?43, p2a_count = ?44, op_return_max_bytes = ?45, op_return_over_80_count = ?46, tx_v1_count = ?47, tx_v2_count = ?48, tx_v3_count = ?49, p2pk_value = ?50, p2tr_value = ?51, multisig_value = ?52, brc20_bytes = ?53, coinbase_output_count = ?54, unspendable_output_count = ?55, backfill_version = ?56 WHERE height = ?57 AND hash = ?58",
+            "UPDATE blocks SET version = ?1, total_fees = ?2, miner = ?3, coinbase_locktime = ?4, coinbase_sequence = ?5, segwit_spend_count = ?6, taproot_spend_count = ?7, omni_count = ?8, omni_bytes = ?9, counterparty_count = ?10, counterparty_bytes = ?11, runes_count = ?12, runes_bytes = ?13, data_carrier_count = ?14, data_carrier_bytes = ?15, p2pk_count = ?16, p2pkh_count = ?17, p2sh_count = ?18, p2wpkh_count = ?19, p2wsh_count = ?20, p2tr_count = ?21, multisig_count = ?22, unknown_script_count = ?23, input_count = ?24, output_count = ?25, rbf_count = ?26, witness_bytes = ?27, inscription_count = ?28, inscription_bytes = ?29, inscription_envelope_bytes = ?30, brc20_count = ?31, taproot_keypath_count = ?32, taproot_scriptpath_count = ?33, total_output_value = ?34, total_input_value = ?35, stamps_count = ?36, largest_tx_size = ?37, legacy_tx_count = ?38, segwit_tx_count = ?39, taproot_tx_count = ?40, coinbase_text = ?41, op_return_count = ?42, op_return_bytes = ?43, p2a_count = ?44, op_return_max_bytes = ?45, op_return_over_80_count = ?46, tx_v1_count = ?47, tx_v2_count = ?48, tx_v3_count = ?49, p2pk_value = ?50, p2tr_value = ?51, multisig_value = ?52, brc20_bytes = ?53, coinbase_output_count = ?54, unspendable_output_count = ?55, coinbase_payout_address = ?56, backfill_version = ?57 WHERE height = ?58 AND hash = ?59",
         )?;
         for block in blocks {
             updated += stmt.execute(params![
@@ -978,6 +995,7 @@ pub fn update_block_extras_raw(
                 block.brc20_bytes,
                 block.coinbase_output_count,
                 block.unspendable_output_count,
+                block.coinbase_payout_address,
                 BACKFILL_VERSION,
                 block.height,
                 block.hash
@@ -998,7 +1016,7 @@ pub fn update_block_extras(
     let tx = conn.unchecked_transaction()?;
     {
         let mut stmt = tx.prepare_cached(
-            "UPDATE blocks SET version = ?1, total_fees = ?2, miner = ?3, median_fee = ?4, median_fee_rate = ?5, coinbase_locktime = ?6, coinbase_sequence = ?7, segwit_spend_count = ?8, taproot_spend_count = ?9, omni_count = ?10, omni_bytes = ?11, counterparty_count = ?12, counterparty_bytes = ?13, runes_count = ?14, runes_bytes = ?15, data_carrier_count = ?16, data_carrier_bytes = ?17, p2pk_count = ?18, p2pkh_count = ?19, p2sh_count = ?20, p2wpkh_count = ?21, p2wsh_count = ?22, p2tr_count = ?23, multisig_count = ?24, unknown_script_count = ?25, input_count = ?26, output_count = ?27, rbf_count = ?28, witness_bytes = ?29, inscription_count = ?30, inscription_bytes = ?31, inscription_envelope_bytes = ?32, brc20_count = ?33, taproot_keypath_count = ?34, taproot_scriptpath_count = ?35, total_output_value = ?36, total_input_value = ?37, fee_rate_p10 = ?38, fee_rate_p90 = ?39, stamps_count = ?40, largest_tx_size = ?41, max_tx_fee = ?42, inscription_fees = ?43, runes_fees = ?44, legacy_tx_count = ?45, segwit_tx_count = ?46, taproot_tx_count = ?47, coinbase_text = ?48, fee_rate_p25 = ?49, fee_rate_p75 = ?50, op_return_count = ?51, op_return_bytes = ?52, p2a_count = ?53, op_return_max_bytes = ?54, op_return_over_80_count = ?55, tx_v1_count = ?56, tx_v2_count = ?57, tx_v3_count = ?58, p2pk_value = ?59, p2tr_value = ?60, multisig_value = ?61, brc20_bytes = ?62, coinbase_output_count = ?63, unspendable_output_count = ?64, backfill_version = ?65 WHERE height = ?66 AND hash = ?67",
+            "UPDATE blocks SET version = ?1, total_fees = ?2, miner = ?3, median_fee = ?4, median_fee_rate = ?5, coinbase_locktime = ?6, coinbase_sequence = ?7, segwit_spend_count = ?8, taproot_spend_count = ?9, omni_count = ?10, omni_bytes = ?11, counterparty_count = ?12, counterparty_bytes = ?13, runes_count = ?14, runes_bytes = ?15, data_carrier_count = ?16, data_carrier_bytes = ?17, p2pk_count = ?18, p2pkh_count = ?19, p2sh_count = ?20, p2wpkh_count = ?21, p2wsh_count = ?22, p2tr_count = ?23, multisig_count = ?24, unknown_script_count = ?25, input_count = ?26, output_count = ?27, rbf_count = ?28, witness_bytes = ?29, inscription_count = ?30, inscription_bytes = ?31, inscription_envelope_bytes = ?32, brc20_count = ?33, taproot_keypath_count = ?34, taproot_scriptpath_count = ?35, total_output_value = ?36, total_input_value = ?37, fee_rate_p10 = ?38, fee_rate_p90 = ?39, stamps_count = ?40, largest_tx_size = ?41, max_tx_fee = ?42, inscription_fees = ?43, runes_fees = ?44, legacy_tx_count = ?45, segwit_tx_count = ?46, taproot_tx_count = ?47, coinbase_text = ?48, fee_rate_p25 = ?49, fee_rate_p75 = ?50, op_return_count = ?51, op_return_bytes = ?52, p2a_count = ?53, op_return_max_bytes = ?54, op_return_over_80_count = ?55, tx_v1_count = ?56, tx_v2_count = ?57, tx_v3_count = ?58, p2pk_value = ?59, p2tr_value = ?60, multisig_value = ?61, brc20_bytes = ?62, coinbase_output_count = ?63, unspendable_output_count = ?64, coinbase_payout_address = ?65, backfill_version = ?66 WHERE height = ?67 AND hash = ?68",
         )?;
         for block in blocks {
             stmt.execute(params![
@@ -1066,6 +1084,7 @@ pub fn update_block_extras(
                 block.brc20_bytes,
                 block.coinbase_output_count,
                 block.unspendable_output_count,
+                block.coinbase_payout_address,
                 BACKFILL_VERSION,
                 block.height,
                 block.hash
@@ -4487,15 +4506,15 @@ mod tests {
 
         assert_eq!(
             cols.len(),
-            72,
-            "parsed {} columns for the block insert, expected 72. The parser \
+            73,
+            "parsed {} columns for the block insert, expected 73. The parser \
              broke, which must not read as a pass.",
             cols.len()
         );
         assert_eq!(
             fields.len(),
-            71,
-            "parsed {} block.* params, expected 71 (the 72nd column, \
+            72,
+            "parsed {} block.* params, expected 72 (the 73rd column, \
              backfill_version, is bound to a constant). The parser broke.",
             fields.len()
         );
@@ -4527,17 +4546,17 @@ mod tests {
 
         assert_eq!(
             cols.len(),
-            65,
-            "parsed {} SET columns for the extras update, expected 65. The \
+            66,
+            "parsed {} SET columns for the extras update, expected 66. The \
              parser broke, which must not read as a pass.",
             cols.len()
         );
         assert_eq!(
             fields.len(),
-            66,
-            "parsed {} block.* params for the extras update, expected 66: 64 \
+            67,
+            "parsed {} block.* params for the extras update, expected 67: 65 \
              in the SET, plus `block.height` and `block.hash` for the WHERE, \
-             with BACKFILL_VERSION bound to the 65th column. The parser broke.",
+             with BACKFILL_VERSION bound to the 66th column. The parser broke.",
             fields.len()
         );
 
@@ -4589,17 +4608,17 @@ mod tests {
         let fields = params_fields(body);
         assert_eq!(
             cols.len(),
-            56,
-            "parsed {} SET columns for the raw writer, expected 56. The \
+            57,
+            "parsed {} SET columns for the raw writer, expected 57. The \
              parser broke, which must not read as a pass.",
             cols.len()
         );
         assert_eq!(
             fields.len(),
-            57,
-            "parsed {} block.* params for the raw writer, expected 57: 55 in \
+            58,
+            "parsed {} block.* params for the raw writer, expected 58: 56 in \
              the SET, plus `block.height` and `block.hash` for the WHERE, \
-             with BACKFILL_VERSION bound to the 56th column. The parser broke.",
+             with BACKFILL_VERSION bound to the 57th column. The parser broke.",
             fields.len()
         );
         let paired = cols.len().saturating_sub(1);
