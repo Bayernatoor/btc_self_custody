@@ -608,6 +608,7 @@ impl ChartMeta {
     pub fn reports_change(&self) -> bool {
         !POINTS_ARE_CHANGES.contains(&self.slug)
             && !X_IS_NOT_A_PROGRESSION.contains(&self.slug)
+            && !POINTS_ARE_SELECTED_EVENTS.contains(&self.slug)
     }
 
     /// Whether each plotted point is an extensive reading for its own x
@@ -1396,8 +1397,8 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: Some("Each dot is one block, placed by how full it was against its median fee rate. Two things a reader might expect to move together, plotted against each other so it is visible when they do not."),
-            technical: "Each dot is one block. X-axis shows how full the block is (weight utilization %), Y-axis shows the median fee rate. Top-right is a full block whose median fee rate was also high; bottom-right is a full block at a low rate, which is most of them; top-left is a high rate in a block that was not full. The pair of coordinates is what the chart shows. It does not establish why either number was what it was, and a block's fullness is set by what the miner included rather than by demand alone.",
+            definition: Some("Each dot is one block, placed by how full it was against its median fee rate. The two axes are set by different mechanisms, so the shape the cloud takes belongs to the period on screen rather than to the chart.\n\nFullness is the miner's decision, not a reading of demand. Nearly every block today is filled to the weight limit, which is why most dots stack into a single column. A block comes up short for one of two reasons: it was found seconds after the one before it, too soon to have assembled a full template, which leaves it close to empty; or the pool that mined it filters transactions by its own rules and leaves space it could have sold. The second is the more common of the two now, and it sits with a few pools rather than across the network, so those blocks carry a median above the network's rather than below it.\n\nThe fee rate axis has moved. No block carried a median under 1 sat/vB between 2019 and 2024. From the middle of 2025 that became ordinary."),
+            technical: "Each dot is one block. X-axis shows how full the block is (weight utilization %), Y-axis shows the median fee rate. Top-right is a full block whose median fee rate was also high; bottom-right is a full block at a low rate; top-left is a high rate in a block that was not full. The pair of coordinates is what the chart shows, and a block's fullness is set by what the miner included rather than by demand alone.",
         }),
     },
     ChartMeta {
@@ -1430,8 +1431,8 @@ pub const CHARTS: &[ChartMeta] = &[
     ChartMeta {
         slug: "fee-spikes",
         title: "Fee Spike Detector",
-        desc_per_block: "Highlights blocks where the median fee rate exceeded 5x the trailing 144-block average. Red dots mark fee spike events",
-        desc_daily: "Highlights blocks where the median fee rate exceeded 5x the trailing 144-block average. Red dots mark fee spike events",
+        desc_per_block: "Blocks whose median fee rate ran five times the trailing 144-block average, or 200 sat/vB above it",
+        desc_daily: "Blocks whose median fee rate ran five times the trailing 144-block average, or 200 sat/vB above it",
         category: Category::Fees,
         unit: Unit::SatVb,
         shape: Shape::LineWithScatter,
@@ -1441,9 +1442,9 @@ pub const CHARTS: &[ChartMeta] = &[
         },
         measurements: &[
             Measurement {
-                series: "Spike (>5x avg)",
+                series: "Spike (5x or +200)",
                 series_daily: "",
-                quantity: "Blocks whose median fee rate exceeded five times the trailing 144-block mean",
+                quantity: "Blocks whose median fee rate cleared five times the trailing 144-block mean, or stood 200 sat/vB above it",
                 method_per_block: Method::Calculated,
                 // No daily builder, so there is no daily method either.
                 method_daily: Method::Calculated,
@@ -1453,8 +1454,8 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: Some("Blocks whose median fee rate ran far above the blocks around them. Fee rates move in bursts rather than drifting, because everyone is bidding for the same space at the same time, so a single block can settle several times higher than the day it sits in. This marks those blocks: a way of finding the moments worth a second look, not an explanation of them."),
-            technical: "The line is the 144-block trailing average of the median fee rate, which is about a day of blocks. A dot marks a block whose own median fee rate was more than five times that average. What produced the jump is not in this data: a burst of fee-paying transactions and a thin block from an unlucky interval both show up the same way. Needs at least 300 blocks, so a 1W or longer range.",
+            definition: Some("Blocks whose median fee rate ran several times above the blocks around them. Demand for block space arrives in bursts, so the rate can climb and fall back inside a few blocks, leaving one block well above the day it sits in while the blocks either side look ordinary. The dots mark those blocks."),
+            technical: "The line is the 144-block trailing average of the median fee rate, which is about a day of blocks. Each block contributes its own median, so the line is an average of medians.\n\nA dot marks a block that cleared either test: a median more than five times that average, or one standing 200 sat/vB above it. Two tests because neither works in both regimes. A ratio alone misses the largest jumps, since a baseline already in the hundreds makes five times it unreachable, and an absolute threshold alone would throw away a fivefold rise that happened to start from one sat/vB.\n\nWhat produced the jump is not in this data: a burst of fee-paying transactions and a thin block from an unlucky interval both show up the same way. Needs at least 300 blocks, so a 1W or longer range.",
         }),
     },
     ChartMeta {
@@ -3161,6 +3162,28 @@ pub const POINTS_ARE_CHANGES: &[&str] =
 ///   this was written.
 pub const X_IS_NOT_A_PROGRESSION: &[&str] = &["halving-era", "weekday"];
 
+/// Charts whose points are a **selection of events** rather than a reading at
+/// every x, so the first and last are two arbitrary occurrences.
+///
+/// Distinct from both lists above, and the distinction is in what is wrong
+/// with `last - first`. [`POINTS_ARE_CHANGES`] is about what each point *is*,
+/// a difference already. [`X_IS_NOT_A_PROGRESSION`] is about the *order* of
+/// the x values. Here the points are plain readings in genuine time order,
+/// and the fault is that the series is sparse.
+///
+/// Fee Spike Detector draws only the blocks that cleared its threshold, 40 of
+/// a month's 4,300, so the rail read "change +0.46, +11.4%": the last marked
+/// block minus the first marked block. Neither bounds the range, and
+/// retuning the threshold so one more block qualifies at either end moves the
+/// figure with nothing in the chain having changed.
+///
+/// **Only the change tile is suppressed.** The average marked block, the
+/// largest and smallest, and how many there were are what the chart is for.
+///
+/// Pinned by `a_sparse_series_reports_no_change`, which finds the sparse
+/// charts from the built options rather than trusting this list.
+pub const POINTS_ARE_SELECTED_EVENTS: &[&str] = &["fee-spikes"];
+
 pub fn is_valid_comparison(
     primary: &ChartMeta,
     candidate: &ChartMeta,
@@ -3784,6 +3807,29 @@ mod tests {
                  WHERE timestamp >= strftime('%s','now','-365 days')",
                 88.0,
                 98.0,
+            ),
+            (
+                "fee-pressure",
+                "Nearly every block today is filled to the weight limit",
+                "SELECT 100.0*SUM(CASE WHEN weight >= 0.99*4000000 THEN 1 \
+                 ELSE 0 END)/COUNT(*) FROM blocks \
+                 WHERE timestamp >= strftime('%s','now','-30 days')",
+                90.0,
+                100.0,
+            ),
+            // The sub-1 era. Asserted as an exact zero because that is what
+            // makes the sentence worth printing: not "rare" but "never", over
+            // six years and a third of a million blocks.
+            (
+                "fee-pressure",
+                "No block carried a median under 1 sat/vB between 2019 \
+                 and 2024",
+                "SELECT COUNT(*) FROM blocks \
+                 WHERE median_fee_rate > 0 AND median_fee_rate < 1 \
+                 AND timestamp >= strftime('%s','2019-01-01') \
+                 AND timestamp < strftime('%s','2025-01-01')",
+                0.0,
+                0.0,
             ),
             (
                 "fullness-dist",
@@ -5029,6 +5075,7 @@ mod tests {
         ("diversity", "1%"),       // the HHI worked example
         ("diversity", "50%"),      // the same example
         ("fee-heatmap", "80%"),    // p10 to p90 spans it by definition
+        ("fee-spikes", "200"),     // the absolute arm of the spike test
         ("fee-spikes", "300"),     // the minimum range the builder needs
         ("fullness-dist", "10%"),  // the histogram's bucket width
         ("multi-velocity", "15"),  // the points-against-percent example

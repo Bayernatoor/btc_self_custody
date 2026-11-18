@@ -3836,6 +3836,81 @@ mod tests {
         }
     }
 
+    /// The sparse-series list holds exactly the charts that plot a selection.
+    ///
+    /// `POINTS_ARE_SELECTED_EVENTS` is hand-maintained, so this derives the
+    /// truth from the built options. A chart drawing one series with far
+    /// fewer points than another on the same axis is plotting the blocks that
+    /// met some condition, not a reading at every x, and its first and last
+    /// point are two arbitrary occurrences rather than the ends of the range.
+    ///
+    /// Companion moving averages do not trip this: `build_ma_array` emits a
+    /// null at every x it cannot yet average, so the series keeps full length
+    /// and only its values are missing.
+    #[test]
+    fn a_sparse_series_reports_no_change() {
+        // Counts the entries carrying a value, so a full-length series padded
+        // with nulls reads as full length minus its padding rather than as a
+        // selection.
+        fn points(series: &serde_json::Value) -> Option<usize> {
+            let data = series.get("data")?.as_array()?;
+            Some(
+                data.iter()
+                    .filter(|e| match e {
+                        serde_json::Value::Array(pair) => {
+                            !pair.last().is_some_and(|v| v.is_null())
+                        }
+                        serde_json::Value::Object(o) => {
+                            !o.get("value").is_some_and(|v| v.is_null())
+                        }
+                        v => !v.is_null(),
+                    })
+                    .count(),
+            )
+        }
+
+        let mut found: std::collections::BTreeSet<&str> =
+            std::collections::BTreeSet::new();
+        for (meta, _daily, opt) in built_charts() {
+            let Some(series) = opt["series"].as_array() else {
+                continue;
+            };
+            let counts: Vec<usize> = series
+                .iter()
+                .filter_map(points)
+                .filter(|n| *n > 0)
+                .collect();
+            if counts.len() < 2 {
+                continue;
+            }
+            let (min, max) = (
+                *counts.iter().min().expect("non-empty"),
+                *counts.iter().max().expect("non-empty"),
+            );
+            if min * 2 < max {
+                found.insert(meta.slug);
+            }
+        }
+        let declared: std::collections::BTreeSet<&str> =
+            registry::POINTS_ARE_SELECTED_EVENTS
+                .iter()
+                .copied()
+                .collect();
+        assert_eq!(
+            found, declared,
+            "charts drawing a sparse series must be exactly the ones \
+             declaring that their points are selected events, or the rail \
+             reports a change between two arbitrary occurrences"
+        );
+        for slug in registry::POINTS_ARE_SELECTED_EVENTS {
+            let meta = registry::find(slug).expect("declared slug exists");
+            assert!(
+                !meta.reports_change(),
+                "{slug} is listed but the rail would still show a change"
+            );
+        }
+    }
+
     /// Adoption Velocity's lines account for each other, at both resolutions.
     ///
     /// The eight series are shares of one denominator, so their moving

@@ -222,7 +222,7 @@ pub fn FeeChartsPage() -> impl IntoView {
                             />
                             <ChartCard
                                 title="Fee Spike Detector"
-                                description="Highlights blocks where the median fee rate exceeded 5x the trailing 144-block average. Red dots mark fee spike events"
+                                description="Blocks whose median fee rate ran five times the trailing 144-block average, or 200 sat/vB above it"
                                 chart_id="chart-fee-spikes"
                                 option=fee_spike_option
                             />

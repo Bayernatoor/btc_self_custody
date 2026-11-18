@@ -788,13 +788,25 @@ pub fn fee_spike_chart(blocks: &[BlockSummary]) -> serde_json::Value {
     let ma_str = build_ma_array(blocks, &ma);
     let ma_data = data_array_value(&ma_str);
 
-    // Build spike scatter: only points where rate > 5x trailing average
+    // Two arms, because neither test alone finds a fee spike in every
+    // regime. The ratio rescales itself out of relevance when the baseline is
+    // already high: block 821486 of December 2023 settled at 708 sat/vB
+    // against a baseline of 235, one of the largest absolute jumps in the
+    // chain, and went unmarked at 3.0x. The absolute arm catches it. Run the
+    // other way, an absolute floor alone would throw away the cheap-regime
+    // spikes that are real to anyone paying them: a 5 sat/vB block against a
+    // 1 sat/vB baseline is a fivefold rise whatever the sum involved.
+    const SPIKE_RATIO: f64 = 5.0;
+    const SPIKE_JUMP_SAT_VB: f64 = 200.0;
     let mut spike_buf = String::with_capacity(blocks.len() * 10);
     spike_buf.push('[');
     let mut first = true;
     for (i, b) in blocks.iter().enumerate() {
         if let Some(avg) = ma[i] {
-            if avg > 0.0 && rates[i] > avg * 5.0 {
+            if avg > 0.0
+                && (rates[i] > avg * SPIKE_RATIO
+                    || rates[i] - avg >= SPIKE_JUMP_SAT_VB)
+            {
                 if !first {
                     spike_buf.push(',');
                 }
@@ -835,7 +847,7 @@ pub fn fee_spike_chart(blocks: &[BlockSummary]) -> serde_json::Value {
                 "itemStyle": { "color": DATA_COLOR }, "symbol": "none"
             },
             {
-                "name": "Spike (>5x avg)", "type": "scatter", "data": spike_data,
+                "name": "Spike (5x or +200)", "type": "scatter", "data": spike_data,
                 "symbolSize": 6,
                 "itemStyle": { "color": TARGET_COLOR }
             }
