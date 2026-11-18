@@ -353,10 +353,17 @@ none of it Runes.
 
 **The version was deliberately not bumped**, because 0.04% is well under the chart's visual
 resolution and a full-chain sweep is not worth spending on a rounding error. The cost of that
-choice is a discontinuity at the height where the new code started ingesting: earlier rows count
-those outputs as Runes, later ones as DataCarrier. It moves `runes_count`, `runes_bytes` and
-`runes_fees` down a hair and `data_carrier_count` up the same; `op_return_count` is unaffected,
-since both classes are OP_RETURN either way.
+choice is a discontinuity: earlier rows count those outputs as Runes, later ones as DataCarrier.
+It moves `runes_count`, `runes_bytes` and `runes_fees` down a hair and `data_carrier_count` up
+the same; `op_return_count` is unaffected, since both classes are OP_RETURN either way.
+
+**Where the split falls is known, because of what production was doing that day.** A 13 to 15
+sweep was running during the deploy, and `heights_needing_backfill` orders `height DESC`, so it
+had already re-written everything from the tip down to about height 449,000 under the old rule,
+the whole Runes era included. Every block still queued was below 840,000, where the rule never
+fired, so the deploy changed nothing about the rest of that sweep. **The old classification
+therefore covers 840,000 up to the tip as it stood on 2026-11-18, and only blocks after that
+use the new rule.**
 
 So the next sweep silently fixes it, and until then nothing warns. Which is the shape the watch
 trap above is about, arrived at on purpose this time rather than by accident.
