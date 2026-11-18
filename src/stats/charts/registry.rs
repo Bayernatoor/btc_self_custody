@@ -1265,8 +1265,8 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Block fees over the block's transactions less one for the coinbase. A block or day with no user transaction reports no reading rather than zero. The fee total is itself coinbase-derived, so this inherits that estimate.",
         }],
         about: Some(About {
-            definition: Some("What one transaction cost, on average, to get into a block. Fees are paid for space rather than for the amount being moved, so a transaction sending a fortune can pay less than one sending pennies if it takes up less room."),
-            technical: "The block's total fees divided by its transactions, less one for the coinbase, which pays nothing. The total is itself taken from the coinbase output rather than summed per transaction, so a miner who underclaims makes this read low. A block with no user transaction reports nothing rather than zero.",
+            definition: Some("What one transaction cost, on average, to get into a block. Fees are paid for space rather than for the amount being moved, so a transaction sending 10 BTC can pay less than one sending 1,000 sats if it takes up less room."),
+            technical: "The block's total fees divided by its transactions, less one for the coinbase, which pays nothing. The total is itself taken from the coinbase output rather than summed per transaction, so when a miner claims less than it could, this reads low. A block with no user transaction reports nothing rather than zero.",
         }),
     },
     ChartMeta {
@@ -1367,14 +1367,14 @@ pub const CHARTS: &[ChartMeta] = &[
         ],
         about: Some(About {
             definition: Some("What different transactions in the same block paid, rather than one number for the block. Each line is a percentile: p10 is the rate a tenth of that block's transactions came in under, the median is the middle one, and p90 is the rate a tenth paid more than. The gap between them is how unequal the block was."),
-            technical: "Five percentile lines, each read directly off the block: p10 is the rate a tenth of that block's transactions paid less than, the median is the middle one, and p90 is the rate a tenth paid more than. Not stacked, because percentiles do not add: stacking them made the top boundary the sum of five quantiles rather than p90. The gap between p10 and p90 is the central 80% and says nothing about why any transaction paid what it did. Click legend items to isolate lines.",
+            technical: "Sort every non-coinbase transaction in the block by fee rate, then take five points from that list: the tenth, twenty-fifth, fiftieth, seventy-fifth and ninetieth percentile.\n\nA block needs ten transactions for p10 and p90 to exist, and four for p25 and p75. Below that the value is recorded as zero, so an unusually empty block draws its line to the floor rather than leaving a gap.\n\nThe gap between p10 and p90 is the central 80%. Click legend items to isolate lines.",
         }),
     },
     ChartMeta {
         slug: "fee-pressure",
         title: "Fee Pressure vs Block Space",
-        desc_per_block: "Each block placed by how full it was and what its middle transaction paid",
-        desc_daily: "Each block placed by how full it was and what its middle transaction paid",
+        desc_per_block: "Each block placed by how full it was against its median fee rate",
+        desc_daily: "Each block placed by how full it was against its median fee rate",
         category: Category::Fees,
         unit: Unit::SatVb,
         shape: Shape::Scatter,
@@ -1396,7 +1396,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: Some("Each dot is one block, placed by how full it was and what its middle transaction paid. Two things a reader might expect to move together, plotted against each other so it is visible when they do not."),
+            definition: Some("Each dot is one block, placed by how full it was against its median fee rate. Two things a reader might expect to move together, plotted against each other so it is visible when they do not."),
             technical: "Each dot is one block. X-axis shows how full the block is (weight utilization %), Y-axis shows the median fee rate. Top-right is a full block whose median fee rate was also high; bottom-right is a full block at a low rate, which is most of them; top-left is a high rate in a block that was not full. The pair of coordinates is what the chart shows. It does not establish why either number was what it was, and a block's fullness is set by what the miner included rather than by demand alone.",
         }),
     },
@@ -1453,7 +1453,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: Some("Blocks whose middle transaction paid far more than the blocks around it did. Fee rates move in bursts rather than drifting, because everyone is bidding for the same space at the same time, so a single block can settle several times higher than the day it sits in. This marks those blocks: a way of finding the moments worth a second look, not an explanation of them."),
+            definition: Some("Blocks whose median fee rate ran far above the blocks around them. Fee rates move in bursts rather than drifting, because everyone is bidding for the same space at the same time, so a single block can settle several times higher than the day it sits in. This marks those blocks: a way of finding the moments worth a second look, not an explanation of them."),
             technical: "The line is the 144-block trailing average of the median fee rate, which is about a day of blocks. A dot marks a block whose own median fee rate was more than five times that average. What produced the jump is not in this data: a burst of fee-paying transactions and a thin block from an unlucky interval both show up the same way. Needs at least 300 blocks, so a 1W or longer range.",
         }),
     },
@@ -1483,7 +1483,7 @@ pub const CHARTS: &[ChartMeta] = &[
         }],
         about: Some(About {
             definition: Some("What everyone paid, in total, to get into a given block. Each transaction pays a fee to be included, and the miner keeps every fee in the block they find. It is one half of what a miner earns. The other is the subsidy, which halves every four years and eventually reaches zero."),
-            technical: "A transaction does not state its fee anywhere: a fee is what its inputs exceed its outputs by. This chart does not sum those, though. The block total is taken from the coinbase transaction, as the value the miner paid itself minus the subsidy the schedule allows, floored at zero. The two agree whenever a miner claims everything available, and a miner who underclaims makes this read low. Shown in BTC or satoshis by the toggle above, never in dollars of the day, so the figure is comparable across the whole chain.",
+            technical: "A transaction does not state its fee anywhere: a fee is what its inputs exceed its outputs by. This chart does not sum those, though. The block's fee total is taken from the coinbase transaction instead, as the value the miner paid itself minus the subsidy the schedule allows, floored at zero. The two agree whenever a miner claims everything available. When a miner claims less than it could, the difference is destroyed and this chart reads low by that amount. Shown in BTC or satoshis.",
         }),
     },
     ChartMeta {
@@ -1550,7 +1550,7 @@ pub const CHARTS: &[ChartMeta] = &[
         slug: "median-rate",
         title: "Median Fee Rate",
         desc_per_block: "Median fee rate across all transactions in each block",
-        desc_daily: "Median fee rate (per-block ranges only for daily)",
+        desc_daily: "Each block's median fee rate, averaged over the day",
         category: Category::Fees,
         unit: Unit::SatVb,
         shape: Shape::Line,
@@ -1571,8 +1571,8 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: Some("How much a transaction paid per unit of size to get into a block, taking the middle transaction. Fees are charged by the room a transaction takes, not the value it moves, so sending a large amount can cost less than sending a small one."),
-            technical: "Fee divided by virtual size for every transaction in the block, then the middle value. Virtual size is weight divided by four, which is the unit the fee market prices in. The median rather than the mean, because it is less sensitive to a few unusually high fees. The coinbase transaction pays no fee and is excluded.",
+            definition: Some("How much a transaction paid per unit of size to get into a block. Fees are based on the space a transaction occupies in a block, not the value it moves, so sending a large amount can cost less than sending a small one."),
+            technical: "Fee divided by virtual size for every transaction in the block, then the median of those. Virtual size is weight divided by four, which is the unit the fee market prices in. The median rather than the mean, because it is less sensitive to a few unusually high fees. The coinbase transaction pays no fee and is excluded.\n\nPer block, each point is that median. On a daily range each point is the mean of that day's block medians, which is a different statistic: every block contributes one value whatever its size, so a block carrying a few hundred transactions counts as much as one carrying several thousand. The two diverge most when transaction counts swing sharply from block to block, which is what happens during fee events.",
         }),
     },
     ChartMeta {
@@ -1652,7 +1652,7 @@ pub const CHARTS: &[ChartMeta] = &[
         ],
         about: Some(About {
             definition: Some("The two halves of what a miner collects for a block. The subsidy is new bitcoin the protocol creates, currently 3.125 BTC and halving every 210,000 blocks. The fees are what senders paid for space. Only the first is on a schedule."),
-            technical: "The block subsidy (new BTC created) halves every 210,000 blocks (~4 years). After the 2024 halving, the subsidy is 3.125 BTC per block. The subsidy schedule is fixed by the protocol; the fee side is not. Fees are a larger share of revenue when they hold up as the subsidy falls, and a smaller one when they fall faster, so the balance between the two is an outcome to watch rather than a guarantee.",
+            technical: "The block subsidy (new BTC created) halves every 210,000 blocks (~4 years). After the 2024 halving, the subsidy is 3.125 BTC per block. The subsidy schedule is fixed by the protocol; the fee side is not. Fees make up a larger share of block revenue if they hold up as the subsidy falls, but nothing guarantees it: the fee market swings with demand for block space.",
         }),
     },
     ChartMeta {

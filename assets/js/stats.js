@@ -293,6 +293,25 @@
             opts.legend.pageIconColor = 'rgba(255,255,255,0.7)';
             opts.legend.pageIconInactiveColor = 'rgba(255,255,255,0.2)';
             opts.legend.pageTextStyle = { color: 'rgba(255,255,255,0.4)', fontSize: 10 };
+
+            // A named Y axis renders its name at the top left, which is the
+            // same row the legend sits on. With five short series, as on Fee
+            // Rate Bands, the legend reaches left far enough to overlap it and
+            // the axis numbers. Give the legend its own row below the name and
+            // move the plot down to match.
+            var named = (opts.yAxis ? (Array.isArray(opts.yAxis) ? opts.yAxis : [opts.yAxis]) : [])
+                .some(function (a) { return a && a.name; });
+            var manySeries = Array.isArray(opts.series) && opts.series.length >= 4;
+            if (named && manySeries) {
+                var drop = 18;
+                opts.legend.top = (typeof opts.legend.top === 'number' ? opts.legend.top : 0) + drop;
+                opts.legend.right = 4;
+                opts.legend.width = '92%';
+                (Array.isArray(opts.grid) ? opts.grid : (opts.grid ? [opts.grid] : []))
+                    .forEach(function (g) {
+                        g.top = (typeof g.top === 'number' ? g.top : 50) + drop;
+                    });
+            }
         }
         // Shorten Y-axis labels with K/M/B suffixes to save horizontal space
         var yAxes = opts.yAxis ? (Array.isArray(opts.yAxis) ? opts.yAxis : [opts.yAxis]) : [];

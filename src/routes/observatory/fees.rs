@@ -174,7 +174,7 @@ pub fn FeeChartsPage() -> impl IntoView {
                             />
                             <ChartCard
                                 title="Median Fee Rate"
-                                description=chart_desc(range, "Median fee rate across all transactions in each block", "Median fee rate (per-block ranges only for daily)")
+                                description=chart_desc(range, "Median fee rate across all transactions in each block", "Each block's median fee rate, averaged over the day")
                                 chart_id="chart-median-rate"
                                 option=median_rate_option
                             />
@@ -216,7 +216,7 @@ pub fn FeeChartsPage() -> impl IntoView {
                             />
                             <ChartCard
                                 title="Fee Pressure vs Block Space"
-                                description="Each block placed by how full it was and what its middle transaction paid"
+                                description="Each block placed by how full it was against its median fee rate"
                                 chart_id="chart-fee-pressure"
                                 option=fee_pressure_option
                             />

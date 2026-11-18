@@ -1181,11 +1181,15 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                                 title="Related"
                                 explain="Charts measuring the same thing or covering the same part of the network, for reading this one in context."
                             >
-                                <div class="flex flex-wrap gap-1.5">
+                                // One per row on a phone, wrapping pills from
+                                // `sm` up. Wrapping at 393px left a ragged
+                                // two-then-one-then-two arrangement that read
+                                // as broken rather than as a list.
+                                <div class="flex flex-col sm:flex-row sm:flex-wrap gap-1.5">
                                     {rel.into_iter().map(|r| view! {
                                         <a
                                             href=format!("/observatory/chart/{}", r.slug)
-                                            class="inline-block px-2.5 py-1.5 rounded-lg bg-white/5 text-sm text-white/85 hover:text-[#f7931a] hover:bg-white/10 transition-colors"
+                                            class="block sm:inline-block text-center sm:text-left px-2.5 py-1.5 rounded-lg bg-white/5 text-sm text-white/85 hover:text-[#f7931a] hover:bg-white/10 transition-colors"
                                         >
                                             {r.title}
                                         </a>
