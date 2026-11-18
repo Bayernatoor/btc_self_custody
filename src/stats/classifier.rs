@@ -7,8 +7,8 @@
 //!
 //! - **SegwitCommit**: Coinbase SegWit commitment (`6a24aa21a9ed` prefix). These are
 //!   infrastructure outputs required by BIP-141 and are excluded from OP_RETURN totals.
-//! - **Runes**: Runes protocol markers (`6a5d` = OP_RETURN OP_13, or tiny outputs <=6 bytes).
-//!   Only classified as Runes after block 840,000 (4th halving / Runes launch).
+//! - **Runes**: a runestone, `6a5d` = OP_RETURN OP_13, and only from block
+//!   840,000 where Runes launched. Before that the same bytes are just data.
 //! - **Omni**: Omni Layer protocol (`6f6d6e69` = "omni" in ASCII after push opcode).
 //! - **Counterparty**: Counterparty protocol (`434e545250525459` = "CNTRPRTY" in ASCII).
 //! - **DataCarrier**: Everything else - generic data embedding.
@@ -46,13 +46,6 @@ pub fn classify(hex: &str, height: u64) -> OpReturnType {
     // Runes protocol: OP_RETURN OP_13 (0x5d)
     // Runes launched at block 840,000 (4th halving). Before that, 6a5d is just data.
     if hex.starts_with("6a5d") && height >= 840_000 {
-        return OpReturnType::Runes;
-    }
-
-    // Very tiny outputs (≤6 bytes) are typically Runes markers (e.g. 6a023a29)
-    // Only classify as Runes after launch; before 840k these are small data carriers
-    let byte_len = hex.len() / 2;
-    if byte_len <= 6 && height >= 840_000 {
         return OpReturnType::Runes;
     }
 
@@ -290,17 +283,27 @@ mod tests {
         assert_eq!(classify("6a5d0014", 839_999), OpReturnType::DataCarrier);
     }
 
+    /// A short OP_RETURN is not a runestone, whatever its height.
+    ///
+    /// This used to classify any OP_RETURN of six bytes or fewer as Runes
+    /// after block 840,000, on the theory that small markers are runestones.
+    /// They are not, and a runestone is already caught by the `6a5d` prefix
+    /// above whatever its length. Sampled against the node over three windows
+    /// spanning the whole Runes era, the rule fired on 4, 5 and 15 outputs
+    /// against 39,418, 12,691 and 103,774 real runestones, and what it caught
+    /// was `6a00` (an empty push), `6a046e6f7065` ("nope") and similar.
     #[test]
-    fn classify_runes_tiny_after_launch() {
-        // ≤6 bytes after 840k → Runes heuristic
-        assert_eq!(classify("6a023a29", 840_000), OpReturnType::Runes);
-        assert_eq!(classify("6a0400000000", 850_000), OpReturnType::Runes);
-    }
-
-    #[test]
-    fn classify_runes_tiny_before_launch() {
-        // ≤6 bytes before 840k → DataCarrier (not Runes)
-        assert_eq!(classify("6a023a29", 500_000), OpReturnType::DataCarrier);
+    fn a_short_op_return_is_not_a_runestone() {
+        for height in [840_000, 850_000, 975_000] {
+            assert_eq!(classify("6a00", height), OpReturnType::DataCarrier);
+            assert_eq!(classify("6a023a29", height), OpReturnType::DataCarrier);
+            assert_eq!(
+                classify("6a046e6f7065", height),
+                OpReturnType::DataCarrier
+            );
+        }
+        // Still Runes, because the prefix says so and length never mattered.
+        assert_eq!(classify("6a5d", 840_000), OpReturnType::Runes);
     }
 
     #[test]

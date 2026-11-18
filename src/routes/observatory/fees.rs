@@ -143,9 +143,7 @@ pub fn FeeChartsPage() -> impl IntoView {
         range,
         overlay_flags,
         |blocks| crate::stats::charts::protocol_fee_breakdown_chart(blocks),
-        |_days| crate::stats::charts::no_daily_builder_chart(
-            "Protocol Fee Revenue"
-        )
+        |days| crate::stats::charts::protocol_fee_breakdown_chart_daily(days)
     );
 
     view! {
@@ -234,8 +232,8 @@ pub fn FeeChartsPage() -> impl IntoView {
 
                             />
                             <ChartCard
-                                title="Protocol Fee Revenue"
-                                description="Fees paid by transactions matching the inscription and Runes detectors. A transaction matching both is counted in both, so the two do not sum to a share of block fees"
+                                title="Inscription and Runes Fees"
+                                description=chart_desc(range, "Fees paid by transactions carrying inscription data and by transactions carrying Runes data. A transaction carrying both counts in both lines", "Each day's fees from transactions carrying inscription data and from transactions carrying Runes data, averaged per block. A transaction carrying both counts in both lines")
                                 chart_id="chart-protocol-fees"
                                 option=protocol_fees_option
 

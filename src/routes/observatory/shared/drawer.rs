@@ -255,7 +255,7 @@ fn drawer_pages() -> Vec<DrawerPage> {
                         card_id: "card-chart-max-tx-fee",
                     },
                     DrawerChart {
-                        label: "Protocol Fee Revenue",
+                        label: "Inscription and Runes Fees",
                         card_id: "card-chart-protocol-fees",
                     },
                 ],

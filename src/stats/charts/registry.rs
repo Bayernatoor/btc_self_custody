@@ -719,7 +719,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: Some("How many outputs a block's coinbase transaction creates. Almost every block pays the reward to one address and reads 1.\n\nA few read in the hundreds. Those are pools that settle with their miners inside the coinbase itself rather than sending a separate payout transaction, so one block pays everybody at once. Eligius did this from 2011 to 2017 and holds the record at 919 outputs in block 133,471; Ocean does it today."),
+            definition: Some("How many outputs a block's coinbase transaction creates. Almost every block pays the reward to one address and reads 1.\n\nA few read in the hundreds. Those are pools that settle with their miners inside the coinbase itself rather than sending a separate payout transaction, so one block pays everybody at once. Eligius did this from 2011 to 2017 and holds the record at 919 outputs in block [133,471](block:133,471); Ocean does it today."),
             technical: "Counts every output of the coinbase transaction, taken from the block itself rather than inferred from payout transactions.\n\nThe count includes outputs that are not payments. Since SegWit, almost every coinbase carries a commitment output, and some miners add an OP_RETURN of their own, so the baseline is one or two rather than one. A block whose coinbase creates 400 outputs is distributing to roughly 400 recipients, not exactly.\n\nOn a daily range this is the mean per block, which deliberately understates the peaks: a single 919-output block in a day of 144 contributes about 6.4 to that day's average. The spikes are only legible below the 5,000-block switch to per-block mode, which is a range of 1M or shorter.",
         }),
     },
@@ -1543,8 +1543,8 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: Some("The most any single transaction paid in each block. Usually a few thousand satoshis, occasionally something extraordinary: the record is 291.24 BTC in block 409,008, which is a mistake rather than a bid, and the kind of thing this chart exists to surface."),
-            technical: "The largest single fee in the block, in BTC. Read per transaction rather than derived from the block total. One outlier does not move any other series here, which is why this sits beside the median rather than replacing it.",
+            definition: Some("The most any single transaction paid in each block. Usually a few thousand satoshis, occasionally something extraordinary: the record is 291.24 BTC in block [409,008](block:409,008), which is a mistake rather than a bid, and the kind of thing this chart exists to surface."),
+            technical: "The largest single fee among the block's transactions, in BTC. Each fee is read from the transaction itself, the amount its inputs exceed its outputs by, which is where this one differs from Total Fees per Block: that one is taken from the coinbase.\n\nA maximum is not an average, so one freak fee appears here at full size and leaves Median Fee Rate where it was. The two are meant to be read together.\n\nA block carrying nothing but a coinbase has no transaction fee to take a maximum of, so it draws a gap rather than a zero.",
         }),
     },
     ChartMeta {
@@ -1578,15 +1578,15 @@ pub const CHARTS: &[ChartMeta] = &[
     },
     ChartMeta {
         slug: "protocol-fees",
-        title: "Protocol Fee Revenue",
-        desc_per_block: "Fees paid by transactions matching the inscription and Runes detectors. A transaction matching both is counted in both, so the two do not sum to a share of block fees",
-        desc_daily: "Fees paid by transactions matching the inscription and Runes detectors. A transaction matching both is counted in both, so the two do not sum to a share of block fees",
+        title: "Inscription and Runes Fees",
+        desc_per_block: "Fees paid by transactions carrying inscription data and by transactions carrying Runes data. A transaction carrying both counts in both lines",
+        desc_daily: "Each day's fees from transactions carrying inscription data and from transactions carrying Runes data, averaged per block. A transaction carrying both counts in both lines",
         category: Category::Fees,
         unit: Unit::Btc,
         shape: Shape::Line,
         source: Source::Dashboard {
             per_block: super::protocol_fee_breakdown_chart,
-            daily: Daily::Unavailable,
+            daily: Daily::Fn(super::protocol_fee_breakdown_chart_daily),
         },
         measurements: &[
             Measurement {
@@ -1594,27 +1594,25 @@ pub const CHARTS: &[ChartMeta] = &[
                 series_daily: "",
                 quantity: "Fees paid by transactions matching the inscription detector",
                 method_per_block: Method::HeuristicallyDetected,
-                // No daily builder, so there is no daily method either.
                 method_daily: Method::HeuristicallyDetected,
                 per_block: Aggregation::PerBlockObservation,
-                daily: Aggregation::Unsupported,
-                population: "Detector match, not a parse. A transaction matching both the inscription and Runes detectors has its whole fee credited to both, so these categories can overlap and are not a partition of the block's fees despite being stacked.",
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "Detector match, not a parse. A transaction matching both the inscription and Runes detectors has its whole fee credited to both, so these categories can overlap and are not a partition of the block's fees. Daily, each point is the day's total over the day's block count, so both arms read in BTC per block.",
             },
             Measurement {
                 series: "Runes",
                 series_daily: "",
                 quantity: "Fees paid by transactions matching the Runes detector",
                 method_per_block: Method::HeuristicallyDetected,
-                // No daily builder, so there is no daily method either.
                 method_daily: Method::HeuristicallyDetected,
                 per_block: Aggregation::PerBlockObservation,
-                daily: Aggregation::Unsupported,
-                population: "As Inscriptions, and can double-count the same transaction's fee.",
+                daily: Aggregation::MeanOfPerBlockValues,
+                population: "As Inscriptions, and can double-count the same transaction's fee. Same daily divisor.",
             },
         ],
         about: Some(About {
-            definition: Some("How much of a block's fee income came from transactions carrying inscription or Runes data. Two detectors drawn side by side rather than as parts of one total, because a transaction carrying both is counted by both."),
-            technical: "Fees attributed to transactions each detector matched. The two are not a partition: more than 125,000 blocks have both firing and in 1,326 of them the totals sum to more than the block collected, so they are drawn unstacked and beside the block's own fee take. Which detector is larger in a period is a fact about the detectors.",
+            definition: Some("How much of a block's fee income came from transactions carrying inscription or Runes data, as two lines rather than one stack.\n\nThe two are separate tests on different parts of a transaction, so they are not shares of one total, and summing them double counts any transaction that passed both. A transaction can pass both, and its whole fee is then counted toward each line. That is uncommon, and where it happens the two lines when summed equal more than the block's total fee: 1,326 blocks do, every one of them between April 2024 and June 2026."),
+            technical: "Each line is the fees paid by the transactions that passed one test, summed per block. The inscription test reads every input's witness, looking for the bytes an Ordinals envelope opens with. The Runes test reads every output, looking for a runestone, and applies only from block 840,000, where Runes launched.\n\nTwo different fields, so neither contains the other and one transaction can pass both. Where it does, the whole fee is added to each line rather than split between them. Nothing here is a share of block fees, and no third line completes these two.\n\nThe two tests are not symmetric, which matters before reading one line against the other. An envelope appears only when an inscription is created, so moving one afterwards is invisible here. A runestone appears whenever a rune is minted or moved. The Runes line counts ongoing activity where the inscription line counts creation alone.",
         }),
     },
     ChartMeta {
@@ -1907,7 +1905,7 @@ pub const CHARTS: &[ChartMeta] = &[
         }],
         about: Some(About {
             definition: Some("The type of address each new output pays to. Every output commits to a script, and the shape of that script says which format the receiver gave out: a legacy '1', a '3' that commits to a hash of the spending conditions rather than to a single key, a SegWit 'bc1q' or a Taproot 'bc1p'. Modern wallets often put a SegWit program behind a '3', which is why that band did not empty when 'bc1q' arrived. One band is not an address at all: P2PK paid a public key directly, before address formats existed. It has not stopped entirely, but it arrives in bursts rather than a trickle: roughly one block in seven hundred carries one, and most days have none at all. Counting them is how the chain shows a format being adopted."),
-            technical: "Counts of outputs created per script type, from the classification stored per block. Daily values are totals for the day, not per-block averages: 3.0 per block over 10 blocks is 30. Coinbase outputs are included: a coinbase payout is an output of its script type like any other, and excluding it made the early chain, which is almost entirely coinbase, read as empty.\n\nThe P2SH band is the one that hides things. A '3' output is only a commitment to a hash, so a nested SegWit program, a multi-signature arrangement and a timelock are the same shape on creation, and the script behind it is revealed only when the output is spent. This chart counts outputs as they are created, so it cannot separate them, and no column here does.\n\nA band can also start before the rule that gave it meaning, because a script shape is valid to create before the network agrees what it means. Six P2SH outputs sit in five blocks from 2012-03-07, and the BIP-16 marker is at block 173,805 on 2012-04-01, nearly four thousand blocks later. Taproot does the same, with outputs from 2019 against a 2021 activation. Turn on the BIP activations overlay to see it: the marker lands well to the right of where the band begins.",
+            technical: "Counts of outputs created per script type, from the classification stored per block. Daily values are totals for the day, not per-block averages: 3.0 per block over 10 blocks is 30. Coinbase outputs are included: a coinbase payout is an output of its script type like any other, and excluding it made the early chain, which is almost entirely coinbase, read as empty.\n\nThe P2SH band is the one that hides things. A '3' output is only a commitment to a hash, so a nested SegWit program, a multi-signature arrangement and a timelock are the same shape on creation, and the script behind it is revealed only when the output is spent. This chart counts outputs as they are created, so it cannot separate them, and no column here does.\n\nA band can also start before the rule that gave it meaning, because a script shape is valid to create before the network agrees what it means. Six P2SH outputs sit in five blocks from 2012-03-07, and the BIP-16 marker is at block [173,805](block:173,805) on 2012-04-01, nearly four thousand blocks later. Taproot does the same, with outputs from 2019 against a 2021 activation. Turn on the BIP activations overlay to see it: the marker lands well to the right of where the band begins.",
         }),
     },
     ChartMeta {
@@ -2252,7 +2250,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: Some("The biggest single transaction in each block, by bytes.\n\nNothing caps a transaction at four megabytes directly. What consensus limits is weight: a block may carry 4,000,000 weight units, where an ordinary byte costs four units and a witness byte costs one. The same cap therefore allows about a megabyte of ordinary data or about four megabytes of witness data. A typical block is around half witness and lands near 1.6 MB, so a transaction that is almost entirely witness can approach four megabytes and still fit.\n\nMore than ninety blocks have gone above 3.9 MB, and they are not spread across the network: MARA mined more than nine in ten of them. Almost all carry an inscription, and forty-five left room for fewer than ten other transactions. The largest in the chain is 3,992,821 bytes, in block 839,842 on 2024-04-18. They began in February 2023 and are still happening."),
+            definition: Some("The biggest single transaction in each block, by bytes.\n\nNothing caps a transaction at four megabytes directly. What consensus limits is weight: a block may carry 4,000,000 weight units, where an ordinary byte costs four units and a witness byte costs one. The same cap therefore allows about a megabyte of ordinary data or about four megabytes of witness data. A typical block is around half witness and lands near 1.6 MB, so a transaction that is almost entirely witness can approach four megabytes and still fit.\n\nMore than ninety blocks have gone above 3.9 MB, and they are not spread across the network: MARA mined more than nine in ten of them. Almost all carry an inscription, and forty-five left room for fewer than ten other transactions. The largest in the chain is 3,992,821 bytes, in block [839,842](block:839,842) on 2024-04-18. They began in February 2023 and are still happening."),
             technical: "Serialized size of the largest transaction in the block, read per transaction. Size rather than weight, so a witness-heavy transaction reads larger here than it costs against the limit.",
         }),
     },
@@ -2553,7 +2551,7 @@ The reference lines at 10% and 5% are markers for reading the trend. They are no
         }],
         about: Some(About {
             definition: Some("How many transactions per second the chain confirmed. Over the past year that has averaged about six, and a single day has run between three and ten.\n\nOnly base-chain transactions are counted, so Lightning payments and transfers inside an exchange are absent: both move value without a block recording each one. The line is a floor on activity rather than a measure of it."),
-            technical: "The two arms use different divisors, and that is most of what distinguishes them.\n\nPer block the divisor is the actual gap to the previous block, so a short interval reads high and a long one reads low at an identical underlying rate. The spread this produces is enormous: over the past year the median block reads about 7 per second and the 95th percentile over 100, with the highest at 7,009, where block 949,397 carried 7,009 transactions and was stamped one second after its predecessor. A header timestamp is not a clock reading, as the Block Interval chart sets out, so the extremes here come as much from stamping as from mining.\n\nDaily the divisor is a constant 86,400 seconds, so nothing depends on when blocks arrived within the day: the line is the day's transaction count rescaled.",
+            technical: "The two arms use different divisors, and that is most of what distinguishes them.\n\nPer block the divisor is the actual gap to the previous block, so a short interval reads high and a long one reads low at an identical underlying rate. The spread this produces is enormous: over the past year the median block reads about 7 per second and the 95th percentile over 100, with the highest at 7,881, where block [972,934](block:972,934) carried 7,881 transactions and was stamped one second after its predecessor. A header timestamp is not a clock reading, as the Block Interval chart sets out, so the extremes here come as much from stamping as from mining.\n\nDaily the divisor is a constant 86,400 seconds, so nothing depends on when blocks arrived within the day: the line is the day's transaction count rescaled.",
         }),
     },
     ChartMeta {
@@ -2689,7 +2687,7 @@ The reference lines at 10% and 5% are markers for reading the trend. They are no
         ],
         about: Some(About {
             definition: Some("The two sides of every block: outputs consumed and outputs created. Bitcoin has no accounts, only discrete outputs, so spending means destroying some and making others, and every node keeps the set of unspent ones in order to validate new blocks.\n\nThe gap between the lines is not the change in that set. An OP_RETURN output is created and paid for like any other, but it is provably unspendable, so it never enters the UTXO set: it lifts the green line and never the red one. Over the past year that gap has run about two thousand outputs per block. The two can disagree about direction and not merely size: across 2025 the gap averaged about 450 outputs per block while the set itself shrank by about 390. The UTXO Growth Rate chart subtracts them and follows the set itself."),
-            technical: "The coinbase input is not counted, because it consumes nothing: the reward is newly issued rather than spent out of the output set. Its outputs are counted, because they create spendable outputs like any others. So a block carrying nothing but a coinbase consumes nothing and creates only its reward, which happens about ninety thousand times across the chain.\n\nAlmost all of those create a single output. About two thousand create more, from pools that pay their miners straight from the coinbase rather than in a separate transaction: Eligius did this from 2011 to 2017 and Ocean does it today. The largest is block 133,471, an Eligius block that paid 919.\n\nOver a day the chart plots the mean per block rather than the day's total, so the two resolutions share a scale and a busy day does not read as a tall one.",
+            technical: "The coinbase input is not counted, because it consumes nothing: the reward is newly issued rather than spent out of the output set. Its outputs are counted, because they create spendable outputs like any others. So a block carrying nothing but a coinbase consumes nothing and creates only its reward, which happens about ninety thousand times across the chain.\n\nAlmost all of those create a single output. About two thousand create more, from pools that pay their miners straight from the coinbase rather than in a separate transaction: Eligius did this from 2011 to 2017 and Ocean does it today. The largest is block [133,471](block:133,471), an Eligius block that paid 919.\n\nOver a day the chart plots the mean per block rather than the day's total, so the two resolutions share a scale and a busy day does not read as a tall one.",
         }),
     },
     ChartMeta {
@@ -4493,16 +4491,32 @@ mod tests {
             ),
             (
                 "tps",
-                "block 949,397 carried 7,009 transactions",
-                "SELECT tx_count FROM blocks WHERE height = 949397",
-                7_009.0,
-                7_009.0,
+                "block 972,934 carried 7,881 transactions",
+                "SELECT tx_count FROM blocks WHERE height = 972934",
+                7_881.0,
+                7_881.0,
+            ),
+            // The superlative, which is the part that drifts. The two rows
+            // around it pin facts about one block that can never change, so
+            // between them they could not notice the record moving, and it
+            // moved on 2026-10-24 without anything failing.
+            (
+                "tps",
+                "the highest at 7,881",
+                "SELECT b.height FROM blocks b \
+                 JOIN blocks p ON p.height = b.height-1 \
+                 WHERE b.timestamp >= strftime('%s','now','-365 days') \
+                 AND b.timestamp > p.timestamp \
+                 ORDER BY b.tx_count*1.0/(b.timestamp-p.timestamp) DESC \
+                 LIMIT 1",
+                972_934.0,
+                972_934.0,
             ),
             (
                 "tps",
                 "and was stamped one second after its predecessor",
                 "SELECT b.timestamp - p.timestamp FROM blocks b \
-                 JOIN blocks p ON p.height = b.height-1 WHERE b.height = 949397",
+                 JOIN blocks p ON p.height = b.height-1 WHERE b.height = 972934",
                 1.0,
                 1.0,
             ),
@@ -4759,6 +4773,21 @@ mod tests {
                  FROM blocks) WHERE back IS NOT NULL",
                 45.0,
                 80.0,
+            ),
+            // The span, which is the part that can go stale. The count
+            // beside it is a running total and would simply grow; what the
+            // copy claims is that no block since June 2026 has shown the
+            // overlap, and only a query for that notices when one does.
+            (
+                "protocol-fees",
+                "every one of them between April 2024 and June 2026",
+                "SELECT COUNT(*) FROM blocks \
+                 WHERE inscription_fees + runes_fees > total_fees \
+                 AND total_fees > 0 \
+                 AND (timestamp < strftime('%s','2024-04-01') \
+                      OR timestamp >= strftime('%s','2026-07-01'))",
+                0.0,
+                0.0,
             ),
             (
                 "protocol-fees",
@@ -5144,7 +5173,6 @@ mod tests {
         ("interval", "40"),
         ("multi-velocity", "197"),
         ("multi-velocity", "98"),
-        ("protocol-fees", "125,000"),
         ("time-dist", "0.3%"),
         ("time-dist", "4.5%"),
         ("time-dist", "63.9%"),
@@ -5314,8 +5342,16 @@ mod tests {
     /// exactly that, and read as a typo in the middle of the most careful
     /// paragraph on the site. Found by the owner on 2026-09-23.
     ///
-    /// The one piece of structure the renderer does honour is a blank line,
-    /// which splits paragraphs, so that is deliberately not caught here.
+    /// Two pieces of structure the renderer does honour, so neither is caught
+    /// here. A blank line splits paragraphs. And in an About field,
+    /// `[label](block:409,008)` becomes a control opening the block modal,
+    /// parsed by `copy_with_links` in the single-chart view.
+    ///
+    /// A subtitle has no such renderer: it is printed as text on the card and
+    /// again on the page, so a link there is literal-asterisk breakage and
+    /// stays banned. Targets are checked against what the parser actually
+    /// handles, because an unrecognised one falls back to plain text and the
+    /// reader sees the raw markers.
     #[test]
     fn copy_carries_no_markup_the_page_cannot_render() {
         const MARKUP: &[(&str, &str)] = &[
@@ -5324,22 +5360,80 @@ mod tests {
             ("`", "code"),
             ("<em", "raw html"),
             ("<strong", "raw html"),
-            ("](", "a markdown link"),
         ];
         for c in CHARTS.iter() {
-            let fields = [
-                Some(c.desc_per_block),
-                Some(c.desc_daily),
+            let subtitles = [c.desc_per_block, c.desc_daily];
+            let long: Vec<&str> = [
                 c.about.and_then(|a| a.definition),
                 c.about.map(|a| a.technical),
-            ];
-            for text in fields.into_iter().flatten() {
+            ]
+            .into_iter()
+            .flatten()
+            .collect();
+
+            for text in subtitles.iter().chain(long.iter()) {
                 for (mark, what) in MARKUP {
                     assert!(
                         !text.contains(mark),
                         "{}: copy contains {mark:?} ({what}), which the \
                          About block prints literally because it renders \
                          text rather than markup",
+                        c.slug
+                    );
+                }
+            }
+
+            for text in subtitles {
+                assert!(
+                    !text.contains("]("),
+                    "{}: a subtitle contains a link, and nothing renders one \
+                     there",
+                    c.slug
+                );
+            }
+
+            for text in long {
+                // Every opening bracket has to belong to a complete marker,
+                // or the parser emits it verbatim and the reader sees it.
+                assert_eq!(
+                    text.matches('[').count(),
+                    text.matches("](").count(),
+                    "{}: a '[' in the copy does not open a link marker",
+                    c.slug
+                );
+                for part in text.split("](").skip(1) {
+                    let target = part
+                        .split_once(')')
+                        .unwrap_or_else(|| {
+                            panic!("{}: a link marker is never closed", c.slug)
+                        })
+                        .0;
+                    let digits =
+                        target.strip_prefix("block:").unwrap_or_else(|| {
+                            assert!(
+                                target.starts_with('/'),
+                                "{}: link target {target:?} is neither a \
+                                 block height nor a path, and the parser \
+                                 renders it as plain text",
+                                c.slug
+                            );
+                            ""
+                        });
+                    if digits.is_empty() {
+                        continue;
+                    }
+                    let height: u64 = digits
+                        .chars()
+                        .filter(|ch| ch.is_ascii_digit())
+                        .collect::<String>()
+                        .parse()
+                        .unwrap_or(0);
+                    assert!(
+                        height > 0
+                            && digits
+                                .chars()
+                                .all(|ch| ch.is_ascii_digit() || ch == ','),
+                        "{}: block link target {target:?} is not a height",
                         c.slug
                     );
                 }

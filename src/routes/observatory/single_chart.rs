@@ -12,7 +12,7 @@ use leptos::prelude::*;
 use leptos_meta::{Link, Meta, Title};
 use leptos_router::hooks::use_params_map;
 
-use super::components::{Chart, DataLoadError};
+use super::components::{show_block_detail, Chart, DataLoadError};
 use super::helpers::range_to_blocks;
 use super::shared::{DashboardData, ObservatoryState};
 use crate::stats::charts::kpi::{self, Kpis};
@@ -951,7 +951,7 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                                                 <h3 class=ABOUT_LABEL>"Definition"</h3>
                                             })}
                                             <p class="text-sm text-white/85 leading-relaxed">
-                                                {para.to_string()}
+                                                {copy_with_links(para)}
                                             </p>
                                         </div>
                                     })
@@ -972,7 +972,7 @@ fn ChartView(meta: &'static ChartMeta) -> impl IntoView {
                                             </h3>
                                         })}
                                         <p class="text-sm text-white/85 leading-relaxed">
-                                            {para.to_string()}
+                                            {copy_with_links(para)}
                                         </p>
                                     </div>
                                 })
@@ -1269,6 +1269,114 @@ fn ScaleSwitch(
 const ABOUT_LABEL: &str =
     "text-[0.65rem] uppercase tracking-widest text-[#f7931a]/85 \
      font-semibold mb-1.5";
+
+/// Render one paragraph of About copy, turning `[label](target)` into a link.
+///
+/// Two kinds of target. `block:409,008` opens the block modal, the same one a
+/// click on a chart point opens, so a height named in the prose is reachable
+/// without leaving the page or sending the reader to a third-party explorer.
+/// Anything else becomes an `href`.
+///
+/// Deliberately not a markdown crate, and deliberately narrow. The About
+/// fields are read as plain strings by the drift rows, the page-description
+/// guard and the number guard, so the markup has to leave the words around it
+/// untouched. The height is written with its thousands separator inside the
+/// target as well as the label, so adding a link introduces no figure the
+/// number guard has not already seen.
+///
+/// Anything the parser does not recognise is emitted verbatim rather than
+/// swallowed: an unmatched bracket costs a reader one stray character, where
+/// eating to the end of the paragraph costs them the sentence.
+fn copy_with_links(para: &str) -> Vec<AnyView> {
+    parse_copy(para)
+        .into_iter()
+        .map(|seg| match seg {
+            Segment::Text(t) => t.to_string().into_any(),
+            Segment::Link { label, href } => view! {
+                <a href=href.to_string() class="text-[#f7931a] hover:underline">
+                    {label.to_string()}
+                </a>
+            }
+            .into_any(),
+            Segment::Block { label, height } => block_link(label, height),
+        })
+        .collect()
+}
+
+/// One piece of a parsed paragraph. Split out from the rendering so the
+/// parser can be tested without a DOM.
+#[derive(Debug, PartialEq)]
+enum Segment<'a> {
+    Text(&'a str),
+    Link { label: &'a str, href: &'a str },
+    Block { label: &'a str, height: u64 },
+}
+
+fn parse_copy(para: &str) -> Vec<Segment<'_>> {
+    let mut out = Vec::new();
+    let mut rest = para;
+    while let Some(open) = rest.find('[') {
+        let after = &rest[open + 1..];
+        let Some(close) = after.find("](") else { break };
+        let target_start = close + 2;
+        let Some(end) = after[target_start..].find(')') else {
+            break;
+        };
+        let label = &after[..close];
+        let target = &after[target_start..target_start + end];
+        let seg = match target.strip_prefix("block:") {
+            Some(digits) => {
+                let height = digits
+                    .chars()
+                    .filter(|c| c.is_ascii_digit())
+                    .collect::<String>()
+                    .parse()
+                    .unwrap_or(0);
+                // A target that does not parse falls back to plain text. A
+                // dead control that looks clickable is worse than prose.
+                if height == 0 {
+                    Segment::Text(label)
+                } else {
+                    Segment::Block { label, height }
+                }
+            }
+            None => Segment::Link {
+                label,
+                href: target,
+            },
+        };
+        if open > 0 {
+            out.push(Segment::Text(&rest[..open]));
+        }
+        out.push(seg);
+        rest = &after[target_start + end + 1..];
+    }
+    if !rest.is_empty() {
+        out.push(Segment::Text(rest));
+    }
+    out
+}
+
+fn block_link(label: &str, height: u64) -> AnyView {
+    let label = label.to_string();
+    view! {
+        <span
+            role="button"
+            tabindex="0"
+            class="text-[#f7931a] hover:underline cursor-pointer"
+            on:click=move |_| show_block_detail(height)
+            on:keydown=move |ev: leptos::ev::KeyboardEvent| {
+                if ev.key() == "Enter" || ev.key() == " " {
+                    ev.prevent_default();
+                    show_block_detail(height);
+                }
+            }
+        >
+            {label}
+        </span>
+    }
+    .into_any()
+}
 
 /// The tray a related set of buttons sits in, so two sets side by side read as
 /// two controls rather than one long strip. The chart header puts the axis
@@ -2180,6 +2288,104 @@ fn Toggle(
 
 #[cfg(test)]
 mod tests {
+    use super::{parse_copy, Segment};
+
+    /// A paragraph with no marker survives intact, markers become links, and
+    /// anything malformed is left on the page rather than eaten.
+    ///
+    /// The last case is the one worth a test. An earlier shape of this parser
+    /// could consume from a stray `[` to the end of the paragraph, so one
+    /// mistyped bracket in the registry would silently delete a sentence from
+    /// a page nobody was looking at.
+    #[test]
+    fn copy_markers_parse_into_text_and_links() {
+        assert_eq!(
+            parse_copy("plain prose, no markers"),
+            vec![Segment::Text("plain prose, no markers")]
+        );
+
+        assert_eq!(
+            parse_copy("the record is in block [409,008](block:409,008)."),
+            vec![
+                Segment::Text("the record is in block "),
+                Segment::Block {
+                    label: "409,008",
+                    height: 409_008
+                },
+                Segment::Text("."),
+            ]
+        );
+
+        assert_eq!(
+            parse_copy("see [the method](/observatory/learn/methodology)"),
+            vec![
+                Segment::Text("see "),
+                Segment::Link {
+                    label: "the method",
+                    href: "/observatory/learn/methodology"
+                },
+            ]
+        );
+
+        // Malformed: no target, so the whole paragraph stays readable.
+        assert_eq!(
+            parse_copy("an unmatched [ bracket and more words"),
+            vec![Segment::Text("an unmatched [ bracket and more words")]
+        );
+
+        // A block target that is not a height renders as its own label, so
+        // the reader sees the word rather than a control going nowhere.
+        assert_eq!(parse_copy("[tip](block:soon)"), vec![Segment::Text("tip")]);
+    }
+
+    /// The parser loses no word of any chart's copy.
+    ///
+    /// `copy_with_links` runs over every About paragraph on the site, and the
+    /// failure that would matter is silent: text swallowed between a marker
+    /// and the end of a paragraph shows up as a sentence missing from a page
+    /// nobody is reading. So this reassembles what the parser produced and
+    /// checks every word of the original is still there, rather than trusting
+    /// the six charts that currently carry a marker.
+    #[test]
+    fn no_chart_copy_loses_a_word_to_the_parser() {
+        for meta in super::registry::CHARTS {
+            let Some(about) = meta.about else { continue };
+            let fields = [about.definition, Some(about.technical)];
+            for text in fields.into_iter().flatten() {
+                for para in text.split("\n\n") {
+                    let rebuilt: String = parse_copy(para)
+                        .into_iter()
+                        .map(|seg| match seg {
+                            Segment::Text(t) => t,
+                            Segment::Link { label, .. } => label,
+                            Segment::Block { label, .. } => label,
+                        })
+                        .collect();
+                    // `](` only, not `block:`. Ordinary prose writes "per
+                    // block: the divisor is..." with a colon, and utxo-flow
+                    // does, so the target prefix is not evidence of anything
+                    // on its own.
+                    assert!(
+                        !rebuilt.contains("]("),
+                        "{}: a marker survived into the rendered text",
+                        meta.slug
+                    );
+                    // Every word that is not itself part of a marker has to
+                    // come out the other side.
+                    for word in
+                        para.split_whitespace().filter(|w| !w.contains("]("))
+                    {
+                        assert!(
+                            rebuilt.contains(word.trim_matches('[')),
+                            "{}: the parser dropped {word:?}",
+                            meta.slug
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     /// No chart's page description may end up saying "measured in count".
     ///
     /// The clause is dropped, not filled, for the 20-odd charts that really

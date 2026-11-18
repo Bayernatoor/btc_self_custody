@@ -1224,13 +1224,27 @@ pub fn max_tx_fee_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         return no_data_chart("Max Tx Fee");
     }
 
-    let fee_fn =
-        |b: &BlockSummary| round(b.max_tx_fee as f64 / 100_000_000.0, 6);
-    let data_str = build_data_array_f64(blocks, fee_fn);
+    // `None`, not zero, where there is no transaction to take a maximum of.
+    //
+    // Same distinction `avg_fee_per_tx_chart` already makes above: a
+    // coinbase-only block has no user transaction, so "the largest fee was 0"
+    // is a claim about a fee that does not exist. 89,947 blocks are in that
+    // position, and emitting zero for them put the rail's low at 0 on any
+    // range containing one, which is seven of the last month's blocks.
+    //
+    // A zero is still plotted where the block *did* carry transactions and
+    // every one of them was free, which is 36,266 blocks of the era before
+    // fees were normal. There the reading is real.
+    let fee_fn = |b: &BlockSummary| {
+        (b.tx_count > 1).then(|| round(b.max_tx_fee as f64 / 100_000_000.0, 6))
+    };
+    let data_str = build_data_array_opt_f64(blocks, fee_fn);
     let data = data_array_value(&data_str);
 
-    let raw: Vec<f64> = blocks.iter().map(fee_fn).collect();
-    let ma = moving_average(&raw, 144);
+    // 144 *blocks*, not 144 readings, for the reason `moving_average_over_gaps`
+    // exists: filtering the gaps out first lets the window reach past its name.
+    let readings: Vec<Option<f64>> = blocks.iter().map(fee_fn).collect();
+    let ma = moving_average_over_gaps(&readings, 144);
     let ma_str = build_ma_array(blocks, &ma);
     let ma_data = data_array_value(&ma_str);
 
@@ -1256,6 +1270,66 @@ pub fn max_tx_fee_chart(blocks: &[BlockSummary]) -> serde_json::Value {
         "tooltip": tooltip_axis(),
         "legend": { "show": has_ma },
         "series": series
+    }))
+}
+
+/// Protocol fees from daily aggregates.
+///
+/// Divided by the day's block count rather than left as a day total, which
+/// keeps both arms in BTC per block. A total would jump 144-fold the moment
+/// the range crosses into daily resolution, and the sibling `fees_chart_daily`
+/// made the same choice for the same reason.
+pub fn protocol_fee_breakdown_chart_daily(
+    days: &[DailyAggregate],
+) -> serde_json::Value {
+    if days.is_empty() {
+        return no_data_chart("Inscription and Runes Fees");
+    }
+
+    let has_data = days
+        .iter()
+        .any(|d| d.total_inscription_fees > 0 || d.total_runes_fees > 0);
+    if !has_data {
+        return no_data_chart("Inscription and Runes Fees");
+    }
+
+    let cats: Vec<String> = days.iter().map(|d| d.date.clone()).collect();
+    // A day with no blocks has nothing to average, so it is a gap rather
+    // than a zero. Same distinction the per-block fee builders make.
+    let per_block = |total: u64, blocks: u64| -> serde_json::Value {
+        if blocks == 0 {
+            json!(null)
+        } else {
+            json!(round(total as f64 / blocks as f64 / 100_000_000.0, 8))
+        }
+    };
+    let insc: Vec<serde_json::Value> = days
+        .iter()
+        .map(|d| per_block(d.total_inscription_fees, d.block_count))
+        .collect();
+    let runes: Vec<serde_json::Value> = days
+        .iter()
+        .map(|d| per_block(d.total_runes_fees, d.block_count))
+        .collect();
+
+    build_option(json!({
+        "xAxis": x_axis_for(true, &cats),
+        "yAxis": y_axis("BTC"),
+        "dataZoom": data_zoom(),
+        "tooltip": tooltip_axis(),
+        "legend": { "show": true },
+        "series": [
+            {
+                "name": "Inscriptions", "type": "line", "data": insc,
+                "lineStyle": { "width": 1.5, "color": "#06b6d4" },
+                "itemStyle": { "color": "#06b6d4" }, "symbol": "none"
+            },
+            {
+                "name": "Runes", "type": "line", "data": runes,
+                "lineStyle": { "width": 1.5, "color": RUNES_COLOR },
+                "itemStyle": { "color": RUNES_COLOR }, "symbol": "none"
+            }
+        ]
     }))
 }
 

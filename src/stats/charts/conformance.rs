@@ -3252,6 +3252,7 @@ mod tests {
             // no single average or peak.
             "protocol-fee-competition (daily)",
             "protocol-fee-competition (per block)",
+            "protocol-fees (daily)",
             "protocol-fees (per block)",
             "utxo-flow (daily)",
             "utxo-flow (per block)",

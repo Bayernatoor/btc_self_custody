@@ -335,6 +335,32 @@ them. Worse, block 899,136 is stamped 2025-05-31 00:01:30, so that day carries o
 difficulty and is indistinguishable from a blend day. Read the event's own row; do not infer it
 from `daily_blocks`.
 
+### The Runes classifier changed at `BACKFILL_VERSION` 15 without a re-sweep
+
+**Do this on the next bump, whatever prompts it.** On 2026-11-18 `classify` stopped treating any
+OP_RETURN of six bytes or fewer as Runes. A runestone is `6a5d` (OP_RETURN OP_13) and was already
+caught by the prefix test above it, so the length branch only ever added errors. Sampled against
+the node over three windows spanning the whole Runes era:
+
+| blocks | `6a5d` runestones | caught by the length rule |
+|---|---|---|
+| 840,000-840,009, Runes launch | 39,418 | 4 |
+| 900,000-900,009 | 12,691 | 5 |
+| 975,880-975,899 | 103,774 | 15 |
+
+What it caught was `6a00` (an empty push), `6a046e6f7065` ("nope") and similar: 0.01% to 0.04%,
+none of it Runes.
+
+**The version was deliberately not bumped**, because 0.04% is well under the chart's visual
+resolution and a full-chain sweep is not worth spending on a rounding error. The cost of that
+choice is a discontinuity at the height where the new code started ingesting: earlier rows count
+those outputs as Runes, later ones as DataCarrier. It moves `runes_count`, `runes_bytes` and
+`runes_fees` down a hair and `data_carrier_count` up the same; `op_return_count` is unaffected,
+since both classes are OP_RETURN either way.
+
+So the next sweep silently fixes it, and until then nothing warns. Which is the shape the watch
+trap above is about, arrived at on purpose this time rather than by accident.
+
 ## Deployment
 
 `.github/workflows/deploy.yml` on push to master: builds on the runner, runs `cargo test --lib`,
