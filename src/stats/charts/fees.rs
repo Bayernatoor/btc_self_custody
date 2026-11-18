@@ -872,7 +872,11 @@ pub fn halving_era_chart(blocks: &[BlockSummary]) -> serde_json::Value {
 
     let subsidy_labels =
         ["50 BTC", "25 BTC", "12.5 BTC", "6.25 BTC", "3.125 BTC"];
-    let era_colors = ["#fbbf24", "#f59e0b", "#d97706", "#b45309", "#92400e"];
+    // Eras are ordered, so the ramp is sequential, but the old one stepped
+    // through adjacent ambers: era 3 (#d97706) against era 4 (#b45309) was
+    // barely two shades apart on a dark background. Widened so neighbours
+    // separate on luminance as well as hue.
+    let era_colors = ["#fde68a", "#fbbf24", "#f97316", "#c2410c", "#7c2d12"];
     let metrics = [
         "Avg Size (MB)",
         "Avg Tx Count",
@@ -1002,7 +1006,11 @@ pub fn halving_era_chart_daily(days: &[DailyAggregate]) -> serde_json::Value {
 
     let subsidy_labels =
         ["50 BTC", "25 BTC", "12.5 BTC", "6.25 BTC", "3.125 BTC"];
-    let era_colors = ["#fbbf24", "#f59e0b", "#d97706", "#b45309", "#92400e"];
+    // Eras are ordered, so the ramp is sequential, but the old one stepped
+    // through adjacent ambers: era 3 (#d97706) against era 4 (#b45309) was
+    // barely two shades apart on a dark background. Widened so neighbours
+    // separate on luminance as well as hue.
+    let era_colors = ["#fde68a", "#fbbf24", "#f97316", "#c2410c", "#7c2d12"];
     let metrics = [
         "Avg Size (MB)",
         "Avg Tx Count",

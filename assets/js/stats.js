@@ -274,6 +274,27 @@
         };
     }
 
+    // Break a label over two lines at whichever space leaves the two halves
+    // closest in length, so "Avg Size (MB)" becomes "Avg Size" over "(MB)"
+    // rather than "Avg" over "Size (MB)". A label with no space is returned
+    // untouched: a mid-word break reads worse than a long line.
+    function wrapIntoTwoLines(label) {
+        var words = String(label).split(' ');
+        if (words.length < 2) return label;
+        var best = label;
+        var bestWidest = Infinity;
+        for (var i = 1; i < words.length; i++) {
+            var head = words.slice(0, i).join(' ');
+            var tail = words.slice(i).join(' ');
+            var widest = Math.max(head.length, tail.length);
+            if (widest < bestWidest) {
+                bestWidest = widest;
+                best = head + '\n' + tail;
+            }
+        }
+        return best;
+    }
+
     function applyMobileAdjustments(opts) {
         if (window.innerWidth >= 640) return;
         // Hide toolbox: not usable on touch screens
@@ -363,6 +384,23 @@
             if (!xa) return;
             xa.axisLabel = xa.axisLabel || {};
             xa.axisLabel.fontSize = 11;
+            // A category axis carrying only a few labels still loses some of
+            // them on a phone: ECharts hides whichever would overlap
+            // its neighbour, so Halving Era drew two of its four metric names
+            // and gave no sign the other two existed. Dropping a date out of
+            // a long run costs nothing, but dropping half the categories of a
+            // four-category chart removes the thing being compared. With this
+            // few there is room for all of them once each may wrap, so show
+            // every label and break it over two lines.
+            if (xa.type === 'category' && Array.isArray(xa.data)
+                && xa.data.length > 1 && xa.data.length <= 6) {
+                xa.axisLabel.interval = 0;
+                xa.axisLabel.fontSize = 10;
+                xa.axisLabel.lineHeight = 12;
+                if (!xa.axisLabel.formatter) {
+                    xa.axisLabel.formatter = wrapIntoTwoLines;
+                }
+            }
         });
         // DataZoom slider: reduce height on mobile
         if (opts.dataZoom && Array.isArray(opts.dataZoom)) {
