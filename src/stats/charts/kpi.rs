@@ -175,15 +175,22 @@ fn point_of(
 /// `xAxis.data`, the category labels. Daily charts put their dates here and
 /// emit bare numbers in the series, so this is the only place the date of a
 /// peak or low can come from for them.
+/// The category labels, from whichever axis carries them.
+///
+/// `yAxis` as well as `xAxis`, because a horizontal bar chart puts its
+/// categories on y. Reading x alone left Empty Blocks by Pool with no labels
+/// to find, so its rail named the largest entry "#0" instead of "SpiderPool".
 fn axis_labels(opt: &serde_json::Value) -> Vec<String> {
-    opt.get("xAxis")
-        .and_then(|x| x.get("data"))
-        .and_then(|d| d.as_array())
-        .map(|a| {
-            a.iter()
-                .map(|v| v.as_str().unwrap_or_default().to_string())
-                .collect()
+    ["xAxis", "yAxis"]
+        .into_iter()
+        .filter_map(|axis| {
+            opt.get(axis)?.get("data")?.as_array().map(|a| {
+                a.iter()
+                    .map(|v| v.as_str().unwrap_or_default().to_string())
+                    .collect::<Vec<String>>()
+            })
         })
+        .find(|labels| labels.iter().any(|l| !l.is_empty()))
         .unwrap_or_default()
 }
 
@@ -675,6 +682,34 @@ mod tests {
                 assert!((average - 2.0).abs() < 1e-9)
             }
             other => panic!("expected Series, got {other:?}"),
+        }
+    }
+
+    /// A horizontal bar chart names its entries, rather than numbering them.
+    ///
+    /// Categories sit on `yAxis` when the bars run sideways, and the rail
+    /// read `xAxis` alone, so Empty Blocks by Pool reported its largest
+    /// entry as "#0". The value and the share were right the whole time,
+    /// which is why nothing failed.
+    #[test]
+    fn a_sideways_bar_chart_takes_its_labels_from_the_y_axis() {
+        let json = r#"{
+            "xAxis": {"type": "value", "name": "Empty Blocks"},
+            "yAxis": {"type": "category", "data": ["SpiderPool", "AntPool"]},
+            "series": [{"name": "Empty Blocks", "data": [30, 17]}]
+        }"#;
+        match compute(json, Shape::Histogram, Unit::Count, true) {
+            Kpis::Categorical {
+                top_name,
+                top_value,
+                entries,
+                ..
+            } => {
+                assert_eq!(top_name, "SpiderPool");
+                assert_eq!(top_value, 30.0);
+                assert_eq!(entries, 2);
+            }
+            other => panic!("expected Categorical, got {other:?}"),
         }
     }
 

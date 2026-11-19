@@ -61,7 +61,18 @@ fn canvas_id(slug: &str) -> String {
 
 fn fmt_num(v: f64) -> String {
     let abs = v.abs();
-    if abs >= 1e12 {
+    // Past T, because hash rate lives there. The network runs at about
+    // 1e21 hashes a second, which stopping at T rendered as
+    // "982137644.1T": arithmetically right and unreadable. E is not an
+    // obscure suffix for this metric, it is the one every pool and
+    // explorer quotes, so EH/s is what a reader already expects.
+    if abs >= 1e21 {
+        format!("{:.1}Z", v / 1e21)
+    } else if abs >= 1e18 {
+        format!("{:.1}E", v / 1e18)
+    } else if abs >= 1e15 {
+        format!("{:.1}P", v / 1e15)
+    } else if abs >= 1e12 {
         format!("{:.1}T", v / 1e12)
     } else if abs >= 1e9 {
         format!("{:.1}G", v / 1e9)
@@ -2289,6 +2300,25 @@ fn Toggle(
 #[cfg(test)]
 mod tests {
     use super::{parse_copy, Segment};
+
+    /// The rail's suffix ladder reaches the scale hash rate actually runs at.
+    ///
+    /// It stopped at T, so the network's ~1e21 hashes a second printed as
+    /// "982137644.1T hashes/s": correct, and no reader gets a magnitude out
+    /// of it. The ladder is SI, so difficulty keeps reading in T as before.
+    #[test]
+    fn the_rail_scales_past_terahashes() {
+        use super::fmt_num;
+        // What the Hash Rate rail was showing, and what it should show.
+        assert_eq!(fmt_num(9.821376441e20), "982.1E");
+        assert_eq!(fmt_num(1.1164984539e21), "1.1Z");
+        // Difficulty's range is untouched: the old reasoning holds there.
+        assert_eq!(fmt_num(1.55973032196072e14), "156.0T");
+        assert_eq!(fmt_num(2.5e15), "2.5P");
+        // And nothing below the new rungs moved.
+        assert_eq!(fmt_num(1.5e9), "1.5G");
+        assert_eq!(fmt_num(-1.5e18), "-1.5E");
+    }
 
     /// A paragraph with no marker survives intact, markers become links, and
     /// anything malformed is left on the page rather than eaten.

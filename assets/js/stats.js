@@ -124,22 +124,27 @@
     // fixed divisor works: dividing by 1e12 put every historical value below
     // 1, where the axis rendered its floor as "0.0000000001".
     //
-    // Deliberately short of "P" and beyond: difficulty reaches the low
-    // hundreds of T, and a suffix a reader has to look up is worse than an
-    // exponent. Anything larger falls back to exponential notation.
+    // Carried past T for hash rate, which runs near 1e21 and rendered as
+    // "1.1e+21" on an axis whose rail said "1090001177.5T": two unreadable
+    // spellings of the same number that did not even agree. E is the suffix
+    // this metric is quoted in everywhere, so it is not one a reader has to
+    // look up. Beyond Z, exponential notation is still the fallback.
     function siSuffix(v) {
         if (v === 0) return '0';
         if (!isFinite(v)) return String(v);
         var neg = v < 0;
         var n = Math.abs(v);
         var units = [
+            { at: 1e21, s: 'Z' },
+            { at: 1e18, s: 'E' },
+            { at: 1e15, s: 'P' },
             { at: 1e12, s: 'T' },
             { at: 1e9,  s: 'G' },
             { at: 1e6,  s: 'M' },
             { at: 1e3,  s: 'K' }
         ];
         var out;
-        if (n >= 1e15) {
+        if (n >= 1e24) {
             out = n.toExponential(1);
         } else {
             var u = null;
