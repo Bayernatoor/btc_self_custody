@@ -1718,8 +1718,8 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "One point per retarget, every 2,016 blocks, not per block. Drawn as two series split by sign so the bars can be coloured; together they are one series of retargets. Both the date and the percentage come from the two retarget blocks, so the bar is the same wherever the range happens to end. A retarget that changed nothing is not drawn: the first sixteen epochs all sat at difficulty 1.0.",
         }],
         about: Some(About {
-            definition: Some("Every 2,016 blocks, roughly every 2 weeks, Bitcoin measures how long those blocks took and resets difficulty so that the next 2,016 are expected to take two weeks. Expected, not guaranteed: block discovery is random and hash rate keeps moving, so an epoch routinely runs days early or late. Every node computes the same correction from the same rule. If miners leave, blocks come slower and the network makes itself easier. If they arrive, it makes itself harder. This is that correction, as a percentage."),
-            technical: "The largest fall on record is 27.94%, at height 689,472 in the week of the 2021 mining ban in China. The largest rises are from 2010, when the network was small enough for one operator to move it. Rises and falls are coloured separately so the sign is readable at a glance.",
+            definition: Some("Every 2,016 blocks, roughly every 2 weeks, Bitcoin measures how long those blocks took and resets difficulty so that the next 2,016 are expected to take two weeks. Expected, not guaranteed: block discovery is random and hash rate keeps moving, so an epoch routinely runs days early or late. Every node computes the same correction from the same rule. If miners leave, blocks come slower and the network makes itself easier. If they arrive, it makes itself harder. This is that correction, as a percentage.\n\nThe largest fall on record is 27.94%, at height [689,472](block:689,472) in the week of the 2021 mining ban in China. The largest rise is July 2010, when 2,016 blocks arrived in three days and eight hours against a two-week target, an average of two minutes and twenty-three seconds apart. That is still the fastest epoch in the chain, and the correction it called for was larger than the protocol permits."),
+            technical: "Read from the difficulty in each block header. Where a block's difficulty differs from the block before it, that is a retarget, and the bar is the new difficulty divided by the previous one, less one, as a percentage. The change itself marks the retarget rather than the height doing it, so an epoch that reset difficulty to the same value draws nothing.\n\nThe protocol clamps a retarget to a factor of four in either direction, so no bar can rise above 300% or fall below -75%, however far off two weeks the epoch ran. That ceiling has been reached once in 484 retargets, at height [68,544](block:68,544) in July 2010, which is why that bar reads exactly 300.",
         }),
     },
     ChartMeta {
@@ -1776,7 +1776,7 @@ pub const CHARTS: &[ChartMeta] = &[
             },
         ],
         about: Some(About {
-            definition: Some("How hard it currently is to mine a block. Every miner races to find a number that makes the block's hash fall below a target, and difficulty is the easiest target the protocol allows divided by the current one. So a harder target is a smaller number and a larger difficulty. No one sets it by hand: every node derives the same value from the previous 2,016 blocks."),
+            definition: Some("How hard it currently is to mine a block. Every miner races to find a number that makes the block's hash fall below a target, and difficulty is the easiest target the protocol allows divided by the current target. So a harder target is a smaller number and a larger difficulty. No one sets it by hand: every node derives the same value from the previous 2,016 blocks."),
             technical: "Read from the header of every block, so this is the protocol's own value. It changes once every 2,016 blocks, roughly every two weeks, which is why the line steps. Multiply by 2^32 for the expected number of hashes per block, the figure hash-rate estimates are built on.",
         }),
     },
@@ -1801,7 +1801,9 @@ pub const CHARTS: &[ChartMeta] = &[
         }],
         about: Some(About {
             definition: Some("One number for how concentrated block production is. It is the Herfindahl-Hirschman Index, borrowed from competition economics: square each pool's percentage share and add them up. Two pools at 50% each score 5,000; a hundred pools at 1% each score 100. It rises faster than a share does, which is the point, because concentration is what it is built to be sensitive to."),
-            technical: "Computed from the shares of blocks in the selected range, by pool, after excluding blocks with no identified pool and renormalising the rest. So it describes identified block production and not ownership of hash rate, and OCEAN template miners count as separate participants because that is how they appear in the coinbase. The 1,000 and 1,800 boundaries and their colours are the conventional reading from antitrust practice, not validated thresholds for Bitcoin. A monopoly scores 10,000, perfectly distributed mining scores near 0. Below 1,000 (green): competitive market. 1,000-1,800 (yellow): moderate concentration. Above 1,800 (red): high concentration, meaning a small number of pools control most of the hashrate. Unknown miners are excluded from the calculation.",
+            technical: "Square each pool's share of the range's blocks and add them up. A monopoly scores 10,000; perfectly spread mining scores near zero. The boundaries at 1,000 and 1,800 and their colours are the conventional reading from antitrust practice rather than thresholds anyone has validated for Bitcoin.\n\nBlocks whose pool cannot be identified are dropped and the shares renormalised over the rest. That assumption carries more weight than it looks: it spreads untagged blocks across the named pools in proportion.\n\nOn recent ranges that costs little, since almost every block is tagged. Further back it decides the answer. No block before 2012 carries a tag and half the chain to date is untagged, so over ALL this method scores 1,286 where treating untagged blocks as one miner scores 2,941 and treating each as its own scores 304. Read the index where attribution is close to complete, which is the last few years.\n\nOCEAN's members tag themselves inside OCEAN's own coinbase tag, so they arrive as separate labels and are folded back into one pool here. That tag names a miner; it does not say who chose the block's transactions.",
+
+
         }),
     },
     ChartMeta {
@@ -1824,8 +1826,8 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Counted where tx_count is one, grouped by calendar month. An empty block is a valid block; the count does not establish why it was empty.",
         }],
         about: Some(About {
-            definition: Some("A block carrying nothing but the miner's own payment to itself. Every block has that one transaction, the coinbase, so a block with a count of one collected no fees and moved nobody's coins. They are almost extinct: close to 90,000 exist in the whole chain, and almost all of them predate 2011."),
-            technical: "Blocks whose transaction count is one, so the coinbase is all there is. This chart does not establish why a miner produced one: a pool can be building on a tip it is still validating, and the data shows the result rather than the reason. 86,656 of them are unattributed, because pool identification depends on coinbase patterns that did not exist in 2009 and 2010, which is also when almost all of them were mined. Modern pools typically include transactions within seconds of receiving a new block.",
+            definition: Some("A block carrying nothing but the miner's own payment to itself. Every block has that one transaction, the coinbase, so a block with a count of one collected no fees and moved nobody's coins. They are almost extinct: close to 90,000 exist in the whole chain, and almost all of them predate 2011.\n\nEarly on there was nothing to put in them: 99% of 2009's blocks are empty and the average block that year carried the coinbase and nothing else. The few that still happen sit right behind another block. Since 2022 an empty block has arrived under a minute after the one before it on average, against about ten minutes for every other block, and two in three land inside thirty seconds.\n\nThat gap is a pool's own to close. The moment a block arrives, every hasher still working the old tip is wasting effort, so a pool moves them across immediately; a coinbase on its own is the one job it can issue before it knows what the new block contained. How long it stays on that job is engineering rather than luck, and pools differ enormously at it. Empty Blocks by Pool has the spread."),
+            technical: "Blocks whose transaction count is one, so the coinbase is all there is. That timing is consistent with the explanation but does not prove it: this chart records what a block held, not what its miner was doing.\n\n86,656 are unattributed, because pool identification depends on coinbase patterns that did not exist in 2009 and 2010, which is when almost all of them were mined.",
         }),
     },
     ChartMeta {
@@ -1835,7 +1837,13 @@ pub const CHARTS: &[ChartMeta] = &[
         desc_daily: "Coinbase-only blocks in the range, grouped by the pool that mined them",
         category: Category::Mining,
         unit: Unit::Count,
-        shape: Shape::Bar,
+        // Histogram, not Bar, and the difference is the rail rather than the
+        // drawing. A Bar routes through the series rail, which reported
+        // "change -29.0, -96.7%" here: the smallest pool's count minus the
+        // largest's, across buckets sorted by size, so it was guaranteed
+        // negative and measured nothing. The sibling Empty Blocks chart was
+        // already declared this way.
+        shape: Shape::Histogram,
         source: Source::Mining(MiningChart::EmptyByPool),
         measurements: &[Measurement {
             series: "",
@@ -1849,7 +1857,7 @@ pub const CHARTS: &[ChartMeta] = &[
         }],
         about: Some(About {
             definition: Some("Which pools mined the coinbase-only blocks. Almost all of them are unattributed, because pool identification reads patterns in the coinbase that did not exist in 2009 and 2010, which is when nearly every empty block was mined. So the Unknown bar is a statement about the early chain rather than about anonymity today."),
-            technical: "Blocks with a transaction count of one, grouped by the matched miner string, with unmatched blocks under Unknown. Aggregated in SQL over the height range rather than from the loaded rows, so it answers for the whole window at any resolution.",
+            technical: "Blocks with a transaction count of one, grouped by the matched miner tag, with unmatched blocks under Unknown.\n\nThese are counts rather than rates, so weigh a bar against how many blocks that pool mined at all. Doing so sharpens the chart rather than softening it: SpiderPool leads while mining about half as many blocks as AntPool.\n\nNor is it luck. Every pool sees a block arrive within thirty seconds of the last at much the same rate, around one block in sixteen. What differs is whether it can fill one: over the last two years about an eighth of SpiderPool's came out empty against about a thirtieth of AntPool's, and Foundry USA has never mined an empty block in the almost six years it has been mining.",
         }),
     },
     ChartMeta {
@@ -1876,7 +1884,7 @@ pub const CHARTS: &[ChartMeta] = &[
         }],
         about: Some(About {
             definition: Some("Which mining pools are finding blocks, and in what proportion. Miners join a pool to get a steady payout instead of a rare large one, and the pool chooses which transactions its members' blocks include. The shares therefore show how much of block production a few operators direct."),
-            technical: "Attributed from the coinbase transaction, where pools tag themselves by convention. Nothing requires it, so a pool that stops tagging, or tags differently, moves between these categories while nothing changes on the network. Untagged blocks are counted as unknown, never shared out among the named pools.",
+            technical: "Attributed from the coinbase transaction, where pools tag themselves by convention. Nothing requires it, so a pool that stops tagging, or tags differently, moves between these categories while nothing changes on the network. Untagged blocks are counted as unknown.\n\nThe ten largest pools in the window get a slice each and everything below them is grouped as Other. Other and Unknown are not the same thing: Other is small pools that did tag themselves, Unknown is blocks that did not.",
         }),
     },
     ChartMeta {
@@ -1904,7 +1912,7 @@ pub const CHARTS: &[ChartMeta] = &[
             population: "Outputs of non-coinbase transactions. Six script types are plotted; OP_RETURN, bare multisig and unrecognised scripts are not among them, so the bands do not sum to every output.",
         }],
         about: Some(About {
-            definition: Some("The type of address each new output pays to. Every output commits to a script, and the shape of that script says which format the receiver gave out: a legacy '1', a '3' that commits to a hash of the spending conditions rather than to a single key, a SegWit 'bc1q' or a Taproot 'bc1p'. Modern wallets often put a SegWit program behind a '3', which is why that band did not empty when 'bc1q' arrived. One band is not an address at all: P2PK paid a public key directly, before address formats existed. It has not stopped entirely, but it arrives in bursts rather than a trickle: roughly one block in seven hundred carries one, and most days have none at all. Counting them is how the chain shows a format being adopted."),
+            definition: Some("The type of address each new output pays to. Every output commits to a script, and the shape of that script says which format the receiver gave out: a legacy '1', a '3' that commits to a hash of the spending conditions rather than to a single key, a SegWit 'bc1q' or a Taproot 'bc1p'. Modern wallets often put a SegWit program behind a '3', which is why that band did not empty when 'bc1q' arrived. One band is not an address at all: P2PK paid a public key directly, before address formats existed. It has not stopped entirely, but it arrives in bursts rather than a trickle, and most days have none at all. Counting them is how the chain shows a format being adopted."),
             technical: "Counts of outputs created per script type, from the classification stored per block. Daily values are totals for the day, not per-block averages: 3.0 per block over 10 blocks is 30. Coinbase outputs are included: a coinbase payout is an output of its script type like any other, and excluding it made the early chain, which is almost entirely coinbase, read as empty.\n\nThe P2SH band is the one that hides things. A '3' output is only a commitment to a hash, so a nested SegWit program, a multi-signature arrangement and a timelock are the same shape on creation, and the script behind it is revealed only when the output is spent. This chart counts outputs as they are created, so it cannot separate them, and no column here does.\n\nA band can also start before the rule that gave it meaning, because a script shape is valid to create before the network agrees what it means. Six P2SH outputs sit in five blocks from 2012-03-07, and the BIP-16 marker is at block [173,805](block:173,805) on 2012-04-01, nearly four thousand blocks later. Taproot does the same, with outputs from 2019 against a 2021 activation. Turn on the BIP activations overlay to see it: the marker lands well to the right of where the band begins.",
         }),
     },
@@ -3942,16 +3950,19 @@ mod tests {
             ),
             (
                 "address-types",
-                // Blocks that carry one, not outputs per block: the copy
-                // describes how often it happens, and an average reads as a
-                // steady trickle when 94% of days have none at all.
-                "roughly one block in seven hundred carries a P2PK output",
-                "SELECT 1.0*COUNT(*)/(SELECT COUNT(*) FROM blocks \
-                 WHERE height >= (SELECT MAX(height)-9999 FROM blocks)) \
-                 FROM blocks WHERE height >= \
-                 (SELECT MAX(height)-9999 FROM blocks) AND p2pk_count > 0",
-                0.0005,
-                0.004,
+                // Days with none, not a rate per block. A rate is the wrong
+                // shape for something that arrives in bursts: "one block in
+                // seven hundred" was measured in a quiet stretch and read
+                // seven times too low the moment one started, on 2026-11-15.
+                // The share of empty days survives a burst, because a burst
+                // is concentrated into days rather than spread across them.
+                "most days have none at all",
+                "SELECT 100.0*SUM(CASE WHEN n = 0 THEN 1 ELSE 0 END)/ \
+                 COUNT(*) FROM (SELECT SUM(p2pk_count) n FROM blocks \
+                 WHERE timestamp >= strftime('%s','now','-365 days') \
+                 GROUP BY date(timestamp,'unixepoch'))",
+                60.0,
+                100.0,
             ),
             (
                 "pq-exposed-value",
@@ -4831,6 +4842,197 @@ mod tests {
                 94.0,
                 94.0,
             ),
+            // A superlative, so it is the part that can go stale. The
+            // duration itself cannot: those blocks are 900,000 deep and
+            // their timestamps are settled.
+            (
+                "diff-adjustment",
+                "still the fastest epoch in the chain",
+                "SELECT d.height FROM blocks d \
+                 JOIN blocks p ON p.height = d.height-2016 \
+                 WHERE d.height % 2016 = 0 \
+                 ORDER BY d.timestamp - p.timestamp ASC LIMIT 1",
+                68_544.0,
+                68_544.0,
+            ),
+            // The ceiling, which is protocol rather than measurement: a
+            // retarget is clamped to a factor of four, so +300% is the most
+            // a bar can read. Guarded as the exact value because the copy
+            // says "exactly 300", and as a count because a second strike
+            // would make "once" wrong.
+            (
+                "diff-adjustment",
+                "at height 68,544 in July 2010, which is why that bar reads exactly 300",
+                "SELECT 100.0*(d.difficulty-p.difficulty)/p.difficulty \
+                 FROM blocks d JOIN blocks p ON p.height = d.height-2016 \
+                 WHERE d.height = 68544",
+                299.99,
+                300.01,
+            ),
+            (
+                "diff-adjustment",
+                "That ceiling has been reached once in 484 retargets",
+                "SELECT COUNT(*) FROM blocks d \
+                 JOIN blocks p ON p.height = d.height-2016 \
+                 WHERE d.height % 2016 = 0 AND p.difficulty > 0 \
+                 AND d.difficulty/p.difficulty >= 3.999",
+                1.0,
+                1.0,
+            ),
+            // The three treatments of an untagged block, over ALL. The
+            // point of the sentence is the spread between them, so all
+            // three are watched: if they ever converge, the paragraph
+            // claiming the choice decides the answer stops being true.
+            // Three pools named in the copy. The two shares are the point
+            // of the paragraph and the zero is its punchline, so all three
+            // are watched: any of them moving makes the sentence wrong.
+            (
+                "empty-by-pool",
+                "SpiderPool leads while mining about half as many blocks as AntPool",
+                "SELECT 1.0*(SELECT COUNT(*) FROM blocks \
+                 WHERE miner = 'SpiderPool' \
+                 AND timestamp >= strftime('%s','now','-365 days')) \
+                 / (SELECT COUNT(*) FROM blocks WHERE miner = 'AntPool' \
+                 AND timestamp >= strftime('%s','now','-365 days'))",
+                0.40,
+                0.60,
+            ),
+            (
+                "empty-by-pool",
+                "about an eighth of SpiderPool's came out empty",
+                "SELECT 100.0*SUM(CASE WHEN b.tx_count <= 1 THEN 1 ELSE 0 \
+                 END)/COUNT(*) FROM blocks b \
+                 JOIN blocks p ON p.height = b.height-1 \
+                 WHERE b.miner = 'SpiderPool' \
+                 AND b.timestamp - p.timestamp < 30 \
+                 AND b.timestamp >= strftime('%s','now','-730 days')",
+                9.0,
+                17.0,
+            ),
+            (
+                "empty-by-pool",
+                "against about a thirtieth of AntPool's",
+                "SELECT 100.0*SUM(CASE WHEN b.tx_count <= 1 THEN 1 ELSE 0 \
+                 END)/COUNT(*) FROM blocks b \
+                 JOIN blocks p ON p.height = b.height-1 \
+                 WHERE b.miner = 'AntPool' \
+                 AND b.timestamp - p.timestamp < 30 \
+                 AND b.timestamp >= strftime('%s','now','-730 days')",
+                1.5,
+                5.5,
+            ),
+            // An exact zero, which is what makes it worth printing: not
+            // "rarely" but "never", over 76,693 blocks.
+            (
+                "empty-by-pool",
+                "Foundry USA has never mined an empty block",
+                "SELECT COUNT(*) FROM blocks \
+                 WHERE miner = 'Foundry USA' AND tx_count <= 1",
+                0.0,
+                0.0,
+            ),
+            // The span the claim covers, so "almost six years" stops being
+            // true before it quietly becomes "almost seven".
+            (
+                "empty-by-pool",
+                "in the almost six years it has been mining",
+                "SELECT (MAX(timestamp) - MIN(timestamp))/31557600.0 \
+                 FROM blocks WHERE miner = 'Foundry USA'",
+                5.5,
+                6.5,
+            ),
+            (
+                "empty-blocks",
+                "99% of 2009's blocks are empty",
+                "SELECT 100.0*SUM(CASE WHEN tx_count = 1 THEN 1 ELSE 0 END)/ \
+                 COUNT(*) FROM blocks \
+                 WHERE timestamp < strftime('%s','2010-01-01')",
+                98.0,
+                100.0,
+            ),
+            // The modern cause, which is the claim worth watching: an empty
+            // block is one that arrived before its miner had a template.
+            // Both halves are a trailing window, so both can move.
+            (
+                "empty-blocks",
+                "arrived under a minute after the block before it on average",
+                "SELECT AVG(b.timestamp - p.timestamp) FROM blocks b \
+                 JOIN blocks p ON p.height = b.height-1 \
+                 WHERE b.tx_count = 1 \
+                 AND b.timestamp >= strftime('%s','2022-01-01')",
+                0.0,
+                60.0,
+            ),
+            (
+                "empty-blocks",
+                "two in three land inside thirty seconds",
+                "SELECT 100.0*SUM(CASE WHEN b.timestamp - p.timestamp < 30 \
+                 THEN 1 ELSE 0 END)/COUNT(*) FROM blocks b \
+                 JOIN blocks p ON p.height = b.height-1 \
+                 WHERE b.tx_count = 1 \
+                 AND b.timestamp >= strftime('%s','2022-01-01')",
+                60.0,
+                80.0,
+            ),
+            (
+                "empty-blocks",
+                "about ten minutes for every other block",
+                "SELECT AVG(b.timestamp - p.timestamp) FROM blocks b \
+                 JOIN blocks p ON p.height = b.height-1 \
+                 WHERE b.tx_count > 1 \
+                 AND b.timestamp >= strftime('%s','2022-01-01')",
+                540.0,
+                660.0,
+            ),
+            (
+                "diversity",
+                "dropping those blocks scores 1,286",
+                "SELECT SUM(s*s) FROM (SELECT 100.0*COUNT(*)/ \
+                 (SELECT COUNT(*) FROM blocks WHERE miner <> 'Unknown') s \
+                 FROM blocks WHERE miner <> 'Unknown' \
+                 GROUP BY CASE WHEN miner LIKE 'OCEAN%' THEN 'OCEAN' \
+                 ELSE miner END)",
+                1_150.0,
+                1_420.0,
+            ),
+            (
+                "diversity",
+                "counting them as one participant scores 2,941",
+                "SELECT SUM(s*s) FROM (SELECT 100.0*COUNT(*)/ \
+                 (SELECT COUNT(*) FROM blocks) s FROM blocks GROUP BY miner)",
+                2_700.0,
+                3_200.0,
+            ),
+            (
+                "diversity",
+                "counting each as its own miner scores 304",
+                "SELECT (SELECT SUM(s*s) FROM (SELECT 100.0*COUNT(*)/ \
+                 (SELECT COUNT(*) FROM blocks) s FROM blocks \
+                 WHERE miner <> 'Unknown' GROUP BY miner)) \
+                 + (SELECT COUNT(*) FROM blocks WHERE miner = 'Unknown') \
+                 * (100.0/(SELECT COUNT(*) FROM blocks)) \
+                 * (100.0/(SELECT COUNT(*) FROM blocks))",
+                260.0,
+                350.0,
+            ),
+            // The claim that no block before 2012 carries a tag.
+            (
+                "diversity",
+                "no block before 2012 carries a tag",
+                "SELECT COUNT(*) FROM blocks \
+                 WHERE miner <> 'Unknown' \
+                 AND timestamp < strftime('%s','2012-01-01')",
+                0.0,
+                0.0,
+            ),
+            (
+                "diversity",
+                "half the chain to date is untagged",
+                "SELECT 100.0*SUM(CASE WHEN miner = 'Unknown' THEN 1 ELSE 0 \
+                 END)/COUNT(*) FROM blocks",
+                45.0,
+                56.0,
+            ),
             (
                 "diff-adjustment",
                 "the largest fall on record is 27.94% at height 689,472",
@@ -4977,6 +5179,10 @@ mod tests {
             "about", "around", "roughly", "nearly", "almost", "than", "over",
             "least", "fewer", "under", "to", "averages", "averaged", "reads",
             "runs", "ran", "held", "holds", "close",
+            // A figure can be introduced by what it does as well as by a
+            // hedge. "dropping those blocks scores 1,286" cleared every
+            // check: no hedge before it, no unit after, no percent sign.
+            "scores", "score", "gives",
         ];
         const UNITS: &[&str] = &[
             "bytes",
@@ -5065,8 +5271,12 @@ mod tests {
         "144",       // blocks in a day at that target
         "10",        // that target again, in minutes
         "1,000",     // the kB this site denominates every byte unit in
-        "75%",       // the SegWit witness discount
-        "2009",      // the year of the genesis block
+        // Two unrelated constants share this figure, so neither use
+        // may delete the entry: the SegWit witness discount, and the
+        // floor of a difficulty retarget, which is clamped to a
+        // factor of four either way.
+        "75%",
+        "2009", // the year of the genesis block
     ];
 
     /// Figures fixed by our own code or used as worked examples, per chart.
@@ -5102,12 +5312,17 @@ mod tests {
         ("diff-ribbon", "9"),      // span, daily arm
         ("diff-ribbon", "14"),     // span, both arms
         ("diversity", "1%"),       // the HHI worked example
-        ("diversity", "50%"),      // the same example
-        ("fee-heatmap", "80%"),    // p10 to p90 spans it by definition
-        ("fee-spikes", "200"),     // the absolute arm of the spike test
-        ("fee-spikes", "300"),     // the minimum range the builder needs
-        ("fullness-dist", "10%"),  // the histogram's bucket width
-        ("multi-velocity", "15"),  // the points-against-percent example
+        ("diversity", "100"),      // the same example
+        ("diversity", "5,000"),    // and the other half of it
+        // The index's own ceiling: one participant at 100% squares
+        // to 10,000, so no chain state can move it.
+        ("diversity", "10,000"),
+        ("diversity", "50%"),     // the same example
+        ("fee-heatmap", "80%"),   // p10 to p90 spans it by definition
+        ("fee-spikes", "200"),    // the absolute arm of the spike test
+        ("fee-spikes", "300"),    // the minimum range the builder needs
+        ("fullness-dist", "10%"), // the histogram's bucket width
+        ("multi-velocity", "15"), // the points-against-percent example
         // Same example. It needed no entry until 2026-10 only because
         // the drift row "by more than 56 points" happened to contain a
         // "5", and coverage here is a substring match. Retuning that
@@ -5239,7 +5454,12 @@ mod tests {
                                         && ch != '.'
                                         && ch != ','
                                 })
-                                .any(|tok| tok == bare)
+                                // Trailing punctuation belongs to the
+                                // sentence, not the figure: a claim ending
+                                // "in July 2010," tokenised to "2010," and
+                                // never matched the figure "2010", so the
+                                // row that guarded it did not count.
+                                .any(|tok| tok.trim_matches(['.', ',']) == bare)
                     });
                     if !covered {
                         found.push((c.slug.to_string(), fig));

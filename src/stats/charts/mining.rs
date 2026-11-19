@@ -138,6 +138,11 @@ pub fn empty_blocks_by_pool_chart(
         "xAxis": {
             "type": "value",
             "name": "Empty Blocks",
+            // Centred under the axis rather than at its end, where the
+            // default put it past the last tick and `grid.right` clipped it
+            // to "Err". Same placement Fee Pressure uses for its x name.
+            "nameLocation": "center",
+            "nameGap": 30,
             "nameTextStyle": { "color": "#d4d4d4" },
             "axisLabel": { "color": "#d4d4d4" },
             "splitLine": { "lineStyle": { "color": "rgba(255,255,255,0.1)" } }
@@ -146,10 +151,24 @@ pub fn empty_blocks_by_pool_chart(
             "type": "category",
             "data": pools,
             "inverse": true,
-            "axisLabel": { "color": "#e8e8e8", "fontSize": 11 },
+            // Capped and truncated, because the labels are pool tags and an
+            // OCEAN sub-miner name has no length limit. The cap is what
+            // keeps a long one from eating the plot once the grid reserves
+            // room for it.
+            "axisLabel": {
+                "color": "#e8e8e8", "fontSize": 11,
+                "width": 150, "overflow": "truncate"
+            },
             "axisLine": { "lineStyle": { "color": "#7a7a7a" } }
         },
-        "grid": { "left": 120, "right": 30, "top": 25, "bottom": 30 },
+        // No legend: one series, already named by the x axis. The default
+        // from `chart_defaults` sits at top 25, the same row the grid
+        // started on, so it printed a swatch across the first bar. The
+        // sibling Empty Blocks chart hides it for the same reason.
+        "legend": { "show": false },
+        // `containLabel`, so the grid reserves whatever the labels need
+        // instead of a fixed 120px that "OCEAN / AbundantMines" ran past.
+        "grid": { "left": 8, "right": 24, "top": 25, "bottom": 44, "containLabel": true },
         "tooltip": tooltip_axis(),
         "series": [{
             "name": "Empty Blocks",
@@ -171,17 +190,34 @@ pub fn mining_diversity_chart(miners: &[MinerShare]) -> serde_json::Value {
 
     // Exclude "Unknown" miners from HHI - early blocks have unidentifiable
     // miners lumped under one label, which inflates concentration artificially.
-    let known: Vec<&MinerShare> =
-        miners.iter().filter(|m| m.miner != "Unknown").collect();
-    let total: u64 = known.iter().map(|m| m.count).sum();
+    //
+    // OCEAN's sub-miners fold back into one pool first. They reach here as
+    // "OCEAN / <name>", which is printable ASCII lifted from after the ">"
+    // in OCEAN's own coinbase tag, so it proves the pool is OCEAN and that
+    // the coinbase carried a name. It does not say who chose the
+    // transactions, and an index of concentration counts whoever does. Left
+    // split, 76 of last year's 94 entries were OCEAN members holding about
+    // 2% of blocks between them, which read as 94 pools when 18 pools mined
+    // the rest.
+    let mut folded: std::collections::BTreeMap<&str, u64> =
+        std::collections::BTreeMap::new();
+    for m in miners.iter().filter(|m| m.miner != "Unknown") {
+        let pool = if m.miner.starts_with("OCEAN") {
+            "OCEAN"
+        } else {
+            m.miner.as_str()
+        };
+        *folded.entry(pool).or_insert(0) += m.count;
+    }
+    let total: u64 = folded.values().sum();
     if total == 0 {
         return no_data_chart("Mining Diversity");
     }
 
-    let hhi: f64 = known
-        .iter()
-        .map(|m| {
-            let share = m.count as f64 / total as f64 * 100.0;
+    let hhi: f64 = folded
+        .values()
+        .map(|&count| {
+            let share = count as f64 / total as f64 * 100.0;
             share * share
         })
         .sum();
@@ -197,7 +233,7 @@ pub fn mining_diversity_chart(miners: &[MinerShare]) -> serde_json::Value {
         ("Concentrated", "#ef4444")
     };
 
-    let pool_count = known.len();
+    let pool_count = folded.len();
 
     json!({
         "backgroundColor": "transparent",
