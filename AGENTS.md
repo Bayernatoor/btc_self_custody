@@ -100,6 +100,37 @@ The probe lives in `scripts/` rather than `notes/` on purpose. `notes/`, `tasks/
 all gitignored, so anything referenced from this file has to sit somewhere tracked or the
 instruction is dead on a fresh clone.
 
+### Run the checks CI cannot, because one had been failing since September
+
+**17 tests are `#[ignore]`d because they need the real database or the real node**, neither of
+which exists on a runner. That is correct, and the cost of it is that nothing runs them unless
+someone remembers. Nobody did: on 2026-11-19 `the_copy_still_matches_the_chain` turned out to
+have been failing since **September**. A chart said P2PK outputs appear in roughly one block in
+seven hundred; a burst starting 2026-11-15 had made it one in a hundred, and the guard that
+existed to catch exactly that had never been asked.
+
+    scripts/check-against-chain.sh                # 10 checks: copy against the chain, parity against Core
+    scripts/check-against-chain.sh --with-sweep   # plus the 3 sweep-safety tests, on a copy of the database
+
+Run it before a deploy, or weekly. It sources `.env` itself, prints SKIP with a reason for any
+prerequisite it cannot meet, and counts skips separately from passes, because a check that
+quietly does not run is the failure it exists to prevent. It exits non-zero on a real failure,
+verified by breaking a drift row and watching it go red rather than by assuming.
+
+Two things it deliberately skips, both known gaps rather than oversights:
+
+- **The classifier oracle**, `the_classifier_agrees_with_core` and `oracle_new_columns`. Their
+  fixture is a hand-built list of (script hex, Core's label) that lived at
+  `/tmp/claude-1000/script_oracle.json`. **Nothing in the repo regenerates it**, so a wiped
+  `/tmp` means these cannot pass on any machine again. Either write the generator or delete the
+  tests; leaving them is a third red that teaches people to ignore the other two.
+- **The sweep tests**, which insist on `SWEEP_DRY_DB` pointing at a copy rather than the live
+  file. `--with-sweep` makes the copy and removes it afterwards, and it is opt-in only because
+  the copy is most of a gigabyte.
+
+The four remaining `#[ignore]`d items are `dump_*` and are not tests: they assert nothing and
+print data for a human. Leave them out.
+
 `cargo run --bin backfill_missing_heights` is a one-shot maintenance utility and needs
 `--features ssr`.
 
