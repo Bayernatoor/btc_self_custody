@@ -117,6 +117,11 @@ prerequisite it cannot meet, and counts skips separately from passes, because a 
 quietly does not run is the failure it exists to prevent. It exits non-zero on a real failure,
 verified by breaking a drift row and watching it go red rather than by assuming.
 
+**A filter matching no test counts as a failure, not a pass.** `cargo test` exits 0 when a
+filter selects nothing, and the first real run of this script hit exactly that: two tests live
+under `fifth_review_fixes::`, the filters did not say so, and one was reported green having run
+nothing. So `run` counts the harness lines rather than trusting the exit code.
+
 Two things it deliberately skips, both known gaps rather than oversights:
 
 - **The classifier oracle**, `the_classifier_agrees_with_core` and `oracle_new_columns`. Their

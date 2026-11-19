@@ -29,11 +29,30 @@ FAILED_NAMES=()
 
 run() { # run <label> <test-filter>
     printf '\n\033[1m%s\033[0m\n' "$1"
-    if cargo test --features ssr "$2" -- --ignored --nocapture 2>&1 | tail -40; then
-        PASS=$((PASS + 1))
-    else
+    local log="${TMPDIR:-/tmp}/check-against-chain-$$.log"
+    cargo test --features ssr "$2" -- --ignored --nocapture >"$log" 2>&1
+    local status=$?
+    tail -40 "$log"
+
+    # A filter matching nothing exits 0 having run nothing, which is this
+    # script's own failure mode turned on itself: on the first real run
+    # "sweep distrusts the hash cache" matched no test and was counted a
+    # pass, because that test lives under `fifth_review_fixes::` and the
+    # filter did not say so. Count the harness lines rather than trust the
+    # exit code.
+    local ran
+    ran=$(grep -cE '^test .+ \.\.\. (ok|FAILED)' "$log")
+    rm -f "$log"
+
+    if ((status != 0)); then
         FAIL=$((FAIL + 1))
         FAILED_NAMES+=("$1")
+    elif ((ran == 0)); then
+        printf '  \033[31mNO MATCH\033[0m filter %s ran no tests\n' "$2"
+        FAIL=$((FAIL + 1))
+        FAILED_NAMES+=("$1 (no match)")
+    else
+        PASS=$((PASS + 1))
     fi
 }
 
@@ -69,7 +88,7 @@ if [[ -n "${BITCOIN_STATS_RPC_URL:-}" ]] &&
     run "coinbase payout address"        raw_parity::payout_address_is_the_largest_output
     run "every output is classified"     raw_parity::the_classified_types_account_for_every_output
     run "what the sweep will write"      raw_parity::what_the_sweep_will_write
-    run "sweep distrusts the hash cache" raw_parity::the_sweep_does_not_trust_the_hash_cache
+    run "sweep distrusts the hash cache" fifth_review_fixes::the_sweep_does_not_trust_the_hash_cache
 else
     skip "node checks (5)" "BITCOIN_STATS_RPC_URL unset or unreachable; source .env"
 fi
@@ -88,7 +107,7 @@ if [[ "$WITH_SWEEP" == "1" && -f bitcoin_stats.db ]]; then
     export SWEEP_DRY_DB="$SWEEP_COPY"
     run "sweep dry run"             raw_parity::the_sweep_dry_run
     run "a reorg cannot corrupt"    raw_parity::a_reorg_cannot_corrupt_a_swept_row
-    run "a dead node stops"         raw_parity::a_dead_node_stops_the_sweep_rather_than_spinning
+    run "a dead node stops"         fifth_review_fixes::a_dead_node_stops_the_sweep_rather_than_spinning
 else
     skip "sweep safety (3)" "pass --with-sweep; they need SWEEP_DRY_DB set to a copy"
 fi
