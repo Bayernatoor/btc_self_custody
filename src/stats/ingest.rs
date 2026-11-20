@@ -176,6 +176,7 @@ pub async fn poll_new_blocks(
 ) {
     // Poll path wants actual latest tip; the 1s cache would mask new blocks
     // during the window between a block arriving and the cache expiring.
+    let poll_started = Instant::now();
     let tip = match rpc.get_blockchain_info_fresh().await {
         Ok(info) => info.blocks,
         Err(e) => {
@@ -235,7 +236,7 @@ pub async fn poll_new_blocks(
     // those from history: firing dozens of spikes at once would look broken.
     if !blocks.is_empty() && blocks.len() <= MAX_POLLER_BROADCAST {
         for b in &blocks {
-            let _ = heartbeat_tx.send(HeartbeatEvent::Block {
+            let sent = heartbeat_tx.send(HeartbeatEvent::Block {
                 height: b.height,
                 hash: b.hash.clone(),
                 timestamp: b.time,
@@ -245,6 +246,9 @@ pub async fn poll_new_blocks(
                 weight: b.weight,
                 confirmed_count: 0,
             });
+            tracing::info!(source = "poll", stage = "block", hash = %b.hash, height = b.height,
+                poll_ms = poll_started.elapsed().as_millis(), receivers = sent.unwrap_or(0),
+                "heartbeat_block");
         }
     } else if blocks.len() > MAX_POLLER_BROADCAST {
         tracing::info!(

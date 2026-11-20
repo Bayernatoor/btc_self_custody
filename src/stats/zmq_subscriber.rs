@@ -26,7 +26,7 @@
 use std::collections::{HashSet, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use sha2::{Digest, Sha256};
 use tokio::sync::{broadcast, Semaphore};
@@ -34,6 +34,7 @@ use zeromq::{Socket, SocketRecv, SubSocket};
 
 use super::api::StatsState;
 use super::db;
+use super::error::StatsError;
 use super::notable::{
     classify_notable, extract_readable_text, has_inscription_marker, ParsedTx,
 };
@@ -293,6 +294,11 @@ async fn subscribe_sequence(
                         "ZMQ sequence: receiving messages (first type='{}')",
                         kind as char
                     );
+                }
+                if matches!(kind, b'C' | b'D') && body.len() == 33 {
+                    // Independent receipt on the tx/sequence socket when hashblock goes quiet.
+                    tracing::info!(source = "sequence", hash = %bytes_to_hex(&body[..32]),
+                        stage = if kind == b'C' { "connect" } else { "disconnect" }, "heartbeat_block");
                 }
                 if kind == b'R' {
                     // ZMQ-provided hashes are already display byte order here (same as
@@ -719,8 +725,9 @@ async fn subscribe_blocks(
             );
             continue;
         }
+        let received_at = Instant::now();
         let block_hash = bytes_to_hex(hash_bytes);
-        tracing::info!("ZMQ: hashblock {block_hash} — fetching spike metadata");
+        tracing::info!(source = "hashblock", stage = "receipt", hash = %block_hash, "heartbeat_block");
 
         // Show mining overlay immediately while metadata is being fetched.
         let _ = sender.send(HeartbeatEvent::BlockMining);
@@ -733,13 +740,6 @@ async fn subscribe_blocks(
                 None => continue,
             };
 
-        tracing::info!(
-            "ZMQ: block {} ({block_hash}) — {} tx, {:.4} BTC fees, size={size}, weight={weight}",
-            header.height,
-            header.tx_count,
-            total_fees as f64 / 100_000_000.0,
-        );
-
         // Bust tip-dependent RPC caches now that a new block is the tip.
         // Without this, /api/stats/live would keep returning the previous
         // block height until BLOCKCHAIN_INFO_TTL (30s) expired, AND the reorg
@@ -750,7 +750,7 @@ async fn subscribe_blocks(
         // Broadcast the spike. confirmed_count is 0 here: the frontend uses
         // tx_count first (confirmed_count is only its fallback), and the DB
         // confirmation is deferred below and off the visual path.
-        let _ = sender.send(HeartbeatEvent::Block {
+        let sent = sender.send(HeartbeatEvent::Block {
             height: header.height,
             hash: block_hash.clone(),
             timestamp: header.timestamp,
@@ -760,6 +760,10 @@ async fn subscribe_blocks(
             weight,
             confirmed_count: 0,
         });
+        tracing::info!(source = "hashblock", stage = "block", hash = %block_hash,
+            height = header.height, elapsed_ms = received_at.elapsed().as_millis(),
+            receivers = sent.unwrap_or(0), tx_count = header.tx_count, total_fees, size, weight,
+            "heartbeat_block");
 
         // Deferred: fetch the full txid list and confirm mempool/notable txs in
         // the DB. Slow over WireGuard, but not on the spike's critical path.
@@ -781,6 +785,37 @@ async fn subscribe_blocks(
     }
 }
 
+/// Time the individual future inside `join!`; timing the join reports the slower
+/// request's duration for both and hides which one held up the spike.
+async fn timed_block_rpc<T>(
+    hash: &str,
+    method: &'static str,
+    attempt: u32,
+    call: impl std::future::Future<Output = Result<T, StatsError>>,
+) -> Result<T, StatsError> {
+    let start = Instant::now();
+    let result = call.await;
+    let outcome = match &result {
+        Ok(_) => "ok",
+        Err(StatsError::Http(e)) if e.is_timeout() => "timeout",
+        Err(StatsError::Http(e)) if e.is_connect() => "connect_error",
+        Err(StatsError::Http(_)) => "http_error",
+        Err(StatsError::Rpc(reason)) => reason.as_str(),
+        Err(_) => "error",
+    };
+    tracing::info!(
+        source = "hashblock",
+        stage = "rpc",
+        hash,
+        method,
+        attempt,
+        elapsed_ms = start.elapsed().as_millis(),
+        outcome,
+        "heartbeat_block"
+    );
+    result
+}
+
 /// Fetch the minimal metadata needed to draw a block spike, with retry
 /// (hashblock fires right as validation completes, so RPC may be briefly busy).
 /// The header is essential; getblockstats is best-effort, if it never returns,
@@ -796,8 +831,18 @@ async fn get_block_fast(
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
         let (header_res, stats_res) = tokio::join!(
-            state.rpc.get_block_header(hash),
-            state.rpc.get_block_stats_brief(hash),
+            timed_block_rpc(
+                hash,
+                "getblockheader",
+                attempt + 1,
+                state.rpc.get_block_header(hash)
+            ),
+            timed_block_rpc(
+                hash,
+                "getblockstats",
+                attempt + 1,
+                state.rpc.get_block_stats_brief(hash)
+            ),
         );
         let header = match header_res {
             Ok(h) => h,
@@ -857,10 +902,12 @@ fn spawn_block_confirm(
         // The reveal's harvest beat is ~2.5s after the block event and getblock is
         // usually <2s after validation, so these typically land in time; if not, the
         // frontend keeps its top-fee approximation.
-        let _ = sender.send(HeartbeatEvent::BlockTxids {
+        let sent = sender.send(HeartbeatEvent::BlockTxids {
             height,
             txids: info.txids.clone(),
         });
+        tracing::info!(source = "hashblock", stage = "block_txids", %hash, height,
+            txids = info.txids.len(), receivers = sent.unwrap_or(0), "heartbeat_block");
 
         // getblock(hash,1) gives authoritative size/weight. If the fast broadcast
         // was estimated (getblockstats was down), re-broadcast now with real
@@ -872,12 +919,15 @@ fn spawn_block_confirm(
             // broadcast, and getblockstats-by-height would resolve against the
             // current best chain, so a reorg in that window would attribute the
             // wrong block's fees to `hash`. get_block_stats_brief(&hash) pins it.
-            let total_fees = state
-                .rpc
-                .get_block_stats_brief(&hash)
-                .await
-                .map(|(_, _, fees)| fees)
-                .unwrap_or(0);
+            let total_fees = timed_block_rpc(
+                &hash,
+                "getblockstats_rebroadcast",
+                1,
+                state.rpc.get_block_stats_brief(&hash),
+            )
+            .await
+            .map(|(_, _, fees)| fees)
+            .unwrap_or(0);
             let _ = sender.send(HeartbeatEvent::Block {
                 height,
                 hash: hash.clone(),
@@ -888,12 +938,8 @@ fn spawn_block_confirm(
                 weight: info.weight,
                 confirmed_count: 0,
             });
-            tracing::info!(
-                "ZMQ: block {height} re-broadcast with authoritative data (size={}, weight={}, {:.4} BTC fees)",
-                info.size,
-                info.weight,
-                total_fees as f64 / 100_000_000.0
-            );
+            tracing::info!(source = "hashblock", stage = "block_update", %hash, height,
+                size = info.size, weight = info.weight, total_fees, "heartbeat_block");
         }
 
         let now = std::time::SystemTime::now()
@@ -933,7 +979,14 @@ async fn get_block_info(
         if attempt > 0 {
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
-        match state.rpc.get_block_txids(hash).await {
+        match timed_block_rpc(
+            hash,
+            "getblock_txids",
+            attempt + 1,
+            state.rpc.get_block_txids(hash),
+        )
+        .await
+        {
             Ok(info) => {
                 return Some(info);
             }
