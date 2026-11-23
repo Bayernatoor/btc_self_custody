@@ -26,6 +26,8 @@ pub mod db;
 #[cfg(feature = "ssr")]
 pub mod error;
 #[cfg(feature = "ssr")]
+pub mod heartbeat_membership;
+#[cfg(feature = "ssr")]
 pub mod ingest;
 #[cfg(feature = "ssr")]
 pub mod notable;

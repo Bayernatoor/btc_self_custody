@@ -1,0 +1,129 @@
+{
+  "core": "/Satoshi:29.2.0/",
+  "subscribed": [
+    "00d1701e7e846b186bf22051e62c18fd7e4fda3c781db5c9fe5139049374ebb043",
+    "69000000"
+  ],
+  "block": {
+    "hash": "4cfdfe96fe4b9ed577e943783dea2b986a934d0e3e53f0fd5e0f210b9fe243c9",
+    "tx": [
+      "2e91a1caf42d89287c930a99bf558bca174f14fd949a61bb793cde6f0b4c808d",
+      "037838f48d0151bf8867365cd5ed6d9b69e4c182f25b8eee349c58b0c78204ce"
+    ]
+  },
+  "stages": [
+    {
+      "name": "empty",
+      "frames": [],
+      "snapshot": {
+        "txids": [],
+        "mempool_sequence": 1
+      }
+    },
+    {
+      "name": "admission",
+      "frames": [
+        [
+          "07da8b57d3d1c605d2f7325226158d314c66761fb2be310192b083828722fb29410100000000000000",
+          "6a000000"
+        ]
+      ],
+      "snapshot": {
+        "txids": [
+          "07da8b57d3d1c605d2f7325226158d314c66761fb2be310192b083828722fb29"
+        ],
+        "mempool_sequence": 2
+      }
+    },
+    {
+      "name": "replacement",
+      "frames": [
+        [
+          "07da8b57d3d1c605d2f7325226158d314c66761fb2be310192b083828722fb29520200000000000000",
+          "6b000000"
+        ],
+        [
+          "037838f48d0151bf8867365cd5ed6d9b69e4c182f25b8eee349c58b0c78204ce410300000000000000",
+          "6c000000"
+        ]
+      ],
+      "snapshot": {
+        "txids": [
+          "037838f48d0151bf8867365cd5ed6d9b69e4c182f25b8eee349c58b0c78204ce"
+        ],
+        "mempool_sequence": 4
+      }
+    },
+    {
+      "name": "second admission",
+      "frames": [
+        [
+          "d053079afcfc1d25a1ddb44cb448f073ca4c77b8f9d9142b47ff79615983b70b410400000000000000",
+          "6d000000"
+        ]
+      ],
+      "snapshot": {
+        "txids": [
+          "037838f48d0151bf8867365cd5ed6d9b69e4c182f25b8eee349c58b0c78204ce",
+          "d053079afcfc1d25a1ddb44cb448f073ca4c77b8f9d9142b47ff79615983b70b"
+        ],
+        "mempool_sequence": 5
+      }
+    },
+    {
+      "name": "one mined",
+      "frames": [
+        [
+          "4cfdfe96fe4b9ed577e943783dea2b986a934d0e3e53f0fd5e0f210b9fe243c943",
+          "6e000000"
+        ]
+      ],
+      "snapshot": {
+        "txids": [
+          "d053079afcfc1d25a1ddb44cb448f073ca4c77b8f9d9142b47ff79615983b70b"
+        ],
+        "mempool_sequence": 6
+      }
+    },
+    {
+      "name": "admission before inclusion lookup finishes",
+      "frames": [
+        [
+          "c84c45adc8e3f7b4d318a096301023c058c379d6b8899206bb8ea12aeaf1ae2b410600000000000000",
+          "6f000000"
+        ]
+      ],
+      "snapshot": {
+        "txids": [
+          "c84c45adc8e3f7b4d318a096301023c058c379d6b8899206bb8ea12aeaf1ae2b",
+          "d053079afcfc1d25a1ddb44cb448f073ca4c77b8f9d9142b47ff79615983b70b"
+        ],
+        "mempool_sequence": 7
+      }
+    },
+    {
+      "name": "disconnect and re-admission",
+      "frames": [
+        [
+          "4cfdfe96fe4b9ed577e943783dea2b986a934d0e3e53f0fd5e0f210b9fe243c944",
+          "70000000"
+        ],
+        [
+          "037838f48d0151bf8867365cd5ed6d9b69e4c182f25b8eee349c58b0c78204ce410700000000000000",
+          "71000000"
+        ],
+        [
+          "c84c45adc8e3f7b4d318a096301023c058c379d6b8899206bb8ea12aeaf1ae2b520800000000000000",
+          "72000000"
+        ]
+      ],
+      "snapshot": {
+        "txids": [
+          "037838f48d0151bf8867365cd5ed6d9b69e4c182f25b8eee349c58b0c78204ce",
+          "d053079afcfc1d25a1ddb44cb448f073ca4c77b8f9d9142b47ff79615983b70b"
+        ],
+        "mempool_sequence": 9
+      }
+    }
+  ]
+}
