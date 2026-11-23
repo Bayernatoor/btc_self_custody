@@ -128,7 +128,11 @@ impl HeartbeatMembership {
         self.snapshot_floor = 0;
     }
 
-    pub fn notify(&mut self, transport: u32, event: Notification) {
+    /// Apply one ordered sequence notification. Returns `true` when a valid
+    /// `Connect`/`Disconnect` or a post-fence (`sequence >= snapshot_floor`)
+    /// `Add`/`Remove` delta was applied, and `false` when the notification was
+    /// ignored as pre-snapshot backlog or rejected as malformed.
+    pub fn notify(&mut self, transport: u32, event: Notification) -> bool {
         if self
             .last_transport
             .is_some_and(|n| n.wrapping_add(1) != transport)
@@ -158,21 +162,21 @@ impl HeartbeatMembership {
                     let connect = self.tick();
                     self.accepted.push_back(BlockTicket { hash, connect });
                 }
-                return;
+                return true;
             }
             Disconnect { hash } if valid_id(&hash) => {
                 self.incomplete();
                 self.accepted.retain(|block| block.hash != hash);
-                return;
+                return true;
             }
             _ => {
                 self.transport_gap();
-                return;
+                return false;
             }
         };
         if !valid_id(&txid) || sequence == 0 || sequence == u64::MAX {
             self.transport_gap();
-            return;
+            return false;
         }
         if self.last_sequence.is_some_and(|last| sequence <= last) {
             // A Core restart/reset is not a late pre-snapshot notification.
@@ -181,7 +185,7 @@ impl HeartbeatMembership {
         }
         self.last_sequence = Some(sequence);
         if sequence < self.snapshot_floor {
-            return;
+            return false;
         }
         let delta = Delta {
             txid,
@@ -201,6 +205,7 @@ impl HeartbeatMembership {
             .expected
             .filter(|n| *n == sequence && consistent)
             .map(|_| sequence + 1);
+        true
     }
 
     /// Start **after** at least one valid sequence message has proved that
@@ -571,5 +576,35 @@ mod tests {
             view.notify((MAX_BUFFERED + 2 + i) as u32, connect(100 + i as u64));
         }
         assert!(!view.apply_block(old, &id(90), &ids(&[1])));
+    }
+
+    #[test]
+    fn notify_returns_false_for_pre_snapshot_backlog_and_true_at_or_above_floor(
+    ) {
+        let mut view = HeartbeatMembership::default();
+        assert!(view.notify(1, tx(1, 10, true)));
+        checkpoint(&mut view, &[1, 2], 15);
+
+        // Pre-snapshot backlog (sequence < snapshot_floor = 15) returns false
+        // and does not mutate membership.
+        assert!(!view.notify(2, tx(3, 12, true)));
+        assert!(!view.notify(3, tx(1, 14, false)));
+        assert_members(&view, &[1, 2]);
+        assert!(view.complete());
+
+        // At or above snapshot_floor (sequence >= 15) returns true and applies.
+        assert!(view.notify(4, tx(3, 15, true)));
+        assert!(view.notify(5, tx(2, 16, false)));
+        assert_members(&view, &[1, 3]);
+        assert!(view.complete());
+
+        // Invalid payload returns false.
+        assert!(!view.notify(
+            6,
+            Notification::Add {
+                txid: "bad".into(),
+                sequence: 17,
+            },
+        ));
     }
 }

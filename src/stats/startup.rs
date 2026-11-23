@@ -203,6 +203,7 @@ pub async fn init() -> Option<(
         time_histogram_cache,
         fullness_histogram_cache,
         heartbeat_tx,
+        heartbeat_store: Arc::new(super::heartbeat_state::HeartbeatStore::new()),
         heartbeat_blocks: Default::default(),
         sse_connections: std::sync::atomic::AtomicUsize::new(0),
         heartbeat_history_cache,
@@ -236,6 +237,9 @@ pub(crate) fn build_api_router(state: Arc<StatsState>) -> Router {
         .route("/signaling", get(api::get_signaling))
         .route("/signaling/periods", get(api::get_signaling_periods))
         .route("/heartbeat", get(api::get_heartbeat_sse))
+        .route("/heartbeat/snapshot", get(api::get_heartbeat_snapshot))
+        .route("/heartbeat/v2", get(api::get_heartbeat_v2_sse))
+        .route("/heartbeat/tx/{txid}", get(api::get_heartbeat_tx_lookup))
         .route("/tx/{txid}", get(api::get_tx_detail))
         .with_state(state)
 }

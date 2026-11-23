@@ -2,7 +2,7 @@
 //! polled alongside receipt; its completion must present the original ticket.
 use std::collections::HashSet;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tokio::task::JoinSet;
 use tokio::time::Instant;
@@ -13,6 +13,7 @@ use super::{bytes_to_hex, observe_block, HeartbeatEvent, StatsState};
 use crate::stats::heartbeat_membership::{
     BlockTicket, CheckpointTicket, HeartbeatMembership, Notification,
 };
+use crate::stats::heartbeat_sync::Coverage;
 use crate::stats::rpc::{BlockTxids, MembershipCheckpoint};
 
 // While coverage is complete, every A/R delta is verified sequentially, so a
@@ -20,7 +21,8 @@ use crate::stats::rpc::{BlockTxids, MembershipCheckpoint};
 // the 60s legacy DB reconcile. Incomplete coverage still reconciles immediately.
 const RECONCILE: Duration = Duration::from_secs(300);
 const CAPACITY_BACKOFF: Duration = Duration::from_secs(60);
-const POST_CONNECT_DELAY: Duration = Duration::from_secs(5);
+const POST_CONNECT_FALLBACK: Duration = Duration::from_secs(90);
+const POST_CONNECT_UNTRACKED_DELAY: Duration = Duration::from_secs(5);
 const RETRY: Duration = Duration::from_secs(5);
 const BATCH_CAP: usize = 2000;
 
@@ -69,6 +71,16 @@ pub(crate) fn spawn_sequence(state: Arc<StatsState>, url: String) {
                 );
             }
             view.transport_gap();
+            let coverage = if state.heartbeat_store.is_initialized() {
+                Coverage::Partial {
+                    reason: "transport_gap".to_string(),
+                }
+            } else {
+                Coverage::Unknown {
+                    reason: "transport_gap".to_string(),
+                }
+            };
+            state.heartbeat_store.set_coverage(coverage);
             tokio::time::sleep(RETRY).await;
         }
     });
@@ -89,7 +101,8 @@ async fn subscribe(
     let mut capacity_limited = true;
     let mut checks = JoinSet::<CheckpointResult>::new();
     let mut inclusions = JoinSet::<InclusionResult>::new();
-    let mut removed = HashSet::new();
+    let mut legacy_removed = HashSet::new();
+    let mut store_removed = HashSet::new();
     let mut flush = tokio::time::interval(Duration::from_millis(500));
     flush.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
@@ -107,42 +120,103 @@ async fn subscribe(
                             if !seen_frame { tracing::info!("heartbeat shadow receiving sequence"); }
                             seen_frame = true;
                             last_frame = Instant::now();
-                            let hash = match &event {
-                                Notification::Add { txid, .. } => { removed.remove(txid); None },
-                                Notification::Remove { txid, .. } => { removed.insert(txid.clone()); None },
+                            enum ShadowAction {
+                                Add(String),
+                                Remove(String),
+                                Connect(String),
+                                Disconnect,
+                            }
+                            let now = now_unix_secs();
+                            let action = match &event {
+                                Notification::Add { txid, .. } => {
+                                    legacy_removed.remove(txid);
+                                    ShadowAction::Add(txid.clone())
+                                }
+                                Notification::Remove { txid, .. } => {
+                                    legacy_removed.insert(txid.clone());
+                                    ShadowAction::Remove(txid.clone())
+                                }
                                 Notification::Disconnect { hash } => {
                                     super::retire_block(state, hash);
                                     tracing::info!(source = "sequence", stage = "disconnect", %hash, "heartbeat_block");
-                                    None
-                                },
-                                Notification::Connect { hash } => Some(hash.clone()),
+                                    ShadowAction::Disconnect
+                                }
+                                Notification::Connect { hash } => {
+                                    ShadowAction::Connect(hash.clone())
+                                }
                             };
                             let was_complete = view.complete();
-                            view.notify(frame, event);
+                            let applied = view.notify(frame, event);
+                            if applied {
+                                match &action {
+                                    ShadowAction::Add(txid) => {
+                                        store_removed.remove(txid);
+                                        state
+                                            .heartbeat_store
+                                            .observe_add(txid.clone(), now);
+                                    }
+                                    ShadowAction::Remove(txid) => {
+                                        store_removed.insert(txid.clone());
+                                    }
+                                    ShadowAction::Connect(_)
+                                    | ShadowAction::Disconnect => {}
+                                }
+                            }
                             if was_complete && !view.complete() {
                                 tracing::info!(frame, "heartbeat shadow coverage incomplete; reconciling");
-                                // Delay post-Connect full mempool reconciliation briefly so it
-                                // does not pile onto getblock/getblockstats and Core's template
-                                // check at t=0. Disconnects and transport gaps reconcile now.
-                                next_checkpoint = if hash.is_some() {
-                                    Instant::now() + POST_CONNECT_DELAY
-                                } else {
-                                    Instant::now()
-                                };
-                            }
-                            if let Some(hash) = hash {
-                                tracing::info!(source = "sequence", stage = "connect", %hash, "heartbeat_block");
-                                if let (Some(job), Some(ticket)) = (observe_block(state, &hash, "sequence"), view.block_ticket(&hash)) {
-                                    if inclusions.len() < 4 {
-                                        let state = Arc::clone(state);
-                                        inclusions.spawn(async move {
-                                            let result = job.accepted_ids(&state.rpc).await;
-                                            (job, ticket, result)
-                                        });
-                                    } else {
-                                        tracing::warn!(%hash, "heartbeat shadow inclusion workers busy; relying on checkpoint");
+                                let reason = match &action {
+                                    ShadowAction::Connect(_) => {
+                                        "block_connected"
                                     }
+                                    ShadowAction::Disconnect => {
+                                        "block_disconnected"
+                                    }
+                                    ShadowAction::Add(_)
+                                    | ShadowAction::Remove(_) => "sequence_gap",
+                                };
+                                state.heartbeat_store.set_coverage(
+                                    Coverage::Partial {
+                                        reason: reason.to_string(),
+                                    },
+                                );
+                                if !matches!(action, ShadowAction::Connect(_)) {
+                                    next_checkpoint = Instant::now();
                                 }
+                            }
+                            match action {
+                                ShadowAction::Connect(hash) => {
+                                    tracing::info!(source = "sequence", stage = "connect", %hash, "heartbeat_block");
+                                    if let (Some(job), Some(ticket)) = (
+                                        observe_block(state, &hash, "sequence"),
+                                        view.block_ticket(&hash),
+                                    ) {
+                                        if inclusions.len() < 4 {
+                                            let state = Arc::clone(state);
+                                            inclusions.spawn(async move {
+                                                let result = job
+                                                    .accepted_ids(&state.rpc)
+                                                    .await;
+                                                (job, ticket, result)
+                                            });
+                                        } else {
+                                            tracing::warn!(%hash, "heartbeat shadow inclusion workers busy; relying on checkpoint");
+                                        }
+                                    }
+                                    // Wait for in-flight block inclusion(s) before issuing the
+                                    // post-Connect getrawmempool checkpoint so mined txids are
+                                    // confirmed first rather than racing at 5s.
+                                    next_checkpoint = if !inclusions.is_empty() {
+                                        Instant::now() + POST_CONNECT_FALLBACK
+                                    } else {
+                                        Instant::now()
+                                            + POST_CONNECT_UNTRACKED_DELAY
+                                    };
+                                }
+                                ShadowAction::Disconnect => {
+                                    next_checkpoint = Instant::now();
+                                }
+                                ShadowAction::Add(_)
+                                | ShadowAction::Remove(_) => {}
                             }
                             Ok(())
                         })();
@@ -160,15 +234,38 @@ async fn subscribe(
                         } else if result.is_ok() {
                             capacity_limited = false;
                         }
+                        let was_complete = view.complete();
                         let installed = match result {
                             Ok(cp) => view.finish_checkpoint(ticket, cp.txids, cp.mempool_sequence, true),
                             Err(e) => { view.abort_checkpoint(ticket); tracing::warn!("heartbeat checkpoint unavailable: {e}"); false }
                         };
+                        if installed {
+                            // `view.members()` already reflects the post-fence
+                            // snapshot plus any replayed A/R deltas, so drop
+                            // buffered pre-checkpoint removals before syncing
+                            // the store.
+                            store_removed.clear();
+                            let members: Vec<&String> =
+                                view.members().collect();
+                            state.heartbeat_store.install_checkpoint(
+                                &members,
+                                view.complete(),
+                                now_unix_secs(),
+                            );
+                        } else if was_complete && !view.complete() {
+                            state.heartbeat_store.set_coverage(
+                                Coverage::Partial {
+                                    reason: "checkpoint_failed".to_string(),
+                                },
+                            );
+                        }
                         tracing::info!(installed, members = view.members().len(), complete = view.complete(), "heartbeat shadow checkpoint");
                         next_checkpoint = Instant::now() + if installed {
                             RECONCILE
                         } else if capacity_hit {
                             CAPACITY_BACKOFF
+                        } else if !inclusions.is_empty() {
+                            POST_CONNECT_FALLBACK
                         } else {
                             RETRY
                         };
@@ -181,7 +278,15 @@ async fn subscribe(
                     Err(e) => Err(e.into()),
                     Ok((job, ticket, result)) => {
                         if let Ok(info) = result {
-                            state.heartbeat_blocks.if_current(&job, || view.apply_block(ticket, &info.hash, &info.txids));
+                            state.heartbeat_blocks.publish_inclusion_if_current(
+                                state, &job, &info,
+                            );
+                            state.heartbeat_blocks.if_current(&job, || {
+                                view.apply_block(ticket, &info.hash, &info.txids)
+                            });
+                        }
+                        if inclusions.is_empty() && !view.complete() {
+                            next_checkpoint = Instant::now();
                         }
                         Ok(())
                     }
@@ -190,7 +295,7 @@ async fn subscribe(
             _ = flush.tick() => {
                 // Refresh a potentially half-open transport. Silence says nothing
                 // about mining, readiness or the cause of a departure.
-                flush_removals(state, &mut removed);
+                flush_removals(state, &mut legacy_removed, &mut store_removed);
                 if last_frame.elapsed() > Duration::from_secs(120) {
                     Err("refreshing quiet sequence subscription".into())
                 } else {
@@ -199,11 +304,12 @@ async fn subscribe(
             }
         };
         if let Err(e) = step {
-            flush_removals(state, &mut removed);
+            flush_removals(state, &mut legacy_removed, &mut store_removed);
             return Err(e);
         }
-        if removed.len() >= BATCH_CAP {
-            flush_removals(state, &mut removed);
+        if legacy_removed.len() >= BATCH_CAP || store_removed.len() >= BATCH_CAP
+        {
+            flush_removals(state, &mut legacy_removed, &mut store_removed);
         }
         if seen_frame && checks.is_empty() && Instant::now() >= next_checkpoint
         {
@@ -219,10 +325,24 @@ async fn subscribe(
     }
 }
 
-fn flush_removals(state: &StatsState, removed: &mut HashSet<String>) {
-    if !removed.is_empty() {
-        let _ = state.heartbeat_tx.send(HeartbeatEvent::TxRemoved {
-            txids: removed.drain().collect(),
-        });
+fn flush_removals(
+    state: &StatsState,
+    legacy_removed: &mut HashSet<String>,
+    store_removed: &mut HashSet<String>,
+) {
+    if !store_removed.is_empty() {
+        let txids: Vec<String> = store_removed.drain().collect();
+        state.heartbeat_store.observe_remove(txids);
     }
+    if !legacy_removed.is_empty() {
+        let txids: Vec<String> = legacy_removed.drain().collect();
+        let _ = state.heartbeat_tx.send(HeartbeatEvent::TxRemoved { txids });
+    }
+}
+
+fn now_unix_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
 }

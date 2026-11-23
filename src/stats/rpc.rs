@@ -960,6 +960,11 @@ impl BitcoinRpc {
         ]
     }
 
+    /// Age in seconds of the cached `getmempoolinfo` reading, if populated.
+    pub fn mempool_cache_age_secs(&self) -> Option<u64> {
+        self.mempool_info_cache.stats().age_seconds
+    }
+
     /// Snapshot of per-slot cache counters for `/api/stats/cache-stats`.
     /// Returns `(method, stats)` tuples. Methods not listed aren't cached.
     pub fn cache_stats(&self) -> Vec<(String, SlotStats)> {

@@ -143,6 +143,8 @@ pub struct StatsState {
     pub extremes_cache: Arc<Cache<(u64, u64), super::types::ExtremesData>>,
     /// Broadcast channel for real-time heartbeat events (ZMQ → SSE).
     pub heartbeat_tx: broadcast::Sender<super::zmq_subscriber::HeartbeatEvent>,
+    /// Authoritative in-memory state owner for Heartbeat Phase 2 sync.
+    pub heartbeat_store: Arc<super::heartbeat_state::HeartbeatStore>,
     pub(crate) heartbeat_blocks: super::zmq_subscriber::BlockJobs,
     /// Active SSE connection count (guard against connection exhaustion).
     pub sse_connections: AtomicUsize,
@@ -240,7 +242,7 @@ impl StatsStateBuilder {
 }
 
 /// Maximum concurrent SSE connections before rejecting new ones.
-const MAX_SSE_CONNECTIONS: usize = 256;
+pub(crate) const MAX_SSE_CONNECTIONS: usize = 256;
 
 /// Largest height span `/op-returns` will serve. Matches its own default
 /// window, so it clamps only explicitly over-wide requests.
@@ -511,6 +513,31 @@ pub async fn get_live(
     let (mempool_res, t_mempool) = mr;
     let (hashrate_res, t_hashrate) = hr;
     let (fee_res, t_fee) = fr;
+
+    // Feed the latest aggregate mempool reading into Heartbeat v2 state before
+    // bubbling up any RPC error so both fresh readings and outages propagate.
+    let now_secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    match &mempool_res {
+        Ok((info, m_stale)) => {
+            let observed_at = now_secs.saturating_sub(
+                state.rpc.mempool_cache_age_secs().unwrap_or(0),
+            );
+            state.heartbeat_store.update_node_mempool(Some(
+                super::heartbeat_sync::NodeMempoolAggregate {
+                    tx_count: info.size,
+                    vbytes: info.bytes,
+                    observed_at,
+                    stale: *m_stale,
+                },
+            ));
+        }
+        Err(_) => {
+            state.heartbeat_store.update_node_mempool(None);
+        }
+    }
 
     // Track staleness across the four RPCs. Any OR-combines to response-level.
     let mut stale = false;
@@ -1101,4 +1128,372 @@ pub async fn get_heartbeat_sse(
         Sse::new(guarded_stream)
             .keep_alive(KeepAlive::new().interval(Duration::from_secs(15))),
     ))
+}
+
+/// Query parameters for `GET /api/stats/heartbeat/v2`.
+#[derive(Deserialize)]
+pub struct HeartbeatV2Query {
+    pub epoch: Option<String>,
+    pub after: Option<String>,
+}
+
+/// Resolve `(epoch, after)` preferring the `Last-Event-ID: <e>:<seq>` header
+/// when present and non-empty (so EventSource auto-reconnects advance past the
+/// initial URL cursor), falling back to `?epoch=<e>&after=<seq>` query params.
+fn parse_heartbeat_v2_cursor(
+    params: &HeartbeatV2Query,
+    headers: &axum::http::HeaderMap,
+) -> Result<(String, u64), (axum::http::StatusCode, &'static str)> {
+    if let Some(raw_header) = headers.get("last-event-id") {
+        let header_val = raw_header.to_str().map_err(|_| {
+            (
+                axum::http::StatusCode::BAD_REQUEST,
+                "invalid Last-Event-ID header",
+            )
+        })?;
+        if !header_val.is_empty() {
+            let (epoch, seq_str) = header_val.rsplit_once(':').ok_or((
+                axum::http::StatusCode::BAD_REQUEST,
+                "invalid Last-Event-ID format; expected <epoch>:<seq>",
+            ))?;
+            if epoch.is_empty() {
+                return Err((
+                    axum::http::StatusCode::BAD_REQUEST,
+                    "invalid Last-Event-ID: empty epoch",
+                ));
+            }
+            let after = seq_str.parse::<u64>().map_err(|_| {
+                (
+                    axum::http::StatusCode::BAD_REQUEST,
+                    "invalid Last-Event-ID: seq must be u64",
+                )
+            })?;
+            return Ok((epoch.to_string(), after));
+        }
+    }
+
+    match (&params.epoch, &params.after) {
+        (Some(epoch), Some(after_str)) => {
+            if epoch.is_empty() {
+                return Err((
+                    axum::http::StatusCode::BAD_REQUEST,
+                    "epoch must not be empty",
+                ));
+            }
+            let after = after_str.parse::<u64>().map_err(|_| {
+                (
+                    axum::http::StatusCode::BAD_REQUEST,
+                    "after must be an unsigned 64-bit integer",
+                )
+            })?;
+            Ok((epoch.clone(), after))
+        }
+        (Some(_), None) | (None, Some(_)) => Err((
+            axum::http::StatusCode::BAD_REQUEST,
+            "both epoch and after query parameters are required",
+        )),
+        (None, None) => Err((
+            axum::http::StatusCode::BAD_REQUEST,
+            "missing epoch/after query parameters or Last-Event-ID header",
+        )),
+    }
+}
+
+/// GET /api/stats/heartbeat/snapshot - shared immutable JSON snapshot of the
+/// Heartbeat v2 state mirror.
+pub async fn get_heartbeat_snapshot(
+    State(state): State<SharedStatsState>,
+) -> impl axum::response::IntoResponse {
+    let snap = state.heartbeat_store.snapshot_async().await;
+    (
+        [
+            (header::CONTENT_TYPE, "application/json".to_string()),
+            (header::CACHE_CONTROL, "no-store".to_string()),
+            (
+                header::HeaderName::from_static("x-heartbeat-epoch"),
+                snap.stream_epoch.clone(),
+            ),
+            (
+                header::HeaderName::from_static("x-heartbeat-seq"),
+                snap.seq.to_string(),
+            ),
+        ],
+        snap.json.clone(),
+    )
+}
+
+/// GET /api/stats/heartbeat/v2 - sequenced Heartbeat v2 SSE delta stream with
+/// atomic replay-to-live handoff and explicit `resync_required` signalling.
+///
+/// Browser client contract on `resync_required`: immediately call `es.close()`,
+/// fetch `/api/stats/heartbeat/snapshot`, install the snapshot, and open a new
+/// `EventSource` at the snapshot's `(stream_epoch, seq)`. Never allow
+/// `EventSource` auto-reconnect to reuse a stale `Last-Event-ID` after the
+/// server terminates the stream with `resync_required`.
+pub async fn get_heartbeat_v2_sse(
+    State(state): State<SharedStatsState>,
+    Query(params): Query<HeartbeatV2Query>,
+    headers: axum::http::HeaderMap,
+) -> Result<
+    (
+        [(header::HeaderName, String); 2],
+        Sse<impl Stream<Item = Result<Event, Infallible>>>,
+    ),
+    (axum::http::StatusCode, &'static str),
+> {
+    let (epoch, after) = parse_heartbeat_v2_cursor(&params, &headers)?;
+
+    // Share the global SSE connection budget with the legacy stream.
+    let prev = state.sse_connections.fetch_add(1, Ordering::Relaxed);
+    if prev >= MAX_SSE_CONNECTIONS {
+        state.sse_connections.fetch_sub(1, Ordering::Relaxed);
+        return Err((
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            "Too many connections",
+        ));
+    }
+    let guard = SseConnectionGuard(Arc::clone(&state));
+
+    let sub = state
+        .heartbeat_store
+        .subscribe_from(Some(&epoch), Some(after));
+
+    enum V2Phase {
+        Replay {
+            replay:
+                std::vec::IntoIter<Arc<super::heartbeat_sync::HeartbeatDelta>>,
+            live_rx:
+                broadcast::Receiver<Arc<super::heartbeat_state::StoreEvent>>,
+            last_replayed: u64,
+        },
+        Live {
+            live_rx:
+                broadcast::Receiver<Arc<super::heartbeat_state::StoreEvent>>,
+            last_replayed: u64,
+        },
+        Resync(Option<super::heartbeat_sync::ResyncRequired>),
+        Done,
+    }
+
+    let initial_phase = match sub {
+        super::heartbeat_state::SubscribeResult::Stream {
+            replay,
+            live_rx,
+            last_replayed,
+        } => {
+            if replay.is_empty() {
+                V2Phase::Live {
+                    live_rx,
+                    last_replayed,
+                }
+            } else {
+                V2Phase::Replay {
+                    replay: replay.into_iter(),
+                    live_rx,
+                    last_replayed,
+                }
+            }
+        }
+        super::heartbeat_state::SubscribeResult::Resync(resync) => {
+            V2Phase::Resync(Some(resync))
+        }
+    };
+
+    let stream = futures::stream::unfold(
+        (initial_phase, guard, Arc::clone(&state), epoch),
+        |(mut phase, guard, state, expected_epoch)| async move {
+            loop {
+                match phase {
+                    V2Phase::Resync(Some(resync)) => {
+                        let data = serde_json::to_string(&resync)
+                            .unwrap_or_else(|_| "{}".to_string());
+                        return Some((
+                            Ok(Event::default()
+                                .event("resync_required")
+                                .data(data)),
+                            (V2Phase::Done, guard, state, expected_epoch),
+                        ));
+                    }
+                    V2Phase::Resync(None) | V2Phase::Done => {
+                        drop(guard);
+                        return None;
+                    }
+                    V2Phase::Replay {
+                        mut replay,
+                        live_rx,
+                        last_replayed,
+                    } => {
+                        if let Some(delta) = replay.next() {
+                            let id =
+                                format!("{}:{}", delta.stream_epoch, delta.seq);
+                            let data = serde_json::to_string(delta.as_ref())
+                                .unwrap_or_default();
+                            return Some((
+                                Ok(Event::default()
+                                    .event("delta")
+                                    .id(id)
+                                    .data(data)),
+                                (
+                                    V2Phase::Replay {
+                                        replay,
+                                        live_rx,
+                                        last_replayed,
+                                    },
+                                    guard,
+                                    state,
+                                    expected_epoch,
+                                ),
+                            ));
+                        }
+                        phase = V2Phase::Live {
+                            live_rx,
+                            last_replayed,
+                        };
+                    }
+                    V2Phase::Live {
+                        mut live_rx,
+                        mut last_replayed,
+                    } => match live_rx.recv().await {
+                        Ok(event) => match event.as_ref() {
+                            super::heartbeat_state::StoreEvent::Delta(
+                                delta,
+                            ) => {
+                                if delta.stream_epoch != expected_epoch {
+                                    let (stream_epoch, latest_seq) = state
+                                        .heartbeat_store
+                                        .current_revision();
+                                    let resync =
+                                        super::heartbeat_sync::ResyncRequired {
+                                            protocol_version:
+                                                super::heartbeat_sync::PROTOCOL_VERSION,
+                                            stream_epoch,
+                                            reason: "epoch_mismatch"
+                                                .to_string(),
+                                            latest_seq,
+                                        };
+                                    let data = serde_json::to_string(&resync)
+                                        .unwrap_or_else(|_| "{}".to_string());
+                                    return Some((
+                                        Ok(Event::default()
+                                            .event("resync_required")
+                                            .data(data)),
+                                        (
+                                            V2Phase::Done,
+                                            guard,
+                                            state,
+                                            expected_epoch,
+                                        ),
+                                    ));
+                                }
+                                if delta.seq <= last_replayed {
+                                    phase = V2Phase::Live {
+                                        live_rx,
+                                        last_replayed,
+                                    };
+                                    continue;
+                                }
+                                last_replayed = delta.seq;
+                                let id = format!(
+                                    "{}:{}",
+                                    delta.stream_epoch, delta.seq
+                                );
+                                let data =
+                                    serde_json::to_string(delta.as_ref())
+                                        .unwrap_or_default();
+                                return Some((
+                                    Ok(Event::default()
+                                        .event("delta")
+                                        .id(id)
+                                        .data(data)),
+                                    (
+                                        V2Phase::Live {
+                                            live_rx,
+                                            last_replayed,
+                                        },
+                                        guard,
+                                        state,
+                                        expected_epoch,
+                                    ),
+                                ));
+                            }
+                            super::heartbeat_state::StoreEvent::Resync(
+                                resync,
+                            ) => {
+                                let data =
+                                    serde_json::to_string(resync.as_ref())
+                                        .unwrap_or_else(|_| "{}".to_string());
+                                return Some((
+                                    Ok(Event::default()
+                                        .event("resync_required")
+                                        .data(data)),
+                                    (
+                                        V2Phase::Done,
+                                        guard,
+                                        state,
+                                        expected_epoch,
+                                    ),
+                                ));
+                            }
+                        },
+                        Err(broadcast::error::RecvError::Lagged(_)) => {
+                            let (stream_epoch, latest_seq) =
+                                state.heartbeat_store.current_revision();
+                            let resync =
+                                super::heartbeat_sync::ResyncRequired {
+                                    protocol_version:
+                                        super::heartbeat_sync::PROTOCOL_VERSION,
+                                    stream_epoch,
+                                    reason: "stream_lagged".to_string(),
+                                    latest_seq,
+                                };
+                            let data = serde_json::to_string(&resync)
+                                .unwrap_or_else(|_| "{}".to_string());
+                            return Some((
+                                Ok(Event::default()
+                                    .event("resync_required")
+                                    .data(data)),
+                                (V2Phase::Done, guard, state, expected_epoch),
+                            ));
+                        }
+                        Err(broadcast::error::RecvError::Closed) => {
+                            drop(guard);
+                            return None;
+                        }
+                    },
+                }
+            }
+        },
+    );
+
+    Ok((
+        [
+            (
+                header::HeaderName::from_static("x-accel-buffering"),
+                "no".to_string(),
+            ),
+            (header::CACHE_CONTROL, "no-cache".to_string()),
+        ],
+        Sse::new(stream)
+            .keep_alive(KeepAlive::new().interval(Duration::from_secs(15))),
+    ))
+}
+
+/// GET /api/stats/heartbeat/tx/{txid} - lightweight server-assisted lookup
+/// against the live Heartbeat mirror and retained confirmation cache.
+pub async fn get_heartbeat_tx_lookup(
+    State(state): State<SharedStatsState>,
+    Path(txid): Path<String>,
+) -> Result<
+    (
+        [(header::HeaderName, &'static str); 1],
+        Json<super::heartbeat_sync::TxLookupStatus>,
+    ),
+    (axum::http::StatusCode, &'static str),
+> {
+    if txid.len() != 64 || !txid.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err((axum::http::StatusCode::BAD_REQUEST, "Invalid txid"));
+    }
+    let normalized = txid.to_ascii_lowercase();
+    let status = state.heartbeat_store.lookup_tx(&normalized);
+    Ok(([(header::CACHE_CONTROL, "no-store")], Json(status)))
 }

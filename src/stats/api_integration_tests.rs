@@ -31,9 +31,15 @@ use tempfile::TempDir;
 use tokio::sync::broadcast;
 use tower::ServiceExt;
 
-use super::api::{StatsState, StatsStateBuilder};
+use super::api::{StatsState, StatsStateBuilder, MAX_SSE_CONNECTIONS};
 use super::cache::CacheTag;
 use super::db::{self, DbPool};
+use super::heartbeat_state::{HeartbeatStore, CHECKPOINT_RESET_DIFF_THRESHOLD};
+use super::heartbeat_sync::{
+    ApplyOutcome, CanonicalBlock, Coverage, HeartbeatDelta, HeartbeatMirror,
+    HeartbeatSnapshot, NodeMempoolAggregate, ResyncRequired, TxFlags,
+    TxLookupStatus, PROTOCOL_VERSION,
+};
 use super::rpc::BitcoinRpc;
 use super::startup::build_api_router;
 
@@ -46,6 +52,10 @@ struct TestApp {
 
 impl TestApp {
     fn new() -> Self {
+        Self::with_heartbeat_store(Arc::new(HeartbeatStore::new()))
+    }
+
+    fn with_heartbeat_store(heartbeat_store: Arc<HeartbeatStore>) -> Self {
         let tempdir = tempfile::tempdir().expect("create tempdir");
         let db_path = tempdir.path().join("test.db");
 
@@ -149,6 +159,7 @@ impl TestApp {
             range_summary_cache,
             extremes_cache,
             heartbeat_tx,
+            heartbeat_store,
             heartbeat_blocks: Default::default(),
             sse_connections: AtomicUsize::new(0),
             heartbeat_history_cache,
@@ -161,6 +172,14 @@ impl TestApp {
             state,
             _tempdir: tempdir,
         }
+    }
+
+    async fn send(&self, req: Request<Body>) -> axum::response::Response {
+        self.router
+            .clone()
+            .oneshot(req)
+            .await
+            .expect("oneshot succeeded")
     }
 
     /// Fire a GET request against the router and parse the JSON response.
@@ -598,4 +617,732 @@ async fn invalidate_on_price_refresh_does_not_touch_stats_cache() {
         app.state.stats_summary_cache.get(&()).is_some(),
         "stats_summary_cache must survive a tag it didn't subscribe to"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Heartbeat Phase 2: /heartbeat/snapshot, /heartbeat/v2, /heartbeat/tx/{txid}
+// ---------------------------------------------------------------------------
+
+#[derive(Debug)]
+struct SseFrame {
+    event: String,
+    id: Option<String>,
+    data: String,
+}
+
+struct SseReader {
+    stream: axum::body::BodyDataStream,
+    buf: String,
+}
+
+impl SseReader {
+    fn from_response(response: axum::response::Response) -> Self {
+        Self {
+            stream: response.into_body().into_data_stream(),
+            buf: String::new(),
+        }
+    }
+
+    async fn next_event(&mut self) -> Option<SseFrame> {
+        use futures::StreamExt;
+        loop {
+            if let Some(pos) = self.buf.find("\n\n") {
+                let raw = self.buf[..pos].to_string();
+                self.buf.drain(..pos + 2);
+                if let Some(frame) = parse_sse_frame(&raw) {
+                    return Some(frame);
+                }
+                continue;
+            }
+            let chunk = tokio::time::timeout(
+                Duration::from_secs(2),
+                self.stream.next(),
+            )
+            .await
+            .expect("timed out waiting for SSE chunk")?;
+            let bytes = chunk.expect("SSE body chunk ok");
+            self.buf.push_str(
+                std::str::from_utf8(&bytes).expect("SSE payload is UTF-8"),
+            );
+        }
+    }
+}
+
+fn parse_sse_frame(raw: &str) -> Option<SseFrame> {
+    let mut event = String::new();
+    let mut id = None;
+    let mut data_lines = Vec::new();
+    for line in raw.lines() {
+        let line = line.strip_suffix('\r').unwrap_or(line);
+        if line.is_empty() || line.starts_with(':') {
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("event:") {
+            event = rest.trim_start().to_string();
+        } else if let Some(rest) = line.strip_prefix("id:") {
+            id = Some(rest.trim_start().to_string());
+        } else if let Some(rest) = line.strip_prefix("data:") {
+            data_lines.push(rest.trim_start().to_string());
+        }
+    }
+    if event.is_empty() && data_lines.is_empty() {
+        return None;
+    }
+    Some(SseFrame {
+        event,
+        id,
+        data: data_lines.join("\n"),
+    })
+}
+
+fn test_hex(seed: u64) -> String {
+    format!("{seed:064x}")
+}
+
+async fn fetch_snapshot(app: &TestApp) -> HeartbeatSnapshot {
+    let req = Request::builder()
+        .uri("/heartbeat/snapshot")
+        .body(Body::empty())
+        .expect("build request");
+    let resp = app.send(req).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .expect("read snapshot body");
+    serde_json::from_slice(&bytes).expect("valid HeartbeatSnapshot JSON")
+}
+
+#[tokio::test]
+async fn heartbeat_snapshot_returns_200_with_epoch_and_seq_headers() {
+    let app = TestApp::new();
+    let tx1 = test_hex(1);
+    app.state
+        .heartbeat_store
+        .install_checkpoint(&[&tx1], true, 1_700_000_000);
+
+    let req = Request::builder()
+        .uri("/heartbeat/snapshot")
+        .body(Body::empty())
+        .expect("build request");
+    let resp = app.send(req).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let headers = resp.headers().clone();
+    assert_eq!(
+        headers
+            .get(axum::http::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok()),
+        Some("application/json")
+    );
+    assert_eq!(
+        headers
+            .get(axum::http::header::CACHE_CONTROL)
+            .and_then(|v| v.to_str().ok()),
+        Some("no-store")
+    );
+    let epoch_hdr = headers
+        .get("x-heartbeat-epoch")
+        .and_then(|v| v.to_str().ok())
+        .expect("X-Heartbeat-Epoch header present");
+    let seq_hdr = headers
+        .get("x-heartbeat-seq")
+        .and_then(|v| v.to_str().ok())
+        .expect("X-Heartbeat-Seq header present");
+
+    let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .expect("read body");
+    let snap: HeartbeatSnapshot =
+        serde_json::from_slice(&bytes).expect("valid HeartbeatSnapshot");
+    assert_eq!(snap.protocol_version, PROTOCOL_VERSION);
+    assert_eq!(snap.stream_epoch, epoch_hdr);
+    assert_eq!(snap.seq.to_string(), seq_hdr);
+    assert_eq!(snap.coverage, Coverage::Complete);
+    assert_eq!(snap.transactions.len(), 1);
+    assert_eq!(snap.transactions[0].txid, tx1);
+}
+
+#[tokio::test]
+async fn heartbeat_v2_rejects_missing_and_malformed_cursors_with_400() {
+    let app = TestApp::new();
+
+    for uri in [
+        "/heartbeat/v2",
+        "/heartbeat/v2?epoch=abc",
+        "/heartbeat/v2?after=0",
+        "/heartbeat/v2?epoch=&after=0",
+        "/heartbeat/v2?epoch=abc&after=notanumber",
+        "/heartbeat/v2?epoch=abc&after=-1",
+    ] {
+        let req = Request::builder()
+            .uri(uri)
+            .body(Body::empty())
+            .expect("build request");
+        let resp = app.send(req).await;
+        assert_eq!(
+            resp.status(),
+            StatusCode::BAD_REQUEST,
+            "{uri} must return 400 Bad Request"
+        );
+    }
+
+    for bad_header in ["no-colon", ":10", "epoch:abc", "epoch:-5"] {
+        let req = Request::builder()
+            .uri("/heartbeat/v2")
+            .header("Last-Event-ID", bad_header)
+            .body(Body::empty())
+            .expect("build request");
+        let resp = app.send(req).await;
+        assert_eq!(
+            resp.status(),
+            StatusCode::BAD_REQUEST,
+            "Last-Event-ID={bad_header} must return 400 Bad Request"
+        );
+    }
+}
+
+#[tokio::test]
+async fn heartbeat_v2_enforces_sse_limit_with_503_and_releases_guard_on_drop() {
+    use std::sync::atomic::Ordering;
+
+    let app = TestApp::new();
+    let (epoch, seq) = app.state.heartbeat_store.current_revision();
+    let uri = format!("/heartbeat/v2?epoch={epoch}&after={seq}");
+
+    // Saturate the global SSE counter.
+    app.state
+        .sse_connections
+        .store(MAX_SSE_CONNECTIONS, Ordering::Relaxed);
+    let req = Request::builder()
+        .uri(&uri)
+        .body(Body::empty())
+        .expect("build request");
+    let resp = app.send(req).await;
+    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(
+        app.state.sse_connections.load(Ordering::Relaxed),
+        MAX_SSE_CONNECTIONS,
+        "rejected 503 must not leak SSE connection counter"
+    );
+
+    // Open a valid stream and verify headers + permit release on drop.
+    app.state.sse_connections.store(0, Ordering::Relaxed);
+    let req = Request::builder()
+        .uri(&uri)
+        .body(Body::empty())
+        .expect("build request");
+    let resp = app.send(req).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let content_type = resp
+        .headers()
+        .get(axum::http::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default();
+    assert!(
+        content_type.contains("text/event-stream"),
+        "expected text/event-stream, got {content_type}"
+    );
+    assert_eq!(
+        resp.headers()
+            .get("x-accel-buffering")
+            .and_then(|v| v.to_str().ok()),
+        Some("no")
+    );
+    assert_eq!(
+        resp.headers()
+            .get(axum::http::header::CACHE_CONTROL)
+            .and_then(|v| v.to_str().ok()),
+        Some("no-cache")
+    );
+    assert_eq!(app.state.sse_connections.load(Ordering::Relaxed), 1);
+
+    drop(resp);
+    assert_eq!(
+        app.state.sse_connections.load(Ordering::Relaxed),
+        0,
+        "dropping the SSE stream must release the connection permit"
+    );
+}
+
+#[tokio::test]
+async fn heartbeat_tx_lookup_validates_txid_and_reports_all_statuses() {
+    let app = TestApp::new();
+    let tx_unconfirmed = test_hex(0x11);
+    let tx_confirmed = test_hex(0x22);
+    let tx_absent = test_hex(0x33);
+    let block_hash = test_hex(0xbb);
+
+    // Invalid txids return 400.
+    for bad in ["short", &"z".repeat(64)] {
+        let req = Request::builder()
+            .uri(format!("/heartbeat/tx/{bad}"))
+            .body(Body::empty())
+            .expect("build request");
+        let resp = app.send(req).await;
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    // Seed mempool and enrich tx_unconfirmed.
+    app.state.heartbeat_store.install_checkpoint(
+        &[&tx_unconfirmed, &tx_confirmed],
+        true,
+        1_700_000_000,
+    );
+    app.state.heartbeat_store.enrich_tx(
+        tx_unconfirmed.clone(),
+        1_500,
+        141,
+        50_000,
+        TxFlags::OP_RETURN_MSG,
+        Some("hodl".to_string()),
+    );
+
+    // Uppercase hex lookup still resolves to unconfirmed tx.
+    let (status, body) = app
+        .get(&format!(
+            "/heartbeat/tx/{}",
+            tx_unconfirmed.to_ascii_uppercase()
+        ))
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    let parsed: TxLookupStatus =
+        serde_json::from_value(body).expect("parse TxLookupStatus");
+    match parsed {
+        TxLookupStatus::Unconfirmed(tx) => {
+            assert_eq!(tx.txid, tx_unconfirmed);
+            assert_eq!(tx.fee, Some(1_500));
+            assert_eq!(tx.vsize, Some(141));
+            assert_eq!(tx.value, Some(50_000));
+            assert_eq!(tx.flags, TxFlags::OP_RETURN_MSG);
+            assert_eq!(tx.op_return_text.as_deref(), Some("hodl"));
+        }
+        other => panic!("expected Unconfirmed, got {other:?}"),
+    }
+
+    // Confirm tx_confirmed via BlockObserved + BlockInclusion.
+    app.state
+        .heartbeat_store
+        .observe_block(block_hash.clone(), 1_700_000_010);
+    app.state.heartbeat_store.apply_block_inclusion(
+        block_hash.clone(),
+        900_000,
+        vec![tx_confirmed.clone()],
+    );
+    let (status, body) =
+        app.get(&format!("/heartbeat/tx/{tx_confirmed}")).await;
+    assert_eq!(status, StatusCode::OK);
+    let parsed: TxLookupStatus =
+        serde_json::from_value(body).expect("parse TxLookupStatus");
+    assert_eq!(
+        parsed,
+        TxLookupStatus::Confirmed {
+            txid: tx_confirmed.clone(),
+            block_hash: block_hash.clone(),
+            block_height: 900_000,
+        }
+    );
+
+    // Absent tx reports current coverage.
+    let (status, body) = app.get(&format!("/heartbeat/tx/{tx_absent}")).await;
+    assert_eq!(status, StatusCode::OK);
+    let parsed: TxLookupStatus =
+        serde_json::from_value(body).expect("parse TxLookupStatus");
+    assert_eq!(
+        parsed,
+        TxLookupStatus::Absent {
+            coverage: Coverage::Complete
+        }
+    );
+
+    // Disconnecting the block clears the confirmed status.
+    app.state.heartbeat_store.disconnect_block(block_hash);
+    let (status, body) =
+        app.get(&format!("/heartbeat/tx/{tx_confirmed}")).await;
+    assert_eq!(status, StatusCode::OK);
+    let parsed: TxLookupStatus =
+        serde_json::from_value(body).expect("parse TxLookupStatus");
+    assert!(matches!(parsed, TxLookupStatus::Absent { .. }));
+}
+
+#[tokio::test]
+async fn heartbeat_v2_atomic_replay_to_live_handoff_has_no_gaps_or_duplicates()
+{
+    let app = TestApp::new();
+    let tx0 = test_hex(1);
+    app.state
+        .heartbeat_store
+        .install_checkpoint(&[&tx0], true, 1_700_000_000);
+
+    let snap = fetch_snapshot(&app).await;
+    let mut mirror = HeartbeatMirror::default();
+    mirror.install_snapshot(snap.clone()).expect("install snap");
+
+    // Publish 3 deltas AFTER snapshot fetch and BEFORE /v2 connect.
+    app.state
+        .heartbeat_store
+        .observe_add(test_hex(2), 1_700_000_001);
+    app.state
+        .heartbeat_store
+        .observe_add(test_hex(3), 1_700_000_002);
+    app.state.heartbeat_store.enrich_tx(
+        test_hex(2),
+        1_200,
+        140,
+        75_000,
+        TxFlags::NONE,
+        None,
+    );
+
+    // Connect using Last-Event-ID header at the snapshot's revision.
+    let req = Request::builder()
+        .uri("/heartbeat/v2")
+        .header(
+            "Last-Event-ID",
+            format!("{}:{}", snap.stream_epoch, snap.seq),
+        )
+        .body(Body::empty())
+        .expect("build request");
+    let resp = app.send(req).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let mut reader = SseReader::from_response(resp);
+
+    // Publish 2 more live deltas after subscribing.
+    app.state
+        .heartbeat_store
+        .observe_add(test_hex(4), 1_700_000_003);
+    app.state.heartbeat_store.observe_remove(vec![test_hex(3)]);
+
+    let mut seen_seqs = Vec::new();
+    for expected_seq in (snap.seq + 1)..=(snap.seq + 5) {
+        let frame = reader
+            .next_event()
+            .await
+            .expect("expected delta frame on stream");
+        assert_eq!(frame.event, "delta");
+        assert_eq!(
+            frame.id.as_deref(),
+            Some(format!("{}:{expected_seq}", snap.stream_epoch).as_str())
+        );
+        let delta: HeartbeatDelta =
+            serde_json::from_str(&frame.data).expect("parse delta");
+        seen_seqs.push(delta.seq);
+        assert_eq!(mirror.apply_delta(delta), ApplyOutcome::Applied);
+    }
+
+    let expected: Vec<u64> = ((snap.seq + 1)..=(snap.seq + 5)).collect();
+    assert_eq!(seen_seqs, expected);
+    assert!(mirror.has_tx(&test_hex(1)));
+    assert!(mirror.has_tx(&test_hex(2)));
+    assert!(!mirror.has_tx(&test_hex(3)));
+    assert!(mirror.has_tx(&test_hex(4)));
+}
+
+#[tokio::test]
+async fn heartbeat_v2_continuous_vs_rejoining_client_equivalence() {
+    use std::sync::atomic::Ordering;
+
+    // Small replay cap (4 events) so we can deterministically trigger
+    // `cursor_expired` without allocating thousands of deltas.
+    let store =
+        Arc::new(HeartbeatStore::with_replay_limits(4, 16 * 1024 * 1024));
+    let app = TestApp::with_heartbeat_store(store);
+
+    let tx_a = test_hex(10);
+    let tx_b = test_hex(11);
+    let tx_c = test_hex(12);
+    let tx_d = test_hex(13);
+    let tx_e = test_hex(14);
+    let tx_f = test_hex(15);
+    let block_1 = test_hex(0xa1);
+    let block_2 = test_hex(0xa2);
+
+    // Seed initial checkpoint.
+    app.state.heartbeat_store.install_checkpoint(
+        &[&tx_a, &tx_b],
+        true,
+        1_700_000_000,
+    );
+
+    // Both clients start at snapshot S.
+    let snap_s = fetch_snapshot(&app).await;
+    let mut client_a = HeartbeatMirror::default();
+    let mut client_b = HeartbeatMirror::default();
+    client_a
+        .install_snapshot(snap_s.clone())
+        .expect("client A install S");
+    client_b
+        .install_snapshot(snap_s.clone())
+        .expect("client B install S");
+
+    // Client A stays continuously connected from S.
+    let req_a = Request::builder()
+        .uri(format!(
+            "/heartbeat/v2?epoch={}&after={}",
+            snap_s.stream_epoch, snap_s.seq
+        ))
+        .body(Body::empty())
+        .expect("build request A");
+    let resp_a = app.send(req_a).await;
+    assert_eq!(resp_a.status(), StatusCode::OK);
+    let mut reader_a = SseReader::from_response(resp_a);
+
+    // Emit a rich mix of live deltas (well over the 4-event replay cap).
+    app.state
+        .heartbeat_store
+        .observe_add(tx_c.clone(), 1_700_000_001);
+    app.state.heartbeat_store.enrich_tx(
+        tx_c.clone(),
+        12_000,
+        220,
+        500_000_000,
+        TxFlags::WHALE | TxFlags::OP_RETURN_MSG,
+        Some("genesis".to_string()),
+    );
+    app.state.heartbeat_store.observe_remove(vec![tx_b.clone()]);
+    app.state
+        .heartbeat_store
+        .update_node_mempool(Some(NodeMempoolAggregate {
+            tx_count: 2,
+            vbytes: 360,
+            observed_at: 1_700_000_005,
+            stale: false,
+        }));
+    app.state
+        .heartbeat_store
+        .observe_block(block_1.clone(), 1_700_000_010);
+    app.state.heartbeat_store.apply_block_inclusion(
+        block_1.clone(),
+        900_001,
+        vec![tx_a.clone()],
+    );
+    app.state
+        .heartbeat_store
+        .apply_block_details(CanonicalBlock {
+            height: 900_001,
+            hash: block_1.clone(),
+            timestamp: 1_700_000_010,
+            tx_count: 1,
+            total_fees: 25_000,
+            size: 1_000,
+            weight: 4_000,
+            observed_at: 1_700_000_010,
+        });
+    app.state
+        .heartbeat_store
+        .observe_block(block_2.clone(), 1_700_000_020);
+    app.state.heartbeat_store.disconnect_block(block_2);
+    app.state
+        .heartbeat_store
+        .observe_add(tx_d.clone(), 1_700_000_025);
+    app.state.heartbeat_store.set_coverage(Coverage::Partial {
+        reason: "block_disconnected".to_string(),
+    });
+
+    let (_, mid_seq) = app.state.heartbeat_store.current_revision();
+    assert!(mid_seq > snap_s.seq + 4, "must exceed replay window");
+
+    // Client B tries to resume from expired cursor S -> receives resync_required & EOF.
+    let req_b_stale = Request::builder()
+        .uri(format!(
+            "/heartbeat/v2?epoch={}&after={}",
+            snap_s.stream_epoch, snap_s.seq
+        ))
+        .body(Body::empty())
+        .expect("build stale request B");
+    let resp_b_stale = app.send(req_b_stale).await;
+    assert_eq!(resp_b_stale.status(), StatusCode::OK);
+    let mut reader_b_stale = SseReader::from_response(resp_b_stale);
+    let resync_frame = reader_b_stale
+        .next_event()
+        .await
+        .expect("expected resync_required frame");
+    assert_eq!(resync_frame.event, "resync_required");
+    let resync: ResyncRequired =
+        serde_json::from_str(&resync_frame.data).expect("parse resync");
+    assert_eq!(resync.reason, "cursor_expired");
+    assert_eq!(resync.stream_epoch, snap_s.stream_epoch);
+    assert_eq!(resync.latest_seq, mid_seq);
+    assert!(
+        reader_b_stale.next_event().await.is_none(),
+        "resync stream must terminate cleanly"
+    );
+    drop(reader_b_stale);
+
+    // Client B fetches fresh snapshot at M and subscribes to trailing deltas.
+    let snap_m = fetch_snapshot(&app).await;
+    assert_eq!(snap_m.seq, mid_seq);
+    client_b
+        .install_snapshot(snap_m.clone())
+        .expect("client B install M");
+
+    let req_b = Request::builder()
+        .uri(format!(
+            "/heartbeat/v2?epoch={}&after={}",
+            snap_m.stream_epoch, snap_m.seq
+        ))
+        .body(Body::empty())
+        .expect("build request B");
+    let resp_b = app.send(req_b).await;
+    assert_eq!(resp_b.status(), StatusCode::OK);
+    let mut reader_b = SseReader::from_response(resp_b);
+
+    // Emit final live deltas to revision R.
+    app.state
+        .heartbeat_store
+        .observe_add(tx_e.clone(), 1_700_000_030);
+    app.state.heartbeat_store.enrich_tx(
+        tx_e.clone(),
+        500,
+        110,
+        10_000,
+        TxFlags::NONE,
+        None,
+    );
+    let (_, target_seq) = app.state.heartbeat_store.current_revision();
+
+    // Drain Client A continuously from S to R.
+    while client_a.revision().unwrap().1 < target_seq {
+        let frame = reader_a.next_event().await.expect("client A delta");
+        assert_eq!(frame.event, "delta");
+        let delta: HeartbeatDelta =
+            serde_json::from_str(&frame.data).expect("parse delta A");
+        assert_eq!(client_a.apply_delta(delta), ApplyOutcome::Applied);
+    }
+
+    // Drain Client B from M to R.
+    while client_b.revision().unwrap().1 < target_seq {
+        let frame = reader_b.next_event().await.expect("client B delta");
+        assert_eq!(frame.event, "delta");
+        let delta: HeartbeatDelta =
+            serde_json::from_str(&frame.data).expect("parse delta B");
+        assert_eq!(client_b.apply_delta(delta), ApplyOutcome::Applied);
+    }
+
+    assert!(
+        client_a.same_observable_state(&client_b),
+        "continuous client A and rejoining client B must converge to identical observable state"
+    );
+    assert_eq!(
+        client_a.confirmed_in(&tx_a),
+        Some((block_1.as_str(), 900_001))
+    );
+    assert_eq!(
+        client_b.confirmed_in(&tx_a),
+        Some((block_1.as_str(), 900_001)),
+        "rejoining client B must recover recent confirmations from snapshot without replaying BlockInclusion"
+    );
+
+    // Part 2: Large checkpoint discontinuity (> 2,000 diff) rotates stream_epoch
+    // and sends `resync_required` to live subscribers.
+    let large_members: Vec<String> =
+        (1000..(1000 + CHECKPOINT_RESET_DIFF_THRESHOLD as u64 + 10))
+            .map(test_hex)
+            .collect();
+    let large_refs: Vec<&String> = large_members.iter().collect();
+    app.state.heartbeat_store.install_checkpoint(
+        &large_refs,
+        true,
+        1_700_000_100,
+    );
+
+    let reset_frame_a = reader_a
+        .next_event()
+        .await
+        .expect("client A receives resync_required on epoch reset");
+    assert_eq!(reset_frame_a.event, "resync_required");
+    let reset_a: ResyncRequired =
+        serde_json::from_str(&reset_frame_a.data).expect("parse reset resync");
+    assert_eq!(reset_a.reason, "checkpoint_reset");
+    assert_ne!(reset_a.stream_epoch, snap_s.stream_epoch);
+    assert_eq!(reset_a.latest_seq, 1);
+    assert!(
+        reader_a.next_event().await.is_none(),
+        "epoch reset stream must close cleanly"
+    );
+
+    let reset_frame_b = reader_b
+        .next_event()
+        .await
+        .expect("client B receives resync_required on epoch reset");
+    assert_eq!(reset_frame_b.event, "resync_required");
+    assert!(reader_b.next_event().await.is_none());
+
+    drop(reader_a);
+    drop(reader_b);
+    assert_eq!(app.state.sse_connections.load(Ordering::Relaxed), 0);
+
+    // Both clients rejoin on the new epoch and converge again.
+    let snap_new = fetch_snapshot(&app).await;
+    assert_eq!(snap_new.stream_epoch, reset_a.stream_epoch);
+    assert_eq!(snap_new.seq, 1);
+    assert_eq!(snap_new.transactions.len(), large_members.len());
+    client_a
+        .install_snapshot(snap_new.clone())
+        .expect("client A new epoch");
+    client_b
+        .install_snapshot(snap_new.clone())
+        .expect("client B new epoch");
+    assert_eq!(
+        client_a.confirmed_in(&tx_a),
+        Some((block_1.as_str(), 900_001)),
+        "checkpoint reset must retain recent confirmations"
+    );
+    assert_eq!(
+        client_b.confirmed_in(&tx_a),
+        Some((block_1.as_str(), 900_001))
+    );
+
+    app.state
+        .heartbeat_store
+        .observe_add(tx_f.clone(), 1_700_000_110);
+    let snap_after = fetch_snapshot(&app).await;
+    client_a
+        .install_snapshot(snap_after.clone())
+        .expect("client A post-add");
+    client_b
+        .install_snapshot(snap_after)
+        .expect("client B post-add");
+    assert!(client_a.same_observable_state(&client_b));
+}
+
+#[tokio::test]
+async fn heartbeat_v2_prefers_last_event_id_over_query_params() {
+    let app = TestApp::new();
+    let tx0 = test_hex(1);
+    app.state
+        .heartbeat_store
+        .install_checkpoint(&[&tx0], true, 1_700_000_000);
+    let (epoch, seq_base) = app.state.heartbeat_store.current_revision();
+    assert_eq!(seq_base, 1);
+
+    // Emit seq 2, 3, 4, 5.
+    for i in 2..=5u64 {
+        app.state
+            .heartbeat_store
+            .observe_add(test_hex(i), 1_700_000_000 + i);
+    }
+
+    // EventSource auto-reconnects retain the original `?epoch=E&after=1` query
+    // string while sending `Last-Event-ID: E:3`. The server must prefer
+    // `Last-Event-ID` and resume after seq 3 (emitting seq 4, then seq 5).
+    let req = Request::builder()
+        .uri(format!("/heartbeat/v2?epoch={epoch}&after=1"))
+        .header("Last-Event-ID", format!("{epoch}:3"))
+        .body(Body::empty())
+        .expect("build request");
+    let resp = app.send(req).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let mut reader = SseReader::from_response(resp);
+
+    let first = reader.next_event().await.expect("expected seq 4 frame");
+    assert_eq!(first.event, "delta");
+    let d4: HeartbeatDelta =
+        serde_json::from_str(&first.data).expect("parse delta 4");
+    assert_eq!(d4.seq, 4);
+
+    let second = reader.next_event().await.expect("expected seq 5 frame");
+    assert_eq!(second.event, "delta");
+    let d5: HeartbeatDelta =
+        serde_json::from_str(&second.data).expect("parse delta 5");
+    assert_eq!(d5.seq, 5);
 }

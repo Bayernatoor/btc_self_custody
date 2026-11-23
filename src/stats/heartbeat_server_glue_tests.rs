@@ -125,3 +125,49 @@ async fn wait_announcement_wakes_without_lost_notification() {
         assert!(announced);
     }
 }
+
+#[test]
+fn observe_block_serialization_cannot_publish_after_retire() {
+    let jobs = BlockJobs::default();
+    let store = HeartbeatStore::new();
+    let hash = "56".repeat(32);
+
+    let job = jobs.entry(&hash).unwrap();
+    // Simulate first observe_block inside if_current.
+    let first = jobs.if_current(&job, || {
+        if !job.observed_sent.swap(true, Ordering::Relaxed) {
+            store.observe_block(hash.clone(), job.observed_at);
+            true
+        } else {
+            false
+        }
+    });
+    assert_eq!(first, Some(true));
+    assert_eq!(store.current_revision().1, 1);
+
+    // Second observe_block for the same active job is deduplicated by observed_sent.
+    let duplicate = jobs.if_current(&job, || {
+        if !job.observed_sent.swap(true, Ordering::Relaxed) {
+            store.observe_block(hash.clone(), job.observed_at);
+            true
+        } else {
+            false
+        }
+    });
+    assert_eq!(duplicate, Some(false));
+    assert_eq!(store.current_revision().1, 1);
+
+    // Retire via on_disconnect and verify stale job cannot publish BlockObserved.
+    jobs.on_disconnect(&hash, || {
+        store.disconnect_block(hash.clone());
+    });
+    assert_eq!(store.current_revision().1, 2);
+    let late_job = jobs.if_current(&job, || {
+        store.observe_block(hash.clone(), job.observed_at);
+    });
+    assert!(late_job.is_none());
+    assert_eq!(store.current_revision().1, 2);
+    let snap: crate::stats::heartbeat_sync::HeartbeatSnapshot =
+        serde_json::from_slice(&store.snapshot().json).expect("valid snapshot");
+    assert!(snap.pending_blocks.is_empty());
+}

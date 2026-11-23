@@ -401,6 +401,8 @@ impl SeenTxids {
 /// DB write can never disagree about a tx's flags.
 struct EnrichedTx {
     event: HeartbeatEvent,
+    /// Compact notable bitmask for Heartbeat v2 `TxDetails`.
+    flags_bits: u8,
     /// Highest-priority notable label, if any.
     notable_type: Option<&'static str>,
     /// Whether any notable flag fired.
@@ -423,6 +425,15 @@ fn enrich_tx(
     };
 
     let flags = classify_notable(parsed, fee, fee_rate, price_usd);
+    let flags_bits = super::heartbeat_sync::TxFlags::from_bools(
+        flags.whale,
+        flags.fee_outlier,
+        flags.consolidation,
+        flags.fan_out,
+        flags.large_inscription,
+        flags.round_number,
+        flags.op_return_msg,
+    );
     let notable_type = flags.primary_type();
     let is_notable = flags.is_notable();
 
@@ -457,6 +468,7 @@ fn enrich_tx(
 
     EnrichedTx {
         event,
+        flags_bits,
         notable_type,
         is_notable,
         value_usd,
@@ -503,6 +515,16 @@ async fn process_rawtx(
             parsed.witness_bytes,
         );
     }
+
+    // Publish details only into the v2 store (never admits membership).
+    state.heartbeat_store.enrich_tx(
+        parsed.txid.clone(),
+        fee,
+        vsize,
+        parsed.value,
+        enriched.flags_bits,
+        parsed.op_return_text.clone(),
+    );
 
     // Broadcast first: the SSE visual path shouldn't wait on the DB.
     let _ = sender.send(enriched.event);

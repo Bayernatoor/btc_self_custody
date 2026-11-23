@@ -3,13 +3,15 @@
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex, OnceLock};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use tokio::sync::{Notify, OnceCell, Semaphore};
 
 use super::{timed_block_rpc, HeartbeatEvent, StatsError, StatsState};
 use crate::stats::{
     db,
+    heartbeat_state::HeartbeatStore,
+    heartbeat_sync::CanonicalBlock,
     rpc::{BitcoinRpc, BlockTxids},
 };
 
@@ -63,8 +65,10 @@ impl Default for BlockJobs {
 pub(crate) struct BlockJob {
     hash: String,
     first_receipt: Instant,
+    observed_at: u64,
     ids: OnceCell<Arc<BlockTxids>>,
     running: AtomicBool,
+    observed_sent: AtomicBool,
     ids_sent: AtomicBool,
     block_sent: AtomicBool,
     retired: Arc<AtomicBool>,
@@ -221,8 +225,10 @@ impl BlockJobs {
         let job = Arc::new(BlockJob {
             hash: hash.into(),
             first_receipt: Instant::now(),
+            observed_at: now_unix_secs(),
             ids: OnceCell::new(),
             running: false.into(),
+            observed_sent: false.into(),
             ids_sent: false.into(),
             block_sent: false.into(),
             retired: Arc::new(AtomicBool::new(false)),
@@ -251,13 +257,27 @@ impl BlockJobs {
         self.on_disconnect(hash, || {});
     }
 
+    #[cfg(test)]
     fn retire(
         &self,
         hash: &str,
         pool: &db::DbPool,
         events: &tokio::sync::broadcast::Sender<HeartbeatEvent>,
     ) {
+        self.retire_with_store(hash, pool, events, None);
+    }
+
+    fn retire_with_store(
+        &self,
+        hash: &str,
+        pool: &db::DbPool,
+        events: &tokio::sync::broadcast::Sender<HeartbeatEvent>,
+        store: Option<&HeartbeatStore>,
+    ) {
         self.on_disconnect(hash, || {
+            if let Some(store) = store {
+                store.disconnect_block(hash.into());
+            }
             let _ = events
                 .send(HeartbeatEvent::BlockDisconnected { hash: hash.into() });
             self.persist(pool, ClaimWrite::Revoke(hash.into()));
@@ -289,14 +309,64 @@ impl BlockJobs {
         let entries = self.entries.lock().unwrap();
         entries.iter().any(|entry| Arc::ptr_eq(entry, job)).then(f)
     }
+
+    /// Publish exact block inclusion once for a still-current job.
+    ///
+    /// Called from both `observe_block` and the shadow sequence task so
+    /// `HeartbeatStore::apply_block_inclusion` is guaranteed to run before the
+    /// post-connect `getrawmempool` checkpoint starts.
+    pub(super) fn publish_inclusion_if_current(
+        &self,
+        state: &StatsState,
+        job: &Arc<BlockJob>,
+        info: &Arc<BlockTxids>,
+    ) {
+        self.if_current(job, || {
+            if job.ids_sent.swap(true, Ordering::Relaxed) {
+                return;
+            }
+            let hash = &job.hash;
+            state.rpc.invalidate_tip_caches(info.height);
+            state.heartbeat_store.apply_block_inclusion(
+                hash.clone(),
+                info.height,
+                info.txids.clone(),
+            );
+            let event = HeartbeatEvent::BlockTxids {
+                hash: hash.clone(),
+                height: info.height,
+                txids: info.txids.clone(),
+            };
+            let receivers = state.heartbeat_tx.send(event).unwrap_or(0);
+            tracing::info!(
+                stage = "block_txids",
+                %hash,
+                height = info.height,
+                txids = info.txids.len(),
+                receivers,
+                "heartbeat_block"
+            );
+            self.persist(
+                &state.db,
+                ClaimWrite::Confirm {
+                    hash: hash.clone(),
+                    retired: Arc::clone(&job.retired),
+                    ids: Arc::clone(info),
+                },
+            );
+        });
+    }
 }
 
 /// Publish D immediately and retire the matching durable claims, including
 /// hashes no longer in the bounded job cache (or confirmed before restart).
 pub(crate) fn retire_block(state: &Arc<StatsState>, hash: &str) {
-    state
-        .heartbeat_blocks
-        .retire(hash, &state.db, &state.heartbeat_tx);
+    state.heartbeat_blocks.retire_with_store(
+        hash,
+        &state.db,
+        &state.heartbeat_tx,
+        Some(&state.heartbeat_store),
+    );
 }
 
 impl BlockJob {
@@ -380,6 +450,13 @@ pub(crate) fn observe_block(
     if job.retired.load(Ordering::Acquire) {
         return None;
     }
+    state.heartbeat_blocks.if_current(&job, || {
+        if !job.observed_sent.swap(true, Ordering::Relaxed) {
+            state
+                .heartbeat_store
+                .observe_block(hash.to_string(), job.observed_at);
+        }
+    })?;
     if job.running.swap(true, Ordering::Acquire) {
         return Some(job);
     }
@@ -405,27 +482,9 @@ pub(crate) fn observe_block(
         let hash = &job.hash;
         let ids = async {
             let info = job.accepted_ids(&state.rpc).await?;
-            state.heartbeat_blocks.if_current(&job, || {
-                if job.ids_sent.swap(true, Ordering::Relaxed) {
-                    return;
-                }
-                state.rpc.invalidate_tip_caches(info.height);
-                let event = HeartbeatEvent::BlockTxids {
-                    hash: hash.clone(),
-                    height: info.height,
-                    txids: info.txids.clone(),
-                };
-                let receivers = state.heartbeat_tx.send(event).unwrap_or(0);
-                tracing::info!(source, stage = "block_txids", %hash, height = info.height, txids = info.txids.len(), receivers, "heartbeat_block");
-                state.heartbeat_blocks.persist(
-                    &state.db,
-                    ClaimWrite::Confirm {
-                        hash: hash.clone(),
-                        retired: Arc::clone(&job.retired),
-                        ids: Arc::clone(&info),
-                    },
-                );
-            });
+            state
+                .heartbeat_blocks
+                .publish_inclusion_if_current(&state, &job, &info);
             Ok::<_, StatsError>(info)
         };
         // Always use Core's getblockstats.totalfee so polled and ZMQ-observed
@@ -438,6 +497,16 @@ pub(crate) fn observe_block(
             let (info, total_fees) = (info?, fees?);
             job.check_height(&state.rpc, info.height).await?;
             state.heartbeat_blocks.if_current(&job, || {
+                state.heartbeat_store.apply_block_details(CanonicalBlock {
+                    height: info.height,
+                    hash: hash.clone(),
+                    timestamp: info.timestamp,
+                    tx_count: info.tx_count,
+                    total_fees,
+                    size: info.size,
+                    weight: info.weight,
+                    observed_at: job.observed_at,
+                });
                 let event = HeartbeatEvent::Block {
                     height: info.height,
                     hash: hash.clone(),
@@ -460,4 +529,11 @@ pub(crate) fn observe_block(
         job.finish_attempt();
     });
     Some(job)
+}
+
+fn now_unix_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
 }

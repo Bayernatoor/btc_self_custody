@@ -58,6 +58,8 @@ probe 200 "/aggregates/daily"      "$BASE/api/stats/aggregates/daily?from=170000
 probe 200 "/signaling"             "$BASE/api/stats/signaling?bit=2"
 probe 200 "/signaling/periods"     "$BASE/api/stats/signaling/periods?bit=2"
 probe 200 "/live"                  "$BASE/api/stats/live"
+probe 200 "/heartbeat/snapshot"    "$BASE/api/stats/heartbeat/snapshot"
+probe 200 "/heartbeat/tx absent"   "$BASE/api/stats/heartbeat/tx/0000000000000000000000000000000000000000000000000000000000000000"
 
 echo
 echo "== axum error paths =="
@@ -65,6 +67,8 @@ probe 400 "/op-returns over-wide"  "$BASE/api/stats/op-returns?from=0&to=$TIP"
 probe 400 "/daily reversed range"  "$BASE/api/stats/aggregates/daily?from=1710000000&to=1700000000"
 probe 400 "/tx bad txid"           "$BASE/api/stats/tx/nothex"
 probe 404 "/tx unknown txid"       "$BASE/api/stats/tx/$(printf '0%.0s' {1..64})"
+probe 400 "/heartbeat/v2 no cursor" "$BASE/api/stats/heartbeat/v2"
+probe 400 "/heartbeat/tx bad txid" "$BASE/api/stats/heartbeat/tx/not-a-txid"
 # These three were the open questions this script was written to answer, and
 # they are now settled, so they are assertions rather than notes. A recorded
 # status nobody compares against anything is not a check.
