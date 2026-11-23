@@ -70,10 +70,6 @@ extern "C" {
     // SSE connection state: "live" | "stale" | "disconnected"
     #[wasm_bindgen(js_name = getHeartbeatConnectionState)]
     fn get_heartbeat_connection_state() -> String;
-
-    // Live mempool stats from the SSE timeline (JSON {tx, vmb}); tx=0 = not ready.
-    #[wasm_bindgen(js_name = getHeartbeatMempoolStats)]
-    fn get_heartbeat_mempool_stats() -> String;
 }
 
 #[cfg(not(feature = "hydrate"))]
@@ -116,11 +112,6 @@ fn get_heartbeat_latest_block() -> String {
 #[allow(dead_code)]
 fn get_heartbeat_connection_state() -> String {
     "live".to_string()
-}
-#[cfg(not(feature = "hydrate"))]
-#[allow(dead_code)]
-fn get_heartbeat_mempool_stats() -> String {
-    "{\"tx\":0,\"vmb\":0}".to_string()
 }
 
 const RETARGET_PERIOD: u64 = 2016;
@@ -174,8 +165,15 @@ pub fn HeartbeatPage() -> impl IntoView {
     let (bp_label, set_bp_label) = signal("Waiting...".to_string());
     let (bp_color, set_bp_color) = signal("#00e676".to_string());
 
-    let (temp_display, set_temp_display) = signal("--.-".to_string());
-    let (temp_label, set_temp_label) = signal("Waiting...".to_string());
+    // Single source of truth for node-aggregate mempool totals, shared by the
+    // bottom info bar and the Temperature tile so they can never disagree.
+    let mempool_summary = Signal::derive(move || {
+        format_mempool_summary(cached_live.get().as_ref())
+    });
+    let mempool_display = Signal::derive(move || mempool_summary.get().bar);
+    let temp_display = Signal::derive(move || mempool_summary.get().tile_vmb);
+    let temp_label =
+        Signal::derive(move || mempool_summary.get().tile_tx_label);
     let (temp_color, set_temp_color) = signal("#00e676".to_string());
     let (temp_subtitle, set_temp_subtitle) = signal(String::new());
 
@@ -353,26 +351,22 @@ pub fn HeartbeatPage() -> impl IntoView {
             set_bp_label.set(bp_context);
             set_bp_color.set(v.bp_color);
 
-            // Temperature: show mempool stats as main, temp as subtitle
-            if let Some(live) = cached_live.get_untracked() {
-                let vmb = live.mempool.bytes as f64 / 1_000_000.0;
-                set_temp_display.set(format!("{:.1}", vmb));
+            // Temperature: mempool vMB and tx count come reactively from
+            // `mempool_summary` (`format_mempool_summary`); only the derived
+            // temperature subtitle and colour come from JS vitals, and only
+            // when the node reported an actual mempool observation.
+            if cached_live
+                .get_untracked()
+                .is_some_and(|l| l.mempool_available)
+            {
                 set_temp_subtitle.set(format!(
                     "{:.1}\u{00B0}C \u{00b7} {}",
                     v.temp_c, v.temp_label
                 ));
+                set_temp_color.set(v.temp_color);
             } else {
-                set_temp_display.set(format!("{:.1}", v.temp_c));
                 set_temp_subtitle.set(String::new());
             }
-            set_temp_label.set(format!(
-                "{} tx in mempool",
-                cached_live
-                    .get_untracked()
-                    .map(|s| super::helpers::format_number(s.mempool.size))
-                    .unwrap_or_else(|| "--".to_string())
-            ));
-            set_temp_color.set(v.temp_color);
 
             // Immune System: hashrate + retarget context
             set_immune_display.set(format!("{:.1} EH/s", v.immune_eh));
@@ -401,24 +395,35 @@ pub fn HeartbeatPage() -> impl IntoView {
             return;
         };
 
-        // Skip when RPC calls failed (server returns zeroed defaults).
-        // Retaining the previous JS state keeps vital signs + bottom bar
-        // showing the last known good values instead of 0s.
-        let rpc_failed = live.mempool.size == 0
+        // Skip when every live RPC call failed (server returns zeroed defaults).
+        // Retaining the previous JS state keeps non-mempool vitals showing
+        // their last known values instead of 0s, while `mempool_summary`
+        // independently transitions to the unavailable placeholder.
+        let rpc_failed = !live.mempool_available
             && live.network.hashrate == 0.0
             && live.next_block_fee == 0.0;
         if rpc_failed {
+            set_temp_subtitle.set(String::new());
             return;
         }
 
-        // Forward live metrics for color + vital signs computation
+        // Forward live metrics for color + vital signs computation. Omit
+        // mempool fields when `getmempoolinfo` failed so JS does not treat
+        // zeroed placeholders as an empty mempool.
+        let mempool_fields = if live.mempool_available {
+            format!(
+                r#""mempool_mb":{:.1},"mempool_min_fee":{},"#,
+                live.mempool.bytes as f64 / 1_000_000.0,
+                (live.mempool.mempoolminfee * 1e8 / 100.0).round() / 10.0, // BTC/kB to sat/vB, rounded to 1dp
+            )
+        } else {
+            String::new()
+        };
         let live_json = format!(
-            r#"{{"next_block_fee":{},"mempool_mb":{:.1},"block_time":{},"hashrate_eh":{:.1},"mempool_min_fee":{},"difficulty":{},"block_height":{}}}"#,
+            r#"{{"next_block_fee":{},{mempool_fields}"block_time":{},"hashrate_eh":{:.1},"difficulty":{},"block_height":{}}}"#,
             live.next_block_fee,
-            live.mempool.bytes as f64 / 1_000_000.0,
             live.blockchain.time,
             live.network.hashrate / 1e18,
-            (live.mempool.mempoolminfee * 1e8 / 100.0).round() / 10.0, // BTC/kB to sat/vB, rounded to 1dp
             live.blockchain.difficulty,
             live.blockchain.blocks,
         );
@@ -446,16 +451,6 @@ pub fn HeartbeatPage() -> impl IntoView {
     // most direct freshness signal (a node RPC stall makes it go silent).
     #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
     let (conn_state, set_conn_state) = signal("live".to_string());
-
-    // Live mempool size from the SSE timeline (polled on the 1s tick below). With
-    // the ZMQ `sequence` removals in place the brick set tracks the real mempool,
-    // so this drives the bottom bar in real time instead of the ~15s RPC value.
-    // tx=0 means "not ready yet" → the display falls back to the RPC figure.
-    // (setters are only touched in the hydrate-only poll below.)
-    #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
-    let (sse_mempool_tx, set_sse_mempool_tx) = signal(0u64);
-    #[cfg_attr(not(feature = "hydrate"), allow(unused_variables))]
-    let (sse_mempool_vmb, set_sse_mempool_vmb) = signal(0.0f64);
 
     // Reactive display values
     let block_height = Signal::derive(move || {
@@ -549,14 +544,6 @@ pub fn HeartbeatPage() -> impl IntoView {
                 if cs != conn_state.get_untracked() {
                     set_conn_state.set(cs);
                 }
-                // Live mempool size from the timeline (real-time, and accurate now
-                // that removals are tracked). tx=0 => not ready, keep the RPC value.
-                let ms = get_heartbeat_mempool_stats();
-                let mtx = extract_json_f64(&ms, "tx") as u64;
-                if mtx > 0 {
-                    set_sse_mempool_tx.set(mtx);
-                    set_sse_mempool_vmb.set(extract_json_f64(&ms, "vmb"));
-                }
             },
             std::time::Duration::from_secs(1),
         );
@@ -589,30 +576,6 @@ pub fn HeartbeatPage() -> impl IntoView {
         } else {
             format!("{}m {}s ago", elapsed / 60, elapsed % 60)
         }
-    });
-
-    let mempool_display = Signal::derive(move || {
-        // Prefer the live SSE-timeline count (real-time + accurate via `sequence`
-        // removals); fall back to the RPC getmempoolinfo value until it's ready.
-        let live_tx = sse_mempool_tx.get();
-        if live_tx > 0 {
-            return format!(
-                "{} tx ({:.1} vMB)",
-                super::helpers::format_number(live_tx),
-                sse_mempool_vmb.get()
-            );
-        }
-        cached_live
-            .get()
-            .filter(|s| s.mempool.size > 0 || s.network.hashrate > 0.0)
-            .map(|s| {
-                format!(
-                    "{} tx ({:.1} vMB)",
-                    super::helpers::format_number(s.mempool.size),
-                    s.mempool.bytes as f64 / 1_000_000.0
-                )
-            })
-            .unwrap_or_else(|| "-- tx (-- vMB)".to_string())
     });
 
     let fee_display = Signal::derive(move || {
@@ -1085,9 +1048,9 @@ pub fn HeartbeatPage() -> impl IntoView {
 #[component]
 fn VitalTile(
     label: &'static str,
-    value: ReadSignal<String>,
+    #[prop(into)] value: Signal<String>,
     unit: &'static str,
-    status: ReadSignal<String>,
+    #[prop(into)] status: Signal<String>,
     color: ReadSignal<String>,
     #[prop(optional, into)] subtitle: Option<Signal<String>>,
     #[prop(optional)] tip: Option<&'static str>,
@@ -1148,6 +1111,42 @@ fn hint_already_seen() -> bool {
 fn mark_hint_seen() {
     if let Ok(Some(s)) = leptos::prelude::window().local_storage() {
         let _ = s.set_item("hb_intro_seen", "1");
+    }
+}
+
+/// Formatted node-aggregate mempool figures shared by the bottom info bar and
+/// the Temperature vital tile so the two displays can never disagree.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct MempoolDisplay {
+    bar: String,
+    tile_vmb: String,
+    tile_tx_label: String,
+}
+
+/// Format node-aggregate mempool totals from `LiveStats`.
+///
+/// Distinguishes a verified empty mempool (`mempool_available == true`,
+/// `size == 0`) from an unavailable RPC (`None` or `!mempool_available`) so
+/// the UI clears prior positive counts on an empty mempool and never renders
+/// a fabricated `0` when `getmempoolinfo` fails.
+fn format_mempool_summary(
+    live: Option<&crate::stats::types::LiveStats>,
+) -> MempoolDisplay {
+    match live {
+        Some(live) if live.mempool_available => {
+            let count = super::helpers::format_number(live.mempool.size);
+            let vmb = format!("{:.1}", live.mempool.bytes as f64 / 1_000_000.0);
+            MempoolDisplay {
+                bar: format!("{count} tx ({vmb} vMB)"),
+                tile_vmb: vmb,
+                tile_tx_label: format!("{count} tx in mempool"),
+            }
+        }
+        _ => MempoolDisplay {
+            bar: "-- tx (-- vMB)".to_string(),
+            tile_vmb: "--.-".to_string(),
+            tile_tx_label: "-- tx in mempool".to_string(),
+        },
     }
 }
 
@@ -1294,7 +1293,52 @@ fn parse_status_json(json: &str) -> Option<OrganismStatus> {
 
 #[cfg(test)]
 mod tests {
-    use super::status_for;
+    use super::{format_mempool_summary, status_for, MempoolDisplay};
+    use crate::stats::types::{
+        LiveBlockchain, LiveMempool, LiveNetwork, LiveStats,
+    };
+
+    fn sample_live_stats(
+        mempool_size: u64,
+        mempool_bytes: u64,
+        mempool_available: bool,
+        stale: bool,
+        hashrate: f64,
+    ) -> LiveStats {
+        LiveStats {
+            blockchain: LiveBlockchain {
+                blocks: 900_000,
+                chain: "main".to_string(),
+                difficulty: 100.0,
+                verification_progress: 1.0,
+                size_on_disk: 0,
+                bestblockhash: String::new(),
+                time: 1_700_000_000,
+            },
+            mempool: LiveMempool {
+                size: mempool_size,
+                bytes: mempool_bytes,
+                usage: 0,
+                total_fee: 0.0,
+                maxmempool: 300_000_000,
+                mempoolminfee: 0.00001,
+            },
+            next_block_fee: 2.0,
+            network: LiveNetwork {
+                price_usd: 100_000.0,
+                sats_per_dollar: 1_000,
+                market_cap_usd: 0.0,
+                total_supply: 19_000_000.0,
+                max_supply: 21_000_000.0,
+                percent_issued: 90.0,
+                utxo_count: 0,
+                chain_size_gb: 0.0,
+                hashrate,
+            },
+            stale,
+            mempool_available,
+        }
+    }
 
     /// The source of this file, for the wiring guard below.
     const SELF: &str = include_str!("heartbeat.rs");
@@ -1419,5 +1463,98 @@ mod tests {
         uniq.sort_unstable();
         uniq.dedup();
         assert_eq!(uniq.len(), tips.len(), "two states share an explanation");
+    }
+
+    #[test]
+    fn mempool_summary_none_renders_unavailable() {
+        assert_eq!(
+            format_mempool_summary(None),
+            MempoolDisplay {
+                bar: "-- tx (-- vMB)".to_string(),
+                tile_vmb: "--.-".to_string(),
+                tile_tx_label: "-- tx in mempool".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn mempool_summary_positive_formats_count_and_vmb() {
+        let live = sample_live_stats(12_345, 4_260_000, true, false, 600e18);
+        assert_eq!(
+            format_mempool_summary(Some(&live)),
+            MempoolDisplay {
+                bar: "12,345 tx (4.3 vMB)".to_string(),
+                tile_vmb: "4.3".to_string(),
+                tile_tx_label: "12,345 tx in mempool".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn mempool_summary_verified_zero_clears_prior_positive() {
+        let positive = sample_live_stats(5_432, 2_100_000, true, false, 600e18);
+        let before = format_mempool_summary(Some(&positive));
+        assert_eq!(before.bar, "5,432 tx (2.1 vMB)");
+        assert_eq!(before.tile_vmb, "2.1");
+        assert_eq!(before.tile_tx_label, "5,432 tx in mempool");
+
+        let empty = sample_live_stats(0, 0, true, false, 0.0);
+        assert_eq!(
+            format_mempool_summary(Some(&empty)),
+            MempoolDisplay {
+                bar: "0 tx (0.0 vMB)".to_string(),
+                tile_vmb: "0.0".to_string(),
+                tile_tx_label: "0 tx in mempool".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn mempool_summary_rpc_failure_never_renders_fake_zero() {
+        // Even when other RPCs succeeded (hashrate > 0), a failed
+        // getmempoolinfo must render unavailable rather than 0.
+        let failed = sample_live_stats(0, 0, false, true, 650e18);
+        assert_eq!(
+            format_mempool_summary(Some(&failed)),
+            MempoolDisplay {
+                bar: "-- tx (-- vMB)".to_string(),
+                tile_vmb: "--.-".to_string(),
+                tile_tx_label: "-- tx in mempool".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn mempool_summary_stale_cached_observation_retains_last_valid_totals() {
+        let stale_cached =
+            sample_live_stats(8_500, 3_400_000, true, true, 620e18);
+        assert_eq!(
+            format_mempool_summary(Some(&stale_cached)),
+            MempoolDisplay {
+                bar: "8,500 tx (3.4 vMB)".to_string(),
+                tile_vmb: "3.4".to_string(),
+                tile_tx_label: "8,500 tx in mempool".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn bar_and_temperature_tile_share_format_mempool_summary_without_sse_override(
+    ) {
+        let code = &SELF[..SELF.find("\n#[cfg(test)]").unwrap_or(SELF.len())];
+        assert!(
+            !code.contains("get_heartbeat_mempool_stats"),
+            "SSE timeline mempool count override must stay removed"
+        );
+        assert!(
+            code.contains("format_mempool_summary(cached_live.get().as_ref())"),
+            "mempool summary must derive from LiveStats via format_mempool_summary"
+        );
+        assert!(
+            code.contains("mempool_summary.get().bar")
+                && code.contains("mempool_summary.get().tile_vmb")
+                && code.contains("mempool_summary.get().tile_tx_label"),
+            "both bottom bar and Temperature tile must derive from the shared mempool_summary"
+        );
     }
 }

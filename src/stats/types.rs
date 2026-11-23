@@ -704,6 +704,10 @@ pub struct PeriodStats {
     pub signaled_pct: f64,
 }
 
+fn default_true() -> bool {
+    true
+}
+
 /// Real-time node, mempool, and network stats. Combines data from multiple
 /// RPC calls and external APIs. Underlying RPC responses are cached in
 /// `BitcoinRpc` per method with TTLs ranging from 1s (chain tip) to 60s
@@ -720,6 +724,13 @@ pub struct LiveStats {
     /// indicator when this is set.
     #[serde(default)]
     pub stale: bool,
+    /// True when `mempool` reflects a real `getmempoolinfo` observation
+    /// (fresh or stale-cached); false when `getmempoolinfo` failed with no
+    /// cached fallback and `mempool` contains zeroed placeholders. Defaults to
+    /// `true` on the wire so payloads emitted before this field existed keep
+    /// deserializing cleanly.
+    #[serde(default = "default_true")]
+    pub mempool_available: bool,
 }
 
 /// Blockchain state from getblockchaininfo RPC.
@@ -1023,5 +1034,44 @@ mod tests {
         let supply = calc_supply(10_000_000);
         assert!(supply > 20_999_000.0);
         assert!(supply <= 21_000_000.0);
+    }
+
+    #[test]
+    fn live_stats_mempool_available_defaults_to_true_on_wire() {
+        let legacy_json = r#"{
+            "blockchain": {
+                "blocks": 900000,
+                "chain": "main",
+                "difficulty": 100.0,
+                "verification_progress": 1.0,
+                "size_on_disk": 0,
+                "bestblockhash": "",
+                "time": 1700000000
+            },
+            "mempool": {
+                "size": 0,
+                "bytes": 0,
+                "usage": 0,
+                "total_fee": 0.0,
+                "maxmempool": 300000000,
+                "mempoolminfee": 0.00001
+            },
+            "next_block_fee": 1.0,
+            "network": {
+                "price_usd": 100000.0,
+                "sats_per_dollar": 1000,
+                "market_cap_usd": 0.0,
+                "total_supply": 19000000.0,
+                "max_supply": 21000000.0,
+                "percent_issued": 90.0,
+                "utxo_count": 0,
+                "chain_size_gb": 0.0,
+                "hashrate": 600e18
+            },
+            "stale": false
+        }"#;
+        let parsed: LiveStats =
+            serde_json::from_str(legacy_json).expect("legacy LiveStats JSON");
+        assert!(parsed.mempool_available);
     }
 }

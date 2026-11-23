@@ -330,22 +330,41 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
     // Always use DB height: it's the source of truth (updated by poll)
     let block_height = db_height.max(blockchain.blocks);
 
-    let mempool = match mempool_res {
+    let now_secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let (mempool, mempool_available) = match mempool_res {
         Ok((info, s)) => {
+            let observed_at = now_secs.saturating_sub(
+                state.rpc.mempool_cache_age_secs().unwrap_or(0),
+            );
+            state.heartbeat_store.update_node_mempool(Some(
+                super::heartbeat_sync::NodeMempoolAggregate {
+                    tx_count: info.size,
+                    vbytes: info.bytes,
+                    observed_at,
+                    stale: s,
+                },
+            ));
             stale |= s;
-            info
+            (info, true)
         }
         Err(e) => {
+            state.heartbeat_store.update_node_mempool(None);
             tracing::warn!("Failed to fetch mempool info: {e}");
             stale = true;
-            super::rpc::MempoolInfo {
-                size: 0,
-                bytes: 0,
-                usage: 0,
-                total_fee: 0.0,
-                maxmempool: 300_000_000,
-                mempoolminfee: 0.0,
-            }
+            (
+                super::rpc::MempoolInfo {
+                    size: 0,
+                    bytes: 0,
+                    usage: 0,
+                    total_fee: 0.0,
+                    maxmempool: 300_000_000,
+                    mempoolminfee: 0.0,
+                },
+                false,
+            )
         }
     };
     let hashrate = match hashrate_res {
@@ -436,6 +455,7 @@ pub async fn fetch_live_stats() -> Result<LiveStats, ServerFnError> {
             hashrate,
         },
         stale,
+        mempool_available,
     })
 }
 
