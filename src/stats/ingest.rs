@@ -14,12 +14,15 @@ use std::time::Instant;
 use futures::stream::{self, StreamExt};
 use rusqlite::Connection;
 
-use tokio::sync::broadcast;
-
+use super::api::StatsState;
 use super::db::DbPool;
 use super::rpc::{BitcoinRpc, Block};
-use super::zmq_subscriber::HeartbeatEvent;
+use super::zmq_subscriber::{observe_block, retire_block};
 use super::{db, error::StatsError};
+
+#[path = "heartbeat_poll_chain.rs"]
+mod poll_chain;
+pub(crate) use poll_chain::PollChain;
 
 /// Max newly-ingested blocks the poller will re-broadcast as heartbeat spikes in
 /// one tick. A ZMQ-only hiccup misses 1-2 blocks; a larger batch is a startup /
@@ -165,20 +168,19 @@ fn initial_start_height(
 }
 
 /// Background: check for new blocks and ingest them. Runs every 15 seconds.
-/// `heartbeat_tx` lets the poller re-broadcast a block the ZMQ hashblock path
-/// missed (ZMQ doesn't replay events; a hiccup would otherwise leave no spike
-/// until the next block). The frontend dedups by height, so a block ZMQ already
-/// broadcast is a harmless no-op on the client.
-pub async fn poll_new_blocks(
-    rpc: &BitcoinRpc,
-    pool: &DbPool,
-    heartbeat_tx: &broadcast::Sender<HeartbeatEvent>,
+/// A fresh tip identity can change even when the DB maximum height does not.
+pub(crate) async fn poll_new_blocks(
+    state: &Arc<StatsState>,
+    chain: &mut PollChain,
 ) {
+    let (rpc, pool) = (&state.rpc, &state.db);
+    // Snapshot local claims before polling: a new connection beyond the
+    // sampled tip must not be retired by an older RPC result.
+    let mut known = state.heartbeat_blocks.published();
     // Poll path wants actual latest tip; the 1s cache would mask new blocks
     // during the window between a block arriving and the cache expiring.
-    let poll_started = Instant::now();
-    let tip = match rpc.get_blockchain_info_fresh().await {
-        Ok(info) => info.blocks,
+    let (tip, tip_hash) = match rpc.get_blockchain_info_fresh().await {
+        Ok(info) => (info.blocks, info.bestblockhash),
         Err(e) => {
             tracing::warn!("Poll: failed to get chain tip: {e}");
             return;
@@ -195,7 +197,38 @@ pub async fn poll_new_blocks(
 
     let db_max = db::max_height(&conn).unwrap_or(None).unwrap_or(0);
 
+    if chain.empty() {
+        for h in
+            db_max.saturating_sub(super::rpc::REORG_DETECTION_DEPTH)..=db_max
+        {
+            if let Ok(Some(hash)) = db::query_block_hash(&conn, h) {
+                known.push((h, hash));
+            }
+        }
+    }
+    drop(conn);
+    let announce = match chain
+        .reconcile(rpc, (tip, tip_hash), db_max, known)
+        .await
+    {
+        Ok((orphaned, announce)) => {
+            for hash in orphaned {
+                retire_block(state, &hash);
+            }
+            for (height, hash) in &announce {
+                tracing::info!(source = "poll", stage="receipt", %hash, height, "heartbeat_block");
+                state.heartbeat_blocks.reserve(hash);
+            }
+            announce
+        }
+        Err(e) => {
+            tracing::warn!("Poll: could not verify heartbeat ancestry: {e}");
+            vec![]
+        }
+    };
+
     if db_max >= tip {
+        publish_polled(state, chain, &announce).await;
         return; // already up to date
     }
 
@@ -203,11 +236,19 @@ pub async fn poll_new_blocks(
     let count = tip - start + 1;
     tracing::info!("Poll: ingesting {count} new blocks ({start} -> {tip})");
 
-    // Drop the connection while doing RPC work
-    drop(conn);
-
+    let live_batch = count <= MAX_POLLER_BROADCAST as u64;
     let results: Vec<Result<Block, _>> = stream::iter(start..=tip)
-        .map(|height| async move { rpc.fetch_block_by_height(height).await })
+        .map(|height| async move {
+            if live_batch {
+                let (block, ids) = rpc.fetch_polled_block(height).await?;
+                if let Some(ids) = ids {
+                    state.heartbeat_blocks.seed_polled(ids);
+                }
+                Ok(block)
+            } else {
+                rpc.fetch_block_by_height(height).await
+            }
+        })
         .buffer_unordered(concurrency())
         .collect()
         .await;
@@ -221,40 +262,53 @@ pub async fn poll_new_blocks(
     }
     blocks.sort_by_key(|b| b.height);
 
-    // Get a fresh connection for the insert
+    // Persist blocks to SQLite before waiting on Heartbeat SSE publication so
+    // slow enrichment never delays chain storage.
     if let Ok(conn) = pool.get() {
         if let Err(e) = db::insert_blocks(&conn, &blocks) {
             tracing::error!("Poll: DB insert error: {e}");
         }
     }
+    publish_polled(state, chain, &announce).await;
 
     tracing::info!("Poll: ingested {} blocks up to {tip}", blocks.len());
 
-    // Re-broadcast newly-ingested blocks as heartbeat spikes so a ZMQ-missed
-    // block still appears (late). Only for small batches: a large catch-up
-    // (startup / post-outage) is not a live ZMQ hiccup, and the frontend gets
-    // those from history: firing dozens of spikes at once would look broken.
-    if !blocks.is_empty() && blocks.len() <= MAX_POLLER_BROADCAST {
-        for b in &blocks {
-            let sent = heartbeat_tx.send(HeartbeatEvent::Block {
-                height: b.height,
-                hash: b.hash.clone(),
-                timestamp: b.time,
-                tx_count: b.n_tx,
-                total_fees: b.total_fees,
-                size: b.size,
-                weight: b.weight,
-                confirmed_count: 0,
-            });
-            tracing::info!(source = "poll", stage = "block", hash = %b.hash, height = b.height,
-                poll_ms = poll_started.elapsed().as_millis(), receivers = sent.unwrap_or(0),
-                "heartbeat_block");
-        }
-    } else if blocks.len() > MAX_POLLER_BROADCAST {
+    if !live_batch {
         tracing::info!(
             "Poll: skipped heartbeat broadcast for {} blocks (catch-up, not a live miss)",
             blocks.len()
         );
+    }
+}
+
+/// RPC fetches above are parallel. Legacy publications are not: a replacement
+/// at H must be seen before its child at H+1 can acquire client-side evidence.
+/// Bounded wait keeps a slow 45s block from stalling the 15s poll loop.
+async fn publish_polled(
+    state: &Arc<StatsState>,
+    chain: &mut PollChain,
+    announce: &[(u64, String)],
+) {
+    use futures::FutureExt;
+    const PARENT_WAIT_CAP: std::time::Duration =
+        std::time::Duration::from_secs(5);
+    for (i, (height, hash)) in announce.iter().enumerate() {
+        let Some(job) = observe_block(state, hash, "poll") else {
+            break;
+        };
+        let published = if i + 1 == announce.len() {
+            // Leave the tail pending across poll ticks. A child found next
+            // tick must also wait for it, and a failed attempt can be retried.
+            job.wait_announcement().now_or_never() == Some(true)
+        } else {
+            tokio::time::timeout(PARENT_WAIT_CAP, job.wait_announcement())
+                .await
+                .unwrap_or(false)
+        };
+        if !published {
+            break;
+        }
+        chain.dispatched(*height);
     }
 }
 
@@ -285,7 +339,7 @@ pub async fn verify_recent_blocks(
             _ => continue, // block not in DB, will be fetched by poller
         };
 
-        let canonical_hash = match rpc.get_block_hash(height).await {
+        let canonical_hash = match rpc.get_block_hash_fresh(height).await {
             Ok(h) => h,
             Err(_) => continue,
         };

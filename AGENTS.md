@@ -109,8 +109,10 @@ have been failing since **September**. A chart said P2PK outputs appear in rough
 seven hundred; a burst starting 2026-11-15 had made it one in a hundred, and the guard that
 existed to catch exactly that had never been asked.
 
-    scripts/check-against-chain.sh                # 10 checks: copy against the chain, parity against Core
+    scripts/check-against-chain.sh                # copy against the chain, parity against Core, Heartbeat regtest smoke
     scripts/check-against-chain.sh --with-sweep   # plus the 3 sweep-safety tests, on a copy of the database
+    python3 scripts/test-heartbeat-regtest-smoke.py [--poll-reorg]  # standalone Heartbeat SSR smoke against ephemeral regtest
+    python3 scripts/record-heartbeat-regtest.py                     # regenerates tests/fixtures/heartbeat-core-sequence.json
 
 Run it before a deploy, or weekly. It sources `.env` itself, prints SKIP with a reason for any
 prerequisite it cannot meet, and counts skips separately from passes, because a check that

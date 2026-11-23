@@ -149,6 +149,7 @@ impl TestApp {
             range_summary_cache,
             extremes_cache,
             heartbeat_tx,
+            heartbeat_blocks: Default::default(),
             sse_connections: AtomicUsize::new(0),
             heartbeat_history_cache,
         });

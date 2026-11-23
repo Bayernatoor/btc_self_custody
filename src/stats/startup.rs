@@ -203,6 +203,7 @@ pub async fn init() -> Option<(
         time_histogram_cache,
         fullness_histogram_cache,
         heartbeat_tx,
+        heartbeat_blocks: Default::default(),
         sse_connections: std::sync::atomic::AtomicUsize::new(0),
         heartbeat_history_cache,
     });
@@ -349,14 +350,10 @@ pub fn spawn_background_tasks(
                     .and_then(|c| db::max_height(&c).ok().flatten())
                     .unwrap_or(0)
             };
+            let mut poll_chain = ingest::PollChain::default();
             loop {
                 tokio::time::sleep(std::time::Duration::from_secs(15)).await;
-                ingest::poll_new_blocks(
-                    &state.rpc,
-                    &state.db,
-                    &state.heartbeat_tx,
-                )
-                .await;
+                ingest::poll_new_blocks(&state, &mut poll_chain).await;
 
                 // Verify the last blocks against the canonical chain (detect reorgs).
                 // Depth must match super::rpc::REORG_DETECTION_DEPTH so the
@@ -625,14 +622,16 @@ pub fn spawn_background_tasks(
         });
     }
 
-    // ZMQ subscriber (only if both URLs are configured)
+    // Sequence membership does not depend on either optional enrichment feed.
+    if let Some(url) = zmq_sequence_url {
+        zmq_subscriber::spawn_sequence(Arc::clone(&state), url);
+    }
     if let (Some(tx_url), Some(block_url)) = (zmq_tx_url, zmq_block_url) {
         zmq_subscriber::spawn(
             Arc::clone(&state),
             state.heartbeat_tx.clone(),
             tx_url,
             block_url,
-            zmq_sequence_url,
         );
 
         // Prune old mempool txs immediately then daily

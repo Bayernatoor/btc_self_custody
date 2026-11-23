@@ -7,18 +7,16 @@
 //!   Parsed to extract txid and total output value, then enriched with fee/vsize
 //!   from `getmempoolentry` RPC.
 //! - `hashblock` (port 28332): 32-byte block hash after validation completes.
-//!   Triggers the block spike broadcast and (deferred) mempool tx confirmation.
-//!   Also emits `BlockMining` immediately so the frontend can show a mining
-//!   overlay during the brief metadata fetch.
+//!   Shares one hash-keyed enrichment job with the chain poller and sequence C.
+//! - `sequence`: ordered membership A/R and chain C/D; its reducer is fenced
+//!   by Core's ready mempool checkpoints. Raw transaction details do not admit a tx.
 //!
 //! ## Heartbeat Event Types
 //!
 //! - `Tx`: New mempool transaction with fee, vsize, value, and fee rate.
 //! - `Block`: Block spike data (height, hash, fees, size, weight, tx_count).
-//!   Broadcast from getblockheader + getblockstats; the full txid list and DB
-//!   confirmation happen off the critical path.
-//! - `BlockMining`: Lightweight signal that a block arrived; fired on `hashblock`.
-//!   Frontend shows a mining overlay until the `Block` event lands.
+//!   Whole-block size/weight come from getblock; fees come from getblockstats.
+//! - `BlockMining`: Lightweight cue before the measurements are ready.
 //!
 //! Transactions are stored in SQLite (`mempool_txs` table) and broadcast
 //! to SSE clients via a tokio broadcast channel.
@@ -38,6 +36,16 @@ use super::error::StatsError;
 use super::notable::{
     classify_notable, extract_readable_text, has_inscription_marker, ParsedTx,
 };
+
+#[path = "heartbeat_block_jobs.rs"]
+mod block_jobs;
+pub(crate) use block_jobs::{observe_block, retire_block, BlockJobs};
+#[cfg(test)]
+#[path = "heartbeat_core_oracle.rs"]
+mod core_oracle;
+#[path = "heartbeat_shadow.rs"]
+mod shadow;
+pub(crate) use shadow::spawn_sequence;
 
 /// Event broadcast to SSE clients via the heartbeat endpoint.
 /// Tagged with `type` for JSON serialization so the frontend can dispatch by event kind.
@@ -116,13 +124,17 @@ pub enum HeartbeatEvent {
         /// path, and the frontend uses `tx_count` first anyway.
         confirmed_count: u64,
     },
-    /// The block's transaction ids, broadcast shortly after the `Block` event
-    /// (from spawn_block_confirm, which fetches them anyway to mark mempool_txs
-    /// confirmed). The frontend uses these to shatter EXACTLY the mempool bricks
-    /// that got mined during the block reveal (instead of a top-fee approximation).
-    /// Sent as its own event so it doesn't delay the fast spike broadcast.
+    /// Exact inclusion for the accepted hash. The list may precede the
+    /// measurements; a client must join on hash, not height or receipt time.
     #[serde(rename = "block_txids")]
-    BlockTxids { height: u64, txids: Vec<String> },
+    BlockTxids {
+        hash: String,
+        height: u64,
+        txids: Vec<String>,
+    },
+    /// Retract inclusion for this hash only; disconnection does not readmit txs.
+    #[serde(rename = "block_disconnected")]
+    BlockDisconnected { hash: String },
     /// A new block arrived: fired on the `hashblock` notification, before the
     /// (fast) metadata fetch. Frontend shows a mining overlay until the `Block`
     /// event lands.
@@ -154,7 +166,6 @@ pub fn spawn(
     tx_sender: broadcast::Sender<HeartbeatEvent>,
     zmq_tx_url: String,
     zmq_block_url: String,
-    zmq_sequence_url: Option<String>,
 ) {
     // rawtx subscriber (port 28333). Re-broadcast/duplicate txs are
     // de-duplicated inside the task via a local seen-txid set (see SeenTxids)
@@ -179,19 +190,14 @@ pub fn spawn(
         });
     }
 
-    // Clone for the optional sequence subscriber before the block subscriber
-    // moves tx_sender.
-    let tx_sender_seq = tx_sender.clone();
-
     // Block subscriber (hashblock on port 28332)
     {
         let state = Arc::clone(&state);
-        let sender = tx_sender;
         let url = zmq_block_url.clone();
         tokio::spawn(async move {
             loop {
                 tracing::info!("ZMQ: connecting to hashblock at {url}");
-                match subscribe_blocks(&state, &sender, &url).await {
+                match subscribe_blocks(&state, &url).await {
                     Ok(()) => tracing::warn!(
                         "ZMQ hashblock stream ended, reconnecting..."
                     ),
@@ -204,137 +210,9 @@ pub fn spawn(
         });
     }
 
-    // Sequence subscriber (mempool add/remove; only the `R` removals are used).
-    // Optional: enabled only when configured AND the node runs -zmqpubsequence.
-    if let Some(seq_url) = zmq_sequence_url.clone() {
-        let sender = tx_sender_seq;
-        tokio::spawn(async move {
-            loop {
-                tracing::info!("ZMQ: connecting to sequence at {seq_url}");
-                match subscribe_sequence(&sender, &seq_url).await {
-                    Ok(()) => tracing::warn!(
-                        "ZMQ sequence stream ended, reconnecting..."
-                    ),
-                    Err(e) => tracing::error!(
-                        "ZMQ sequence error: {e}, reconnecting in 5s..."
-                    ),
-                }
-                tokio::time::sleep(Duration::from_secs(5)).await;
-            }
-        });
-    }
-
     tracing::info!(
-        "ZMQ subscriber spawned (tx: {zmq_tx_url}, block: {zmq_block_url}, sequence: {})",
-        zmq_sequence_url.as_deref().unwrap_or("disabled")
+        "ZMQ subscribers spawned (tx: {zmq_tx_url}, block: {zmq_block_url})"
     );
-}
-
-/// Batch removed-txid broadcasts at most this often (ms). Keeps a burst of RBF
-/// churn to one SSE message per tick instead of one per tx.
-const SEQ_FLUSH_MS: u64 = 500;
-/// Flush early if a single window accumulates this many removals, to bound the
-/// SSE message size during heavy churn.
-const SEQ_BATCH_CAP: usize = 2000;
-/// Reconnect the sequence socket after this much silence. The `sequence` topic
-/// also carries `A` (add) events on every mempool arrival, so any real node is
-/// near-constantly chatty here; prolonged silence means a half-dead TCP link.
-const SEQ_RECV_TIMEOUT_SECS: u64 = 120;
-
-/// Subscribe to the `sequence` topic and broadcast mempool REMOVALS (the `R`
-/// events: RBF replacement, eviction, expiry). Message body layout:
-///   [0..32]  txid, little-endian internal byte order
-///   [32]     event type: 'A' add | 'R' remove | 'C' block connect | 'D' disconnect
-///   [33..41] mempool sequence (u64 LE) for A/R only
-/// We act only on `R`: Core excludes block-confirmed txs from `R`, so this never
-/// overlaps the block harvest. Adds keep coming via `rawtx` (with fee/size data),
-/// so `A`/`C`/`D` are ignored here. Removals are batched (SEQ_FLUSH_MS) into one
-/// `TxRemoved` event. `sender`-only: no DB writes (the 60s reconcile owns the DB).
-async fn subscribe_sequence(
-    sender: &broadcast::Sender<HeartbeatEvent>,
-    url: &str,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let mut socket = SubSocket::new();
-    socket.connect(url).await?;
-    socket.subscribe("sequence").await?;
-    tracing::info!("ZMQ: subscribed to sequence (mempool removals)");
-
-    let mut batch: Vec<String> = Vec::new();
-    let mut flush = tokio::time::interval(Duration::from_millis(SEQ_FLUSH_MS));
-    let mut last_msg = std::time::Instant::now();
-    let mut removed_total: u64 = 0;
-    let mut msg_total: u64 = 0;
-
-    loop {
-        tokio::select! {
-            recvd = socket.recv() => {
-                let msg = recvd?;
-                last_msg = std::time::Instant::now();
-                let frames: Vec<_> = msg.into_vec();
-                if frames.len() < 2 {
-                    continue;
-                }
-                // We only subscribed to "sequence", but guard defensively.
-                let topic = std::str::from_utf8(&frames[0]).unwrap_or("");
-                if topic != "sequence" {
-                    continue;
-                }
-                let body = &frames[1];
-                if body.len() < 33 {
-                    continue;
-                }
-                let kind = body[32];
-                // One-time proof the node is actually publishing `sequence` here
-                // (A adds fire on every mempool arrival, so this lands immediately
-                // if the topic is wired up). If this never logs, the endpoint isn't
-                // publishing sequence: check the node's -zmqpubsequence port.
-                msg_total += 1;
-                if msg_total == 1 {
-                    tracing::info!(
-                        "ZMQ sequence: receiving messages (first type='{}')",
-                        kind as char
-                    );
-                }
-                if matches!(kind, b'C' | b'D') && body.len() == 33 {
-                    // Independent receipt on the tx/sequence socket when hashblock goes quiet.
-                    tracing::info!(source = "sequence", hash = %bytes_to_hex(&body[..32]),
-                        stage = if kind == b'C' { "connect" } else { "disconnect" }, "heartbeat_block");
-                }
-                if kind == b'R' {
-                    // ZMQ-provided hashes are already display byte order here (same as
-                    // hashblock in subscribe_blocks, which uses bytes_to_hex directly).
-                    // Use the direct encoding so these match the display-order txids on
-                    // the client bricks; the reversed helper is only for hashes we
-                    // compute ourselves (rawtx's double-SHA).
-                    let txid = bytes_to_hex(&body[0..32]);
-                    removed_total += 1;
-                    // One-time canary that removals are flowing (pairs with the
-                    // "receiving messages" line); sample later ones at debug.
-                    if removed_total == 1 {
-                        tracing::info!("ZMQ sequence: removals flowing");
-                    } else if removed_total.is_multiple_of(500) {
-                        tracing::debug!("ZMQ sequence R #{removed_total}: {txid}");
-                    }
-                    batch.push(txid);
-                    if batch.len() >= SEQ_BATCH_CAP {
-                        let txids = std::mem::take(&mut batch);
-                        let _ = sender.send(HeartbeatEvent::TxRemoved { txids });
-                    }
-                }
-            }
-            _ = flush.tick() => {
-                if !batch.is_empty() {
-                    let txids = std::mem::take(&mut batch);
-                    let _ = sender.send(HeartbeatEvent::TxRemoved { txids });
-                }
-                if last_msg.elapsed().as_secs() > SEQ_RECV_TIMEOUT_SECS {
-                    return Err(
-                        "ZMQ sequence: no message in timeout — connection likely dead".into(),
-                    );
-                }
-            }
-        }
-    }
 }
 
 /// Subscribe to the `rawtx` topic and broadcast each new mempool tx.
@@ -694,15 +572,9 @@ async fn process_rawtx(
     });
 }
 
-/// Subscribe to block hashes. On hashblock (validation complete), broadcast the
-/// spike ASAP from two small RPCs (getblockheader + getblockstats), then defer
-/// the full txid list + mempool-tx confirmation to a background task. The txid
-/// list from `getblock(hash, 1)` is 200-400KB and takes tens of seconds over
-/// WireGuard for a busy block: waiting on it before broadcasting was the whole
-/// reason the spike lagged 20-90s behind the block.
+/// Forward hash observations without parking the receive loop on a block RPC.
 async fn subscribe_blocks(
     state: &Arc<StatsState>,
-    sender: &broadcast::Sender<HeartbeatEvent>,
     url: &str,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut socket = SubSocket::new();
@@ -725,63 +597,9 @@ async fn subscribe_blocks(
             );
             continue;
         }
-        let received_at = Instant::now();
-        let block_hash = bytes_to_hex(hash_bytes);
-        tracing::info!(source = "hashblock", stage = "receipt", hash = %block_hash, "heartbeat_block");
-
-        // Show mining overlay immediately while metadata is being fetched.
-        let _ = sender.send(HeartbeatEvent::BlockMining);
-
-        // Fast path: header (height/timestamp/tx_count) + getblockstats
-        // (size/weight/total_fees). Both small: the spike appears in ~1-2s.
-        let (header, size, weight, total_fees) =
-            match get_block_fast(state, &block_hash).await {
-                Some(v) => v,
-                None => continue,
-            };
-
-        // Bust tip-dependent RPC caches now that a new block is the tip.
-        // Without this, /api/stats/live would keep returning the previous
-        // block height until BLOCKCHAIN_INFO_TTL (30s) expired, AND the reorg
-        // detector's block-hash LRU could hold pre-reorg hashes for heights in
-        // the reorg window, masking real reorgs. Only needs the height.
-        state.rpc.invalidate_tip_caches(header.height);
-
-        // Broadcast the spike. confirmed_count is 0 here: the frontend uses
-        // tx_count first (confirmed_count is only its fallback), and the DB
-        // confirmation is deferred below and off the visual path.
-        let sent = sender.send(HeartbeatEvent::Block {
-            height: header.height,
-            hash: block_hash.clone(),
-            timestamp: header.timestamp,
-            tx_count: header.tx_count,
-            total_fees,
-            size,
-            weight,
-            confirmed_count: 0,
-        });
-        tracing::info!(source = "hashblock", stage = "block", hash = %block_hash,
-            height = header.height, elapsed_ms = received_at.elapsed().as_millis(),
-            receivers = sent.unwrap_or(0), tx_count = header.tx_count, total_fees, size, weight,
-            "heartbeat_block");
-
-        // Deferred: fetch the full txid list and confirm mempool/notable txs in
-        // the DB. Slow over WireGuard, but not on the spike's critical path.
-        // poll_new_blocks does NOT confirm mempool txs, so this is the only
-        // place that marks tracked txs confirmed.
-        //
-        // If getblockstats was unavailable in the fast path (size/weight 0, e.g.
-        // the node blipped mid-outage), the deferred task also re-broadcasts the
-        // block with authoritative data once the node answers; the frontend
-        // replaces the estimated spike via its total_fees==0 dedup path.
-        let estimated = size == 0 || weight == 0;
-        spawn_block_confirm(
-            state,
-            sender,
-            block_hash,
-            header.height,
-            estimated,
-        );
+        let hash = bytes_to_hex(hash_bytes);
+        tracing::info!(source = "hashblock", stage = "receipt", %hash, "heartbeat_block");
+        observe_block(state, &hash, "hashblock");
     }
 }
 
@@ -804,7 +622,7 @@ async fn timed_block_rpc<T>(
         Err(_) => "error",
     };
     tracing::info!(
-        source = "hashblock",
+        source = "shared_block_job",
         stage = "rpc",
         hash,
         method,
@@ -814,192 +632,6 @@ async fn timed_block_rpc<T>(
         "heartbeat_block"
     );
     result
-}
-
-/// Fetch the minimal metadata needed to draw a block spike, with retry
-/// (hashblock fires right as validation completes, so RPC may be briefly busy).
-/// The header is essential; getblockstats is best-effort, if it never returns,
-/// the block still broadcasts with zero size/weight/fees rather than vanishing.
-/// Returns `(header, size, weight, total_fees)` or `None` if the header failed.
-async fn get_block_fast(
-    state: &Arc<StatsState>,
-    hash: &str,
-) -> Option<(super::rpc::BlockTxids, u64, u64, u64)> {
-    let mut header_only: Option<super::rpc::BlockTxids> = None;
-    for attempt in 0..3 {
-        if attempt > 0 {
-            tokio::time::sleep(Duration::from_secs(1)).await;
-        }
-        let (header_res, stats_res) = tokio::join!(
-            timed_block_rpc(
-                hash,
-                "getblockheader",
-                attempt + 1,
-                state.rpc.get_block_header(hash)
-            ),
-            timed_block_rpc(
-                hash,
-                "getblockstats",
-                attempt + 1,
-                state.rpc.get_block_stats_brief(hash)
-            ),
-        );
-        let header = match header_res {
-            Ok(h) => h,
-            Err(e) => {
-                if attempt < 2 {
-                    tracing::debug!(
-                        "ZMQ: block {hash} header not ready (attempt {}), retrying...",
-                        attempt + 1
-                    );
-                } else {
-                    tracing::error!(
-                        "ZMQ: getblockheader failed for {hash} after 3 attempts: {e}"
-                    );
-                }
-                continue;
-            }
-        };
-        match stats_res {
-            Ok((size, weight, total_fees)) => {
-                return Some((header, size, weight, total_fees));
-            }
-            Err(_) => {
-                // Header is good; keep it and retry for stats.
-                header_only = Some(header);
-            }
-        }
-    }
-    // Stats never came back: broadcast the block anyway from the header.
-    if header_only.is_some() {
-        tracing::warn!(
-            "ZMQ: getblockstats unavailable for {hash}; broadcasting with zero size/weight/fees"
-        );
-    }
-    header_only.map(|h| (h, 0, 0, 0))
-}
-
-/// Background task: fetch the block's full txid list and mark the matching
-/// mempool_txs + notable_txs rows confirmed. Runs detached so the ~20-90s
-/// getblock(hash, 1) over WireGuard never delays the spike broadcast.
-fn spawn_block_confirm(
-    state: &Arc<StatsState>,
-    sender: &broadcast::Sender<HeartbeatEvent>,
-    hash: String,
-    height: u64,
-    estimated: bool,
-) {
-    let state = Arc::clone(state);
-    let sender = sender.clone();
-    tokio::spawn(async move {
-        let info = match get_block_info(&state, &hash).await {
-            Some(i) => i,
-            None => return, // logged inside get_block_info; poller will backfill
-        };
-
-        // Broadcast the block's txids ASAP (before the estimated re-broadcast + DB
-        // work) so the frontend's block reveal can shatter EXACTLY the mined bricks.
-        // The reveal's harvest beat is ~2.5s after the block event and getblock is
-        // usually <2s after validation, so these typically land in time; if not, the
-        // frontend keeps its top-fee approximation.
-        let sent = sender.send(HeartbeatEvent::BlockTxids {
-            height,
-            txids: info.txids.clone(),
-        });
-        tracing::info!(source = "hashblock", stage = "block_txids", %hash, height,
-            txids = info.txids.len(), receivers = sent.unwrap_or(0), "heartbeat_block");
-
-        // getblock(hash,1) gives authoritative size/weight. If the fast broadcast
-        // was estimated (getblockstats was down), re-broadcast now with real
-        // size/weight + getblockstats totalfee so the frontend can replace the
-        // zero-data spike. Idempotent: a healthy block was never estimated, so
-        // this only fires after a node blip.
-        if estimated {
-            // Fetch fees by HASH, not height: this runs 20-90s after the fast
-            // broadcast, and getblockstats-by-height would resolve against the
-            // current best chain, so a reorg in that window would attribute the
-            // wrong block's fees to `hash`. get_block_stats_brief(&hash) pins it.
-            let total_fees = timed_block_rpc(
-                &hash,
-                "getblockstats_rebroadcast",
-                1,
-                state.rpc.get_block_stats_brief(&hash),
-            )
-            .await
-            .map(|(_, _, fees)| fees)
-            .unwrap_or(0);
-            let _ = sender.send(HeartbeatEvent::Block {
-                height,
-                hash: hash.clone(),
-                timestamp: info.timestamp,
-                tx_count: info.tx_count,
-                total_fees,
-                size: info.size,
-                weight: info.weight,
-                confirmed_count: 0,
-            });
-            tracing::info!(source = "hashblock", stage = "block_update", %hash, height,
-                size = info.size, weight = info.weight, total_fees, "heartbeat_block");
-        }
-
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-        let db = state.db.clone();
-        let txid_count = info.txids.len();
-        let txids = info.txids;
-        let confirmed = tokio::task::spawn_blocking(move || match db.get() {
-            Ok(conn) => {
-                let _ = db::confirm_notable_txs(&conn, &txids, height, now);
-                db::confirm_mempool_txs(&conn, &txids, height, now)
-                    .map(|(count, _)| count)
-                    .unwrap_or(0)
-            }
-            Err(e) => {
-                tracing::error!("ZMQ: DB error confirming block {height}: {e}");
-                0
-            }
-        })
-        .await
-        .unwrap_or(0);
-        tracing::info!(
-            "ZMQ: block {height} DB-confirmed {confirmed}/{txid_count} tracked txs"
-        );
-    });
-}
-
-/// Get block metadata and txid list from RPC, with retry.
-/// hashblock fires after validation, but RPC may still be briefly busy.
-async fn get_block_info(
-    state: &Arc<StatsState>,
-    hash: &str,
-) -> Option<super::rpc::BlockTxids> {
-    for attempt in 0..3 {
-        if attempt > 0 {
-            tokio::time::sleep(Duration::from_secs(1)).await;
-        }
-        match timed_block_rpc(
-            hash,
-            "getblock_txids",
-            attempt + 1,
-            state.rpc.get_block_txids(hash),
-        )
-        .await
-        {
-            Ok(info) => {
-                return Some(info);
-            }
-            Err(e) => {
-                if attempt < 2 {
-                    tracing::debug!("ZMQ: block {hash} not ready yet (attempt {}), retrying...", attempt + 1);
-                } else {
-                    tracing::error!("ZMQ: failed to get block txids for {hash} after 3 attempts: {e}");
-                }
-            }
-        }
-    }
-    None
 }
 
 // === Raw transaction parsing ===

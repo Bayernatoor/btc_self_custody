@@ -126,6 +126,35 @@ else
     skip "classifier oracle (2)" "SCRIPT_ORACLE unset; no generator exists for it"
 fi
 
+# ---------------------------------------------------------------------------
+# Heartbeat regtest smoke (ephemeral offline bitcoind + built SSR binary).
+# Needs local bitcoind/bitcoin-cli/python3 and `target/debug/we_hodl_btc`
+# (or WE_HODL_BTC_BIN). Does not touch bitcoin_stats.db or any live node.
+# ---------------------------------------------------------------------------
+HB_BIN="${WE_HODL_BTC_BIN:-target/debug/we_hodl_btc}"
+if command -v bitcoind >/dev/null 2>&1 &&
+   command -v bitcoin-cli >/dev/null 2>&1 &&
+   command -v python3 >/dev/null 2>&1 &&
+   [[ -x "$HB_BIN" ]]; then
+    for mode in "sequence" "--poll-reorg"; do
+        label="heartbeat regtest smoke ($mode)"
+        printf '\n\033[1m%s\033[0m\n' "$label"
+        if [[ "$mode" == "sequence" ]]; then
+            python3 scripts/test-heartbeat-regtest-smoke.py
+        else
+            python3 scripts/test-heartbeat-regtest-smoke.py --poll-reorg
+        fi
+        if (($? == 0)); then
+            PASS=$((PASS + 1))
+        else
+            FAIL=$((FAIL + 1))
+            FAILED_NAMES+=("$label")
+        fi
+    done
+else
+    skip "heartbeat regtest smoke (2)" "needs bitcoind, bitcoin-cli, python3, and $HB_BIN"
+fi
+
 printf '\n\033[1m%d passed, %d failed, %d skipped\033[0m\n' "$PASS" "$FAIL" "$SKIP"
 if ((FAIL > 0)); then
     printf '\033[31mfailed:\033[0m %s\n' "${FAILED_NAMES[*]}"

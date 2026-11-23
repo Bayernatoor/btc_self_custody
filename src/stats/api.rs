@@ -143,6 +143,7 @@ pub struct StatsState {
     pub extremes_cache: Arc<Cache<(u64, u64), super::types::ExtremesData>>,
     /// Broadcast channel for real-time heartbeat events (ZMQ → SSE).
     pub heartbeat_tx: broadcast::Sender<super::zmq_subscriber::HeartbeatEvent>,
+    pub(crate) heartbeat_blocks: super::zmq_subscriber::BlockJobs,
     /// Active SSE connection count (guard against connection exhaustion).
     pub sse_connections: AtomicUsize,
     /// Cached heartbeat history payload (the big initial mempool-fill JSON, up to
@@ -1058,6 +1059,7 @@ pub async fn get_heartbeat_sse(
                             super::zmq_subscriber::HeartbeatEvent::Tx { .. } => "tx",
                             super::zmq_subscriber::HeartbeatEvent::Block { .. } => "block",
                             super::zmq_subscriber::HeartbeatEvent::BlockTxids { .. } => "block_txids",
+                            super::zmq_subscriber::HeartbeatEvent::BlockDisconnected { .. } => "block_disconnected",
                             super::zmq_subscriber::HeartbeatEvent::BlockMining => "block_mining",
                             super::zmq_subscriber::HeartbeatEvent::TxRemoved { .. } => "tx_removed",
                         };

@@ -461,6 +461,23 @@ struct RawMempoolFees {
     base: f64,
 }
 
+/// Core captures both fields under the mempool lock. `mempool_sequence` is
+/// the number of the *next* change, not the last change in the set.
+#[derive(Debug, Deserialize)]
+pub(crate) struct MembershipCheckpoint {
+    pub txids: Vec<String>,
+    pub mempool_sequence: u64,
+}
+
+fn valid_id_list(ids: &[String]) -> bool {
+    let mut unique = std::collections::HashSet::with_capacity(ids.len());
+    ids.iter().all(|id| {
+        id.len() == 64
+            && id.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+            && unique.insert(id)
+    })
+}
+
 /// Bitcoin Core JSON-RPC client. Holds a persistent HTTP client with
 /// connection pooling, configurable timeouts, and per-method response caches
 /// (see [`rpc_cache`](super::rpc_cache)) that protect Core from request floods
@@ -585,17 +602,40 @@ pub struct MempoolEntryInfo {
 
 /// Block metadata and transaction ID list from `getblock` verbosity=1.
 /// Used by ZMQ block handler for fast block processing without full tx data.
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 pub struct BlockTxids {
+    pub hash: String,
+    pub confirmations: i64,
     pub height: u64,
+    #[serde(rename = "time")]
     pub timestamp: u64,
-    /// Block size in bytes (0 when fetched via getblockheader).
+    /// Whole-block size in bytes, including the coinbase.
     pub size: u64,
-    /// Block weight in weight units (0 when fetched via getblockheader).
+    /// Whole-block weight in weight units.
     pub weight: u64,
+    #[serde(rename = "nTx")]
     pub tx_count: u64,
-    /// All transaction IDs in the block (empty when fetched via getblockheader).
+    /// Complete ordered list, including the coinbase.
+    #[serde(rename = "tx")]
     pub txids: Vec<String>,
+}
+
+impl BlockTxids {
+    fn validate(self, hash: &str) -> Result<Self, StatsError> {
+        if self.hash != hash
+            || self.confirmations < 1
+            || self.tx_count == 0
+            || self.size == 0
+            || self.weight == 0
+            || self.tx_count != self.txids.len() as u64
+            || !valid_id_list(&self.txids)
+        {
+            return Err(StatsError::Rpc(
+                "incomplete or non-active getblock response".into(),
+            ));
+        }
+        Ok(self)
+    }
 }
 
 /// Fully parsed block data from `getblock` verbosity=2.
@@ -1149,6 +1189,29 @@ impl BitcoinRpc {
         result.as_str().map(|s| s.to_string()).ok_or_else(|| {
             StatsError::Rpc("Expected string for block hash".to_string())
         })
+    }
+
+    /// Walk the ancestry of one specific polled tip, not a series of heights
+    /// which might resolve against different branches during a reorganization.
+    pub(crate) async fn poll_parent(
+        &self,
+        hash: &str,
+        height: u64,
+    ) -> Result<String, StatsError> {
+        #[derive(Deserialize)]
+        struct Header {
+            hash: String,
+            height: u64,
+            previousblockhash: String,
+        }
+        let h: Header =
+            self.call_typed("getblockheader", &[json!(hash)]).await?;
+        if h.hash != hash || h.height != height {
+            return Err(StatsError::Rpc(
+                "polled header identity mismatch".into(),
+            ));
+        }
+        Ok(h.previousblockhash)
     }
 
     /// Fetch a block by hash, preferring the LRU cache for previously-seen
@@ -2111,49 +2174,134 @@ impl BitcoinRpc {
         })
     }
 
-    /// Get block header (fast, ~1KB response). Used for immediate block broadcast.
-    pub async fn get_block_header(
-        &self,
-        hash: &str,
-    ) -> Result<BlockTxids, StatsError> {
-        let result = self.call("getblockheader", &[json!(hash)]).await?;
-        Ok(BlockTxids {
-            height: result["height"].as_u64().unwrap_or(0),
-            timestamp: result["time"].as_u64().unwrap_or(0),
-            size: 0,   // not in header
-            weight: 0, // not in header
-            tx_count: result["nTx"].as_u64().unwrap_or(0),
-            txids: vec![], // not in header
-        })
-    }
-
     /// Get block metadata + txid list (verbosity=1, no full tx data).
     pub async fn get_block_txids(
         &self,
         hash: &str,
     ) -> Result<BlockTxids, StatsError> {
-        let result = self.call("getblock", &[json!(hash), json!(1)]).await?;
-        let height = result["height"].as_u64().unwrap_or(0);
-        let timestamp = result["time"].as_u64().unwrap_or(0);
-        let size = result["size"].as_u64().unwrap_or(0);
-        let weight = result["weight"].as_u64().unwrap_or(0);
-        let tx_count = result["nTx"].as_u64().unwrap_or(0);
-        let txids = result["tx"]
-            .as_array()
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_str().map(String::from))
-                    .collect()
-            })
-            .unwrap_or_default();
-        Ok(BlockTxids {
-            height,
-            timestamp,
-            size,
-            weight,
-            tx_count,
-            txids,
-        })
+        let block: BlockTxids = self
+            .call_typed("getblock", &[json!(hash), json!(1)])
+            .await?;
+        block.validate(hash)
+    }
+
+    /// Live poll ingestion already needs verbosity 2. Reuse its txids instead
+    /// of making a second large call when this is the first block observation.
+    pub(crate) async fn fetch_polled_block(
+        &self,
+        height: u64,
+    ) -> Result<(Block, Option<BlockTxids>), StatsError> {
+        let hash = self.get_block_hash_fresh(height).await?;
+        if let Some(block) = self.block_data_cache.get(&hash) {
+            return Ok((block, None));
+        }
+        let mut raw = self.call("getblock", &[json!(&hash), json!(2)]).await?;
+        let block = Self::parse_block_value(&raw);
+        if let Some(txs) = raw["tx"].as_array_mut() {
+            for tx in txs {
+                *tx =
+                    tx.get_mut("txid").map(Value::take).unwrap_or(Value::Null);
+            }
+        }
+        let exact: BlockTxids = serde_json::from_value(raw)
+            .map_err(|e| StatsError::Rpc(e.to_string()))?;
+        let exact = exact.validate(&hash)?;
+        if exact.height != height {
+            return Err(StatsError::Rpc(
+                "unexpected polled block height".into(),
+            ));
+        }
+        self.block_data_cache.put(hash, block.clone());
+        Ok((block, Some(exact)))
+    }
+
+    /// A restart between two independent RPCs can pair the old process's
+    /// readiness with the new process's loading mempool. Core v29.3's
+    /// `HTTPReq_JSONRPC` (src/httprpc.cpp) executes a batch in array order in
+    /// one process. `loaded` is monotonic within that process. The set and its
+    /// sequence still come from the single atomic getrawmempool operation.
+    pub(crate) async fn membership_checkpoint(
+        &self,
+        preflight_capacity: bool,
+    ) -> Result<MembershipCheckpoint, StatsError> {
+        if preflight_capacity {
+            self.check_checkpoint_capacity().await?;
+        }
+        #[derive(Deserialize)]
+        struct Readiness {
+            loaded: bool,
+        }
+        #[derive(Deserialize)]
+        struct Reply<T> {
+            id: u8,
+            result: Option<T>,
+            error: Option<Value>,
+        }
+        let batch = json!([
+            {"jsonrpc":"1.0", "id":1, "method":"getmempoolinfo", "params":[]},
+            {"jsonrpc":"1.0", "id":2, "method":"getrawmempool", "params":[false, true]}
+        ]);
+        let mut response = self
+            .client
+            .post(&self.url)
+            .basic_auth(&self.user, Some(&self.password))
+            .json(&batch)
+            .send()
+            .await?
+            .error_for_status()?;
+        // Bound even chunked bodies before decoding. A cap is an incomplete
+        // observation, never a truncated checkpoint substituted for Core's set.
+        const LIMIT: usize =
+            super::heartbeat_membership::MAX_MEMBERS * 70 + 16_384;
+        // Bound pre-allocation to LIMIT; trusts owner node Content-Length below that cap.
+        let initial_cap = match response.content_length() {
+            Some(len) if len > LIMIT as u64 => {
+                return Err(StatsError::CheckpointCapacity);
+            }
+            Some(len) => len as usize,
+            None => 0,
+        };
+        let mut bytes = Vec::with_capacity(initial_cap);
+        while let Some(chunk) = response.chunk().await? {
+            if chunk.len() > LIMIT - bytes.len() {
+                return Err(StatsError::CheckpointCapacity);
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        let (ready, checkpoint): (
+            Reply<Readiness>,
+            Reply<MembershipCheckpoint>,
+        ) = serde_json::from_slice(&bytes)
+            .map_err(|e| StatsError::Rpc(e.to_string()))?;
+        if ready.id != 1
+            || checkpoint.id != 2
+            || ready.error.is_some()
+            || checkpoint.error.is_some()
+            || !ready.result.is_some_and(|r| r.loaded)
+        {
+            return Err(StatsError::Rpc(
+                "unavailable or unloaded mempool checkpoint".into(),
+            ));
+        }
+        let checkpoint = checkpoint.result.ok_or_else(|| {
+            StatsError::Rpc("missing mempool checkpoint result".into())
+        })?;
+        if checkpoint.txids.len() > super::heartbeat_membership::MAX_MEMBERS {
+            return Err(StatsError::CheckpointCapacity);
+        }
+        Ok(checkpoint)
+    }
+
+    async fn check_checkpoint_capacity(&self) -> Result<(), StatsError> {
+        #[derive(Deserialize)]
+        struct Count {
+            size: usize,
+        }
+        let info: Count = self.call_typed("getmempoolinfo", &[]).await?;
+        if info.size > super::heartbeat_membership::MAX_MEMBERS {
+            return Err(StatsError::CheckpointCapacity);
+        }
+        Ok(())
     }
 
     /// Get all mempool entries with fee/vsize data (verbose=true).
@@ -2196,28 +2344,29 @@ impl BitcoinRpc {
         Ok(txids)
     }
 
-    /// Get (size, weight, total_fees) for a block via a single getblockstats
-    /// call by hash. The response is small (a few scalars), so this is fast
-    /// even over WireGuard: used together with `get_block_header` to broadcast
-    /// the heartbeat block spike immediately, without waiting on the full txid
-    /// list from `getblock(hash, 1)`.
-    pub async fn get_block_stats_brief(
+    /// The fee is a getblockstats fact; its size/weight totals exclude the
+    /// coinbase and must never stand in for the whole block's dimensions.
+    pub(crate) async fn get_block_fees(
         &self,
         hash: &str,
-    ) -> Result<(u64, u64, u64), StatsError> {
-        let result = self
-            .call(
+    ) -> Result<u64, StatsError> {
+        #[derive(Deserialize)]
+        struct Fees {
+            blockhash: String,
+            totalfee: u64,
+        }
+        let fees: Fees = self
+            .call_typed(
                 "getblockstats",
-                &[
-                    json!(hash),
-                    json!(["total_size", "total_weight", "totalfee"]),
-                ],
+                &[json!(hash), json!(["blockhash", "totalfee"])],
             )
             .await?;
-        let size = result["total_size"].as_u64().unwrap_or(0);
-        let weight = result["total_weight"].as_u64().unwrap_or(0);
-        let total_fees = result["totalfee"].as_u64().unwrap_or(0);
-        Ok((size, weight, total_fees))
+        if fees.blockhash != hash {
+            return Err(StatsError::Rpc(
+                "getblockstats returned a different hash".into(),
+            ));
+        }
+        Ok(fees.totalfee)
     }
 
     /// Call `getmempoolinfo` - returns mempool size, fee stats, memory usage.

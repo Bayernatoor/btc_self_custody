@@ -342,6 +342,33 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
         CREATE INDEX IF NOT EXISTS idx_notable_confirmed_height ON notable_txs(confirmed_height);",
     )?;
 
+    // A height alone cannot identify which branch confirmed a historical row.
+    // NULL preserves those claims without attributing them to today's chain.
+    for table in ["mempool_txs", "notable_txs"] {
+        if conn
+            .prepare(&format!("SELECT confirmed_hash FROM {table} LIMIT 0"))
+            .is_err()
+        {
+            conn.execute_batch(&format!(
+                "ALTER TABLE {table} ADD COLUMN confirmed_hash TEXT"
+            ))?;
+        }
+        conn.execute_batch(&format!(
+            "CREATE INDEX IF NOT EXISTS idx_{table}_confirmed_hash ON {table}(confirmed_hash)
+             WHERE confirmed_hash IS NOT NULL"
+        ))?;
+    }
+    if conn
+        .prepare("SELECT awaiting_readmission FROM mempool_txs LIMIT 0")
+        .is_err()
+    {
+        conn.execute_batch("ALTER TABLE mempool_txs ADD COLUMN awaiting_readmission INTEGER NOT NULL DEFAULT 0")?;
+    }
+    conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_mempool_admitted ON mempool_txs(first_seen DESC)
+         WHERE confirmed_height IS NULL AND awaiting_readmission = 0",
+    )?;
+
     // Pre-computed daily aggregates table. Populated incrementally on new
     // blocks so queries read directly instead of re-aggregating 940k+ rows.
     conn.execute_batch(
@@ -2789,16 +2816,20 @@ pub struct MempoolTxInsert<'a> {
     pub op_return_text: Option<&'a str>,
 }
 
-/// Insert a mempool transaction (ignore if txid already exists).
+/// Record positive mempool evidence. Only clear `awaiting_readmission` when no
+/// active block confirmation claim is stamped, so a delayed pre-block write
+/// cannot prime a double-spent row to resurrect upon a subsequent `Revoke`.
 pub fn insert_mempool_tx(
     conn: &Connection,
     tx: &MempoolTxInsert<'_>,
 ) -> rusqlite::Result<()> {
     conn.execute(
-        "INSERT OR IGNORE INTO mempool_txs
+        "INSERT INTO mempool_txs
              (txid, fee, vsize, value, first_seen, notable_type, value_usd,
               input_count, output_count, op_return_text)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+         ON CONFLICT(txid) DO UPDATE SET awaiting_readmission = 0
+         WHERE awaiting_readmission = 1 AND confirmed_height IS NULL",
         params![
             tx.txid,
             tx.fee,
@@ -2815,64 +2846,70 @@ pub fn insert_mempool_tx(
     Ok(())
 }
 
-/// Mark a list of txids as confirmed in a specific block.
-/// Mark a list of txids as confirmed in a specific block.
-/// Uses batched IN clauses (100 per batch) for ~10x faster execution.
-/// Returns (confirmed_count, total_fees_sats), fees summed from our mempool data.
-pub fn confirm_mempool_txs(
-    conn: &Connection,
+/// Stamp both tables atomically. The writer reservation must precede the
+/// generation check: otherwise a delayed writer can stamp a row re-added
+/// after D while waiting for SQLite. Never overwrite a legacy hashless claim.
+pub(crate) fn confirm_heartbeat_txs(
+    conn: &mut Connection,
     txids: &[String],
+    hash: &str,
     height: u64,
     confirmed_at: u64,
+    current: impl FnOnce() -> bool,
 ) -> rusqlite::Result<(u64, u64)> {
-    if txids.is_empty() {
+    let tx = conn
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+    if !current() {
         return Ok((0, 0));
     }
-    let tx = conn.unchecked_transaction()?;
-    let mut total_fees = 0u64;
-    let mut count = 0u64;
-    let chunk_size = 100;
-
-    // Sum fees before confirming (only for txs in the local mempool)
-    for chunk in txids.chunks(chunk_size) {
-        let placeholders: Vec<&str> = chunk.iter().map(|_| "?").collect();
-        let sql = format!(
-            "SELECT COALESCE(SUM(fee), 0) FROM mempool_txs
-             WHERE txid IN ({}) AND confirmed_height IS NULL",
-            placeholders.join(",")
+    let (mut count, mut fees) = (0, 0);
+    for chunk in txids.chunks(100) {
+        let ids = vec!["?"; chunk.len()].join(",");
+        let claim =
+            "confirmed_hash = ?1, confirmed_height = ?2, confirmed_at = ?3";
+        let matches = format!(
+            "txid IN ({ids}) AND (confirmed_height IS NULL OR confirmed_hash != ?1)"
         );
-        let mut stmt = tx.prepare(&sql)?;
-        for (i, txid) in chunk.iter().enumerate() {
-            stmt.raw_bind_parameter(i + 1, txid.as_str())?;
+        for (is_mempool, sql) in [
+            (true, format!("UPDATE mempool_txs SET {claim}, awaiting_readmission = 1 WHERE {matches} RETURNING fee")),
+            (false, format!("UPDATE notable_txs SET {claim} WHERE {matches}")),
+        ] {
+            let mut stmt = tx.prepare_cached(&sql)?;
+            stmt.raw_bind_parameter(1, hash)?;
+            stmt.raw_bind_parameter(2, height)?;
+            stmt.raw_bind_parameter(3, confirmed_at)?;
+            for (i, id) in chunk.iter().enumerate() {
+                stmt.raw_bind_parameter(i + 4, id)?;
+            }
+            if is_mempool {
+                let mut rows = stmt.raw_query();
+                while let Some(row) = rows.next()? {
+                    count += 1;
+                    fees += row.get::<_, u64>(0)?;
+                }
+            } else {
+                stmt.raw_execute()?;
+            }
         }
-        let mut rows = stmt.raw_query();
-        if let Some(row) = rows.next()? {
-            total_fees += row.get::<_, i64>(0).unwrap_or(0) as u64;
-        }
-    }
-
-    // Now confirm them
-    for chunk in txids.chunks(chunk_size) {
-        let placeholders: Vec<&str> = chunk.iter().map(|_| "?").collect();
-        let sql = format!(
-            "UPDATE mempool_txs SET confirmed_height = ?1, confirmed_at = ?2
-             WHERE txid IN ({}) AND confirmed_height IS NULL",
-            placeholders.join(",")
-        );
-        let mut stmt = tx.prepare(&sql)?;
-        let mut param_idx = 1;
-        stmt.raw_bind_parameter(param_idx, height as i64)?;
-        param_idx += 1;
-        stmt.raw_bind_parameter(param_idx, confirmed_at as i64)?;
-        param_idx += 1;
-        for txid in chunk {
-            stmt.raw_bind_parameter(param_idx, txid.as_str())?;
-            param_idx += 1;
-        }
-        count += stmt.raw_execute()? as u64;
     }
     tx.commit()?;
-    Ok((count, total_fees))
+    Ok((count, fees))
+}
+
+/// A D removes only this block's evidence. It does not supply the positive
+/// observation needed to clear `awaiting_readmission` on the mempool row.
+pub(crate) fn revoke_heartbeat_claims(
+    conn: &mut Connection,
+    hash: &str,
+) -> rusqlite::Result<()> {
+    let tx = conn.transaction()?;
+    for table in ["mempool_txs", "notable_txs"] {
+        tx.execute(&format!(
+            "UPDATE {table} SET confirmed_hash = NULL, confirmed_height = NULL, confirmed_at = NULL
+             WHERE confirmed_hash = ?1"
+        ), [hash])?;
+    }
+    tx.commit()
 }
 
 /// Reconcile mempool_txs against the node's live mempool: delete unconfirmed rows
@@ -2960,7 +2997,7 @@ pub fn insert_missing_mempool_txs(
     // not no-op INSERT OR IGNOREs against rows we already have.
     let existing: std::collections::HashSet<String> = {
         let mut stmt = conn.prepare_cached(
-            "SELECT txid FROM mempool_txs WHERE confirmed_height IS NULL",
+            "SELECT txid FROM mempool_txs WHERE confirmed_height IS NULL AND awaiting_readmission = 0",
         )?;
         let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
         rows.filter_map(|r| r.ok()).collect()
@@ -2971,8 +3008,8 @@ pub fn insert_missing_mempool_txs(
         if existing.contains(txid) {
             continue;
         }
-        // INSERT OR IGNORE (via insert_mempool_tx) so a txid that exists as a
-        // CONFIRMED row (rare: reorg back into mempool) is left untouched.
+        // Clears awaiting_readmission only once any revoked block claim has
+        // cleared confirmed_height (see insert_mempool_tx).
         insert_mempool_tx(
             &tx,
             &MempoolTxInsert {
@@ -3032,37 +3069,15 @@ pub fn prune_confirmed_mempool_txs(
     confirmed_before: u64,
     max_delete: usize,
 ) -> rusqlite::Result<u64> {
-    let txids: Vec<String> = {
-        let mut stmt = conn.prepare_cached(
-            "SELECT txid FROM mempool_txs
-             WHERE confirmed_height IS NOT NULL AND confirmed_at < ?1
-             LIMIT ?2",
-        )?;
-        let rows = stmt.query_map(
-            params![confirmed_before as i64, max_delete as i64],
-            |row| row.get::<_, String>(0),
-        )?;
-        rows.filter_map(|r| r.ok()).collect()
-    };
-    if txids.is_empty() {
-        return Ok(0);
-    }
-    let tx = conn.unchecked_transaction()?;
-    let mut deleted = 0u64;
-    for chunk in txids.chunks(100) {
-        let placeholders: Vec<&str> = chunk.iter().map(|_| "?").collect();
-        let sql = format!(
-            "DELETE FROM mempool_txs WHERE txid IN ({})",
-            placeholders.join(",")
-        );
-        let mut stmt = tx.prepare(&sql)?;
-        for (i, txid) in chunk.iter().enumerate() {
-            stmt.raw_bind_parameter(i + 1, txid.as_str())?;
-        }
-        deleted += stmt.raw_execute()? as u64;
-    }
-    tx.commit()?;
-    Ok(deleted)
+    // A select followed by a separate delete-by-txid could erase a readmission.
+    let deleted = conn.execute(
+        "DELETE FROM mempool_txs WHERE txid IN (
+             SELECT txid FROM mempool_txs
+             WHERE confirmed_height IS NOT NULL AND confirmed_at < ?1 LIMIT ?2
+         )",
+        params![confirmed_before, max_delete],
+    )?;
+    Ok(deleted as u64)
 }
 
 /// Query recent unconfirmed mempool transactions (for SSE history).
@@ -3075,7 +3090,7 @@ pub fn query_recent_mempool_txs(
         "SELECT txid, fee, vsize, value, first_seen, notable_type, value_usd,
                 input_count, output_count, op_return_text
          FROM mempool_txs
-         WHERE confirmed_height IS NULL AND first_seen >= ?1
+         WHERE confirmed_height IS NULL AND awaiting_readmission = 0 AND first_seen >= ?1
          ORDER BY first_seen DESC
          LIMIT ?2",
     )?;
@@ -3161,6 +3176,8 @@ pub struct NotableTx {
     pub confirmed_height: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub confirmed_at: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confirmed_hash: Option<String>,
 }
 
 /// Input data for [`insert_notable_tx`]. Use `..Default::default()` in tests.
@@ -3206,42 +3223,6 @@ pub fn insert_notable_tx(
         ],
     )?;
     Ok(())
-}
-
-/// Mark notable txs as confirmed when a block confirms them.
-/// Takes a list of txids and updates confirmed_height/confirmed_at for any matches.
-pub fn confirm_notable_txs(
-    conn: &Connection,
-    txids: &[String],
-    height: u64,
-    confirmed_at: u64,
-) -> rusqlite::Result<u64> {
-    if txids.is_empty() {
-        return Ok(0);
-    }
-    let tx = conn.unchecked_transaction()?;
-    let mut total = 0u64;
-    for chunk in txids.chunks(100) {
-        let placeholders: Vec<&str> = chunk.iter().map(|_| "?").collect();
-        let sql = format!(
-            "UPDATE notable_txs SET confirmed_height = ?1, confirmed_at = ?2
-             WHERE txid IN ({}) AND confirmed_height IS NULL",
-            placeholders.join(",")
-        );
-        let mut stmt = tx.prepare(&sql)?;
-        let mut param_idx = 1;
-        stmt.raw_bind_parameter(param_idx, height as i64)?;
-        param_idx += 1;
-        stmt.raw_bind_parameter(param_idx, confirmed_at as i64)?;
-        param_idx += 1;
-        for txid in chunk {
-            stmt.raw_bind_parameter(param_idx, txid.as_str())?;
-            param_idx += 1;
-        }
-        total += stmt.raw_execute()? as u64;
-    }
-    tx.commit()?;
-    Ok(total)
 }
 
 /// Filter parameters for notable tx queries.
@@ -3299,7 +3280,7 @@ pub fn query_notable_txs(
     let sql = format!(
         "SELECT txid, notable_type, fee, vsize, value, max_output_value, value_usd,
                 input_count, output_count, witness_bytes, op_return_text,
-                first_seen, confirmed_height, confirmed_at
+                first_seen, confirmed_height, confirmed_at, confirmed_hash
          FROM notable_txs {where_clause}
          ORDER BY first_seen DESC
          LIMIT ?{limit_idx} OFFSET ?{offset_idx}"
@@ -3344,6 +3325,7 @@ pub fn query_notable_txs(
             first_seen: row.get(11)?,
             confirmed_height: row.get(12)?,
             confirmed_at: row.get(13)?,
+            confirmed_hash: row.get(14)?,
         });
     }
     Ok(result)
@@ -3464,7 +3446,7 @@ pub fn query_notable_top(
     let mut stmt = conn.prepare(
         "SELECT txid, notable_type, fee, vsize, value, max_output_value, value_usd,
                 input_count, output_count, witness_bytes, op_return_text,
-                first_seen, confirmed_height, confirmed_at
+                first_seen, confirmed_height, confirmed_at, confirmed_hash
          FROM notable_txs
          WHERE first_seen >= ?1
          ORDER BY value_usd DESC
@@ -3486,6 +3468,7 @@ pub fn query_notable_top(
             first_seen: row.get(11)?,
             confirmed_height: row.get(12)?,
             confirmed_at: row.get(13)?,
+            confirmed_hash: row.get(14)?,
         })
     })?;
     rows.collect()
@@ -3548,7 +3531,7 @@ pub fn query_unconfirmed_txids(
 ) -> rusqlite::Result<Vec<String>> {
     let mut stmt = conn.prepare_cached(
         "SELECT txid FROM mempool_txs
-         WHERE confirmed_height IS NULL
+         WHERE confirmed_height IS NULL AND awaiting_readmission = 0
          ORDER BY first_seen DESC
          LIMIT ?1",
     )?;
@@ -3564,7 +3547,7 @@ pub fn count_unconfirmed_mempool_txs(
     conn: &Connection,
 ) -> rusqlite::Result<u64> {
     conn.query_row(
-        "SELECT COUNT(*) FROM mempool_txs WHERE confirmed_height IS NULL",
+        "SELECT COUNT(*) FROM mempool_txs WHERE confirmed_height IS NULL AND awaiting_readmission = 0",
         [],
         |row| row.get(0),
     )
@@ -4973,14 +4956,21 @@ mod tests {
 
     #[test]
     fn test_mempool_confirm() {
-        let conn = setup_db();
+        let mut conn = setup_db();
         insert_test_tx(&conn, "tx1", 100, 150, 500_000, 1700000000);
         insert_test_tx(&conn, "tx2", 200, 250, 600_000, 1700000001);
         insert_test_tx(&conn, "tx3", 300, 350, 700_000, 1700000002);
 
         let txids = vec!["tx1".to_string(), "tx2".to_string()];
-        let (confirmed, fees) =
-            confirm_mempool_txs(&conn, &txids, 800_000, 1700001000).unwrap();
+        let (confirmed, fees) = confirm_heartbeat_txs(
+            &mut conn,
+            &txids,
+            "block",
+            800_000,
+            1700001000,
+            || true,
+        )
+        .unwrap();
         assert_eq!(confirmed, 2);
         assert_eq!(fees, 300); // tx1=100 + tx2=200
 
@@ -4997,14 +4987,21 @@ mod tests {
 
     #[test]
     fn test_mempool_query_unconfirmed_only() {
-        let conn = setup_db();
+        let mut conn = setup_db();
         insert_test_tx(&conn, "tx1", 100, 150, 500_000, 1700000000);
         insert_test_tx(&conn, "tx2", 200, 250, 600_000, 1700000001);
         insert_test_tx(&conn, "tx3", 300, 350, 700_000, 1700000002);
 
         // Confirm tx1
-        confirm_mempool_txs(&conn, &["tx1".to_string()], 800_000, 1700001000)
-            .unwrap();
+        confirm_heartbeat_txs(
+            &mut conn,
+            &["tx1".to_string()],
+            "block",
+            800_000,
+            1700001000,
+            || true,
+        )
+        .unwrap();
 
         // query_recent_mempool_txs only returns unconfirmed
         let txs = query_recent_mempool_txs(&conn, 0, 100).unwrap();
@@ -5034,14 +5031,21 @@ mod tests {
 
     #[test]
     fn test_mempool_query_unconfirmed_txids() {
-        let conn = setup_db();
+        let mut conn = setup_db();
         insert_test_tx(&conn, "tx1", 100, 150, 500_000, 1700000000);
         insert_test_tx(&conn, "tx2", 200, 250, 600_000, 1700000001);
         insert_test_tx(&conn, "tx3", 300, 350, 700_000, 1700000002);
 
         // Confirm tx2
-        confirm_mempool_txs(&conn, &["tx2".to_string()], 800_000, 1700001000)
-            .unwrap();
+        confirm_heartbeat_txs(
+            &mut conn,
+            &["tx2".to_string()],
+            "block",
+            800_000,
+            1700001000,
+            || true,
+        )
+        .unwrap();
 
         let unconfirmed = query_unconfirmed_txids(&conn, 100).unwrap();
         assert_eq!(unconfirmed.len(), 2);

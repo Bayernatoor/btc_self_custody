@@ -25,6 +25,9 @@ pub enum StatsError {
     #[error("Bitcoin RPC error: {0}")]
     Rpc(String),
 
+    #[error("mempool checkpoint exceeds the observer capacity")]
+    CheckpointCapacity,
+
     /// SQLite query or connection error.
     #[error("Database error: {0}")]
     Db(#[from] rusqlite::Error),
