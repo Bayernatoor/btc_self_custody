@@ -10,6 +10,7 @@ pub mod hall_of_fame_data;
 /// bundle, which have no use for them.
 #[cfg(all(test, feature = "ssr"))]
 mod hall_of_fame_records;
+pub mod heartbeat_sync;
 pub mod server_fns;
 pub mod types;
 
@@ -27,6 +28,8 @@ pub mod db;
 pub mod error;
 #[cfg(feature = "ssr")]
 pub mod heartbeat_membership;
+#[cfg(feature = "ssr")]
+pub mod heartbeat_state;
 #[cfg(feature = "ssr")]
 pub mod ingest;
 #[cfg(feature = "ssr")]
